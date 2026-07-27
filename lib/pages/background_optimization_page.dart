@@ -540,37 +540,52 @@ class _BackgroundOptimizationPageState
   Widget _buildStrategyTogglesCard(ThemeData theme) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SwitchListTile(
-              title: const Text('AlarmManager 看门狗',
-                  style: TextStyle(fontWeight: FontWeight.w500)),
-              subtitle: Text(
-                '每 5 分钟检查后台服务是否存活，被杀后自动重启',
-                style: theme.textTheme.bodySmall,
+            // Section description
+            Padding(
+              padding: const EdgeInsets.only(
+                  left: 16, right: 16, top: 12, bottom: 4),
+              child: Text(
+                '以下策略可独立开关。默认全部启用以获得最强保活效果。'
+                '关闭某项仅影响该策略，不会影响后台服务本身的运行。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
+            ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            _buildToggleTile(
+              theme: theme,
+              title: 'AlarmManager 看门狗',
+              detail: '启用后，Android 系统会每 5 分钟用原生闹钟检查后台服务是否还活着。'
+                  '如果进程被系统杀掉，闹钟会触发自动重启。'
+                  '\n\n闹钟在设备休眠（Doze）模式下依然生效，'
+                  '重启后也会自动重新调度。'
+                  '\n\n适用场景：对后台任务要求极高的用户。'
+                  '\n耗电影响：极低（系统批量处理闹钟）。',
               value: _watchdogEnabled,
               onChanged: (v) {
                 setState(() => _watchdogEnabled = v);
                 setWatchdogEnabled(v);
                 if (v && _isServiceRunning) {
-                  // Immediately activate if service is running
                   startBackgroundService();
                 } else if (!v) {
-                  // Disable the alarm
                   disableKeepAlive();
                 }
               },
             ),
             const Divider(height: 1, indent: 16, endIndent: 16),
-            SwitchListTile(
-              title: const Text('冷启动自动恢复',
-                  style: TextStyle(fontWeight: FontWeight.w500)),
-              subtitle: Text(
-                '进程被杀后重新打开 App 时自动恢复后台服务',
-                style: theme.textTheme.bodySmall,
-              ),
+            _buildToggleTile(
+              theme: theme,
+              title: '冷启动自动恢复',
+              detail: '启用后，每次重新打开 App 时，会自动检测并恢复之前正在运行的后台服务。'
+                  '\n\n如果 App 进程被系统或用户手动杀掉，'
+                  '下次打开 App 时后台服务会自动重启，无需手动操作。'
+                  '\n\n适用场景：所有用户都建议开启。'
+                  '\n耗电影响：无（仅在 App 启动时检查一次）。',
               value: _coldStartRestoreEnabled,
               onChanged: (v) {
                 setState(() => _coldStartRestoreEnabled = v);
@@ -578,13 +593,17 @@ class _BackgroundOptimizationPageState
               },
             ),
             const Divider(height: 1, indent: 16, endIndent: 16),
-            SwitchListTile(
-              title: const Text('电池优化提醒',
-                  style: TextStyle(fontWeight: FontWeight.w500)),
-              subtitle: Text(
-                '在后台优化页显示电池优化状态和忽略入口',
-                style: theme.textTheme.bodySmall,
-              ),
+            _buildToggleTile(
+              theme: theme,
+              title: '电池优化提醒',
+              detail: '启用后，本页面会显示电池优化状态卡片。'
+                  '如果检测到 App 未被添加到省电白名单，'
+                  '会提供一键跳转至系统设置进行豁免。'
+                  '\n\n电池优化是安卓系统省电机制（Doze），'
+                  '会限制后台应用的运行。添加到白名单后，'
+                  '系统不会因省电而杀掉本 App。'
+                  '\n\n适用场景：关闭本开关仅隐藏提醒卡片，'
+                  '不影响实际的电池优化豁免状态。',
               value: _batteryReminderEnabled,
               onChanged: (v) {
                 setState(() => _batteryReminderEnabled = v);
@@ -593,6 +612,61 @@ class _BackgroundOptimizationPageState
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildToggleTile({
+    required ThemeData theme,
+    required String title,
+    required String detail,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return SwitchListTile(
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(title,
+                style: const TextStyle(fontWeight: FontWeight.w500)),
+          ),
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _showDetailDialog(theme, title, detail),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(
+                Icons.info_outline,
+                size: 18,
+                color: theme.colorScheme.primary.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+        ],
+      ),
+      subtitle: Text(
+        detail.length > 60 ? '${detail.substring(0, 60)}…' : detail,
+        style: theme.textTheme.bodySmall,
+      ),
+      value: value,
+      onChanged: onChanged,
+    );
+  }
+
+  void _showDetailDialog(ThemeData theme, String title, String detail) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(
+          child: Text(detail, style: theme.textTheme.bodyMedium),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
       ),
     );
   }
