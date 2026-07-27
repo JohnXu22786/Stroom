@@ -772,5 +772,119 @@ void main() {
         expect(service.config.customParams[0].paramName, equals('test'));
       });
     });
+
+    group('AsrService file size validation', () {
+      test('default maxFileSizeBytes is 25 MB for OpenAI compatibility', () {
+        const config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+        );
+        expect(config.maxFileSizeBytes, 25 * 1024 * 1024);
+      });
+
+      test('rejects files exceeding maxFileSizeBytes before making request',
+          () async {
+        const config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+          maxFileSizeBytes: 100, // 100 bytes max
+        );
+        final service = AsrService(config: config);
+
+        // 200 bytes > 100 bytes max → should reject
+        await expectLater(
+          () => service.transcribe(
+            audioBytes: Uint8List(200),
+            audioFormat: 'wav',
+          ),
+          throwsA(predicate((e) =>
+              e is Exception && e.toString().contains('文件大小超过限制'))),
+        );
+      });
+
+      test('allows files within maxFileSizeBytes limit', () async {
+        final adapter = _CapturingAdapter();
+        final mockDio = Dio()..httpClientAdapter = adapter;
+
+        const config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+          maxFileSizeBytes: 100, // 100 bytes max
+        );
+        final service = AsrService(config: config, dio: mockDio);
+
+        // 50 bytes < 100 bytes max → should proceed
+        final result = await service.transcribe(
+          audioBytes: Uint8List(50),
+          audioFormat: 'wav',
+        );
+        expect(result.text, equals('Hello world'));
+      });
+
+      test('accepts custom maxFileSizeBytes', () {
+        const config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+          maxFileSizeBytes: 50 * 1024 * 1024, // 50 MB
+        );
+        expect(config.maxFileSizeBytes, 50 * 1024 * 1024);
+      });
+
+      test('allows files exactly at maxFileSizeBytes', () async {
+        final adapter = _CapturingAdapter();
+        final mockDio = Dio()..httpClientAdapter = adapter;
+
+        const config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+          maxFileSizeBytes: 50, // 50 bytes max
+        );
+        final service = AsrService(config: config, dio: mockDio);
+
+        // exactly 50 bytes → should proceed
+        final result = await service.transcribe(
+          audioBytes: Uint8List(50),
+          audioFormat: 'wav',
+        );
+        expect(result.text, equals('Hello world'));
+      });
+
+      test('error message includes file size and limit for clarity', () async {
+        const config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com',
+          maxFileSizeBytes: 1024, // 1 KB
+        );
+        final service = AsrService(config: config);
+
+        try {
+          await service.transcribe(
+            audioBytes: Uint8List(2048), // 2 KB
+            audioFormat: 'wav',
+          );
+          fail('Expected exception was not thrown');
+        } on Exception catch (e) {
+          final msg = e.toString();
+          expect(msg, contains('2.0 KB'));
+          expect(msg, contains('1.0 KB'));
+        }
+      });
+
+      test('copyWith preserves maxFileSizeBytes', () {
+        const config = AsrConfig(
+          apiKey: 'key',
+          host: 'https://api.test.com',
+          maxFileSizeBytes: 10 * 1024 * 1024, // 10 MB
+        );
+        final copy = config.copyWith(model: 'whisper-2');
+        expect(copy.maxFileSizeBytes, 10 * 1024 * 1024);
+      });
+
+      test('copyWith can update maxFileSizeBytes', () {
+        const config = AsrConfig(apiKey: 'key', host: 'https://api.test.com');
+        final copy = config.copyWith(maxFileSizeBytes: 100 * 1024 * 1024);
+        expect(copy.maxFileSizeBytes, 100 * 1024 * 1024);
+      });
+    });
   });
 }

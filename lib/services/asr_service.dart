@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 import '../utils/audio_utils.dart';
+import '../utils/format_file_size.dart';
 import 'app_log_service.dart';
 import '../utils/http_utils.dart';
 
@@ -38,6 +39,10 @@ const _asrSupportedFormats = {
 /// This follows the standard OpenAI STT multipart/form-data convention,
 /// which is compatible with OpenAI, OpenRouter, aihubmix, and other
 /// OpenAI-compatible providers.
+///
+/// [maxFileSizeBytes] controls the maximum allowed audio file size.
+/// The default is 25 MB, matching OpenAI's audio API limit.
+/// For non-OpenAI providers that support larger files, this can be increased.
 class AsrConfig {
   final String model;
   final String apiKey;
@@ -50,6 +55,16 @@ class AsrConfig {
   /// Custom parameters that the user defined
   final List<CustomParam> customParams;
 
+  /// Maximum allowed audio file size in bytes.
+  ///
+  /// Files larger than this will be rejected before sending to the API.
+  /// Defaults to 25 MB (26,214,400 bytes), matching OpenAI's audio API limit.
+  /// Set to a higher value for providers that support larger files.
+  final int maxFileSizeBytes;
+
+  /// Default max file size for OpenAI-compatible audio APIs.
+  static const int defaultMaxAudioFileSizeBytes = 25 * 1024 * 1024;
+
   const AsrConfig({
     this.model = 'whisper-1',
     required this.apiKey,
@@ -57,6 +72,7 @@ class AsrConfig {
     this.language,
     this.typeConfig = const {},
     this.customParams = const [],
+    this.maxFileSizeBytes = defaultMaxAudioFileSizeBytes,
   });
 
   /// Returns the host without a trailing slash.
@@ -89,6 +105,7 @@ class AsrConfig {
     String? language,
     Map<String, dynamic>? typeConfig,
     List<CustomParam>? customParams,
+    int? maxFileSizeBytes,
   }) =>
       AsrConfig(
         model: model ?? this.model,
@@ -97,6 +114,7 @@ class AsrConfig {
         language: language ?? this.language,
         typeConfig: typeConfig ?? this.typeConfig,
         customParams: customParams ?? this.customParams,
+        maxFileSizeBytes: maxFileSizeBytes ?? this.maxFileSizeBytes,
       );
 }
 
@@ -205,6 +223,24 @@ class AsrService {
     }
     if (audioBytes.isEmpty) {
       throw Exception('音频数据为空');
+    }
+
+    // ── File size validation ───────────────────────────────────────
+    // OpenAI's audio API has a 25 MB hard limit. Files exceeding this
+    // are rejected early with a clear message. The limit is configurable
+    // for non-OpenAI providers that support larger audio files.
+    if (audioBytes.length > config.maxFileSizeBytes) {
+      final isOpenAiDefault =
+          config.maxFileSizeBytes == AsrConfig.defaultMaxAudioFileSizeBytes;
+      final guidance = isOpenAiDefault
+          ? 'OpenAI 音频 API 最大支持 25 MB。请压缩音频或使用支持更大文件的供应商。'
+          : '请降低文件大小后重试。';
+      throw Exception(
+        '文件大小超过限制: '
+        '${formatFileSize(audioBytes.length)} > '
+        '${formatFileSize(config.maxFileSizeBytes)}。'
+        '$guidance',
+      );
     }
 
     final fmt = audioFormat.toLowerCase();
@@ -404,6 +440,7 @@ AsrService createAsrServiceFromConfig({
   String? language,
   Map<String, dynamic> typeConfig = const {},
   List<CustomParam> customParams = const [],
+  int maxFileSizeBytes = AsrConfig.defaultMaxAudioFileSizeBytes,
 }) {
   return AsrService(
     config: AsrConfig(
@@ -413,6 +450,7 @@ AsrService createAsrServiceFromConfig({
       language: language,
       typeConfig: typeConfig,
       customParams: customParams,
+      maxFileSizeBytes: maxFileSizeBytes,
     ),
   );
 }
