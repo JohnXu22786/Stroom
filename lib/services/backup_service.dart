@@ -651,12 +651,15 @@ class BackupService {
       'browser_cookies.json',
     };
 
-    // 恢复浏览器Cookies持久化数据
+    // 恢复浏览器Cookies持久化数据（选中则恢复，未选中则删除）
     if (selection.browserCookies) {
       final bcData = fileMap['browser_cookies.json'];
       if (bcData != null) {
         await writeBackupFile('', 'browser_cookies.json', bcData);
       }
+    } else {
+      // 未勾选浏览器Cookies → 删除现有关联数据
+      await _deleteFile('', 'browser_cookies.json');
     }
 
     // 根据 selection 决定哪些目录需要恢复
@@ -744,11 +747,75 @@ class BackupService {
       if (restoreIndex % 20 == 0) await _yieldToEventLoop();
     }
 
+    // 清理未选中目录中的现有文件
+    // 对于未勾选的类别，删除磁盘上已有的文件，确保恢复后干干净净
+    await _cleanupUnselectedDirs(selection);
+
     // 数据迁移：确保恢复后的数据格式是最新的
     // 旧格式备份（pre-migration）中包含 chat_configs、null IDs 等，
     // 需要迁移到当前数据格式才能正常使用。
     await DataMigrationService.migrateDataFormatIfNeeded();
     onProgress?.call(1.0);
+  }
+
+  // ================================================================
+  // 文件清理辅助
+  // ================================================================
+
+  /// 删除指定目录中的一个文件。
+  static Future<void> _deleteFile(String subDir, String fileName) async {
+    try {
+      if (kIsWeb || WebFileStore.isTestMode) {
+        await WebFileStore.delete('$subDir/$fileName');
+      } else {
+        final appDir = await AppStorage.directory;
+        final file = File(p.join(appDir, subDir, fileName));
+        if (await file.exists()) {
+          await file.delete();
+        }
+      }
+    } catch (e) {
+      debugPrint('删除文件 $subDir/$fileName 失败: $e');
+    }
+  }
+
+  /// 清理未选中目录中的所有文件。
+  ///
+  /// 对于用户未勾选的类别，删除对应目录下的所有现有文件，
+  /// 确保恢复后只保留用户选中的数据。
+  static Future<void> _cleanupUnselectedDirs(BackupSelection selection) async {
+    // 目录与对应 selection 标记的映射
+    final dirsToCheck = {
+      'attachments': selection.chatRecordsAndAttachments,
+      'pictures': selection.pictures,
+      'tts_audio': selection.audio,
+      'videos': selection.videos,
+      'texts': selection.texts,
+      'synthesis': selection.tasks,
+      'catcatch': selection.tasks,
+      'anki': selection.ankiData,
+    };
+
+    for (final entry in dirsToCheck.entries) {
+      if (entry.value) continue; // 已选中，不需要清理
+      final dir = entry.key;
+
+      try {
+        if (kIsWeb || WebFileStore.isTestMode) {
+          // Web/test 模式下没有目录结构概念，无法递归删除
+          // 依靠 DB 记录清除来控制数据
+          continue;
+        }
+        final appDir = await AppStorage.directory;
+        final targetDir = Directory(p.join(appDir, dir));
+        if (await targetDir.exists()) {
+          await targetDir.delete(recursive: true);
+          debugPrint('[BackupService] 已清理未选中目录: $dir');
+        }
+      } catch (e) {
+        debugPrint('[BackupService] 清理未选中目录 $dir 失败: $e');
+      }
+    }
   }
 
   // ================================================================
@@ -792,34 +859,51 @@ class BackupService {
         'image(${imageRecords.length}) audio(${audioRecords.length}) '
         'video(${videoRecords.length}) text(${textRecords.length})');
 
-    // 选择性恢复：只清除并恢复选中的记录类型
+    // 选择性恢复：勾选的类别从备份恢复，未勾选的类别清除现有数据。
+    // 这样确保恢复后只保留用户勾选的数据类别，实现真正意义上的选择性恢复。
+    // 注意：只有当至少有一个 DB 类别被选中时才执行清除操作，
+    // 防止"全不选"时意外清空所有数据。
+    final hasAnyDbCategory = selection.pictures ||
+        selection.audio ||
+        selection.videos ||
+        selection.texts;
+
     if (selection.pictures) {
       await ManifestDatabase.clearRecords('image_records');
       for (final record in imageRecords) {
         await ManifestDatabase.insertImageRecord(record);
       }
+    } else if (hasAnyDbCategory) {
+      // 用户未勾选图片但有其他 DB 类别被选中 → 清除现有图片记录
+      await ManifestDatabase.clearRecords('image_records');
     }
     if (selection.audio) {
       await ManifestDatabase.clearRecords('audio_records');
       for (final record in audioRecords) {
         await ManifestDatabase.insertAudioRecord(record);
       }
+    } else if (hasAnyDbCategory) {
+      await ManifestDatabase.clearRecords('audio_records');
     }
     if (selection.videos) {
       await ManifestDatabase.clearRecords('video_records');
       for (final record in videoRecords) {
         await ManifestDatabase.insertVideoRecord(record);
       }
+    } else if (hasAnyDbCategory) {
+      await ManifestDatabase.clearRecords('video_records');
     }
     if (selection.texts) {
       await ManifestDatabase.clearRecords('text_records');
       for (final record in textRecords) {
         await ManifestDatabase.insertTextRecord(record);
       }
+    } else if (hasAnyDbCategory) {
+      await ManifestDatabase.clearRecords('text_records');
     }
 
-    // Restore folders only for selected record types
-    // 与记录清除一致：选中即先清除，再从备份中恢复（备份可能为空）
+    // Restore folders only for selected record types;
+    // clear folders for unselected types to remove all data cleanly.
     if (selection.texts) {
       final dirs = textFolders.isNotEmpty ? textFolders : folders;
       await ManifestDatabase.clearFolders(
@@ -828,6 +912,9 @@ class BackupService {
         await ManifestDatabase.insertFolder(folder,
             recordTable: ManifestTables.textRecords);
       }
+    } else if (hasAnyDbCategory) {
+      await ManifestDatabase.clearFolders(
+          recordTable: ManifestTables.textRecords);
     }
     if (selection.audio) {
       final dirs = audioFolders.isNotEmpty ? audioFolders : folders;
@@ -837,6 +924,9 @@ class BackupService {
         await ManifestDatabase.insertFolder(folder,
             recordTable: ManifestTables.audioRecords);
       }
+    } else if (hasAnyDbCategory) {
+      await ManifestDatabase.clearFolders(
+          recordTable: ManifestTables.audioRecords);
     }
     if (selection.pictures) {
       final dirs = imageFolders.isNotEmpty ? imageFolders : folders;
@@ -846,6 +936,9 @@ class BackupService {
         await ManifestDatabase.insertFolder(folder,
             recordTable: ManifestTables.imageRecords);
       }
+    } else if (hasAnyDbCategory) {
+      await ManifestDatabase.clearFolders(
+          recordTable: ManifestTables.imageRecords);
     }
     if (selection.videos) {
       final dirs = videoFolders.isNotEmpty ? videoFolders : folders;
@@ -855,9 +948,17 @@ class BackupService {
         await ManifestDatabase.insertFolder(folder,
             recordTable: ManifestTables.videoRecords);
       }
+    } else if (hasAnyDbCategory) {
+      await ManifestDatabase.clearFolders(
+          recordTable: ManifestTables.videoRecords);
     }
   }
 
+  /// 从 JSON 恢复 SharedPreferences。
+  ///
+  /// 先清除所有非 flutter.* 键，再写入备份数据。
+  /// 未选中的类别会被清除——这是设计意图：选择性恢复时，
+  /// 只保留勾选的类别数据，未勾选的会被删除。
   static Future<void> _restorePreferencesFromJson(String json) async {
     final backupPrefs = jsonDecode(json) as Map<String, dynamic>;
     final prefs = await SharedPreferences.getInstance();
