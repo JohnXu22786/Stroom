@@ -492,9 +492,21 @@ class AsrService {
 
     for (int i = 0; i < chunks.length; i++) {
       final chunk = chunks[i];
+
+      // ── Prompt carrying: pass previous chunk's text as prompt ──
+      final chunkParams = Map<String, dynamic>.from(sharedParams);
+      if (i > 0 && texts.isNotEmpty) {
+        // Use last ~100 chars of previous chunk's text as prompt for continuity
+        final prevText = texts.last;
+        final promptSuffix = prevText.length > 100
+            ? prevText.substring(prevText.length - 100)
+            : prevText;
+        chunkParams['prompt'] = promptSuffix;
+      }
+
       try {
         final response = await _sendTranscriptionRequest(
-          sharedParams: Map<String, dynamic>.from(sharedParams),
+          sharedParams: chunkParams,
           audioBytes: chunk,
           fileName: fileName,
           mimeType: mimeType,
@@ -510,10 +522,52 @@ class AsrService {
       }
     }
 
+    // ── Overlap deduplication ─────────────────────────────────────
+    final merged = _dedupOverlappingTexts(texts);
+
     return AsrResult(
-      text: texts.join(' '),
+      text: merged,
       processingTimeMs: 0,
     );
+  }
+
+  /// Merge consecutive texts with overlap deduplication.
+  ///
+  /// When audio chunks overlap, their transcriptions may have duplicate
+  /// text at boundaries. This finds the longest common suffix/prefix
+  /// between consecutive chunks and removes the duplicate.
+  static String _dedupOverlappingTexts(List<String> texts) {
+    if (texts.isEmpty) return '';
+    if (texts.length == 1) return texts.first;
+
+    final result = StringBuffer(texts.first);
+    for (int i = 1; i < texts.length; i++) {
+      final prev = texts[i - 1];
+      final curr = texts[i];
+
+      // Find overlap: longest suffix of prev that matches prefix of curr
+      int bestLen = 0;
+      final maxCheck = prev.length < curr.length ? prev.length : curr.length;
+      final minCheck = (maxCheck > 0) ? (maxCheck ~/ 10).clamp(1, 20) : 0;
+
+      for (int len = maxCheck; len >= minCheck; len--) {
+        final prevSuffix = prev.substring(prev.length - len);
+        final currPrefix = curr.substring(0, len);
+        if (prevSuffix == currPrefix) {
+          bestLen = len;
+          break;
+        }
+      }
+
+      // Append curr without the overlapping prefix
+      if (bestLen > 0) {
+        result.write(curr.substring(bestLen));
+      } else {
+        result.write(' $curr');
+      }
+    }
+
+    return result.toString();
   }
 
   /// Send the transcription request using the configured [uploadMethod].
