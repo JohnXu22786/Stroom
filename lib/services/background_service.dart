@@ -213,22 +213,18 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
 
   try {
     final prefs = await SharedPreferences.getInstance();
-    final wasEnabled =
-        prefs.getBool(_backgroundServiceEnabledKey) ?? false;
+    final wasEnabled = prefs.getBool(_backgroundServiceEnabledKey) ?? false;
     if (!wasEnabled) return;
 
     final service = FlutterBackgroundService();
     if (!await service.isRunning()) {
-      await AppLogService.info('BackgroundService',
-          '检测到后台服务之前已启用，正在恢复...');
+      await AppLogService.info('BackgroundService', '检测到后台服务之前已启用，正在恢复...');
       await service.startService();
       await AppLogService.info('BackgroundService', '后台服务已恢复');
     }
   } catch (e) {
-    debugPrint(
-        '[BackgroundService] Failed to restore background service: $e');
-    await AppLogService.error(
-        'BackgroundService', '恢复后台服务失败', e);
+    debugPrint('[BackgroundService] Failed to restore background service: $e');
+    await AppLogService.error('BackgroundService', '恢复后台服务失败', e);
   }
 }
 
@@ -238,9 +234,7 @@ Future<void> _setServiceEnabledPreference(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_backgroundServiceEnabledKey, enabled);
   } catch (e) {
-    debugPrint(
-        '[BackgroundService] Failed to save service enabled state: $e');
-    await AppLogService.error(
-        'BackgroundService', '保存后台服务启用状态失败', e);
+    debugPrint('[BackgroundService] Failed to save service enabled state: $e');
+    await AppLogService.error('BackgroundService', '保存后台服务启用状态失败', e);
   }
 }

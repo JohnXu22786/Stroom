@@ -139,8 +139,7 @@ void main() {
       expect(true, isTrue);
     });
 
-    test(
-        'startBackgroundService persists enabled state to SharedPreferences',
+    test('startBackgroundService persists enabled state to SharedPreferences',
         () async {
       final mock = registerMockPlatform();
       mock.setServiceRunning(false);
@@ -153,8 +152,7 @@ void main() {
       expect(prefs.getBool('background_service_enabled'), isTrue);
     });
 
-    test(
-        'stopBackgroundService clears enabled state from SharedPreferences',
+    test('stopBackgroundService clears enabled state from SharedPreferences',
         () async {
       final mock = registerMockPlatform();
       mock.setServiceRunning(true);
@@ -192,8 +190,7 @@ void main() {
       }
     });
 
-    test(
-        'restoreBackgroundServiceOnColdStart does nothing when pref is false',
+    test('restoreBackgroundServiceOnColdStart does nothing when pref is false',
         () async {
       final mock = registerMockPlatform();
       mock.setServiceRunning(false);
