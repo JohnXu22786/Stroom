@@ -17,6 +17,13 @@ const _serviceContent = '后台任务运行中…';
 /// the background service on the next cold start.
 const _backgroundServiceEnabledKey = 'background_service_enabled';
 
+/// SharedPreferences keys for individual keep-alive strategy toggles.
+/// All default to true (maximum protection). Users can disable
+/// individual strategies from the BackgroundOptimizationPage.
+const _watchdogEnabledKey = 'background_service_watchdog';
+const _coldStartRestoreEnabledKey = 'background_service_cold_start_restore';
+const _batteryReminderEnabledKey = 'background_service_battery_reminder';
+
 /// Method channel for communicating with the native Android keep-alive
 /// watchdog (AlarmManager-based BroadcastReceiver).
 const _keepAliveChannel = MethodChannel('com.johntsui.stroom/keepalive');
@@ -147,10 +154,9 @@ Future<void> startBackgroundService() async {
     // Persist the enabled state so that if the process is killed by the
     // OS, the service can be auto-restored on the next cold start.
     await _setServiceEnabledPreference(true);
-    // Activate the native AlarmManager keep-alive watchdog.
-    // Schedules a periodic alarm that restarts the service if the
-    // process was killed by the OS.
-    _enableKeepAlive();
+    // Activate the native AlarmManager keep-alive watchdog (only if
+    // the user has the watchdog toggle enabled).
+    await _enableKeepAlive();
   } catch (e) {
     debugPrint('[BackgroundService] Failed to start background service: $e');
     await AppLogService.error('BackgroundService', '启动后台服务失败', e);
@@ -222,6 +228,7 @@ bool isBackgroundServiceSupported() {
 /// [initializeBackgroundService] has completed.
 Future<void> restoreBackgroundServiceOnColdStart() async {
   if (!isBackgroundServiceSupported()) return;
+  if (!await isColdStartRestoreEnabled()) return;
 
   try {
     final prefs = await SharedPreferences.getInstance();
@@ -251,6 +258,65 @@ Future<void> _setServiceEnabledPreference(bool enabled) async {
   }
 }
 
+// ── Individual keep-alive strategy toggles ──────────────────────────────
+
+/// Returns whether the AlarmManager watchdog is enabled.
+/// Defaults to `true`.
+Future<bool> isWatchdogEnabled() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_watchdogEnabledKey) ?? true;
+  } catch (_) {
+    return true;
+  }
+}
+
+/// Enables or disables the AlarmManager watchdog.
+Future<void> setWatchdogEnabled(bool enabled) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_watchdogEnabledKey, enabled);
+  } catch (_) {}
+}
+
+/// Returns whether cold-start auto-restore is enabled.
+/// Defaults to `true`.
+Future<bool> isColdStartRestoreEnabled() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_coldStartRestoreEnabledKey) ?? true;
+  } catch (_) {
+    return true;
+  }
+}
+
+/// Enables or disables cold-start auto-restore.
+Future<void> setColdStartRestoreEnabled(bool enabled) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_coldStartRestoreEnabledKey, enabled);
+  } catch (_) {}
+}
+
+/// Returns whether the battery optimization reminder card is visible.
+/// Defaults to `true`.
+Future<bool> isBatteryReminderEnabled() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_batteryReminderEnabledKey) ?? true;
+  } catch (_) {
+    return true;
+  }
+}
+
+/// Enables or disables the battery optimization reminder card.
+Future<void> setBatteryReminderEnabled(bool enabled) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_batteryReminderEnabledKey, enabled);
+  } catch (_) {}
+}
+
 /// Activates the native AlarmManager keep-alive watchdog.
 ///
 /// On Android, this schedules a periodic alarm via AlarmManager that
@@ -260,8 +326,9 @@ Future<void> _setServiceEnabledPreference(bool enabled) async {
 ///
 /// This is a fire-and-forget call — failures are logged but not
 /// propagated since keep-alive is a best-effort enhancement.
-void _enableKeepAlive() {
+Future<void> _enableKeepAlive() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
+  if (!await isWatchdogEnabled()) return;
   try {
     _keepAliveChannel.invokeMethod('startKeepAlive');
   } catch (e) {
@@ -277,6 +344,11 @@ void _disableKeepAlive() {
   } catch (e) {
     debugPrint('[BackgroundService] Failed to disable keep-alive alarm: $e');
   }
+}
+
+/// Public wrapper for disabling the keep-alive watchdog from the UI.
+void disableKeepAlive() {
+  _disableKeepAlive();
 }
 
 /// Checks whether the app is exempt from Android battery optimization.
@@ -305,7 +377,6 @@ Future<bool> isIgnoringBatteryOptimizations() async {
 /// opening the app's settings page.
 void requestIgnoreBatteryOptimizations() {
   if (defaultTargetPlatform != TargetPlatform.android) return;
-  if (const bool.fromEnvironment('FLUTTER_TEST')) return;
   try {
     _keepAliveChannel.invokeMethod('requestIgnoreBatteryOptimizations');
   } catch (e) {

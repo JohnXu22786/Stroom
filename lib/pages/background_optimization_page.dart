@@ -33,12 +33,31 @@ class _BackgroundOptimizationPageState
   bool _isIgnoringBattery = false;
   bool _isCheckingBattery = true;
 
+  // ── Keep-alive strategy toggles ─────────────────────────────────────
+  bool _watchdogEnabled = true;
+  bool _coldStartRestoreEnabled = true;
+  bool _batteryReminderEnabled = true;
+
   @override
   void initState() {
     super.initState();
     _detectPlatform();
     _checkBackgroundService();
     _checkBatteryOptimization();
+    _loadStrategyToggles();
+  }
+
+  Future<void> _loadStrategyToggles() async {
+    final w = await isWatchdogEnabled();
+    final c = await isColdStartRestoreEnabled();
+    final b = await isBatteryReminderEnabled();
+    if (mounted) {
+      setState(() {
+        _watchdogEnabled = w;
+        _coldStartRestoreEnabled = c;
+        _batteryReminderEnabled = b;
+      });
+    }
   }
 
   // ── Platform Detection ───────────────────────────────────────────────
@@ -249,6 +268,10 @@ class _BackgroundOptimizationPageState
           const SizedBox(height: 24),
           _buildBatteryOptimizationCard(theme),
           const SizedBox(height: 24),
+          _buildSectionHeader('保活策略', theme),
+          const SizedBox(height: 8),
+          _buildStrategyTogglesCard(theme),
+          const SizedBox(height: 24),
           _buildSectionHeader('平台教程', theme),
           const SizedBox(height: 8),
           _buildDescription(
@@ -455,6 +478,9 @@ class _BackgroundOptimizationPageState
     if (defaultTargetPlatform != TargetPlatform.android) {
       return const SizedBox.shrink();
     }
+    if (!_batteryReminderEnabled) {
+      return const SizedBox.shrink();
+    }
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -503,6 +529,68 @@ class _BackgroundOptimizationPageState
                 ),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Strategy Toggles Card ─────────────────────────────────────────────
+
+  Widget _buildStrategyTogglesCard(ThemeData theme) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          children: [
+            SwitchListTile(
+              title: const Text('AlarmManager 看门狗',
+                  style: TextStyle(fontWeight: FontWeight.w500)),
+              subtitle: Text(
+                '每 5 分钟检查后台服务是否存活，被杀后自动重启',
+                style: theme.textTheme.bodySmall,
+              ),
+              value: _watchdogEnabled,
+              onChanged: (v) {
+                setState(() => _watchdogEnabled = v);
+                setWatchdogEnabled(v);
+                if (v && _isServiceRunning) {
+                  // Immediately activate if service is running
+                  startBackgroundService();
+                } else if (!v) {
+                  // Disable the alarm
+                  disableKeepAlive();
+                }
+              },
+            ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            SwitchListTile(
+              title: const Text('冷启动自动恢复',
+                  style: TextStyle(fontWeight: FontWeight.w500)),
+              subtitle: Text(
+                '进程被杀后重新打开 App 时自动恢复后台服务',
+                style: theme.textTheme.bodySmall,
+              ),
+              value: _coldStartRestoreEnabled,
+              onChanged: (v) {
+                setState(() => _coldStartRestoreEnabled = v);
+                setColdStartRestoreEnabled(v);
+              },
+            ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            SwitchListTile(
+              title: const Text('电池优化提醒',
+                  style: TextStyle(fontWeight: FontWeight.w500)),
+              subtitle: Text(
+                '在后台优化页显示电池优化状态和忽略入口',
+                style: theme.textTheme.bodySmall,
+              ),
+              value: _batteryReminderEnabled,
+              onChanged: (v) {
+                setState(() => _batteryReminderEnabled = v);
+                setBatteryReminderEnabled(v);
+              },
+            ),
           ],
         ),
       ),
