@@ -14,6 +14,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Allow user to exempt app from battery optimization (Doze) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- Required to install APK packages on Android 8+ (API 26+) -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
@@ -88,7 +91,18 @@
         <service
             android:name="com.foregroundservice.ForegroundService"
             android:foregroundServiceType="dataSync"
-            android:exported="false" />
+            android:exported="false"
+            android:stopWithTask="false" />
+
+        <!-- Keep-alive watchdog: AlarmManager-based receiver that restarts
+             the foreground service if the process was killed by the OS. -->
+        <receiver
+            android:name=".KeepAliveReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
