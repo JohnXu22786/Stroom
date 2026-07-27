@@ -265,7 +265,9 @@ class OpenAiFileService {
       final totalParts = (bytes.length / config.partSizeBytes).ceil();
       final partIds = <String>[];
 
-      for (var offset = 0; offset < bytes.length; offset += config.partSizeBytes) {
+      for (var offset = 0;
+          offset < bytes.length;
+          offset += config.partSizeBytes) {
         if (cancelToken?.isCancelled == true) {
           await _cancelUploadSafely(uploadId);
           throw Exception('上传已取消');
@@ -276,8 +278,8 @@ class OpenAiFileService {
             : offset + config.partSizeBytes;
         final partBytes = bytes.sublist(offset, end);
 
-        final partId = await _addPart(uploadId, partBytes,
-            cancelToken: cancelToken);
+        final partId =
+            await _addPart(uploadId, partBytes, cancelToken: cancelToken);
         partIds.add(partId);
 
         // Report progress (0.0 to 1.0)
@@ -398,7 +400,8 @@ class OpenAiFileService {
 
       if (fileData == null) {
         // Fallback: some providers might return the file data at top level
-        if (data['id'] is String && (data['id'] as String).startsWith('file-')) {
+        if (data['id'] is String &&
+            (data['id'] as String).startsWith('file-')) {
           return OpenAiFileResult(
             id: data['id'] as String,
             bytes: (data['bytes'] as num?)?.toInt() ?? 0,

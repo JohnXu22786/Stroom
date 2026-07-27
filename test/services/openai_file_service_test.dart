@@ -63,7 +63,9 @@ class _MockAdapter implements HttpClientAdapter {
     return ResponseBody.fromString(
       '{"error":{"message":"Not found"}}',
       404,
-      headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType]
+      },
     );
   }
 
@@ -104,8 +106,7 @@ String _bodyString(Uint8List bytes) {
 
 /// Check if [bodyBytes] contains a multipart field with the given [name]
 /// and [value].
-bool _multipartFieldContains(
-    List<int> bodyBytes, String name, String value) {
+bool _multipartFieldContains(List<int> bodyBytes, String name, String value) {
   final bodyStr = utf8.decode(bodyBytes, allowMalformed: true);
   final pattern = 'name="$name"';
   final nameIdx = bodyStr.indexOf(pattern);
@@ -147,7 +148,8 @@ OpenAiFileUploadConfig _testConfig({String baseUrl = 'https://api.test.com'}) {
 Dio _mockDio(_MockAdapter adapter) {
   return Dio(BaseOptions(
     headers: {'Authorization': 'Bearer test-key'},
-  ))..httpClientAdapter = adapter;
+  ))
+    ..httpClientAdapter = adapter;
 }
 
 // ============================================================================
@@ -231,7 +233,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"file-abc123","object":"file","bytes":100,"created_at":1234567890,"filename":"test.txt","purpose":"user_data"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -277,15 +281,15 @@ void main() {
       );
     });
 
-    test(
-        'sends Authorization header with API key in regular upload',
-        () async {
+    test('sends Authorization header with API key in regular upload', () async {
       final adapter = _MockAdapter();
       adapter.onPost('/files', (options, bodyBytes) {
         return ResponseBody.fromString(
           '{"id":"file-abc","object":"file","bytes":50,"created_at":1,"filename":"a.txt","purpose":"user_data"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -330,14 +334,17 @@ void main() {
       );
     });
 
-    test('wraps DioException with user-friendly message on regular upload failure',
+    test(
+        'wraps DioException with user-friendly message on regular upload failure',
         () async {
       final adapter = _MockAdapter();
       adapter.onPost('/files', (options, bodyBytes) {
         return ResponseBody.fromString(
           '{"error":{"message":"Invalid file format"}}',
           400,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -351,16 +358,14 @@ void main() {
           mimeType: 'text/plain',
           purpose: 'user_data',
         ),
-        throwsA(predicate((e) =>
-            e is Exception && e.toString().contains('HTTP 400'))),
+        throwsA(predicate(
+            (e) => e is Exception && e.toString().contains('HTTP 400'))),
       );
     });
   });
 
   group('OpenAiFileService large file upload (multipart)', () {
-    test(
-        'uses multipart upload flow for files above threshold',
-        () async {
+    test('uses multipart upload flow for files above threshold', () async {
       // Use a low threshold so even a small file triggers multipart
       final config = OpenAiFileUploadConfig(
         apiKey: 'test-key',
@@ -385,7 +390,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":200,"created_at":1,"filename":"large.bin","purpose":"fine-tune","status":"pending","expires_at":99999999}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -394,7 +401,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$partId","object":"upload.part","created_at":1,"upload_id":"$uploadId"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -409,7 +418,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":200,"created_at":1,"filename":"large.bin","purpose":"fine-tune","status":"completed","file":{"id":"$fileId","object":"file","bytes":200,"created_at":1,"filename":"large.bin","purpose":"fine-tune"}}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -469,7 +480,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":$totalSize,"created_at":1,"filename":"split.bin","purpose":"user_data","status":"pending","expires_at":99999999}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -479,7 +492,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$pid","object":"upload.part","created_at":1,"upload_id":"$uploadId"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -487,7 +502,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":$totalSize,"created_at":1,"filename":"split.bin","purpose":"user_data","status":"completed","file":{"id":"file-split","object":"file","bytes":$totalSize,"created_at":1,"filename":"split.bin","purpose":"user_data"}}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -527,7 +544,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":$totalSize,"created_at":1,"filename":"p.bin","purpose":"user_data","status":"pending","expires_at":99999999}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -535,7 +554,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"part_${progressValues.length}","object":"upload.part","created_at":1,"upload_id":"$uploadId"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -543,7 +564,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":$totalSize,"created_at":1,"filename":"p.bin","purpose":"user_data","status":"completed","file":{"id":"file-p","object":"file","bytes":$totalSize,"created_at":1,"filename":"p.bin","purpose":"user_data"}}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -589,7 +612,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":100,"created_at":1,"filename":"c.bin","purpose":"user_data","status":"pending","expires_at":99999999}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -597,7 +622,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"part_x","object":"upload.part","created_at":1,"upload_id":"$uploadId"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -616,8 +643,7 @@ void main() {
       );
     });
 
-    test(
-        'throws when multipart upload fails due to upload creation error',
+    test('throws when multipart upload fails due to upload creation error',
         () async {
       final config = OpenAiFileUploadConfig(
         apiKey: 'test-key',
@@ -631,7 +657,9 @@ void main() {
         return ResponseBody.fromString(
           '{"error":{"message":"Upload limit exceeded"}}',
           429,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -671,7 +699,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"file-boundary","object":"file","bytes":$threshold,"created_at":1,"filename":"boundary.bin","purpose":"user_data"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -680,7 +710,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"u1","object":"upload","bytes":$threshold,"created_at":1,"filename":"boundary.bin","purpose":"user_data","status":"pending","expires_at":99999999}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -717,7 +749,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":101,"created_at":1,"filename":"over.bin","purpose":"user_data","status":"pending","expires_at":99999999}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -725,7 +759,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"p1","object":"upload.part","created_at":1,"upload_id":"$uploadId"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -733,7 +769,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":101,"created_at":1,"filename":"over.bin","purpose":"user_data","status":"completed","file":{"id":"file-over","object":"file","bytes":101,"created_at":1,"filename":"over.bin","purpose":"user_data"}}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -759,7 +797,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"file-my-id","object":"file","bytes":500,"created_at":1,"filename":"my.txt","purpose":"assistants"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -793,7 +833,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":50,"created_at":1,"filename":"n.bin","purpose":"vision","status":"pending","expires_at":99999999}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -801,7 +843,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"p1","object":"upload.part","created_at":1,"upload_id":"$uploadId"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -809,7 +853,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":50,"created_at":1,"filename":"n.bin","purpose":"vision","status":"completed","file":{"id":"$nestedFileId","object":"file","bytes":50,"created_at":1,"filename":"n.bin","purpose":"vision"}}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -844,7 +890,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":30,"created_at":1,"filename":"f.bin","purpose":"assistants","status":"pending","expires_at":99999999}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -852,7 +900,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"p1","object":"upload.part","created_at":1,"upload_id":"$uploadId"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -862,7 +912,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":30,"created_at":1,"filename":"f.bin","purpose":"assistants","status":"completed"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -901,7 +953,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":40,"created_at":1,"filename":"top.bin","purpose":"vision","status":"pending","expires_at":99999999}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -909,7 +963,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"pt1","object":"upload.part","created_at":1,"upload_id":"$uploadId"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -918,7 +974,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$fileId","object":"upload","bytes":40,"created_at":1,"filename":"top.bin","purpose":"vision","status":"completed"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -1005,7 +1063,8 @@ void main() {
       final config = OpenAiFileUploadConfig(
         apiKey: 'test-key',
         baseUrl: 'https://api.test.com',
-        multipartThresholdBytes: 4, // threshold below 6-byte file → use multipart
+        multipartThresholdBytes:
+            4, // threshold below 6-byte file → use multipart
         partSizeBytes: partSize,
       );
 
@@ -1017,7 +1076,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":${testData.length},"created_at":1,"filename":"body.bin","purpose":"user_data","status":"pending","expires_at":99999999}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -1025,7 +1086,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"part_body_1","object":"upload.part","created_at":1,"upload_id":"$uploadId"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -1033,7 +1096,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"$uploadId","object":"upload","bytes":${testData.length},"created_at":1,"filename":"body.bin","purpose":"user_data","status":"completed","file":{"id":"file-body","object":"file","bytes":${testData.length},"created_at":1,"filename":"body.bin","purpose":"user_data"}}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 
@@ -1048,8 +1113,8 @@ void main() {
       );
 
       // Find the add-part request
-      final partReq = adapter.capturedRequests
-          .firstWhere((r) => r.path.contains('/parts'));
+      final partReq =
+          adapter.capturedRequests.firstWhere((r) => r.path.contains('/parts'));
       expect(partReq.contentType!.contains('multipart/form-data'), isTrue);
       // Verify the test data is in the body
       expect(_bodyContains(partReq.bodyBytes, testData), isTrue,
@@ -1063,7 +1128,9 @@ void main() {
         return ResponseBody.fromString(
           '{"id":"file-x","object":"file","bytes":10,"created_at":1,"filename":"my_file.json","purpose":"fine-tune"}',
           200,
-          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType]
+          },
         );
       });
 

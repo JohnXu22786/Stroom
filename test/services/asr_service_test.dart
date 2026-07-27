@@ -797,8 +797,8 @@ void main() {
             audioBytes: Uint8List(200),
             audioFormat: 'wav',
           ),
-          throwsA(predicate((e) =>
-              e is Exception && e.toString().contains('文件大小超过限制'))),
+          throwsA(predicate(
+              (e) => e is Exception && e.toString().contains('文件大小超过限制'))),
         );
       });
 
