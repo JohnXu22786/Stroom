@@ -19,6 +19,7 @@ import '../../utils/audio_separation.dart';
 import '../../utils/audio_utils.dart';
 import '../../utils/file_manifest.dart';
 import '../../utils/text_manifest.dart';
+import '../../utils/video_manifest.dart';
 import '../models/block_type_definition.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_execution.dart';
