@@ -489,6 +489,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
                           reasoningContent: m.reasoningContent,
                           toolCalls: m.toolCalls,
                           reasoningSections: m.reasoningSections,
+                          rawRequest: m.rawRequest,
+                          rawResponse: m.rawResponse,
                         ))
                     .toList(),
                 isPinned: c.isPinned,

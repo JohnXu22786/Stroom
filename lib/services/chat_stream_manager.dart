@@ -338,6 +338,13 @@ class ChatStreamManager {
     Map<String, dynamic>? rawRequestCapture;
     Map<String, dynamic>? rawResponseCapture;
 
+    // Snapshot the ChatService instance that will handle this stream.
+    // After the stream starts, _adapter.currentChatService may be replaced
+    // by configure() / selectModel() from another page instance, but our
+    // captured reference keeps the in-flight request data reachable for
+    // raw request/response capture in the finally block below.
+    final _snappedChatService = _adapter.currentChatService;
+
     try {
       final stream = _adapter.sendStreamWithTools(
         text,
@@ -482,20 +489,24 @@ class ChatStreamManager {
           List<String>.from(state.textChunks));
       _maybeSetProvider(convId, streamingFullReplyProvider, state.fullReply);
 
-      // Capture request/response raw data
+      // Capture request/response raw data from the ChatService instance
+      // that was active when this stream started (snapped above). Using
+      // the snapped reference is critical: adapter.currentChatService may
+      // have been replaced mid-stream by a page re-entry calling configure()
+      // or selectModel(). Reading through the replaced service returns null.
       try {
-        final reqBody = _adapter.lastRequestBody;
-        final headers = _adapter.lastRequestHeaders;
-        final url = _adapter.lastRequestUrl;
+        final reqBody = _snappedChatService?.lastRequestBody;
+        final headers = _snappedChatService?.lastRequestHeaders;
+        final url = _snappedChatService?.lastRequestUrl;
         if (reqBody != null || headers != null || url != null) {
           rawRequestCapture = {};
           if (url != null) rawRequestCapture['url'] = url;
           if (headers != null) rawRequestCapture['headers'] = headers;
           if (reqBody != null) rawRequestCapture['body'] = reqBody;
         }
-        final respData = _adapter.lastResponseData;
-        final statusCode = _adapter.lastResponseStatusCode;
-        final respHeaders = _adapter.lastResponseHeaders;
+        final respData = _snappedChatService?.lastResponseData;
+        final statusCode = _snappedChatService?.lastResponseStatusCode;
+        final respHeaders = _snappedChatService?.lastResponseHeaders;
         if (respData != null || statusCode != null || respHeaders != null) {
           rawResponseCapture = {};
           if (statusCode != null) {
@@ -675,7 +686,14 @@ class ChatStreamManager {
 
   /// Clears all global streaming providers.
   void _clearProviders() {
-    _setProvider(isStreamingProvider, false);
+    // Only clear isStreamingProvider when NO conversation is actively
+    // streaming. If another conversation is still running (e.g. user
+    // switched tabs while a stream is in-flight), clearing the flag
+    // would let the user start a second concurrent stream on the
+    // current conversation, violating the adapter's single-stream limit.
+    if (_streams.isEmpty) {
+      _setProvider(isStreamingProvider, false);
+    }
     _setProvider(streamingMsgIdProvider, null);
     _setProvider(streamingFullReplyProvider, '');
     _setProvider(streamingHasFirstTokenProvider, false);
