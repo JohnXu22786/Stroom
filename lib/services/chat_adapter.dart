@@ -52,6 +52,13 @@ class AvailableModel {
 class ChatAdapter {
   ChatService? _chatService;
 
+  /// The [ChatService] instance currently handling API requests.
+  /// May be replaced by [configure] or [selectModel] mid-session.
+  /// Callers that need to read per-request data (lastRequestBody etc.)
+  /// after a request completes should capture this reference before
+  /// the request starts, to guard against the service being swapped.
+  ChatService? get currentChatService => _chatService;
+
   /// MCP 客户端管理器
   final McpClientManager _mcpClientManager = McpClientManager();
 

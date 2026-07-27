@@ -1145,11 +1145,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
           List<String>.from(ref.read(streamingReasoningSectionsProvider)),
       textChunks: List<String>.from(ref.read(streamingTextSectionsProvider)),
       toolCalls: List<ToolCallData>.from(ref.read(streamingToolCallsProvider)),
-      // Always true during live streaming: the last reasoning section shows
-      // "thinking..." while active. When a new section becomes the last,
-      // the previous one automatically transitions to "thinking complete".
-      // After the stream ends, _buildFinalSegments replaces with isStreaming=false.
-      isLastReasoningStreaming: true,
+      // Use the per-message reasoning-completed flag (which is reset
+      // to false on each ReasoningSectionEndEvent for multi-round tool
+      // calls). When false, the last reasoning section shows "思考中"
+      // (actively streaming); when true, it shows "思考完成".
+      isLastReasoningStreaming: !(_isReasoningCompletedForMsg[msgId] ?? false),
       toolCallRoundStarts:
           List<int>.from(ref.read(streamingToolCallRoundStartsProvider)),
     );
@@ -1918,9 +1918,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
       _rebuildLiveSegments(msgId);
 
-      final hasFirstToken = ref.read(streamingHasFirstTokenProvider);
-      if (hasFirstToken && next.isNotEmpty) {
-        _isReasoningCompletedForMsg[msgId] = true;
+      // ReasoningSectionEndEvent appends a new (empty) section –
+      // reasoningSections length increases. The previous section is
+      // now complete; the new section will start filling on the next
+      // ReasoningEvent. Mark the flag false so the fresh section
+      // renders as "思考中" once reasoning chunks arrive.
+      if (next.length > (prev?.length ?? 0)) {
+        _isReasoningCompletedForMsg[msgId] = false;
       }
       if (mounted) setState(() {});
     });
@@ -1964,6 +1968,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
       if (!_isStreamingForCurrentConv()) return;
       final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider);
       if (msgId == null) return;
+      // Text chunks arriving = the current round's reasoning phase
+      // is complete. Mark the flag so _rebuildLiveSegments flips the
+      // last reasoning section to "思考完成".
+      _isReasoningCompletedForMsg[msgId] = true;
       _rebuildLiveSegments(msgId);
       if (mounted) setState(() {});
     });
@@ -1981,31 +1989,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
       final wasStreaming = prev?.contains(activeId) ?? false;
       final isStreaming = next.contains(activeId);
       if (wasStreaming && !isStreaming && _isStreamingActive) {
+        final capturedMsgId = _streamingMsgId;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _handleStreamCompletion();
-        });
-      } else if (prev == null && !isStreaming && !_isStreamingActive) {
-        // Initial subscription: the stream may have completed before
-        // this page was built (e.g. user returns after stream already
-        // finished). The manager has already cleared _streams, so the
-        // transition is invisible. We must still clean up any stale
-        // providers (isStreamingProvider, etc.).
-        // _handleStreamCompletion would no-op because its guard
-        // `if (!_isStreamingActive) return;` would short-circuit,
-        // so clear the stale providers directly here.
-        final manager = ref.read(chatStreamManagerProvider);
-        if (!manager.isStreamingFor(activeId)) {
-          AppLogService.info('ChatPage',
-              '[STREAM-COMPLETION] initial detection: activeId=$activeId already completed, clearing stale providers');
-          try {
-            ref.read(isStreamingProvider.notifier).state = false;
-            ref.read(streamingMsgIdProvider.notifier).state = null;
-            ref.read(streamingFullReplyProvider.notifier).state = '';
-            ref.read(streamingHasFirstTokenProvider.notifier).state = false;
-          } catch (e) {
-            debugPrint('[ChatPage] initial-detection provider cleanup: $e');
+          if (mounted && _streamingMsgId == capturedMsgId) {
+            _handleStreamCompletion();
           }
-        }
+        });
       }
     });
 
