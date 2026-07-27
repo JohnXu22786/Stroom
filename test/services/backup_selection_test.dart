@@ -82,7 +82,7 @@ void main() {
       expect(sel.browserCookies, isTrue);
     });
 
-    test('ankiData=false excludes Anki from selectedLabels', () {
+    test('all flags false returns empty selectedLabels', () {
       final sel = BackupSelection(
         chatRecordsAndAttachments: false,
         settings: false,
@@ -1383,6 +1383,1088 @@ void main() {
       expect(restoredPrefs.getString('assistants'), contains('备份助手'),
           reason:
               'v1 format restores all preferences (merged), not just selected category');
+    });
+  });
+
+  // ==================================================================
+  // 全面检查：所有 9 个类别在选择性备份和恢复中的行为一致性
+  // ==================================================================
+  //
+  // 用户报告：「选择性备份和恢复有问题，不选择视频恢复，视频却没有消失。
+  // 有的可以，有的不可以。」经全面排查，发现原因：
+  //
+  // 1. SharedPreferences（chat + settings）在 v2 部分选择时，clear-all 行为
+  //    会摧毁未选中的类型（已在上面的 group 中修复）
+  // 2. 数据库记录类型（pictures/audio/videos/texts）在未选中时正确保留 ——
+  //    与 SharedPreferences 的（修复前）毁灭行为不一致，导致用户观察到
+  //    videos "没有消失"（正确行为），而设置/聊天"消失了"（修复前的 bug）
+  //
+  // 本 group 对所有 9 个类别逐一验证选择性备份和选择性恢复的正确性。
+
+  group('Comprehensive selective backup/restore audit for all 9 categories',
+      () {
+    // ----------------------------------------------------------------
+    // 选择性备份：验证未选中的类别排除在归档之外
+    // ----------------------------------------------------------------
+
+    testWidgets('selective backup: deselected categories excluded from archive',
+        (WidgetTester t) async {
+      // Insert test records for ALL 4 DB-based types
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_audit',
+        'name': 'audit_img',
+        'hash': 'audit_img_hash',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'width': 100,
+        'height': 100,
+      });
+      await ManifestDatabase.insertAudioRecord({
+        'id': 'aud_audit',
+        'name': 'audit_aud',
+        'hash': 'audit_aud_hash',
+        'format': 'wav',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'duration': 1.0,
+      });
+      await ManifestDatabase.insertVideoRecord({
+        'id': 'vid_audit',
+        'name': 'audit_vid',
+        'hash': 'audit_vid_hash',
+        'format': 'mp4',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'duration': 1.0,
+      });
+      await ManifestDatabase.insertTextRecord({
+        'id': 'txt_audit',
+        'name': 'audit_txt',
+        'hash': 'audit_txt_hash',
+        'format': 'txt',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'textLength': 100,
+      });
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"audit_conv"}]',
+        'assistants': '[{"id":"audit_a"}]',
+        'provider_entries': '[{"id":"audit_p"}]',
+        'data_format_version': 2,
+      });
+
+      // Backup with ONLY pictures selected (all other 8 categories deselected)
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: true,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      final bytes = await BackupService.buildBackupBytesForTest(selection: sel);
+      final archive = ZipDecoder().decodeBytes(bytes);
+      final fileNames =
+          archive.files.where((f) => f.isFile).map((f) => f.name).toSet();
+
+      // Always present
+      expect(fileNames, contains('manifest.json'));
+      expect(fileNames, contains('stroom_manifest.json'));
+
+      // Deselected categories: files must NOT be in archive
+      expect(fileNames, isNot(contains('chat_data.json')),
+          reason: 'chat_data.json must not be in pictures-only backup');
+      expect(fileNames, isNot(contains('settings.json')),
+          reason: 'settings.json must not be in pictures-only backup');
+      expect(fileNames.any((n) => n.startsWith('tts_audio/')), isFalse,
+          reason: 'Audio files must not be in pictures-only backup');
+      expect(fileNames.any((n) => n.startsWith('videos/')), isFalse,
+          reason: 'Video files must not be in pictures-only backup');
+      expect(fileNames.any((n) => n.startsWith('texts/')), isFalse,
+          reason: 'Text files must not be in pictures-only backup');
+      expect(fileNames.any((n) => n.startsWith('attachments/')), isFalse,
+          reason: 'Attachment files must not be in pictures-only backup');
+      expect(fileNames.any((n) => n.startsWith('synthesis/')), isFalse,
+          reason: 'Task files must not be in pictures-only backup');
+      expect(fileNames.any((n) => n.startsWith('catcatch/')), isFalse,
+          reason: 'Task files must not be in pictures-only backup');
+      expect(fileNames.any((n) => n.startsWith('anki/')), isFalse,
+          reason: 'Anki files must not be in pictures-only backup');
+      expect(fileNames, isNot(contains('browser_cookies.json')),
+          reason: 'browser_cookies.json must not be in pictures-only backup');
+
+      // Verify stroom_manifest.json: deselected types have empty arrays
+      Uint8List? manifestData;
+      for (final f in archive) {
+        if (f.isFile && f.name == 'stroom_manifest.json') {
+          manifestData = Uint8List.fromList(f.content as List<int>);
+          break;
+        }
+      }
+      expect(manifestData, isNotNull);
+      final dbJson =
+          jsonDecode(utf8.decode(manifestData!)) as Map<String, dynamic>;
+      expect((dbJson['image_records'] as List<dynamic>).length, greaterThan(0),
+          reason: 'Image records must be included when pictures is selected');
+      expect((dbJson['audio_records'] as List<dynamic>).length, equals(0),
+          reason: 'Audio records must be empty when audio is deselected');
+      expect((dbJson['video_records'] as List<dynamic>).length, equals(0),
+          reason: 'Video records must be empty when videos is deselected');
+      expect((dbJson['text_records'] as List<dynamic>).length, equals(0),
+          reason: 'Text records must be empty when texts is deselected');
+    });
+
+    // ----------------------------------------------------------------
+    // 选择性恢复：验证所有 4 种 DB 记录类型在未选中时都被保留
+    // ----------------------------------------------------------------
+
+    testWidgets(
+        'selective restore with NOTHING selected preserves ALL existing DB records',
+        (WidgetTester t) async {
+      // Insert records for all 4 types
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_preserve',
+        'name': 'p_img',
+        'hash': 'p_img_hash',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'width': 100,
+        'height': 100,
+      });
+      await ManifestDatabase.insertAudioRecord({
+        'id': 'aud_preserve',
+        'name': 'p_aud',
+        'hash': 'p_aud_hash',
+        'format': 'wav',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'duration': 1.0,
+      });
+      await ManifestDatabase.insertVideoRecord({
+        'id': 'vid_preserve',
+        'name': 'p_vid',
+        'hash': 'p_vid_hash',
+        'format': 'mp4',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'duration': 1.0,
+      });
+      await ManifestDatabase.insertTextRecord({
+        'id': 'txt_preserve',
+        'name': 'p_txt',
+        'hash': 'p_txt_hash',
+        'format': 'txt',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'textLength': 100,
+      });
+
+      // Build a full backup with DIFFERENT data
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': [
+              {
+                'id': 'img_backup',
+                'name': 'b_img',
+                'hash': 'b_img_hash',
+                'format': 'jpg',
+                'createdAt': DateTime.now().toIso8601String(),
+                'size': 999,
+                'folder': '',
+                'width': 999,
+                'height': 999,
+              },
+            ],
+            'audio_records': [
+              {
+                'id': 'aud_backup',
+                'name': 'b_aud',
+                'hash': 'b_aud_hash',
+                'format': 'wav',
+                'createdAt': DateTime.now().toIso8601String(),
+                'size': 999,
+                'folder': '',
+                'duration': 99.0,
+              },
+            ],
+            'video_records': [
+              {
+                'id': 'vid_backup',
+                'name': 'b_vid',
+                'hash': 'b_vid_hash',
+                'format': 'mp4',
+                'createdAt': DateTime.now().toIso8601String(),
+                'size': 999,
+                'folder': '',
+                'duration': 99.0,
+              },
+            ],
+            'text_records': [
+              {
+                'id': 'txt_backup',
+                'name': 'b_txt',
+                'hash': 'b_txt_hash',
+                'format': 'txt',
+                'createdAt': DateTime.now().toIso8601String(),
+                'size': 999,
+                'folder': '',
+                'textLength': 999,
+              },
+            ],
+            'folders': <String>[],
+          }))));
+      // Also include chat and settings to test SharedPreferences preservation
+      backupArchive.addFile(ArchiveFile(
+          'chat_data.json',
+          0,
+          utf8.encode(jsonEncode({
+            'conversations': '[{"id":"backup_conv"}]',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'settings.json',
+          0,
+          utf8.encode(jsonEncode({
+            'assistants': '[{"id":"backup_a"}]',
+          }))));
+
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"original_conv"}]',
+        'assistants': '[{"id":"original_a"}]',
+      });
+
+      // Restore with ABSOLUTELY NOTHING selected
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      // ALL existing DB records must be preserved
+      final images = await ManifestDatabase.getAllImageRecords();
+      expect(images.length, equals(1));
+      expect(images[0]['id'], equals('img_preserve'),
+          reason: 'Pre-existing image records must be preserved');
+
+      final audios = await ManifestDatabase.getAllAudioRecords();
+      expect(audios.length, equals(1));
+      expect(audios[0]['id'], equals('aud_preserve'),
+          reason: 'Pre-existing audio records must be preserved');
+
+      final videos = await ManifestDatabase.getAllVideoRecords();
+      expect(videos.length, equals(1));
+      expect(videos[0]['id'], equals('vid_preserve'),
+          reason: 'Pre-existing video records must be preserved');
+
+      final texts = await ManifestDatabase.getAllTextRecords();
+      expect(texts.length, equals(1));
+      expect(texts[0]['id'], equals('txt_preserve'),
+          reason: 'Pre-existing text records must be preserved');
+
+      // SharedPreferences must also be preserved
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('conversations'), contains('original_conv'),
+          reason: 'Chat must be preserved when chat is deselected');
+      expect(prefs.getString('assistants'), contains('original_a'),
+          reason: 'Settings must be preserved when settings is deselected');
+    });
+
+    // ----------------------------------------------------------------
+    // 选择性恢复：每次只选一个类别，验证只有该类别被替换
+    // ----------------------------------------------------------------
+
+    testWidgets(
+        'selective restore: only the selected category is replaced, all others preserved',
+        (WidgetTester t) async {
+      // Insert pre-existing records for all 4 DB types
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_pre',
+        'name': 'pre_img',
+        'hash': 'pre_img_hash',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 50,
+        'folder': '',
+        'width': 50,
+        'height': 50,
+      });
+      await ManifestDatabase.insertAudioRecord({
+        'id': 'aud_pre',
+        'name': 'pre_aud',
+        'hash': 'pre_aud_hash',
+        'format': 'wav',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 50,
+        'folder': '',
+        'duration': 0.5,
+      });
+      await ManifestDatabase.insertVideoRecord({
+        'id': 'vid_pre',
+        'name': 'pre_vid',
+        'hash': 'pre_vid_hash',
+        'format': 'mp4',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 50,
+        'folder': '',
+        'duration': 0.5,
+      });
+      await ManifestDatabase.insertTextRecord({
+        'id': 'txt_pre',
+        'name': 'pre_txt',
+        'hash': 'pre_txt_hash',
+        'format': 'txt',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 50,
+        'folder': '',
+        'textLength': 50,
+      });
+
+      // Build backup with DIFFERENT data for ALL 4 types
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': [
+              {
+                'id': 'img_new',
+                'name': 'new_img',
+                'hash': 'new_img_hash',
+                'format': 'jpg',
+                'createdAt': DateTime.now().toIso8601String(),
+                'size': 999,
+                'folder': '',
+                'width': 999,
+                'height': 999,
+              },
+            ],
+            'audio_records': [
+              {
+                'id': 'aud_new',
+                'name': 'new_aud',
+                'hash': 'new_aud_hash',
+                'format': 'wav',
+                'createdAt': DateTime.now().toIso8601String(),
+                'size': 999,
+                'folder': '',
+                'duration': 99.0,
+              },
+            ],
+            'video_records': [
+              {
+                'id': 'vid_new',
+                'name': 'new_vid',
+                'hash': 'new_vid_hash',
+                'format': 'mp4',
+                'createdAt': DateTime.now().toIso8601String(),
+                'size': 999,
+                'folder': '',
+                'duration': 99.0,
+              },
+            ],
+            'text_records': [
+              {
+                'id': 'txt_new',
+                'name': 'new_txt',
+                'hash': 'new_txt_hash',
+                'format': 'txt',
+                'createdAt': DateTime.now().toIso8601String(),
+                'size': 999,
+                'folder': '',
+                'textLength': 999,
+              },
+            ],
+            'folders': <String>[],
+          }))));
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore with ONLY videos selected (all other categories deselected)
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: true,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      // Only videos should be replaced; all others preserved
+      final videos = await ManifestDatabase.getAllVideoRecords();
+      expect(videos.length, equals(1));
+      expect(videos[0]['id'], equals('vid_new'),
+          reason: 'Videos must be replaced from backup');
+
+      final images = await ManifestDatabase.getAllImageRecords();
+      expect(images.length, equals(1));
+      expect(images[0]['id'], equals('img_pre'),
+          reason: 'Images must be preserved (not selected)');
+
+      final audios = await ManifestDatabase.getAllAudioRecords();
+      expect(audios.length, equals(1));
+      expect(audios[0]['id'], equals('aud_pre'),
+          reason: 'Audio must be preserved (not selected)');
+
+      final texts = await ManifestDatabase.getAllTextRecords();
+      expect(texts.length, equals(1));
+      expect(texts[0]['id'], equals('txt_pre'),
+          reason: 'Texts must be preserved (not selected)');
+    });
+
+    // ----------------------------------------------------------------
+    // 选择性备份 + 全量恢复：验证从选择性备份全量恢复会清除未选类别的数据
+    // （这是正确但可能令人意外的行为 —— 用户需要知道这个后果）
+    // ----------------------------------------------------------------
+
+    testWidgets(
+        'FULL restore from SELECTIVE backup clears categories that were not in backup',
+        (WidgetTester t) async {
+      // Scenario: user does a selective backup WITHOUT videos, then a full restore
+      // Result: video records are cleared (backup has empty video data, full restore clears all)
+
+      // Insert pre-existing video records
+      await ManifestDatabase.insertVideoRecord({
+        'id': 'vid_will_be_lost',
+        'name': 'lost_vid',
+        'hash': 'lost_vid_hash',
+        'format': 'mp4',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 500,
+        'folder': '',
+        'duration': 10.0,
+      });
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_will_be_replaced',
+        'name': 'old_img',
+        'hash': 'old_img_hash',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'width': 100,
+        'height': 100,
+      });
+
+      // Build a SELECTIVE backup (pictures only, no videos)
+      final selBackup = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: true,
+        audio: false,
+        videos: false, // <-- VIDEOS NOT INCLUDED
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      final backupBytes =
+          await BackupService.buildBackupBytesForTest(selection: selBackup);
+
+      // Now do a FULL restore from this selective backup
+      await BackupService.restoreFromBytesForTest(backupBytes);
+      // Default selection = BackupSelection.all (all true)
+
+      // Image records should be replaced by backup data
+      final images = await ManifestDatabase.getAllImageRecords();
+      expect(images.length, equals(1),
+          reason: 'Image records should be restored from backup');
+      expect(images[0]['id'], equals('img_will_be_replaced'),
+          reason: 'Original image record should be restored from backup');
+
+      // Video records: CLEARED because full restore clears all tables,
+      // but backup has empty video_records (videos were not selected during backup)
+      final videos = await ManifestDatabase.getAllVideoRecords();
+      expect(videos.length, equals(0),
+          reason:
+              'Video records are cleared because full restore clears all tables, '
+              'and the backup had empty video data (videos were not in the backup)');
+    });
+
+    // ----------------------------------------------------------------
+    // 选择性恢复：每个类别单独验证正确行为
+    // ----------------------------------------------------------------
+
+    testWidgets(
+        'texts-only restore replaces text records, preserves all others',
+        (WidgetTester t) async {
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_keep',
+        'name': 'keep_img',
+        'hash': 'keep_img_hash',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 10,
+        'folder': '',
+        'width': 10,
+        'height': 10,
+      });
+      await ManifestDatabase.insertTextRecord({
+        'id': 'txt_old',
+        'name': 'old_txt',
+        'hash': 'old_txt_hash',
+        'format': 'txt',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 10,
+        'folder': '',
+        'textLength': 10,
+      });
+
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': [
+              {
+                'id': 'txt_new',
+                'name': 'new_txt',
+                'hash': 'new_txt_hash',
+                'format': 'txt',
+                'createdAt': DateTime.now().toIso8601String(),
+                'size': 999,
+                'folder': '',
+                'textLength': 999,
+              },
+            ],
+            'folders': <String>[],
+          }))));
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      final sel = BackupSelection(
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: true, // <-- only texts selected
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      final texts = await ManifestDatabase.getAllTextRecords();
+      expect(texts.length, equals(1));
+      expect(texts[0]['id'], equals('txt_new'));
+
+      final images = await ManifestDatabase.getAllImageRecords();
+      expect(images.length, equals(1));
+      expect(images[0]['id'], equals('img_keep'),
+          reason: 'Images preserved when only texts selected');
+    });
+
+    testWidgets('audio-only restore replaces audio records, preserves others',
+        (WidgetTester t) async {
+      await ManifestDatabase.insertVideoRecord({
+        'id': 'vid_keep',
+        'name': 'keep_vid',
+        'hash': 'keep_vid_hash',
+        'format': 'mp4',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 10,
+        'folder': '',
+        'duration': 0.1,
+      });
+      await ManifestDatabase.insertAudioRecord({
+        'id': 'aud_old',
+        'name': 'old_aud',
+        'hash': 'old_aud_hash',
+        'format': 'wav',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 10,
+        'folder': '',
+        'duration': 0.1,
+      });
+
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': [
+              {
+                'id': 'aud_new',
+                'name': 'new_aud',
+                'hash': 'new_aud_hash',
+                'format': 'wav',
+                'createdAt': DateTime.now().toIso8601String(),
+                'size': 999,
+                'folder': '',
+                'duration': 99.0,
+              },
+            ],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      final sel = BackupSelection(
+        pictures: false,
+        audio: true, // <-- only audio selected
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      final audios = await ManifestDatabase.getAllAudioRecords();
+      expect(audios.length, equals(1));
+      expect(audios[0]['id'], equals('aud_new'));
+
+      final videos = await ManifestDatabase.getAllVideoRecords();
+      expect(videos.length, equals(1));
+      expect(videos[0]['id'], equals('vid_keep'),
+          reason: 'Videos preserved when only audio selected');
+    });
+
+    // ----------------------------------------------------------------
+    // 浏览器 Cookies 和 Anki 数据的选择性处理
+    // ----------------------------------------------------------------
+
+    testWidgets(
+        'browserCookies: true restores file with correct content, false preserves pre-existing data',
+        (WidgetTester t) async {
+      final cookiesContent = 'mock_cookies_data';
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      backupArchive.addFile(
+          ArchiveFile('browser_cookies.json', 0, utf8.encode(cookiesContent)));
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Test 1: browserCookies selected → file should be restored with correct content
+      final selTrue = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: true,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes,
+          selection: selTrue);
+      var written = await WebFileStore.read('/browser_cookies.json');
+      expect(written, isNotNull,
+          reason:
+              'browser_cookies.json should be restored when browserCookies is true');
+      expect(String.fromCharCodes(written!), equals(cookiesContent),
+          reason: 'Restored browser_cookies.json content should match backup');
+
+      // Clean up and verify cleanup succeeded
+      await WebFileStore.delete('/browser_cookies.json');
+      var afterDelete = await WebFileStore.read('/browser_cookies.json');
+      expect(afterDelete, isNull,
+          reason: 'Cleanup should remove browser_cookies.json before test 2');
+
+      // Test 2: browserCookies deselected → backup file NOT restored,
+      // pre-existing data survived
+      await WebFileStore.write('/browser_cookies.json',
+          Uint8List.fromList(utf8.encode('pre_existing_cookies')));
+      final selFalse = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes,
+          selection: selFalse);
+      written = await WebFileStore.read('/browser_cookies.json');
+      expect(written, isNotNull,
+          reason:
+              'Pre-existing browser_cookies.json should be preserved when browserCookies is false');
+      expect(String.fromCharCodes(written!), equals('pre_existing_cookies'),
+          reason:
+              'Pre-existing cookie content should be unchanged (not replaced by backup)');
+    });
+
+    testWidgets(
+        'ankiData: true restores file, false preserves pre-existing anki data',
+        (WidgetTester t) async {
+      // Seed pre-existing anki data on disk
+      await WebFileStore.write('anki/collection.anki2',
+          Uint8List.fromList(utf8.encode('pre_existing_anki')));
+      // Build backup with anki data
+      final ankiContent = 'mock_anki_content_for_restore';
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      backupArchive.addFile(
+          ArchiveFile('anki/collection.anki2', 0, utf8.encode(ankiContent)));
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Test 1: ankiData false → file NOT restored, pre-existing data preserved
+      final selFalse = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes,
+          selection: selFalse);
+
+      var written = await WebFileStore.read('anki/collection.anki2');
+      expect(written, isNotNull,
+          reason:
+              'Pre-existing anki data must be preserved when ankiData is false');
+      expect(String.fromCharCodes(written!), equals('pre_existing_anki'),
+          reason:
+              'Pre-existing anki content should be unchanged when ankiData is false');
+
+      // Clean up for test 2
+      await WebFileStore.delete('anki/collection.anki2');
+
+      // Test 2: ankiData true → file restored with correct content
+      final selTrue = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: true,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes,
+          selection: selTrue);
+
+      written = await WebFileStore.read('anki/collection.anki2');
+      expect(written, isNotNull,
+          reason:
+              'anki/collection.anki2 should be restored when ankiData is true');
+      expect(String.fromCharCodes(written!), equals(ankiContent),
+          reason: 'Restored anki content should match backup');
+    });
+
+    // ----------------------------------------------------------------
+    // 任务文件选择性恢复
+    // ----------------------------------------------------------------
+
+    testWidgets(
+        'tasks-only restore restores task files, preserves all DB records and SharedPreferences',
+        (WidgetTester t) async {
+      // Seed pre-existing data in all DB tables and SharedPreferences
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_keep_task',
+        'name': 'keep_img',
+        'hash': 'keep_img_hash',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 10,
+        'folder': '',
+        'width': 10,
+        'height': 10,
+      });
+      await ManifestDatabase.insertAudioRecord({
+        'id': 'aud_keep_task',
+        'name': 'keep_aud',
+        'hash': 'keep_aud_hash',
+        'format': 'wav',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 10,
+        'folder': '',
+        'duration': 0.1,
+      });
+      await ManifestDatabase.insertVideoRecord({
+        'id': 'vid_keep_task',
+        'name': 'keep_vid',
+        'hash': 'keep_vid_hash',
+        'format': 'mp4',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 10,
+        'folder': '',
+        'duration': 0.1,
+      });
+      await ManifestDatabase.insertTextRecord({
+        'id': 'txt_keep_task',
+        'name': 'keep_txt',
+        'hash': 'keep_txt_hash',
+        'format': 'txt',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 10,
+        'folder': '',
+        'textLength': 10,
+      });
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"keep_conv"}]',
+        'assistants': '[{"id":"keep_a"}]',
+        'provider_entries': '[{"id":"keep_p"}]',
+      });
+
+      // Build backup with task data
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'synthesis/tasks.json', 0, utf8.encode('["task_from_backup"]')));
+      backupArchive.addFile(ArchiveFile(
+          'catcatch/tasks.json', 0, utf8.encode('["catcatch_from_backup"]')));
+      // Also include chat/settings in backup (should not be restored)
+      backupArchive.addFile(ArchiveFile(
+          'chat_data.json',
+          0,
+          utf8.encode(jsonEncode({
+            'conversations': '[{"id":"backup_conv"}]',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'settings.json',
+          0,
+          utf8.encode(jsonEncode({
+            'assistants': '[{"id":"backup_a"}]',
+          }))));
+
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore with ONLY tasks selected
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true, // <-- only tasks selected
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      // Task files should be restored
+      final synthesisData = await WebFileStore.read('synthesis/tasks.json');
+      expect(synthesisData, isNotNull,
+          reason:
+              'synthesis/tasks.json should be restored when tasks is selected');
+      final synthesisContent = String.fromCharCodes(synthesisData!);
+      expect(synthesisContent, contains('task_from_backup'),
+          reason: 'Synthesis tasks should contain backup data');
+
+      final catcatchData = await WebFileStore.read('catcatch/tasks.json');
+      expect(catcatchData, isNotNull,
+          reason:
+              'catcatch/tasks.json should be restored when tasks is selected');
+
+      // All DB records must be preserved (not selected for restore)
+      final images = await ManifestDatabase.getAllImageRecords();
+      expect(images.length, equals(1));
+      expect(images[0]['id'], equals('img_keep_task'),
+          reason: 'Images preserved during tasks-only restore');
+
+      final audios = await ManifestDatabase.getAllAudioRecords();
+      expect(audios.length, equals(1));
+      expect(audios[0]['id'], equals('aud_keep_task'));
+
+      final videos = await ManifestDatabase.getAllVideoRecords();
+      expect(videos.length, equals(1));
+      expect(videos[0]['id'], equals('vid_keep_task'));
+
+      final texts = await ManifestDatabase.getAllTextRecords();
+      expect(texts.length, equals(1));
+      expect(texts[0]['id'], equals('txt_keep_task'));
+
+      // SharedPreferences must be preserved (not selected)
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('conversations'), contains('keep_conv'),
+          reason: 'Chat preserved during tasks-only restore');
+      expect(prefs.getString('assistants'), contains('keep_a'),
+          reason: 'Settings preserved during tasks-only restore');
+    });
+
+    // ----------------------------------------------------------------
+    // 文件夹选择性恢复：验证文件夹表按类型正确处理
+    // ----------------------------------------------------------------
+
+    testWidgets(
+        'folder tables are preserved or replaced according to selection',
+        (WidgetTester t) async {
+      // Set up pre-existing folders for multiple types
+      await ManifestDatabase.insertFolder('Folder_A',
+          recordTable: ManifestTables.imageRecords);
+      await ManifestDatabase.insertFolder('Folder_B',
+          recordTable: ManifestTables.videoRecords);
+
+      // Build backup with folders for images only
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+            ManifestTables.imageFolders: ['Backup_Folder_X'],
+            ManifestTables.videoFolders: <String>[],
+          }))));
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore with ONLY images selected (videos deselected)
+      final sel = BackupSelection(
+        pictures: true,
+        audio: false,
+        videos: false, // <-- videos not selected
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      // Image folders: cleared and replaced from backup
+      final imgFolders = await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.imageRecords);
+      expect(imgFolders, contains('Backup_Folder_X'),
+          reason: 'Image folder from backup should be restored');
+      expect(imgFolders, isNot(contains('Folder_A')),
+          reason: 'Pre-existing image folder should be replaced');
+
+      // Video folders: preserved (not selected for restore)
+      final vidFolders = await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.videoRecords);
+      expect(vidFolders, contains('Folder_B'),
+          reason:
+              'Pre-existing video folder must be preserved (videos not selected)');
     });
   });
 
