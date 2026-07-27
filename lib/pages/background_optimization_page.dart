@@ -30,12 +30,34 @@ class _BackgroundOptimizationPageState
   bool _isCheckingService = true;
   bool _isOperating = false;
   bool _isServiceSupported = false;
+  bool _isIgnoringBattery = false;
+  bool _isCheckingBattery = true;
+
+  // ── Keep-alive strategy toggles ─────────────────────────────────────
+  bool _watchdogEnabled = true;
+  bool _coldStartRestoreEnabled = true;
+  bool _batteryReminderEnabled = true;
 
   @override
   void initState() {
     super.initState();
     _detectPlatform();
     _checkBackgroundService();
+    _checkBatteryOptimization();
+    _loadStrategyToggles();
+  }
+
+  Future<void> _loadStrategyToggles() async {
+    final w = await isWatchdogEnabled();
+    final c = await isColdStartRestoreEnabled();
+    final b = await isBatteryReminderEnabled();
+    if (mounted) {
+      setState(() {
+        _watchdogEnabled = w;
+        _coldStartRestoreEnabled = c;
+        _batteryReminderEnabled = b;
+      });
+    }
   }
 
   // ── Platform Detection ───────────────────────────────────────────────
@@ -115,6 +137,35 @@ class _BackgroundOptimizationPageState
         _isCheckingService = false;
       });
     }
+  }
+
+  // ── Battery Optimization Check ───────────────────────────────────────
+
+  Future<void> _checkBatteryOptimization() async {
+    setState(() {
+      _isCheckingBattery = true;
+    });
+
+    try {
+      _isIgnoringBattery = await isIgnoringBatteryOptimizations();
+    } catch (_) {
+      _isIgnoringBattery = false;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isCheckingBattery = false;
+      });
+    }
+  }
+
+  Future<void> _requestBatteryExemption() async {
+    try {
+      requestIgnoreBatteryOptimizations();
+      // Re-check after a short delay to let the system dialog complete.
+      await Future<void>.delayed(const Duration(seconds: 2));
+      await _checkBatteryOptimization();
+    } catch (_) {}
   }
 
   // ── Service Control ──────────────────────────────────────────────────
@@ -214,6 +265,12 @@ class _BackgroundOptimizationPageState
           _buildSectionHeader('后台优化检测', theme),
           const SizedBox(height: 8),
           _buildOptimizationStatusCard(theme),
+          const SizedBox(height: 24),
+          _buildBatteryOptimizationCard(theme),
+          const SizedBox(height: 24),
+          _buildSectionHeader('保活策略', theme),
+          const SizedBox(height: 8),
+          _buildStrategyTogglesCard(theme),
           const SizedBox(height: 24),
           _buildSectionHeader('平台教程', theme),
           const SizedBox(height: 8),
@@ -411,6 +468,205 @@ class _BackgroundOptimizationPageState
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  // ── Battery Optimization Card ────────────────────────────────────────
+
+  Widget _buildBatteryOptimizationCard(ThemeData theme) {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return const SizedBox.shrink();
+    }
+    if (!_batteryReminderEnabled) {
+      return const SizedBox.shrink();
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _isCheckingBattery
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        _isIgnoringBattery
+                            ? Icons.check_circle
+                            : Icons.battery_alert,
+                        color:
+                            _isIgnoringBattery ? Colors.green : Colors.orange,
+                        size: 20,
+                      ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _isCheckingBattery
+                        ? '正在检测电池优化状态...'
+                        : _isIgnoringBattery
+                            ? '已忽略电池优化'
+                            : '未忽略电池优化 — 后台可能被杀',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (!_isIgnoringBattery && !_isCheckingBattery) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _requestBatteryExemption,
+                  icon: const Icon(Icons.battery_charging_full, size: 18),
+                  label: const Text('忽略电池优化'),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Strategy Toggles Card ─────────────────────────────────────────────
+
+  Widget _buildStrategyTogglesCard(ThemeData theme) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Section description
+            Padding(
+              padding: const EdgeInsets.only(
+                  left: 16, right: 16, top: 12, bottom: 4),
+              child: Text(
+                '以下策略可独立开关。默认全部启用以获得最强保活效果。'
+                '关闭某项仅影响该策略，不会影响后台服务本身的运行。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            _buildToggleTile(
+              theme: theme,
+              title: 'AlarmManager 看门狗',
+              detail: '启用后，Android 系统会每 5 分钟用原生闹钟检查后台服务是否还活着。'
+                  '如果进程被系统杀掉，闹钟会触发自动重启。'
+                  '\n\n闹钟在设备休眠（Doze）模式下依然生效，'
+                  '重启后也会自动重新调度。'
+                  '\n\n适用场景：对后台任务要求极高的用户。'
+                  '\n耗电影响：极低（系统批量处理闹钟）。',
+              value: _watchdogEnabled,
+              onChanged: (v) {
+                setState(() => _watchdogEnabled = v);
+                setWatchdogEnabled(v);
+                if (v && _isServiceRunning) {
+                  startBackgroundService();
+                } else if (!v) {
+                  disableKeepAlive();
+                }
+              },
+            ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            _buildToggleTile(
+              theme: theme,
+              title: '冷启动自动恢复',
+              detail: '启用后，每次重新打开 App 时，会自动检测并恢复之前正在运行的后台服务。'
+                  '\n\n如果 App 进程被系统或用户手动杀掉，'
+                  '下次打开 App 时后台服务会自动重启，无需手动操作。'
+                  '\n\n适用场景：所有用户都建议开启。'
+                  '\n耗电影响：无（仅在 App 启动时检查一次）。',
+              value: _coldStartRestoreEnabled,
+              onChanged: (v) {
+                setState(() => _coldStartRestoreEnabled = v);
+                setColdStartRestoreEnabled(v);
+              },
+            ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            _buildToggleTile(
+              theme: theme,
+              title: '电池优化提醒',
+              detail: '启用后，本页面会显示电池优化状态卡片。'
+                  '如果检测到 App 未被添加到省电白名单，'
+                  '会提供一键跳转至系统设置进行豁免。'
+                  '\n\n电池优化是安卓系统省电机制（Doze），'
+                  '会限制后台应用的运行。添加到白名单后，'
+                  '系统不会因省电而杀掉本 App。'
+                  '\n\n适用场景：关闭本开关仅隐藏提醒卡片，'
+                  '不影响实际的电池优化豁免状态。',
+              value: _batteryReminderEnabled,
+              onChanged: (v) {
+                setState(() => _batteryReminderEnabled = v);
+                setBatteryReminderEnabled(v);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToggleTile({
+    required ThemeData theme,
+    required String title,
+    required String detail,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return SwitchListTile(
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(title,
+                style: const TextStyle(fontWeight: FontWeight.w500)),
+          ),
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _showDetailDialog(theme, title, detail),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(
+                Icons.info_outline,
+                size: 18,
+                color: theme.colorScheme.primary.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+        ],
+      ),
+      subtitle: Text(
+        detail.length > 60 ? '${detail.substring(0, 60)}…' : detail,
+        style: theme.textTheme.bodySmall,
+      ),
+      value: value,
+      onChanged: onChanged,
+    );
+  }
+
+  void _showDetailDialog(ThemeData theme, String title, String detail) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(
+          child: Text(detail, style: theme.textTheme.bodyMedium),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
       ),
     );
   }
