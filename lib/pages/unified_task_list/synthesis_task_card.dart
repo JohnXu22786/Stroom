@@ -124,14 +124,16 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
           ),
           // 操作按钮（暂停/继续/删除）
           const SizedBox(width: 8),
-          if (task.status == TaskStatus.running)
+          if (widget.task.status == TaskStatus.running)
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, size: 20),
               onSelected: (value) {
                 if (value == 'pause') {
-                  ref.read(taskListProvider.notifier).pauseTask(task.id);
+                  ref.read(taskListProvider.notifier).pauseTask(widget.task.id);
                 } else if (value == 'remove') {
-                  ref.read(taskListProvider.notifier).removeTask(task.id);
+                  ref
+                      .read(taskListProvider.notifier)
+                      .removeTask(widget.task.id);
                 }
               },
               itemBuilder: (_) => [
@@ -156,7 +158,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                 ),
               ],
             ),
-          if (task.status == TaskStatus.paused)
+          if (widget.task.status == TaskStatus.paused)
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -164,7 +166,9 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                   height: 32,
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      ref.read(taskListProvider.notifier).resumeTask(task.id);
+                      ref
+                          .read(taskListProvider.notifier)
+                          .resumeTask(widget.task.id);
                     },
                     icon: const Icon(Icons.play_arrow, size: 16),
                     label: const Text('继续', style: TextStyle(fontSize: 12)),
@@ -178,7 +182,9 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                   height: 32,
                   child: OutlinedButton.icon(
                     onPressed: () {
-                      ref.read(taskListProvider.notifier).removeTask(task.id);
+                      ref
+                          .read(taskListProvider.notifier)
+                          .removeTask(widget.task.id);
                     },
                     icon: const Icon(Icons.delete_outline, size: 16),
                     label: const Text('删除', style: TextStyle(fontSize: 12)),
