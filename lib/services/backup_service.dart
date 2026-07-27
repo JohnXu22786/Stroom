@@ -901,9 +901,10 @@ class BackupService {
         debugPrint('恢复偏好设置 ${entry.key} 失败: $e');
       }
     }
-    await AppLogService.info('BackupService',
+    await AppLogService.info(
+        'BackupService',
         '_restorePreferencesFromJson: restored ${backupPrefs.length} keys'
-        '${clearAll ? "" : " (selective - preserved unselected keys)"}');
+            '${clearAll ? "" : " (selective - preserved unselected keys)"}');
   }
 
   // ================================================================

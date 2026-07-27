@@ -939,8 +939,7 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'conversations': '[{"id":"conv1","messages":[]}]',
         'active_conversation_id': 'conv1',
-        'assistants':
-            '[{"id":"a1","name":"测试助手","prompt":"你好"}]',
+        'assistants': '[{"id":"a1","name":"测试助手","prompt":"你好"}]',
         'provider_entries': '[{"id":"p1","type":"llm"}]',
         'per_model_chat_settings': '{"gpt-4":{"reasoningEnabled":true}}',
         'selected_model_index': 0,
@@ -973,8 +972,7 @@ void main() {
           'chat_data.json',
           0,
           utf8.encode(jsonEncode({
-            'conversations':
-                '[{"id":"conv_backup","messages":[]}]',
+            'conversations': '[{"id":"conv_backup","messages":[]}]',
             'active_conversation_id': 'conv_backup',
           }))));
       // New settings data from backup (DIFFERENT from existing)
@@ -982,8 +980,7 @@ void main() {
           'settings.json',
           0,
           utf8.encode(jsonEncode({
-            'assistants':
-                '[{"id":"a_backup","name":"备份助手","prompt":"hi"}]',
+            'assistants': '[{"id":"a_backup","name":"备份助手","prompt":"hi"}]',
             'provider_entries': '[{"id":"p_backup","type":"llm"}]',
             'data_format_version': 2,
           }))));
@@ -1023,7 +1020,8 @@ void main() {
       // (they were NOT selected for restore, so existing values must be preserved)
       final assistants = restoredPrefs.getString('assistants');
       expect(assistants, isNotNull,
-          reason: 'Settings (assistants) must NOT be destroyed when only chat is restored');
+          reason:
+              'Settings (assistants) must NOT be destroyed when only chat is restored');
       expect(assistants, contains('测试助手'),
           reason:
               'Existing assistants data must be preserved (settings was NOT selected)');
@@ -1037,8 +1035,7 @@ void main() {
               'Existing provider_entries must be preserved (settings was NOT selected)');
 
       expect(restoredPrefs.getString('per_model_chat_settings'), isNotNull,
-          reason:
-              'Settings (per_model_chat_settings) must be preserved');
+          reason: 'Settings (per_model_chat_settings) must be preserved');
       expect(restoredPrefs.getInt('selected_model_index'), equals(0),
           reason: 'Settings (selected_model_index) must be preserved');
     });
@@ -1051,8 +1048,7 @@ void main() {
         'conversations':
             '[{"id":"original_conv","messages":[{"role":"user","content":"hello"}]}]',
         'active_conversation_id': 'original_conv',
-        'assistants':
-            '[{"id":"a1","name":"原始助手","prompt":"你好"}]',
+        'assistants': '[{"id":"a1","name":"原始助手","prompt":"你好"}]',
         'provider_entries': '[{"id":"p1","type":"llm"}]',
         'per_model_chat_settings': '{}',
         'selected_model_index': 0,
@@ -1084,16 +1080,14 @@ void main() {
           'chat_data.json',
           0,
           utf8.encode(jsonEncode({
-            'conversations':
-                '[{"id":"backup_conv","messages":[]}]',
+            'conversations': '[{"id":"backup_conv","messages":[]}]',
             'active_conversation_id': 'backup_conv',
           }))));
       backupArchive.addFile(ArchiveFile(
           'settings.json',
           0,
           utf8.encode(jsonEncode({
-            'assistants':
-                '[{"id":"a_backup","name":"备份助手"}]',
+            'assistants': '[{"id":"a_backup","name":"备份助手"}]',
             'provider_entries': '[{"id":"p_backup","type":"llm"}]',
             'per_model_chat_settings':
                 '{"gpt-4-backup":{"reasoningEnabled":false}}',
@@ -1143,8 +1137,7 @@ void main() {
               'Existing conversations must be preserved (chat was NOT selected)');
 
       expect(restoredPrefs.getString('active_conversation_id'), isNotNull,
-          reason:
-              'Chat (active_conversation_id) must be preserved');
+          reason: 'Chat (active_conversation_id) must be preserved');
       expect(restoredPrefs.getString('active_conversation_id'),
           equals('original_conv'),
           reason:
@@ -1304,13 +1297,13 @@ void main() {
           reason: 'Full restore should replace provider_entries');
 
       // Old data should be gone
-      expect(restoredPrefs.getString('conversations'), isNot(contains('old_conv')),
+      expect(
+          restoredPrefs.getString('conversations'), isNot(contains('old_conv')),
           reason: 'Full restore should remove old chat data');
 
       // Legacy key not in backup should be removed
       expect(restoredPrefs.getString('old_legacy_key'), isNull,
-          reason:
-              'Full restore should remove keys not present in backup');
+          reason: 'Full restore should remove keys not present in backup');
     });
 
     testWidgets(
@@ -1319,8 +1312,7 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'conversations': '[{"id":"v1_orig_conv"}]',
         'active_conversation_id': 'v1_orig_conv',
-        'assistants':
-            '[{"id":"v1_orig_a","name":"原始助手"}]',
+        'assistants': '[{"id":"v1_orig_a","name":"原始助手"}]',
         'provider_entries': '[{"id":"v1_orig_p","type":"llm"}]',
         'data_format_version': 1,
       });
@@ -1349,11 +1341,9 @@ void main() {
           'preferences.json',
           0,
           utf8.encode(jsonEncode({
-            'conversations':
-                '[{"id":"v1_backup_conv"}]',
+            'conversations': '[{"id":"v1_backup_conv"}]',
             'active_conversation_id': 'v1_backup_conv',
-            'assistants':
-                '[{"id":"v1_backup_a","name":"备份助手"}]',
+            'assistants': '[{"id":"v1_backup_a","name":"备份助手"}]',
             'provider_entries': '[{"id":"v1_backup_p","type":"llm"}]',
             'data_format_version': 1,
           }))));
@@ -1382,7 +1372,8 @@ void main() {
       final restoredPrefs = await SharedPreferences.getInstance();
 
       // Chat should be restored from backup
-      expect(restoredPrefs.getString('conversations'), contains('v1_backup_conv'),
+      expect(
+          restoredPrefs.getString('conversations'), contains('v1_backup_conv'),
           reason: 'v1 restore should restore chat from preferences.json');
 
       // Settings also restored (v1 format limitation: cannot separate
