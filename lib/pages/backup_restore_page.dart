@@ -244,7 +244,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '未选中的类别将保持不变，不会被覆盖。',
+                      '未勾选的类别将被清除。恢复后只保留勾选的类别数据。',
                       style: TextStyle(fontSize: 13, color: Colors.grey),
                     ),
                   ),

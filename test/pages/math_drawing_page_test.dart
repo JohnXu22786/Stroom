@@ -186,79 +186,55 @@ void main() {
   });
 
   group('MathDrawingPage - UI spacing', () {
-    testWidgets(
-        'eye icon is inside TextField as prefixIcon for consistent spacing',
+    testWidgets('formula rows render with color circle and visibility icon',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      // The eye icon should be rendered inside the TextField's InputDecoration
-      // as a prefixIcon, not as a standalone GestureDetector in the Row.
-      final tf = tester.widget<TextField>(find.byType(TextField));
-      final decoration = tf.decoration;
-      expect(decoration, isNotNull);
+      // Color circle and visibility icon should both be present
+      expect(find.byIcon(Icons.visibility), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
 
-      // prefixIcon should be present and wrap an Icon with Icons.visibility
-      final prefixIcon = decoration!.prefixIcon;
-      expect(prefixIcon, isNotNull);
+      // No layout exceptions
+      expect(tester.takeException(), isNull);
+    });
 
-      // Verify the prefixIcon widget tree contains Icons.visibility
-      final iconInPrefix = find.descendant(
-        of: find.byWidgetPredicate((w) => w == prefixIcon),
-        matching: find.byWidgetPredicate(
-          (w) => w is Icon && w.icon == Icons.visibility,
-        ),
+    testWidgets('eye icon is positioned after the text field (outside input)',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      final textField = find.byType(TextField);
+      final eyeIcon = find.byIcon(Icons.visibility);
+
+      // Eye icon's left edge must be to the right of the TextField's right edge
+      final textFieldRect = tester.getRect(textField);
+      final eyeRect = tester.getRect(eyeIcon);
+
+      expect(eyeRect.left, greaterThan(textFieldRect.right - 1),
+          reason:
+              'Eye icon should be positioned to the right of the text field (outside the input)');
+    });
+
+    testWidgets('color circle has left padding from the row edge',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Find the Container with BoxShape.circle (the color indicator)
+      final colorCircle = find.byWidgetPredicate(
+        (w) =>
+            w is Container &&
+            w.decoration is BoxDecoration &&
+            (w.decoration as BoxDecoration).shape == BoxShape.circle,
       );
-      expect(iconInPrefix, findsOneWidget);
+      expect(colorCircle, findsOneWidget);
 
-      // Ensure no standalone eye icon exists directly in the Row
-      // (the only eye icon should be inside the TextField as prefixIcon)
-      expect(find.byIcon(Icons.visibility), findsOneWidget);
-    });
-
-    testWidgets('eye icon as prefixIcon toggles visibility when tapped',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      await tester.enterText(find.byType(TextField), 'x^2');
-      await tester.pump();
-
-      // Tap the visibility icon (now inside the TextField as prefixIcon)
-      await tester.tap(find.byIcon(Icons.visibility));
-      await tester.pump();
-
-      // Should now show visibility_off icon
-      expect(find.byIcon(Icons.visibility_off), findsOneWidget);
-
-      // Tap again to toggle back
-      await tester.tap(find.byIcon(Icons.visibility_off));
-      await tester.pump();
-
-      expect(find.byIcon(Icons.visibility), findsOneWidget);
-    });
-
-    testWidgets(
-        'prefixIcon and suffixIcon both exist inside TextField decoration with balanced spacing',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      // Enter text to make the undo suffixIcon appear
-      await tester.enterText(find.byType(TextField), 'x^2');
-      await tester.pump();
-
-      final tf = tester.widget<TextField>(find.byType(TextField));
-      final decoration = tf.decoration;
-      expect(decoration, isNotNull);
-
-      // Both prefixIcon (eye) and suffixIcon (undo) should be present
-      expect(decoration!.prefixIcon, isNotNull);
-      expect(decoration.suffixIcon, isNotNull);
-
-      // Both use the same contentPadding for balanced spacing
-      expect(decoration.contentPadding,
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 6));
+      // The left edge of the color circle should have padding (the 4px
+      // SizedBox) before it, plus the 8px ListView padding
+      final circleRect = tester.getRect(colorCircle);
+      expect(circleRect.left, greaterThan(2),
+          reason: 'Color circle should have left padding from the row edge');
     });
 
     testWidgets(

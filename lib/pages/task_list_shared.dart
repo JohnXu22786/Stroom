@@ -254,8 +254,8 @@ class TaskCard extends ConsumerWidget {
                     value: 'remove',
                     child: ListTile(
                       leading: Icon(Icons.delete_outline,
-                          size: 20, color: Colors.grey),
-                      title: Text('从列表移除'),
+                          size: 20, color: Colors.red),
+                      title: Text('从列表移除', style: TextStyle(color: Colors.red)),
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                     ),

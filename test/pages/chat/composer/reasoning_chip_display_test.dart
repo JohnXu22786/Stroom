@@ -7,6 +7,7 @@ import 'package:stroom/pages/chat/composer/composer_shared.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/models/tts_models.dart' show CustomParam;
 
 /// Helper that creates a widget with all providers needed to test
 /// the composer widget in isolation, with reasoning state overrides.
@@ -23,6 +24,7 @@ Widget createComposerTestApp({
   Map<String, String> reasoningParamValues = const {},
   Set<String> enabledTools = const {},
   List<ReasoningParam> extraReasoningParams = const [],
+  List<CustomParam> customParams = const [],
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -49,6 +51,7 @@ Widget createComposerTestApp({
           onModelSelected: (idx) {},
           onEnabledToolsChanged: (tools) {},
           enabledTools: enabledTools,
+          customParams: customParams,
           reasoningParams: [
             ReasoningParam(
                 paramName: 'reasoning_effort',
@@ -335,25 +338,19 @@ void main() {
     // ═══════════════════════════════════════════════════════════
 
     testWidgets(
-        'custom params chip uses accent color and shows badge when params active and tools enabled',
+        'custom params chip uses accent color and shows badge when model custom params exist',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: true,
         reasoningEffortEnabled: true,
-        enabledTools: {'some_tool'},
+        enabledTools: {}, // no tools enabled — custom params are independent
+        customParams: [
+          CustomParam(paramName: 'voice', defaultValue: 'cheerful'),
+        ],
         reasoningParamValues: {
           'reasoning_effort': 'medium',
-          'custom_param_1': 'value1',
         },
-        extraReasoningParams: [
-          ReasoningParam(
-            paramName: 'custom_param_1',
-            isEffortParam: false,
-            isReasoningToggle: false,
-            options: ['value1', 'value2'],
-          ),
-        ],
       ));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -389,28 +386,23 @@ void main() {
       );
       expect(customChip, findsOneWidget);
       final chip = tester.widget<SettingsChip>(customChip);
-      // No non-effort/non-toggle params have values, so badgeCount should be null
+      // No model custom params configured, so badgeCount should be null
       expect(chip.badgeCount, isNull);
     });
 
-    testWidgets('custom params chip turns grey when no tools are enabled',
+    testWidgets(
+        'custom params chip turns grey when no model custom params are configured',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: true,
         reasoningEffortEnabled: true,
+        enabledTools: {
+          'some_tool'
+        }, // tools enabled but still grey (no custom params)
         reasoningParamValues: {
           'reasoning_effort': 'medium',
-          'custom_param_1': 'value1',
         },
-        extraReasoningParams: [
-          ReasoningParam(
-            paramName: 'custom_param_1',
-            isEffortParam: false,
-            isReasoningToggle: false,
-            options: ['value1', 'value2'],
-          ),
-        ],
       ));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -421,6 +413,7 @@ void main() {
       );
       expect(customChip, findsOneWidget);
       final chip = tester.widget<SettingsChip>(customChip);
+      // No model custom params configured → grey chip, no badge
       expect(chip.color, Colors.grey);
       expect(chip.badgeCount, isNull);
     });

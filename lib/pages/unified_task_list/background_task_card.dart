@@ -471,8 +471,9 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
           onPressed: () {
             ref.read(backgroundTasksProvider.notifier).removeTask(task.id);
           },
-          icon: Icon(Icons.delete_outline, size: 18, color: cs.error),
-          label: Text('删除', style: TextStyle(fontSize: 13, color: cs.error)),
+          icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+          label: const Text('删除',
+              style: TextStyle(fontSize: 13, color: Colors.red)),
           style: TextButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             minimumSize: const Size(48, 48),

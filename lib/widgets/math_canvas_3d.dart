@@ -303,7 +303,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       if (hasScaleChange) {
         // Pinch zoom: use cumulative scale from gesture start for stability
         final newDistance =
-            (_initialScaleDistance! / scale).clamp(0.1, 1000).toDouble();
+            (_initialScaleDistance! * scale).clamp(0.1, 1000).toDouble();
         setState(() {
           _cameraDistance = newDistance;
         });

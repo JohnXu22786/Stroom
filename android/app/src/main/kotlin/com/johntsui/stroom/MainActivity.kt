@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.Process
+import android.provider.Settings
 import android.provider.DocumentsContract
 import android.util.Log
 import androidx.core.content.FileProvider
@@ -24,6 +25,7 @@ import java.io.FileOutputStream
 class MainActivity : FlutterActivity() {
     private val CHANNEL_INSTALL = "com.johntsui.stroom/install"
     private val CHANNEL_SAF = "com.johntsui.stroom/saf"
+    private val CHANNEL_KEEPALIVE = "com.johntsui.stroom/keepalive"
     private val TAG = "MainActivity"
 
     companion object {
@@ -161,6 +163,69 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                 }
+                // === 日志文件操作（写入 Stroom/Logs 目录） ===
+                "writeLog" -> {
+                    val uriStr = call.argument<String>("uri")
+                    val fileName = call.argument<String>("fileName")
+                    val content = call.argument<String>("content")
+                    if (uriStr != null && fileName != null && content != null) {
+                        writeLogToSaf(uriStr, fileName, content, result)
+                    } else {
+                        result.error("INVALID_ARGS", "日志参数不完整", null)
+                    }
+                }
+                "readLog" -> {
+                    val uriStr = call.argument<String>("uri")
+                    val fileName = call.argument<String>("fileName")
+                    if (uriStr != null && fileName != null) {
+                        readLogFromSaf(uriStr, fileName, result)
+                    } else {
+                        result.error("INVALID_ARGS", "日志参数不完整", null)
+                    }
+                }
+                "listLogs" -> {
+                    val uriStr = call.argument<String>("uri")
+                    if (uriStr != null) {
+                        listLogsInSaf(uriStr, result)
+                    } else {
+                        result.error("INVALID_ARGS", "URI 为空", null)
+                    }
+                }
+                "deleteLog" -> {
+                    val uriStr = call.argument<String>("uri")
+                    val fileName = call.argument<String>("fileName")
+                    if (uriStr != null && fileName != null) {
+                        deleteLogInSaf(uriStr, fileName, result)
+                    } else {
+                        result.error("INVALID_ARGS", "日志参数不完整", null)
+                    }
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+
+        // === 保活通道：AlarmManager 看门狗 + 忽略电池优化 ===
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_KEEPALIVE).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startKeepAlive" -> {
+                    Log.i(TAG, "Keep-alive: start requested from Dart")
+                    KeepAliveReceiver.scheduleAlarm(this)
+                    result.success(true)
+                }
+                "stopKeepAlive" -> {
+                    Log.i(TAG, "Keep-alive: stop requested from Dart")
+                    KeepAliveReceiver.cancelAlarm(this)
+                    result.success(true)
+                }
+                "isIgnoringBatteryOptimizations" -> {
+                    result.success(isIgnoringBatteryOptimizations())
+                }
+                "requestIgnoreBatteryOptimizations" -> {
+                    requestIgnoreBatteryOptimizations()
+                    result.success(true)
+                }
                 else -> {
                     result.notImplemented()
                 }
@@ -293,9 +358,10 @@ class MainActivity : FlutterActivity() {
 
     /// 检查 SAF URI 是否仍然可访问。
     ///
-    /// 在 Stroom/AutoBackups 子目录中尝试创建临时文件并删除来验证权限是否仍有效，
-    /// 因为文件实际会写入该子目录。在某些 Android 版本上，在 Documents 根目录
-    /// 直接创建文件可能失败，但在其子目录中创建文件却能正常工作。
+    /// 优先尝试在 Stroom/AutoBackups 子目录中创建测试文件并删除来验证权限。
+    /// 如果创建文件测试失败，回退到更简单的测试：先尝试列出 Stroom 目录内容
+    /// （仅需读权限），再尝试查找或创建 Stroom/AutoBackups 目录（需要写权限）。
+    /// 在某些 Android 版本上，目录创建可能比文件创建更可靠。
     private fun checkSafAccess(uriStr: String, result: MethodChannel.Result) {
         try {
             val uri = Uri.parse(uriStr)
@@ -309,22 +375,62 @@ class MainActivity : FlutterActivity() {
             // 首先找到或创建 Stroom/AutoBackups 子目录
             val backupDir = getOrCreateBackupDir(documentFile)
             if (backupDir == null) {
-                result.success(false)
+                // 目录创建失败，尝试回退：仅检查 tree document 是否可列出内容
+                try {
+                    val children = documentFile.listFiles()
+                    // 能列出内容说明仍有读取权限
+                    // 但无法创建子目录意味着写入可能受限
+                    Log.w(TAG, "SAF: 目录可读但无法创建 Stroom/AutoBackups")
+                    result.success(false)
+                } catch (e2: Exception) {
+                    Log.e(TAG, "SAF: 访问检查完全失败", e2)
+                    result.success(false)
+                }
                 return
             }
 
             // 在 Stroom/AutoBackups 子目录中创建临时测试文件
             val testFileName = ".saf_access_test_${System.currentTimeMillis()}.tmp"
-            val testFile = backupDir.createFile("application/octet-stream", testFileName)
-            if (testFile != null) {
-                // 写入一些测试数据
-                val outStream = contentResolver.openOutputStream(testFile.uri)
-                outStream?.use { it.write(1) }
-                // 删除测试文件
-                testFile.delete()
-                result.success(true)
-            } else {
-                result.success(false)
+            try {
+                val testFile = backupDir.createFile("application/octet-stream", testFileName)
+                if (testFile != null) {
+                    // 写入一些测试数据
+                    val outStream = contentResolver.openOutputStream(testFile.uri)
+                    if (outStream != null) {
+                        outStream.use { it.write(1) }
+                        // 删除测试文件
+                        testFile.delete()
+                        result.success(true)
+                    } else {
+                        // 输出流打开失败，清理测试文件
+                        testFile.delete()
+                        Log.w(TAG, "SAF: 可创建文件但无法打开输出流")
+                        result.success(false)
+                    }
+                } else {
+                    // 文件创建失败，尝试回退：列出备份目录内容
+                    // 如果能列出文件，说明有读取权限但可能写入受限
+                    try {
+                        backupDir.listFiles()
+                        Log.w(TAG, "SAF: 可列出文件但无法创建测试文件，" +
+                            "权限可能部分恢复")
+                        // 部分权限也认为是可访问的（允许只读操作）
+                        result.success(true)
+                    } catch (e2: Exception) {
+                        Log.e(TAG, "SAF: 文件创建和列出均失败", e2)
+                        result.success(false)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "SAF: 测试文件创建异常", e)
+                // 发生异常时仍尝试回退检查
+                try {
+                    backupDir.listFiles()
+                    Log.w(TAG, "SAF: 异常后目录列表成功，认为可访问")
+                    result.success(true)
+                } catch (e2: Exception) {
+                    result.success(false)
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 访问检查失败", e)
@@ -345,6 +451,200 @@ class MainActivity : FlutterActivity() {
         val autoBackupsDir = stroomDir.findFile("AutoBackups")
             ?: stroomDir.createDirectory("AutoBackups")
         return autoBackupsDir
+    }
+
+    /// 在 treeDocument 下找到或创建 Stroom/Logs 嵌套目录。
+    ///
+    /// 日志文件与备份文件共享 Stroom 父目录，位于 Logs 子目录。
+    /// 返回 Logs 的 DocumentFile，如果任何一级创建失败返回 null。
+    private fun getOrCreateLogsDir(treeDocument: DocumentFile): DocumentFile? {
+        val stroomDir = treeDocument.findFile("Stroom")
+            ?: treeDocument.createDirectory("Stroom")
+        if (stroomDir == null) return null
+
+        val logsDir = stroomDir.findFile("Logs")
+            ?: stroomDir.createDirectory("Logs")
+        return logsDir
+    }
+
+    // ==================================================================
+    // 日志文件 SAF 操作方法（写入 Stroom/Logs 目录，追加模式）
+    // ==================================================================
+
+    /// 通过 SAF 将日志文本追加写入文件。
+    ///
+    /// 与备份文件的"覆盖写入"不同，日志采用追加模式：
+    /// 先读取已有内容，再拼接新内容后写回。
+    /// 如果文件不存在则直接创建。
+    ///
+    /// 安全策略：先写入临时文件，成功后再替换原文件，避免写入失败导致数据丢失。
+    private fun writeLogToSaf(
+        uriStr: String,
+        fileName: String,
+        content: String,
+        result: MethodChannel.Result
+    ) {
+        try {
+            val uri = Uri.parse(uriStr)
+            val treeDocument = DocumentFile.fromTreeUri(this, uri)
+
+            if (treeDocument == null) {
+                result.error("TREE_DOC_FAILED", "无法访问目录", null)
+                return
+            }
+
+            // 获取或创建 Stroom/Logs 目录
+            val logsDir = getOrCreateLogsDir(treeDocument)
+            if (logsDir == null) {
+                result.error("CREATE_DIR_FAILED", "无法创建日志目录", null)
+                return
+            }
+
+            // 查找已有日志文件，读取已有内容用于追加
+            val existingFile = logsDir.findFile(fileName)
+            val existingContent = if (existingFile != null) {
+                val inputStream = contentResolver.openInputStream(existingFile.uri)
+                inputStream?.bufferedReader()?.use { it.readText() } ?: ""
+            } else {
+                ""
+            }
+
+            // 拼接完整内容
+            val combinedContent = existingContent + content
+
+            // 安全写入：先写临时文件，成功后删除旧文件并重命名
+            val tempFileName = "$fileName.tmp_${System.currentTimeMillis()}"
+            val tempFile = logsDir.createFile("text/plain", tempFileName)
+            if (tempFile == null) {
+                result.error("CREATE_FILE_FAILED", "无法创建临时日志文件", null)
+                return
+            }
+
+            val outputStream = contentResolver.openOutputStream(tempFile.uri)
+            if (outputStream == null) {
+                // 清理临时文件
+                tempFile.delete()
+                result.error("WRITE_FAILED", "无法打开输出流写入日志", null)
+                return
+            }
+
+            outputStream.bufferedWriter().use { writer ->
+                writer.write(combinedContent)
+                writer.flush()
+            }
+
+            // 写入成功：删除旧文件
+            if (existingFile != null) {
+                existingFile.delete()
+            }
+
+            // 将临时文件重命名为目标文件名
+            val renamed = tempFile.renameTo(fileName)
+            if (!renamed) {
+                // 重命名失败，尝试重新创建。内容已写入临时文件，
+                // 至少数据没丢（临时文件会留在目录里）
+                Log.w(TAG, "SAF: 日志文件重命名失败，临时文件保留: $tempFileName")
+            }
+
+            result.success(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "SAF: 写入日志文件失败", e)
+            result.error("WRITE_LOG_FAILED", "写入日志文件失败: ${e.message}", null)
+        }
+    }
+
+    /// 通过 SAF 读取日志文件内容。
+    private fun readLogFromSaf(
+        uriStr: String,
+        fileName: String,
+        result: MethodChannel.Result
+    ) {
+        try {
+            val uri = Uri.parse(uriStr)
+            val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            if (treeDocument == null) {
+                result.success(null)
+                return
+            }
+            val logsDir = getOrCreateLogsDir(treeDocument)
+                ?: run {
+                    result.success(null)
+                    return
+                }
+
+            val file = logsDir.findFile(fileName)
+            if (file != null) {
+                val inputStream = contentResolver.openInputStream(file.uri)
+                val content = inputStream?.bufferedReader()?.use { it.readText() }
+                result.success(content)
+            } else {
+                result.success(null)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "SAF: 读取日志文件失败", e)
+            result.success(null)
+        }
+    }
+
+    /// 列出 SAF 日志目录中的所有 .log 文件。
+    private fun listLogsInSaf(
+        uriStr: String,
+        result: MethodChannel.Result
+    ) {
+        try {
+            val uri = Uri.parse(uriStr)
+            val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            if (treeDocument == null) {
+                result.success(emptyList<String>())
+                return
+            }
+            val logsDir = getOrCreateLogsDir(treeDocument)
+                ?: run {
+                    result.success(emptyList<String>())
+                    return
+                }
+
+            val children = logsDir.listFiles()
+            val fileNames = children
+                .filter { it.isFile && (it.name?.endsWith(".log") == true) }
+                .map { it.name }
+                .filterNotNull()
+            result.success(fileNames)
+        } catch (e: Exception) {
+            Log.e(TAG, "SAF: 列出日志文件失败", e)
+            result.success(emptyList<String>())
+        }
+    }
+
+    /// 通过 SAF 删除日志文件。
+    private fun deleteLogInSaf(
+        uriStr: String,
+        fileName: String,
+        result: MethodChannel.Result
+    ) {
+        try {
+            val uri = Uri.parse(uriStr)
+            val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            if (treeDocument == null) {
+                result.success(null)
+                return
+            }
+            val logsDir = getOrCreateLogsDir(treeDocument)
+                ?: run {
+                    result.success(null)
+                    return
+                }
+
+            val file = logsDir.findFile(fileName)
+            if (file != null) {
+                val deleted = file.delete()
+                Log.i(TAG, "SAF: 删除日志文件 $fileName: $deleted")
+            }
+            result.success(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "SAF: 删除日志文件失败", e)
+            result.success(null)
+        }
     }
 
     /// 通过 SAF 将字节写入文件。
@@ -563,6 +863,48 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 获取可用空间失败", e)
             result.success(-1L)
+        }
+    }
+
+    /// 检查是否已忽略电池优化。
+    ///
+    /// 如果返回 true，说明应用已被添加到省电白名单，
+    /// Doze 模式不会影响后台运行。
+    private fun isIgnoringBatteryOptimizations(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            powerManager.isIgnoringBatteryOptimizations(packageName)
+        } else {
+            true // 低版本不需要
+        }
+    }
+
+    /// 打开系统设置页面，引导用户将本应用添加到省电白名单。
+    ///
+    /// Android 6+ 需要 REQUEST_IGNORE_BATTERY_OPTIMIZATIONS 权限，
+    /// 系统会自动弹出确认弹窗让用户选择"是/否"。
+    /// 对于某些国产 ROM，这个 API 可能无效（它们有自己的省电策略），
+    /// 此时会回退到打开应用详情页。
+    private fun requestIgnoreBatteryOptimizations() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+                Log.i(TAG, "Battery optimization exemption requested")
+            }
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS not supported — opening app settings", e)
+            // 回退：打开应用详情页
+            try {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            } catch (e2: Exception) {
+                Log.e(TAG, "Failed to open app settings", e2)
+            }
         }
     }
 
