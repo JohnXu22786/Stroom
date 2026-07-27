@@ -497,23 +497,44 @@ void main() {
   // ==================================================================
 
   group('Selective restore only restores selected categories', () {
-    testWidgets('pictures-only restore only restores image records',
+    testWidgets(
+        'pictures-only restore: images replaced, unselected records CLEARED',
         (WidgetTester t) async {
-      // First, add some existing data (simulating pre-existing data)
+      // Add pre-existing data for multiple types
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_old',
+        'name': 'old_img',
+        'hash': 'old_hash',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 50,
+        'folder': '',
+        'width': 50,
+        'height': 50,
+      });
       await ManifestDatabase.insertAudioRecord({
-        'id': 'aud_existing_1',
-        'name': 'existing_aud',
-        'hash': 'existing_aud_hash',
+        'id': 'aud_old',
+        'name': 'old_aud',
+        'hash': 'old_aud_hash',
         'format': 'wav',
         'createdAt': DateTime.now().toIso8601String(),
         'size': 100,
         'folder': '',
         'duration': 1.0,
       });
+      await ManifestDatabase.insertVideoRecord({
+        'id': 'vid_old',
+        'name': 'old_vid',
+        'hash': 'old_vid_hash',
+        'format': 'mp4',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'duration': 1.0,
+      });
 
-      // Build a backup archive containing both image and audio records
+      // Build backup with new data for ALL types
       final backupArchive = Archive();
-      // manifest.json (v2 format)
       backupArchive.addFile(ArchiveFile(
           'manifest.json',
           0,
@@ -522,16 +543,15 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      // stroom_manifest.json with both image and audio records
       backupArchive.addFile(ArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
             'image_records': [
               {
-                'id': 'img_restore_1',
-                'name': 'restored_img',
-                'hash': 'restored_img_hash',
+                'id': 'img_new',
+                'name': 'new_img',
+                'hash': 'new_hash',
                 'format': 'jpg',
                 'createdAt': DateTime.now().toIso8601String(),
                 'size': 200,
@@ -542,9 +562,9 @@ void main() {
             ],
             'audio_records': [
               {
-                'id': 'aud_restore_1',
-                'name': 'restored_aud',
-                'hash': 'restored_aud_hash',
+                'id': 'aud_new',
+                'name': 'new_aud',
+                'hash': 'new_aud_hash',
                 'format': 'wav',
                 'createdAt': DateTime.now().toIso8601String(),
                 'size': 200,
@@ -552,6 +572,8 @@ void main() {
                 'duration': 2.0,
               },
             ],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
             'folders': <String>[],
           }))));
       final encoded = ZipEncoder().encode(backupArchive);
@@ -559,30 +581,33 @@ void main() {
 
       // Restore with pictures-only selection
       final sel = BackupSelection(
-        chatRecordsAndAttachments: false,
-        settings: false,
         pictures: true,
-        audio: false,
-        videos: false,
+        audio: false, // unselected → will be CLEARED
+        videos: false, // unselected → will be CLEARED
         texts: false,
         tasks: false,
+        ankiData: false,
+        browserCookies: false,
       );
       await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
 
-      // Verify: image records were restored
-      final imageRecords = await ManifestDatabase.getAllImageRecords();
-      expect(imageRecords.length, equals(1),
-          reason: 'Image records should be restored');
-      expect(imageRecords[0]['id'], equals('img_restore_1'));
+      // Selected: image records replaced from backup
+      final imgRecords = await ManifestDatabase.getAllImageRecords();
+      expect(imgRecords.length, equals(1));
+      expect(imgRecords[0]['id'], equals('img_new'),
+          reason: 'Selected image records should be restored from backup');
 
-      // Verify: audio records from the backup were NOT restored (pictures-only)
-      final audioRecords = await ManifestDatabase.getAllAudioRecords();
-      expect(audioRecords.length, equals(1),
+      // Unselected: audio records CLEARED (not preserved)
+      final audRecords = await ManifestDatabase.getAllAudioRecords();
+      expect(audRecords.length, equals(0),
           reason:
-              'Audio records should be preserved (only pictures were selected for restore)');
-      expect(audioRecords[0]['id'], equals('aud_existing_1'),
+              'Unselected audio records must be cleared (user did not select audio)');
+
+      // Unselected: video records CLEARED
+      final vidRecords = await ManifestDatabase.getAllVideoRecords();
+      expect(vidRecords.length, equals(0),
           reason:
-              'Pre-existing audio record must be preserved during selective restore');
+              'Unselected video records must be cleared (user did not select video)');
     });
 
     testWidgets('full restore replaces all record types',
@@ -842,7 +867,8 @@ void main() {
           reason: 'text_records should be empty (not selected)');
     });
 
-    testWidgets('video-only restore preserves other record types',
+    testWidgets(
+        'video-only restore: videos replaced, unselected records CLEARED',
         (WidgetTester t) async {
       // Add pre-existing data in multiple tables
       await ManifestDatabase.insertImageRecord({
@@ -855,6 +881,16 @@ void main() {
         'folder': '',
         'width': 50,
         'height': 50,
+      });
+      await ManifestDatabase.insertAudioRecord({
+        'id': 'aud_existing',
+        'name': 'existing_aud',
+        'hash': 'existing_aud_hash',
+        'format': 'wav',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'duration': 1.0,
       });
 
       // Build backup with video records
@@ -903,18 +939,23 @@ void main() {
       );
       await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
 
-      // Video records should include the restored one
+      // Selected: video records restored from backup
       final videoRecords = await ManifestDatabase.getAllVideoRecords();
       expect(videoRecords.length, equals(1),
           reason: 'Video record should be restored');
       expect(videoRecords[0]['id'], equals('vid_restore_1'));
 
-      // Image records should be preserved (not selected for restore)
+      // Unselected: image records CLEARED
       final imageRecords = await ManifestDatabase.getAllImageRecords();
-      expect(imageRecords.length, equals(1),
-          reason: 'Image records should be preserved');
-      expect(imageRecords[0]['id'], equals('img_existing_vid'),
-          reason: 'Pre-existing image record must be preserved');
+      expect(imageRecords.length, equals(0),
+          reason:
+              'Unselected image records must be cleared (user did not select pictures)');
+
+      // Unselected: audio records CLEARED
+      final audioRecords = await ManifestDatabase.getAllAudioRecords();
+      expect(audioRecords.length, equals(0),
+          reason:
+              'Unselected audio records must be cleared (user did not select audio)');
     });
   });
 
@@ -923,17 +964,14 @@ void main() {
   // ==================================================================
 
   // ==================================================================
-  // 选择性恢复 SharedPreferences：部分选择不应清除未选中的内容
+  // 选择性恢复 SharedPreferences：部分选择清除未选中的键，全不选则保留
   // ==================================================================
   //
-  // Bug: _restorePreferencesFromJson 始终清除所有非 flutter.* 键后再恢复。
-  // 在 v2 格式中，如果用户只选中 chatRecordsAndAttachments（未选中 settings），
-  // mergedPrefs 只包含聊天键，但 _restorePreferencesFromJson 会清除所有
-  // 设置键 —— 导致永久数据丢失。反之亦然（只选 settings 会摧毁聊天记录）。
+  // 新行为：选择 chat 时不清除 settings；选择 settings 时清除 chat；
+  // 两者都不选（或 BackupSelection 全为 false）时保留所有偏好。
 
-  group('Selective SharedPreferences restore preserves unselected keys', () {
-    testWidgets(
-        'v2 restore: chat-only selection must NOT destroy settings keys',
+  group('Selective SharedPreferences restore clears unselected keys', () {
+    testWidgets('v2 restore: chat-only selection clears settings',
         (WidgetTester t) async {
       // Set up existing preferences with both chat and settings data
       SharedPreferences.setMockInitialValues({
@@ -1016,32 +1054,25 @@ void main() {
         reason: 'Active conversation ID should be restored from backup',
       );
 
-      // CRITICAL: Settings keys must NOT be destroyed
-      // (they were NOT selected for restore, so existing values must be preserved)
+      // Settings keys should be CLEARED (not preserved)
+      // (settings was NOT selected for restore, so existing values must be cleared)
       final assistants = restoredPrefs.getString('assistants');
-      expect(assistants, isNotNull,
+      expect(assistants, isNull,
           reason:
-              'Settings (assistants) must NOT be destroyed when only chat is restored');
-      expect(assistants, contains('测试助手'),
-          reason:
-              'Existing assistants data must be preserved (settings was NOT selected)');
+              'Settings (assistants) must be cleared when only chat is restored');
 
       final provEntries = restoredPrefs.getString('provider_entries');
-      expect(provEntries, isNotNull,
+      expect(provEntries, isNull,
           reason:
-              'Settings (provider_entries) must NOT be destroyed when only chat is restored');
-      expect(provEntries, contains('p1'),
-          reason:
-              'Existing provider_entries must be preserved (settings was NOT selected)');
+              'Settings (provider_entries) must be cleared when only chat is restored');
 
-      expect(restoredPrefs.getString('per_model_chat_settings'), isNotNull,
-          reason: 'Settings (per_model_chat_settings) must be preserved');
-      expect(restoredPrefs.getInt('selected_model_index'), equals(0),
-          reason: 'Settings (selected_model_index) must be preserved');
+      expect(restoredPrefs.getString('per_model_chat_settings'), isNull,
+          reason: 'Settings (per_model_chat_settings) must be cleared');
+      expect(restoredPrefs.getInt('selected_model_index'), isNull,
+          reason: 'Settings (selected_model_index) must be cleared');
     });
 
-    testWidgets(
-        'v2 restore: settings-only selection must NOT destroy chat keys',
+    testWidgets('v2 restore: settings-only selection clears chat',
         (WidgetTester t) async {
       // Set up existing preferences with both chat and settings data
       SharedPreferences.setMockInitialValues({
@@ -1127,21 +1158,15 @@ void main() {
         reason: 'Settings (provider_entries) should be restored from backup',
       );
 
-      // CRITICAL: Chat keys must NOT be destroyed
+      // Chat keys should be CLEARED (not preserved)
+      // (chat was NOT selected for restore, so existing values must be cleared)
       final conversations = restoredPrefs.getString('conversations');
-      expect(conversations, isNotNull,
+      expect(conversations, isNull,
           reason:
-              'Chat (conversations) must NOT be destroyed when only settings is restored');
-      expect(conversations, contains('original_conv'),
-          reason:
-              'Existing conversations must be preserved (chat was NOT selected)');
+              'Chat (conversations) must be cleared when only settings is restored');
 
-      expect(restoredPrefs.getString('active_conversation_id'), isNotNull,
-          reason: 'Chat (active_conversation_id) must be preserved');
-      expect(restoredPrefs.getString('active_conversation_id'),
-          equals('original_conv'),
-          reason:
-              'Existing active_conversation_id must be preserved (chat was NOT selected)');
+      expect(restoredPrefs.getString('active_conversation_id'), isNull,
+          reason: 'Chat (active_conversation_id) must be cleared');
     });
 
     testWidgets(
@@ -1390,15 +1415,7 @@ void main() {
   // 全面检查：所有 9 个类别在选择性备份和恢复中的行为一致性
   // ==================================================================
   //
-  // 用户报告：「选择性备份和恢复有问题，不选择视频恢复，视频却没有消失。
-  // 有的可以，有的不可以。」经全面排查，发现原因：
-  //
-  // 1. SharedPreferences（chat + settings）在 v2 部分选择时，clear-all 行为
-  //    会摧毁未选中的类型（已在上面的 group 中修复）
-  // 2. 数据库记录类型（pictures/audio/videos/texts）在未选中时正确保留 ——
-  //    与 SharedPreferences 的（修复前）毁灭行为不一致，导致用户观察到
-  //    videos "没有消失"（正确行为），而设置/聊天"消失了"（修复前的 bug）
-  //
+  // 新行为：选中的类别恢复（清空后还原），未选中的类别清除，什么都没选则保留。
   // 本 group 对所有 9 个类别逐一验证选择性备份和选择性恢复的正确性。
 
   group('Comprehensive selective backup/restore audit for all 9 categories',
@@ -1523,7 +1540,7 @@ void main() {
     });
 
     // ----------------------------------------------------------------
-    // 选择性恢复：验证所有 4 种 DB 记录类型在未选中时都被保留
+    // 选择性恢复：验证未选择任何 DB 类别时保留所有数据，部分选择时清除未选类别
     // ----------------------------------------------------------------
 
     testWidgets(
@@ -1707,7 +1724,7 @@ void main() {
     // ----------------------------------------------------------------
 
     testWidgets(
-        'selective restore: only the selected category is replaced, all others preserved',
+        'selective restore: only the selected category is restored, all others cleared',
         (WidgetTester t) async {
       // Insert pre-existing records for all 4 DB types
       await ManifestDatabase.insertImageRecord({
@@ -1834,26 +1851,23 @@ void main() {
       );
       await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
 
-      // Only videos should be replaced; all others preserved
+      // Only videos should be replaced; all others CLEARED
       final videos = await ManifestDatabase.getAllVideoRecords();
       expect(videos.length, equals(1));
       expect(videos[0]['id'], equals('vid_new'),
           reason: 'Videos must be replaced from backup');
 
       final images = await ManifestDatabase.getAllImageRecords();
-      expect(images.length, equals(1));
-      expect(images[0]['id'], equals('img_pre'),
-          reason: 'Images must be preserved (not selected)');
+      expect(images.length, equals(0),
+          reason: 'Images must be cleared (not selected)');
 
       final audios = await ManifestDatabase.getAllAudioRecords();
-      expect(audios.length, equals(1));
-      expect(audios[0]['id'], equals('aud_pre'),
-          reason: 'Audio must be preserved (not selected)');
+      expect(audios.length, equals(0),
+          reason: 'Audio must be cleared (not selected)');
 
       final texts = await ManifestDatabase.getAllTextRecords();
-      expect(texts.length, equals(1));
-      expect(texts[0]['id'], equals('txt_pre'),
-          reason: 'Texts must be preserved (not selected)');
+      expect(texts.length, equals(0),
+          reason: 'Texts must be cleared (not selected)');
     });
 
     // ----------------------------------------------------------------
@@ -1929,8 +1943,7 @@ void main() {
     // 选择性恢复：每个类别单独验证正确行为
     // ----------------------------------------------------------------
 
-    testWidgets(
-        'texts-only restore replaces text records, preserves all others',
+    testWidgets('texts-only restore replaces text records, clears all others',
         (WidgetTester t) async {
       await ManifestDatabase.insertImageRecord({
         'id': 'img_keep',
@@ -2003,12 +2016,11 @@ void main() {
       expect(texts[0]['id'], equals('txt_new'));
 
       final images = await ManifestDatabase.getAllImageRecords();
-      expect(images.length, equals(1));
-      expect(images[0]['id'], equals('img_keep'),
-          reason: 'Images preserved when only texts selected');
+      expect(images.length, equals(0),
+          reason: 'Images cleared when only texts selected');
     });
 
-    testWidgets('audio-only restore replaces audio records, preserves others',
+    testWidgets('audio-only restore replaces audio records, clears others',
         (WidgetTester t) async {
       await ManifestDatabase.insertVideoRecord({
         'id': 'vid_keep',
@@ -2080,9 +2092,8 @@ void main() {
       expect(audios[0]['id'], equals('aud_new'));
 
       final videos = await ManifestDatabase.getAllVideoRecords();
-      expect(videos.length, equals(1));
-      expect(videos[0]['id'], equals('vid_keep'),
-          reason: 'Videos preserved when only audio selected');
+      expect(videos.length, equals(0),
+          reason: 'Videos cleared when only audio selected');
     });
 
     // ----------------------------------------------------------------
@@ -2090,7 +2101,7 @@ void main() {
     // ----------------------------------------------------------------
 
     testWidgets(
-        'browserCookies: true restores file with correct content, false preserves pre-existing data',
+        'browserCookies: true restores file with correct content, false clears pre-existing data',
         (WidgetTester t) async {
       final cookiesContent = 'mock_cookies_data';
       final backupArchive = Archive();
@@ -2145,7 +2156,7 @@ void main() {
           reason: 'Cleanup should remove browser_cookies.json before test 2');
 
       // Test 2: browserCookies deselected → backup file NOT restored,
-      // pre-existing data survived
+      // pre-existing data is cleared (not preserved)
       await WebFileStore.write('/browser_cookies.json',
           Uint8List.fromList(utf8.encode('pre_existing_cookies')));
       final selFalse = BackupSelection(
@@ -2162,12 +2173,9 @@ void main() {
       await BackupService.restoreFromBytesForTest(backupBytes,
           selection: selFalse);
       written = await WebFileStore.read('/browser_cookies.json');
-      expect(written, isNotNull,
+      expect(written, isNull,
           reason:
-              'Pre-existing browser_cookies.json should be preserved when browserCookies is false');
-      expect(String.fromCharCodes(written!), equals('pre_existing_cookies'),
-          reason:
-              'Pre-existing cookie content should be unchanged (not replaced by backup)');
+              'Pre-existing browser_cookies.json should be cleared when browserCookies is false');
     });
 
     testWidgets(
@@ -2459,12 +2467,12 @@ void main() {
       expect(imgFolders, isNot(contains('Folder_A')),
           reason: 'Pre-existing image folder should be replaced');
 
-      // Video folders: preserved (not selected for restore)
+      // Video folders: cleared (not selected for restore)
       final vidFolders = await ManifestDatabase.getAllFolders(
           recordTable: ManifestTables.videoRecords);
-      expect(vidFolders, contains('Folder_B'),
+      expect(vidFolders.length, equals(0),
           reason:
-              'Pre-existing video folder must be preserved (videos not selected)');
+              'Pre-existing video folder must be cleared (videos not selected)');
     });
   });
 
