@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
@@ -84,6 +85,14 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    // Set up a mock MethodChannel handler for the keep-alive channel
+    // so that fire-and-forget invokeMethod calls don't create pending
+    // platform channel calls that fail the test after completion.
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('com.johntsui.stroom/keepalive'),
+      (MethodCall methodCall) async => true,
+    );
   });
 
   group('BackgroundService - basic', () {

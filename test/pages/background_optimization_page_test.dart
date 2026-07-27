@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
@@ -85,6 +86,14 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
 /// Returns the mock so tests can control its behavior.
 MockBackgroundServicePlatform registerMockPlatform() {
   SharedPreferences.setMockInitialValues({});
+  // Set up a mock MethodChannel handler for the keep-alive channel
+  // so that fire-and-forget invokeMethod calls don't create pending
+  // platform channel calls that fail the test after completion.
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+    const MethodChannel('com.johntsui.stroom/keepalive'),
+    (MethodCall methodCall) async => true,
+  );
   final mock = MockBackgroundServicePlatform();
   FlutterBackgroundServicePlatform.instance = mock;
   return mock;

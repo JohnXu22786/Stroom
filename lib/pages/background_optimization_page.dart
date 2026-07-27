@@ -30,12 +30,15 @@ class _BackgroundOptimizationPageState
   bool _isCheckingService = true;
   bool _isOperating = false;
   bool _isServiceSupported = false;
+  bool _isIgnoringBattery = false;
+  bool _isCheckingBattery = true;
 
   @override
   void initState() {
     super.initState();
     _detectPlatform();
     _checkBackgroundService();
+    _checkBatteryOptimization();
   }
 
   // ── Platform Detection ───────────────────────────────────────────────
@@ -115,6 +118,35 @@ class _BackgroundOptimizationPageState
         _isCheckingService = false;
       });
     }
+  }
+
+  // ── Battery Optimization Check ───────────────────────────────────────
+
+  Future<void> _checkBatteryOptimization() async {
+    setState(() {
+      _isCheckingBattery = true;
+    });
+
+    try {
+      _isIgnoringBattery = await isIgnoringBatteryOptimizations();
+    } catch (_) {
+      _isIgnoringBattery = false;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isCheckingBattery = false;
+      });
+    }
+  }
+
+  Future<void> _requestBatteryExemption() async {
+    try {
+      requestIgnoreBatteryOptimizations();
+      // Re-check after a short delay to let the system dialog complete.
+      await Future<void>.delayed(const Duration(seconds: 2));
+      await _checkBatteryOptimization();
+    } catch (_) {}
   }
 
   // ── Service Control ──────────────────────────────────────────────────
@@ -214,6 +246,8 @@ class _BackgroundOptimizationPageState
           _buildSectionHeader('后台优化检测', theme),
           const SizedBox(height: 8),
           _buildOptimizationStatusCard(theme),
+          const SizedBox(height: 24),
+          _buildBatteryOptimizationCard(theme),
           const SizedBox(height: 24),
           _buildSectionHeader('平台教程', theme),
           const SizedBox(height: 8),
@@ -407,6 +441,66 @@ class _BackgroundOptimizationPageState
                     ),
                   ),
                 ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Battery Optimization Card ────────────────────────────────────────
+
+  Widget _buildBatteryOptimizationCard(ThemeData theme) {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return const SizedBox.shrink();
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _isCheckingBattery
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        _isIgnoringBattery
+                            ? Icons.check_circle
+                            : Icons.battery_alert,
+                        color:
+                            _isIgnoringBattery ? Colors.green : Colors.orange,
+                        size: 20,
+                      ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _isCheckingBattery
+                        ? '正在检测电池优化状态...'
+                        : _isIgnoringBattery
+                            ? '已忽略电池优化'
+                            : '未忽略电池优化 — 后台可能被杀',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (!_isIgnoringBattery && !_isCheckingBattery) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _requestBatteryExemption,
+                  icon: const Icon(Icons.battery_charging_full, size: 18),
+                  label: const Text('忽略电池优化'),
+                ),
               ),
             ],
           ],

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,6 +16,10 @@ const _serviceContent = '后台任务运行中…';
 /// Android system killing the process for memory), the app can restore
 /// the background service on the next cold start.
 const _backgroundServiceEnabledKey = 'background_service_enabled';
+
+/// Method channel for communicating with the native Android keep-alive
+/// watchdog (AlarmManager-based BroadcastReceiver).
+const _keepAliveChannel = MethodChannel('com.johntsui.stroom/keepalive');
 
 Future<void> initializeBackgroundService() async {
   await AppLogService.info('BackgroundService', '初始化后台服务');
@@ -107,7 +112,7 @@ void onStart(ServiceInstance service) {
     );
   }
 
-  timer = Timer.periodic(const Duration(seconds: 10), (timer) async {
+  timer = Timer.periodic(const Duration(seconds: 5), (timer) async {
     if (service is AndroidServiceInstance) {
       service.setForegroundNotificationInfo(
         title: _serviceTitle,
@@ -131,16 +136,18 @@ Future<void> startBackgroundService() async {
       final started = await service.startService();
       if (started) {
         await AppLogService.info('BackgroundService', '后台服务已启动');
-        // Persist the enabled state so that if the process is killed by the
-        // OS, the service can be auto-restored on the next cold start.
-        await _setServiceEnabledPreference(true);
       } else {
         await AppLogService.warning('BackgroundService', '后台服务启动返回失败');
+        return;
       }
-    } else {
-      // Service already running — ensure persisted state matches
-      await _setServiceEnabledPreference(true);
     }
+    // Persist the enabled state so that if the process is killed by the
+    // OS, the service can be auto-restored on the next cold start.
+    await _setServiceEnabledPreference(true);
+    // Activate the native AlarmManager keep-alive watchdog.
+    // Schedules a periodic alarm that restarts the service if the
+    // process was killed by the OS.
+    _enableKeepAlive();
   } catch (e) {
     debugPrint('[BackgroundService] Failed to start background service: $e');
     await AppLogService.error('BackgroundService', '启动后台服务失败', e);
@@ -158,6 +165,8 @@ Future<void> stopBackgroundService() async {
     // Clear the persisted enabled state so the service is not
     // auto-restored on the next cold start.
     await _setServiceEnabledPreference(false);
+    // Deactivate the native AlarmManager keep-alive watchdog.
+    _disableKeepAlive();
   } catch (e) {
     debugPrint('[BackgroundService] Failed to stop background service: $e');
     await AppLogService.error('BackgroundService', '停止后台服务失败', e);
@@ -236,5 +245,68 @@ Future<void> _setServiceEnabledPreference(bool enabled) async {
   } catch (e) {
     debugPrint('[BackgroundService] Failed to save service enabled state: $e');
     await AppLogService.error('BackgroundService', '保存后台服务启用状态失败', e);
+  }
+}
+
+/// Activates the native AlarmManager keep-alive watchdog.
+///
+/// On Android, this schedules a periodic alarm via AlarmManager that
+/// re-starts the foreground service if the OS killed the process.
+/// The alarm survives process death and fires even if the device is
+/// in deep sleep (Doze mode, with setInexactRepeating).
+///
+/// This is a fire-and-forget call — failures are logged but not
+/// propagated since keep-alive is a best-effort enhancement.
+void _enableKeepAlive() {
+  if (defaultTargetPlatform != TargetPlatform.android) return;
+  try {
+    _keepAliveChannel.invokeMethod('startKeepAlive');
+  } catch (e) {
+    debugPrint('[BackgroundService] Failed to enable keep-alive alarm: $e');
+  }
+}
+
+/// Deactivates the native AlarmManager keep-alive watchdog.
+void _disableKeepAlive() {
+  if (defaultTargetPlatform != TargetPlatform.android) return;
+  try {
+    _keepAliveChannel.invokeMethod('stopKeepAlive');
+  } catch (e) {
+    debugPrint('[BackgroundService] Failed to disable keep-alive alarm: $e');
+  }
+}
+
+/// Checks whether the app is exempt from Android battery optimization.
+///
+/// Returns `true` if the user has added the app to the battery
+/// optimization whitelist (Doze mode exemption). Returns `false` on
+/// non-Android platforms or if the status cannot be determined.
+Future<bool> isIgnoringBatteryOptimizations() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return true;
+  try {
+    final result = await _keepAliveChannel
+        .invokeMethod<bool>('isIgnoringBatteryOptimizations');
+    return result ?? false;
+  } catch (e) {
+    debugPrint(
+        '[BackgroundService] Failed to check battery optimization status: $e');
+    return false;
+  }
+}
+
+/// Opens the system settings dialog for the user to exempt the app
+/// from battery optimization.
+///
+/// On Android 6+, this shows the system's "Ignore battery optimization"
+/// confirmation dialog. On some Chinese ROMs, this may fall back to
+/// opening the app's settings page.
+void requestIgnoreBatteryOptimizations() {
+  if (defaultTargetPlatform != TargetPlatform.android) return;
+  if (const bool.fromEnvironment('FLUTTER_TEST')) return;
+  try {
+    _keepAliveChannel.invokeMethod('requestIgnoreBatteryOptimizations');
+  } catch (e) {
+    debugPrint(
+        '[BackgroundService] Failed to request battery optimization exemption: $e');
   }
 }

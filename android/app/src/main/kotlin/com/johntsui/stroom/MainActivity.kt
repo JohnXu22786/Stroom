@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.Process
+import android.provider.Settings
 import android.provider.DocumentsContract
 import android.util.Log
 import androidx.core.content.FileProvider
@@ -24,6 +25,7 @@ import java.io.FileOutputStream
 class MainActivity : FlutterActivity() {
     private val CHANNEL_INSTALL = "com.johntsui.stroom/install"
     private val CHANNEL_SAF = "com.johntsui.stroom/saf"
+    private val CHANNEL_KEEPALIVE = "com.johntsui.stroom/keepalive"
     private val TAG = "MainActivity"
 
     companion object {
@@ -197,6 +199,32 @@ class MainActivity : FlutterActivity() {
                     } else {
                         result.error("INVALID_ARGS", "日志参数不完整", null)
                     }
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+
+        // === 保活通道：AlarmManager 看门狗 + 忽略电池优化 ===
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_KEEPALIVE).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startKeepAlive" -> {
+                    Log.i(TAG, "Keep-alive: start requested from Dart")
+                    KeepAliveReceiver.scheduleAlarm(this)
+                    result.success(true)
+                }
+                "stopKeepAlive" -> {
+                    Log.i(TAG, "Keep-alive: stop requested from Dart")
+                    KeepAliveReceiver.cancelAlarm(this)
+                    result.success(true)
+                }
+                "isIgnoringBatteryOptimizations" -> {
+                    result.success(isIgnoringBatteryOptimizations())
+                }
+                "requestIgnoreBatteryOptimizations" -> {
+                    requestIgnoreBatteryOptimizations()
+                    result.success(true)
                 }
                 else -> {
                     result.notImplemented()
@@ -835,6 +863,48 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 获取可用空间失败", e)
             result.success(-1L)
+        }
+    }
+
+    /// 检查是否已忽略电池优化。
+    ///
+    /// 如果返回 true，说明应用已被添加到省电白名单，
+    /// Doze 模式不会影响后台运行。
+    private fun isIgnoringBatteryOptimizations(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            powerManager.isIgnoringBatteryOptimizations(packageName)
+        } else {
+            true // 低版本不需要
+        }
+    }
+
+    /// 打开系统设置页面，引导用户将本应用添加到省电白名单。
+    ///
+    /// Android 6+ 需要 REQUEST_IGNORE_BATTERY_OPTIMIZATIONS 权限，
+    /// 系统会自动弹出确认弹窗让用户选择"是/否"。
+    /// 对于某些国产 ROM，这个 API 可能无效（它们有自己的省电策略），
+    /// 此时会回退到打开应用详情页。
+    private fun requestIgnoreBatteryOptimizations() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+                Log.i(TAG, "Battery optimization exemption requested")
+            }
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS not supported — opening app settings", e)
+            // 回退：打开应用详情页
+            try {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            } catch (e2: Exception) {
+                Log.e(TAG, "Failed to open app settings", e2)
+            }
         }
     }
 
