@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/background_optimization_page.dart';
 import 'package:stroom/services/background_service.dart';
 
@@ -83,6 +84,7 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
 /// Registers a mock background service platform for testing.
 /// Returns the mock so tests can control its behavior.
 MockBackgroundServicePlatform registerMockPlatform() {
+  SharedPreferences.setMockInitialValues({});
   final mock = MockBackgroundServicePlatform();
   FlutterBackgroundServicePlatform.instance = mock;
   return mock;

@@ -2,12 +2,19 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'app_log_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 const _serviceName = 'com.johntsui.stroom.background_service';
 const _serviceTitle = 'Stroom';
 const _serviceContent = '后台任务运行中…';
+
+/// SharedPreferences key that stores whether the user has enabled the
+/// background service. Persisted so that after a process death (e.g.,
+/// Android system killing the process for memory), the app can restore
+/// the background service on the next cold start.
+const _backgroundServiceEnabledKey = 'background_service_enabled';
 
 Future<void> initializeBackgroundService() async {
   await AppLogService.info('BackgroundService', '初始化后台服务');
@@ -88,6 +95,16 @@ void onStart(ServiceInstance service) {
       timer?.cancel();
       service.stopSelf();
     });
+
+    // Set foreground notification immediately to ensure the foreground
+    // service is properly recognized by the system from the start.
+    // The periodic timer below keeps the notification updated, but the
+    // first call should be immediate to avoid any window where the
+    // foreground notification info is not yet set on the native side.
+    service.setForegroundNotificationInfo(
+      title: _serviceTitle,
+      content: _serviceContent,
+    );
   }
 
   timer = Timer.periodic(const Duration(seconds: 10), (timer) async {
@@ -111,8 +128,18 @@ Future<void> startBackgroundService() async {
   try {
     final service = FlutterBackgroundService();
     if (!await service.isRunning()) {
-      await service.startService();
-      await AppLogService.info('BackgroundService', '后台服务已启动');
+      final started = await service.startService();
+      if (started) {
+        await AppLogService.info('BackgroundService', '后台服务已启动');
+        // Persist the enabled state so that if the process is killed by the
+        // OS, the service can be auto-restored on the next cold start.
+        await _setServiceEnabledPreference(true);
+      } else {
+        await AppLogService.warning('BackgroundService', '后台服务启动返回失败');
+      }
+    } else {
+      // Service already running — ensure persisted state matches
+      await _setServiceEnabledPreference(true);
     }
   } catch (e) {
     debugPrint('[BackgroundService] Failed to start background service: $e');
@@ -128,6 +155,9 @@ Future<void> stopBackgroundService() async {
       service.invoke('stopService');
       await AppLogService.info('BackgroundService', '后台服务已停止');
     }
+    // Clear the persisted enabled state so the service is not
+    // auto-restored on the next cold start.
+    await _setServiceEnabledPreference(false);
   } catch (e) {
     debugPrint('[BackgroundService] Failed to stop background service: $e');
     await AppLogService.error('BackgroundService', '停止后台服务失败', e);
@@ -165,4 +195,52 @@ bool isBackgroundServiceSupported() {
     return true;
   }
   return false;
+}
+
+/// Restores the background service on a cold start if it was previously
+/// running before the process was killed.
+///
+/// On Android, the OS may kill the app process even when a foreground
+/// service is active (memory pressure, aggressive battery optimization
+/// on some ROMs). When the user reopens the app, this function detects
+/// that the service was previously enabled and restarts it automatically,
+/// providing a seamless experience.
+///
+/// Should be called once during app initialization, after
+/// [initializeBackgroundService] has completed.
+Future<void> restoreBackgroundServiceOnColdStart() async {
+  if (!isBackgroundServiceSupported()) return;
+
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final wasEnabled =
+        prefs.getBool(_backgroundServiceEnabledKey) ?? false;
+    if (!wasEnabled) return;
+
+    final service = FlutterBackgroundService();
+    if (!await service.isRunning()) {
+      await AppLogService.info('BackgroundService',
+          '检测到后台服务之前已启用，正在恢复...');
+      await service.startService();
+      await AppLogService.info('BackgroundService', '后台服务已恢复');
+    }
+  } catch (e) {
+    debugPrint(
+        '[BackgroundService] Failed to restore background service: $e');
+    await AppLogService.error(
+        'BackgroundService', '恢复后台服务失败', e);
+  }
+}
+
+/// Persists the background service enabled state to SharedPreferences.
+Future<void> _setServiceEnabledPreference(bool enabled) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_backgroundServiceEnabledKey, enabled);
+  } catch (e) {
+    debugPrint(
+        '[BackgroundService] Failed to save service enabled state: $e');
+    await AppLogService.error(
+        'BackgroundService', '保存后台服务启用状态失败', e);
+  }
 }
