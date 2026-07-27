@@ -34,7 +34,9 @@ class _ModelOption {
   final String providerName;
   final String host;
   final String apiKey;
-  const _ModelOption(this.model, this.providerName, this.host, this.apiKey);
+  final Map<String, dynamic> providerTypeConfig;
+  const _ModelOption(this.model, this.providerName, this.host, this.apiKey,
+      this.providerTypeConfig);
 }
 
 /// Collect all available models with their source provider info from ALL
@@ -53,6 +55,7 @@ List<_ModelOption> _getAsrModelOptions(WidgetRef ref) {
               config.providerName,
               config.host,
               config.key,
+              Map<String, dynamic>.from(config.typeConfig),
             ));
           }
         }
@@ -1024,15 +1027,16 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     final selectedOption = modelOptions[_selectedModelIndex];
     final tc = Map<String, dynamic>.from(selectedOption.model.typeConfig);
 
-    // Extract upload settings from typeConfig
-    final uploadMethodStr = tc.remove('uploadMethod') as String?;
+    // Upload settings come from provider typeConfig, not model typeConfig
+    final ptc = selectedOption.providerTypeConfig;
+    final uploadMethodStr = ptc['uploadMethod'] as String?;
     final uploadMethod = uploadMethodStr != null
         ? AudioUploadMethod.values.firstWhere(
             (m) => m.name == uploadMethodStr,
             orElse: () => AudioUploadMethod.multipart,
           )
         : AudioUploadMethod.multipart;
-    final maxFileSizeMb = tc.remove('maxFileSizeMb') as num?;
+    final maxFileSizeMb = ptc['maxFileSizeMb'] as num?;
     final maxFileSizeBytes = maxFileSizeMb != null
         ? (maxFileSizeMb * 1024 * 1024).toInt()
         : AsrConfig.defaultMaxAudioFileSizeBytes;

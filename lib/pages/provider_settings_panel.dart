@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../providers/provider_config.dart';
+import '../services/asr_service.dart';
 import 'llm_model_config_shared.dart';
 
 /// Format a JSON parse error with detailed position information.
@@ -92,7 +93,13 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   late List<ReasoningParam> _reasoningParams;
   final Map<int, String?> _jsonErrors = {};
 
+  // ASR upload settings
+  AudioUploadMethod _uploadMethod = AudioUploadMethod.multipart;
+  double _maxFileSizeMb = 25.0;
+  late final TextEditingController _maxFileSizeController;
+
   bool get _isLlmType => widget.providerType == 'llm';
+  bool get _isAsrType => widget.providerType == 'asr';
 
   @override
   void initState() {
@@ -133,6 +140,24 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     for (int i = 0; i < _customParams.length; i++) {
       _validateJsonField(i, _customParams[i]);
     }
+
+    // ASR upload settings
+    if (_isAsrType) {
+      final uploadMethodStr = c.typeConfig['uploadMethod'] as String?;
+      if (uploadMethodStr != null) {
+        _uploadMethod = AudioUploadMethod.values.firstWhere(
+          (m) => m.name == uploadMethodStr,
+          orElse: () => AudioUploadMethod.multipart,
+        );
+      }
+      _maxFileSizeMb =
+          (c.typeConfig['maxFileSizeMb'] as num?)?.toDouble() ?? 25.0;
+      _maxFileSizeController = TextEditingController(
+        text: _maxFileSizeMb.toStringAsFixed(1),
+      );
+    } else {
+      _maxFileSizeController = TextEditingController(text: '25.0');
+    }
   }
 
   @override
@@ -142,6 +167,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     _keyController.dispose();
     _maxTokensController.dispose();
     _seedController.dispose();
+    _maxFileSizeController.dispose();
     super.dispose();
   }
 
@@ -638,6 +664,12 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       typeConfig['seed'] = int.tryParse(seedStr);
     }
 
+    // ASR upload settings
+    if (_isAsrType) {
+      typeConfig['uploadMethod'] = _uploadMethod.name;
+      typeConfig['maxFileSizeMb'] = _maxFileSizeMb;
+    }
+
     return ProviderConfigItem(
       providerName: _nameController.text.trim(),
       host: _hostController.text.trim(),
@@ -735,6 +767,117 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
             ),
           ),
           const SizedBox(height: 16),
+
+          // ==========================================================
+          // ASR Upload Settings
+          // ==========================================================
+          if (_isAsrType) ...[
+            Text(
+              '上传设置',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: cs.primary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '选择音频发送方式，不同供应商支持的上传方式和大小限制不同。',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Text('上传方式'),
+                const Spacer(),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade400),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<AudioUploadMethod>(
+                      value: _uploadMethod,
+                      isDense: true,
+                      items: const [
+                        DropdownMenuItem(
+                          value: AudioUploadMethod.multipart,
+                          child: Text('Multipart (通用)',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: AudioUploadMethod.base64Json,
+                          child: Text('Base64 JSON',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: AudioUploadMethod.url,
+                          child:
+                              Text('URL (链接)', style: TextStyle(fontSize: 13)),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _uploadMethod = v);
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _uploadMethod == AudioUploadMethod.multipart
+                  ? 'multipart/form-data 直传。最通用，受各供应商大小限制（通常 25 MB）。'
+                  : _uploadMethod == AudioUploadMethod.base64Json
+                      ? 'Base64 编码后 JSON 发送。可绕过部分供应商 multipart 大小限制。'
+                      : '提供公网 URL，供应商自行下载。支持超大文件（Together AI 1 GB 等）。',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+            if (_uploadMethod != AudioUploadMethod.url)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text('最大文件大小'),
+                      const Spacer(),
+                      SizedBox(
+                        width: 90,
+                        child: TextField(
+                          controller: _maxFileSizeController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 13),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 8),
+                            border: OutlineInputBorder(),
+                            suffixText: 'MB',
+                          ),
+                          onChanged: (v) {
+                            final parsed = double.tryParse(v);
+                            if (parsed != null && parsed > 0) {
+                              setState(() => _maxFileSizeMb = parsed);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '超过 ${_maxFileSizeMb.toStringAsFixed(1)} MB 的文件将被拒绝。'
+                    '默认 25 MB 是 OpenAI 音频 API 上限。',
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 24),
+          ],
 
           // ==========================================================
           // 推理参数
