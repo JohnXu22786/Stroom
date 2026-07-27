@@ -148,6 +148,8 @@ Future<void> main() async {
           // 先初始化通知服务（创建通知渠道），再初始化后台服务
           await NotificationService().initialize();
           await initializeBackgroundService();
+          // 冷启动时恢复之前运行的后台服务（进程被杀后自动恢复）
+          await restoreBackgroundServiceOnColdStart();
         }
         registerBuiltinProviders();
         registerBuiltinProviderTypes();

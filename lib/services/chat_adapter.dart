@@ -5,9 +5,12 @@ import '../models/chat_event.dart';
 import '../models/chat_message.dart';
 import '../models/mcp.dart';
 import '../models/tool_call.dart';
+import '../models/tts_models.dart' show CustomParam;
 import '../providers/provider_config.dart';
 import 'chat_service.dart';
 import 'http_tool_service.dart';
+import 'todo_tool_service.dart';
+import 'web_search_service.dart';
 import '../providers/chat_api_provider.dart';
 import 'mcp_client.dart';
 
@@ -81,6 +84,13 @@ class ChatAdapter {
   /// Gets the reasoning parameters from the current model config.
   List<ReasoningParam> get reasoningParams {
     return _chatService?.modelConfig?.reasoningParams ?? [];
+  }
+
+  /// Gets the model-level custom parameters (模型页自定义参数)
+  /// from the current model config.
+  /// These are distinct from reasoning/inference parameters.
+  List<CustomParam> get customParams {
+    return _chatService?.modelConfig?.customParams ?? [];
   }
 
   /// 获取当前 MCP 工具定义列表
@@ -311,6 +321,40 @@ class ChatAdapter {
     }
     debugPrint(
         'Registered ${HttpToolService.toolDefinitions.length} HTTP tools');
+
+    // Register Todo tools (todowrite / todoread)
+    for (final def in TodoToolService.toolDefinitions) {
+      Future<String> handler(Map<String, dynamic> args) async {
+        switch (def.name) {
+          case 'todowrite':
+            return await TodoToolService.handleTodoWrite(args);
+          case 'todoread':
+            return await TodoToolService.handleTodoRead(args);
+          default:
+            return '错误: 未知的 Todo 工具 "${def.name}"';
+        }
+      }
+
+      ChatService.registerTool(def, handler);
+    }
+    debugPrint(
+        'Registered ${TodoToolService.toolDefinitions.length} Todo tools');
+
+    // Register Web Search tool (web_search - Google/Bing/Baidu)
+    for (final def in WebSearchService.toolDefinitions) {
+      Future<String> handler(Map<String, dynamic> args) async {
+        switch (def.name) {
+          case 'web_search':
+            return await WebSearchService.handleWebSearch(args);
+          default:
+            return '错误: 未知的搜索工具 "${def.name}"';
+        }
+      }
+
+      ChatService.registerTool(def, handler);
+    }
+    debugPrint(
+        'Registered ${WebSearchService.toolDefinitions.length} Web Search tools');
   }
 
   /// 释放 MCP 资源

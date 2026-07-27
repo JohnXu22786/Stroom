@@ -122,7 +122,74 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
               ),
             ),
           ),
-          // ── Expanded detail section ──
+          // 操作按钮（暂停/继续/删除）
+          const SizedBox(width: 8),
+          if (task.status == TaskStatus.running)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, size: 20),
+              onSelected: (value) {
+                if (value == 'pause') {
+                  ref.read(taskListProvider.notifier).pauseTask(task.id);
+                } else if (value == 'remove') {
+                  ref.read(taskListProvider.notifier).removeTask(task.id);
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'pause',
+                  child: ListTile(
+                    leading: Icon(Icons.pause, size: 20),
+                    title: Text('暂停'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'remove',
+                  child: ListTile(
+                    leading:
+                        Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                    title: Text('删除', style: TextStyle(color: Colors.red)),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
+            ),
+          if (task.status == TaskStatus.paused)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 32,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      ref.read(taskListProvider.notifier).resumeTask(task.id);
+                    },
+                    icon: const Icon(Icons.play_arrow, size: 16),
+                    label: const Text('继续', style: TextStyle(fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                SizedBox(
+                  height: 32,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      ref.read(taskListProvider.notifier).removeTask(task.id);
+                    },
+                    icon: const Icon(Icons.delete_outline, size: 16),
+                    label: const Text('删除', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          // Expanded detail section
           AnimatedCrossFade(
             firstChild: const SizedBox.shrink(),
             secondChild: _buildExpandedDetail(),

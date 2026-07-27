@@ -404,6 +404,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
+          // ---- Left spacing before color indicator ----
+          const SizedBox(width: 4),
+
           // ---- Color indicator (tappable) ----
           GestureDetector(
             onTap: () => _showColorPicker(index),
@@ -419,7 +422,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             ),
           ),
 
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
 
           // ---- Formula text field ----
           Expanded(
@@ -434,18 +437,6 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                     OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                 filled: true,
                 fillColor: f.color.withValues(alpha: 0.06),
-                // Eye / eye-off toggle: on the left of text with consistent spacing
-                prefixIcon: IconButton(
-                  icon: Icon(
-                    f.visible ? Icons.visibility : Icons.visibility_off,
-                    size: 20,
-                    color: f.visible ? cs.onSurface : cs.onSurfaceVariant,
-                  ),
-                  onPressed: () => _toggleVisibility(index),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                      minWidth: 24, maxWidth: 24, minHeight: 24, maxHeight: 24),
-                ),
                 // Undo button: appears only when text has been modified
                 suffixIcon: hasChanged
                     ? IconButton(
@@ -474,6 +465,25 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               onSubmitted: (_) => _plotAll(),
             ),
           ),
+
+          const SizedBox(width: 12),
+
+          // ---- Eye / eye-off toggle ----
+          IconButton(
+            icon: Icon(
+              f.visible ? Icons.visibility : Icons.visibility_off,
+              size: 20,
+              color: f.visible ? cs.onSurface : cs.onSurfaceVariant,
+            ),
+            tooltip: f.visible ? '隐藏公式' : '显示公式',
+            onPressed: () => _toggleVisibility(index),
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(
+                minWidth: 24, maxWidth: 24, minHeight: 24, maxHeight: 24),
+          ),
+
+          const SizedBox(width: 12),
 
           // ---- Add formula (+) button (first row only) ----
           if (index == 0)
