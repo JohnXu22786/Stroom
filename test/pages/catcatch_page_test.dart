@@ -4,144 +4,210 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/catcatch_page.dart';
 
 void main() {
-  group('CatCatchPage - Duration Filter Three Inputs', () {
-    testWidgets('Three input fields render for hours, minutes, seconds', (
-      tester,
-    ) async {
+  group('CatCatchPage - Multi-card & Bottom Bar', () {
+    testWidgets('Empty state shown when no tasks', (tester) async {
       await tester.pumpWidget(
         const ProviderScope(child: MaterialApp(home: CatCatchPage())),
       );
-
-      // Wait for frame
       await tester.pump();
 
-      // Find the three text fields by their decoration labels
-      // The hour field's InputDecoration has labelText: '时'
-      // The minute field's InputDecoration has labelText: '分'
-      // The second field's InputDecoration has labelText: '秒'
-      expect(
-        find.byType(TextFormField),
-        findsNWidgets(4),
-      ); // URL + 3 duration fields
+      // Should show empty state
+      expect(find.text('暂无下载任务'), findsOneWidget);
+      expect(find.text('点击右上角 + 添加下载任务'), findsOneWidget);
     });
 
-    testWidgets('Entering values shows hh:mm:ss preview below inputs', (
+    testWidgets('Add button creates a task card with URL + duration fields', (
       tester,
     ) async {
       await tester.pumpWidget(
         const ProviderScope(child: MaterialApp(home: CatCatchPage())),
       );
-
-      // Wait for frame
       await tester.pump();
 
-      // Find text fields - URL field is first, then 時/分/秒 fields
-      final textFields = find.byType(TextFormField);
-      expect(textFields, findsNWidgets(4));
-
-      // The second TextFormField should be the hour field (index 1)
-      // Third is minute (index 2), fourth is second (index 3)
-      await tester.enterText(textFields.at(1), '1'); // hours
-      await tester.enterText(textFields.at(2), '30'); // minutes
-      await tester.enterText(textFields.at(3), '15'); // seconds
-
-      // Pump to rebuild with the entered text
+      // Tap add button
+      await tester.tap(find.byIcon(Icons.add));
       await tester.pump();
 
-      // Check that the preview text shows hh:mm:ss format
-      // The preview should be something like 01:30:15
+      // Should now have: URL field + 3 duration fields = 4 TextFormFields
+      expect(find.byType(TextFormField), findsNWidgets(4));
+
+      // URL hint should be visible
+      expect(find.text('请输入视频/音频网页URL'), findsOneWidget);
+
+      // Duration labels should be visible
+      expect(find.text('时'), findsOneWidget);
+      expect(find.text('分'), findsOneWidget);
+      expect(find.text('秒'), findsOneWidget);
+
+      // Duration hint should be visible
+      expect(
+        find.text('可选：按时长筛选视频资源。留空则展示全部资源供选择'),
+        findsOneWidget,
+      );
+
+      // Preview should show 00:00:00 initially
+      expect(find.text('00:00:00'), findsOneWidget);
+    });
+
+    testWidgets('Task card shows remove button', (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      // Add a task
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
+      // Should have close button
+      expect(find.byIcon(Icons.close), findsOneWidget);
+    });
+
+    testWidgets('Remove button removes the task card', (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      // Add a task
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
+      // Now should have 4 TextFormFields
+      expect(find.byType(TextFormField), findsNWidgets(4));
+
+      // Tap remove button
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pump();
+
+      // Should return to empty state
+      expect(find.text('暂无下载任务'), findsOneWidget);
+      expect(find.byType(TextFormField), findsNothing);
+    });
+
+    testWidgets('Can add multiple task cards', (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      // Add 3 tasks using the keyed add button
+      final addButton = find.byKey(const Key('catcatch_add_task'));
+      await tester.tap(addButton);
+      await tester.pump();
+      expect(find.text('已添加 1 个任务'), findsOneWidget);
+      await tester.tap(addButton);
+      await tester.pump();
+      expect(find.text('已添加 2 个任务'), findsOneWidget);
+      await tester.tap(addButton);
+      await tester.pump();
+      expect(find.text('已添加 3 个任务'), findsOneWidget);
+
+      // Verify each card has a close button (one per card)
+      expect(find.byIcon(Icons.close), findsNWidgets(3));
+    });
+
+    testWidgets('Task count shows in bottom bar', (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      // Add 2 tasks
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
+      // Should show task count
+      expect(find.text('已添加 2 个任务'), findsOneWidget);
+    });
+
+    testWidgets('Removing a task updates the count', (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      // Add 2 tasks
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
+      expect(find.text('已添加 2 个任务'), findsOneWidget);
+
+      // Remove one task
+      await tester.tap(find.byIcon(Icons.close).first);
+      await tester.pump();
+
+      // Count should update to 1
+      expect(find.text('已添加 1 个任务'), findsOneWidget);
+    });
+
+    testWidgets('Removing last task shows empty state', (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      // Add one task
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
+      expect(find.text('暂无下载任务'), findsNothing);
+
+      // Remove it
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pump();
+
+      // Empty state should be back
+      expect(find.text('暂无下载任务'), findsOneWidget);
+    });
+
+    testWidgets('Entering URL and duration shows preview', (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      // Add one task
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
+      // Find the TextFormFields: URL(0), hour(1), minute(2), second(3)
+      final fields = find.byType(TextFormField);
+
+      // Enter URL
+      await tester.enterText(fields.at(0), 'https://example.com/video.mp4');
+
+      // Enter duration: 1 hour, 30 minutes, 15 seconds
+      await tester.enterText(fields.at(1), '1');
+      await tester.enterText(fields.at(2), '30');
+      await tester.enterText(fields.at(3), '15');
+      await tester.pump();
+
+      // Preview should update
       expect(find.text('01:30:15'), findsOneWidget);
     });
 
-    testWidgets('Hint text is visible below the duration inputs', (
-      tester,
-    ) async {
+    testWidgets('Start button is disabled when no valid URLs', (tester) async {
       await tester.pumpWidget(
         const ProviderScope(child: MaterialApp(home: CatCatchPage())),
       );
-
       await tester.pump();
 
-      // The hint text about duration filtering should be visible (new optional text)
-      expect(find.text('可选：按时长筛选视频资源。留空则展示全部资源供选择'), findsOneWidget);
+      // Add a task but don't enter URL
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
+      // Start button should be disabled
+      final button = find.widgetWithText(FilledButton, '开始分析');
+      final filledButton = tester.widget<FilledButton>(button);
+      expect(filledButton.onPressed, isNull);
     });
 
-    testWidgets('Empty fields show 00:00:00 preview', (tester) async {
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
-      );
-
-      await tester.pump();
-
-      // With empty fields, preview should show 00:00:00
-      expect(find.text('00:00:00'), findsOneWidget);
-    });
-
-    testWidgets('Login hint text is visible below duration filter hint', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
-      );
-
-      await tester.pump();
-
-      // The login hint should be visible
-      expect(find.text('使用右上角按钮，在应用内浏览器登录，以获得需要登录才能获得的资源'), findsOneWidget);
-    });
-
-    testWidgets('Login hint is positioned below duration filter hint', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
-      );
-
-      await tester.pump();
-
-      // Both hints should be on the page
-      final durationHint = find.text('可选：按时长筛选视频资源。留空则展示全部资源供选择');
-      final loginHint = find.text('使用右上角按钮，在应用内浏览器登录，以获得需要登录才能获得的资源');
-
-      expect(durationHint, findsOneWidget);
-      expect(loginHint, findsOneWidget);
-
-      // Get render boxes to check positioning
-      final durationBox = tester.renderObject<RenderBox>(durationHint);
-      final loginBox = tester.renderObject<RenderBox>(loginHint);
-
-      final durationPos = durationBox.localToGlobal(Offset.zero);
-      final loginPos = loginBox.localToGlobal(Offset.zero);
-
-      // Login hint should be below the duration hint
-      expect(loginPos.dy, greaterThan(durationPos.dy));
-
-      // There should be some gap between them (not directly adjacent)
-      expect(
-        loginPos.dy - durationPos.dy - durationBox.size.height,
-        greaterThan(10.0),
-        reason: 'Login hint should be slightly separated from duration hint',
-      );
-    });
-
-    testWidgets('Non-numeric input in hour field handled gracefully', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
-      );
-
-      await tester.pump();
-
-      final textFields = find.byType(TextFormField);
-
-      await tester.enterText(textFields.at(1), 'abc');
-      await tester.pump();
-
-      expect(find.text('00:00:00'), findsOneWidget);
-    });
-
-    testWidgets('Empty duration fields (all zero) do NOT show snackbar error', (
+    testWidgets('Start button is enabled when valid URL entered', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -149,86 +215,169 @@ void main() {
       );
       await tester.pump();
 
-      // Should NOT find the old duration-required snackbar anywhere
-      expect(find.text('请输入视频时长'), findsNothing);
-    });
-
-    testWidgets('Start button is present and labeled correctly',
-        (tester) async {
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
-      );
+      // Add a task
+      await tester.tap(find.byIcon(Icons.add));
       await tester.pump();
 
-      // Should have the start button with correct label
-      expect(find.text('开始分析'), findsOneWidget);
-    });
-
-    // ====================================================================
-    // Clear button tests
-    // ====================================================================
-
-    testWidgets('Clear button NOT visible when URL field is empty', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
-      );
-      await tester.pump();
-
-      // URL field should be empty initially
-      expect(find.byIcon(Icons.clear), findsNothing);
-    });
-
-    testWidgets('Clear button visible when URL field has text', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
-      );
-      await tester.pump();
-
-      // Enter text into URL field
+      // Enter a valid URL
       final urlField = find.byType(TextFormField).first;
       await tester.enterText(urlField, 'https://example.com/video.mp4');
       await tester.pump();
 
-      // Clear button should appear
-      expect(find.byIcon(Icons.clear), findsOneWidget);
+      // Start button should be enabled
+      final button = find.widgetWithText(FilledButton, '开始分析');
+      final filledButton = tester.widget<FilledButton>(button);
+      expect(filledButton.onPressed, isNotNull);
     });
 
-    testWidgets('Clear button clears all 4 input fields', (tester) async {
+    testWidgets('Start button enabled when at least one card has valid URL', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         const ProviderScope(child: MaterialApp(home: CatCatchPage())),
       );
       await tester.pump();
 
-      // Fill URL field
-      final urlField = find.byType(TextFormField).at(0);
-      await tester.enterText(urlField, 'https://example.com/video.mp4');
-
-      // Fill time fields
-      await tester.enterText(find.byType(TextFormField).at(1), '1'); // hours
-      await tester.enterText(find.byType(TextFormField).at(2), '30'); // minutes
-      await tester.enterText(find.byType(TextFormField).at(3), '15'); // seconds
+      // Add 2 tasks
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.add));
       await tester.pump();
 
-      // Verify all fields have text
-      expect(find.text('01:30:15'), findsOneWidget);
-      expect(find.byIcon(Icons.clear), findsOneWidget);
-
-      // Tap clear button
-      await tester.tap(find.byIcon(Icons.clear));
+      // Enter valid URL only on first card
+      final fields = find.byType(TextFormField);
+      await tester.enterText(fields.at(0), 'https://example.com/video.mp4');
       await tester.pump();
 
-      // Verify URL field is cleared
-      expect(find.text('https://example.com/video.mp4'), findsNothing);
+      // Start button should be enabled
+      final button = find.widgetWithText(FilledButton, '开始分析');
+      final filledButton = tester.widget<FilledButton>(button);
+      expect(filledButton.onPressed, isNotNull);
+    });
 
-      // Verify time fields are cleared - preview should reset to 00:00:00
+    // ====================================================================
+    // Duration behavior tests
+    // ====================================================================
+
+    testWidgets('Non-numeric input in hour field shows 00:00:00', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      // Add a task
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
+      // Enter non-numeric in hour field (index 1 = hour in 4-field card)
+      final fields = find.byType(TextFormField);
+      await tester.enterText(fields.at(1), 'abc');
+      await tester.pump();
+
+      // Preview should stay 00:00:00
       expect(find.text('00:00:00'), findsOneWidget);
+    });
 
-      // Clear button should disappear
-      expect(find.byIcon(Icons.clear), findsNothing);
+    testWidgets('Duration preview shows correct format with mixed values', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      // Add a task
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
+      // Enter values: 0h, 5m, 0s
+      final fields = find.byType(TextFormField);
+      await tester.enterText(fields.at(1), ''); // hour - empty
+      await tester.enterText(fields.at(2), '5'); // minute
+      await tester.enterText(fields.at(3), ''); // second - empty
+      await tester.pump();
+
+      expect(find.text('00:05:00'), findsOneWidget);
+    });
+
+    // ====================================================================
+    // Bottom bar tests
+    // ====================================================================
+
+    testWidgets('Bottom bar has video and audio folder selectors', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      expect(find.text('视频保存至'), findsOneWidget);
+      expect(find.text('音频保存至'), findsOneWidget);
+
+      // Both should show "根目录" as default
+      expect(find.text('根目录'), findsNWidgets(2));
+    });
+
+    testWidgets('Bottom bar shows start button with correct label', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      expect(find.text('开始分析'), findsOneWidget);
+    });
+
+    testWidgets('Browser button is present in app bar', (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      expect(find.byIcon(Icons.language), findsOneWidget);
+    });
+
+    // ====================================================================
+    // Snackbar behavior
+    // ====================================================================
+
+    testWidgets('Start button disabled when only invalid URL entered', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      // Add a task with no URL
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
+      // Enter invalid URL
+      final urlField = find.byType(TextFormField).first;
+      await tester.enterText(urlField, 'not-a-valid-url');
+      await tester.pump();
+
+      // Start button should still be disabled (invalid URL)
+      final button = find.widgetWithText(FilledButton, '开始分析');
+      final filledButton = tester.widget<FilledButton>(button);
+      expect(filledButton.onPressed, isNull);
+    });
+
+    testWidgets('Empty URL field shows nothing in snackbar test', (
+      tester,
+    ) async {
+      // Regression: old duration-required snackbar should never appear
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+      );
+      await tester.pump();
+
+      expect(find.text('请输入视频时长'), findsNothing);
     });
   });
 }
