@@ -620,7 +620,12 @@ class BackupService {
         }
       }
       if (mergedPrefs.isNotEmpty) {
-        await _restorePreferencesFromJson(jsonEncode(mergedPrefs));
+        // 仅当聊天和设置都被选中时才清除所有旧偏好设置（全量恢复行为）。
+        // 否则为选择性恢复：只覆盖选中的键，保留未选中的现有数据。
+        final isFullPrefsRestore =
+            selection.chatRecordsAndAttachments && selection.settings;
+        await _restorePreferencesFromJson(jsonEncode(mergedPrefs),
+            clearAll: isFullPrefsRestore);
       }
     }
     onProgress?.call(0.55);
@@ -858,14 +863,24 @@ class BackupService {
     }
   }
 
-  static Future<void> _restorePreferencesFromJson(String json) async {
+  /// 从 JSON 恢复 SharedPreferences。
+  ///
+  /// [clearAll] 控制是否先清除所有非 flutter.* 键再恢复：
+  /// - `true`（默认，全量恢复）：清除所有旧数据后写入备份数据。
+  ///   用于 v1 格式恢复和 v2 全量恢复（聊天+设置均选中）。
+  /// - `false`（选择性恢复）：仅覆盖备份中包含的键，保留未选中的现有数据。
+  ///   用于 v2 格式中仅选中聊天或仅选中设置的情况。
+  static Future<void> _restorePreferencesFromJson(String json,
+      {bool clearAll = true}) async {
     final backupPrefs = jsonDecode(json) as Map<String, dynamic>;
     final prefs = await SharedPreferences.getInstance();
 
-    final keysToRemove =
-        prefs.getKeys().where((k) => !k.startsWith('flutter.')).toList();
-    for (final key in keysToRemove) {
-      await prefs.remove(key);
+    if (clearAll) {
+      final keysToRemove =
+          prefs.getKeys().where((k) => !k.startsWith('flutter.')).toList();
+      for (final key in keysToRemove) {
+        await prefs.remove(key);
+      }
     }
 
     for (final entry in backupPrefs.entries) {
@@ -887,7 +902,8 @@ class BackupService {
       }
     }
     await AppLogService.info('BackupService',
-        '_restorePreferencesFromJson: restored ${backupPrefs.length} keys');
+        '_restorePreferencesFromJson: restored ${backupPrefs.length} keys'
+        '${clearAll ? "" : " (selective - preserved unselected keys)"}');
   }
 
   // ================================================================

@@ -922,6 +922,479 @@ void main() {
   // 已存在的全量备份/恢复测试不应受选择性变更影响
   // ==================================================================
 
+  // ==================================================================
+  // 选择性恢复 SharedPreferences：部分选择不应清除未选中的内容
+  // ==================================================================
+  //
+  // Bug: _restorePreferencesFromJson 始终清除所有非 flutter.* 键后再恢复。
+  // 在 v2 格式中，如果用户只选中 chatRecordsAndAttachments（未选中 settings），
+  // mergedPrefs 只包含聊天键，但 _restorePreferencesFromJson 会清除所有
+  // 设置键 —— 导致永久数据丢失。反之亦然（只选 settings 会摧毁聊天记录）。
+
+  group('Selective SharedPreferences restore preserves unselected keys', () {
+    testWidgets(
+        'v2 restore: chat-only selection must NOT destroy settings keys',
+        (WidgetTester t) async {
+      // Set up existing preferences with both chat and settings data
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"conv1","messages":[]}]',
+        'active_conversation_id': 'conv1',
+        'assistants':
+            '[{"id":"a1","name":"测试助手","prompt":"你好"}]',
+        'provider_entries': '[{"id":"p1","type":"llm"}]',
+        'per_model_chat_settings': '{"gpt-4":{"reasoningEnabled":true}}',
+        'selected_model_index': 0,
+        'model_order': '["gpt-4"]',
+        'data_format_version': 2,
+      });
+
+      // Build a v2 backup archive with DIFFERENT chat data and DIFFERENT settings
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      // New chat data from backup
+      backupArchive.addFile(ArchiveFile(
+          'chat_data.json',
+          0,
+          utf8.encode(jsonEncode({
+            'conversations':
+                '[{"id":"conv_backup","messages":[]}]',
+            'active_conversation_id': 'conv_backup',
+          }))));
+      // New settings data from backup (DIFFERENT from existing)
+      backupArchive.addFile(ArchiveFile(
+          'settings.json',
+          0,
+          utf8.encode(jsonEncode({
+            'assistants':
+                '[{"id":"a_backup","name":"备份助手","prompt":"hi"}]',
+            'provider_entries': '[{"id":"p_backup","type":"llm"}]',
+            'data_format_version': 2,
+          }))));
+
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore with chatRecordsAndAttachments ONLY (NOT settings)
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: true,
+        settings: false, // <-- settings NOT selected
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      final restoredPrefs = await SharedPreferences.getInstance();
+
+      // Chat keys should be restored from backup
+      expect(
+        restoredPrefs.getString('conversations'),
+        contains('conv_backup'),
+        reason: 'Chat conversations should be restored from backup',
+      );
+      expect(
+        restoredPrefs.getString('active_conversation_id'),
+        equals('conv_backup'),
+        reason: 'Active conversation ID should be restored from backup',
+      );
+
+      // CRITICAL: Settings keys must NOT be destroyed
+      // (they were NOT selected for restore, so existing values must be preserved)
+      final assistants = restoredPrefs.getString('assistants');
+      expect(assistants, isNotNull,
+          reason: 'Settings (assistants) must NOT be destroyed when only chat is restored');
+      expect(assistants, contains('测试助手'),
+          reason:
+              'Existing assistants data must be preserved (settings was NOT selected)');
+
+      final provEntries = restoredPrefs.getString('provider_entries');
+      expect(provEntries, isNotNull,
+          reason:
+              'Settings (provider_entries) must NOT be destroyed when only chat is restored');
+      expect(provEntries, contains('p1'),
+          reason:
+              'Existing provider_entries must be preserved (settings was NOT selected)');
+
+      expect(restoredPrefs.getString('per_model_chat_settings'), isNotNull,
+          reason:
+              'Settings (per_model_chat_settings) must be preserved');
+      expect(restoredPrefs.getInt('selected_model_index'), equals(0),
+          reason: 'Settings (selected_model_index) must be preserved');
+    });
+
+    testWidgets(
+        'v2 restore: settings-only selection must NOT destroy chat keys',
+        (WidgetTester t) async {
+      // Set up existing preferences with both chat and settings data
+      SharedPreferences.setMockInitialValues({
+        'conversations':
+            '[{"id":"original_conv","messages":[{"role":"user","content":"hello"}]}]',
+        'active_conversation_id': 'original_conv',
+        'assistants':
+            '[{"id":"a1","name":"原始助手","prompt":"你好"}]',
+        'provider_entries': '[{"id":"p1","type":"llm"}]',
+        'per_model_chat_settings': '{}',
+        'selected_model_index': 0,
+        'model_order': '["gpt-4"]',
+        'data_format_version': 2,
+      });
+
+      // Build a v2 backup archive with DIFFERENT settings data
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'chat_data.json',
+          0,
+          utf8.encode(jsonEncode({
+            'conversations':
+                '[{"id":"backup_conv","messages":[]}]',
+            'active_conversation_id': 'backup_conv',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'settings.json',
+          0,
+          utf8.encode(jsonEncode({
+            'assistants':
+                '[{"id":"a_backup","name":"备份助手"}]',
+            'provider_entries': '[{"id":"p_backup","type":"llm"}]',
+            'per_model_chat_settings':
+                '{"gpt-4-backup":{"reasoningEnabled":false}}',
+            'selected_model_index': 1,
+            'model_order': '["gpt-4-backup"]',
+            'data_format_version': 2,
+          }))));
+
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore with settings ONLY (NOT chatRecordsAndAttachments)
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false, // <-- chat NOT selected
+        settings: true,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      final restoredPrefs = await SharedPreferences.getInstance();
+
+      // Settings keys should be restored from backup
+      expect(
+        restoredPrefs.getString('assistants'),
+        contains('备份助手'),
+        reason: 'Settings (assistants) should be restored from backup',
+      );
+      expect(
+        restoredPrefs.getString('provider_entries'),
+        contains('p_backup'),
+        reason: 'Settings (provider_entries) should be restored from backup',
+      );
+
+      // CRITICAL: Chat keys must NOT be destroyed
+      final conversations = restoredPrefs.getString('conversations');
+      expect(conversations, isNotNull,
+          reason:
+              'Chat (conversations) must NOT be destroyed when only settings is restored');
+      expect(conversations, contains('original_conv'),
+          reason:
+              'Existing conversations must be preserved (chat was NOT selected)');
+
+      expect(restoredPrefs.getString('active_conversation_id'), isNotNull,
+          reason:
+              'Chat (active_conversation_id) must be preserved');
+      expect(restoredPrefs.getString('active_conversation_id'),
+          equals('original_conv'),
+          reason:
+              'Existing active_conversation_id must be preserved (chat was NOT selected)');
+    });
+
+    testWidgets(
+        'v2 restore: deselecting BOTH chat AND settings preserves all preferences',
+        (WidgetTester t) async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"conv1"}]',
+        'active_conversation_id': 'conv1',
+        'assistants': '[{"id":"a1","name":"助手"}]',
+        'provider_entries': '[{"id":"p1","type":"llm"}]',
+        'data_format_version': 2,
+      });
+
+      // Build a v2 backup with different data
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'chat_data.json',
+          0,
+          utf8.encode(jsonEncode({
+            'conversations': '[{"id":"alt_conv"}]',
+            'active_conversation_id': 'alt_conv',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'settings.json',
+          0,
+          utf8.encode(jsonEncode({
+            'assistants': '[{"id":"alt_a"}]',
+            'provider_entries': '[{"id":"alt_p"}]',
+            'data_format_version': 2,
+          }))));
+
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore with NEITHER chat nor settings
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      final restoredPrefs = await SharedPreferences.getInstance();
+
+      // All original data must be preserved (nothing was selected for restore)
+      expect(restoredPrefs.getString('conversations'), contains('conv1'),
+          reason: 'Original chat must be preserved when nothing is restored');
+      expect(restoredPrefs.getString('assistants'), contains('助手'),
+          reason:
+              'Original settings must be preserved when nothing is restored');
+      expect(restoredPrefs.getString('provider_entries'), contains('p1'),
+          reason:
+              'Original provider_entries must be preserved when nothing is restored');
+    });
+
+    testWidgets(
+        'v2 restore: full restore (both chat AND settings) still clears and replaces all',
+        (WidgetTester t) async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"old_conv"}]',
+        'active_conversation_id': 'old_conv',
+        'assistants': '[{"id":"old_a"}]',
+        'provider_entries': '[{"id":"old_p"}]',
+        'old_legacy_key': 'should_be_removed',
+        'data_format_version': 2,
+      });
+
+      // Build a v2 backup
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'chat_data.json',
+          0,
+          utf8.encode(jsonEncode({
+            'conversations': '[{"id":"new_conv"}]',
+            'active_conversation_id': 'new_conv',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'settings.json',
+          0,
+          utf8.encode(jsonEncode({
+            'assistants': '[{"id":"new_a"}]',
+            'provider_entries': '[{"id":"new_p"}]',
+            'data_format_version': 2,
+          }))));
+
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Full restore (BOTH chat and settings)
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: true,
+        settings: true,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      final restoredPrefs = await SharedPreferences.getInstance();
+
+      // New data should replace old
+      expect(restoredPrefs.getString('conversations'), contains('new_conv'),
+          reason: 'Full restore should replace chat data');
+      expect(restoredPrefs.getString('assistants'), contains('new_a'),
+          reason: 'Full restore should replace settings data');
+      expect(restoredPrefs.getString('provider_entries'), contains('new_p'),
+          reason: 'Full restore should replace provider_entries');
+
+      // Old data should be gone
+      expect(restoredPrefs.getString('conversations'), isNot(contains('old_conv')),
+          reason: 'Full restore should remove old chat data');
+
+      // Legacy key not in backup should be removed
+      expect(restoredPrefs.getString('old_legacy_key'), isNull,
+          reason:
+              'Full restore should remove keys not present in backup');
+    });
+
+    testWidgets(
+        'v1 restore: chat-only selection also overwrites settings (v1 design limitation - merged prefs)',
+        (WidgetTester t) async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"v1_orig_conv"}]',
+        'active_conversation_id': 'v1_orig_conv',
+        'assistants':
+            '[{"id":"v1_orig_a","name":"原始助手"}]',
+        'provider_entries': '[{"id":"v1_orig_p","type":"llm"}]',
+        'data_format_version': 1,
+      });
+
+      // Build a v1 backup
+      final archive = Archive();
+      archive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 1,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      archive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      archive.addFile(ArchiveFile(
+          'preferences.json',
+          0,
+          utf8.encode(jsonEncode({
+            'conversations':
+                '[{"id":"v1_backup_conv"}]',
+            'active_conversation_id': 'v1_backup_conv',
+            'assistants':
+                '[{"id":"v1_backup_a","name":"备份助手"}]',
+            'provider_entries': '[{"id":"v1_backup_p","type":"llm"}]',
+            'data_format_version': 1,
+          }))));
+
+      final encoded = ZipEncoder().encode(archive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore v1 with chat-only selection
+      // v1 merges chat+settings in preferences.json, so even chat-only
+      // will restore all preferences from the backup.
+      // This is a v1 format limitation: chat and settings cannot be
+      // separated, so unselected categories are also overwritten.
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: true,
+        settings: false, // <-- not selected, but v1 can't separate
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      final restoredPrefs = await SharedPreferences.getInstance();
+
+      // Chat should be restored from backup
+      expect(restoredPrefs.getString('conversations'), contains('v1_backup_conv'),
+          reason: 'v1 restore should restore chat from preferences.json');
+
+      // Settings also restored (v1 format limitation: cannot separate
+      // chat from settings in merged preferences.json).
+      // Original pre-restore data is overwritten by backup data for
+      // unselected categories. This is the best possible behavior for v1.
+      expect(restoredPrefs.getString('assistants'), contains('备份助手'),
+          reason:
+              'v1 format restores all preferences (merged), not just selected category');
+    });
+  });
+
   group('Existing full backup/restore still works (regression)', () {
     testWidgets('buildBackupBytesForTest with default selection is full backup',
         (WidgetTester t) async {
