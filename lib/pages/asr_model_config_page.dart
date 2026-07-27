@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../providers/provider_config.dart';
+import '../services/asr_service.dart';
 import 'llm_model_config_shared.dart';
 
 /// ASR 模型配置编辑页面
@@ -35,6 +36,11 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
   bool _enableTemperature = false;
   bool _enableTimestampGranularities = false;
   bool _enablePrompt = false;
+
+  // Upload settings
+  AudioUploadMethod _uploadMethod = AudioUploadMethod.multipart;
+  double _maxFileSizeMb = 25.0;
+  late final TextEditingController _maxFileSizeController;
 
   bool _isSaving = false;
 
@@ -101,6 +107,15 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
     if ((m.typeConfig['enablePrompt'] as bool? ?? false) != _enablePrompt) {
       return true;
     }
+    // Upload settings
+    if ((m.typeConfig['uploadMethod'] as String? ?? 'multipart') !=
+        _uploadMethod.name) {
+      return true;
+    }
+    if (((m.typeConfig['maxFileSizeMb'] as num?)?.toDouble() ?? 25.0) !=
+        _maxFileSizeMb) {
+      return true;
+    }
 
     final originalCustom = m.customParams.map((p) => p.toMap()).toList();
     final currentCustom = _customParams.map((p) => p.toMap()).toList();
@@ -127,6 +142,21 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
     _enableTimestampGranularities =
         m?.typeConfig['enableTimestampGranularities'] as bool? ?? false;
     _enablePrompt = m?.typeConfig['enablePrompt'] as bool? ?? false;
+
+    // Upload method: stored as string name in typeConfig
+    final uploadMethodStr = m?.typeConfig['uploadMethod'] as String?;
+    if (uploadMethodStr != null) {
+      _uploadMethod = AudioUploadMethod.values.firstWhere(
+        (m) => m.name == uploadMethodStr,
+        orElse: () => AudioUploadMethod.multipart,
+      );
+    }
+    // Max file size: stored in MB
+    _maxFileSizeMb =
+        (m?.typeConfig['maxFileSizeMb'] as num?)?.toDouble() ?? 25.0;
+    _maxFileSizeController = TextEditingController(
+      text: _maxFileSizeMb.toStringAsFixed(1),
+    );
 
     _languageController = TextEditingController(
       text: m?.typeConfig['language'] as String? ?? '',
@@ -544,6 +574,10 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
     typeConfig['enableTimestampGranularities'] = _enableTimestampGranularities;
     typeConfig['enablePrompt'] = _enablePrompt;
 
+    // Upload settings (always saved)
+    typeConfig['uploadMethod'] = _uploadMethod.name;
+    typeConfig['maxFileSizeMb'] = _maxFileSizeMb;
+
     final result = ModelConfig(
       name: name,
       modelId: modelId,
@@ -630,6 +664,114 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
               hintText: '如 whisper-1',
               required: true,
             ),
+            const SizedBox(height: 24),
+
+            // ==========================================================
+            // Upload Settings
+            // ==========================================================
+            Text(
+              '上传设置',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: cs.primary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '选择音频发送方式。不同供应商支持的上传方式和大小限制不同。',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+
+            // Upload Method
+            Row(
+              children: [
+                const Text('上传方式'),
+                const Spacer(),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade400),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<AudioUploadMethod>(
+                      value: _uploadMethod,
+                      isDense: true,
+                      items: const [
+                        DropdownMenuItem(
+                          value: AudioUploadMethod.multipart,
+                          child: Text('Multipart (通用)',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: AudioUploadMethod.base64Json,
+                          child: Text('Base64 JSON',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: AudioUploadMethod.url,
+                          child:
+                              Text('URL (链接)', style: TextStyle(fontSize: 13)),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _uploadMethod = v);
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _uploadMethodDescription(),
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+
+            // Max File Size (only for file-based methods)
+            if (_uploadMethod != AudioUploadMethod.url)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text('最大文件大小'),
+                      const Spacer(),
+                      SizedBox(
+                        width: 90,
+                        child: TextField(
+                          controller: _maxFileSizeController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 13),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 8),
+                            border: OutlineInputBorder(),
+                            suffixText: 'MB',
+                          ),
+                          onChanged: (v) {
+                            final parsed = double.tryParse(v);
+                            if (parsed != null && parsed > 0) {
+                              setState(() => _maxFileSizeMb = parsed);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _maxFileSizeHint(),
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
             const SizedBox(height: 24),
 
             // ==========================================================
@@ -1042,5 +1184,22 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
         ),
       ),
     );
+  }
+
+  String _uploadMethodDescription() {
+    switch (_uploadMethod) {
+      case AudioUploadMethod.multipart:
+        return 'multipart/form-data 直传。最通用，受各供应商大小限制（通常 25 MB）。';
+      case AudioUploadMethod.base64Json:
+        return 'Base64 编码后 JSON 发送。可绕过部分供应商 multipart 大小限制。';
+      case AudioUploadMethod.url:
+        return '提供公网 URL，供应商自行下载。支持超大文件（Together AI 1 GB，Groq 100 MB 等）。';
+    }
+  }
+
+  String _maxFileSizeHint() {
+    final mb = _maxFileSizeMb.toStringAsFixed(1);
+    return '超过 $mb MB 的文件将被拒绝。默认 25 MB 是 OpenAI 音频 API 上限。'
+        '使用 Together AI 等供应商可调至 500 MB。';
   }
 }

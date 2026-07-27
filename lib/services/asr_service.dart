@@ -24,6 +24,31 @@ const _asrSupportedFormats = {
 };
 
 // ============================================================================
+// Audio Upload Method
+// ============================================================================
+
+/// How the audio data is sent to the transcription API.
+///
+/// Different OpenAI-compatible providers support different upload methods:
+/// - [multipart]: Standard `multipart/form-data` with binary file field.
+///   Works with all providers. Limited by each provider's file size cap.
+/// - [base64Json]: Base64-encode the audio and send as JSON body.
+///   Bypasses multipart size limits on some providers (e.g., OpenRouter).
+/// - [url]: Pass a public HTTPS URL instead of file bytes. The provider
+///   downloads the audio server-side. Supports the largest files (e.g.,
+///   Together AI up to 1 GB, Groq up to 100 MB).
+enum AudioUploadMethod {
+  /// Standard multipart/form-data upload (most compatible).
+  multipart,
+
+  /// Base64-encoded audio in JSON body.
+  base64Json,
+
+  /// Pass a public URL for the provider to download.
+  url,
+}
+
+// ============================================================================
 // ASR Config
 // ============================================================================
 
@@ -31,18 +56,11 @@ const _asrSupportedFormats = {
 /// service using the Whisper API.
 ///
 /// The user provides the full endpoint URL (e.g. https://api.openai.com/v1/audio/transcriptions),
-/// which is used directly without appending any path. The request is sent as:
-///   POST {host}
-///   Content-Type: multipart/form-data (with boundary)
-///   Body: file (binary), model, language (optional), response_format=json
+/// which is used directly without appending any path.
 ///
-/// This follows the standard OpenAI STT multipart/form-data convention,
-/// which is compatible with OpenAI, OpenRouter, aihubmix, and other
-/// OpenAI-compatible providers.
-///
-/// [maxFileSizeBytes] controls the maximum allowed audio file size.
-/// The default is 25 MB, matching OpenAI's audio API limit.
-/// For non-OpenAI providers that support larger files, this can be increased.
+/// [uploadMethod] selects the HTTP format used to send audio.
+/// [maxFileSizeBytes] controls the maximum allowed audio file size for
+/// file-based upload methods (multipart, base64Json). Does NOT apply to URL.
 class AsrConfig {
   final String model;
   final String apiKey;
@@ -55,11 +73,15 @@ class AsrConfig {
   /// Custom parameters that the user defined
   final List<CustomParam> customParams;
 
+  /// How to send the audio file to the API.
+  final AudioUploadMethod uploadMethod;
+
   /// Maximum allowed audio file size in bytes.
   ///
   /// Files larger than this will be rejected before sending to the API.
   /// Defaults to 25 MB (26,214,400 bytes), matching OpenAI's audio API limit.
   /// Set to a higher value for providers that support larger files.
+  /// Does NOT apply to [AudioUploadMethod.url].
   final int maxFileSizeBytes;
 
   /// Default max file size for OpenAI-compatible audio APIs.
@@ -72,6 +94,7 @@ class AsrConfig {
     this.language,
     this.typeConfig = const {},
     this.customParams = const [],
+    this.uploadMethod = AudioUploadMethod.multipart,
     this.maxFileSizeBytes = defaultMaxAudioFileSizeBytes,
   });
 
@@ -105,6 +128,7 @@ class AsrConfig {
     String? language,
     Map<String, dynamic>? typeConfig,
     List<CustomParam>? customParams,
+    AudioUploadMethod? uploadMethod,
     int? maxFileSizeBytes,
   }) =>
       AsrConfig(
@@ -114,6 +138,7 @@ class AsrConfig {
         language: language ?? this.language,
         typeConfig: typeConfig ?? this.typeConfig,
         customParams: customParams ?? this.customParams,
+        uploadMethod: uploadMethod ?? this.uploadMethod,
         maxFileSizeBytes: maxFileSizeBytes ?? this.maxFileSizeBytes,
       );
 }
@@ -204,20 +229,17 @@ class AsrService {
 
   /// Transcribe audio bytes into text.
   ///
+  /// Supports [AudioUploadMethod.multipart] (default) and [AudioUploadMethod.base64Json].
+  /// For [AudioUploadMethod.url], use [transcribeFromUrl] instead.
+  ///
   /// [audioBytes] - The raw audio data (e.g., WAV, MP3, M4A, etc.).
   /// [audioFormat] - The audio file extension/format (e.g., 'wav', 'mp3', 'm4a').
-  /// Returns [AsrResult] with the transcribed text.
-  ///
-  /// The request is sent as multipart/form-data (standard OpenAI STT convention)
-  /// with the audio file as a binary part. The labeled [audioFormat] is used
-  /// directly for the filename and MIME type — no auto-detection or conversion
-  /// is performed.
   Future<AsrResult> transcribe({
     required Uint8List audioBytes,
     String audioFormat = 'wav',
   }) async {
-    await AppLogService.info(
-        'AsrService', '开始转写: 格式=$audioFormat, 大小=${audioBytes.length} 字节');
+    await AppLogService.info('AsrService',
+        '开始转写: 格式=$audioFormat, 方式=${config.uploadMethod.name}, 大小=${audioBytes.length} 字节');
     if (config.host.isEmpty) {
       throw Exception('API 地址未配置');
     }
@@ -225,15 +247,13 @@ class AsrService {
       throw Exception('音频数据为空');
     }
 
-    // ── File size validation ───────────────────────────────────────
-    // OpenAI's audio API has a 25 MB hard limit. Files exceeding this
-    // are rejected early with a clear message. The limit is configurable
-    // for non-OpenAI providers that support larger audio files.
-    if (audioBytes.length > config.maxFileSizeBytes) {
+    // ── File size validation (file-based methods only) ──────────────
+    if (config.uploadMethod != AudioUploadMethod.url &&
+        audioBytes.length > config.maxFileSizeBytes) {
       final isOpenAiDefault =
           config.maxFileSizeBytes == AsrConfig.defaultMaxAudioFileSizeBytes;
       final guidance = isOpenAiDefault
-          ? 'OpenAI 音频 API 最大支持 25 MB。请压缩音频或使用支持更大文件的供应商。'
+          ? 'OpenAI 音频 API 最大支持 25 MB。请压缩音频、使用音频链接、或调大限制。'
           : '请降低文件大小后重试。';
       throw Exception(
         '文件大小超过限制: '
@@ -253,86 +273,65 @@ class AsrService {
     }
 
     final stopwatch = Stopwatch()..start();
-
-    final fileName = 'audio.$fmt';
     final mimeTypeString = getMimeType(fmt);
     final mimeType = mimeTypeString.contains('/')
         ? DioMediaType.parse(mimeTypeString)
         : null;
+    final fileName = 'audio.$fmt';
 
-    final extraFormFields = <String, dynamic>{};
-    final diagnosticFields = <String, dynamic>{
-      'file': '$fileName (${audioBytes.length} bytes, $mimeTypeString)',
-      'model': config.model,
-    };
+    // Build shared parameters (model, language, response_format, etc.)
+    final sharedParams = _buildSharedParams();
 
-    final tc = config.typeConfig;
+    // ── Dispatch by upload method ───────────────────────────────────
+    try {
+      final response = await _sendTranscriptionRequest(
+        sharedParams: sharedParams,
+        audioBytes: audioBytes,
+        fileName: fileName,
+        mimeType: mimeType,
+      );
 
-    // response_format
-    if (tc['enableResponseFormat'] == true &&
-        tc.containsKey('responseFormat')) {
-      final rf = tc['responseFormat'] as String;
-      extraFormFields['response_format'] = rf;
-      diagnosticFields['response_format'] = rf;
-    } else {
-      extraFormFields['response_format'] = 'json';
-      diagnosticFields['response_format'] = 'json';
+      stopwatch.stop();
+      _captureResponseDiagnostics(response);
+      final text = _extractText(response.data);
+
+      await AppLogService.info('AsrService',
+          '转写完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${text.length}');
+      return AsrResult(
+        text: text,
+        processingTimeMs: stopwatch.elapsedMilliseconds,
+      );
+    } on DioException catch (e) {
+      _captureDioExceptionDiagnostics(e);
+      throwWrappedDioException(e);
+    }
+  }
+
+  /// Transcribe audio from a public URL (supports [AudioUploadMethod.url]).
+  ///
+  /// The provider downloads the audio server-side, avoiding client-side
+  /// file size limits entirely. Supported by Together AI (up to 1 GB),
+  /// Groq (up to 100 MB), xAI (up to 500 MB), etc.
+  Future<AsrResult> transcribeFromUrl(String audioUrl) async {
+    await AppLogService.info('AsrService', '开始转写 (URL): $audioUrl');
+
+    if (config.host.isEmpty) {
+      throw Exception('API 地址未配置');
+    }
+    final trimmed = audioUrl.trim();
+    if (trimmed.isEmpty) {
+      throw Exception('音频链接为空');
+    }
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      throw Exception('无效的音频链接，必须以 http:// 或 https:// 开头');
     }
 
-    // language
-    final effectiveLang = config.effectiveLanguage;
-    if (effectiveLang != null && effectiveLang.isNotEmpty) {
-      extraFormFields['language'] = effectiveLang;
-      diagnosticFields['language'] = effectiveLang;
-    }
+    final stopwatch = Stopwatch()..start();
+    final sharedParams = _buildSharedParams();
+    sharedParams['file'] = trimmed;
 
-    // temperature
-    if (tc['enableTemperature'] == true && tc.containsKey('temperature')) {
-      final temp = (tc['temperature'] as num).toDouble();
-      extraFormFields['temperature'] = temp.toString();
-      diagnosticFields['temperature'] = temp;
-    }
-
-    // timestamp_granularities (only for verbose_json)
-    if (tc['enableTimestampGranularities'] == true &&
-        tc.containsKey('timestampGranularities')) {
-      final tg = tc['timestampGranularities'] as String;
-      extraFormFields['timestamp_granularities'] = tg;
-      diagnosticFields['timestamp_granularities'] = tg;
-    }
-
-    // prompt
-    if (tc['enablePrompt'] == true && tc.containsKey('prompt')) {
-      final prompt = tc['prompt'] as String;
-      if (prompt.trim().isNotEmpty) {
-        extraFormFields['prompt'] = prompt;
-        diagnosticFields['prompt'] = prompt;
-      }
-    }
-
-    // Custom parameters
-    for (final param in config.customParams) {
-      final name = param.paramName.trim();
-      if (name.isEmpty) continue;
-      final value = param.defaultValue.trim();
-      if (value.isEmpty) continue;
-      final parsed = _parseParamValue(value, param.type);
-      extraFormFields[name] = parsed is String ? parsed : parsed.toString();
-      diagnosticFields[name] = parsed;
-    }
-
-    final formData = FormData.fromMap({
-      'file': MultipartFile.fromBytes(
-        audioBytes,
-        filename: fileName,
-        contentType: mimeType,
-      ),
-      'model': config.model,
-      ...extraFormFields,
-    });
-
-    // Capture request diagnostics (for error details dialog).
-    lastRequestBody = diagnosticFields;
+    // Capture diagnostics
+    lastRequestBody = sharedParams;
     lastRequestUrl = config.transcribeUrl;
     lastRequestHeaders = {
       if (config.apiKey.isNotEmpty)
@@ -343,37 +342,157 @@ class AsrService {
     lastResponseHeaders = null;
 
     try {
-      // ⚠️  Do NOT set contentType manually — Dio auto-generates the proper
-      //     Content-Type with boundary when sending FormData. Setting it
-      //     explicitly (e.g., contentType: 'multipart/form-data') strips the
-      //     boundary parameter, which all OpenAI-compatible servers reject.
       final response = await _dio.post(
         config.transcribeUrl,
-        data: formData,
+        data: jsonEncode(sharedParams),
+        options: Options(
+          headers: {'Content-Type': 'application/json'},
+        ),
       );
 
       stopwatch.stop();
-
-      // Capture response diagnostics
-      lastResponseStatusCode = response.statusCode;
-      lastResponseData = response.data is Map
-          ? Map<String, dynamic>.from(response.data as Map)
-          : <String, dynamic>{'raw': '$response.data'};
-      lastResponseHeaders = response.headers.map;
-
+      _captureResponseDiagnostics(response);
       final text = _extractText(response.data);
 
       await AppLogService.info('AsrService',
-          '转写完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${text.length}');
+          '转写完成 (URL): ${stopwatch.elapsedMilliseconds}ms, 文本长度=${text.length}');
       return AsrResult(
         text: text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
       );
     } on DioException catch (e) {
-      // Capture response diagnostics from exception
       _captureDioExceptionDiagnostics(e);
       throwWrappedDioException(e);
     }
+  }
+
+  // ── Internal ─────────────────────────────────────────────────────
+
+  /// Build the shared request parameters (model, language, response_format,
+  /// temperature, etc.) as a JSON-compatible map.
+  Map<String, dynamic> _buildSharedParams() {
+    final params = <String, dynamic>{
+      'model': config.model,
+    };
+
+    final tc = config.typeConfig;
+
+    // response_format
+    if (tc['enableResponseFormat'] == true &&
+        tc.containsKey('responseFormat')) {
+      params['response_format'] = tc['responseFormat'] as String;
+    } else {
+      params['response_format'] = 'json';
+    }
+
+    // language
+    final effectiveLang = config.effectiveLanguage;
+    if (effectiveLang != null && effectiveLang.isNotEmpty) {
+      params['language'] = effectiveLang;
+    }
+
+    // temperature
+    if (tc['enableTemperature'] == true && tc.containsKey('temperature')) {
+      params['temperature'] = (tc['temperature'] as num).toDouble();
+    }
+
+    // timestamp_granularities (only for verbose_json)
+    if (tc['enableTimestampGranularities'] == true &&
+        tc.containsKey('timestampGranularities')) {
+      params['timestamp_granularities'] =
+          tc['timestampGranularities'] as String;
+    }
+
+    // prompt
+    if (tc['enablePrompt'] == true && tc.containsKey('prompt')) {
+      final prompt = tc['prompt'] as String;
+      if (prompt.trim().isNotEmpty) {
+        params['prompt'] = prompt;
+      }
+    }
+
+    // Custom parameters
+    for (final param in config.customParams) {
+      final name = param.paramName.trim();
+      if (name.isEmpty) continue;
+      final value = param.defaultValue.trim();
+      if (value.isEmpty) continue;
+      final parsed = _parseParamValue(value, param.type);
+      params[name] = parsed is String ? parsed : parsed.toString();
+    }
+
+    return params;
+  }
+
+  /// Send the transcription request using the configured [uploadMethod].
+  Future<Response<dynamic>> _sendTranscriptionRequest({
+    required Map<String, dynamic> sharedParams,
+    required Uint8List audioBytes,
+    required String fileName,
+    required DioMediaType? mimeType,
+  }) async {
+    final diagnosticFields = Map<String, dynamic>.from(sharedParams);
+
+    switch (config.uploadMethod) {
+      case AudioUploadMethod.multipart:
+        final formData = FormData.fromMap({
+          'file': MultipartFile.fromBytes(
+            audioBytes,
+            filename: fileName,
+            contentType: mimeType,
+          ),
+          ...sharedParams,
+        });
+        diagnosticFields['file'] =
+            '$fileName (${audioBytes.length} bytes, ${mimeType?.mimeType ?? 'unknown'})';
+
+        _captureDiagnostics(diagnosticFields);
+
+        return _dio.post(
+          config.transcribeUrl,
+          data: formData,
+        );
+
+      case AudioUploadMethod.base64Json:
+        final b64 = base64Encode(audioBytes);
+        sharedParams['file'] = b64;
+        diagnosticFields['file'] =
+            '$fileName (base64, ${audioBytes.length} bytes)';
+
+        _captureDiagnostics(diagnosticFields);
+
+        return _dio.post(
+          config.transcribeUrl,
+          data: jsonEncode(sharedParams),
+          options: Options(
+            headers: {'Content-Type': 'application/json'},
+          ),
+        );
+
+      case AudioUploadMethod.url:
+        // Should not be reached — use transcribeFromUrl for URL method.
+        throw Exception('URL 上传方式请使用 transcribeFromUrl() 方法，而不是 transcribe()');
+    }
+  }
+
+  void _captureDiagnostics(Map<String, dynamic> diagnosticFields) {
+    lastRequestBody = diagnosticFields;
+    lastRequestUrl = config.transcribeUrl;
+    lastRequestHeaders = {
+      if (config.apiKey.isNotEmpty)
+        'Authorization': 'Bearer ${_maskApiKey(config.apiKey)}',
+    };
+    lastResponseData = null;
+    lastResponseStatusCode = null;
+    lastResponseHeaders = null;
+  }
+
+  void _captureResponseDiagnostics(Response<dynamic> response) {
+    lastResponseStatusCode = response.statusCode;
+    lastResponseData = response.data is Map
+        ? Map<String, dynamic>.from(response.data as Map)
+        : <String, dynamic>{'raw': '$response.data'};
+    lastResponseHeaders = response.headers.map;
   }
 
   /// Capture response-level diagnostic fields from a [DioException].
@@ -440,6 +559,7 @@ AsrService createAsrServiceFromConfig({
   String? language,
   Map<String, dynamic> typeConfig = const {},
   List<CustomParam> customParams = const [],
+  AudioUploadMethod uploadMethod = AudioUploadMethod.multipart,
   int maxFileSizeBytes = AsrConfig.defaultMaxAudioFileSizeBytes,
 }) {
   return AsrService(
@@ -450,6 +570,7 @@ AsrService createAsrServiceFromConfig({
       language: language,
       typeConfig: typeConfig,
       customParams: customParams,
+      uploadMethod: uploadMethod,
       maxFileSizeBytes: maxFileSizeBytes,
     ),
   );

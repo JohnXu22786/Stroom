@@ -1022,13 +1022,30 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // Also passes through the model's typeConfig and customParams
     // for built-in ASR parameters and custom parameters.
     final selectedOption = modelOptions[_selectedModelIndex];
+    final tc = Map<String, dynamic>.from(selectedOption.model.typeConfig);
+
+    // Extract upload settings from typeConfig
+    final uploadMethodStr = tc.remove('uploadMethod') as String?;
+    final uploadMethod = uploadMethodStr != null
+        ? AudioUploadMethod.values.firstWhere(
+            (m) => m.name == uploadMethodStr,
+            orElse: () => AudioUploadMethod.multipart,
+          )
+        : AudioUploadMethod.multipart;
+    final maxFileSizeMb = tc.remove('maxFileSizeMb') as num?;
+    final maxFileSizeBytes = maxFileSizeMb != null
+        ? (maxFileSizeMb * 1024 * 1024).toInt()
+        : AsrConfig.defaultMaxAudioFileSizeBytes;
+
     final effectiveConfig = AsrConfig(
       host: selectedOption.host,
       apiKey: selectedOption.apiKey,
       model: selectedOption.model.modelId,
-      typeConfig: Map<String, dynamic>.from(selectedOption.model.typeConfig),
+      typeConfig: tc,
       customParams:
           selectedOption.model.customParams.map((p) => p.copy()).toList(),
+      uploadMethod: uploadMethod,
+      maxFileSizeBytes: maxFileSizeBytes,
     );
 
     // Capture the list before pop
