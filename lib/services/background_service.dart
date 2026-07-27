@@ -112,7 +112,10 @@ void onStart(ServiceInstance service) {
     );
   }
 
-  timer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+  // Update every 2 seconds to keep the foreground notification
+  // visibly active. Frequent updates signal to the OS that the
+  // service is important and should not be killed.
+  timer = Timer.periodic(const Duration(seconds: 2), (timer) async {
     if (service is AndroidServiceInstance) {
       service.setForegroundNotificationInfo(
         title: _serviceTitle,

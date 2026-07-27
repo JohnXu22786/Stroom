@@ -29,7 +29,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "KeepAliveReceiver"
         private const val ALARM_REQUEST_CODE = 2001
-        private const val KEEP_ALIVE_INTERVAL_MS = 15 * 60 * 1000L // 15 minutes
+        private const val KEEP_ALIVE_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
 
         // SharedPreferences key — mirrors the Dart side's
         // _backgroundServiceEnabledKey. Written from Kotlin so that the
