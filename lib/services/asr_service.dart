@@ -96,6 +96,13 @@ class AsrConfig {
   /// Compression codec: 'none', 'adpcm', 'flac', 'opus', 'mp3'.
   final String compression;
 
+  /// Fallback strategy when file exceeds [maxFileSizeBytes]:
+  /// - 'none': reject immediately
+  /// - 'specific': try base64/URL (whichever isn't the primary method)
+  /// - 'generic': apply preprocessing → compression → chunking → re-upload
+  /// - 'all': try specific first, then generic
+  final String fallbackMethod;
+
   /// Default max file size for OpenAI-compatible audio APIs.
   static const int defaultMaxAudioFileSizeBytes = 25 * 1024 * 1024;
 
@@ -111,6 +118,7 @@ class AsrConfig {
     this.preprocessing = 'none',
     this.chunking = 'none',
     this.compression = 'none',
+    this.fallbackMethod = 'none',
   });
 
   /// Returns the host without a trailing slash.
@@ -148,6 +156,7 @@ class AsrConfig {
     String? preprocessing,
     String? chunking,
     String? compression,
+    String? fallbackMethod,
   }) =>
       AsrConfig(
         model: model ?? this.model,
@@ -161,6 +170,7 @@ class AsrConfig {
         preprocessing: preprocessing ?? this.preprocessing,
         chunking: chunking ?? this.chunking,
         compression: compression ?? this.compression,
+        fallbackMethod: fallbackMethod ?? this.fallbackMethod,
       );
 }
 
@@ -279,7 +289,7 @@ class AsrService {
 
     var workingBytes = audioBytes;
 
-    // ── Preprocessing (resample + mono) ─────────────────────────────
+    // ── Preprocessing (always applied if configured) ────────────────
     if (config.preprocessing == 'resampleMono' && fmt == 'wav') {
       try {
         final preprocessor = WavPreprocessor();
@@ -291,75 +301,138 @@ class AsrService {
       }
     }
 
-    // ── Compression (ADPCM, FLAC, Opus, MP3) ────────────────────────
-    if (config.compression != 'none' && fmt == 'wav') {
-      try {
-        final info = parseWavHeader(workingBytes);
-        final samples = readPcmSamplesFloat(workingBytes, info);
-        final pcm = Int16List(samples.length);
-        for (int i = 0; i < samples.length; i++) {
-          pcm[i] = (samples[i] * 32767).round().clamp(-32768, 32767);
-        }
+    // ── Check if file fits within limit ─────────────────────────────
+    final exceedsLimit = workingBytes.length > config.maxFileSizeBytes &&
+        config.uploadMethod != AudioUploadMethod.url;
 
-        final codec = switch (config.compression) {
-          'adpcm' => AudioCodec.adpcm,
-          'flac' => AudioCodec.flac,
-          'opus' => AudioCodec.opus,
-          'mp3' => AudioCodec.mp3,
-          _ => AudioCodec.none,
-        };
+    if (!exceedsLimit) {
+      // ── File fits — send via primary method ───────────────────────
+      return _applyCompressionAndSend(workingBytes, fmt);
+    }
 
-        if (codec != AudioCodec.none) {
-          workingBytes = compressPcm(pcm, codec, sampleRate: info.sampleRate);
-          await AppLogService.info('AsrService',
-              '压缩完成 ($config.compression): ${audioBytes.length} → ${workingBytes.length} 字节');
+    // ── File exceeds limit — apply fallback strategy ────────────────
+    await AppLogService.info('AsrService',
+        '文件超限 (${formatFileSize(workingBytes.length)} > ${formatFileSize(config.maxFileSizeBytes)})，尝试兜底策略: ${config.fallbackMethod}');
+
+    final fallback = config.fallbackMethod;
+
+    // Step 1: Try specific fallback (base64/URL) if configured
+    if (fallback == 'specific' || fallback == 'all') {
+      final specificMethod = _getSpecificFallback(config.uploadMethod);
+      if (specificMethod != null) {
+        try {
+          if (specificMethod == AudioUploadMethod.base64Json) {
+            return _sendViaBase64(workingBytes, fmt);
+          }
+          // URL method requires a URL, not bytes — skip for now
+          await AppLogService.info(
+              'AsrService', '特定兜底 (${specificMethod.name}) 不适用（需要 URL）');
+        } catch (e) {
+          await AppLogService.warning(
+              'AsrService', '特定兜底 (${specificMethod.name}) 失败: $e');
         }
-      } catch (e) {
-        await AppLogService.warning(
-            'AsrService', '压缩失败 ($config.compression): $e');
       }
     }
 
-    // ── Chunking ────────────────────────────────────────────────────
-    if (config.chunking != 'none' &&
-        workingBytes.length > config.maxFileSizeBytes &&
-        fmt == 'wav') {
-      return _transcribeChunked(workingBytes, fmt);
+    // Step 2: Try generic fallback (compression → chunking → re-upload)
+    if (fallback == 'generic' || fallback == 'all') {
+      // Apply compression if configured
+      if (config.compression != 'none' && fmt == 'wav') {
+        workingBytes = _applyCompression(workingBytes, fmt);
+      }
+
+      // Apply chunking if configured
+      if (config.chunking != 'none' &&
+          workingBytes.length > config.maxFileSizeBytes &&
+          fmt == 'wav') {
+        return _transcribeChunked(workingBytes, fmt);
+      }
+
+      // If compression/chunking brought it under limit, send via primary
+      if (workingBytes.length <= config.maxFileSizeBytes) {
+        return _sendViaMethod(workingBytes, fmt, config.uploadMethod);
+      }
     }
 
-    // ── File size validation (file-based methods only) ──────────────
-    if (config.uploadMethod != AudioUploadMethod.url &&
-        workingBytes.length > config.maxFileSizeBytes) {
-      final isOpenAiDefault =
-          config.maxFileSizeBytes == AsrConfig.defaultMaxAudioFileSizeBytes;
-      final guidance = isOpenAiDefault
-          ? 'OpenAI 音频 API 最大支持 25 MB。请启用音频切块或调大限制。'
-          : '请降低文件大小后重试。';
-      throw Exception(
-        '文件大小超过限制: '
-        '${formatFileSize(workingBytes.length)} > '
-        '${formatFileSize(config.maxFileSizeBytes)}。'
-        '$guidance',
-      );
-    }
+    // ── All fallbacks exhausted — reject ────────────────────────────
+    throw Exception(
+      '文件大小超过限制且兜底策略未能解决: '
+      '${formatFileSize(workingBytes.length)} > '
+      '${formatFileSize(config.maxFileSizeBytes)}。'
+      '请配置兜底策略（base64/URL/压缩/切块）或降低文件大小。',
+    );
+  }
 
+  /// Apply compression to working bytes.
+  Uint8List _applyCompression(Uint8List workingBytes, String fmt) {
+    if (config.compression == 'none' || fmt != 'wav') return workingBytes;
+    try {
+      final info = parseWavHeader(workingBytes);
+      final samples = readPcmSamplesFloat(workingBytes, info);
+      final pcm = Int16List(samples.length);
+      for (int i = 0; i < samples.length; i++) {
+        pcm[i] = (samples[i] * 32767).round().clamp(-32768, 32767);
+      }
+      final codec = switch (config.compression) {
+        'adpcm' => AudioCodec.adpcm,
+        'flac' => AudioCodec.flac,
+        'opus' => AudioCodec.opus,
+        'mp3' => AudioCodec.mp3,
+        _ => AudioCodec.none,
+      };
+      if (codec != AudioCodec.none) {
+        return compressPcm(pcm, codec, sampleRate: info.sampleRate);
+      }
+    } catch (e) {
+      AppLogService.warning('AsrService', '压缩失败: $e');
+    }
+    return workingBytes;
+  }
+
+  /// Apply compression and send via primary method (for files within limit).
+  Future<AsrResult> _applyCompressionAndSend(
+      Uint8List workingBytes, String fmt) async {
+    if (config.compression != 'none' && fmt == 'wav') {
+      workingBytes = _applyCompression(workingBytes, fmt);
+    }
+    return _sendViaMethod(workingBytes, fmt, config.uploadMethod);
+  }
+
+  /// Get the specific fallback method (base64 or URL) that differs from primary.
+  AudioUploadMethod? _getSpecificFallback(AudioUploadMethod primary) {
+    switch (primary) {
+      case AudioUploadMethod.multipart:
+        return AudioUploadMethod.base64Json; // prefer base64 as fallback
+      case AudioUploadMethod.base64Json:
+        return AudioUploadMethod.multipart;
+      case AudioUploadMethod.url:
+        return AudioUploadMethod.base64Json;
+    }
+  }
+
+  /// Send via base64 JSON method.
+  Future<AsrResult> _sendViaBase64(Uint8List bytes, String fmt) async {
+    return _sendViaMethod(bytes, fmt, AudioUploadMethod.base64Json);
+  }
+
+  /// Send audio via the specified upload method.
+  Future<AsrResult> _sendViaMethod(
+      Uint8List bytes, String fmt, AudioUploadMethod method) async {
     final stopwatch = Stopwatch()..start();
     final mimeTypeString = getMimeType(fmt);
     final mimeType = mimeTypeString.contains('/')
         ? DioMediaType.parse(mimeTypeString)
         : null;
     final fileName = 'audio.$fmt';
-
-    // Build shared parameters (model, language, response_format, etc.)
     final sharedParams = _buildSharedParams();
 
-    // ── Dispatch by upload method ───────────────────────────────────
     try {
       final response = await _sendTranscriptionRequest(
         sharedParams: sharedParams,
-        audioBytes: workingBytes,
+        audioBytes: bytes,
         fileName: fileName,
         mimeType: mimeType,
+        method: method,
       );
 
       stopwatch.stop();
@@ -606,16 +679,18 @@ class AsrService {
     return result.toString();
   }
 
-  /// Send the transcription request using the configured [uploadMethod].
+  /// Send the transcription request using the specified [method].
   Future<Response<dynamic>> _sendTranscriptionRequest({
     required Map<String, dynamic> sharedParams,
     required Uint8List audioBytes,
     required String fileName,
     required DioMediaType? mimeType,
+    AudioUploadMethod? method,
   }) async {
+    final effectiveMethod = method ?? config.uploadMethod;
     final diagnosticFields = Map<String, dynamic>.from(sharedParams);
 
-    switch (config.uploadMethod) {
+    switch (effectiveMethod) {
       case AudioUploadMethod.multipart:
         final formData = FormData.fromMap({
           'file': MultipartFile.fromBytes(

@@ -103,6 +103,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   String _chunking =
       'none'; // 'none' | 'silence' | 'fixedDuration' | 'fixedSize'
   String _compression = 'none'; // 'none' | 'adpcm' | 'flac'
+  String _fallbackMethod = 'none'; // 'none' | 'specific' | 'generic' | 'all'
 
   bool get _isLlmType => widget.providerType == 'llm';
   bool get _isAsrType => widget.providerType == 'asr';
@@ -164,6 +165,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       _preprocessing = c.typeConfig['preprocessing'] as String? ?? 'none';
       _chunking = c.typeConfig['chunking'] as String? ?? 'none';
       _compression = c.typeConfig['compression'] as String? ?? 'none';
+      _fallbackMethod = c.typeConfig['fallbackMethod'] as String? ?? 'none';
     } else {
       _maxFileSizeController = TextEditingController(text: '25.0');
     }
@@ -680,6 +682,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       typeConfig['preprocessing'] = _preprocessing;
       typeConfig['chunking'] = _chunking;
       typeConfig['compression'] = _compression;
+      typeConfig['fallbackMethod'] = _fallbackMethod;
     }
 
     return ProviderConfigItem(
@@ -784,30 +787,46 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
           // ASR Upload Settings
           // ==========================================================
           if (_isAsrType) ...[
+            // ════════════════════════════════════════════════════════════
+            // 上传设置
+            // ════════════════════════════════════════════════════════════
             Text(
               '上传设置',
               style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
                 color: cs.primary,
+                letterSpacing: 0.3,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
               '选择音频发送方式，不同供应商支持的上传方式和大小限制不同。',
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              style: TextStyle(
+                fontSize: 13,
+                color: cs.onSurfaceVariant,
+                height: 1.4,
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Row(
               children: [
-                const Text('上传方式'),
+                Text(
+                  '上传方式',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: cs.onSurface,
+                  ),
+                ),
                 const Spacer(),
                 Container(
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade400),
-                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: cs.outlineVariant),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<AudioUploadMethod>(
                       value: _uploadMethod,
@@ -815,7 +834,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                       items: const [
                         DropdownMenuItem(
                           value: AudioUploadMethod.multipart,
-                          child: Text('Multipart (通用)',
+                          child: Text('Multipart（通用）',
                               style: TextStyle(fontSize: 13)),
                         ),
                         DropdownMenuItem(
@@ -826,7 +845,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                         DropdownMenuItem(
                           value: AudioUploadMethod.url,
                           child:
-                              Text('URL (链接)', style: TextStyle(fontSize: 13)),
+                              Text('URL（链接）', style: TextStyle(fontSize: 13)),
                         ),
                       ],
                       onChanged: (v) {
@@ -837,23 +856,34 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
               _uploadMethod == AudioUploadMethod.multipart
                   ? 'multipart/form-data 直传。最通用，受各供应商大小限制（通常 25 MB）。'
                   : _uploadMethod == AudioUploadMethod.base64Json
                       ? 'Base64 编码后 JSON 发送。可绕过部分供应商 multipart 大小限制。'
                       : '提供公网 URL，供应商自行下载。支持超大文件（Together AI 1 GB 等）。',
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              style: TextStyle(
+                fontSize: 12,
+                color: cs.onSurfaceVariant.withAlpha(180),
+                height: 1.4,
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             if (_uploadMethod != AudioUploadMethod.url)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Text('最大文件大小'),
+                      Text(
+                        '最大文件大小',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: cs.onSurface,
+                        ),
+                      ),
                       const Spacer(),
                       SizedBox(
                         width: 90,
@@ -880,41 +910,60 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
                     '超过 ${_maxFileSizeMb.toStringAsFixed(1)} MB 的文件将被拒绝。'
                     '默认 25 MB 是 OpenAI 音频 API 上限。',
-                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.onSurfaceVariant.withAlpha(180),
+                      height: 1.4,
+                    ),
                   ),
                 ],
               ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
 
-            // Preprocessing
+            // ════════════════════════════════════════════════════════════
+            // 音频预处理
+            // ════════════════════════════════════════════════════════════
             Text(
               '音频预处理',
               style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
                 color: cs.primary,
+                letterSpacing: 0.3,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
-              '降低音频文件大小，不影响转写准确率',
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              '降低音频文件大小，不影响转写准确率。',
+              style: TextStyle(
+                fontSize: 13,
+                color: cs.onSurfaceVariant,
+                height: 1.4,
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Row(
               children: [
-                const Text('预处理方式'),
+                Text(
+                  '预处理方式',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: cs.onSurface,
+                  ),
+                ),
                 const Spacer(),
                 Container(
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade400),
-                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: cs.outlineVariant),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       value: _preprocessing,
@@ -926,7 +975,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                         ),
                         DropdownMenuItem(
                           value: 'resampleMono',
-                          child: Text('WAV 优化 (16kHz Mono)',
+                          child: Text('WAV 优化（16kHz Mono）',
                               style: TextStyle(fontSize: 13)),
                         ),
                       ],
@@ -938,40 +987,59 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
               _preprocessing == 'resampleMono'
                   ? '重采样到 16kHz + 单声道混音。体积缩小约 4-6x，语音转写准确率几乎不变。'
                   : '不进行预处理，原样发送。',
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              style: TextStyle(
+                fontSize: 12,
+                color: cs.onSurfaceVariant.withAlpha(180),
+                height: 1.4,
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 32),
 
-            // Chunking
+            // ════════════════════════════════════════════════════════════
+            // 音频切块
+            // ════════════════════════════════════════════════════════════
             Text(
               '音频切块',
               style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
                 color: cs.primary,
+                letterSpacing: 0.3,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
-              '超过大小限制时自动切片后分别转写',
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              '超过大小限制时自动切片后分别转写。',
+              style: TextStyle(
+                fontSize: 13,
+                color: cs.onSurfaceVariant,
+                height: 1.4,
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Row(
               children: [
-                const Text('切块方式'),
+                Text(
+                  '切块方式',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: cs.onSurface,
+                  ),
+                ),
                 const Spacer(),
                 Container(
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade400),
-                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: cs.outlineVariant),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       value: _chunking,
@@ -983,7 +1051,9 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                         ),
                         DropdownMenuItem(
                           value: 'silence',
-                          child: Text('静音检测切块', style: TextStyle(fontSize: 13)),
+                          child: Text('静音检测切块（推荐）',
+                              style: TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w600)),
                         ),
                         DropdownMenuItem(
                           value: 'fixedDuration',
@@ -1002,38 +1072,57 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
               _chunkingDescription(),
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              style: TextStyle(
+                fontSize: 12,
+                color: cs.onSurfaceVariant.withAlpha(180),
+                height: 1.4,
+              ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
 
-            // Compression
+            // ════════════════════════════════════════════════════════════
+            // 压缩编码
+            // ════════════════════════════════════════════════════════════
             Text(
               '压缩编码',
               style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
                 color: cs.primary,
+                letterSpacing: 0.3,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
-              '选择音频压缩格式，减小上传体积',
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              '选择音频压缩格式，减小上传体积。',
+              style: TextStyle(
+                fontSize: 13,
+                color: cs.onSurfaceVariant,
+                height: 1.4,
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Row(
               children: [
-                const Text('压缩方式'),
+                Text(
+                  '压缩方式',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: cs.onSurface,
+                  ),
+                ),
                 const Spacer(),
                 Container(
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade400),
-                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: cs.outlineVariant),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       value: _compression,
@@ -1073,7 +1162,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
               _compression == 'adpcm'
                   ? 'IMA ADPCM，4:1 有损压缩。纯 Dart 实现，音质适合语音转写。'
@@ -1084,9 +1173,105 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                           : _compression == 'mp3'
                               ? 'MP3 编码器，需系统 ffmpeg。通用兼容性最好。'
                               : '不压缩，以原始 WAV 格式发送。',
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              style: TextStyle(
+                fontSize: 12,
+                color: cs.onSurfaceVariant.withAlpha(180),
+                height: 1.4,
+              ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
+
+            // ════════════════════════════════════════════════════════════
+            // 兜底策略
+            // ════════════════════════════════════════════════════════════
+            Text(
+              '兜底策略',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
+                color: cs.primary,
+                letterSpacing: 0.3,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '当文件超过大小限制时的处理方式。特定兜底（Base64/URL）优先于通用兜底（压缩/切块）。',
+              style: TextStyle(
+                fontSize: 13,
+                color: cs.onSurfaceVariant,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Text(
+                  '兜底方式',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: cs.onSurface,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: cs.outlineVariant),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _fallbackMethod,
+                      isDense: true,
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'none',
+                          child:
+                              Text('无（直接拒绝）', style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'specific',
+                          child: Text('特定兜底（Base64/URL）',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'generic',
+                          child: Text('通用兜底（压缩/切块）',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'all',
+                          child: Text('全部尝试（推荐）',
+                              style: TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _fallbackMethod = v);
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _fallbackMethod == 'specific'
+                  ? '优先尝试 Base64 JSON 或 URL 上传（取决于主方式）。'
+                  : _fallbackMethod == 'generic'
+                      ? '先应用压缩，再尝试切块，最后重新上传。'
+                      : _fallbackMethod == 'all'
+                          ? '先尝试特定兜底，再尝试通用兜底。最大化成功率。'
+                          : '文件超过限制时直接拒绝，不尝试任何兜底。',
+              style: TextStyle(
+                fontSize: 12,
+                color: cs.onSurfaceVariant.withAlpha(180),
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 32),
           ],
 
           // ==========================================================
