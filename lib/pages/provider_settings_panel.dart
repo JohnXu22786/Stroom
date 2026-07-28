@@ -962,7 +962,8 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                     border: Border.all(color: cs.outlineVariant),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       value: _fallbackMethod,
@@ -970,8 +971,8 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                       items: const [
                         DropdownMenuItem(
                           value: 'none',
-                          child: Text('无（直接拒绝）',
-                              style: TextStyle(fontSize: 13)),
+                          child:
+                              Text('无（直接拒绝）', style: TextStyle(fontSize: 13)),
                         ),
                         DropdownMenuItem(
                           value: 'specific',

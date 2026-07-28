@@ -333,7 +333,8 @@ class EnvironmentAnalyzer {
   /// Compute the nth percentile from a sorted list.
   static double _percentile(Float64List sorted, double fraction) {
     if (sorted.isEmpty) return -100.0;
-    final index = (sorted.length * fraction).round().clamp(0, sorted.length - 1);
+    final index =
+        (sorted.length * fraction).round().clamp(0, sorted.length - 1);
     return sorted[index];
   }
 }
@@ -710,12 +711,10 @@ class AudioChunker {
 
     // Step 6: Greedy cut selection
     final totalSamples = info.totalSamples;
-    final minChunkSamples =
-        (config.minChunkDuration * info.sampleRate).round();
+    final minChunkSamples = (config.minChunkDuration * info.sampleRate).round();
     final targetChunkSamples =
         (config.targetChunkDuration * info.sampleRate).round();
-    final maxChunkSamples =
-        (config.maxChunkDuration * info.sampleRate).round();
+    final maxChunkSamples = (config.maxChunkDuration * info.sampleRate).round();
 
     final selectedCuts = _selectCutPoints(
       candidates,
@@ -755,8 +754,8 @@ class AudioChunker {
           final subStart = start + (chunkBytes * p) ~/ numParts;
           final subEnd = start + (chunkBytes * (p + 1)) ~/ numParts;
           if (subEnd > subStart) {
-            chunks.add(_writeWavChunk(wavBytes, info,
-                subStart - pcmDataOffset, subEnd - pcmDataOffset));
+            chunks.add(_writeWavChunk(wavBytes, info, subStart - pcmDataOffset,
+                subEnd - pcmDataOffset));
           }
         }
       }
@@ -924,13 +923,15 @@ class AudioChunker {
     int currentSample = 0;
 
     while (currentSample + minChunkSamples < totalSamples) {
-      final searchEnd = (currentSample + maxChunkSamples).clamp(0, totalSamples);
+      final searchEnd =
+          (currentSample + maxChunkSamples).clamp(0, totalSamples);
       final searchStart = currentSample + minChunkSamples;
 
       // Find candidates in the search range
-      final inRange = candidates.where((c) =>
-          c.samplePosition >= searchStart &&
-          c.samplePosition <= searchEnd).toList();
+      final inRange = candidates
+          .where((c) =>
+              c.samplePosition >= searchStart && c.samplePosition <= searchEnd)
+          .toList();
 
       if (inRange.isEmpty) {
         // ── No candidate in range — force-cut ──
@@ -1088,8 +1089,8 @@ class AudioChunker {
           final subEnd =
               startSample + ((endSample - startSample) * (p + 1)) ~/ numParts;
           if (subEnd > subStart) {
-            chunks.add(_writeWavChunk(
-                wavBytes, info, subStart * bpf, subEnd * bpf));
+            chunks.add(
+                _writeWavChunk(wavBytes, info, subStart * bpf, subEnd * bpf));
           }
         }
       }

@@ -748,7 +748,8 @@ void main() {
       final originalInfo = parseWavHeader(wav);
       // With 0 overlap, total chunk data ≈ original data
       // (Allow small variance due to rounding at frame boundaries)
-      expect(totalChunkData, closeTo(originalInfo.dataSize, originalInfo.dataSize * 0.1));
+      expect(totalChunkData,
+          closeTo(originalInfo.dataSize, originalInfo.dataSize * 0.1));
     });
   });
 
