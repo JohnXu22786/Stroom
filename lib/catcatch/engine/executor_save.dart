@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
+import '../../services/app_log_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/video_manifest.dart';
 import '../../utils/file_manifest.dart';
@@ -44,7 +45,17 @@ Future<String> executeSave({
 
 Future<void> registerCompletedVideo(String filePath, CatCatchTask task) async {
   final ext = p.extension(filePath).toLowerCase().replaceAll('.', '');
-  const videoExts = {'mp4', 'webm', 'mov', 'mkv', 'ogv', 'avi', 'flv', 'wmv'};
+  const videoExts = {
+    'mp4',
+    'webm',
+    'ogg',
+    'mov',
+    'mkv',
+    'ogv',
+    'avi',
+    'flv',
+    'wmv'
+  };
   if (!videoExts.contains(ext)) return;
 
   final file = File(filePath);
@@ -69,6 +80,8 @@ Future<void> registerCompletedVideo(String filePath, CatCatchTask task) async {
   );
   await VideoManifest.writeFile('$hash.$ext', fileBytes);
   await VideoManifest.addRecord(record);
+  AppLogService.info(
+      'CatCatch', '视频已保存: $recordName.$ext (${fileBytes.length} bytes)');
   debugPrint(
       '[TaskExecutor] Registered video to gallery: $recordName.$ext (folder: $videoFolder)');
 }
