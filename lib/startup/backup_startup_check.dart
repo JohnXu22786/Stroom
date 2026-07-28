@@ -154,23 +154,29 @@ class BackupStartupCheck {
 
         if (!backupSuccess && context.mounted) {
           final reachedMaxAttempts = backupAttempts >= maxBackupAttempts;
-          final shouldRetry = await _showBackupFailedDialog(
+          final dialogResult = await _showBackupFailedDialog(
             context,
             showSkip: reachedMaxAttempts,
             errorMessage: AutoBackupService.lastError,
           );
           if (!context.mounted) break;
 
-          if (!shouldRetry) {
-            // Android: 用户选择「重新授权」→ 清除 SAF URI，回到步骤 1
-            // iOS / 桌面：用户选择「跳过」→ 退出循环（iOS 路径固定无需授权）
-            if (!kIsWeb && Platform.isAndroid && !reachedMaxAttempts) {
-              await BackupLocationManager.clearStorageAccess();
-              needReAuth = true;
-            }
+          if (dialogResult == null) {
+            // 用户选择「跳过」→ 退出循环
             break;
           }
-          // shouldRetry == true: 继续循环重试备份
+
+          if (dialogResult == true) {
+            // 用户选择「重试」→ 继续循环
+            continue;
+          }
+
+          // dialogResult == false: 用户选择「重新授权」→ 清除 SAF URI，回到步骤 1
+          if (!kIsWeb && Platform.isAndroid) {
+            await BackupLocationManager.clearStorageAccess();
+            needReAuth = true;
+          }
+          break;
         }
       }
     } while (needReAuth && context.mounted);
@@ -348,12 +354,15 @@ class BackupStartupCheck {
 
   /// 显示自动备份失败对话框。
   ///
-  /// 返回 `true` 表示用户想重试；`false` 表示用户想重新授权路径或跳过。
+  /// 返回值：
+  /// - `true`  → 重试（继续循环备份）
+  /// - `false` → 重新授权存储路径（Android 专用，清除 SAF URI）
+  /// - `null`  → 跳过备份，退出循环
   ///
   /// [showSkip] 为 true 时在 Android 上也显示「跳过」按钮
   /// （达到最大重试次数后，避免无限循环）。
   /// [errorMessage] 可选的错误详情，用于判断是否为 OOM 并显示针对性提示。
-  static Future<bool> _showBackupFailedDialog(
+  static Future<bool?> _showBackupFailedDialog(
     BuildContext context, {
     bool showSkip = false,
     String? errorMessage,
@@ -376,6 +385,10 @@ class BackupStartupCheck {
           '• 点击「跳过」暂不备份，继续使用应用\n'
           '• 在设置中手动导出备份（可选择排除视频等大文件）\n'
           '• 清理一些不需要的视频/图片后重试';
+    } else if (showSkip) {
+      // 达到最大重试次数，只显示「跳过」按钮
+      contentText = '自动备份多次尝试后仍未成功。\n\n'
+          '点击「跳过」暂不备份，稍后可在应用中手动备份。';
     } else if (isAndroid) {
       contentText = '自动备份未能成功完成。\n\n'
           '请确认已授权正确的「Documents」文档目录路径，\n'
@@ -387,7 +400,10 @@ class BackupStartupCheck {
           '备份成功后即可正常使用。';
     }
 
-    final result = await showDialog<bool>(
+    // OOM 时「重新授权」无意义，直接显示「跳过」
+    final showSkipInDialog = isOom || showSkip || !isAndroid;
+
+    final result = await showDialog<bool?>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
@@ -400,9 +416,9 @@ class BackupStartupCheck {
         ),
         content: Text(contentText),
         actions: [
-          if (showSkip || !isAndroid)
+          if (showSkipInDialog)
             TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
+              onPressed: () => Navigator.of(ctx).pop(null),
               child: const Text('跳过'),
             )
           else
@@ -418,6 +434,6 @@ class BackupStartupCheck {
         ],
       ),
     );
-    return result ?? false;
+    return result;
   }
 }
