@@ -112,13 +112,13 @@ void main() {
       expect(out[0], 0x66);
     });
 
-    test('opus/mp3 fall back to uncompressed', () {
+    test('opus/mp3 produce encoded output', () {
       final pcm = Int16List.fromList([100, 200]);
       final opusOut = compressPcm(pcm, AudioCodec.opus);
       final mp3Out = compressPcm(pcm, AudioCodec.mp3);
-      // Fallback to S16LE bytes
-      expect(opusOut.length, 4);
-      expect(mp3Out.length, 4);
+      // Both should produce encoded output (larger than raw PCM due to headers)
+      expect(opusOut.length, greaterThan(4));
+      expect(mp3Out.length, greaterThan(4));
     });
   });
 }
