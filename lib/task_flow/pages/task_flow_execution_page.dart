@@ -81,13 +81,9 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('任务流已启动，可在任务列表中查看进度'),
-          action: SnackBarAction(
-            label: '查看',
-            onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const UnifiedTaskListPage())),
-          ),
+        const SnackBar(
+          content: Text('任务流已启动'),
+          duration: Duration(seconds: 2),
         ),
       );
       Navigator.of(context).pop();

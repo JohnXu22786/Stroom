@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/task_provider_shared.dart';
+import '../../../services/app_log_service.dart';
 import '../../../utils/audio_separation.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/task_flow_execution.dart';
@@ -15,10 +16,14 @@ import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
 import 'shared_helpers.dart';
 
-Future<Uint8List> _extractAudioIsolate(
-    Uint8List videoBytes, String videoFormat) {
-  return Isolate.run(
-      () => extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat));
+/// Reads the video file and extracts audio — all in a background isolate
+/// so the GUI stays responsive even for large files.
+Future<Uint8List> _readAndExtractInIsolate(
+    String filePath, String videoFormat) {
+  return Isolate.run(() {
+    final bytes = File(filePath).readAsBytesSync();
+    return extractAudioSync(videoBytes: bytes, videoFormat: videoFormat);
+  });
 }
 
 Future<String> executeAudioSeparationBlock({
@@ -40,8 +45,9 @@ Future<String> executeAudioSeparationBlock({
   bgNotifier.addTask(
       type: BackgroundTaskType.audioSeparation, title: title, taskId: taskId);
 
-  Uint8List videoBytes;
+  Uint8List audioBytes;
   try {
+    // Validate file exists before handing off to isolate
     final file = File(input);
     if (!await file.exists()) {
       failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
@@ -49,25 +55,26 @@ Future<String> executeAudioSeparationBlock({
       throw BlockExecutionException('输入文件不存在',
           blockType: def.typeKey.name, blockTitle: def.label);
     }
-    videoBytes = await file.readAsBytes();
-    if (videoBytes.isEmpty) {
-      failSubTask(
-          bgNotifier, taskId, execNotifier, execId, flowSubTask.id, '输入文件为空');
-      throw BlockExecutionException('输入文件为空',
-          blockType: def.typeKey.name, blockTitle: def.label);
-    }
+
+    // Read + extract audio in a background isolate so GUI stays responsive
+    bgNotifier.updateStep(taskId, 0, running: true);
+    audioBytes = await _readAndExtractInIsolate(input, inputFormat);
+    bgNotifier.updateStep(taskId, 0, completed: true);
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
-    failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
-        '无法读取输入文件: $e');
-    throw BlockExecutionException('无法读取输入文件',
+    failSubTask(
+        bgNotifier, taskId, execNotifier, execId, flowSubTask.id, '音频提取失败: $e');
+    throw BlockExecutionException('音频提取失败',
         blockType: def.typeKey.name, blockTitle: def.label);
   }
 
   try {
-    bgNotifier.updateStep(taskId, 0, running: true);
-    final audioBytes = await _extractAudioIsolate(videoBytes, inputFormat);
-    bgNotifier.updateStep(taskId, 0, completed: true);
+    if (audioBytes.isEmpty) {
+      failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
+          '提取的音频数据为空');
+      throw BlockExecutionException('提取的音频数据为空',
+          blockType: def.typeKey.name, blockTitle: def.label);
+    }
 
     bgNotifier.updateStep(taskId, 1, running: true);
     final saveFolder = block.params['saveFolder'] ?? '';

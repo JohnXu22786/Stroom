@@ -5,6 +5,7 @@ import '../../providers/background_task_provider.dart';
 import '../../providers/provider_config.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/task_provider_shared.dart';
+import '../../services/app_log_service.dart';
 import '../models/block_type_definition.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_execution.dart';
@@ -56,6 +57,8 @@ class TaskFlowExecutionService {
       flowName: flow.name,
     );
 
+    AppLogService.info('TaskFlow', '开始执行: ${flow.name} ($execId)');
+
     final placeholders = <int, FlowSubTask>{};
     for (int i = 0; i < flow.blocks.length; i++) {
       final block = flow.blocks[i];
@@ -84,6 +87,8 @@ class TaskFlowExecutionService {
 
       try {
         final providerState = _ref.read(providerEntriesProvider);
+        AppLogService.info(
+            'TaskFlow', '步骤 ${i + 1}/${flow.blocks.length}: ${def.label}');
         final result = await _executeBlock(
           def,
           block,
@@ -98,6 +103,8 @@ class TaskFlowExecutionService {
         );
         currentData = result;
       } catch (e) {
+        AppLogService.warning('TaskFlow',
+            '步骤 ${i + 1} 失败: ${flow.blocks[i].getDefinition()?.label ?? "?"} — $e');
         final executions = execNotifier.state.where((x) => x.id == execId);
         if (executions.isNotEmpty) {
           execNotifier.failExecution(execId, error: '步骤 ${i + 1} 失败: $e');
@@ -107,6 +114,7 @@ class TaskFlowExecutionService {
     }
 
     execNotifier.completeExecution(execId);
+    AppLogService.info('TaskFlow', '完成: ${flow.name} ($execId)');
   }
 
   String _subTaskType(BlockType? typeKey) {
