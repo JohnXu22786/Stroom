@@ -138,7 +138,12 @@ class BackupStartupCheck {
       // ---------------------------------------------------------------
       // 步骤 3：执行启动后自动备份
       // ---------------------------------------------------------------
+      // 最多尝试 2 次，避免 OOM 等不可恢复错误导致无限弹窗循环。
+      int backupAttempts = 0;
+      const maxBackupAttempts = 2;
+
       while (!backupSuccess && context.mounted) {
+        backupAttempts++;
         try {
           backupSuccess = await AutoBackupService.performAutoBackup();
         } catch (e) {
@@ -148,19 +153,30 @@ class BackupStartupCheck {
         }
 
         if (!backupSuccess && context.mounted) {
-          final shouldRetry = await _showBackupFailedDialog(context);
+          final reachedMaxAttempts = backupAttempts >= maxBackupAttempts;
+          final dialogResult = await _showBackupFailedDialog(
+            context,
+            showSkip: reachedMaxAttempts,
+            errorMessage: AutoBackupService.lastError,
+          );
           if (!context.mounted) break;
 
-          if (!shouldRetry) {
-            // Android: 用户选择「重新授权」→ 清除 SAF URI，回到步骤 1
-            // iOS / 桌面：用户选择「跳过」→ 退出循环（iOS 路径固定无需授权）
-            if (!kIsWeb && Platform.isAndroid) {
-              await BackupLocationManager.clearStorageAccess();
-              needReAuth = true;
-            }
+          if (dialogResult == null) {
+            // 用户选择「跳过」→ 退出循环
             break;
           }
-          // shouldRetry == true: 继续循环重试备份
+
+          if (dialogResult == true) {
+            // 用户选择「重试」→ 继续循环
+            continue;
+          }
+
+          // dialogResult == false: 用户选择「重新授权」→ 清除 SAF URI，回到步骤 1
+          if (!kIsWeb && Platform.isAndroid) {
+            await BackupLocationManager.clearStorageAccess();
+            needReAuth = true;
+          }
+          break;
         }
       }
     } while (needReAuth && context.mounted);
@@ -338,13 +354,56 @@ class BackupStartupCheck {
 
   /// 显示自动备份失败对话框。
   ///
-  /// 返回 `true` 表示用户想重试；`false` 表示用户想重新授权路径或跳过。
-  /// - Android：不提供「跳过」按钮（有 SAF 可重新授权），必须重试或重新授权。
-  /// - iOS / 桌面：保留「跳过」按钮（路径固定，不存在重新授权问题）。
-  static Future<bool> _showBackupFailedDialog(BuildContext context) async {
+  /// 返回值：
+  /// - `true`  → 重试（继续循环备份）
+  /// - `false` → 重新授权存储路径（Android 专用，清除 SAF URI）
+  /// - `null`  → 跳过备份，退出循环
+  ///
+  /// [showSkip] 为 true 时在 Android 上也显示「跳过」按钮
+  /// （达到最大重试次数后，避免无限循环）。
+  /// [errorMessage] 可选的错误详情，用于判断是否为 OOM 并显示针对性提示。
+  static Future<bool?> _showBackupFailedDialog(
+    BuildContext context, {
+    bool showSkip = false,
+    String? errorMessage,
+  }) async {
     final isAndroid = !kIsWeb && Platform.isAndroid;
+    final isOom = errorMessage != null &&
+        (errorMessage.contains('Out of Memory') ||
+            errorMessage.contains('OutOfMemory') ||
+            errorMessage.contains('out of memory') ||
+            errorMessage.contains('Cannot allocate memory') ||
+            errorMessage.contains('failed to map file') ||
+            errorMessage.contains('malloc failed'));
 
-    final result = await showDialog<bool>(
+    // 根据错误类型和重试次数构建提示文本
+    String contentText;
+    if (isOom) {
+      contentText = '自动备份因设备内存不足而失败。\n\n'
+          '这通常是因为备份数据（尤其是视频文件）太大。'
+          '您可以：\n'
+          '• 点击「跳过」暂不备份，继续使用应用\n'
+          '• 在设置中手动导出备份（可选择排除视频等大文件）\n'
+          '• 清理一些不需要的视频/图片后重试';
+    } else if (showSkip) {
+      // 达到最大重试次数，只显示「跳过」按钮
+      contentText = '自动备份多次尝试后仍未成功。\n\n'
+          '点击「跳过」暂不备份，稍后可在应用中手动备份。';
+    } else if (isAndroid) {
+      contentText = '自动备份未能成功完成。\n\n'
+          '请确认已授权正确的「Documents」文档目录路径，\n'
+          '点击「重新授权」返回重新选择正确的目录；\n'
+          '或点击「重试」再次尝试备份。';
+    } else {
+      contentText = '自动备份未能成功完成，可能是存储空间不足或设备状态异常。\n\n'
+          '请清理不必要的文件后点击「重试」，应用将再次尝试自动备份。'
+          '备份成功后即可正常使用。';
+    }
+
+    // OOM 时「重新授权」无意义，直接显示「跳过」
+    final showSkipInDialog = isOom || showSkip || !isAndroid;
+
+    final result = await showDialog<bool?>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
@@ -355,34 +414,26 @@ class BackupStartupCheck {
             const Text('自动备份失败'),
           ],
         ),
-        content: Text(
-          isAndroid
-              ? '自动备份未能成功完成。\n\n'
-                  '请确认已授权正确的「Documents」文档目录路径，\n'
-                  '点击「重新授权」返回重新选择正确的目录；\n'
-                  '或点击「重试」再次尝试备份。'
-              : '自动备份未能成功完成，可能是存储空间不足或设备状态异常。\n\n'
-                  '请清理不必要的文件后点击「重试」，应用将再次尝试自动备份。'
-                  '备份成功后即可正常使用。',
-        ),
+        content: Text(contentText),
         actions: [
-          if (isAndroid)
+          if (showSkipInDialog)
             TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('重新授权'),
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: const Text('跳过'),
             )
           else
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('跳过'),
+              child: const Text('重新授权'),
             ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('重试'),
-          ),
+          if (!showSkip)
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('重试'),
+            ),
         ],
       ),
     );
-    return result ?? false;
+    return result;
   }
 }
