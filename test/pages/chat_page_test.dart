@@ -444,7 +444,8 @@ void main() {
             reason: 'isStreamingProvider should persist across rebuilds');
       }
 
-      container.read(isStreamingProvider('test-conv-id').notifier).state = false;
+      container.read(isStreamingProvider('test-conv-id').notifier).state =
+          false;
       expect(container.read(isStreamingProvider('test-conv-id')), false);
     });
 
@@ -455,10 +456,12 @@ void main() {
       expect(container.read(streamingMsgIdProvider('test-conv-id')), isNull);
 
       const testId = 'ai-test-msg-id';
-      container.read(streamingMsgIdProvider('test-conv-id').notifier).state = testId;
+      container.read(streamingMsgIdProvider('test-conv-id').notifier).state =
+          testId;
       expect(container.read(streamingMsgIdProvider('test-conv-id')), testId);
 
-      container.read(streamingMsgIdProvider('test-conv-id').notifier).state = null;
+      container.read(streamingMsgIdProvider('test-conv-id').notifier).state =
+          null;
       expect(container.read(streamingMsgIdProvider('test-conv-id')), isNull);
     });
 
@@ -468,13 +471,21 @@ void main() {
 
       expect(container.read(streamingFullReplyProvider('test-conv-id')), '');
 
-      container.read(streamingFullReplyProvider('test-conv-id').notifier).state = 'Hello';
-      expect(container.read(streamingFullReplyProvider('test-conv-id')), 'Hello');
+      container
+          .read(streamingFullReplyProvider('test-conv-id').notifier)
+          .state = 'Hello';
+      expect(
+          container.read(streamingFullReplyProvider('test-conv-id')), 'Hello');
 
-      container.read(streamingFullReplyProvider('test-conv-id').notifier).state = 'Hello world';
-      expect(container.read(streamingFullReplyProvider('test-conv-id')), 'Hello world');
+      container
+          .read(streamingFullReplyProvider('test-conv-id').notifier)
+          .state = 'Hello world';
+      expect(container.read(streamingFullReplyProvider('test-conv-id')),
+          'Hello world');
 
-      container.read(streamingFullReplyProvider('test-conv-id').notifier).state = '';
+      container
+          .read(streamingFullReplyProvider('test-conv-id').notifier)
+          .state = '';
       expect(container.read(streamingFullReplyProvider('test-conv-id')), '');
     });
 
@@ -484,20 +495,32 @@ void main() {
 
       // Simulate streaming lifecycle
       container.read(isStreamingProvider('test-conv-id').notifier).state = true;
-      container.read(streamingMsgIdProvider('test-conv-id').notifier).state = 'msg-1';
-      container.read(streamingFullReplyProvider('test-conv-id').notifier).state = 'some text';
-      container.read(streamingHasFirstTokenProvider('test-conv-id').notifier).state = true;
+      container.read(streamingMsgIdProvider('test-conv-id').notifier).state =
+          'msg-1';
+      container
+          .read(streamingFullReplyProvider('test-conv-id').notifier)
+          .state = 'some text';
+      container
+          .read(streamingHasFirstTokenProvider('test-conv-id').notifier)
+          .state = true;
 
       // Simulate completion: all should reset
-      container.read(isStreamingProvider('test-conv-id').notifier).state = false;
-      container.read(streamingMsgIdProvider('test-conv-id').notifier).state = null;
-      container.read(streamingFullReplyProvider('test-conv-id').notifier).state = '';
-      container.read(streamingHasFirstTokenProvider('test-conv-id').notifier).state = false;
+      container.read(isStreamingProvider('test-conv-id').notifier).state =
+          false;
+      container.read(streamingMsgIdProvider('test-conv-id').notifier).state =
+          null;
+      container
+          .read(streamingFullReplyProvider('test-conv-id').notifier)
+          .state = '';
+      container
+          .read(streamingHasFirstTokenProvider('test-conv-id').notifier)
+          .state = false;
 
       expect(container.read(isStreamingProvider('test-conv-id')), false);
       expect(container.read(streamingMsgIdProvider('test-conv-id')), isNull);
       expect(container.read(streamingFullReplyProvider('test-conv-id')), '');
-      expect(container.read(streamingHasFirstTokenProvider('test-conv-id')), false);
+      expect(container.read(streamingHasFirstTokenProvider('test-conv-id')),
+          false);
     });
   });
 
@@ -525,7 +548,8 @@ void main() {
             providerEntriesProvider.overrideWith((ref) {
               return ProviderEntriesNotifier();
             }),
-            if (isStreaming) isStreamingProvider('test-conv-id').overrideWith((ref) => true),
+            if (isStreaming)
+              isStreamingProvider('test-conv-id').overrideWith((ref) => true),
           ],
           child: MaterialApp(
             navigatorKey: navKey,
@@ -942,7 +966,8 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      final sections = container.read(streamingReasoningSectionsProvider('test-conv-id'));
+      final sections =
+          container.read(streamingReasoningSectionsProvider('test-conv-id'));
       expect(sections, isEmpty, reason: '推理章节应在无推理内容时初始化为空列表，而非[""]');
     });
 
@@ -950,7 +975,8 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      final reasoning = container.read(streamingReasoningProvider('test-conv-id'));
+      final reasoning =
+          container.read(streamingReasoningProvider('test-conv-id'));
       expect(reasoning, isEmpty);
     });
 
@@ -967,37 +993,58 @@ void main() {
       addTearDown(container.dispose);
 
       // Simulate the start of reasoning: first section
-      container.read(streamingReasoningSectionsProvider('test-conv-id').notifier).state = [];
+      container
+          .read(streamingReasoningSectionsProvider('test-conv-id').notifier)
+          .state = [];
 
       // Add reasoning content - this simulates ReasoningEvent handler logic
-      final sections = [...container.read(streamingReasoningSectionsProvider('test-conv-id'))];
+      final sections = [
+        ...container.read(streamingReasoningSectionsProvider('test-conv-id'))
+      ];
       if (sections.isEmpty) {
         sections.add('First reasoning text');
       } else {
         sections[sections.length - 1] = 'First reasoning text';
       }
-      container.read(streamingReasoningSectionsProvider('test-conv-id').notifier).state =
-          sections;
+      container
+          .read(streamingReasoningSectionsProvider('test-conv-id').notifier)
+          .state = sections;
 
-      expect(container.read(streamingReasoningSectionsProvider('test-conv-id')).length, 1);
       expect(
-        container.read(streamingReasoningSectionsProvider('test-conv-id')).first,
+          container
+              .read(streamingReasoningSectionsProvider('test-conv-id'))
+              .length,
+          1);
+      expect(
+        container
+            .read(streamingReasoningSectionsProvider('test-conv-id'))
+            .first,
         'First reasoning text',
       );
 
       // Simulate ReasoningSectionEndEvent - add new empty section
-      final sections2 = [...container.read(streamingReasoningSectionsProvider('test-conv-id'))];
+      final sections2 = [
+        ...container.read(streamingReasoningSectionsProvider('test-conv-id'))
+      ];
       sections2.add('');
-      container.read(streamingReasoningSectionsProvider('test-conv-id').notifier).state =
-          sections2;
+      container
+          .read(streamingReasoningSectionsProvider('test-conv-id').notifier)
+          .state = sections2;
 
-      expect(container.read(streamingReasoningSectionsProvider('test-conv-id')).length, 2);
+      expect(
+          container
+              .read(streamingReasoningSectionsProvider('test-conv-id'))
+              .length,
+          2);
 
       // Fill second section (simulating second round of reasoning)
-      final sections3 = [...container.read(streamingReasoningSectionsProvider('test-conv-id'))];
+      final sections3 = [
+        ...container.read(streamingReasoningSectionsProvider('test-conv-id'))
+      ];
       sections3[sections3.length - 1] = 'Second reasoning text';
-      container.read(streamingReasoningSectionsProvider('test-conv-id').notifier).state =
-          sections3;
+      container
+          .read(streamingReasoningSectionsProvider('test-conv-id').notifier)
+          .state = sections3;
 
       expect(
         container.read(streamingReasoningSectionsProvider('test-conv-id')).last,
@@ -1011,8 +1058,12 @@ void main() {
       addTearDown(container.dispose);
 
       // Simulate streaming start with no reasoning content yet
-      container.read(streamingReasoningSectionsProvider('test-conv-id').notifier).state = [];
-      container.read(streamingReasoningProvider('test-conv-id').notifier).state = '';
+      container
+          .read(streamingReasoningSectionsProvider('test-conv-id').notifier)
+          .state = [];
+      container
+          .read(streamingReasoningProvider('test-conv-id').notifier)
+          .state = '';
 
       // Simulate finalization when no reasoning was received
       final reasoningBuffer = '';
@@ -1025,10 +1076,12 @@ void main() {
         // Don't add empty section - reasoningBuffer is empty
         // Keep sections empty so no button is shown
       }
-      container.read(streamingReasoningSectionsProvider('test-conv-id').notifier).state =
-          finalSections;
+      container
+          .read(streamingReasoningSectionsProvider('test-conv-id').notifier)
+          .state = finalSections;
 
-      expect(container.read(streamingReasoningSectionsProvider('test-conv-id')), isEmpty,
+      expect(container.read(streamingReasoningSectionsProvider('test-conv-id')),
+          isEmpty,
           reason: '无推理内容时章节列表应为空，避免显示空按钮');
     });
 
@@ -1037,12 +1090,21 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      container.read(streamingReasoningSectionsProvider('test-conv-id').notifier).state = [
+      container
+          .read(streamingReasoningSectionsProvider('test-conv-id').notifier)
+          .state = [
         'test reasoning',
       ];
 
-      expect(container.read(streamingReasoningSectionsProvider('test-conv-id')).length, 1);
-      expect(container.read(streamingReasoningSectionsProvider('test-conv-id')).first,
+      expect(
+          container
+              .read(streamingReasoningSectionsProvider('test-conv-id'))
+              .length,
+          1);
+      expect(
+          container
+              .read(streamingReasoningSectionsProvider('test-conv-id'))
+              .first,
           'test reasoning');
     });
   });
@@ -1053,24 +1115,42 @@ void main() {
       addTearDown(container.dispose);
 
       // Simulate old session state
-      container.read(streamingReasoningSectionsProvider('test-conv-id').notifier).state = [
+      container
+          .read(streamingReasoningSectionsProvider('test-conv-id').notifier)
+          .state = [
         'old reasoning',
         'more reasoning',
       ];
-      container.read(streamingReasoningProvider('test-conv-id').notifier).state = 'old buffer';
-      container.read(streamingMsgIdProvider('test-conv-id').notifier).state = 'old-msg-id';
-      container.read(streamingFullReplyProvider('test-conv-id').notifier).state = 'old content';
+      container
+          .read(streamingReasoningProvider('test-conv-id').notifier)
+          .state = 'old buffer';
+      container.read(streamingMsgIdProvider('test-conv-id').notifier).state =
+          'old-msg-id';
+      container
+          .read(streamingFullReplyProvider('test-conv-id').notifier)
+          .state = 'old content';
 
       // Reset for new session
-      container.read(streamingReasoningSectionsProvider('test-conv-id').notifier).state = [];
-      container.read(streamingReasoningProvider('test-conv-id').notifier).state = '';
-      container.read(streamingMsgIdProvider('test-conv-id').notifier).state = 'new-msg-id';
-      container.read(streamingFullReplyProvider('test-conv-id').notifier).state = '';
+      container
+          .read(streamingReasoningSectionsProvider('test-conv-id').notifier)
+          .state = [];
+      container
+          .read(streamingReasoningProvider('test-conv-id').notifier)
+          .state = '';
+      container.read(streamingMsgIdProvider('test-conv-id').notifier).state =
+          'new-msg-id';
+      container
+          .read(streamingFullReplyProvider('test-conv-id').notifier)
+          .state = '';
 
-      expect(container.read(streamingReasoningSectionsProvider('test-conv-id')), isEmpty);
-      expect(container.read(streamingReasoningProvider('test-conv-id')), isEmpty);
-      expect(container.read(streamingMsgIdProvider('test-conv-id')), 'new-msg-id');
-      expect(container.read(streamingFullReplyProvider('test-conv-id')), isEmpty);
+      expect(container.read(streamingReasoningSectionsProvider('test-conv-id')),
+          isEmpty);
+      expect(
+          container.read(streamingReasoningProvider('test-conv-id')), isEmpty);
+      expect(
+          container.read(streamingMsgIdProvider('test-conv-id')), 'new-msg-id');
+      expect(
+          container.read(streamingFullReplyProvider('test-conv-id')), isEmpty);
     });
   });
 }
