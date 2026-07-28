@@ -1,10 +1,15 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/models/chat_message.dart';
+import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
+import 'package:stroom/providers/chat_manager_provider.dart';
+import 'package:stroom/providers/chat_stream_provider.dart';
+import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_service.dart';
@@ -1453,5 +1458,85 @@ void main() {
 
       manager.dispose();
     });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // Cross-conversation provider isolation tests
+  // ═══════════════════════════════════════════════════════════════
+  group('Cross-conversation provider isolation', () {
+    /// Creates a [ChatStreamManager] connected to Riverpod via the provider.
+    ChatStreamManager _makeManagerWithRef(ProviderContainer container) {
+      return container.read(chatStreamManagerProvider);
+    }
+
+    test(
+      'BUG-REPRO Issue B: _activeConvId preserved when other stream is running',
+      () async {
+        // Issue B: When stream A completes while B is still streaming,
+        // startStreaming cleanup at line 636 sets _activeConvId = null,
+        // which blocks B's future throttled provider updates.
+        //
+        // Expected: _activeConvId should not be null while another
+        // stream exists. It should point to the still-running stream.
+        final manager = ChatStreamManager();
+
+        // Block convA so convB can start while A is still running
+        final blockA = Completer<void>();
+        final providerA = _MockProvider(
+          [
+            [AIStreamEvent('A response')],
+          ],
+          waitForYield: blockA,
+        );
+        manager.adapter.forceService(_makeChatService(providerA));
+        final futureA = manager.startStreaming(
+          text: 'Q A',
+          convId: 'convA',
+          history: [_userMsg('Q A')],
+        );
+
+        // Start convB — also run to completion, but start it while A runs
+        // Wait for A to be fully set up first
+        await Future.delayed(const Duration(milliseconds: 10));
+
+        // Since A uses the adapter, we need a mock that doesn't interfere
+        final providerB = _MockProvider([
+          [AIStreamEvent('B response')],
+        ]);
+        manager.adapter.forceService(_makeChatService(providerB));
+        final futureB = manager.startStreaming(
+          text: 'Q B',
+          convId: 'convB',
+          history: [_userMsg('Q B')],
+        );
+
+        // Both streams exist
+        expect(manager.isStreamingFor('convA'), true);
+        expect(manager.isStreamingFor('convB'), true);
+
+        // Let A complete first
+        blockA.complete();
+        final resultA = await futureA;
+        expect(resultA.fullReply, 'A response');
+
+        // ISSUE B: After A completes, convB is still streaming
+        // but _activeConvId = null (line 636 unconditionally).
+        expect(manager.isStreamingFor('convB'), true);
+        expect(
+          manager.activeStreamingConvId,
+          isNotNull,
+          reason: 'After convA completes, _activeConvId should not be null '
+              'when convB is still streaming. '
+              'BUG: startStreaming cleanup line 636 unconditionally sets '
+              '_activeConvId=null, blocking future provider updates from convB.',
+        );
+
+        // Complete B
+        final resultB = await futureB;
+        expect(resultB.fullReply, 'B response');
+
+        manager.dispose();
+      },
+    );
   });
 }

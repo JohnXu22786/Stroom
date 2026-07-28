@@ -207,8 +207,10 @@ List<MessageSegment> _buildLegacy(
   return segments;
 }
 
-/// Shared state provider tracking whether AI is currently streaming a response.
-final isStreamingProvider = StateProvider<bool>((ref) => false);
+/// Shared state provider tracking whether AI is currently streaming a response
+/// for a specific conversation.
+final isStreamingProvider =
+    StateProvider.family<bool, String>((ref, conversationId) => false);
 
 /// Shared state provider tracking whether reasoning is enabled.
 final reasoningEnabledProvider = StateProvider<bool>((ref) => false);

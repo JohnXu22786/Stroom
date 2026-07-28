@@ -328,17 +328,38 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     // ── SYNCHRONOUS: immediately set streaming state so that any
     // provider listeners firing during pending async work (e.g. MCP
-    // init) do NOT bail out via _rebuildLiveSegments' guard or
-    // _isStreamingForCurrentConv's isStreamingProvider check. This
-    // prevents the "one-frame render then freeze" re-entry bug.
+    // init) do NOT bail out via _rebuildLiveSegments' guard.
+    // This prevents the "one-frame render then freeze" re-entry bug.
     _isStreamingActive = true;
     _streamingMsgId = msgId;
     try {
-      ref.read(isStreamingProvider.notifier).state = true;
-      ref.read(streamingMsgIdProvider.notifier).state = msgId;
-      ref.read(streamingFullReplyProvider.notifier).state = fullReply;
-      ref.read(streamingReasoningSectionsProvider.notifier).state =
-          List<String>.from(reasoningSections);
+      ref.read(isStreamingProvider(activeConvId).notifier).state = true;
+      ref.read(streamingMsgIdProvider(activeConvId).notifier).state = msgId;
+      ref.read(streamingFullReplyProvider(activeConvId).notifier).state =
+          fullReply;
+      ref
+          .read(streamingReasoningSectionsProvider(activeConvId).notifier)
+          .state = List<String>.from(reasoningSections);
+      // Also restore the remaining segment providers to prevent
+      // cross-contamination with stale data from another conversation.
+      ref.read(streamingTextSectionsProvider(activeConvId).notifier).state =
+          List<String>.from(
+              ref.read(chatStreamManagerProvider).textChunksFor(activeConvId) ??
+                  ['']);
+      ref.read(streamingToolCallsProvider(activeConvId).notifier).state =
+          List<ToolCallData>.from(
+              ref.read(chatStreamManagerProvider).toolCallsFor(activeConvId) ??
+                  []);
+      ref
+          .read(streamingToolCallRoundStartsProvider(activeConvId).notifier)
+          .state = List<int>.from(ref
+              .read(chatStreamManagerProvider)
+              .toolCallRoundStartsFor(activeConvId) ??
+          []);
+      ref.read(streamingHasFirstTokenProvider(activeConvId).notifier).state =
+          ref.read(chatStreamManagerProvider).hasFirstTokenFor(activeConvId) ??
+              false;
+      ref.read(streamingReasoningProvider(activeConvId).notifier).state = '';
     } catch (e) {
       debugPrint('[ChatPage] _restoreStreamingState provider set failed: $e');
     }
@@ -422,16 +443,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     _isStreamingActive = false;
     _streamingMsgId = null;
+    final convId = ref.read(activeConversationIdProvider);
     try {
-      ref.read(isStreamingProvider.notifier).state = false;
-      ref.read(streamingMsgIdProvider.notifier).state = null;
-      ref.read(streamingFullReplyProvider.notifier).state = '';
-      ref.read(streamingHasFirstTokenProvider.notifier).state = false;
-      ref.read(streamingReasoningProvider.notifier).state = '';
-      ref.read(streamingReasoningSectionsProvider.notifier).state = [];
-      ref.read(streamingToolCallsProvider.notifier).state = [];
-      ref.read(streamingTextSectionsProvider.notifier).state = [''];
-      ref.read(streamingToolCallRoundStartsProvider.notifier).state = [];
+      if (convId != null) {
+        ref.read(isStreamingProvider(convId).notifier).state = false;
+        ref.read(streamingMsgIdProvider(convId).notifier).state = null;
+        ref.read(streamingFullReplyProvider(convId).notifier).state = '';
+        ref.read(streamingHasFirstTokenProvider(convId).notifier).state = false;
+        ref.read(streamingReasoningProvider(convId).notifier).state = '';
+        ref.read(streamingReasoningSectionsProvider(convId).notifier).state =
+            [];
+        ref.read(streamingToolCallsProvider(convId).notifier).state = [];
+        ref.read(streamingTextSectionsProvider(convId).notifier).state = [''];
+        ref.read(streamingToolCallRoundStartsProvider(convId).notifier).state =
+            [];
+      }
     } catch (e) {
       debugPrint('[ChatPage] _handleStreamCompletion provider cleanup: $e');
     }
@@ -777,9 +803,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
         // We skipped it during the load loop above (it may not be in DB
         // yet if periodic persist hasn't run), so restore it now as a
         // live Message.textStream that streaming listeners can update.
-        final inCtrl = _controller?.messages
-                .any((m) => m.id == savedStreamingMsgId) ??
-            false;
+        final inCtrl =
+            _controller?.messages.any((m) => m.id == savedStreamingMsgId) ??
+                false;
         if (!inCtrl) {
           _controller?.insertMessage(
             Message.textStream(
@@ -1094,7 +1120,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     await AppLogService.info(
         'ChatPage', '开始流式请求, capturedConvId=$capturedConvId');
-    ref.read(isStreamingProvider.notifier).state = true;
+    ref.read(isStreamingProvider(effectiveConvId).notifier).state = true;
     _isStreamingActive = true;
     if (mounted) setState(() {});
 
@@ -1168,10 +1194,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     // Clean up local streaming state and providers.
     try {
-      ref.read(isStreamingProvider.notifier).state = false;
-      ref.read(streamingMsgIdProvider.notifier).state = null;
-      ref.read(streamingFullReplyProvider.notifier).state = '';
-      ref.read(streamingHasFirstTokenProvider.notifier).state = false;
+      ref.read(isStreamingProvider(effectiveConvId).notifier).state = false;
+      ref.read(streamingMsgIdProvider(effectiveConvId).notifier).state = null;
+      ref.read(streamingFullReplyProvider(effectiveConvId).notifier).state = '';
+      ref.read(streamingHasFirstTokenProvider(effectiveConvId).notifier).state =
+          false;
     } catch (e) {
       debugPrint('[ChatPage] post-stream provider cleanup failed: $e');
     }
@@ -1251,37 +1278,22 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Rebuilds the live [_chatSegments] for [msgId] by reading current
   /// provider state and using the same interleaving logic as post-stream.
   void _rebuildLiveSegments(String msgId) {
-    // Only rebuild while streaming is active. After the stream ends,
-    // _buildFinalSegments handles the final state. Skipping here prevents
-    // a late-arriving listener from overwriting the completed segments
-    // with live streaming=true data.
-    if (!_isStreamingActive) {
-      AppLogService.info('ChatPage',
-          '[STREAM-REBUILD] _rebuildLiveSegments: bail — _isStreamingActive=false, msgId=$msgId');
-      return;
-    }
+    if (!_isStreamingActive) return;
+    if (_finalizedMessages.contains(msgId)) return;
 
-    // Prevent overwriting segments that _buildFinalSegments has already
-    // set for this message (e.g., when the manager's _clearProviders
-    // fires after the stream ends but before chat_page cleanup).
-    if (_finalizedMessages.contains(msgId)) {
-      AppLogService.info('ChatPage',
-          '[STREAM-REBUILD] _rebuildLiveSegments: bail — _finalizedMessages contains $msgId');
-      return;
-    }
+    final convId = ref.read(activeConversationIdProvider);
+    if (convId == null) return;
 
     final segments = buildAgentChainSegments(
-      reasoningSections:
-          List<String>.from(ref.read(streamingReasoningSectionsProvider)),
-      textChunks: List<String>.from(ref.read(streamingTextSectionsProvider)),
-      toolCalls: List<ToolCallData>.from(ref.read(streamingToolCallsProvider)),
-      // Use the per-message reasoning-completed flag (which is reset
-      // to false on each ReasoningSectionEndEvent for multi-round tool
-      // calls). When false, the last reasoning section shows "思考中"
-      // (actively streaming); when true, it shows "思考完成".
+      reasoningSections: List<String>.from(
+          ref.read(streamingReasoningSectionsProvider(convId))),
+      textChunks:
+          List<String>.from(ref.read(streamingTextSectionsProvider(convId))),
+      toolCalls:
+          List<ToolCallData>.from(ref.read(streamingToolCallsProvider(convId))),
       isLastReasoningStreaming: !(_isReasoningCompletedForMsg[msgId] ?? false),
-      toolCallRoundStarts:
-          List<int>.from(ref.read(streamingToolCallRoundStartsProvider)),
+      toolCallRoundStarts: List<int>.from(
+          ref.read(streamingToolCallRoundStartsProvider(convId))),
     );
 
     _chatSegments[msgId] = segments;
@@ -1772,10 +1784,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
       debugPrint('[ChatPage] _stopStreaming cancel error: $e');
     }
     try {
-      ref.read(isStreamingProvider.notifier).state = false;
-      ref.read(streamingMsgIdProvider.notifier).state = null;
-      ref.read(streamingFullReplyProvider.notifier).state = '';
-      ref.read(streamingHasFirstTokenProvider.notifier).state = false;
+      final convId = ref.read(activeConversationIdProvider);
+      if (convId != null) {
+        ref.read(isStreamingProvider(convId).notifier).state = false;
+        ref.read(streamingMsgIdProvider(convId).notifier).state = null;
+        ref.read(streamingFullReplyProvider(convId).notifier).state = '';
+        ref.read(streamingHasFirstTokenProvider(convId).notifier).state = false;
+      }
     } catch (e) {
       debugPrint('[ChatPage] _stopStreaming provider cleanup error: $e');
     }
@@ -2005,113 +2020,81 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final activeId = ref.watch(activeConversationIdProvider);
     final streamingConvs = ref.watch(streamingConversationsProvider);
     final isStreaming = activeId != null && streamingConvs.contains(activeId);
-    final streamingFullReply = ref.watch(streamingFullReplyProvider);
-    final streamingMsgId = ref.watch(streamingMsgIdProvider);
+    final streamingFullReply =
+        activeId != null ? ref.watch(streamingFullReplyProvider(activeId)) : '';
+    final streamingMsgId =
+        activeId != null ? ref.watch(streamingMsgIdProvider(activeId)) : null;
     final markdownConfig = buildMarkdownConfig(
       isDark: isDark,
       isStreaming: isStreaming,
     );
 
-    // Helper: checks if an active streaming session belongs to the current
-    // conversation. This prevents provider updates from a different
-    // conversation's stream from affecting this page.
-    bool _isStreamingForCurrentConv() {
-      final convId = ref.read(activeConversationIdProvider);
-      if (convId == null) return false;
-      return ref.read(streamingConversationsProvider).contains(convId);
-    }
+    // ── Streaming listeners (per-conversation via family providers) ──
+    // Each listener watches its conversation's family instance. When the
+    // user switches conversations, build() re-executes and the listeners
+    // automatically re-register on the new conversation's families.
+    // No _isStreamingForCurrentConv guard needed — families prevent cross-contamination.
+    if (activeId != null) {
+      final convId = activeId; // Capture for listener closures below
 
-    // Keep the controller and rendering segments in sync with provider
-    // updates during background streaming (e.g., when re-entering the page
-    // while the ChatStreamManager is still processing in the background).
-    ref.listen(streamingFullReplyProvider, (String? prev, String next) {
-      if (!mounted || next.isEmpty || next == prev) return;
-      if (!_isStreamingForCurrentConv()) return;
-      final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider);
-      if (msgId == null) return;
-      _updateStreamingMessage(msgId, next);
-      // Rebuild all segments from live provider data to maintain
-      // correct per-round interleaving (reasoning → text → toolCall).
-      _rebuildLiveSegments(msgId);
-      // setState needed because _rebuildLiveSegments only updates
-      // _chatSegments[msgId] without triggering a UI rebuild. The other
-      // listeners (textSections/toolCalls/reasoning) call setState, but
-      // this listener is the primary text-content pusher and must ensure
-      // the updated segments are reflected in the chat UI.
-      if (mounted) setState(() {});
-    });
-
-    // Keep reasoning sections in sync: the manager updates
-    // streamingReasoningSectionsProvider on each ReasoningEvent.
-    // _rebuildLiveSegments handles the per-round interleaving with
-    // text and tool calls.
-    ref.listen(streamingReasoningSectionsProvider,
-        (List<String>? prev, List<String> next) {
-      if (!mounted || next.isEmpty || identical(prev, next)) return;
-      if (!_isStreamingForCurrentConv()) return;
-      final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider);
-      if (msgId == null) return;
-      _reasoningContents[msgId] = List<String>.from(next);
-
-      _rebuildLiveSegments(msgId);
-
-      // ReasoningSectionEndEvent appends a new (empty) section –
-      // reasoningSections length increases. The previous section is
-      // now complete; the new section will start filling on the next
-      // ReasoningEvent. Mark the flag false so the fresh section
-      // renders as "思考中" once reasoning chunks arrive.
-      if (next.length > (prev?.length ?? 0)) {
-        _isReasoningCompletedForMsg[msgId] = false;
-      }
-      if (mounted) setState(() {});
-    });
-
-    // When the first text token arrives after reasoning, mark reasoning
-    // as "completed" so the button label changes from "推理中" to "推理过程".
-    ref.listen(streamingHasFirstTokenProvider, (bool? prev, bool next) {
-      if (!mounted || !next) return;
-      if (!_isStreamingForCurrentConv()) return;
-      final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider);
-      if (msgId == null) return;
-      if ((_reasoningContents[msgId]?.length ?? 0) > 0) {
-        _isReasoningCompletedForMsg[msgId] = true;
+      ref.listen(streamingFullReplyProvider(convId),
+          (String? prev, String next) {
+        if (!mounted || next.isEmpty || next == prev) return;
+        final msgId =
+            _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
+        if (msgId == null) return;
+        _updateStreamingMessage(msgId, next);
+        _rebuildLiveSegments(msgId);
         if (mounted) setState(() {});
-      }
-    });
+      });
 
-    // Keep tool call segments in sync: the manager accumulates
-    // ToolCallData in streamingToolCallsProvider. _rebuildLiveSegments
-    // handles the per-round interleaving.
-    ref.listen(streamingToolCallsProvider,
-        (List<ToolCallData>? prev, List<ToolCallData> next) {
-      if (!mounted || next.isEmpty || identical(prev, next)) return;
-      if (!_isStreamingForCurrentConv()) return;
-      final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider);
-      if (msgId == null) return;
-      _rebuildLiveSegments(msgId);
-      if (mounted) setState(() {});
-    });
+      ref.listen(streamingReasoningSectionsProvider(convId),
+          (List<String>? prev, List<String> next) {
+        if (!mounted || next.isEmpty || identical(prev, next)) return;
+        final msgId =
+            _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
+        if (msgId == null) return;
+        _reasoningContents[msgId] = List<String>.from(next);
+        _rebuildLiveSegments(msgId);
+        if (next.length > (prev?.length ?? 0)) {
+          _isReasoningCompletedForMsg[msgId] = false;
+        }
+        if (mounted) setState(() {});
+      });
 
-    // Keep text sections in sync: when streamingTextSectionsProvider
-    // changes (new chunk added, more text in the last chunk), rebuild
-    // segments so the interleaved text content stays current.
-    // This listener covers the case where textSections is updated in the
-    // same synchronous block as another provider but after it — the
-    // "host" listener fires with stale textSections, and this listener
-    // immediately corrects the segments on the next provider update.
-    ref.listen(streamingTextSectionsProvider,
-        (List<String>? prev, List<String> next) {
-      if (!mounted || next.isEmpty || identical(prev, next)) return;
-      if (!_isStreamingForCurrentConv()) return;
-      final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider);
-      if (msgId == null) return;
-      // Text chunks arriving = the current round's reasoning phase
-      // is complete. Mark the flag so _rebuildLiveSegments flips the
-      // last reasoning section to "思考完成".
-      _isReasoningCompletedForMsg[msgId] = true;
-      _rebuildLiveSegments(msgId);
-      if (mounted) setState(() {});
-    });
+      ref.listen(streamingHasFirstTokenProvider(convId),
+          (bool? prev, bool next) {
+        if (!mounted || !next) return;
+        final msgId =
+            _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
+        if (msgId == null) return;
+        if ((_reasoningContents[msgId]?.length ?? 0) > 0) {
+          _isReasoningCompletedForMsg[msgId] = true;
+          if (mounted) setState(() {});
+        }
+      });
+
+      ref.listen(streamingToolCallsProvider(convId),
+          (List<ToolCallData>? prev, List<ToolCallData> next) {
+        if (!mounted || next.isEmpty || identical(prev, next)) return;
+        final msgId =
+            _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
+        if (msgId == null) return;
+        _rebuildLiveSegments(msgId);
+        if (mounted) setState(() {});
+      });
+
+      ref.listen(streamingTextSectionsProvider(convId),
+          (List<String>? prev, List<String> next) {
+        if (!mounted || next.isEmpty || identical(prev, next)) return;
+        final msgId =
+            _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
+        if (msgId == null) return;
+        _isReasoningCompletedForMsg[msgId] = true;
+        _rebuildLiveSegments(msgId);
+        if (mounted) setState(() {});
+      });
+    }
 
     // Detect background stream completion. When the current conversation
     // leaves the streaming set, the stream is done — run cleanup + reload
@@ -2121,10 +2104,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     ref.listen(streamingConversationsProvider,
         (Set<String>? prev, Set<String> next) {
       if (!mounted) return;
-      final activeId = ref.read(activeConversationIdProvider);
-      if (activeId == null) return;
-      final wasStreaming = prev?.contains(activeId) ?? false;
-      final isStreaming = next.contains(activeId);
+      final activeConvId = ref.read(activeConversationIdProvider);
+      if (activeConvId == null) return;
+      final wasStreaming = prev?.contains(activeConvId) ?? false;
+      final isStreaming = next.contains(activeConvId);
       if (wasStreaming && !isStreaming && _isStreamingActive) {
         final capturedMsgId = _streamingMsgId;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2779,8 +2762,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                         message.id == _streamingMsgId &&
                                             message.text.isEmpty &&
                                             isStreaming &&
+                                            activeId != null &&
                                             !ref.read(
-                                              streamingHasFirstTokenProvider,
+                                              streamingHasFirstTokenProvider(
+                                                  activeId),
                                             );
                                     final hasSearchMatch = _isSearching &&
                                         _searchQuery.isNotEmpty &&
