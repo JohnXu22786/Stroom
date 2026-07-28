@@ -42,6 +42,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Card(
+      elevation: 0,
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
@@ -91,10 +92,10 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            _buildStatusChip(),
+                            buildStatusChip(widget.task.status),
                             const SizedBox(width: 8),
                             Text(
-                              _formatTime(widget.task.createdAt),
+                              formatRelativeTime(widget.task.createdAt),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey[500],
@@ -122,79 +123,6 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
               ),
             ),
           ),
-          // 操作按钮（暂停/继续/删除）
-          const SizedBox(width: 8),
-          if (widget.task.status == TaskStatus.running)
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, size: 20),
-              onSelected: (value) {
-                if (value == 'pause') {
-                  ref.read(taskListProvider.notifier).pauseTask(widget.task.id);
-                } else if (value == 'remove') {
-                  ref
-                      .read(taskListProvider.notifier)
-                      .removeTask(widget.task.id);
-                }
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'pause',
-                  child: ListTile(
-                    leading: Icon(Icons.pause, size: 20),
-                    title: Text('暂停'),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'remove',
-                  child: ListTile(
-                    leading:
-                        Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                    title: Text('删除', style: TextStyle(color: Colors.red)),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-              ],
-            ),
-          if (widget.task.status == TaskStatus.paused)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  height: 32,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      ref
-                          .read(taskListProvider.notifier)
-                          .resumeTask(widget.task.id);
-                    },
-                    icon: const Icon(Icons.play_arrow, size: 16),
-                    label: const Text('继续', style: TextStyle(fontSize: 12)),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                SizedBox(
-                  height: 32,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      ref
-                          .read(taskListProvider.notifier)
-                          .removeTask(widget.task.id);
-                    },
-                    icon: const Icon(Icons.delete_outline, size: 16),
-                    label: const Text('删除', style: TextStyle(fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                  ),
-                ),
-              ],
-            ),
           // Expanded detail section
           AnimatedCrossFade(
             firstChild: const SizedBox.shrink(),
@@ -210,100 +138,26 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
   }
 
   Widget _buildStatusIcon() {
+    final cs = Theme.of(context).colorScheme;
     switch (widget.task.status) {
       case TaskStatus.running:
-        return const SizedBox(
+        return SizedBox(
           width: 24,
           height: 24,
           child: CircularProgressIndicator(
             strokeWidth: 2.5,
-            color: Colors.blue,
+            color: cs.primary,
           ),
         );
       case TaskStatus.completed:
-        return const Icon(Icons.check_circle, color: Colors.green, size: 24);
+        return Icon(Icons.check_circle, color: cs.primary, size: 24);
       case TaskStatus.failed:
-        return const Icon(Icons.error, color: Colors.red, size: 24);
+        return Icon(Icons.error, color: cs.error, size: 24);
       case TaskStatus.paused:
-        return const Icon(Icons.pause_circle, color: Colors.orange, size: 24);
+        return Icon(Icons.pause_circle, color: cs.tertiary, size: 24);
       case TaskStatus.waiting:
-        return const Icon(Icons.hourglass_empty,
-            color: Colors.purple, size: 24);
+        return Icon(Icons.hourglass_empty, color: cs.tertiary, size: 24);
     }
-  }
-
-  Widget _buildStatusChip() {
-    switch (widget.task.status) {
-      case TaskStatus.running:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.blue.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '进行中',
-            style: TextStyle(fontSize: 11, color: Colors.blue),
-          ),
-        );
-      case TaskStatus.completed:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.green.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '已完成',
-            style: TextStyle(fontSize: 11, color: Colors.green),
-          ),
-        );
-      case TaskStatus.failed:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.red.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '失败',
-            style: TextStyle(fontSize: 11, color: Colors.red),
-          ),
-        );
-      case TaskStatus.paused:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.orange.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '已暂停',
-            style: TextStyle(fontSize: 11, color: Colors.orange),
-          ),
-        );
-      case TaskStatus.waiting:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.purple.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '等待中',
-            style: TextStyle(fontSize: 11, color: Colors.purple),
-          ),
-        );
-    }
-  }
-
-  String _formatTime(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
-    if (diff.inHours < 24) return '${diff.inHours}小时前';
-    return '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
   // ===========================================================================
@@ -526,15 +380,15 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                 const SizedBox(height: 8),
               ],
               // Status info
-              _buildInfoRow(cs, Icons.info_outline, '状态',
-                  _statusLabel(widget.task.status)),
+              buildInfoRow(cs, Icons.info_outline, '状态',
+                  getStatusLabel(widget.task.status)),
               const SizedBox(height: 4),
-              _buildInfoRow(cs, Icons.access_time, '创建时间',
-                  _formatTime(widget.task.createdAt)),
+              buildInfoRow(cs, Icons.access_time, '创建时间',
+                  formatRelativeTime(widget.task.createdAt)),
               if (widget.task.completedAt != null) ...[
                 const SizedBox(height: 4),
-                _buildInfoRow(cs, Icons.check_circle_outline, '完成时间',
-                    _formatTime(widget.task.completedAt!)),
+                buildInfoRow(cs, Icons.check_circle_outline, '完成时间',
+                    formatRelativeTime(widget.task.completedAt!)),
               ],
               // Error message for failed tasks
               if (widget.task.status == TaskStatus.failed &&
@@ -591,46 +445,6 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                 ),
               ],
             ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _statusLabel(TaskStatus status) {
-    switch (status) {
-      case TaskStatus.running:
-        return '进行中';
-      case TaskStatus.completed:
-        return '已完成';
-      case TaskStatus.failed:
-        return '失败';
-      case TaskStatus.paused:
-        return '已暂停';
-      case TaskStatus.waiting:
-        return '等待中';
-    }
-  }
-
-  Widget _buildInfoRow(
-      ColorScheme cs, IconData icon, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 14, color: cs.onSurfaceVariant),
-        const SizedBox(width: 6),
-        Text(
-          '$label: ',
-          style: TextStyle(
-            fontSize: 12,
-            color: cs.onSurfaceVariant,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(fontSize: 12, color: cs.onSurface),
           ),
         ),
       ],

@@ -37,7 +37,7 @@ void main() {
   group('BlockTypeDefinition', () {
     test('creates ASR block type correctly', () {
       final asr = BlockTypeDefinition.asr;
-      expect(asr.typeKey, 'asr');
+      expect(asr.typeKey, BlockType.asr);
       expect(asr.label, '语音识别');
       expect(asr.inputType, IOType.audio);
       expect(asr.outputType, IOType.text);
@@ -46,28 +46,28 @@ void main() {
 
     test('creates OCR block type correctly', () {
       final ocr = BlockTypeDefinition.ocr;
-      expect(ocr.typeKey, 'ocr');
+      expect(ocr.typeKey, BlockType.ocr);
       expect(ocr.inputType, IOType.image);
       expect(ocr.outputType, IOType.text);
     });
 
     test('creates AudioSeparation block type correctly', () {
       final sep = BlockTypeDefinition.audioSeparation;
-      expect(sep.typeKey, 'audioSeparation');
+      expect(sep.typeKey, BlockType.audioSeparation);
       expect(sep.inputType, IOType.video);
       expect(sep.outputType, IOType.audio);
     });
 
     test('creates CatCatch block type correctly', () {
       final cc = BlockTypeDefinition.catcatch;
-      expect(cc.typeKey, 'catcatch');
+      expect(cc.typeKey, BlockType.catcatch);
       expect(cc.inputType, IOType.text);
       expect(cc.outputType, IOType.video);
     });
 
     test('creates TTS block type correctly', () {
       final tts = BlockTypeDefinition.tts;
-      expect(tts.typeKey, 'tts');
+      expect(tts.typeKey, BlockType.tts);
       expect(tts.inputType, IOType.text);
       expect(tts.outputType, IOType.audio);
     });
@@ -75,18 +75,18 @@ void main() {
     test('can get all registered block types', () {
       final all = BlockTypeDefinition.all;
       expect(all.length, greaterThan(0));
-      expect(all.any((b) => b.typeKey == 'asr'), isTrue);
-      expect(all.any((b) => b.typeKey == 'ocr'), isTrue);
+      expect(all.any((b) => b.typeKey == BlockType.asr), isTrue);
+      expect(all.any((b) => b.typeKey == BlockType.ocr), isTrue);
     });
 
     test('findBlockType returns correct type by key', () {
-      final found = BlockTypeDefinition.findBlockType('asr');
+      final found = BlockTypeDefinition.findBlockType(BlockType.asr);
       expect(found, isNotNull);
-      expect(found!.typeKey, 'asr');
+      expect(found!.typeKey, BlockType.asr);
     });
 
     test('findBlockType returns null for unknown key', () {
-      expect(BlockTypeDefinition.findBlockType('nonexistent'), isNull);
+      expect(BlockTypeDefinition.findBlockType(BlockType.custom), isNull);
     });
 
     test('getCompatibleNextBlocks filters by input type', () {
@@ -95,10 +95,10 @@ void main() {
       final outputText = BlockTypeDefinition.asr;
       final compatible =
           BlockTypeDefinition.getCompatibleNextBlocks(outputText.outputType);
-      expect(compatible.any((b) => b.typeKey == 'tts'), isTrue);
+      expect(compatible.any((b) => b.typeKey == BlockType.tts), isTrue);
       // ASR outputs text, so it should NOT be compatible with blocks
       // that need audio as input (like ASR itself)
-      expect(compatible.any((b) => b.typeKey == 'asr'), isFalse);
+      expect(compatible.any((b) => b.typeKey == BlockType.asr), isFalse);
     });
 
     test('serialization round-trips correctly', () {
@@ -116,9 +116,9 @@ void main() {
   group('TaskFlowBlock', () {
     test('creates block instance with correct type and default params', () {
       final definition = BlockTypeDefinition.asr;
-      final block = TaskFlowBlock(typeKey: 'asr');
+      final block = TaskFlowBlock(typeKey: BlockType.asr);
       expect(block.id, isNotEmpty);
-      expect(block.typeKey, 'asr');
+      expect(block.typeKey, BlockType.asr);
       // Params should contain default values from the definition
       expect(block.params, isNotEmpty);
       expect(block.params.containsKey('saveFolder'), isTrue);
@@ -126,7 +126,7 @@ void main() {
 
     test('can set custom parameters on block', () {
       final block = TaskFlowBlock(
-        typeKey: 'asr',
+        typeKey: BlockType.asr,
         params: {'saveFolder': 'my_folder', 'modelIndex': 1},
       );
       expect(block.params['saveFolder'], 'my_folder');
@@ -134,7 +134,7 @@ void main() {
     });
 
     test('param override works correctly', () {
-      final block = TaskFlowBlock(typeKey: 'asr');
+      final block = TaskFlowBlock(typeKey: BlockType.asr);
       final updated = block.copyWithParams({'saveFolder': 'custom_folder'});
       expect(updated.params['saveFolder'], 'custom_folder');
       // Other default params should still exist
@@ -143,7 +143,7 @@ void main() {
 
     test('serialization round-trips', () {
       final original = TaskFlowBlock(
-        typeKey: 'asr',
+        typeKey: BlockType.asr,
         params: {'saveFolder': 'test', 'modelIndex': 0},
       );
       final map = original.toMap();
@@ -154,14 +154,14 @@ void main() {
     });
 
     test('getDefinition returns correct BlockTypeDefinition', () {
-      final block = TaskFlowBlock(typeKey: 'asr');
+      final block = TaskFlowBlock(typeKey: BlockType.asr);
       final def = block.getDefinition();
       expect(def, isNotNull);
-      expect(def!.typeKey, 'asr');
+      expect(def!.typeKey, BlockType.asr);
     });
 
     test('getDefinition returns null for unknown typeKey', () {
-      final block = TaskFlowBlock(typeKey: 'nonexistent');
+      final block = TaskFlowBlock(typeKey: BlockType.custom);
       expect(block.getDefinition(), isNull);
     });
   });
@@ -176,9 +176,9 @@ void main() {
 
     test('can add blocks to flow', () {
       final flow = TaskFlowDefinition(name: '测试');
-      final block1 = TaskFlowBlock(typeKey: 'catcatch');
-      final block2 = TaskFlowBlock(typeKey: 'audioSeparation');
-      final block3 = TaskFlowBlock(typeKey: 'asr');
+      final block1 = TaskFlowBlock(typeKey: BlockType.catcatch);
+      final block2 = TaskFlowBlock(typeKey: BlockType.audioSeparation);
+      final block3 = TaskFlowBlock(typeKey: BlockType.asr);
 
       final updated = flow.addBlock(block1).addBlock(block2).addBlock(block3);
 
@@ -193,9 +193,9 @@ void main() {
         inputType: IOType.text,
       );
       final validFlow = flow
-          .addBlock(TaskFlowBlock(typeKey: 'catcatch'))
-          .addBlock(TaskFlowBlock(typeKey: 'audioSeparation'))
-          .addBlock(TaskFlowBlock(typeKey: 'asr'));
+          .addBlock(TaskFlowBlock(typeKey: BlockType.catcatch))
+          .addBlock(TaskFlowBlock(typeKey: BlockType.audioSeparation))
+          .addBlock(TaskFlowBlock(typeKey: BlockType.asr));
 
       final result = validFlow.validate();
       expect(result.isValid, isTrue);
@@ -210,8 +210,8 @@ void main() {
         inputType: IOType.text,
       );
       final invalidFlow = flow
-          .addBlock(TaskFlowBlock(typeKey: 'asr'))
-          .addBlock(TaskFlowBlock(typeKey: 'audioSeparation'));
+          .addBlock(TaskFlowBlock(typeKey: BlockType.asr))
+          .addBlock(TaskFlowBlock(typeKey: BlockType.audioSeparation));
 
       final result = invalidFlow.validate();
       expect(result.isValid, isFalse);
@@ -228,7 +228,7 @@ void main() {
     test('validate detects single-block flow as valid', () {
       // ASR needs audio input, so set inputType accordingly
       final flow = TaskFlowDefinition(name: '单块', inputType: IOType.audio)
-          .addBlock(TaskFlowBlock(typeKey: 'asr'));
+          .addBlock(TaskFlowBlock(typeKey: BlockType.asr));
       // A single block with matching input type is valid
       final result = flow.validate();
       expect(result.isValid, isTrue);
@@ -237,7 +237,7 @@ void main() {
     test('validate catches initial input vs first block mismatch', () {
       // Input type is text but first block (ASR) needs audio
       final flow = TaskFlowDefinition(name: '测试', inputType: IOType.text)
-          .addBlock(TaskFlowBlock(typeKey: 'asr'));
+          .addBlock(TaskFlowBlock(typeKey: BlockType.asr));
       final result = flow.validate();
       expect(result.isValid, isFalse);
       expect(result.errors.any((e) => e.contains('初始输入')), isTrue);
@@ -245,33 +245,33 @@ void main() {
 
     test('removeBlock works by index', () {
       final flow = TaskFlowDefinition(name: '测试')
-          .addBlock(TaskFlowBlock(typeKey: 'catcatch'))
-          .addBlock(TaskFlowBlock(typeKey: 'asr'));
+          .addBlock(TaskFlowBlock(typeKey: BlockType.catcatch))
+          .addBlock(TaskFlowBlock(typeKey: BlockType.asr));
       expect(flow.blocks.length, 2);
 
       final updated = flow.removeBlock(0);
       expect(updated.blocks.length, 1);
-      expect(updated.blocks[0].typeKey, 'asr');
+      expect(updated.blocks[0].typeKey, BlockType.asr);
     });
 
     test('moveBlock reorders blocks correctly', () {
       final flow = TaskFlowDefinition(name: '测试')
-          .addBlock(TaskFlowBlock(typeKey: 'catcatch'))
-          .addBlock(TaskFlowBlock(typeKey: 'asr'));
+          .addBlock(TaskFlowBlock(typeKey: BlockType.catcatch))
+          .addBlock(TaskFlowBlock(typeKey: BlockType.asr));
 
       final updated = flow.moveBlock(oldIndex: 1, newIndex: 0);
-      expect(updated.blocks[0].typeKey, 'asr');
-      expect(updated.blocks[1].typeKey, 'catcatch');
+      expect(updated.blocks[0].typeKey, BlockType.asr);
+      expect(updated.blocks[1].typeKey, BlockType.catcatch);
     });
 
     test('serialization round-trips with blocks and params', () {
       final original = TaskFlowDefinition(name: '完整流程', inputType: IOType.text)
           .addBlock(TaskFlowBlock(
-            typeKey: 'catcatch',
+            typeKey: BlockType.catcatch,
             params: {'videoFolder': 'videos'},
           ))
           .addBlock(TaskFlowBlock(
-            typeKey: 'asr',
+            typeKey: BlockType.asr,
             params: {'saveFolder': 'texts', 'modelIndex': 1},
           ));
 
@@ -288,7 +288,7 @@ void main() {
 
     test('copyWithNewId creates a new flow with different id', () {
       final original = TaskFlowDefinition(name: '原流程')
-          .addBlock(TaskFlowBlock(typeKey: 'asr'));
+          .addBlock(TaskFlowBlock(typeKey: BlockType.asr));
       final copy = original.copyWithNewId();
       expect(copy.id, isNot(original.id));
       expect(copy.name, original.name);

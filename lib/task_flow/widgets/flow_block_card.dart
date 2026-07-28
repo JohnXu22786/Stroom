@@ -103,7 +103,7 @@ class FlowBlockCard extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              def.typeKey,
+                              def.typeKey.name,
                               style: TextStyle(
                                 fontSize: 10,
                                 color: cs.onSurfaceVariant,
@@ -232,7 +232,7 @@ class FlowBlockCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '未知功能块: ${block.typeKey}',
+                      '未知功能块: ${block.typeKey.name}',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,

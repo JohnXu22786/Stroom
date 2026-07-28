@@ -1,13 +1,11 @@
-import 'dart:convert';
-import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
-import 'package:path/path.dart' as p;
 
 import '../../providers/task_provider_shared.dart';
-import '../../services/storage_service.dart';
 import '../models/task_flow_execution.dart';
+import 'persistable_notifier.dart';
 
 /// Provider for tracking task flow executions (for the unified task list).
 final taskFlowExecutionsProvider =
@@ -15,8 +13,39 @@ final taskFlowExecutionsProvider =
   (ref) => TaskFlowExecutionNotifier(),
 );
 
-class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
+class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
+    with PersistableNotifier<List<TaskFlowExecution>> {
   TaskFlowExecutionNotifier() : super([]);
+
+  // ===========================================================================
+  // PersistableNotifier contract
+  // ===========================================================================
+
+  @override
+  String get persistenceFileName => 'executions.json';
+
+  @override
+  List<TaskFlowExecution> fromJsonList(List<dynamic> json) {
+    final result = <TaskFlowExecution>[];
+    for (final item in json) {
+      try {
+        result.add(
+            TaskFlowExecution.fromMap(Map<String, dynamic>.from(item as Map)));
+      } catch (e) {
+        debugPrint('WARNING: Skipping corrupt TaskFlowExecution: $e');
+      }
+    }
+    return result;
+  }
+
+  @override
+  List<dynamic> toJsonList(List<TaskFlowExecution> state) {
+    return state.map((e) => e.toMap()).toList();
+  }
+
+  // ===========================================================================
+  // Operations
+  // ===========================================================================
 
   /// Create a new execution entry.
   String addExecution({
@@ -40,7 +69,6 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
       if (e.id != executionId) return e;
       return e.copyWith(subTasks: [...e.subTasks, subTask]);
     }).toList();
-    _persistExecutions();
   }
 
   /// Update a placeholder sub-task's [subTaskId] with the real task ID
@@ -55,7 +83,6 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
       }).toList();
       return e.copyWith(subTasks: updated);
     }).toList();
-    _persistExecutions();
   }
 
   /// Update a sub-task's status.
@@ -75,8 +102,6 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
       }).toList();
       e = e.copyWith(subTasks: updated);
 
-      // Always recompute execution status from sub-task states.
-      // This handles live status transitions (e.g., failed→completed on retry).
       if (updated.isEmpty) return e;
 
       final anyFailed = updated.any((st) => st.status == TaskStatus.failed);
@@ -87,8 +112,6 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
       final allCompleted =
           updated.every((st) => st.status == TaskStatus.completed);
 
-      // Failed takes priority over running — if any sub-task has failed
-      // (even if others are still waiting), mark the flow as failed.
       if (anyFailed) {
         return e.copyWith(
           status: FlowExecutionStatus.failed,
@@ -104,7 +127,6 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
       }
       return e;
     }).toList();
-    _persistExecutions();
   }
 
   /// Mark execution as completed.
@@ -116,7 +138,6 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
   void completeExecution(String executionId) {
     state = state.map((e) {
       if (e.id != executionId) return e;
-      // Compute status from sub-tasks
       if (e.subTasks.isEmpty) {
         return e.copyWith(
           status: FlowExecutionStatus.completed,
@@ -137,10 +158,9 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
           completedAt: DateTime.now(),
         );
       }
-      // Still running — leave as is; auto-complete will handle it
       return e;
     }).toList();
-    _persistExecutions();
+    _debouncedPersist();
   }
 
   /// Mark execution as failed.
@@ -167,70 +187,57 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>> {
         subTasks: cascaded,
       );
     }).toList();
-    _persistExecutions();
+    _debouncedPersist();
   }
 
   /// Remove an execution.
   void removeExecution(String executionId) {
     state = state.where((e) => e.id != executionId).toList();
-    _persistExecutions();
+    _debouncedPersist();
   }
 
   // ===========================================================================
   // Persistence
   // ===========================================================================
 
-  Future<void> _persistExecutions() async {
-    try {
-      final file = await _executionsFile();
-      final data = state.map((e) => e.toMap()).toList();
-      await file.writeAsString(jsonEncode(data));
-    } catch (e) {
-      debugPrint(
-          '[TaskFlowExecutionNotifier] Failed to persist executions: $e');
-    }
+  Timer? _persistTimer;
+
+  void _debouncedPersist() {
+    _persistTimer?.cancel();
+    _persistTimer = Timer(const Duration(milliseconds: 200), persist);
   }
 
-  Future<List<TaskFlowExecution>> _loadPersistedExecutions() async {
-    try {
-      final file = await _executionsFile();
-      if (!await file.exists()) return [];
-      final content = await file.readAsString();
-      if (content.isEmpty) return [];
-      final list = jsonDecode(content) as List;
-      return list
-          .map((m) =>
-              TaskFlowExecution.fromMap(Map<String, dynamic>.from(m as Map)))
-          .toList();
-    } catch (e) {
-      debugPrint(
-          '[TaskFlowExecutionNotifier] Failed to load persisted executions: $e');
-      return [];
-    }
-  }
-
-  Future<File> _executionsFile() async {
-    final dirPath = await AppStorage.directory;
-    final taskFlowDir = Directory(p.join(dirPath, 'task_flows'));
-    try {
-      if (!await taskFlowDir.exists()) {
-        await taskFlowDir.create(recursive: true);
-      }
-    } catch (_) {}
-    return File(p.join(taskFlowDir.path, 'executions.json'));
+  /// Persist immediately (bypasses debounce). Used only at creation time
+  /// so the execution survives a crash before a terminal state is reached.
+  void _persistExecutions() {
+    persist();
   }
 
   /// Restore persisted executions on startup.
   Future<void> restoreFromPersistence() async {
-    final execs = await _loadPersistedExecutions();
-    if (execs.isEmpty) return;
-    // Merge with existing state (in case executions were added before restore)
-    state = [
-      for (final e in execs)
-        if (!state.any((s) => s.id == e.id)) e,
-      ...state,
-    ];
-    debugPrint(
-        '[TaskFlowExecutionNotifier] Restored ${execs.length} executions from persistence');
+    await restore();
+    state = state.map((e) {
+      if (e.status == FlowExecutionStatus.running) {
+        return e.copyWith(
+          status: FlowExecutionStatus.failed,
+          completedAt: DateTime.now(),
+          subTasks: e.subTasks.map((s) {
+            if (s.status != TaskStatus.completed &&
+                s.status != TaskStatus.failed) {
+              return s.copyWithStatus(TaskStatus.failed);
+            }
+            return s;
+          }).toList(),
+        );
+      }
+      return e;
+    }).toList();
+    persist();
+  }
+
+  @override
+  void dispose() {
+    _persistTimer?.cancel();
+    super.dispose();
   }
 }

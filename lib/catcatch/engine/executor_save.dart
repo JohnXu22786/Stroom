@@ -44,17 +44,7 @@ Future<String> executeSave({
 
 Future<void> registerCompletedVideo(String filePath, CatCatchTask task) async {
   final ext = p.extension(filePath).toLowerCase().replaceAll('.', '');
-  const videoExts = {
-    'mp4',
-    'webm',
-    'ogg',
-    'mov',
-    'mkv',
-    'ogv',
-    'avi',
-    'flv',
-    'wmv'
-  };
+  const videoExts = {'mp4', 'webm', 'mov', 'mkv', 'ogv', 'avi', 'flv', 'wmv'};
   if (!videoExts.contains(ext)) return;
 
   final file = File(filePath);

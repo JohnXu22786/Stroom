@@ -21,7 +21,7 @@ import 'io_type.dart';
 @immutable
 class TaskFlowBlock {
   final String id;
-  final String typeKey;
+  final BlockType typeKey;
   final Map<String, dynamic> params;
 
   TaskFlowBlock({
@@ -34,7 +34,7 @@ class TaskFlowBlock {
             : _defaultParamsFor(typeKey);
 
   /// Get the default params for a given type key.
-  static Map<String, dynamic> _defaultParamsFor(String typeKey) {
+  static Map<String, dynamic> _defaultParamsFor(BlockType typeKey) {
     final def = BlockTypeDefinition.findBlockType(typeKey);
     if (def != null) return Map<String, dynamic>.from(def.defaultParams);
     return {};
@@ -65,13 +65,13 @@ class TaskFlowBlock {
 
   Map<String, dynamic> toMap() => {
         'id': id,
-        'typeKey': typeKey,
+        'typeKey': typeKey.name,
         'params': params,
       };
 
   factory TaskFlowBlock.fromMap(Map<String, dynamic> map) => TaskFlowBlock(
         id: map['id'] as String?,
-        typeKey: map['typeKey'] as String,
+        typeKey: parseBlockType(map['typeKey'] as String),
         params: map['params'] != null
             ? Map<String, dynamic>.from(map['params'] as Map)
             : null,
@@ -205,7 +205,7 @@ class TaskFlowDefinition {
     // First pass: check all blocks have known types
     for (int i = 0; i < blocks.length; i++) {
       if (blocks[i].getDefinition() == null) {
-        errors.add('第 ${i + 1} 个功能块类型未注册: "${blocks[i].typeKey}"');
+        errors.add('第 ${i + 1} 个功能块类型未注册: "${blocks[i].typeKey.name}"');
       }
     }
     if (errors.isNotEmpty) {

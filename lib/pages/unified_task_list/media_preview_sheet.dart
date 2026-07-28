@@ -59,10 +59,9 @@ class _MediaPreviewSheetState extends ConsumerState<MediaPreviewSheet> {
   Future<void> _initPreview() async {
     try {
       final ext = widget.resource.ext.toLowerCase();
-      final isVideoFormat =
-          ['mp4', 'webm', 'ogg', 'mov', 'mkv', 'ogv'].contains(ext);
+      final isVideoFormat = ['mp4', 'webm', 'mov', 'mkv', 'ogv'].contains(ext);
       final isAudioFormat =
-          ['mp3', 'wav', 'm4a', 'aac', 'wma', 'opus'].contains(ext);
+          ['mp3', 'wav', 'm4a', 'aac', 'wma', 'opus', 'ogg'].contains(ext);
 
       if (!isVideoFormat && !isAudioFormat) {
         setState(() {

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../../utils/file_manifest.dart';
 import '../../utils/video_manifest.dart';
@@ -44,7 +46,8 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
     if (_definition != null) {
       for (final p in _definition!.params) {
         if (p.type == BlockParamType.string ||
-            p.type == BlockParamType.secret) {
+            p.type == BlockParamType.secret ||
+            p.type == BlockParamType.number) {
           _controllers[p.key] = TextEditingController(
             text: _params[p.key]?.toString() ?? '',
           );
@@ -68,7 +71,7 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
     if (_definition == null) {
       return AlertDialog(
         title: const Text('未知功能块'),
-        content: Text('功能块类型 "${widget.block.typeKey}" 未注册'),
+        content: Text('功能块类型 "${widget.block.typeKey.name}" 未注册'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -97,7 +100,7 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
         ],
       ),
       content: SizedBox(
-        width: 360,
+        width: math.min(MediaQuery.of(context).size.width * 0.9, 420),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -245,6 +248,11 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
         );
 
       case BlockParamType.number:
+        final controller = _controllers[param.key] ??
+            TextEditingController(text: value?.toString() ?? '');
+        if (_controllers[param.key] == null) {
+          _controllers[param.key] = controller;
+        }
         return TextField(
           decoration: InputDecoration(
             isDense: true,
@@ -258,7 +266,7 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
           ),
           keyboardType: TextInputType.number,
           style: const TextStyle(fontSize: 13),
-          controller: TextEditingController(text: value?.toString() ?? ''),
+          controller: controller,
           onChanged: (v) {
             final parsed = num.tryParse(v);
             _params[param.key] = parsed ?? 0;

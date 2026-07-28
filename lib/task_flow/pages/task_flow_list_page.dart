@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../pages/unified_task_list/task_utils.dart';
 import '../models/task_flow_definition.dart';
 import '../providers/task_flow_provider.dart';
 import 'task_flow_builder_page.dart';
@@ -46,19 +47,11 @@ class TaskFlowListPage extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            '暂无任务流',
+            '暂无流程，点击 + 创建',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
               color: cs.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '点击 + 创建一个任务流来自动化你的工作',
-            style: TextStyle(
-              fontSize: 14,
-              color: cs.onSurfaceVariant.withValues(alpha: 0.6),
             ),
           ),
         ],
@@ -72,13 +65,18 @@ class TaskFlowListPage extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
   ) {
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
-      itemCount: flows.length,
-      itemBuilder: (_, i) {
-        final flow = flows[i];
-        return _buildFlowCard(flow, cs, context, ref);
+    return RefreshIndicator(
+      onRefresh: () async {
+        await ref.read(taskFlowListProvider.notifier).restoreFromPersistence();
       },
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
+        itemCount: flows.length,
+        itemBuilder: (_, i) {
+          final flow = flows[i];
+          return _buildFlowCard(flow, cs, context, ref);
+        },
+      ),
     );
   }
 
@@ -89,7 +87,7 @@ class TaskFlowListPage extends ConsumerWidget {
     WidgetRef ref,
   ) {
     final defs = flow.blocks
-        .map((b) => b.getDefinition()?.label ?? b.typeKey)
+        .map((b) => b.getDefinition()?.label ?? b.typeKey.name)
         .join(' → ');
 
     return Card(
@@ -187,7 +185,7 @@ class TaskFlowListPage extends ConsumerWidget {
                         ),
                         const Spacer(),
                         Text(
-                          _formatTime(flow.updatedAt),
+                          formatRelativeTime(flow.updatedAt),
                           style: TextStyle(
                             fontSize: 10,
                             color: cs.onSurfaceVariant.withValues(alpha: 0.6),
@@ -310,14 +308,5 @@ class TaskFlowListPage extends ConsumerWidget {
         builder: (_) => const TaskFlowBuilderPage(),
       ),
     );
-  }
-
-  String _formatTime(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inHours < 1) return '${diff.inMinutes} 分钟前';
-    if (diff.inDays < 1) return '${diff.inHours} 小时前';
-    return '${diff.inDays} 天前';
   }
 }

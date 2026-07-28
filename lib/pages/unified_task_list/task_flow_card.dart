@@ -11,6 +11,7 @@ import '../../task_flow/providers/task_flow_execution_provider.dart';
 import 'background_task_card.dart';
 import 'catcatch_task_card.dart';
 import 'synthesis_task_card.dart';
+import 'task_utils.dart';
 
 /// Card for a task flow execution in the unified task list.
 ///
@@ -37,16 +38,14 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    // ── Watch providers DIRECTLY, NOT from parent props ──
-    final catcatchTasks = ref.watch(catcatchTasksProvider);
-    final backgroundTasks = ref.watch(backgroundTasksProvider);
-    final synthesisTasks = ref.watch(taskListProvider);
-
-    // Watch execution directly for real-time subTaskId/subTask status
-    final execution = ref
-        .watch(taskFlowExecutionsProvider)
-        .where((e) => e.id == widget.execution.id)
-        .firstOrNull;
+    // Watch execution directly for real-time subTaskId/subTask status.
+    // Use .select() so the card only rebuilds when ITS execution changes,
+    // not when any unrelated execution is added/updated/removed.
+    final execution = ref.watch(
+      taskFlowExecutionsProvider.select(
+        (list) => list.where((e) => e.id == widget.execution.id).firstOrNull,
+      ),
+    );
     if (execution == null) return const SizedBox.shrink();
 
     final subTasks = execution.subTasks;
@@ -133,22 +132,22 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
 
           // ── Expanded: nested real task cards ──
           if (_expanded) ...[
-            for (int i = 0; i < subTasks.length; i++)
-              _buildSubTaskCard(subTasks[i], catcatchTasks, backgroundTasks,
-                  synthesisTasks, cs),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: TextButton.icon(
-                  onPressed: () => _confirmDelete(context, execution.id),
-                  icon: Icon(Icons.delete_outline, size: 16, color: cs.error),
-                  label: Text('删除',
-                      style: TextStyle(fontSize: 13, color: cs.error)),
+            _ExpandedContent(
+              subTasks: subTasks,
+              executionId: execution.id,
+            ),
+            if (execution.status == FlowExecutionStatus.failed &&
+                execution.error != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                child: Text(
+                  execution.error!,
+                  style: TextStyle(
+                    color: cs.error,
+                    fontSize: 12,
+                  ),
                 ),
               ),
-            ),
           ],
         ],
       ),
@@ -204,12 +203,51 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
     if (failed > 0) return '$done/$total 已完成 · $failed 个失败';
     return '$done/$total 已完成';
   }
+}
 
-  // ===========================================================================
-  // Delete
-  // ===========================================================================
+// ===========================================================================
+// Expanded content — only built when _expanded is true
+// ===========================================================================
 
-  void _confirmDelete(BuildContext context, String execId) {
+class _ExpandedContent extends ConsumerWidget {
+  final List<FlowSubTask> subTasks;
+  final String executionId;
+
+  const _ExpandedContent({
+    required this.subTasks,
+    required this.executionId,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+
+    final catcatchTasks = ref.watch(catcatchTasksProvider);
+    final backgroundTasks = ref.watch(backgroundTasksProvider);
+    final synthesisTasks = ref.watch(taskListProvider);
+
+    return Column(
+      children: [
+        for (int i = 0; i < subTasks.length; i++)
+          _buildSubTaskCard(
+              subTasks[i], catcatchTasks, backgroundTasks, synthesisTasks, cs),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: TextButton.icon(
+              onPressed: () => _confirmDelete(context, ref, executionId),
+              icon: Icon(Icons.delete_outline, size: 16, color: cs.error),
+              label:
+                  Text('删除', style: TextStyle(fontSize: 13, color: cs.error)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _confirmDelete(BuildContext context, WidgetRef ref, String execId) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -233,10 +271,6 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
       ),
     );
   }
-
-  // ===========================================================================
-  // Sub-task → real task card mapping
-  // ===========================================================================
 
   Widget _buildSubTaskCard(
     FlowSubTask subTask,
@@ -297,10 +331,6 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
   }
 
   Widget _buildFallbackCard(FlowSubTask subTask, ColorScheme cs) {
-    // Show loading spinner ONLY while the real task is being created AND
-    // the sub-task is still waiting.  Once the flow has failed (cascade
-    // marks remaining placeholder sub-tasks as `failed`) we must show the
-    // failure state, not a misleading spinner.
     final isInitializing = subTask.subTaskId.startsWith('pending_') &&
         subTask.status == TaskStatus.waiting;
     return Padding(
@@ -351,7 +381,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                 subTask.status == TaskStatus.failed &&
                         subTask.subTaskId.startsWith('pending_')
                     ? '未执行'
-                    : _statusLabel(subTask.status),
+                    : getStatusLabel(subTask.status),
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
           ],
@@ -359,10 +389,6 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
       ),
     );
   }
-
-  // ===========================================================================
-  // Status helpers
-  // ===========================================================================
 
   Widget _statusIcon(TaskStatus status, ColorScheme cs) {
     switch (status) {
@@ -381,21 +407,6 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
       case TaskStatus.waiting:
         return Icon(Icons.hourglass_empty,
             size: 16, color: cs.onSurfaceVariant);
-    }
-  }
-
-  String _statusLabel(TaskStatus status) {
-    switch (status) {
-      case TaskStatus.running:
-        return '执行中...';
-      case TaskStatus.completed:
-        return '已完成';
-      case TaskStatus.failed:
-        return '失败';
-      case TaskStatus.paused:
-        return '已暂停';
-      case TaskStatus.waiting:
-        return '等待中';
     }
   }
 }

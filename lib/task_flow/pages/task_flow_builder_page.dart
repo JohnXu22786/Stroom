@@ -28,6 +28,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   String? _editingFlowId;
   IOType _inputType = IOType.text;
 
+  String _initialName = '';
+  String _initialDesc = '';
+  IOType _initialInputType = IOType.text;
+  List<TaskFlowBlock> _initialBlocks = [];
+
   /// Available input types for initial input.
   /// Text and URL are merged into single "文本" option (URL treated as text).
   static const List<IOType> _inputTypeOptions = [
@@ -56,6 +61,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       _blocks = List<TaskFlowBlock>.from(flow.blocks);
       _isEditing = true;
     }
+
+    _initialName = _nameController.text.trim();
+    _initialDesc = _descController.text.trim();
+    _initialInputType = _inputType;
+    _initialBlocks = List<TaskFlowBlock>.from(_blocks);
   }
 
   @override
@@ -65,37 +75,98 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     super.dispose();
   }
 
+  bool get _isDirty {
+    if (!_isEditing) {
+      return _nameController.text.trim().isNotEmpty ||
+          _descController.text.trim().isNotEmpty ||
+          _blocks.isNotEmpty ||
+          _inputType != IOType.text;
+    }
+    return _nameController.text.trim() != _initialName ||
+        _descController.text.trim() != _initialDesc ||
+        _inputType != _initialInputType ||
+        _blocksDiffer(_blocks, _initialBlocks);
+  }
+
+  bool _blocksDiffer(List<TaskFlowBlock> a, List<TaskFlowBlock> b) {
+    if (a.length != b.length) return true;
+    for (int i = 0; i < a.length; i++) {
+      final blockA = a[i];
+      final blockB = b[i];
+      if (blockA.id != blockB.id || blockA.typeKey != blockB.typeKey)
+        return true;
+      if (!mapEquals(blockA.params, blockB.params)) return true;
+    }
+    return false;
+  }
+
+  Future<bool> _showUnsavedChangesDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('放弃未保存的更改？'),
+        content: const Text('返回后，所有未保存的更改将会丢失。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('继续编辑'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('放弃'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_isEditing ? '编辑任务流' : '新建任务流'),
-        centerTitle: true,
-        actions: [
-          TextButton.icon(
-            onPressed: _saveFlow,
-            icon: const Icon(Icons.save, size: 18),
-            label: const Text('保存'),
-          ),
-        ],
-      ),
-      body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: Column(
-          children: [
-            // Name & description
-            _buildHeader(cs),
-
-            // Flow content with initial input + blocks (scrollable)
-            Expanded(
-              child: _buildFlowContent(cs),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        if (!mounted) return;
+        if (!_isDirty) {
+          Navigator.of(context).pop();
+          return;
+        }
+        final shouldDiscard = await _showUnsavedChangesDialog();
+        if (shouldDiscard && context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(_isEditing ? '编辑任务流' : '新建任务流'),
+          centerTitle: true,
+          actions: [
+            TextButton.icon(
+              onPressed: _saveFlow,
+              icon: const Icon(Icons.save, size: 18),
+              label: const Text('保存'),
             ),
-
-            // Bottom bar: add block button
-            _buildBottomBar(cs),
           ],
+        ),
+        body: GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: Column(
+            children: [
+              // Name & description
+              _buildHeader(cs),
+
+              // Flow content with initial input + blocks (scrollable)
+              Expanded(
+                child: _buildFlowContent(cs),
+              ),
+
+              // Bottom bar: add block button
+              _buildBottomBar(cs),
+            ],
+          ),
         ),
       ),
     );
@@ -480,7 +551,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     );
   }
 
-  void _addBlock(String typeKey) {
+  void _addBlock(BlockType typeKey) {
     setState(() {
       _blocks = [..._blocks, TaskFlowBlock(typeKey: typeKey)];
     });
@@ -531,17 +602,29 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         const SnackBar(content: Text('任务流已更新')),
       );
     } else {
-      notifier.addFlow(
+      _editingFlowId = notifier.addFlow(
         name: name,
         description: _descController.text.trim(),
         inputType: _inputType,
         blocks: _blocks,
       );
+      _isEditing = true;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('任务流已创建')),
       );
     }
 
-    Navigator.popUntil(context, (r) => r.isFirst);
+    _initialName = _nameController.text.trim();
+    _initialDesc = _descController.text.trim();
+    _initialInputType = _inputType;
+    _initialBlocks = _blocks
+        .map((b) => TaskFlowBlock(
+              id: b.id,
+              typeKey: b.typeKey,
+              params: Map<String, dynamic>.from(b.params),
+            ))
+        .toList();
+
+    Navigator.of(context).pop();
   }
 }
