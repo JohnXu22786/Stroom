@@ -379,6 +379,36 @@ void main() {
       await DataMigrationService.cleanOldBackups();
     });
   });
+
+  // ==================================================================
+  // lastError tracking
+  // ==================================================================
+
+  group('lastError tracking', () {
+    test('lastError is null after successful backup', () async {
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+      final result = await AutoBackupService.performAutoBackup();
+      expect(result, isTrue);
+      expect(AutoBackupService.lastError, isNull);
+      await dir.delete(recursive: true);
+    });
+
+    test('lastError is null after cancel', () async {
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+      AutoBackupService.cancel();
+      final result = await AutoBackupService.performAutoBackup();
+      expect(result, isFalse);
+      expect(AutoBackupService.lastError, isNull);
+    });
+  });
 }
 
 String _pad(int n) => n.toString().padLeft(2, '0');
