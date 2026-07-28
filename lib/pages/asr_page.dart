@@ -34,7 +34,9 @@ class _ModelOption {
   final String providerName;
   final String host;
   final String apiKey;
-  const _ModelOption(this.model, this.providerName, this.host, this.apiKey);
+  final Map<String, dynamic> providerTypeConfig;
+  const _ModelOption(this.model, this.providerName, this.host, this.apiKey,
+      this.providerTypeConfig);
 }
 
 /// Collect all available models with their source provider info from ALL
@@ -53,6 +55,7 @@ List<_ModelOption> _getAsrModelOptions(WidgetRef ref) {
               config.providerName,
               config.host,
               config.key,
+              Map<String, dynamic>.from(config.typeConfig),
             ));
           }
         }
@@ -1022,13 +1025,39 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // Also passes through the model's typeConfig and customParams
     // for built-in ASR parameters and custom parameters.
     final selectedOption = modelOptions[_selectedModelIndex];
+    final tc = Map<String, dynamic>.from(selectedOption.model.typeConfig);
+
+    // Upload settings come from provider typeConfig, not model typeConfig
+    final ptc = selectedOption.providerTypeConfig;
+    final uploadMethodStr = ptc['uploadMethod'] as String?;
+    final uploadMethod = uploadMethodStr != null
+        ? AudioUploadMethod.values.firstWhere(
+            (m) => m.name == uploadMethodStr,
+            orElse: () => AudioUploadMethod.multipart,
+          )
+        : AudioUploadMethod.multipart;
+    final maxFileSizeMb = ptc['maxFileSizeMb'] as num?;
+    final maxFileSizeBytes = maxFileSizeMb != null
+        ? (maxFileSizeMb * 1024 * 1024).toInt()
+        : AsrConfig.defaultMaxAudioFileSizeBytes;
+    final preprocessing = ptc['preprocessing'] as String? ?? 'none';
+    final chunking = ptc['chunking'] as String? ?? 'none';
+    final compression = ptc['compression'] as String? ?? 'none';
+    final fallbackMethod = ptc['fallbackMethod'] as String? ?? 'none';
+
     final effectiveConfig = AsrConfig(
       host: selectedOption.host,
       apiKey: selectedOption.apiKey,
       model: selectedOption.model.modelId,
-      typeConfig: Map<String, dynamic>.from(selectedOption.model.typeConfig),
+      typeConfig: tc,
       customParams:
           selectedOption.model.customParams.map((p) => p.copy()).toList(),
+      uploadMethod: uploadMethod,
+      maxFileSizeBytes: maxFileSizeBytes,
+      preprocessing: preprocessing,
+      chunking: chunking,
+      compression: compression,
+      fallbackMethod: fallbackMethod,
     );
 
     // Capture the list before pop
