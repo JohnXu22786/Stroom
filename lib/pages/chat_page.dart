@@ -1146,6 +1146,24 @@ class _ChatPageState extends ConsumerState<ChatPage>
       return;
     }
 
+    // Guard: refuse to start if a DIFFERENT conversation is already
+    // streaming. The adapter supports only one concurrent request, so we
+    // must either block or silently abandon the other stream. We block
+    // with a snackbar — the user should stop the other stream first.
+    final activeConvs = ref.read(streamingConversationsProvider);
+    if (activeConvs.isNotEmpty &&
+        activeConvs.any((id) => id != effectiveConvId)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('另一个对话正在生成回复，请先停止'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
     await AppLogService.info(
         'ChatPage', '开始流式请求, capturedConvId=$capturedConvId');
     ref.read(isStreamingProvider(effectiveConvId).notifier).state = true;
@@ -2197,9 +2215,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
         // tool call cards or reasoning buttons).
         _history.clear();
         manager.activateConversation(next);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _loadConversationMessages();
-        });
+        // Only schedule _loadConversationMessages for actual conversation
+        // SWITCHES (prev != null), not for the initial registration of this
+        // listener (prev == null). During init, _initialize() already calls
+        // _loadConversationMessages + _restoreStreamingState, so a second
+        // load would clear the in-progress UI and cause user messages to
+        // appear incomplete for 1-2 seconds before re-rendering.
+        if (prev != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _loadConversationMessages();
+          });
+        }
       }
     });
 
