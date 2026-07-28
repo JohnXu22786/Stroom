@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../pages/unified_task_list_page.dart';
 import '../models/block_type_definition.dart';
 import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
@@ -40,16 +41,57 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     final inputText = _inputController.text.trim();
     if (inputText.isEmpty) return;
 
-    // Get the service BEFORE pop — its Ref is from a global Provider, NOT a widget.
-    // It will continue running after the page is disposed.
-    final service = ref.read(taskFlowExecutionServiceProvider);
+    final flow = ref
+        .read(taskFlowListProvider)
+        .where((f) => f.id == widget.flowId)
+        .firstOrNull;
 
-    if (mounted) {
-      Navigator.popUntil(context, (r) => r.isFirst);
+    if (flow == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('任务流不存在')),
+        );
+      }
+      return;
     }
 
-    // Fire-and-forget: the service runs independently of widget lifecycle
+    if (flow.blocks.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('任务流未包含任何功能块')),
+        );
+      }
+      return;
+    }
+
+    final service = ref.read(taskFlowExecutionServiceProvider);
+
+    if (service.isRunning) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已有任务流正在执行')),
+        );
+      }
+      return;
+    }
+
+    // Fire-and-forget: startFlow can take minutes (polling loops).
+    // The unified task list will show real-time progress.
     service.startFlow(widget.flowId, inputText);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('任务流已启动，可在任务列表中查看进度'),
+          action: SnackBarAction(
+            label: '查看',
+            onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const UnifiedTaskListPage())),
+          ),
+        ),
+      );
+      Navigator.of(context).pop();
+    }
   }
 
   // ===========================================================================
@@ -67,7 +109,22 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
     if (flow == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('任务流')),
-        body: const Center(child: Text('任务流未找到')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                '任务未找到',
+                style: TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('返回'),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -132,7 +189,7 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
                         Colors.grey.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Text(def?.label ?? entry.value.typeKey,
+                  child: Text(def?.label ?? entry.value.typeKey.name,
                       style: TextStyle(
                           fontSize: 11,
                           color: def?.color ?? Colors.grey,
@@ -256,7 +313,7 @@ class _TaskFlowExecutionPageState extends ConsumerState<TaskFlowExecutionPage> {
                       size: 16, color: cs.onSurfaceVariant)),
               const SizedBox(width: 10),
               Expanded(
-                child: Text('${index + 1}. ${def?.label ?? block.typeKey}',
+                child: Text('${index + 1}. ${def?.label ?? block.typeKey.name}',
                     style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,

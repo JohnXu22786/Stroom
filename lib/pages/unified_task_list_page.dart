@@ -221,6 +221,13 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                     ref.read(backgroundTasksProvider.notifier).removeTask(t.id);
                   }
                 }
+                for (final e in taskFlowExecutions) {
+                  if (e.taskStatus == TaskStatus.completed) {
+                    ref
+                        .read(taskFlowExecutionsProvider.notifier)
+                        .removeExecution(e.id);
+                  }
+                }
               } else if (value == 'clear_failed') {
                 showDialog(
                   context: context,
@@ -254,6 +261,13 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                               ref
                                   .read(backgroundTasksProvider.notifier)
                                   .removeTask(t.id);
+                            }
+                          }
+                          for (final e in taskFlowExecutions) {
+                            if (e.taskStatus == TaskStatus.failed) {
+                              ref
+                                  .read(taskFlowExecutionsProvider.notifier)
+                                  .removeExecution(e.id);
                             }
                           }
                         },
@@ -291,6 +305,11 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                             ref
                                 .read(backgroundTasksProvider.notifier)
                                 .removeTask(t.id);
+                          }
+                          for (final e in taskFlowExecutions) {
+                            ref
+                                .read(taskFlowExecutionsProvider.notifier)
+                                .removeExecution(e.id);
                           }
                         },
                         child: const Text('确定',

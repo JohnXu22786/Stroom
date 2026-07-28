@@ -71,7 +71,6 @@ class MediaResource {
   bool get isVideo => [
         'mp4',
         'webm',
-        'ogg',
         'ogv',
         'mov',
         'mkv',
@@ -83,7 +82,7 @@ class MediaResource {
 
   /// 是否音频格式
   bool get isAudio =>
-      ['mp3', 'wav', 'm4a', 'aac', 'wma', 'opus', 'weba'].contains(ext);
+      ['mp3', 'wav', 'm4a', 'aac', 'wma', 'opus', 'weba', 'ogg'].contains(ext);
 
   /// 是否媒体资源（视频/音频/播放列表）
   bool get isMedia => isVideo || isAudio || isPlaylist;

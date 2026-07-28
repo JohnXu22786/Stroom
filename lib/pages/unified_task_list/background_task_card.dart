@@ -118,7 +118,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            _buildStatusChip(widget.task.status),
+                            buildStatusChip(widget.task.status),
                             const SizedBox(width: 8),
                             Text(
                               formatRelativeTime(widget.task.createdAt),
@@ -180,9 +180,9 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Type and time info
-        _buildInfoRow(cs, Icons.category_outlined, '任务类型', task.type.label),
+        buildInfoRow(cs, Icons.category_outlined, '任务类型', task.type.label),
         const SizedBox(height: 4),
-        _buildInfoRow(
+        buildInfoRow(
           cs,
           Icons.access_time,
           '创建时间',
@@ -190,7 +190,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         ),
         if (task.completedAt != null) ...[
           const SizedBox(height: 4),
-          _buildInfoRow(
+          buildInfoRow(
             cs,
             Icons.check_circle_outline,
             '完成时间',
@@ -407,35 +407,6 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     return colorScheme.outlineVariant;
   }
 
-  Widget _buildInfoRow(
-    ColorScheme cs,
-    IconData icon,
-    String label,
-    String value,
-  ) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 14, color: cs.onSurfaceVariant),
-        const SizedBox(width: 6),
-        Text(
-          '$label: ',
-          style: TextStyle(
-            fontSize: 12,
-            color: cs.onSurfaceVariant,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(fontSize: 12, color: cs.onSurface),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildActionButtons(
       BackgroundTask task, ColorScheme cs, WidgetRef ref) {
     return Row(
@@ -608,71 +579,6 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     }
     // Waiting uses a static icon (no spinning), handled by the fallback below.
     return Icon(_statusIcon(status), color: _statusColor(status), size: 24);
-  }
-
-  static Widget _buildStatusChip(TaskStatus status) {
-    switch (status) {
-      case TaskStatus.running:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.blue.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '进行中',
-            style: TextStyle(fontSize: 11, color: Colors.blue),
-          ),
-        );
-      case TaskStatus.completed:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.green.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '已完成',
-            style: TextStyle(fontSize: 11, color: Colors.green),
-          ),
-        );
-      case TaskStatus.failed:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.red.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '失败',
-            style: TextStyle(fontSize: 11, color: Colors.red),
-          ),
-        );
-      case TaskStatus.paused:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.orange.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '已暂停',
-            style: TextStyle(fontSize: 11, color: Colors.orange),
-          ),
-        );
-      case TaskStatus.waiting:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.purple.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '等待中',
-            style: TextStyle(fontSize: 11, color: Colors.purple),
-          ),
-        );
-    }
   }
 
   static IconData _taskTypeIcon(BackgroundTaskType type) {

@@ -14,6 +14,8 @@ import '../catcatch/models/catcatch_task.dart' as catcatch_task;
 import '../providers/task_provider.dart';
 import '../providers/background_task_provider.dart';
 import '../task_flow/providers/task_flow_provider.dart';
+import '../task_flow/providers/task_flow_execution_provider.dart';
+import '../task_flow/models/task_flow_execution.dart';
 import '../task_flow/pages/task_flow_list_page.dart';
 import 'chat_page.dart';
 import 'files_page.dart';
@@ -444,6 +446,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
     final backgroundTasks = ref.watch(backgroundTasksProvider);
+    final flowExecutions = ref.watch(taskFlowExecutionsProvider);
 
     // --- Compute status counts for the status card ---
     int inProgressCount = 0;
@@ -470,6 +473,19 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
     for (final t in backgroundTasks) {
       countCatchStatusName(t.status.name);
+    }
+    for (final e in flowExecutions) {
+      switch (e.status) {
+        case FlowExecutionStatus.running:
+          inProgressCount++;
+          break;
+        case FlowExecutionStatus.completed:
+          completedCount++;
+          break;
+        case FlowExecutionStatus.failed:
+          failedCount++;
+          break;
+      }
     }
 
     return SafeArea(

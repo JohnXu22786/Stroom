@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/task_provider.dart';
+import 'unified_task_list/task_utils.dart';
 
 class TaskCard extends ConsumerWidget {
   final SynthesisTask task;
@@ -32,10 +33,10 @@ class TaskCard extends ConsumerWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      _buildStatusChip(),
+                      buildStatusChip(task.status),
                       const SizedBox(width: 8),
                       Text(
-                        _formatTime(task.createdAt),
+                        formatRelativeTime(task.createdAt),
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[500],
@@ -289,80 +290,6 @@ class TaskCard extends ConsumerWidget {
         return const Icon(Icons.hourglass_empty,
             color: Colors.purple, size: 24);
     }
-  }
-
-  Widget _buildStatusChip() {
-    switch (task.status) {
-      case TaskStatus.running:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.blue.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '进行中',
-            style: TextStyle(fontSize: 11, color: Colors.blue),
-          ),
-        );
-      case TaskStatus.completed:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.green.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '已完成',
-            style: TextStyle(fontSize: 11, color: Colors.green),
-          ),
-        );
-      case TaskStatus.failed:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.red.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '失败',
-            style: TextStyle(fontSize: 11, color: Colors.red),
-          ),
-        );
-      case TaskStatus.paused:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.orange.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '已暂停',
-            style: TextStyle(fontSize: 11, color: Colors.orange),
-          ),
-        );
-      case TaskStatus.waiting:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.purple.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '等待中',
-            style: TextStyle(fontSize: 11, color: Colors.purple),
-          ),
-        );
-    }
-  }
-
-  String _formatTime(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
-    if (diff.inHours < 24) return '${diff.inHours}小时前';
-    return '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
   void _showErrorDetailDialog(BuildContext context, String error) {

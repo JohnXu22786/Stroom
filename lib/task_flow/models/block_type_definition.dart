@@ -2,6 +2,26 @@ import 'package:flutter/material.dart';
 import 'io_type.dart';
 
 // ============================================================================
+// Block type enum
+// ============================================================================
+
+enum BlockType {
+  catcatch,
+  audioSeparation,
+  asr,
+  ocr,
+  tts,
+  custom,
+}
+
+BlockType parseBlockType(String name) {
+  return BlockType.values.firstWhere(
+    (e) => e.name == name,
+    orElse: () => BlockType.custom,
+  );
+}
+
+// ============================================================================
 // Parameter type for block configuration
 // ============================================================================
 
@@ -88,7 +108,7 @@ class BlockParamDefinition {
 /// The [typeKey] must match the [BackgroundTaskType] name for blocks
 /// that wrap existing background tasks.
 class BlockTypeDefinition {
-  final String typeKey;
+  final BlockType typeKey;
   final String label;
   final IOType inputType;
   final IOType outputType;
@@ -112,7 +132,7 @@ class BlockTypeDefinition {
 
   /// OCR: image → text
   static const ocr = BlockTypeDefinition(
-    typeKey: 'ocr',
+    typeKey: BlockType.ocr,
     label: '文字识别',
     inputType: IOType.image,
     outputType: IOType.text,
@@ -126,7 +146,7 @@ class BlockTypeDefinition {
 
   /// ASR (Speech Recognition): audio → text
   static const asr = BlockTypeDefinition(
-    typeKey: 'asr',
+    typeKey: BlockType.asr,
     label: '语音识别',
     inputType: IOType.audio,
     outputType: IOType.text,
@@ -149,7 +169,7 @@ class BlockTypeDefinition {
 
   /// AudioSeparation: video → audio
   static const audioSeparation = BlockTypeDefinition(
-    typeKey: 'audioSeparation',
+    typeKey: BlockType.audioSeparation,
     label: '音频分离',
     inputType: IOType.video,
     outputType: IOType.audio,
@@ -166,7 +186,7 @@ class BlockTypeDefinition {
 
   /// CatCatch (Web Resource Download): text → video
   static const catcatch = BlockTypeDefinition(
-    typeKey: 'catcatch',
+    typeKey: BlockType.catcatch,
     label: '下载网页资源',
     inputType: IOType.text,
     outputType: IOType.video,
@@ -189,7 +209,7 @@ class BlockTypeDefinition {
 
   /// TTS (Text-to-Speech): text → audio
   static const tts = BlockTypeDefinition(
-    typeKey: 'tts',
+    typeKey: BlockType.tts,
     label: '语音合成',
     inputType: IOType.text,
     outputType: IOType.audio,
@@ -225,7 +245,7 @@ class BlockTypeDefinition {
   ];
 
   /// Find a block type by its key.
-  static BlockTypeDefinition? findBlockType(String typeKey) {
+  static BlockTypeDefinition? findBlockType(BlockType typeKey) {
     for (final b in all) {
       if (b.typeKey == typeKey) return b;
     }
@@ -262,7 +282,7 @@ class BlockTypeDefinition {
   // ========================================================================
 
   Map<String, dynamic> toMap() => {
-        'typeKey': typeKey,
+        'typeKey': typeKey.name,
         'label': label,
         'inputType': inputType.toJson(),
         'outputType': outputType.toJson(),
@@ -270,15 +290,13 @@ class BlockTypeDefinition {
       };
 
   factory BlockTypeDefinition.fromMap(Map<String, dynamic> map) {
-    // For built-in types, return the singleton to preserve icon/color.
-    final typeKey = map['typeKey'] as String;
+    final typeKey = parseBlockType(map['typeKey'] as String);
     final existing = findBlockType(typeKey);
     if (existing != null) return existing;
 
-    // Fallback for unknown types (custom/user-defined).
     return BlockTypeDefinition(
       typeKey: typeKey,
-      label: map['label'] as String? ?? typeKey,
+      label: map['label'] as String? ?? typeKey.name,
       inputType: IOType.fromJson(map['inputType'] as String? ?? 'any'),
       outputType: IOType.fromJson(map['outputType'] as String? ?? 'any'),
       icon: Icons.extension,

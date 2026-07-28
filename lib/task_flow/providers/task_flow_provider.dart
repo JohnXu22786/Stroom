@@ -1,13 +1,9 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
-import 'package:path/path.dart' as p;
 
 import '../models/task_flow_definition.dart';
 import '../models/io_type.dart';
-import '../../services/storage_service.dart';
+import 'persistable_notifier.dart';
 
 // ============================================================================
 // Provider
@@ -24,8 +20,35 @@ final taskFlowListProvider =
 // Notifier
 // ============================================================================
 
-class TaskFlowNotifier extends StateNotifier<List<TaskFlowDefinition>> {
+class TaskFlowNotifier extends StateNotifier<List<TaskFlowDefinition>>
+    with PersistableNotifier<List<TaskFlowDefinition>> {
   TaskFlowNotifier() : super([]);
+
+  // ========================================================================
+  // PersistableNotifier contract
+  // ========================================================================
+
+  @override
+  String get persistenceFileName => 'flows.json';
+
+  @override
+  List<TaskFlowDefinition> fromJsonList(List<dynamic> json) {
+    final result = <TaskFlowDefinition>[];
+    for (final item in json) {
+      try {
+        result.add(
+            TaskFlowDefinition.fromMap(Map<String, dynamic>.from(item as Map)));
+      } catch (e) {
+        debugPrint('WARNING: Skipping corrupt TaskFlowDefinition: $e');
+      }
+    }
+    return result;
+  }
+
+  @override
+  List<dynamic> toJsonList(List<TaskFlowDefinition> state) {
+    return state.map((f) => f.toMap()).toList();
+  }
 
   // ========================================================================
   // CRUD Operations
@@ -45,7 +68,7 @@ class TaskFlowNotifier extends StateNotifier<List<TaskFlowDefinition>> {
       blocks: blocks ?? [],
     );
     state = [flow, ...state];
-    _persist();
+    persist();
     return flow.id;
   }
 
@@ -75,13 +98,13 @@ class TaskFlowNotifier extends StateNotifier<List<TaskFlowDefinition>> {
     // Re-sort: move updated item to front
     newState.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     state = newState;
-    _persist();
+    persist();
   }
 
   /// Remove a flow by id. Does nothing if not found.
   void removeFlow(String id) {
     state = state.where((f) => f.id != id).toList();
-    _persist();
+    persist();
   }
 
   /// Duplicate a flow (creates a copy with a new id).
@@ -97,7 +120,7 @@ class TaskFlowNotifier extends StateNotifier<List<TaskFlowDefinition>> {
       updatedAt: DateTime.now(),
     );
     state = [newCopy, ...state];
-    _persist();
+    persist();
     return newCopy.id;
   }
 
@@ -114,58 +137,12 @@ class TaskFlowNotifier extends StateNotifier<List<TaskFlowDefinition>> {
   // Persistence
   // ========================================================================
 
-  Future<void> _persist() async {
-    try {
-      final file = await _flowsFile();
-      final data = state.map((f) => f.toMap()).toList();
-      await file.writeAsString(jsonEncode(data));
-    } catch (e) {
-      debugPrint('[TaskFlowNotifier] Failed to persist flows: $e');
-    }
-  }
-
-  Future<List<TaskFlowDefinition>> _loadPersistedFlows() async {
-    try {
-      final file = await _flowsFile();
-      if (!await file.exists()) return [];
-      final content = await file.readAsString();
-      if (content.isEmpty) return [];
-      final list = jsonDecode(content) as List;
-      return list
-          .map((m) =>
-              TaskFlowDefinition.fromMap(Map<String, dynamic>.from(m as Map)))
-          .toList();
-    } catch (e) {
-      debugPrint('[TaskFlowNotifier] Failed to load persisted flows: $e');
-      return [];
-    }
-  }
-
-  Future<File> _flowsFile() async {
-    final dirPath = await AppStorage.directory;
-    final taskFlowDir = Directory(p.join(dirPath, 'task_flows'));
-    try {
-      if (!await taskFlowDir.exists()) {
-        await taskFlowDir.create(recursive: true);
-      }
-    } catch (_) {}
-    return File(p.join(taskFlowDir.path, 'flows.json'));
-  }
-
   /// Restore persisted flows on startup.
   Future<void> restoreFromPersistence() async {
-    final flows = await _loadPersistedFlows();
-    if (flows.isEmpty) return;
-    // Merge with existing state (in case flows were added before restore)
-    state = [
-      for (final f in flows)
-        if (!state.any((s) => s.id == f.id)) f,
-      ...state,
-    ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    debugPrint(
-        '[TaskFlowNotifier] Restored ${flows.length} flows from persistence');
+    await restore();
+    if (state.isNotEmpty) {
+      state = [...state]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    }
+    await persist();
   }
-
-  /// Persist current state to storage (public for manual save).
-  Future<void> persist() => _persist();
 }

@@ -271,9 +271,113 @@ String formatRelativeTime(DateTime dt) {
   final now = DateTime.now();
   final diff = now.difference(dt);
   if (diff.inMinutes < 1) return '刚刚';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
-  if (diff.inHours < 24) return '${diff.inHours}小时前';
+  if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前';
+  if (diff.inHours < 24) return '${diff.inHours} 小时前';
   return '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+}
+
+String getStatusLabel(TaskStatus status) {
+  switch (status) {
+    case TaskStatus.running:
+      return '进行中';
+    case TaskStatus.completed:
+      return '已完成';
+    case TaskStatus.failed:
+      return '失败';
+    case TaskStatus.paused:
+      return '已暂停';
+    case TaskStatus.waiting:
+      return '等待中';
+  }
+}
+
+Widget buildInfoRow(ColorScheme cs, IconData icon, String label, String value) {
+  return Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, size: 14, color: cs.onSurfaceVariant),
+      const SizedBox(width: 6),
+      Text(
+        '$label: ',
+        style: TextStyle(
+          fontSize: 12,
+          color: cs.onSurfaceVariant,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      Expanded(
+        child: Text(
+          value,
+          style: TextStyle(fontSize: 12, color: cs.onSurface),
+        ),
+      ),
+    ],
+  );
+}
+
+Widget buildStatusChip(TaskStatus status) {
+  switch (status) {
+    case TaskStatus.running:
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.blue.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Text(
+          '进行中',
+          style: TextStyle(fontSize: 11, color: Colors.blue),
+        ),
+      );
+    case TaskStatus.completed:
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.green.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Text(
+          '已完成',
+          style: TextStyle(fontSize: 11, color: Colors.green),
+        ),
+      );
+    case TaskStatus.failed:
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.red.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Text(
+          '失败',
+          style: TextStyle(fontSize: 11, color: Colors.red),
+        ),
+      );
+    case TaskStatus.paused:
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.orange.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Text(
+          '已暂停',
+          style: TextStyle(fontSize: 11, color: Colors.orange),
+        ),
+      );
+    case TaskStatus.waiting:
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.purple.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Text(
+          '等待中',
+          style: TextStyle(fontSize: 11, color: Colors.purple),
+        ),
+      );
+  }
 }
 
 // =============================================================================

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 
@@ -25,9 +26,9 @@ void main() {
       final id = notifier.addFlow(
         name: '网页转文字',
         blocks: [
-          TaskFlowBlock(typeKey: 'catcatch'),
-          TaskFlowBlock(typeKey: 'audioSeparation'),
-          TaskFlowBlock(typeKey: 'asr'),
+          TaskFlowBlock(typeKey: BlockType.catcatch),
+          TaskFlowBlock(typeKey: BlockType.audioSeparation),
+          TaskFlowBlock(typeKey: BlockType.asr),
         ],
       );
 
@@ -51,13 +52,13 @@ void main() {
       notifier.updateFlow(
         id,
         blocks: [
-          TaskFlowBlock(typeKey: 'asr'),
-          TaskFlowBlock(typeKey: 'tts'),
+          TaskFlowBlock(typeKey: BlockType.asr),
+          TaskFlowBlock(typeKey: BlockType.tts),
         ],
       );
 
       expect(notifier.state[0].blocks.length, 2);
-      expect(notifier.state[0].blocks[0].typeKey, 'asr');
+      expect(notifier.state[0].blocks[0].typeKey, BlockType.asr);
     });
 
     test('updateFlow for nonexistent id does nothing', () {
@@ -95,7 +96,7 @@ void main() {
       final originalId = notifier.addFlow(
         name: '原流程',
         blocks: [
-          TaskFlowBlock(typeKey: 'asr', params: {'saveFolder': 'test'})
+          TaskFlowBlock(typeKey: BlockType.asr, params: {'saveFolder': 'test'})
         ],
       );
 
@@ -145,7 +146,7 @@ void main() {
       final notifier = TaskFlowNotifier();
       notifier.addFlow(
         name: '流程1',
-        blocks: [TaskFlowBlock(typeKey: 'asr')],
+        blocks: [TaskFlowBlock(typeKey: BlockType.asr)],
       );
       notifier.addFlow(name: '流程2');
 
