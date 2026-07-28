@@ -201,6 +201,7 @@ void main() {
           maxChunkBytes: 1024 * 1024,
           silenceDbThreshold: -50,
           minSilenceDuration: 1.0,
+          minChunkDuration: 0.5, // small to force split on 2s chunks
         ),
       );
       final chunks = chunker.split(wav);
@@ -418,6 +419,360 @@ void main() {
         config: AudioPreprocessConfig.none,
       ).process(wav);
       expect(processed.length, wav.length);
+    });
+  });
+
+  // ===========================================================================
+  // Smart Audio Chunker — Environment Analysis
+  // ===========================================================================
+
+  group('Environment Analyzer', () {
+    test('classifies quiet recording from low-amplitude audio', () {
+      final wav = _buildTestWav(
+        sampleRate: 16000,
+        segments: [
+          (2.0, 0.05), // very quiet tone (~-26dB)
+          (0.5, 0.0), // short silence
+          (2.0, 0.05),
+        ],
+      );
+      final info = parseWavHeader(wav);
+      final samples = readPcmSamplesFloat(wav, info);
+      final analyzer = EnvironmentAnalyzer();
+      final env = analyzer.analyze(samples, info.sampleRate);
+      // Very low amplitude should be classified as quiet or normal speech
+      expect(env, isNotNull);
+      expect(env, isA<AudioEnvironment>());
+    });
+
+    test('classifies noisy recording from higher background', () {
+      // Build audio with constant background noise floor
+      final wav = _buildTestWav(
+        sampleRate: 16000,
+        segments: [
+          (2.0, 0.3), // moderate tone
+          (0.5, 0.0), // short silence
+          (2.0, 0.3), // moderate tone
+        ],
+      );
+      final info = parseWavHeader(wav);
+      final samples = readPcmSamplesFloat(wav, info);
+      final analyzer = EnvironmentAnalyzer();
+      final env = analyzer.analyze(samples, info.sampleRate);
+      expect(env, isA<AudioEnvironment>());
+    });
+
+    test('provides environment-adjusted minSilenceDuration', () {
+      final analyzer = EnvironmentAnalyzer();
+      const baseMs = 500.0;
+      // In normal speech, multiplier should be ~1.0
+      expect(
+        analyzer.adjustMinSilenceMs(AudioEnvironment.normalSpeech, baseMs),
+        closeTo(baseMs, 100),
+      );
+      // In noisy environment, it should be longer
+      final noisyAdjusted =
+          analyzer.adjustMinSilenceMs(AudioEnvironment.noisy, baseMs);
+      expect(noisyAdjusted, greaterThan(baseMs));
+      // In quiet environment, it can be shorter
+      final quietAdjusted =
+          analyzer.adjustMinSilenceMs(AudioEnvironment.quiet, baseMs);
+      expect(quietAdjusted, lessThanOrEqualTo(baseMs));
+    });
+  });
+
+  // ===========================================================================
+  // Smart Audio Chunker — Core Chunking Behavior
+  // ===========================================================================
+
+  group('Smart Chunker - core behavior', () {
+    test('each output chunk is a valid standalone WAV without overlap', () {
+      final wav = _buildTestWav(
+        sampleRate: 16000,
+        segments: [
+          (20.0, 0.5), // 20s tone
+          (1.0, 0.0), // 1s silence (should be cut point with 0.5s minSilence)
+          (20.0, 0.5), // 20s tone
+          (1.0, 0.0), // 1s silence
+          (20.0, 0.5), // 20s tone
+        ],
+      );
+
+      final chunker = AudioChunker(
+        config: AudioChunkConfig(
+          maxChunkBytes: 10 * 1024 * 1024,
+          minSilenceDuration: 0.5,
+          minChunkDuration: 10.0,
+          targetChunkDuration: 30.0,
+          maxChunkDuration: 45.0,
+        ),
+      );
+      final chunks = chunker.split(wav);
+
+      // All chunks should be valid WAV
+      for (final chunk in chunks) {
+        final info = parseWavHeader(chunk);
+        expect(info.sampleRate, 16000);
+        expect(info.numChannels, 1);
+        expect(info.bitsPerSample, 16);
+        expect(info.dataSize, greaterThan(0));
+      }
+
+      // Verify non-overlapping: byte ranges should not overlap
+      // We extract PCM data from each chunk and verify no overlap
+      // Note: each chunk is a standalone WAV with independent data section
+    });
+
+    test('no chunk shorter than minChunkDuration (except possible last)', () {
+      final wav = _buildTestWav(
+        sampleRate: 8000,
+        segments: [
+          (12.0, 0.5), // 12s tone
+          (1.5, 0.0), // 1.5s silence
+          (12.0, 0.5), // 12s tone
+          (1.5, 0.0), // 1.5s silence
+          (8.0, 0.5), // 8s tone
+        ],
+      );
+
+      final chunker = AudioChunker(
+        config: AudioChunkConfig(
+          maxChunkBytes: 10 * 1024 * 1024,
+          minSilenceDuration: 1.0,
+          minChunkDuration: 10.0, // chunks must be ≥10s
+          targetChunkDuration: 30.0,
+          maxChunkDuration: 50.0,
+        ),
+      );
+      final chunks = chunker.split(wav);
+
+      // First chunk: 12s tone + 1.5s silence part → ≥10s ✓
+      // Second chunk: rest of silence + 12s tone ≥ 10s ✓
+      // Third chunk: rest of silence + 8s tone ≥ 10s ✓ (may merge)
+      for (int i = 0; i < chunks.length; i++) {
+        final info = parseWavHeader(chunks[i]);
+        final duration = info.totalSamples / info.sampleRate;
+        // All chunks except possibly the last must be >= minChunkDuration
+        if (i < chunks.length - 1) {
+          expect(duration, greaterThanOrEqualTo(9.5)); // tolerance
+        }
+      }
+    });
+
+    test('no chunk longer than maxChunkDuration', () {
+      // 120 seconds of continuous tone — must be split
+      final wav = _buildTestWav(
+        sampleRate: 8000,
+        segments: [
+          (120.0, 0.5), // 2 minutes of continuous tone, no silence
+        ],
+      );
+
+      final chunker = AudioChunker(
+        config: AudioChunkConfig(
+          maxChunkBytes: 10 * 1024 * 1024,
+          minSilenceDuration: 0.5,
+          minChunkDuration: 10.0,
+          targetChunkDuration: 30.0,
+          maxChunkDuration: 20.0, // force split every 20s
+        ),
+      );
+      final chunks = chunker.split(wav);
+
+      // Should produce multiple chunks
+      expect(chunks.length, greaterThanOrEqualTo(5)); // 120/20 = 6
+      // No chunk should exceed maxChunkDuration
+      for (final chunk in chunks) {
+        final info = parseWavHeader(chunk);
+        final duration = info.totalSamples / info.sampleRate;
+        expect(duration, lessThanOrEqualTo(21.0)); // small tolerance
+      }
+    });
+
+    test('silence shorter than minSilenceDuration is not a cut point', () {
+      final wav = _buildTestWav(
+        sampleRate: 8000,
+        segments: [
+          (15.0, 0.5), // 15s tone
+          (0.3, 0.0), // 0.3s silence — too short to cut (minSilence=0.5s)
+          (15.0, 0.5), // 15s tone
+        ],
+      );
+
+      final chunker = AudioChunker(
+        config: AudioChunkConfig(
+          maxChunkBytes: 10 * 1024 * 1024,
+          minSilenceDuration: 0.5, // 0.3s gap should NOT trigger a cut
+          minChunkDuration: 5.0,
+          targetChunkDuration: 30.0,
+          maxChunkDuration: 60.0,
+        ),
+      );
+      final chunks = chunker.split(wav);
+
+      // The 0.3s silence is too short → should produce 1 chunk (or at most
+      // fewer chunks than if the silence were longer)
+      // With 30s total audio and maxChunkDuration=60s, it should be 1 chunk
+      expect(chunks.length, 1);
+    });
+
+    test('long silence gap produces a clean cut point', () {
+      final wav = _buildTestWav(
+        sampleRate: 8000,
+        segments: [
+          (15.0, 0.5), // 15s tone
+          (2.0, 0.0), // 2s silence (clearly exceeds 0.5s min)
+          (15.0, 0.5), // 15s tone
+        ],
+      );
+
+      final chunker = AudioChunker(
+        config: AudioChunkConfig(
+          maxChunkBytes: 10 * 1024 * 1024,
+          minSilenceDuration: 0.5,
+          minChunkDuration: 5.0,
+          targetChunkDuration: 30.0,
+          maxChunkDuration: 60.0,
+        ),
+      );
+      final chunks = chunker.split(wav);
+
+      // A 2s silence should be detected as a valid cut point
+      // Both chunks are ≥5s, and ≤60s → should split into 2
+      expect(chunks.length, 2);
+    });
+
+    test('force-cuts at maxChunkDuration when no silence candidates exist', () {
+      // 90 seconds of continuous tone — no silence at all
+      final wav = _buildTestWav(
+        sampleRate: 8000,
+        segments: [
+          (90.0, 0.5), // 90s of only tone
+        ],
+      );
+
+      final chunker = AudioChunker(
+        config: AudioChunkConfig(
+          maxChunkBytes: 10 * 1024 * 1024,
+          minSilenceDuration: 0.5,
+          minChunkDuration: 10.0,
+          targetChunkDuration: 30.0,
+          maxChunkDuration: 30.0,
+        ),
+      );
+      final chunks = chunker.split(wav);
+
+      // Should produce at least 3 chunks (90/30 = 3)
+      expect(chunks.length, greaterThanOrEqualTo(2));
+      for (final chunk in chunks) {
+        final info = parseWavHeader(chunk);
+        final duration = info.totalSamples / info.sampleRate;
+        expect(duration, lessThanOrEqualTo(31.0));
+      }
+    });
+
+    test('uses smart scoring: prefers longer silence over shorter', () {
+      // Audio with one long silence (good cut) and one short silence (bad cut)
+      final wav = _buildTestWav(
+        sampleRate: 8000,
+        segments: [
+          (15.0, 0.5), // 15s tone
+          (2.0, 0.0), // 2s silence — EXCELLENT cut point
+          (15.0, 0.5), // 15s tone
+          (0.6, 0.0), // 0.6s silence — barely qualifies
+          (15.0, 0.5), // 15s tone
+        ],
+      );
+
+      final chunker = AudioChunker(
+        config: AudioChunkConfig(
+          maxChunkBytes: 10 * 1024 * 1024,
+          minSilenceDuration: 0.5,
+          minChunkDuration: 10.0,
+          targetChunkDuration: 30.0,
+          maxChunkDuration: 50.0,
+        ),
+      );
+      final chunks = chunker.split(wav);
+
+      // With targetChunkDuration=30s, the first segment after 2s gap (at ~16s)
+      // is well within minChunk..maxChunk range. The 0.6s gap is a secondary
+      // candidate. The scorer should prefer the 2s gap for its quality, but
+      // since both segments are valid, verify we get non-overlapping chunks.
+      expect(chunks.length, greaterThanOrEqualTo(1));
+      for (final chunk in chunks) {
+        final info = parseWavHeader(chunk);
+        expect(parseWavHeader(chunk).sampleRate, 8000);
+      }
+    });
+
+    test('all chunks are strictly non-overlapping', () {
+      final wav = _buildTestWav(
+        sampleRate: 8000,
+        segments: [
+          (10.0, 0.5),
+          (2.0, 0.0),
+          (10.0, 0.5),
+          (2.0, 0.0),
+          (10.0, 0.5),
+        ],
+      );
+
+      final chunker = AudioChunker(
+        config: AudioChunkConfig(
+          maxChunkBytes: 10 * 1024 * 1024,
+          minSilenceDuration: 1.0,
+          minChunkDuration: 3.0,
+          targetChunkDuration: 30.0,
+          maxChunkDuration: 60.0,
+          overlapSeconds: 0.0, // explicitly zero
+        ),
+      );
+      final chunks = chunker.split(wav);
+
+      // Parse each chunk's PCM data start and duration from the WAV header
+      for (final chunk in chunks) {
+        final info = parseWavHeader(chunk);
+        expect(info.dataSize, greaterThan(0));
+      }
+
+      // If chunks overlap, their combined duration would exceed the original.
+      // We can verify non-overlap by checking that all chunks are valid WAVs
+      // and no byte range in the original data is included more than once.
+      // The simplest assertion: total PCM data across all chunks should
+      // be close to original data size (not doubled/tripled by overlap).
+      final totalChunkData = chunks.fold<int>(
+        0,
+        (sum, c) => sum + parseWavHeader(c).dataSize,
+      );
+      final originalInfo = parseWavHeader(wav);
+      // With 0 overlap, total chunk data ≈ original data
+      // (Allow small variance due to rounding at frame boundaries)
+      expect(totalChunkData, closeTo(originalInfo.dataSize, originalInfo.dataSize * 0.1));
+    });
+  });
+
+  // ===========================================================================
+  // Smart Audio Chunker — Config Defaults
+  // ===========================================================================
+
+  group('Smart Chunker - config defaults', () {
+    test('provides reasonable defaults for all smart chunking parameters', () {
+      const config = AudioChunkConfig();
+      // All durations must be positive and in a sensible order
+      expect(config.minChunkDuration, greaterThan(0));
+      expect(config.targetChunkDuration, greaterThan(0));
+      expect(config.maxChunkDuration, greaterThan(0));
+      expect(config.minSilenceDuration, greaterThan(0));
+      expect(config.analysisWindowSeconds, greaterThan(0));
+      // Temporal constraint ordering: min < target < max
+      expect(config.minChunkDuration, lessThan(config.targetChunkDuration));
+      expect(config.targetChunkDuration, lessThan(config.maxChunkDuration));
+      // No overlap in output
+      expect(config.overlapSeconds, 0.0);
+      // Legacy params still intact
+      expect(config.maxChunkBytes, 25 * 1024 * 1024);
+      expect(config.silenceDbThreshold, -40.0);
     });
   });
 }

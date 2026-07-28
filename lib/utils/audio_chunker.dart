@@ -61,30 +61,62 @@ class AudioChunkConfig {
   final int maxChunkBytes;
 
   /// Minimum silence amplitude in dB (RMS). Default -40 dB.
+  /// In noisy environments, this threshold is dynamically raised relative
+  /// to the detected noise floor.
   final double silenceDbThreshold;
 
   /// Minimum silence duration in seconds to consider as a split point.
-  /// Default 1.5 seconds.
+  /// Default 0.5 seconds (500ms) — short enough to catch sentence pauses.
+  /// In noisy environments, this is dynamically lengthened by [EnvironmentAnalyzer].
   final double minSilenceDuration;
 
   /// RMS analysis frame size in samples. Default 1024 (~23ms at 44.1kHz).
   final int frameSize;
 
   /// Overlap in seconds added before and after each cut point.
-  /// Default 0.3s.
+  /// In smart (silence-based) chunking, overlap is always 0 — chunks are
+  /// strictly non-overlapping. For fixed-duration and fixed-size methods,
+  /// overlap is also 0 by default since the new design avoids overlap entirely.
+  /// Default 0.0s.
   final double overlapSeconds;
 
   /// Fixed duration per chunk in seconds (used by fixedDuration method).
   /// Default 60 seconds (1 minute).
   final double fixedDurationSeconds;
 
+  /// Minimum chunk duration in seconds. Silence gaps that would produce a
+  /// chunk below this duration are skipped (merged into adjacent chunk).
+  /// Default 20.0 seconds (several sentences).
+  final double minChunkDuration;
+
+  /// Target chunk duration in seconds — the sweet spot the chunker aims for.
+  /// The scorer prefers cut points that produce chunks close to this duration.
+  /// Default 45.0 seconds.
+  final double targetChunkDuration;
+
+  /// Maximum chunk duration in seconds — hard limit.
+  /// If no good cut point is found within [minChunkDuration..maxChunkDuration],
+  /// the chunker force-cuts at the nearest energy valley to this boundary.
+  /// Default 60.0 seconds.
+  final double maxChunkDuration;
+
+  /// Analysis window in seconds for looking before/after a candidate cut
+  /// to assess transition quality and sentence-boundary likelihood.
+  /// This is a JUDGMENT window only — output chunks are always non-overlapping.
+  /// Default 1.5 seconds.
+  final double analysisWindowSeconds;
+
   const AudioChunkConfig({
     this.maxChunkBytes = 25 * 1024 * 1024,
     this.silenceDbThreshold = -40.0,
-    this.minSilenceDuration = 1.5,
+    this.minSilenceDuration = 0.5,
     this.frameSize = 1024,
-    this.overlapSeconds = 0.3,
+    this.overlapSeconds = 0.0,
     this.fixedDurationSeconds = 60.0,
+    this.minChunkDuration = 20.0,
+    this.targetChunkDuration = 45.0,
+    this.maxChunkDuration = 60.0,
+    this.analysisWindowSeconds = 1.5,
   });
 }
 
@@ -101,6 +133,209 @@ enum AudioChunkMethod {
 
   /// Split to stay under maxChunkBytes (no silence awareness).
   fixedSize,
+}
+
+// ============================================================================
+// Audio Environment Classification
+// ============================================================================
+
+/// The detected acoustic environment type.
+///
+/// Used to dynamically adjust silence thresholds, minimum silence duration,
+/// and scoring weights for the smart chunker.
+enum AudioEnvironment {
+  /// Very low background noise — studio recording, quiet office.
+  quiet,
+
+  /// Typical conversational speech with moderate background.
+  normalSpeech,
+
+  /// Multi-person environment with variable noise levels.
+  meeting,
+
+  /// High background noise — street, cafe, subway.
+  noisy,
+
+  /// Continuous music, singing, or instrumental audio.
+  music,
+
+  /// Persistent background hum — AC, fan, wind noise.
+  continuousNoise,
+}
+
+// ============================================================================
+// Candidate Cut Point
+// ============================================================================
+
+/// A candidate cut point with a quality score.
+///
+/// Each candidate represents a potential split location (typically the
+/// midpoint of a silence gap) with computed quality metrics.
+class CandidateCut {
+  /// Sample index in the original PCM data.
+  final int samplePosition;
+
+  /// Duration of the silence gap in seconds.
+  final double silenceDuration;
+
+  /// Confidence that this region is truly silent (0..1).
+  /// 1.0 = very confident (deep silence), 0.0 = barely silent.
+  final double silenceConfidence;
+
+  /// Energy transition quality at this boundary (0..1).
+  /// 1.0 = clean drop from speech to silence and back.
+  final double transitionQuality;
+
+  /// Likelihood this is a sentence/phrase boundary (0..1).
+  /// Based on energy decline pattern before the gap.
+  final double sentenceEndLikelihood;
+
+  /// The computed total score (0..1). Higher = better cut point.
+  double totalScore;
+
+  CandidateCut({
+    required this.samplePosition,
+    required this.silenceDuration,
+    required this.silenceConfidence,
+    required this.transitionQuality,
+    required this.sentenceEndLikelihood,
+    this.totalScore = 0.0,
+  });
+}
+
+// ============================================================================
+// Environment Analyzer
+// ============================================================================
+
+/// Analyzes audio energy distribution to classify the acoustic environment
+/// and adjust chunking parameters dynamically.
+class EnvironmentAnalyzer {
+  final int frameSize;
+  final double silenceDbThreshold;
+
+  const EnvironmentAnalyzer({
+    this.frameSize = 1024,
+    this.silenceDbThreshold = -40.0,
+  });
+
+  /// Analyze PCM samples to classify the audio environment.
+  ///
+  /// Returns [AudioEnvironment.normalSpeech] if the analysis cannot
+  /// determine the environment confidently.
+  AudioEnvironment analyze(Float64List samples, int sampleRate) {
+    if (samples.length < frameSize) return AudioEnvironment.normalSpeech;
+
+    final frameCount = samples.length ~/ frameSize;
+    final dbValues = Float64List(frameCount);
+
+    // Compute RMS dB for each frame
+    for (int f = 0; f < frameCount; f++) {
+      double sumSq = 0;
+      final start = f * frameSize;
+      final end = (start + frameSize).clamp(0, samples.length);
+      for (int i = start; i < end; i++) {
+        sumSq += samples[i] * samples[i];
+      }
+      final rms = sqrt(sumSq / (end - start));
+      dbValues[f] = rms > 1e-10 ? 20 * log(rms) / ln10 : -100.0;
+    }
+
+    // Compute statistics
+    final sorted = Float64List.fromList(dbValues)..sort();
+    final noiseFloor = _percentile(sorted, 0.20);
+    final peak = _percentile(sorted, 0.95);
+    final dynamicRange = peak - noiseFloor;
+
+    // Count frame types
+    int silentFrames = 0;
+    for (final db in dbValues) {
+      if (db < noiseFloor + 6) silentFrames++;
+    }
+    final gapDensity = frameCount > 0 ? silentFrames / frameCount : 0.0;
+
+    // Classification tree
+    // ── Very low noise floor → quiet ──
+    if (noiseFloor < -55 && gapDensity >= 0.05) {
+      return AudioEnvironment.quiet;
+    }
+
+    // ── Moderate noise, good dynamic range → speech ──
+    if (noiseFloor < -35) {
+      if (dynamicRange > 25) return AudioEnvironment.normalSpeech;
+      // Lower dynamic range with moderate noise → meeting
+      if (gapDensity < 0.15) return AudioEnvironment.meeting;
+      return AudioEnvironment.normalSpeech;
+    }
+
+    // ── High noise floor → noisy ──
+    if (noiseFloor < -20) {
+      if (dynamicRange < 15 && gapDensity < 0.1) {
+        return AudioEnvironment.continuousNoise;
+      }
+      return AudioEnvironment.noisy;
+    }
+
+    // ── Very high energy, few gaps → music ──
+    if (gapDensity < 0.05) {
+      return AudioEnvironment.music;
+    }
+
+    return AudioEnvironment.noisy;
+  }
+
+  /// Get the environment-adjusted minimum silence duration in milliseconds.
+  ///
+  /// In noisy environments, the required silence is longer because
+  /// absolute volume-based detection is less reliable.
+  double adjustMinSilenceMs(AudioEnvironment env, double baseMs) {
+    switch (env) {
+      case AudioEnvironment.quiet:
+        // Quiet environment: can detect brief pauses reliably
+        return baseMs * 0.6;
+      case AudioEnvironment.normalSpeech:
+        return baseMs;
+      case AudioEnvironment.meeting:
+        // Multicast environment: require longer pauses to avoid mid-sentence cuts
+        return baseMs * 1.3;
+      case AudioEnvironment.noisy:
+        // High background: need longer silence to be confident
+        return baseMs * 1.8;
+      case AudioEnvironment.music:
+        // Music rarely has true silence — require very long gaps
+        return baseMs * 3.0;
+      case AudioEnvironment.continuousNoise:
+        // Persistent hum: similar to noisy
+        return baseMs * 2.0;
+    }
+  }
+
+  /// Get the environment-adjusted silence dB threshold.
+  ///
+  /// In noisy environments, the threshold is raised relative to the
+  /// noise floor to avoid false positives from background noise.
+  double adjustSilenceDbThreshold(AudioEnvironment env, double baseDb) {
+    switch (env) {
+      case AudioEnvironment.quiet:
+        return baseDb - 6; // lower → more sensitive
+      case AudioEnvironment.normalSpeech:
+        return baseDb;
+      case AudioEnvironment.meeting:
+        return baseDb + 3;
+      case AudioEnvironment.noisy:
+        return baseDb + 8;
+      case AudioEnvironment.music:
+        return baseDb + 15;
+      case AudioEnvironment.continuousNoise:
+        return baseDb + 10;
+    }
+  }
+
+  /// Compute the nth percentile from a sorted list.
+  static double _percentile(Float64List sorted, double fraction) {
+    if (sorted.isEmpty) return -100.0;
+    final index = (sorted.length * fraction).round().clamp(0, sorted.length - 1);
+    return sorted[index];
+  }
 }
 
 // ============================================================================
@@ -257,27 +492,75 @@ Float64List readPcmSamplesFloat(Uint8List wavBytes, WavInfo info) {
 }
 
 // ============================================================================
-// RMS Silence Detection (based on FFmpeg af_silencedetect.c algorithm)
+// RMS Frame Energy + Silence Gap Detection
 // ============================================================================
+
+/// A detected gap (silence or low-energy region) with quality metrics.
+class _DetectedGap {
+  final int startSample;
+  final int endSample;
+  final double durationSeconds;
+  final double minDb; // deepest silence within the gap
+  final double avgDb; // average dB across the gap
+
+  const _DetectedGap({
+    required this.startSample,
+    required this.endSample,
+    required this.durationSeconds,
+    required this.minDb,
+    required this.avgDb,
+  });
+
+  int get midSample => (startSample + endSample) ~/ 2;
+}
 
 /// Detect silence regions in PCM audio using RMS energy.
 ///
-/// Returns a list of silence gaps, each with start/end sample indices.
-/// A gap is "silent" when its RMS dB level is below [silenceDbThreshold]
-/// for at least [minSilenceDuration] seconds.
+/// Enhanced to compute per-gap quality metrics (min depth, average level)
+/// for the smart chunker's candidate scoring.
 class SilenceDetector {
   final AudioChunkConfig config;
 
   const SilenceDetector(this.config);
 
-  /// Analyze PCM samples and return silence regions.
+  /// Analyze PCM samples and return silence regions with quality metrics.
   /// [samples] must be normalized float samples in [-1.0, 1.0].
   /// [sampleRate] is the audio sample rate.
-  List<SilenceGap> detect(Float64List samples, int sampleRate) {
+  /// [dbThreshold] overrides [config.silenceDbThreshold] if provided
+  /// (used for environment-adjusted thresholds).
+  /// [minSilenceSec] overrides [config.minSilenceDuration] if provided.
+  List<SilenceGap> detect(
+    Float64List samples,
+    int sampleRate, {
+    double? dbThreshold,
+    double? minSilenceSec,
+  }) {
+    final gaps = detectGaps(samples, sampleRate,
+        dbThreshold: dbThreshold, minSilenceSec: minSilenceSec);
+    return gaps
+        .map((g) => SilenceGap(
+              startSample: g.startSample,
+              endSample: g.endSample,
+              durationSeconds: g.durationSeconds,
+            ))
+        .toList();
+  }
+
+  /// Detect silence gaps with full quality metrics for candidate scoring.
+  // ignore: library_private_types_in_public_api
+  List<_DetectedGap> detectGaps(
+    Float64List samples,
+    int sampleRate, {
+    double? dbThreshold,
+    double? minSilenceSec,
+  }) {
+    final threshold = dbThreshold ?? config.silenceDbThreshold;
+    final minSilenceS = minSilenceSec ?? config.minSilenceDuration;
     final frameSize = config.frameSize;
     final frameCount = samples.length ~/ frameSize;
+    if (frameCount == 0) return [];
     final minSilentFrames =
-        (config.minSilenceDuration * sampleRate / frameSize).ceil();
+        (minSilenceS * sampleRate / frameSize).ceil().clamp(1, frameCount);
 
     // Step 1: Compute RMS dB for each frame
     final dbValues = Float64List(frameCount);
@@ -289,39 +572,47 @@ class SilenceDetector {
         sumSq += samples[i] * samples[i];
       }
       final rms = sqrt(sumSq / (end - start));
-      // Convert to dB: 20 * log10(rms), with floor at -100 dB
       dbValues[f] = rms > 1e-10 ? 20 * log(rms) / ln10 : -100.0;
     }
 
     // Step 2: Find contiguous silent frames
-    final silenceGaps = <SilenceGap>[];
+    final gaps = <_DetectedGap>[];
     int? gapStart;
+    double gapMinDb = 0;
+    double gapSumDb = 0;
+    int gapFrameCount = 0;
 
     for (int f = 0; f < frameCount; f++) {
-      if (dbValues[f] < config.silenceDbThreshold) {
-        gapStart ??= f;
+      if (dbValues[f] < threshold) {
+        if (gapStart == null) {
+          gapStart = f;
+          gapMinDb = dbValues[f];
+          gapSumDb = dbValues[f];
+          gapFrameCount = 1;
+        } else {
+          gapMinDb = gapMinDb < dbValues[f] ? gapMinDb : dbValues[f];
+          gapSumDb += dbValues[f];
+          gapFrameCount++;
+        }
       } else {
         if (gapStart != null && (f - gapStart) >= minSilentFrames) {
-          silenceGaps.add(SilenceGap(
+          gaps.add(_DetectedGap(
             startSample: gapStart * frameSize,
             endSample: f * frameSize,
             durationSeconds: (f - gapStart) * frameSize / sampleRate,
+            minDb: gapMinDb,
+            avgDb: gapSumDb / gapFrameCount,
           ));
         }
         gapStart = null;
       }
     }
 
-    // Handle trailing silence
-    if (gapStart != null && (frameCount - gapStart) >= minSilentFrames) {
-      silenceGaps.add(SilenceGap(
-        startSample: gapStart * frameSize,
-        endSample: samples.length,
-        durationSeconds: (frameCount - gapStart) * frameSize / sampleRate,
-      ));
-    }
+    // Trailing silence: excluded from cut points (belongs to last chunk).
+    // No trailing gap is emitted — the last chunk naturally includes trailing
+    // silence without creating a tiny silence-only chunk at the end.
 
-    return silenceGaps;
+    return gaps;
   }
 }
 
@@ -340,20 +631,26 @@ class SilenceGap {
 }
 
 // ============================================================================
-// Audio Chunker (combines parser + silence detector + splitter)
+// Audio Chunker (smart silence-based splitting)
 // ============================================================================
 
 /// Splits a PCM WAV file into chunks suitable for ASR transcription.
 ///
-/// The chunking strategy:
-/// 1. Parse WAV header to get sample rate, channels, data offset
+/// The smart chunking strategy:
+/// 1. Parse WAV header → sample rate, channels, data offset
 /// 2. Convert PCM to float samples
-/// 3. Detect silence gaps using RMS energy
-/// 4. Split at silence gap midpoints
-/// 5. If any resulting chunk exceeds [AudioChunkConfig.maxChunkBytes],
-///    sub-split it at regular intervals (no silence detection needed —
-///    the chunk is homogenous audio).
-/// 6. Each chunk is a complete valid WAV file (with RIFF header)
+/// 3. Analyze audio environment (noise floor, dynamic range, gap density)
+/// 4. Adjust thresholds dynamically based on environment
+/// 5. Detect silence gaps with quality metrics (depth, average level)
+/// 6. Convert gaps to candidate cut points with multi-factor scoring:
+///    - Silence duration (longer is better)
+///    - Silence depth / confidence
+///    - Proximity to target chunk duration
+///    - Transition quality (clean drop/rise)
+///    - Sentence-boundary likelihood (energy decline pattern)
+/// 7. Greedy selection: in range [minChunk, maxChunk], pick best candidate
+/// 8. If no candidate: force-cut at maxChunkDuration boundary (nearest energy valley)
+/// 9. Output strictly NON-overlapping chunks as valid WAV files
 class AudioChunker {
   final AudioChunkConfig config;
 
@@ -373,8 +670,10 @@ class AudioChunker {
     }
   }
 
-  /// Split a WAV file into chunks using silence detection.
-  /// Falls back to fixed-size splitting if no silence is detected.
+  /// Split a WAV file into chunks using smart silence-based detection.
+  ///
+  /// Uses environmental analysis + candidate scoring + greedy selection.
+  /// Falls back to forced chunking if no silence candidates are available.
   List<Uint8List> split(Uint8List wavBytes) {
     // Step 1: Parse header
     final info = parseWavHeader(wavBytes);
@@ -382,85 +681,386 @@ class AudioChunker {
     // Step 2: Read PCM as float
     final samples = readPcmSamplesFloat(wavBytes, info);
 
-    // Step 3: Find silence gaps
+    // Step 3: Environment analysis → dynamic parameters
+    final envAnalyzer = EnvironmentAnalyzer(
+      frameSize: config.frameSize,
+      silenceDbThreshold: config.silenceDbThreshold,
+    );
+    final env = envAnalyzer.analyze(samples, info.sampleRate);
+    final adjustedMinSilenceS =
+        envAnalyzer.adjustMinSilenceMs(env, config.minSilenceDuration * 1000) /
+            1000.0;
+    final adjustedDbThreshold =
+        envAnalyzer.adjustSilenceDbThreshold(env, config.silenceDbThreshold);
+
+    // Step 4: Detect silence gaps with full quality metrics
     final detector = SilenceDetector(config);
-    final silenceGaps = detector.detect(samples, info.sampleRate);
+    final allGaps = detector.detectGaps(
+      samples,
+      info.sampleRate,
+      dbThreshold: adjustedDbThreshold,
+      minSilenceSec: adjustedMinSilenceS,
+    );
 
-    // Step 4: Build cut points from silence gaps + file boundaries
-    final cutSamples = <int>[0];
-    for (final gap in silenceGaps) {
-      cutSamples.add(gap.midSample);
-    }
-    cutSamples.add(info.totalSamples);
+    // Step 5: Build candidate cut points from gaps
+    // Pass the environment-adjusted threshold so confidence scoring reflects
+    // the actual detection conditions, not the base default.
+    final candidates = _buildCandidates(
+        allGaps, samples, info.sampleRate, adjustedDbThreshold);
 
-    // Step 5: Convert cut samples to byte offsets, apply overlap
-    final overlapSamples = (config.overlapSeconds * info.sampleRate).round();
+    // Step 6: Greedy cut selection
+    final totalSamples = info.totalSamples;
+    final minChunkSamples =
+        (config.minChunkDuration * info.sampleRate).round();
+    final targetChunkSamples =
+        (config.targetChunkDuration * info.sampleRate).round();
+    final maxChunkSamples =
+        (config.maxChunkDuration * info.sampleRate).round();
+
+    final selectedCuts = _selectCutPoints(
+      candidates,
+      totalSamples: totalSamples,
+      minChunkSamples: minChunkSamples,
+      targetChunkSamples: targetChunkSamples,
+      maxChunkSamples: maxChunkSamples,
+      sampleRate: info.sampleRate,
+    );
+
+    // Step 7: Convert cut samples to byte offsets (NO overlap)
     final pcmDataOffset = info.dataOffset;
     final bpf = info.bytesPerFrame;
 
     final byteCuts = <int>[];
-    for (final sample in cutSamples) {
+    for (final sample in selectedCuts) {
       int byte = pcmDataOffset + (sample * bpf);
       byte = byte.clamp(pcmDataOffset, pcmDataOffset + info.dataSize);
       byteCuts.add(byte);
     }
 
-    // Step 6: Build chunks, enforcing max size
-    final rawChunks = <_RawChunk>[];
+    // Step 8: Build chunks from byte ranges, enforcing maxChunkBytes
+    final chunks = <Uint8List>[];
     for (int i = 0; i < byteCuts.length - 1; i++) {
-      int start = byteCuts[i];
-      int end = byteCuts[i + 1];
-
-      // Apply overlap: expand backward for non-first chunks
-      if (i > 0) {
-        start = (start - overlapSamples * bpf)
-            .clamp(pcmDataOffset, pcmDataOffset + info.dataSize);
-      }
-      // Apply overlap: expand forward for non-last chunks
-      if (i < byteCuts.length - 2) {
-        end = (end + overlapSamples * bpf)
-            .clamp(pcmDataOffset, pcmDataOffset + info.dataSize);
-      }
-
+      final start = byteCuts[i];
+      final end = byteCuts[i + 1];
       if (end <= start) continue;
 
-      // Sub-split if too large
       final chunkBytes = end - start;
       if (chunkBytes <= config.maxChunkBytes) {
-        rawChunks.add(_RawChunk(
-            start,
-            end,
-            (start - pcmDataOffset) ~/ bpf / info.sampleRate,
-            (end - pcmDataOffset) ~/ bpf / info.sampleRate));
+        chunks.add(_writeWavChunk(
+            wavBytes, info, start - pcmDataOffset, end - pcmDataOffset));
       } else {
-        // Evenly split into sub-chunks
+        // Sub-split to stay under maxChunkBytes
         final numParts = (chunkBytes / config.maxChunkBytes).ceil();
         for (int p = 0; p < numParts; p++) {
           final subStart = start + (chunkBytes * p) ~/ numParts;
           final subEnd = start + (chunkBytes * (p + 1)) ~/ numParts;
           if (subEnd > subStart) {
-            rawChunks.add(_RawChunk(
-                subStart,
-                subEnd,
-                (subStart - pcmDataOffset) ~/ bpf / info.sampleRate,
-                (subEnd - pcmDataOffset) ~/ bpf / info.sampleRate));
+            chunks.add(_writeWavChunk(wavBytes, info,
+                subStart - pcmDataOffset, subEnd - pcmDataOffset));
           }
         }
       }
     }
 
-    // Step 7: Write each chunk as a valid WAV file
-    return rawChunks
-        .map((rc) => _writeWavChunk(
-              wavBytes,
-              info,
-              rc.startByte - pcmDataOffset,
-              rc.endByte - pcmDataOffset,
-            ))
-        .toList();
+    return chunks;
+  }
+
+  /// Build [CandidateCut] objects from detected gaps with quality metrics.
+  /// [adjustedDbThreshold] is the environment-adjusted silence dB threshold
+  /// used during actual gap detection — confidence is computed relative to this.
+  List<CandidateCut> _buildCandidates(
+    List<_DetectedGap> gaps,
+    Float64List samples,
+    int sampleRate,
+    double adjustedDbThreshold,
+  ) {
+    final frameSize = config.frameSize;
+    final candidates = <CandidateCut>[];
+
+    for (final gap in gaps) {
+      // 1. Silence confidence: based on how deep the silence is relative to
+      // the threshold that was actually used for detection (environment-adjusted).
+      final depthBelowThreshold = adjustedDbThreshold - gap.minDb;
+      // Normalize: 6dB below threshold = 0.5, 20dB below = 1.0
+      final silenceConf = (depthBelowThreshold / 20.0).clamp(0.0, 1.0);
+
+      // 2. Transition quality: energy drop before and after the gap
+      final transition = _computeTransitionQuality(
+          samples, gap.startSample, gap.endSample, frameSize);
+
+      // 3. Sentence-end likelihood: energy decline pattern before gap
+      final sentenceEnd = _computeSentenceEndLikelihood(
+          samples, gap.startSample, frameSize, sampleRate);
+
+      candidates.add(CandidateCut(
+        samplePosition: gap.midSample,
+        silenceDuration: gap.durationSeconds,
+        silenceConfidence: silenceConf,
+        transitionQuality: transition,
+        sentenceEndLikelihood: sentenceEnd,
+      ));
+    }
+
+    return candidates;
+  }
+
+  /// Compute how clean the energy transition is at a silence gap boundary.
+  ///
+  /// Looks at the energy envelope before and after the gap:
+  /// - A clean transition: energy drops significantly before gap, rises after
+  /// - A noisy transition: energy fluctuates on either side
+  double _computeTransitionQuality(
+    Float64List samples,
+    int gapStartSample,
+    int gapEndSample,
+    int frameSize,
+  ) {
+    // Look at frames before the gap (pre-gap energy)
+    double preGapMax = 0;
+    final preStart = (gapStartSample - frameSize * 3).clamp(0, gapStartSample);
+    final preEnd = gapStartSample;
+    for (int i = preStart; i < preEnd; i++) {
+      final absVal = samples[i].abs();
+      if (absVal > preGapMax) preGapMax = absVal;
+    }
+
+    // Look at frames after the gap (post-gap energy)
+    double postGapMax = 0;
+    final postStart = gapEndSample;
+    final postEnd = (gapEndSample + frameSize * 3).clamp(0, samples.length);
+    for (int i = postStart; i < postEnd; i++) {
+      final absVal = samples[i].abs();
+      if (absVal > postGapMax) postGapMax = absVal;
+    }
+
+    // A good transition: pre-gap energy is meaningful, gap is deep,
+    // post-gap energy resumes cleanly.
+    // Score based on pre/post energy ratio (should be balanced)
+    final preDb = preGapMax > 1e-6 ? 20 * log(preGapMax) / ln10 : -100;
+    final postDb = postGapMax > 1e-6 ? 20 * log(postGapMax) / ln10 : -100;
+
+    // How similar are pre and post levels? Similar = natural sentence boundary.
+    final levelDiff = (preDb - postDb).abs();
+    final levelScore = (1.0 - (levelDiff / 30.0)).clamp(0.0, 1.0);
+
+    return levelScore;
+  }
+
+  /// Estimate whether the energy decline before a gap looks like a sentence end.
+  ///
+  /// A sentence end typically shows a gradual energy decline over ~1-2 seconds
+  /// rather than an abrupt drop (which would indicate an interruption).
+  double _computeSentenceEndLikelihood(
+    Float64List samples,
+    int gapStartSample,
+    int frameSize,
+    int sampleRate,
+  ) {
+    // Look at ~1.5 seconds before the gap
+    final windowFrames = (1.5 * sampleRate / frameSize).round().clamp(3, 30);
+    final frames = <double>[];
+    for (int f = 0; f < windowFrames; f++) {
+      final start = (gapStartSample - (windowFrames - f) * frameSize)
+          .clamp(0, samples.length);
+      final end = (start + frameSize).clamp(0, samples.length);
+      double sumAbs = 0;
+      for (int i = start; i < end; i++) {
+        sumAbs += samples[i].abs();
+      }
+      frames.add(sumAbs / (end - start));
+    }
+
+    if (frames.length < 3) return 0.5;
+
+    // Check if energy is declining (first half > second half)
+    final midpoint = frames.length ~/ 2;
+    double firstHalf = 0, secondHalf = 0;
+    for (int i = 0; i < midpoint; i++) {
+      firstHalf += frames[i];
+    }
+    for (int i = midpoint; i < frames.length; i++) {
+      secondHalf += frames[i];
+    }
+    firstHalf /= midpoint;
+    secondHalf /= (frames.length - midpoint);
+
+    if (firstHalf <= 0) return 0.5;
+
+    // decline ratio: 1.0 = complete silence, 0.5 = no change, <0.5 = rising
+    final declineRatio = (firstHalf - secondHalf) / firstHalf;
+    // Map: declineRatio 0 → 0.3, declineRatio 0.5 → 0.8, declineRatio 1.0 → 1.0
+    return (0.3 + declineRatio * 1.4).clamp(0.0, 1.0);
+  }
+
+  /// Greedy select cut points that produce chunks within
+  /// [minChunkSamples..maxChunkSamples], preferring cuts near
+  /// [targetChunkSamples].
+  ///
+  /// Algorithm:
+  /// 1. Start at position 0
+  /// 2. Search forward for candidates in [minChunk, maxChunk] range
+  /// 3. Score each candidate dynamically (position-dependent, since target
+  ///    proximity is relative to the current position)
+  /// 4. Pick the highest-scoring candidate
+  /// 5. If no candidate in range: force-cut at maxChunk or at the
+  ///    nearest energy valley
+  /// 6. Repeat until end of audio
+  List<int> _selectCutPoints(
+    List<CandidateCut> candidates, {
+    required int totalSamples,
+    required int minChunkSamples,
+    required int targetChunkSamples,
+    required int maxChunkSamples,
+    required int sampleRate,
+  }) {
+    final cuts = <int>[0];
+
+    // Early return only if audio is too short to warrant any chunking at all.
+    if (totalSamples <= minChunkSamples) {
+      cuts.add(totalSamples);
+      return cuts;
+    }
+
+    int currentSample = 0;
+
+    while (currentSample + minChunkSamples < totalSamples) {
+      final searchEnd = (currentSample + maxChunkSamples).clamp(0, totalSamples);
+      final searchStart = currentSample + minChunkSamples;
+
+      // Find candidates in the search range
+      final inRange = candidates.where((c) =>
+          c.samplePosition >= searchStart &&
+          c.samplePosition <= searchEnd).toList();
+
+      if (inRange.isEmpty) {
+        // ── No candidate in range — force-cut ──
+        if (searchEnd >= totalSamples) {
+          break; // rest is the final chunk
+        }
+
+        // Find the nearest candidate to maxChunk boundary
+        // or force-cut at maxChunk position
+        final forcePos = _findForceCutPosition(
+          candidates,
+          currentSample + maxChunkSamples,
+          totalSamples,
+          sampleRate,
+        );
+        cuts.add(forcePos);
+        currentSample = forcePos;
+        continue;
+      }
+
+      // ── Score each candidate dynamically ──
+      CandidateCut? best;
+      double bestScore = -1;
+
+      for (final c in inRange) {
+        final score = _scoreCandidate(c, currentSample, targetChunkSamples,
+            minChunkSamples, maxChunkSamples, sampleRate);
+        c.totalScore = score;
+        if (score > bestScore) {
+          bestScore = score;
+          best = c;
+        }
+      }
+
+      // Even the best might be poor — if below a quality floor, consider
+      // whether we should continue searching or force-cut.
+      if (best == null || bestScore < 0.15) {
+        // Quality too low: force-cut at max boundary
+        final forcePos = _findForceCutPosition(
+          candidates,
+          currentSample + maxChunkSamples,
+          totalSamples,
+          sampleRate,
+        );
+        cuts.add(forcePos);
+        currentSample = forcePos;
+      } else {
+        cuts.add(best.samplePosition);
+        currentSample = best.samplePosition;
+      }
+    }
+
+    cuts.add(totalSamples);
+    return cuts;
+  }
+
+  /// Score a candidate cut point considering its position relative to current position.
+  double _scoreCandidate(
+    CandidateCut c,
+    int currentSample,
+    int targetChunkSamples,
+    int minChunkSamples,
+    int maxChunkSamples,
+    int sampleRate,
+  ) {
+    final chunkSamples = c.samplePosition - currentSample;
+
+    // 1. Silence quality (35%)
+    final silenceScore = _silenceQualityScore(c);
+
+    // 2. Target proximity (25%) — Gaussian around target
+    final sigma = targetChunkSamples * 0.3;
+    final diff = (chunkSamples - targetChunkSamples).toDouble();
+    final targetScore = exp(-(diff * diff) / (2 * sigma * sigma));
+
+    // 3. VAD / silence confidence (25%)
+    final vadScore = c.silenceConfidence;
+
+    // 4. Transition quality (10%)
+    final transitionScore = c.transitionQuality;
+
+    // 5. Sentence boundary (5%)
+    final sentenceScore = c.sentenceEndLikelihood;
+
+    return silenceScore * 0.35 +
+        targetScore * 0.25 +
+        vadScore * 0.25 +
+        transitionScore * 0.10 +
+        sentenceScore * 0.05;
+  }
+
+  /// Score based on silence duration — logarithmic, saturates at ~4× minSilence.
+  double _silenceQualityScore(CandidateCut c) {
+    final ratio = c.silenceDuration / config.minSilenceDuration.clamp(0.1, 10);
+    // log base 4: at 1× → 0.5, at 4× → 1.0
+    return (log(ratio + 1) / log(5)).clamp(0.0, 1.0);
+  }
+
+  /// Find a forced cut position near [preferredPos].
+  ///
+  /// If there's a candidate within a small window around preferredPos,
+  /// use it. Otherwise, hard-cut at preferredPos (or totalSamples if past end).
+  int _findForceCutPosition(
+    List<CandidateCut> candidates,
+    int preferredPos,
+    int totalSamples,
+    int sampleRate,
+  ) {
+    if (preferredPos >= totalSamples) return totalSamples;
+
+    // Search for candidates within ±3s of preferredPos
+    final windowSamples = (3 * sampleRate).round();
+    CandidateCut? nearest;
+    int nearestDist = windowSamples + 1;
+
+    for (final c in candidates) {
+      final dist = (c.samplePosition - preferredPos).abs();
+      if (dist < nearestDist && dist <= windowSamples) {
+        nearest = c;
+        nearestDist = dist;
+      }
+    }
+
+    if (nearest != null) return nearest.samplePosition;
+
+    return preferredPos.clamp(0, totalSamples);
   }
 
   /// Split WAV into chunks of fixed [config.fixedDurationSeconds] seconds.
+  /// No overlap — chunks are strictly consecutive.
   List<Uint8List> splitByDuration(Uint8List wavBytes) {
     final info = parseWavHeader(wavBytes);
     final samplesPerChunk =
@@ -475,27 +1075,21 @@ class AudioChunker {
       int endSample = (startSample + samplesPerChunk).clamp(0, totalSamples);
       if (endSample <= startSample) break;
 
-      // Apply overlap
-      final overlapSamples = (config.overlapSeconds * info.sampleRate).round();
-      int adjStart = (startSample - (startSample > 0 ? overlapSamples : 0))
-          .clamp(0, totalSamples);
-      int adjEnd = (endSample + (endSample < totalSamples ? overlapSamples : 0))
-          .clamp(0, totalSamples);
-
-      // Also enforce maxChunkBytes — sub-split if needed
-      final adjBytes = (adjEnd - adjStart) * bpf;
+      final adjBytes = (endSample - startSample) * bpf;
       if (adjBytes <= config.maxChunkBytes) {
-        chunks
-            .add(_writeWavChunk(wavBytes, info, adjStart * bpf, adjEnd * bpf));
+        chunks.add(
+            _writeWavChunk(wavBytes, info, startSample * bpf, endSample * bpf));
       } else {
-        // Sub-split evenly
+        // Sub-split evenly to stay within maxChunkBytes
         final numParts = (adjBytes / config.maxChunkBytes).ceil();
         for (int p = 0; p < numParts; p++) {
-          final subStart = adjStart + ((adjEnd - adjStart) * p) ~/ numParts;
-          final subEnd = adjStart + ((adjEnd - adjStart) * (p + 1)) ~/ numParts;
+          final subStart =
+              startSample + ((endSample - startSample) * p) ~/ numParts;
+          final subEnd =
+              startSample + ((endSample - startSample) * (p + 1)) ~/ numParts;
           if (subEnd > subStart) {
-            chunks.add(
-                _writeWavChunk(wavBytes, info, subStart * bpf, subEnd * bpf));
+            chunks.add(_writeWavChunk(
+                wavBytes, info, subStart * bpf, subEnd * bpf));
           }
         }
       }
@@ -505,16 +1099,14 @@ class AudioChunker {
   }
 
   /// Split WAV into chunks that stay under [config.maxChunkBytes].
-  /// Simple byte-count splitting — no silence awareness.
+  /// Simple byte-count splitting — no silence awareness, no overlap.
   List<Uint8List> splitBySize(Uint8List wavBytes) {
     final info = parseWavHeader(wavBytes);
     final bpf = info.bytesPerFrame;
     final totalSamples = info.totalSamples;
     final chunks = <Uint8List>[];
 
-    // Determine chunk size in bytes (leave room for WAV header ~44 bytes)
-    final targetChunkBytes = config.maxChunkBytes;
-    final chunkSamples = (targetChunkBytes ~/ bpf);
+    final chunkSamples = (config.maxChunkBytes ~/ bpf).clamp(1, totalSamples);
 
     for (int startSample = 0;
         startSample < totalSamples;
@@ -522,27 +1114,12 @@ class AudioChunker {
       int endSample = (startSample + chunkSamples).clamp(0, totalSamples);
       if (endSample <= startSample) break;
 
-      final overlapSamples = (config.overlapSeconds * info.sampleRate).round();
-      int adjStart = (startSample - (startSample > 0 ? overlapSamples : 0))
-          .clamp(0, totalSamples);
-      int adjEnd = (endSample + (endSample < totalSamples ? overlapSamples : 0))
-          .clamp(0, totalSamples);
-
-      chunks.add(_writeWavChunk(wavBytes, info, adjStart * bpf, adjEnd * bpf));
+      chunks.add(
+          _writeWavChunk(wavBytes, info, startSample * bpf, endSample * bpf));
     }
 
     return chunks;
   }
-}
-
-class _RawChunk {
-  final int startByte;
-  final int endByte;
-  final double startSecond;
-  final double endSecond;
-
-  const _RawChunk(
-      this.startByte, this.endByte, this.startSecond, this.endSecond);
 }
 
 // ============================================================================

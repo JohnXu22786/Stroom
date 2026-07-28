@@ -1105,7 +1105,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
             ),
             const SizedBox(height: 6),
             Text(
-              '超过大小限制时自动切片后分别转写。',
+              '智能裁切：分析音频环境、候选切点评分、句末优先。不重叠输出。',
               style: TextStyle(
                 fontSize: 13,
                 color: cs.onSurfaceVariant,
@@ -1142,7 +1142,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                         ),
                         DropdownMenuItem(
                           value: 'silence',
-                          child: Text('静音检测切块（推荐）',
+                          child: Text('智能裁切（推荐）',
                               style: TextStyle(
                                   fontSize: 13, fontWeight: FontWeight.w600)),
                         ),
@@ -1960,7 +1960,9 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   String _chunkingDescription() {
     switch (_chunking) {
       case 'silence':
-        return 'RMS 能量检测静音区间，在静音中点切块。最智能，不截断语句。';
+        return '智能分析音频环境 + 候选切点评分。'
+            '优先在句末/长静音处切，不重叠输出。'
+            '默认 20s min / 45s target / 60s max。';
       case 'fixedDuration':
         return '每 N 秒切一块（默认 60 秒）。简单直接，可能截断语句。';
       case 'fixedSize':
