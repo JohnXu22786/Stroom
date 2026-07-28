@@ -3,34 +3,38 @@ import '../models/tool_call.dart';
 
 /// The ID of the message currently being streamed. Survives page disposal
 /// so the page can reconnect to the active stream when navigated back to.
-final streamingMsgIdProvider = StateProvider<String?>((ref) => null);
+final streamingMsgIdProvider =
+    StateProvider.family<String?, String>((ref, convId) => null);
 
 /// The full accumulated reply text during streaming. Persists across page
 /// lifecycle so the partial result is visible when returning to the page.
-final streamingFullReplyProvider = StateProvider<String>((ref) => '');
+final streamingFullReplyProvider =
+    StateProvider.family<String, String>((ref, convId) => '');
 
 /// Whether at least one token has been received from the AI. Used to show
 /// JumpingDots (waiting) vs. streaming text on page re-entry.
-final streamingHasFirstTokenProvider = StateProvider<bool>((ref) => false);
+final streamingHasFirstTokenProvider =
+    StateProvider.family<bool, String>((ref, convId) => false);
 
 /// The reasoning content accumulated during streaming for the current
 /// (most recent) reasoning section. Persists across page lifecycle so
 /// the reasoning section is visible when returning to the page.
-final streamingReasoningProvider = StateProvider<String>((ref) => '');
+final streamingReasoningProvider =
+    StateProvider.family<String, String>((ref, convId) => '');
 
 /// All reasoning sections accumulated during streaming. Each entry is a
 /// completed or in-progress reasoning chain. Used to display multiple
 /// reasoning buttons when there are multi-step tool call rounds.
 /// The last entry is the currently active section (if streaming).
 final streamingReasoningSectionsProvider =
-    StateProvider<List<String>>((ref) => []);
+    StateProvider.family<List<String>, String>((ref, convId) => []);
 
 /// Tool call data for the currently streaming message. Each entry is a
 /// [ToolCallData] with its current status (running, completed, or error).
 /// Persists across page lifecycle so tool call cards are visible when
 /// returning to the page.
 final streamingToolCallsProvider =
-    StateProvider<List<ToolCallData>>((ref) => []);
+    StateProvider.family<List<ToolCallData>, String>((ref, convId) => []);
 
 /// Per-round text chunks for the currently streaming message.
 /// Mirrors [ChatMessage.textSections]: each entry is the assistant's
@@ -39,14 +43,14 @@ final streamingToolCallsProvider =
 /// blocks during live streaming. The last entry is the currently growing
 /// chunk.
 final streamingTextSectionsProvider =
-    StateProvider<List<String>>((ref) => ['']);
+    StateProvider.family<List<String>, String>((ref, convId) => ['']);
 
 /// Round boundary indices for tool calls during streaming.
 /// Each entry is an index into [streamingToolCallsProvider] where a new
 /// assistant step begins. Used by [buildAgentChainSegments] to correctly
 /// group consecutive tool calls that belong to the same step.
 final streamingToolCallRoundStartsProvider =
-    StateProvider<List<int>>((ref) => []);
+    StateProvider.family<List<int>, String>((ref, convId) => []);
 
 /// The set of conversation IDs that currently have an active stream.
 ///
@@ -59,8 +63,8 @@ final streamingToolCallRoundStartsProvider =
 /// 2. Drive the send/stop button state per-conversation (the button shows
 ///    "stop" only when the current conversation is in this set).
 ///
-/// This is decoupled from [isStreamingProvider] (which reflects only the
-/// single active conversation's state) so that completion detection works
-/// even when the active conversation has changed.
+/// This is decoupled from [isStreamingProvider] (a per-conversation family)
+/// so that completion detection works even when the active conversation has
+/// changed.
 final streamingConversationsProvider =
     StateProvider<Set<String>>((ref) => <String>{});

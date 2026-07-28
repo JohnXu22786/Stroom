@@ -152,9 +152,6 @@ class ChatStreamManager {
   // ── Per-conversation stream states ──
   final Map<String, _ConversationStreamState> _streams = {};
 
-  /// The conversation whose state is currently pushed to providers.
-  String? _activeConvId;
-
   // ── Throttle constants ──
   static const Duration _textThrottle = Duration(milliseconds: 200); // 5次/秒
   static const Duration _reasoningThrottle = Duration(milliseconds: 200);
@@ -174,45 +171,62 @@ class ChatStreamManager {
   /// Whether ANY conversation is currently streaming.
   bool get isStreaming => _streams.isNotEmpty;
 
-  /// The currently active conversation ID (the one whose data is in providers).
-  String? get activeStreamingConvId => _activeConvId;
+  /// Returns the first active streaming conversation ID, or null if none.
+  /// (Legacy getter; with family providers, _activeConvId no longer exists.)
+  String? get activeStreamingConvId =>
+      _streams.isNotEmpty ? _streams.keys.first : null;
 
-  // ── Legacy getters (operate on the active conversation) ──
+  // ── Legacy getters (operate on the first active conversation) ──
 
-  /// The streaming conversation ID for the active conversation.
-  String? get streamingConvId => _activeConvId;
+  /// The streaming conversation ID (first active).
+  String? get streamingConvId => activeStreamingConvId;
 
-  /// The streaming message ID for the active conversation.
-  String? get streamingMsgId =>
-      _activeConvId != null ? _streams[_activeConvId]?.streamingMsgId : null;
+  /// The streaming message ID for the first active conversation.
+  String? get streamingMsgId {
+    final first = activeStreamingConvId;
+    return first != null ? _streams[first]?.streamingMsgId : null;
+  }
 
-  /// The full reply for the active conversation.
-  String get fullReply =>
-      _activeConvId != null ? (_streams[_activeConvId]?.fullReply ?? '') : '';
+  /// The full reply for the first active conversation.
+  String get fullReply {
+    final first = activeStreamingConvId;
+    return first != null ? (_streams[first]?.fullReply ?? '') : '';
+  }
 
-  /// The reasoning buffer for the active conversation.
-  String get reasoningBuffer => _activeConvId != null
-      ? (_streams[_activeConvId]?.reasoningBuffer ?? '')
-      : '';
+  /// The reasoning buffer for the first active conversation.
+  String get reasoningBuffer {
+    final first = activeStreamingConvId;
+    return first != null ? (_streams[first]?.reasoningBuffer ?? '') : '';
+  }
 
-  /// Reasoning sections for the active conversation.
-  List<String> get reasoningSections => _activeConvId != null
-      ? List.unmodifiable(_streams[_activeConvId]?.reasoningSections ?? [])
-      : const [];
+  /// Reasoning sections for the first active conversation.
+  List<String> get reasoningSections {
+    final first = activeStreamingConvId;
+    return first != null
+        ? List.unmodifiable(_streams[first]?.reasoningSections ?? [])
+        : const [];
+  }
 
-  /// Tool calls for the active conversation.
-  List<ToolCallData> get toolCalls => _activeConvId != null
-      ? List.unmodifiable(_streams[_activeConvId]?.toolCalls ?? [])
-      : const [];
+  /// Tool calls for the first active conversation.
+  List<ToolCallData> get toolCalls {
+    final first = activeStreamingConvId;
+    return first != null
+        ? List.unmodifiable(_streams[first]?.toolCalls ?? [])
+        : const [];
+  }
 
-  /// Message history for the active conversation.
-  List<ChatMessage> get history => _activeConvId != null
-      ? List.unmodifiable(_streams[_activeConvId]?.history ?? [])
-      : const [];
+  /// Message history for the first active conversation.
+  List<ChatMessage> get history {
+    final first = activeStreamingConvId;
+    return first != null
+        ? List.unmodifiable(_streams[first]?.history ?? [])
+        : const [];
+  }
 
-  bool get hasReceivedFirstToken =>
-      _activeConvId != null &&
-      (_streams[_activeConvId]?.hasReceivedFirstToken ?? false);
+  bool get hasReceivedFirstToken {
+    final first = activeStreamingConvId;
+    return first != null && (_streams[first]?.hasReceivedFirstToken ?? false);
+  }
 
   // ── Per-conversation queries ──
 
@@ -237,6 +251,18 @@ class ChatStreamManager {
   List<ToolCallData> toolCallsFor(String convId) =>
       List.unmodifiable(_streams[convId]?.toolCalls ?? []);
 
+  /// Whether the first token has been received for a specific conversation.
+  bool hasFirstTokenFor(String convId) =>
+      _streams[convId]?.hasReceivedFirstToken ?? false;
+
+  /// Text chunks for a specific conversation.
+  List<String> textChunksFor(String convId) =>
+      List.unmodifiable(_streams[convId]?.textChunks ?? []);
+
+  /// Tool call round starts for a specific conversation.
+  List<int> toolCallRoundStartsFor(String convId) =>
+      List.unmodifiable(_streams[convId]?.toolCallRoundStarts ?? []);
+
   // ── Provider 更新辅助 ──
 
   void _setProvider<T>(StateProvider<T> provider, T value) {
@@ -246,27 +272,15 @@ class ChatStreamManager {
 
   // ── 公共 API ──
 
-  /// Sets the active conversation for provider output.
-  ///
-  /// When the user switches conversations in the chat page, call this to
-  /// ensure the global providers reflect the newly selected conversation's
-  /// streaming state (if any).
+  /// Pushes the streaming state of [convId] to its per-conversation
+  /// family provider instances. If the conversation has no active stream,
+  /// clears the provider for this conversation.
   void activateConversation(String convId) {
-    if (_activeConvId == convId) {
-      debugPrint(
-          '[ChatStreamManager] activateConversation: early-return, _activeConvId=$convId already active');
-      return;
-    }
-    _activeConvId = convId;
     final state = _streams[convId];
     if (state != null) {
-      debugPrint(
-          '[ChatStreamManager] activateConversation: set _activeConvId=$convId, pushing state to providers');
       _pushStateToProviders(state);
     } else {
-      debugPrint(
-          '[ChatStreamManager] activateConversation: convId=$convId has no active stream, clearing providers');
-      _clearProviders();
+      _clearProvidersFor(convId);
     }
   }
 
@@ -319,11 +333,8 @@ class ChatStreamManager {
       convId
     });
 
-    // If no active conversation yet, set this one as active
-    if (_activeConvId == null || _activeConvId == convId) {
-      _activeConvId = convId;
-      _pushStateToProviders(state);
-    }
+    // Push initial state to this conversation's family providers
+    _pushStateToProviders(state);
 
     // Start periodic persistence timer
     state.persistTimer = Timer.periodic(_persistInterval, (_) {
@@ -362,7 +373,7 @@ class ChatStreamManager {
           case TextEvent e:
             if (!state.hasReceivedFirstToken) {
               state.hasReceivedFirstToken = true;
-              _maybeSetProvider(convId, streamingHasFirstTokenProvider, true);
+              _pushToProvider(convId, streamingHasFirstTokenProvider, true);
             }
             state.fullReply += e.text;
             state.textChunks[state.textChunks.length - 1] += e.text;
@@ -373,9 +384,9 @@ class ChatStreamManager {
               // Set textSections first (no listener) so that when
               // fullReply fires its listener and reads streamingTextSectionsProvider
               // inside _rebuildLiveSegments, it sees the already-updated value.
-              _maybeSetProvider(convId, streamingTextSectionsProvider,
+              _pushToProvider(convId, streamingTextSectionsProvider,
                   List<String>.from(state.textChunks));
-              _maybeSetProvider(
+              _pushToProvider(
                   convId, streamingFullReplyProvider, state.fullReply);
             }
 
@@ -393,9 +404,9 @@ class ChatStreamManager {
             if (now.difference(state.lastReasoningUpdate) >=
                 _reasoningThrottle) {
               state.lastReasoningUpdate = now;
-              _maybeSetProvider(
+              _pushToProvider(
                   convId, streamingReasoningProvider, state.reasoningBuffer);
-              _maybeSetProvider(
+              _pushToProvider(
                   convId, streamingReasoningSectionsProvider, sections);
             }
 
@@ -404,7 +415,7 @@ class ChatStreamManager {
             sections.add('');
             state.reasoningSections = sections;
             state.reasoningBuffer = ''; // Reset for new reasoning section
-            _maybeSetProvider(
+            _pushToProvider(
                 convId, streamingReasoningSectionsProvider, sections);
 
           case ToolCallStartEvent e:
@@ -429,11 +440,11 @@ class ChatStreamManager {
             }
             // Set textSections first (no listener) so that when
             // toolCalls fires its listener, it reads the updated value.
-            _maybeSetProvider(convId, streamingTextSectionsProvider,
+            _pushToProvider(convId, streamingTextSectionsProvider,
                 List<String>.from(state.textChunks));
-            _maybeSetProvider(convId, streamingToolCallsProvider,
+            _pushToProvider(convId, streamingToolCallsProvider,
                 List<ToolCallData>.from(state.toolCalls));
-            _maybeSetProvider(convId, streamingToolCallRoundStartsProvider,
+            _pushToProvider(convId, streamingToolCallRoundStartsProvider,
                 List<int>.from(state.toolCallRoundStarts));
 
           case ToolCallCompleteEvent e:
@@ -456,7 +467,7 @@ class ChatStreamManager {
                 break;
               }
             }
-            _maybeSetProvider(convId, streamingToolCallsProvider,
+            _pushToProvider(convId, streamingToolCallsProvider,
                 List<ToolCallData>.from(state.toolCalls));
         }
       }
@@ -470,11 +481,11 @@ class ChatStreamManager {
           // Best effort: logging failure should not prevent cleanup
         }
         state.fullReply = '错误: ${e.toString()}';
-        _maybeSetProvider(convId, streamingTextSectionsProvider,
+        _pushToProvider(convId, streamingTextSectionsProvider,
             List<String>.from(state.textChunks));
-        _maybeSetProvider(convId, streamingFullReplyProvider, state.fullReply);
+        _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);
         state.toolCalls.clear();
-        _maybeSetProvider(convId, streamingToolCallsProvider, []);
+        _pushToProvider(convId, streamingToolCallsProvider, []);
       }
     } finally {
       // Stop periodic persistence
@@ -485,9 +496,9 @@ class ChatStreamManager {
       // Set textSections first (no listener) so that when
       // fullReply fires its listener and reads streamingTextSectionsProvider
       // inside _rebuildLiveSegments, it sees the already-updated value.
-      _maybeSetProvider(convId, streamingTextSectionsProvider,
+      _pushToProvider(convId, streamingTextSectionsProvider,
           List<String>.from(state.textChunks));
-      _maybeSetProvider(convId, streamingFullReplyProvider, state.fullReply);
+      _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);
 
       // Capture request/response raw data from the ChatService instance
       // that was active when this stream started (snapped above). Using
@@ -609,12 +620,12 @@ class ChatStreamManager {
     // in a disposed widget and the clearing doesn't happen — leaving the
     // send/stop button stuck on "Stop" after re-entry. Clearing here is a
     // safety net that doesn't affect segment data.
-    _setProvider(isStreamingProvider, false);
+    _setProvider(isStreamingProvider(convId), false);
     // Also clear these non-segment-affecting providers to prevent stale
     // references after page disposal.
-    _setProvider(streamingMsgIdProvider, null);
-    _setProvider(streamingHasFirstTokenProvider, false);
-    _setProvider(streamingReasoningProvider, '');
+    _setProvider(streamingMsgIdProvider(convId), null);
+    _setProvider(streamingHasFirstTokenProvider(convId), false);
+    _setProvider(streamingReasoningProvider(convId), '');
 
     // Remove this conversation from the streaming set. The page watches
     // this provider to detect completion and run cleanup + DB reload.
@@ -633,7 +644,6 @@ class ChatStreamManager {
     // with empty data, overwriting the correct segments (including reasoning
     // with isStreaming=true that should have been replaced by
     // _buildFinalSegments with isStreaming=false).
-    _activeConvId = null;
 
     return result;
   }
@@ -660,54 +670,52 @@ class ChatStreamManager {
       s.persistTimer = null;
     }
     _streams.clear();
-    _activeConvId = null;
     _setProvider(streamingConversationsProvider, <String>{});
     _adapter.dispose();
   }
 
   // ── 私有方法 ──
 
-  /// Pushes the state of the given conversation to global providers.
+  /// Pushes the state of the given conversation to its per-conversation
+  /// family provider instances.
   void _pushStateToProviders(_ConversationStreamState s) {
-    _setProvider(isStreamingProvider, true);
-    _setProvider(streamingMsgIdProvider, s.streamingMsgId);
-    _setProvider(streamingFullReplyProvider, s.fullReply);
-    _setProvider(streamingHasFirstTokenProvider, s.hasReceivedFirstToken);
-    _setProvider(streamingReasoningProvider, s.reasoningBuffer);
-    _setProvider(streamingReasoningSectionsProvider,
+    _setProvider(isStreamingProvider(s.convId), true);
+    _setProvider(streamingMsgIdProvider(s.convId), s.streamingMsgId);
+    _setProvider(streamingFullReplyProvider(s.convId), s.fullReply);
+    _setProvider(
+        streamingHasFirstTokenProvider(s.convId), s.hasReceivedFirstToken);
+    _setProvider(streamingReasoningProvider(s.convId), s.reasoningBuffer);
+    _setProvider(streamingReasoningSectionsProvider(s.convId),
         List<String>.from(s.reasoningSections));
-    _setProvider(
-        streamingToolCallsProvider, List<ToolCallData>.from(s.toolCalls));
-    _setProvider(
-        streamingTextSectionsProvider, List<String>.from(s.textChunks));
-    _setProvider(streamingToolCallRoundStartsProvider,
+    _setProvider(streamingToolCallsProvider(s.convId),
+        List<ToolCallData>.from(s.toolCalls));
+    _setProvider(streamingTextSectionsProvider(s.convId),
+        List<String>.from(s.textChunks));
+    _setProvider(streamingToolCallRoundStartsProvider(s.convId),
         List<int>.from(s.toolCallRoundStarts));
   }
 
-  /// Clears all global streaming providers.
-  void _clearProviders() {
-    // Only clear isStreamingProvider when NO conversation is actively
-    // streaming. If another conversation is still running (e.g. user
-    // switched tabs while a stream is in-flight), clearing the flag
-    // would let the user start a second concurrent stream on the
-    // current conversation, violating the adapter's single-stream limit.
-    if (_streams.isEmpty) {
-      _setProvider(isStreamingProvider, false);
-    }
-    _setProvider(streamingMsgIdProvider, null);
-    _setProvider(streamingFullReplyProvider, '');
-    _setProvider(streamingHasFirstTokenProvider, false);
-    _setProvider(streamingReasoningProvider, '');
-    _setProvider(streamingReasoningSectionsProvider, []);
-    _setProvider(streamingToolCallsProvider, []);
-    _setProvider(streamingTextSectionsProvider, ['']);
-    _setProvider(streamingToolCallRoundStartsProvider, []);
+  /// Clears streaming providers for a specific conversation.
+  void _clearProvidersFor(String convId) {
+    if (_streams.isNotEmpty) return; // Don't clear if any stream is running
+    _setProvider(isStreamingProvider(convId), false);
+    _setProvider(streamingMsgIdProvider(convId), null);
+    _setProvider(streamingFullReplyProvider(convId), '');
+    _setProvider(streamingHasFirstTokenProvider(convId), false);
+    _setProvider(streamingReasoningProvider(convId), '');
+    _setProvider(streamingReasoningSectionsProvider(convId), []);
+    _setProvider(streamingToolCallsProvider(convId), []);
+    _setProvider(streamingTextSectionsProvider(convId), ['']);
+    _setProvider(streamingToolCallRoundStartsProvider(convId), []);
   }
 
-  /// Only pushes a provider update if [convId] matches the active conversation.
-  void _maybeSetProvider<T>(String convId, StateProvider<T> provider, T value) {
-    if (_activeConvId != convId) return;
-    _setProvider(provider, value);
+  /// Pushes a provider update for [convId]'s family instance.
+  /// With family providers, there is no _activeConvId guard — each
+  /// conversation writes to its own independent provider space.
+  void _pushToProvider<T>(
+      String convId, StateProvider<T> Function(String) family, T value) {
+    if (_ref == null) return;
+    _setProvider(family(convId), value);
   }
 
   /// Periodic partial persistence for the given conversation's stream.
