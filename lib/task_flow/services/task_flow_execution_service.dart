@@ -798,9 +798,10 @@ class TaskFlowExecutionService {
 
   /// Register a CatCatch-downloaded file to the manifest library.
   ///
-  /// Unlike the legacy registrator, this method uses a taskId-salted
-  /// hash so every flow run produces a distinct gallery entry — even when
-  /// downloading the same URL repeatedly.
+  /// Unlike the legacy registrator, this method uses the content-hash for
+  /// physical file sharing and adds a Windows-style unique name suffix `(2)`,
+  /// `(3)`, ... when the same content is downloaded repeatedly into the same
+  /// folder.  This ensures every flow run produces a distinct gallery entry.
   Future<void> _registerFlowCatCatchOutput(
       String filePath, catcatch.CatCatchTask task) async {
     final ext = p.extension(filePath).toLowerCase().replaceAll('.', '');
@@ -812,9 +813,6 @@ class TaskFlowExecutionService {
 
     final fileBytes = await file.readAsBytes();
     final contentHash = md5.convert(fileBytes).toString();
-    // Salt with taskId so identical bytes produce distinct records
-    final saltedHash =
-        md5.convert(utf8.encode('$contentHash:${task.id}')).toString();
 
     const videoExts = {
       'mp4',
@@ -838,14 +836,20 @@ class TaskFlowExecutionService {
       'ogg'
     };
 
-    final basename = p.basenameWithoutExtension(filePath);
-
     if (videoExts.contains(ext)) {
       try {
         final videoFolder = task.metadata['videoFolder'] ?? '';
+        final records = await VideoManifest.loadRecords();
+        final basename = p.basenameWithoutExtension(filePath);
+        String name = basename;
+        int idx = 2;
+        while (records.any((r) => r.name == name && r.folder == videoFolder)) {
+          name = '$basename ($idx)';
+          idx++;
+        }
         final record = VideoRecord(
-          name: basename,
-          hash: saltedHash,
+          name: name,
+          hash: contentHash,
           format: ext,
           createdAt: DateTime.now(),
           size: fileBytes.length,
@@ -854,8 +858,7 @@ class TaskFlowExecutionService {
         );
         await VideoManifest.writeFile('$contentHash.$ext', fileBytes);
         await VideoManifest.addRecord(record);
-        print(
-            '[TaskFlow] Registered video: $basename.$ext (folder: $videoFolder)');
+        print('[TaskFlow] Registered video: $name.$ext (folder: $videoFolder)');
       } catch (e) {
         print('[TaskFlow] Register video failed: $e');
       }
@@ -864,9 +867,17 @@ class TaskFlowExecutionService {
     if (audioExts.contains(ext)) {
       try {
         final audioFolder = task.metadata['audioFolder'] ?? '';
+        final records = await FileManifest.loadRecords();
+        final basename = p.basenameWithoutExtension(filePath);
+        String name = basename;
+        int idx = 2;
+        while (records.any((r) => r.name == name && r.folder == audioFolder)) {
+          name = '$basename ($idx)';
+          idx++;
+        }
         final record = AudioRecord(
-          name: basename,
-          hash: saltedHash,
+          name: name,
+          hash: contentHash,
           format: ext,
           createdAt: DateTime.now(),
           size: fileBytes.length,
@@ -875,8 +886,7 @@ class TaskFlowExecutionService {
         );
         await FileManifest.writeFile('$contentHash.$ext', fileBytes);
         await FileManifest.addRecord(record);
-        print(
-            '[TaskFlow] Registered audio: $basename.$ext (folder: $audioFolder)');
+        print('[TaskFlow] Registered audio: $name.$ext (folder: $audioFolder)');
       } catch (e) {
         print('[TaskFlow] Register audio failed: $e');
       }
