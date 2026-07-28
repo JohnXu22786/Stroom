@@ -1780,6 +1780,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
     try {
       final convId = ref.read(activeConversationIdProvider);
       ref.read(chatStreamManagerProvider).cancel(convId);
+      // Immediately remove this conversation from the streaming set so
+      // the send/stop button reflects the stopped state without waiting
+      // for the manager's async cleanup loop to finish.
+      if (convId != null) {
+        final activeSet = <String>{...ref.read(streamingConversationsProvider)}
+          ..remove(convId);
+        ref.read(streamingConversationsProvider.notifier).state = activeSet;
+      }
     } catch (e) {
       debugPrint('[ChatPage] _stopStreaming cancel error: $e');
     }
@@ -2124,9 +2132,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // Reactively load messages when the active conversation changes.
     // Also activate the conversation in the streaming manager so the
     // global providers reflect this conversation's streaming state.
+    // Reset the per-page streaming flags so stale state from the
+    // previous conversation doesn't affect the new one.
     ref.listen(activeConversationIdProvider, (prev, next) {
       if (next != null && next != prev) {
-        ref.read(chatStreamManagerProvider).activateConversation(next);
+        _isStreamingActive = false;
+        _streamingMsgId = null;
+        final manager = ref.read(chatStreamManagerProvider);
+        manager.activateConversation(next);
+        // If the target conversation is still streaming in the background,
+        // re-enable streaming flags so live segment updates work.
+        if (manager.isStreamingFor(next)) {
+          _isStreamingActive = true;
+          _streamingMsgId = manager.streamingMsgIdFor(next);
+        }
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _loadConversationMessages();
         });
