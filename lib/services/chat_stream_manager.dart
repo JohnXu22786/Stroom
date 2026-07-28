@@ -310,13 +310,28 @@ class ChatStreamManager {
       return _streams[convId]!.resultCompleter!.future;
     }
 
-    // Enforce single-stream constraint: the ChatAdapter supports only one
-    // active stream at a time. Reject new conversation streams while
-    // another is already in progress.
+    // Abandon streams for other conversations before starting this one.
+    // The adapter supports only one concurrent request, so cancel any
+    // active request. The old conversation's per-conversation state is
+    // preserved but its stream is abandoned (loop still runs to completion
+    // in the background, but its writes to family providers are harmless
+    // since nobody watches the old conversation's providers).
     if (_streams.isNotEmpty) {
-      debugPrint('[ChatStreamManager] 单流约束: 对话 $convId 试图启动，但已有其他对话在流式传输');
-      throw StateError('Only one conversation can stream at a time. '
-          'Currently streaming: ${_streams.keys.join(", ")}');
+      final oldKeys = List<String>.from(_streams.keys);
+      for (final oldConvId in oldKeys) {
+        if (oldConvId == convId) continue;
+        final oldState = _streams[oldConvId];
+        if (oldState != null) {
+          oldState.cancelledByUser = true;
+          oldState.persistTimer?.cancel();
+          oldState.persistTimer = null;
+        }
+        _streams.remove(oldConvId);
+      }
+      // Cancel the adapter's current request so the new one can start.
+      // ChatService.cancel() closes _chatEventController, causing the old
+      // stream's await-for loop to exit cleanly via the done event.
+      _adapter.cancel();
     }
 
     // Create per-conversation state and its result completer.
@@ -350,7 +365,28 @@ class ChatStreamManager {
       _doPeriodicPersist(state);
     });
 
-    // Now safe to yield to event loop — all state is established.
+    // Snapshot the ChatService instance BEFORE the first await so that
+    // sendStreamWithTools and the finally-block capture use the same
+    // service that was active when this startStreaming was called.
+    // After the first await, _adapter.currentChatService may be replaced
+    // by configure() / selectModel() or forceService() from another call.
+    final _snappedChatService = _adapter.currentChatService;
+
+    // Start the provider stream BEFORE yielding to the event loop so
+    // that _chatService is guaranteed to be the one we just captured.
+    // The stream controller will buffer any events produced before the
+    // await-for loop subscribes below.
+    final stream = _adapter.sendStreamWithTools(
+      text,
+      history: state.history,
+      reasoning: reasoning,
+      reasoningEffort: reasoningEffort,
+      reasoningParamValues: reasoningParamValues,
+      tools: tools,
+    );
+
+    // Now safe to yield to event loop — all state is established and the
+    // provider stream is already created.
     await AppLogService.info('ChatStreamManager',
         '[STREAM-MGR] startStreaming: begin, convId=$convId, historyLen=${history.length}');
 
@@ -358,23 +394,7 @@ class ChatStreamManager {
     Map<String, dynamic>? rawRequestCapture;
     Map<String, dynamic>? rawResponseCapture;
 
-    // Snapshot the ChatService instance that will handle this stream.
-    // After the stream starts, _adapter.currentChatService may be replaced
-    // by configure() / selectModel() from another page instance, but our
-    // captured reference keeps the in-flight request data reachable for
-    // raw request/response capture in the finally block below.
-    final _snappedChatService = _adapter.currentChatService;
-
     try {
-      final stream = _adapter.sendStreamWithTools(
-        text,
-        history: state.history,
-        reasoning: reasoning,
-        reasoningEffort: reasoningEffort,
-        reasoningParamValues: reasoningParamValues,
-        tools: tools,
-      );
-
       await for (final event in stream) {
         if (state.cancelledByUser) break;
 
