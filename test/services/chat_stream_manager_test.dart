@@ -1523,11 +1523,13 @@ void main() {
     );
 
     test(
-      'guards: rejects second stream when another conversation is already streaming',
+      'guards: starting a different conversation abandons the old one',
       () async {
         final manager = ChatStreamManager();
 
-        // Block convA so it stays active while we try to start convB
+        // Use a WAITING mock to keep convA alive while we start convB.
+        // This simulates real-world: "user switches to another conversation
+        // while the first one is still streaming."
         final blockA = Completer<void>();
         final providerA = _MockProvider(
           [
@@ -1542,27 +1544,35 @@ void main() {
           history: [_userMsg('Q A')],
         );
 
+        // Must verify streaming state synchronously before any microtask runs
         expect(manager.isStreamingFor('convA'), true);
 
-        // Try to start convB while convA is streaming — should be rejected
+        // Start convB while convA is blocked — convA should be abandoned
         final providerB = _MockProvider([
           [AIStreamEvent('B response')],
         ]);
         manager.adapter.forceService(_makeChatService(providerB));
-        expect(
-          manager.startStreaming(
-            text: 'Q B',
-            convId: 'convB',
-            history: [_userMsg('Q B')],
-          ),
-          throwsStateError,
-          reason: 'When a conversation is already streaming, starting '
-              'another should throw a StateError.',
+        final futureB = manager.startStreaming(
+          text: 'Q B',
+          convId: 'convB',
+          history: [_userMsg('Q B')],
         );
 
-        // Clean up convA
+        // ConvA should be abandoned (no longer tracked)
+        expect(manager.isStreamingFor('convA'), false);
+        // ConvB should be streaming
+        expect(manager.isStreamingFor('convB'), true);
+
+        // Complete convA's blocked provider and let it finish
         blockA.complete();
+
+        // Complete convB
+        final resultB = await futureB;
+        expect(resultB.fullReply, 'B response');
+
+        // ConvA's future should also complete (stream was closed)
         await futureA;
+
         manager.dispose();
       },
     );
