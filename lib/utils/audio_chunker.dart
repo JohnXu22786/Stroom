@@ -218,6 +218,40 @@ class EnvironmentAnalyzer {
     this.silenceDbThreshold = -40.0,
   });
 
+  /// Analyze pre-computed per-frame dB values to classify the audio environment.
+  /// Avoids recomputing frame energies that were already calculated for
+  /// silence gap detection.
+  AudioEnvironment analyzeFromDb(Float64List dbValues) {
+    if (dbValues.isEmpty) return AudioEnvironment.normalSpeech;
+
+    final sorted = Float64List.fromList(dbValues)..sort();
+    final noiseFloor = _percentile(sorted, 0.20);
+    final peak = _percentile(sorted, 0.95);
+    final dynamicRange = peak - noiseFloor;
+
+    int silentFrames = 0;
+    for (final db in dbValues) {
+      if (db < noiseFloor + 6) silentFrames++;
+    }
+    final gapDensity =
+        dbValues.length > 0 ? silentFrames / dbValues.length : 0.0;
+
+    // Classification tree (same logic as analyze())
+    if (noiseFloor < -55 && gapDensity >= 0.05) return AudioEnvironment.quiet;
+    if (noiseFloor < -35) {
+      if (dynamicRange > 25) return AudioEnvironment.normalSpeech;
+      if (gapDensity < 0.15) return AudioEnvironment.meeting;
+      return AudioEnvironment.normalSpeech;
+    }
+    if (noiseFloor < -20) {
+      if (dynamicRange < 15 && gapDensity < 0.1)
+        return AudioEnvironment.continuousNoise;
+      return AudioEnvironment.noisy;
+    }
+    if (gapDensity < 0.05) return AudioEnvironment.music;
+    return AudioEnvironment.noisy;
+  }
+
   /// Analyze PCM samples to classify the audio environment.
   ///
   /// Returns [AudioEnvironment.normalSpeech] if the analysis cannot
@@ -330,11 +364,12 @@ class EnvironmentAnalyzer {
     }
   }
 
-  /// Compute the nth percentile from a sorted list.
+  /// Compute the nth percentile from a sorted list using nearest-rank method.
   static double _percentile(Float64List sorted, double fraction) {
     if (sorted.isEmpty) return -100.0;
-    final index =
-        (sorted.length * fraction).round().clamp(0, sorted.length - 1);
+    // Nearest-rank: ceil(P * N) - 1. E.g., N=10, P=0.20 → ceil(2)-1 = 1
+    // which is the 20th percentile (2nd of 10 values, 0-indexed).
+    final index = (sorted.length * fraction).ceil().clamp(1, sorted.length) - 1;
     return sorted[index];
   }
 }
@@ -397,7 +432,11 @@ WavInfo parseWavHeader(Uint8List bytes) {
 
     switch (tag) {
       case 'fmt ':
-        if (gotFmt) break; // skip duplicate fmt chunks
+        if (gotFmt) {
+          // Skip duplicate fmt chunk — advance past its data
+          offset += alignedSize;
+          break;
+        }
 
         if (size < 16) {
           throw FormatException('fmt chunk too small: $size bytes');
@@ -418,12 +457,15 @@ WavInfo parseWavHeader(Uint8List bytes) {
           bitsPerSample = _readUint16(bytes, offset, bigEndian: isRifx);
           offset += 2;
         } else {
-          bitsPerSample = 8; // WAVEFORMAT (no bitsPerSample)
+          bitsPerSample =
+              8; // WAVEFORMAT (no bitsPerSample) — unreachable due to size<16 guard above
         }
 
-        // Skip extension bytes if any
-        final extensionSize = size - 16;
-        offset += extensionSize.clamp(0, alignedSize - (offset % alignedSize));
+        // Skip extension bytes if any.
+        // The fmt chunk DATA occupies `alignedSize` bytes (padded to even).
+        // We already read 16 bytes of core format fields; skip the rest
+        // (extensions + any RIFF alignment padding byte).
+        offset += alignedSize - 16;
 
         gotFmt = true;
         break;
@@ -477,14 +519,19 @@ WavInfo parseWavHeader(Uint8List bytes) {
 
 /// Read PCM samples from WAV data as normalized float values [-1.0, 1.0].
 /// Converts from S16LE interleaved format.
+///
+/// Returns ALL raw interleaved samples (LRLRLR... for stereo). The caller
+/// is responsible for de-interleaving if needed via [WavPreprocessor].
 Float64List readPcmSamplesFloat(Uint8List wavBytes, WavInfo info) {
-  final sampleCount = info.totalSamples;
-  final samples = Float64List(sampleCount);
+  // Total INDIVIDUAL samples, not frames: dataSize / bytesPerSample.
+  // For stereo 16-bit: bytesPerSample=2, each frame has 2 samples (L+R).
+  final rawSampleCount = info.dataSize ~/ info.bytesPerSample;
+  final samples = Float64List(rawSampleCount);
   // ByteData from buffer — compatible with Dart >= 3.0.0
   final dv = wavBytes.buffer
       .asByteData(info.dataOffset + wavBytes.offsetInBytes, info.dataSize);
 
-  for (int i = 0; i < sampleCount; i++) {
+  for (int i = 0; i < rawSampleCount; i++) {
     final s16 = dv.getInt16(i * 2, Endian.little);
     samples[i] = s16 / 32768.0;
   }
@@ -495,6 +542,25 @@ Float64List readPcmSamplesFloat(Uint8List wavBytes, WavInfo info) {
 // ============================================================================
 // RMS Frame Energy + Silence Gap Detection
 // ============================================================================
+
+/// Compute per-frame RMS dB values for PCM samples.
+/// Used as a shared computation between environment analysis and gap detection.
+Float64List _computeFrameDb(Float64List samples, int frameSize) {
+  final frameCount = samples.length ~/ frameSize;
+  if (frameCount == 0) return Float64List(0);
+  final dbValues = Float64List(frameCount);
+  for (int f = 0; f < frameCount; f++) {
+    double sumSq = 0;
+    final start = f * frameSize;
+    final end = (start + frameSize).clamp(0, samples.length);
+    for (int i = start; i < end; i++) {
+      sumSq += samples[i] * samples[i];
+    }
+    final rms = sqrt(sumSq / (end - start));
+    dbValues[f] = rms > 1e-10 ? 20 * log(rms) / ln10 : -100.0;
+  }
+  return dbValues;
+}
 
 /// A detected gap (silence or low-energy region) with quality metrics.
 class _DetectedGap {
@@ -545,6 +611,56 @@ class SilenceDetector {
               durationSeconds: g.durationSeconds,
             ))
         .toList();
+  }
+
+  /// Detect silence gaps from pre-computed per-frame dB values.
+  /// Avoids recomputing frame energies when they were already calculated.
+  List<_DetectedGap> detectGapsFromDb(
+    Float64List dbValues,
+    int sampleRate, {
+    double? dbThreshold,
+    double? minSilenceSec,
+  }) {
+    final threshold = dbThreshold ?? config.silenceDbThreshold;
+    final minSilenceS = minSilenceSec ?? config.minSilenceDuration;
+    final frameSize = config.frameSize;
+    final frameCount = dbValues.length;
+    if (frameCount == 0) return [];
+    final minSilentFrames =
+        (minSilenceS * sampleRate / frameSize).ceil().clamp(1, frameCount);
+
+    final gaps = <_DetectedGap>[];
+    int? gapStart;
+    double gapMinDb = 0;
+    double gapSumDb = 0;
+    int gapFrameCount = 0;
+
+    for (int f = 0; f < frameCount; f++) {
+      if (dbValues[f] < threshold) {
+        if (gapStart == null) {
+          gapStart = f;
+          gapMinDb = dbValues[f];
+          gapSumDb = dbValues[f];
+          gapFrameCount = 1;
+        } else {
+          gapMinDb = gapMinDb < dbValues[f] ? gapMinDb : dbValues[f];
+          gapSumDb += dbValues[f];
+          gapFrameCount++;
+        }
+      } else {
+        if (gapStart != null && (f - gapStart) >= minSilentFrames) {
+          gaps.add(_DetectedGap(
+            startSample: gapStart * frameSize,
+            endSample: f * frameSize,
+            durationSeconds: (f - gapStart) * frameSize / sampleRate,
+            minDb: gapMinDb,
+            avgDb: gapSumDb / gapFrameCount,
+          ));
+        }
+        gapStart = null;
+      }
+    }
+    return gaps;
   }
 
   /// Detect silence gaps with full quality metrics for candidate scoring.
@@ -682,28 +798,31 @@ class AudioChunker {
     // Step 2: Read PCM as float
     final samples = readPcmSamplesFloat(wavBytes, info);
 
-    // Step 3: Environment analysis → dynamic parameters
+    // Step 3: Compute frame dB once (shared by environment analysis + gap detection)
+    final frameDb = _computeFrameDb(samples, config.frameSize);
+
+    // Step 4: Environment analysis → dynamic parameters
     final envAnalyzer = EnvironmentAnalyzer(
       frameSize: config.frameSize,
       silenceDbThreshold: config.silenceDbThreshold,
     );
-    final env = envAnalyzer.analyze(samples, info.sampleRate);
+    final env = envAnalyzer.analyzeFromDb(frameDb);
     final adjustedMinSilenceS =
         envAnalyzer.adjustMinSilenceMs(env, config.minSilenceDuration * 1000) /
             1000.0;
     final adjustedDbThreshold =
         envAnalyzer.adjustSilenceDbThreshold(env, config.silenceDbThreshold);
 
-    // Step 4: Detect silence gaps with full quality metrics
+    // Step 5: Detect silence gaps with full quality metrics
     final detector = SilenceDetector(config);
-    final allGaps = detector.detectGaps(
-      samples,
+    final allGaps = detector.detectGapsFromDb(
+      frameDb,
       info.sampleRate,
       dbThreshold: adjustedDbThreshold,
       minSilenceSec: adjustedMinSilenceS,
     );
 
-    // Step 5: Build candidate cut points from gaps
+    // Step 6: Build candidate cut points from gaps
     // Pass the environment-adjusted threshold so confidence scoring reflects
     // the actual detection conditions, not the base default.
     final candidates = _buildCandidates(
@@ -748,14 +867,19 @@ class AudioChunker {
         chunks.add(_writeWavChunk(
             wavBytes, info, start - pcmDataOffset, end - pcmDataOffset));
       } else {
-        // Sub-split to stay under maxChunkBytes
+        // Sub-split to stay under maxChunkBytes.
+        // Compute in frame units to avoid mid-sample splits.
+        final totalFrames = (end - start) ~/ bpf;
         final numParts = (chunkBytes / config.maxChunkBytes).ceil();
         for (int p = 0; p < numParts; p++) {
-          final subStart = start + (chunkBytes * p) ~/ numParts;
-          final subEnd = start + (chunkBytes * (p + 1)) ~/ numParts;
-          if (subEnd > subStart) {
-            chunks.add(_writeWavChunk(wavBytes, info, subStart - pcmDataOffset,
-                subEnd - pcmDataOffset));
+          final subStartFrame = (totalFrames * p) ~/ numParts;
+          final subEndFrame = (totalFrames * (p + 1)) ~/ numParts;
+          if (subEndFrame > subStartFrame) {
+            chunks.add(_writeWavChunk(
+                wavBytes,
+                info,
+                start - pcmDataOffset + subStartFrame * bpf,
+                start - pcmDataOffset + subEndFrame * bpf));
           }
         }
       }
@@ -855,8 +979,10 @@ class AudioChunker {
     int frameSize,
     int sampleRate,
   ) {
-    // Look at ~1.5 seconds before the gap
-    final windowFrames = (1.5 * sampleRate / frameSize).round().clamp(3, 30);
+    // Look at config.analysisWindowSeconds before the gap
+    final windowFrames = (config.analysisWindowSeconds * sampleRate / frameSize)
+        .round()
+        .clamp(3, 30);
     final frames = <double>[];
     for (int f = 0; f < windowFrames; f++) {
       final start = (gapStartSample - (windowFrames - f) * frameSize)
@@ -885,9 +1011,9 @@ class AudioChunker {
 
     if (firstHalf <= 0) return 0.5;
 
-    // decline ratio: 1.0 = complete silence, 0.5 = no change, <0.5 = rising
+    // decline ratio: 1.0 = complete silence, 0.5 = half energy, <0.5 = rising
     final declineRatio = (firstHalf - secondHalf) / firstHalf;
-    // Map: declineRatio 0 → 0.3, declineRatio 0.5 → 0.8, declineRatio 1.0 → 1.0
+    // Map: declineRatio 0 → 0.3, declineRatio 0.5 → 1.0, declineRatio 1.0 → 1.0
     return (0.3 + declineRatio * 1.4).clamp(0.0, 1.0);
   }
 
@@ -914,8 +1040,15 @@ class AudioChunker {
   }) {
     final cuts = <int>[0];
 
-    // Early return only if audio is too short to warrant any chunking at all.
+    // Early return if audio is too short to warrant chunking.
     if (totalSamples <= minChunkSamples) {
+      cuts.add(totalSamples);
+      return cuts;
+    }
+
+    // Guard against invalid config (maxChunk <= 0 or max < min) that
+    // would cause an infinite loop in force-cut logic.
+    if (maxChunkSamples <= 0 || maxChunkSamples < minChunkSamples) {
       cuts.add(totalSamples);
       return cuts;
     }
@@ -947,6 +1080,8 @@ class AudioChunker {
           totalSamples,
           sampleRate,
         );
+        // Guard against duplicate totalSamples (already added at end)
+        if (forcePos >= totalSamples) break;
         cuts.add(forcePos);
         currentSample = forcePos;
         continue;
@@ -976,6 +1111,7 @@ class AudioChunker {
           totalSamples,
           sampleRate,
         );
+        if (forcePos >= totalSamples) break;
         cuts.add(forcePos);
         currentSample = forcePos;
       } else {
@@ -1025,8 +1161,11 @@ class AudioChunker {
 
   /// Score based on silence duration — logarithmic, saturates at ~4× minSilence.
   double _silenceQualityScore(CandidateCut c) {
-    final ratio = c.silenceDuration / config.minSilenceDuration.clamp(0.1, 10);
-    // log base 4: at 1× → 0.5, at 4× → 1.0
+    final clampedMinSilence = config.minSilenceDuration.clamp(0.1, 10);
+    // Guard against NaN (Dart's NaN.clamp returns NaN, which propagates).
+    if (clampedMinSilence.isNaN) return 0.5;
+    final ratio = c.silenceDuration / clampedMinSilence;
+    // log base 5: at ratio=0 → 0, at ratio=4 (4× min silence) → 1.0
     return (log(ratio + 1) / log(5)).clamp(0.0, 1.0);
   }
 
@@ -1148,11 +1287,9 @@ Uint8List _writeWavChunk(
   writer.writeString('data');
   writer.writeUint32(dataSize);
 
-  // Copy PCM data slice via BytesBuilder bulk add
-  final sliceBytes = Uint8List(dataSize);
-  for (int i = 0; i < dataSize; i++) {
-    sliceBytes[i] = wavBytes[info.dataOffset + pcmStart + i];
-  }
+  // Copy PCM data slice using zero-copy Uint8List.view
+  final sliceBytes = Uint8List.view(wavBytes.buffer,
+      wavBytes.offsetInBytes + info.dataOffset + pcmStart, dataSize);
   writer.writeBytes(sliceBytes);
 
   return writer.toBytes();
@@ -1267,17 +1404,17 @@ class WavPreprocessor {
     final filtered = Float64List(input.length);
     for (int i = 0; i < input.length; i++) {
       double sum = 0;
-      int count = 0;
+      double weightSum = 0;
       for (int j = -filterLen; j <= filterLen; j++) {
         final idx = i + j;
         if (idx >= 0 && idx < input.length) {
           // Triangular window
           final w = 1.0 - j.abs() / (filterLen + 1);
           sum += input[idx] * w;
-          count++;
+          weightSum += w;
         }
       }
-      filtered[i] = count > 0 ? sum / count : input[i];
+      filtered[i] = weightSum > 0 ? sum / weightSum : input[i];
     }
 
     return _resampleLerp(filtered, inRate, outRate);

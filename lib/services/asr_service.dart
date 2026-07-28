@@ -336,21 +336,25 @@ class AsrService {
 
     // Step 2: Try generic fallback (compression → chunking → re-upload)
     if (fallback == 'generic' || fallback == 'all') {
+      var actualFmt = fmt;
+
       // Apply compression if configured
       if (config.compression != 'none' && fmt == 'wav') {
-        workingBytes = _applyCompression(workingBytes, fmt);
+        final result = _applyCompression(workingBytes, fmt);
+        workingBytes = result.$1;
+        actualFmt = result.$2;
       }
 
-      // Apply chunking if configured
+      // Apply chunking if configured (only works on uncompressed WAV)
       if (config.chunking != 'none' &&
           workingBytes.length > config.maxFileSizeBytes &&
-          fmt == 'wav') {
-        return _transcribeChunked(workingBytes, fmt);
+          actualFmt == 'wav') {
+        return _transcribeChunked(workingBytes, actualFmt);
       }
 
       // If compression/chunking brought it under limit, send via primary
       if (workingBytes.length <= config.maxFileSizeBytes) {
-        return _sendViaMethod(workingBytes, fmt, config.uploadMethod);
+        return _sendViaMethod(workingBytes, actualFmt, config.uploadMethod);
       }
     }
 
@@ -363,9 +367,11 @@ class AsrService {
     );
   }
 
-  /// Apply compression to working bytes.
-  Uint8List _applyCompression(Uint8List workingBytes, String fmt) {
-    if (config.compression == 'none' || fmt != 'wav') return workingBytes;
+  /// Apply compression to working bytes. Returns compressed bytes and the
+  /// new audio format string (e.g., 'flac' instead of 'wav').
+  (Uint8List, String) _applyCompression(Uint8List workingBytes, String fmt) {
+    if (config.compression == 'none' || fmt != 'wav')
+      return (workingBytes, fmt);
     try {
       final info = parseWavHeader(workingBytes);
       final samples = readPcmSamplesFloat(workingBytes, info);
@@ -381,21 +387,25 @@ class AsrService {
         _ => AudioCodec.none,
       };
       if (codec != AudioCodec.none) {
-        return compressPcm(pcm, codec, sampleRate: info.sampleRate);
+        final compressed = compressPcm(pcm, codec, sampleRate: info.sampleRate);
+        return (compressed, config.compression);
       }
     } catch (e) {
       AppLogService.warning('AsrService', '压缩失败: $e');
     }
-    return workingBytes;
+    return (workingBytes, fmt);
   }
 
   /// Apply compression and send via primary method (for files within limit).
   Future<AsrResult> _applyCompressionAndSend(
       Uint8List workingBytes, String fmt) async {
+    var actualFmt = fmt;
     if (config.compression != 'none' && fmt == 'wav') {
-      workingBytes = _applyCompression(workingBytes, fmt);
+      final result = _applyCompression(workingBytes, fmt);
+      workingBytes = result.$1;
+      actualFmt = result.$2;
     }
-    return _sendViaMethod(workingBytes, fmt, config.uploadMethod);
+    return _sendViaMethod(workingBytes, actualFmt, config.uploadMethod);
   }
 
   /// Get the specific fallback method (base64 or URL) that differs from primary.

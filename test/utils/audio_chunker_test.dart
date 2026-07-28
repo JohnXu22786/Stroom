@@ -111,6 +111,66 @@ void main() {
       dv.setUint16(0, 3, Endian.little); // IEEE float
       expect(() => parseWavHeader(corrupted), throwsA(isA<FormatException>()));
     });
+
+    test('parses WAV with extended fmt chunk (WAVEFORMATEX, size=40)', () {
+      // Build a WAV manually with a 40-byte fmt chunk
+      final pcmData = Uint8List(160); // 10 samples at 16-bit mono
+      final dataSize = pcmData.length;
+      const fmtSize = 40; // WAVEFORMATEX
+      // RIFF(4) + fileSize(4) + WAVE(4) = 12
+      // fmt (4) + fmtSize(4) + fmtData(fmtSize) = 8 + fmtSize
+      // data(4) + dataSize(4) + pcmData = 8 + dataSize
+      final total = 12 + 8 + fmtSize + 8 + dataSize;
+      final out = ByteData(total);
+      int off = 0;
+      void w4(String s) {
+        for (int i = 0; i < 4; i++) out.setUint8(off++, s.codeUnitAt(i));
+      }
+
+      void w16(int v) {
+        out.setUint16(off, v, Endian.little);
+        off += 2;
+      }
+
+      void w32(int v) {
+        out.setUint32(off, v, Endian.little);
+        off += 4;
+      }
+
+      w4('RIFF');
+      w32(total - 8);
+      w4('WAVE');
+      w4('fmt ');
+      w32(fmtSize); // 40-byte extended fmt
+      w16(1); // PCM
+      w16(1); // mono
+      w32(16000); // sample rate
+      w32(32000); // byte rate
+      w16(2); // block align
+      w16(16); // bits per sample
+      w16(22); // cbSize (22 bytes of extension)
+      w16(16); // wValidBitsPerSample
+      w32(0); // dwChannelMask
+      w16(1); // SubFormat = PCM (first 2 bytes of GUID)
+      // Pad remaining 14 bytes of SubFormat GUID (all zeros for PCM)
+      for (int i = 0; i < 14; i++) {
+        out.setUint8(off++, 0);
+      }
+      w4('data');
+      w32(dataSize);
+      // Copy PCM data
+      for (int i = 0; i < dataSize; i++) {
+        out.setUint8(off++, pcmData[i]);
+      }
+
+      final wavBytes = Uint8List.view(out.buffer, 0, total);
+
+      final info = parseWavHeader(wavBytes);
+      expect(info.sampleRate, 16000);
+      expect(info.numChannels, 1);
+      expect(info.bitsPerSample, 16);
+      expect(info.dataSize, dataSize);
+    });
   });
 
   group('Silence Detection', () {
