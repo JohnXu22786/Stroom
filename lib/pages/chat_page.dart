@@ -690,7 +690,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
           ? Map<String, List<String>>.from(_reasoningContents)
           : null;
 
-
       _history.clear();
       _chatSegments.clear();
       _reasoningContents.clear();
@@ -2162,8 +2161,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             if (streamingConvs.contains(deletedId)) {
               ref.read(chatStreamManagerProvider).cancel(deletedId);
               final updated = <String>{...streamingConvs}..remove(deletedId);
-              ref.read(streamingConversationsProvider.notifier).state =
-                  updated;
+              ref.read(streamingConversationsProvider.notifier).state = updated;
             }
           }
         }
@@ -2763,10 +2761,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                         message.id == _streamingMsgId &&
                                             message.text.isEmpty &&
                                             isStreaming &&
-                                            activeId != null &&
                                             !ref.read(
                                               streamingHasFirstTokenProvider(
-                                                  activeId),
+                                                  activeId!),
                                             );
                                     final hasSearchMatch = _isSearching &&
                                         _searchQuery.isNotEmpty &&
