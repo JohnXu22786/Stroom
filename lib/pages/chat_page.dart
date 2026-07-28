@@ -713,8 +713,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         : <String>{};
     final hasExplicitPrefs = conv?.hasExplicitEnabledMcpTools ?? false;
     // Re-resolve with the full tool list (now including MCP tools)
-    ref.read(enabledToolNamesProvider.notifier).state =
-        resolveEnabledToolNames(
+    ref.read(enabledToolNamesProvider.notifier).state = resolveEnabledToolNames(
       allTools: _adapter.getAllToolDefinitions(),
       savedEnabledNames: convEnabled,
       hasExplicitSavedPrefs: hasExplicitPrefs,
@@ -899,7 +898,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // the globally saved model index.
     final currentModelName = _getCurrentModelName();
     if (convId != null && currentModelName.isNotEmpty) {
-      ref.read(conversationsProvider.notifier)
+      ref
+          .read(conversationsProvider.notifier)
           .updateLastUsedModel(convId, currentModelName);
     }
 
@@ -3322,7 +3322,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // persists when re-entering the conversation.
     final convId = ref.read(activeConversationIdProvider);
     if (convId != null && selectedName.isNotEmpty) {
-      ref.read(conversationsProvider.notifier)
+      ref
+          .read(conversationsProvider.notifier)
           .updateLastUsedModel(convId, selectedName);
     }
   }
