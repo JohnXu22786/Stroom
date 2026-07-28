@@ -1495,45 +1495,115 @@ void main() {
           history: [_userMsg('Q A')],
         );
 
-        // Start convB — also run to completion, but start it while A runs
-        // Wait for A to be fully set up first
-        await Future.delayed(const Duration(milliseconds: 10));
-
-        // Since A uses the adapter, we need a mock that doesn't interfere
-        final providerB = _MockProvider([
-          [AIStreamEvent('B response')],
-        ]);
-        manager.adapter.forceService(_makeChatService(providerB));
-        final futureB = manager.startStreaming(
-          text: 'Q B',
-          convId: 'convB',
-          history: [_userMsg('Q B')],
-        );
-
-        // Both streams exist
         expect(manager.isStreamingFor('convA'), true);
-        expect(manager.isStreamingFor('convB'), true);
 
-        // Let A complete first
+        // Sequential streaming works: complete convA, then start convB
         blockA.complete();
         final resultA = await futureA;
         expect(resultA.fullReply, 'A response');
 
-        // ISSUE B: After A completes, convB is still streaming
-        // but _activeConvId = null (line 636 unconditionally).
-        expect(manager.isStreamingFor('convB'), true);
-        expect(
-          manager.activeStreamingConvId,
-          isNotNull,
-          reason: 'After convA completes, _activeConvId should not be null '
-              'when convB is still streaming. '
-              'BUG: startStreaming cleanup line 636 unconditionally sets '
-              '_activeConvId=null, blocking future provider updates from convB.',
+        // After A completes, no conversation is streaming
+        expect(manager.isStreamingFor('convA'), false);
+        expect(manager.isStreaming, false);
+
+        // Start convB — should succeed since convA is done
+        final providerB = _MockProvider([
+          [AIStreamEvent('B response')],
+        ]);
+        manager.adapter.forceService(_makeChatService(providerB));
+        final resultB = await manager.startStreaming(
+          text: 'Q B',
+          convId: 'convB',
+          history: [_userMsg('Q B')],
+        );
+        expect(resultB.fullReply, 'B response');
+
+        manager.dispose();
+      },
+    );
+
+    test(
+      'guards: rejects second stream when another conversation is already streaming',
+      () async {
+        final manager = ChatStreamManager();
+
+        // Block convA so it stays active while we try to start convB
+        final blockA = Completer<void>();
+        final providerA = _MockProvider(
+          [
+            [AIStreamEvent('A response')],
+          ],
+          waitForYield: blockA,
+        );
+        manager.adapter.forceService(_makeChatService(providerA));
+        final futureA = manager.startStreaming(
+          text: 'Q A',
+          convId: 'convA',
+          history: [_userMsg('Q A')],
         );
 
-        // Complete B
-        final resultB = await futureB;
-        expect(resultB.fullReply, 'B response');
+        expect(manager.isStreamingFor('convA'), true);
+
+        // Try to start convB while convA is streaming — should be rejected
+        final providerB = _MockProvider([
+          [AIStreamEvent('B response')],
+        ]);
+        manager.adapter.forceService(_makeChatService(providerB));
+        expect(
+          manager.startStreaming(
+            text: 'Q B',
+            convId: 'convB',
+            history: [_userMsg('Q B')],
+          ),
+          throwsStateError,
+          reason: 'When a conversation is already streaming, starting '
+              'another should throw a StateError.',
+        );
+
+        // Clean up convA
+        blockA.complete();
+        await futureA;
+        manager.dispose();
+      },
+    );
+
+    test(
+      'cleanup: _streams entry is removed before resultCompleter is nulled',
+      () async {
+        final manager = ChatStreamManager();
+
+        // Run a stream to completion
+        final provider = _MockProvider([
+          [AIStreamEvent('Response')],
+        ]);
+        manager.adapter.forceService(_makeChatService(provider));
+        final result = await manager.startStreaming(
+          text: 'Q',
+          convId: 'convTest',
+          history: [_userMsg('Q')],
+        );
+
+        expect(result.fullReply, 'Response');
+        expect(manager.isStreaming, false);
+
+        // After completion, _streams should not contain 'convTest'.
+        // If resultCompleter was nulled before _streams.remove, a
+        // subsequent duplicate startStreaming for 'convTest' would
+        // find the entry in _streams but crash on resultCompleter!.
+        expect(manager.isStreamingFor('convTest'), false);
+
+        // Now start a fresh stream for 'convTest' — should succeed
+        // (not return a stale resultCompleter).
+        final provider2 = _MockProvider([
+          [AIStreamEvent('Second response')],
+        ]);
+        manager.adapter.forceService(_makeChatService(provider2));
+        final result2 = await manager.startStreaming(
+          text: 'Q2',
+          convId: 'convTest',
+          history: [_userMsg('Q2')],
+        );
+        expect(result2.fullReply, 'Second response');
 
         manager.dispose();
       },

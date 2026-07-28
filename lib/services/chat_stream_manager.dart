@@ -310,6 +310,15 @@ class ChatStreamManager {
       return _streams[convId]!.resultCompleter!.future;
     }
 
+    // Enforce single-stream constraint: the ChatAdapter supports only one
+    // active stream at a time. Reject new conversation streams while
+    // another is already in progress.
+    if (_streams.isNotEmpty) {
+      debugPrint('[ChatStreamManager] 单流约束: 对话 $convId 试图启动，但已有其他对话在流式传输');
+      throw StateError('Only one conversation can stream at a time. '
+          'Currently streaming: ${_streams.keys.join(", ")}');
+    }
+
     // Create per-conversation state and its result completer.
     // ALL synchronous setup must happen BEFORE the first await so
     // that isStreaming / isStreamingFor are correct immediately.
@@ -609,10 +618,12 @@ class ChatStreamManager {
       state.resultCompleter!.complete(result);
     }
 
-    // Clean up this conversation's stream
-    state.isComplete = true;
-    state.resultCompleter = null;
+    // Clean up this conversation's stream.
+    // Remove from _streams FIRST so any concurrent check at line [duplicate]
+    // sees the convId as not streaming. Then null the completer so that
+    // stale references to the completed state object are not accessible.
     _streams.remove(convId);
+    state.resultCompleter = null;
 
     // Always reset isStreamingProvider when the stream ends. The chat_page's
     // _startStreaming post-stream also clears it, but when the page is
@@ -696,8 +707,12 @@ class ChatStreamManager {
   }
 
   /// Clears streaming providers for a specific conversation.
+  ///
+  /// Only clears if [convId] does NOT currently have an active stream.
+  /// If another conversation IS streaming (different convId), this
+  /// conversation's unrelated provider entries are still cleared.
   void _clearProvidersFor(String convId) {
-    if (_streams.isNotEmpty) return; // Don't clear if any stream is running
+    if (_streams.containsKey(convId)) return; // Don't clear if still streaming
     _setProvider(isStreamingProvider(convId), false);
     _setProvider(streamingMsgIdProvider(convId), null);
     _setProvider(streamingFullReplyProvider(convId), '');
