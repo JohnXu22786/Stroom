@@ -78,7 +78,7 @@ Future<String> uniqueExecutorPath(String path) async {
   final dir = p.dirname(path);
   final name = p.basenameWithoutExtension(path);
   final ext = p.extension(path);
-  for (int i = 2; i < 100; i++) {
+  for (int i = 1; i < 100; i++) {
     final newPath = p.join(dir, '$name ($i)$ext');
     if (!await File(newPath).exists()) return newPath;
   }
