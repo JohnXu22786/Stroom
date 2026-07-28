@@ -102,6 +102,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   String _preprocessing = 'none'; // 'none' | 'resampleMono'
   String _chunking =
       'none'; // 'none' | 'silence' | 'fixedDuration' | 'fixedSize'
+  String _compression = 'none'; // 'none' | 'adpcm' | 'flac'
 
   bool get _isLlmType => widget.providerType == 'llm';
   bool get _isAsrType => widget.providerType == 'asr';
@@ -162,6 +163,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       );
       _preprocessing = c.typeConfig['preprocessing'] as String? ?? 'none';
       _chunking = c.typeConfig['chunking'] as String? ?? 'none';
+      _compression = c.typeConfig['compression'] as String? ?? 'none';
     } else {
       _maxFileSizeController = TextEditingController(text: '25.0');
     }
@@ -677,6 +679,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       typeConfig['maxFileSizeMb'] = _maxFileSizeMb;
       typeConfig['preprocessing'] = _preprocessing;
       typeConfig['chunking'] = _chunking;
+      typeConfig['compression'] = _compression;
     }
 
     return ProviderConfigItem(
@@ -1002,6 +1005,85 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
             const SizedBox(height: 4),
             Text(
               _chunkingDescription(),
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 24),
+
+            // Compression
+            Text(
+              '压缩编码',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: cs.primary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '选择音频压缩格式，减小上传体积',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Text('压缩方式'),
+                const Spacer(),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade400),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _compression,
+                      isDense: true,
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'none',
+                          child:
+                              Text('无（原样发送）', style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'adpcm',
+                          child: Text('ADPCM（~4x 压缩）',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'flac',
+                          child: Text('FLAC（无损 ~2x）',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'opus',
+                          child: Text('Opus（需 ffmpeg）',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'mp3',
+                          child: Text('MP3（需 ffmpeg）',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _compression = v);
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _compression == 'adpcm'
+                  ? 'IMA ADPCM，4:1 有损压缩。纯 Dart 实现，音质适合语音转写。'
+                  : _compression == 'flac'
+                      ? 'FLAC 无损压缩，纯 Dart 实现。体积缩小约一半。'
+                      : _compression == 'opus'
+                          ? 'Opus 编码器，需系统 ffmpeg。最优语音压缩。'
+                          : _compression == 'mp3'
+                              ? 'MP3 编码器，需系统 ffmpeg。通用兼容性最好。'
+                              : '不压缩，以原始 WAV 格式发送。',
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 24),

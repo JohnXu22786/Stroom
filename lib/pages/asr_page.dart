@@ -1042,6 +1042,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         : AsrConfig.defaultMaxAudioFileSizeBytes;
     final preprocessing = ptc['preprocessing'] as String? ?? 'none';
     final chunking = ptc['chunking'] as String? ?? 'none';
+    final compression = ptc['compression'] as String? ?? 'none';
 
     final effectiveConfig = AsrConfig(
       host: selectedOption.host,
@@ -1054,6 +1055,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       maxFileSizeBytes: maxFileSizeBytes,
       preprocessing: preprocessing,
       chunking: chunking,
+      compression: compression,
     );
 
     // Capture the list before pop

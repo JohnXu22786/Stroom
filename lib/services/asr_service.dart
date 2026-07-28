@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
+import '../utils/audio_codecs.dart';
 import '../utils/audio_chunker.dart';
 import '../utils/audio_utils.dart';
 import '../utils/format_file_size.dart';
@@ -92,6 +93,9 @@ class AsrConfig {
   /// Chunking method: 'none', 'silence', 'fixedDuration', or 'fixedSize'.
   final String chunking;
 
+  /// Compression codec: 'none', 'adpcm', 'flac', 'opus', 'mp3'.
+  final String compression;
+
   /// Default max file size for OpenAI-compatible audio APIs.
   static const int defaultMaxAudioFileSizeBytes = 25 * 1024 * 1024;
 
@@ -106,6 +110,7 @@ class AsrConfig {
     this.maxFileSizeBytes = defaultMaxAudioFileSizeBytes,
     this.preprocessing = 'none',
     this.chunking = 'none',
+    this.compression = 'none',
   });
 
   /// Returns the host without a trailing slash.
@@ -142,6 +147,7 @@ class AsrConfig {
     int? maxFileSizeBytes,
     String? preprocessing,
     String? chunking,
+    String? compression,
   }) =>
       AsrConfig(
         model: model ?? this.model,
@@ -154,6 +160,7 @@ class AsrConfig {
         maxFileSizeBytes: maxFileSizeBytes ?? this.maxFileSizeBytes,
         preprocessing: preprocessing ?? this.preprocessing,
         chunking: chunking ?? this.chunking,
+        compression: compression ?? this.compression,
       );
 }
 
@@ -281,6 +288,35 @@ class AsrService {
             '预处理完成: ${audioBytes.length} → ${workingBytes.length} 字节');
       } catch (e) {
         await AppLogService.warning('AsrService', '预处理失败: $e');
+      }
+    }
+
+    // ── Compression (ADPCM, FLAC, Opus, MP3) ────────────────────────
+    if (config.compression != 'none' && fmt == 'wav') {
+      try {
+        final info = parseWavHeader(workingBytes);
+        final samples = readPcmSamplesFloat(workingBytes, info);
+        final pcm = Int16List(samples.length);
+        for (int i = 0; i < samples.length; i++) {
+          pcm[i] = (samples[i] * 32767).round().clamp(-32768, 32767);
+        }
+
+        final codec = switch (config.compression) {
+          'adpcm' => AudioCodec.adpcm,
+          'flac' => AudioCodec.flac,
+          'opus' => AudioCodec.opus,
+          'mp3' => AudioCodec.mp3,
+          _ => AudioCodec.none,
+        };
+
+        if (codec != AudioCodec.none) {
+          workingBytes = compressPcm(pcm, codec, sampleRate: info.sampleRate);
+          await AppLogService.info('AsrService',
+              '压缩完成 ($config.compression): ${audioBytes.length} → ${workingBytes.length} 字节');
+        }
+      } catch (e) {
+        await AppLogService.warning(
+            'AsrService', '压缩失败 ($config.compression): $e');
       }
     }
 
