@@ -263,6 +263,12 @@ class ChatStreamManager {
   List<int> toolCallRoundStartsFor(String convId) =>
       List.unmodifiable(_streams[convId]?.toolCallRoundStarts ?? []);
 
+  /// The in-progress reasoning buffer for a specific conversation.
+  /// Returns the content of the currently-accumulating reasoning section,
+  /// or an empty string if no reasoning stream is active for this convId.
+  String reasoningBufferFor(String convId) =>
+      _streams[convId]?.reasoningBuffer ?? '';
+
   // ── Provider 更新辅助 ──
 
   void _setProvider<T>(StateProvider<T> provider, T value) {
@@ -306,16 +312,30 @@ class ChatStreamManager {
     // If this conversation already has a stream running, return the
     // pending future so the caller awaits the same result.
     if (_streams.containsKey(convId)) {
-      debugPrint('[ChatStreamManager] 对话 $convId 已有流式请求进行中');
-      return _streams[convId]!.resultCompleter!.future;
+      final existing = _streams[convId]!;
+      // If the existing stream was cancelled (user tapped Stop), clean
+      // up immediately and allow a fresh stream. Without this, a
+      // Stop→re-Send sequence would return the cancelled stream's stale
+      // result, losing the new user message from history.
+      if (existing.cancelledByUser) {
+        existing.persistTimer?.cancel();
+        existing.persistTimer = null;
+        _streams.remove(convId);
+        // Fall through to start a new stream below.
+      } else {
+        debugPrint('[ChatStreamManager] 对话 $convId 已有流式请求进行中');
+        return _streams[convId]!.resultCompleter!.future;
+      }
     }
 
     // Abandon streams for other conversations before starting this one.
     // The adapter supports only one concurrent request, so cancel any
     // active request. The old conversation's per-conversation state is
-    // preserved but its stream is abandoned (loop still runs to completion
-    // in the background, but its writes to family providers are harmless
-    // since nobody watches the old conversation's providers).
+    // preserved in memory (so _saveMessages can persist partial results),
+    // but _adapter.cancel() closes the ChatService's event controller,
+    // causing the old stream's await-for loop to exit cleanly via the
+    // done event. Writes to family providers are harmless since nobody
+    // watches the old conversation's providers after switch.
     if (_streams.isNotEmpty) {
       final oldKeys = List<String>.from(_streams.keys);
       for (final oldConvId in oldKeys) {
@@ -639,32 +659,36 @@ class ChatStreamManager {
     }
 
     // Clean up this conversation's stream.
-    // Remove from _streams FIRST so any concurrent check at line [duplicate]
-    // sees the convId as not streaming. Then null the completer so that
-    // stale references to the completed state object are not accessible.
-    _streams.remove(convId);
+    // Identity guard: if _streams[convId] no longer references THIS state
+    // object, a new stream was already started for the same convId (via the
+    // Stop→re-Send path). In that case, skip removal and provider cleanup
+    // to avoid destroying the new stream's state.
+    if (_streams[convId] == state) {
+      _streams.remove(convId);
+    }
     state.resultCompleter = null;
 
-    // Always reset isStreamingProvider when the stream ends. The chat_page's
-    // _startStreaming post-stream also clears it, but when the page is
-    // disposed (user left during streaming), the page's ref.read() throws
-    // in a disposed widget and the clearing doesn't happen — leaving the
-    // send/stop button stuck on "Stop" after re-entry. Clearing here is a
-    // safety net that doesn't affect segment data.
-    _setProvider(isStreamingProvider(convId), false);
-    // Also clear these non-segment-affecting providers to prevent stale
-    // references after page disposal.
-    _setProvider(streamingMsgIdProvider(convId), null);
-    _setProvider(streamingHasFirstTokenProvider(convId), false);
-    _setProvider(streamingReasoningProvider(convId), '');
+    // Only clear per-conversation providers if no new stream replaced
+    // this one. If a new stream is active for the same convId, its own
+    // provider state should be left untouched.
+    final replaced = _streams.containsKey(convId) && _streams[convId] != state;
+    if (!replaced) {
+      _setProvider(isStreamingProvider(convId), false);
+      _setProvider(streamingMsgIdProvider(convId), null);
+      _setProvider(streamingHasFirstTokenProvider(convId), false);
+      _setProvider(streamingReasoningProvider(convId), '');
+    }
 
-    // Remove this conversation from the streaming set. The page watches
-    // this provider to detect completion and run cleanup + DB reload.
-    final activeSet = <String>{
-      ..._ref?.read(streamingConversationsProvider) ?? const {}
-    };
-    activeSet.remove(convId);
-    _setProvider(streamingConversationsProvider, activeSet);
+    // Remove this conversation from the streaming set ONLY if no new
+    // stream replaced this one. If _streams still contains convId (pointing
+    // to a different state object), keep it in the streaming set.
+    if (!_streams.containsKey(convId)) {
+      final activeSet = <String>{
+        ..._ref?.read(streamingConversationsProvider) ?? const {}
+      };
+      activeSet.remove(convId);
+      _setProvider(streamingConversationsProvider, activeSet);
+    }
 
     // Do NOT clear segment-related providers here (streamingFullReplyProvider,
     // streamingTextSectionsProvider, streamingReasoningSectionsProvider,

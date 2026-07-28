@@ -75,6 +75,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// calling ref.read() (which throws after the widget is marked disposed).
   bool _isStreamingActive = false;
 
+  /// Synchronous guard: set of conversation IDs that are currently in the
+  /// async gap between passing the streaming guard in _onMessageSend and
+  /// the synchronous _streams insertion in ChatStreamManager.startStreaming.
+  /// Prevents double-send when the user rapidly presses Enter twice.
+  final Set<String> _pendingSendConvIds = {};
+
   /// True while _editUserMessageWithText or _retryAssistantMessage is
   /// mutating history and controller messages, preventing
   /// _loadConversationMessages from interfering with the edit.
@@ -344,22 +350,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // cross-contamination with stale data from another conversation.
       ref.read(streamingTextSectionsProvider(activeConvId).notifier).state =
           List<String>.from(
-              ref.read(chatStreamManagerProvider).textChunksFor(activeConvId) ??
-                  ['']);
+              ref.read(chatStreamManagerProvider).textChunksFor(activeConvId));
       ref.read(streamingToolCallsProvider(activeConvId).notifier).state =
           List<ToolCallData>.from(
-              ref.read(chatStreamManagerProvider).toolCallsFor(activeConvId) ??
-                  []);
+              ref.read(chatStreamManagerProvider).toolCallsFor(activeConvId));
       ref
-          .read(streamingToolCallRoundStartsProvider(activeConvId).notifier)
-          .state = List<int>.from(ref
+              .read(streamingToolCallRoundStartsProvider(activeConvId).notifier)
+              .state =
+          List<int>.from(ref
               .read(chatStreamManagerProvider)
-              .toolCallRoundStartsFor(activeConvId) ??
-          []);
+              .toolCallRoundStartsFor(activeConvId));
       ref.read(streamingHasFirstTokenProvider(activeConvId).notifier).state =
-          ref.read(chatStreamManagerProvider).hasFirstTokenFor(activeConvId) ??
-              false;
-      ref.read(streamingReasoningProvider(activeConvId).notifier).state = '';
+          ref.read(chatStreamManagerProvider).hasFirstTokenFor(activeConvId);
+      ref.read(streamingReasoningProvider(activeConvId).notifier).state =
+          ref.read(chatStreamManagerProvider).reasoningBufferFor(activeConvId);
     } catch (e) {
       debugPrint('[ChatPage] _restoreStreamingState provider set failed: $e');
     }
@@ -367,6 +371,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // Restore reasoning sections map for backward compatibility
     if (reasoningSections.isNotEmpty) {
       _reasoningContents[msgId] = List.of(reasoningSections);
+    }
+    // Restore reasoning completion state. During normal streaming, the
+    // streamingTextSectionsProvider listener in build() sets this flag.
+    // But during re-entry (_restoreStreamingState runs before build()),
+    // the listener hasn't fired yet, so we set it here synchronously.
+    // Without this, the reasoning button shows "思考中" (animated chevrons)
+    // instead of "思考完成" when returning to a conversation where
+    // reasoning is done and text is already flowing.
+    if (reasoningSections.isNotEmpty &&
+        ref.read(chatStreamManagerProvider).hasFirstTokenFor(activeConvId)) {
+      _isReasoningCompletedForMsg[msgId] = true;
     }
 
     // ── POST-FRAME: deferred controller + UI work
@@ -693,6 +708,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
           : null;
       final savedFinalizedMessages =
           _isStreamingActive ? Set<String>.from(_finalizedMessages) : null;
+      final savedReasoningContents = _isStreamingActive
+          ? Map<String, List<String>>.from(_reasoningContents)
+          : null;
+
 
       _history.clear();
       _chatSegments.clear();
@@ -798,6 +817,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         _streamingMsgId = savedStreamingMsgId;
         _chatSegments.addAll(savedChatSegments!);
         _finalizedMessages.addAll(savedFinalizedMessages!);
+        _reasoningContents.addAll(savedReasoningContents!);
 
         // Re-insert the streaming placeholder into the new controller.
         // We skipped it during the load loop above (it may not be in DB
@@ -1039,64 +1059,73 @@ class _ChatPageState extends ConsumerState<ChatPage>
         ref.read(streamingConversationsProvider).contains(convId)) {
       return;
     }
-    await AppLogService.info(
-        'ChatPage',
-        '用户发送消息, convId=$convId, text长度=${text.length}, '
-            'attachments=${attachments.length}');
-    if (convId == null) {
-      await AppLogService.info('ChatPage', '无活跃对话，创建新对话');
-      ref.read(conversationsProvider.notifier).createConversation();
-      convId = ref.read(activeConversationIdProvider);
-      await AppLogService.info('ChatPage', '新对话已创建: $convId');
-    }
-
-    // Save the current enabled tools to the conversation before sending.
-    // This ensures the tool preferences are persisted even if the user
-    // switches conversations or navigates away during streaming.
-    _saveEnabledToolsToConversation();
-
-    // Save the current model as the conversation's last used model so it
-    // can be restored when re-entering this conversation. Per the
-    // requirement, the conversation's last used model takes priority over
-    // the globally saved model index.
-    final currentModelName = _getCurrentModelName();
-    if (convId != null && currentModelName.isNotEmpty) {
-      ref
-          .read(conversationsProvider.notifier)
-          .updateLastUsedModel(convId, currentModelName);
-    }
-
-    final userMsgId = 'u${DateTime.now().millisecondsSinceEpoch}';
-
-    _history.add(
-      ChatMessage(
-        role: 'user',
-        content: text,
-        id: userMsgId,
-        attachments: attachments,
-      ),
-    );
-    await _controller?.insertMessage(
-      Message.text(
-        id: userMsgId,
-        authorId: _currentUser.id,
-        text: text,
-        createdAt: DateTime.now(),
-      ),
-    );
-
-    await _startStreaming(text, capturedConvId: convId);
-
-    // Reload _history from conversation provider to ensure it reflects the
-    // manager's persisted messages. Post-stream code in _startStreaming may
-    // not execute reliably if the widget was disposed or an async error
-    // occurred during background streaming.
-    await _syncHistoryFromProvider(capturedConvId: convId);
-
+    // Synchronous guard: prevent double-send from rapid Enter / button taps
+    // during the async gap between the guard above and the synchronous
+    // _streams insertion inside manager.startStreaming.
+    if (convId != null && _pendingSendConvIds.contains(convId)) return;
+    if (convId != null) _pendingSendConvIds.add(convId);
     try {
-      await AppLogService.info('ChatPage',
-          '[STREAM-SEND] _onMessageSend: after sync, _history.length=${_history.length}');
-    } catch (_) {}
+      await AppLogService.info(
+          'ChatPage',
+          '用户发送消息, convId=$convId, text长度=${text.length}, '
+              'attachments=${attachments.length}');
+      if (convId == null) {
+        await AppLogService.info('ChatPage', '无活跃对话，创建新对话');
+        ref.read(conversationsProvider.notifier).createConversation();
+        convId = ref.read(activeConversationIdProvider);
+        await AppLogService.info('ChatPage', '新对话已创建: $convId');
+      }
+
+      // Save the current enabled tools to the conversation before sending.
+      // This ensures the tool preferences are persisted even if the user
+      // switches conversations or navigates away during streaming.
+      _saveEnabledToolsToConversation();
+
+      // Save the current model as the conversation's last used model so it
+      // can be restored when re-entering this conversation. Per the
+      // requirement, the conversation's last used model takes priority over
+      // the globally saved model index.
+      final currentModelName = _getCurrentModelName();
+      if (convId != null && currentModelName.isNotEmpty) {
+        ref
+            .read(conversationsProvider.notifier)
+            .updateLastUsedModel(convId, currentModelName);
+      }
+
+      final userMsgId = 'u${DateTime.now().millisecondsSinceEpoch}';
+
+      _history.add(
+        ChatMessage(
+          role: 'user',
+          content: text,
+          id: userMsgId,
+          attachments: attachments,
+        ),
+      );
+      await _controller?.insertMessage(
+        Message.text(
+          id: userMsgId,
+          authorId: _currentUser.id,
+          text: text,
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      await _startStreaming(text, capturedConvId: convId);
+
+      // Reload _history from conversation provider to ensure it reflects the
+      // manager's persisted messages. Post-stream code in _startStreaming may
+      // not execute reliably if the widget was disposed or an async error
+      // occurred during background streaming.
+      await _syncHistoryFromProvider(capturedConvId: convId);
+
+      try {
+        await AppLogService.info('ChatPage',
+            '[STREAM-SEND] _onMessageSend: after sync, _history.length=${_history.length}');
+      } catch (_) {}
+    } finally {
+      if (convId != null) _pendingSendConvIds.remove(convId);
+    }
   }
 
   Future<void> _syncHistoryFromProvider({String? capturedConvId}) async {
@@ -1199,6 +1228,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ref.read(streamingFullReplyProvider(effectiveConvId).notifier).state = '';
       ref.read(streamingHasFirstTokenProvider(effectiveConvId).notifier).state =
           false;
+      ref.read(streamingReasoningProvider(effectiveConvId).notifier).state = '';
+      ref
+          .read(streamingReasoningSectionsProvider(effectiveConvId).notifier)
+          .state = [];
+      ref.read(streamingToolCallsProvider(effectiveConvId).notifier).state = [];
+      ref.read(streamingTextSectionsProvider(effectiveConvId).notifier).state =
+          [''];
+      ref
+          .read(streamingToolCallRoundStartsProvider(effectiveConvId).notifier)
+          .state = [];
     } catch (e) {
       debugPrint('[ChatPage] post-stream provider cleanup failed: $e');
     }
@@ -1798,6 +1837,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
         ref.read(streamingMsgIdProvider(convId).notifier).state = null;
         ref.read(streamingFullReplyProvider(convId).notifier).state = '';
         ref.read(streamingHasFirstTokenProvider(convId).notifier).state = false;
+        ref.read(streamingReasoningProvider(convId).notifier).state = '';
+        ref.read(streamingReasoningSectionsProvider(convId).notifier).state =
+            [];
+        ref.read(streamingToolCallsProvider(convId).notifier).state = [];
+        ref.read(streamingTextSectionsProvider(convId).notifier).state = [''];
+        ref.read(streamingToolCallRoundStartsProvider(convId).notifier).state =
+            [];
       }
     } catch (e) {
       debugPrint('[ChatPage] _stopStreaming provider cleanup error: $e');
@@ -2136,16 +2182,22 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // previous conversation doesn't affect the new one.
     ref.listen(activeConversationIdProvider, (prev, next) {
       if (next != null && next != prev) {
-        _isStreamingActive = false;
-        _streamingMsgId = null;
+        // Check streaming state FIRST, then set flags, THEN activate
+        // (so listeners fired by activateConversation see correct flags).
         final manager = ref.read(chatStreamManagerProvider);
+        final targetIsStreaming = manager.isStreamingFor(next);
+        _isStreamingActive = targetIsStreaming;
+        _streamingMsgId =
+            targetIsStreaming ? manager.streamingMsgIdFor(next) : null;
+        // Clear _history so _loadConversationMessages passes the guard
+        // at line 627 (`if (_isStreamingActive && _history.isNotEmpty) return;`).
+        // Without this, switching from a streaming conversation to another
+        // and back leaves _history populated with stale data from the other
+        // conversation, causing the guard to short-circuit the reload and
+        // losing _chatSegments for completed messages (plain text only, no
+        // tool call cards or reasoning buttons).
+        _history.clear();
         manager.activateConversation(next);
-        // If the target conversation is still streaming in the background,
-        // re-enable streaming flags so live segment updates work.
-        if (manager.isStreamingFor(next)) {
-          _isStreamingActive = true;
-          _streamingMsgId = manager.streamingMsgIdFor(next);
-        }
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _loadConversationMessages();
         });
@@ -2166,6 +2218,25 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // history in the current session.
     ref.listen(conversationsProvider, (prev, next) {
       if (prev != next) {
+        // Detect deleted conversations: if a conversation that was
+        // streaming was removed from the list, cancel its orphaned
+        // stream. Otherwise the persist timer runs indefinitely and
+        // the stream never cleans up.
+        if (prev != null) {
+          final deletedIds = prev
+              .map((c) => c.id)
+              .toSet()
+              .difference(next.map((c) => c.id).toSet());
+          final streamingConvs = ref.read(streamingConversationsProvider);
+          for (final deletedId in deletedIds) {
+            if (streamingConvs.contains(deletedId)) {
+              ref.read(chatStreamManagerProvider).cancel(deletedId);
+              final updated = <String>{...streamingConvs}..remove(deletedId);
+              ref.read(streamingConversationsProvider.notifier).state =
+                  updated;
+            }
+          }
+        }
         final activeId = ref.read(activeConversationIdProvider);
         if (activeId != null) {
           final activeConv = next.where((c) => c.id == activeId).firstOrNull;
