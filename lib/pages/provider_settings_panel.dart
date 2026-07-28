@@ -925,6 +925,97 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
             const SizedBox(height: 32),
 
             // ════════════════════════════════════════════════════════════
+            // 兜底策略
+            // ════════════════════════════════════════════════════════════
+            Text(
+              '兜底策略',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
+                color: cs.primary,
+                letterSpacing: 0.3,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '当文件超过大小限制时的处理方式。特定兜底（Base64/URL）优先于通用兜底（压缩/切块）。',
+              style: TextStyle(
+                fontSize: 13,
+                color: cs.onSurfaceVariant,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Text(
+                  '兜底方式',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: cs.onSurface,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: cs.outlineVariant),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _fallbackMethod,
+                      isDense: true,
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'none',
+                          child: Text('无（直接拒绝）',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'specific',
+                          child: Text('特定兜底（Base64/URL）',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'generic',
+                          child: Text('通用兜底（压缩/切块）',
+                              style: TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'all',
+                          child: Text('全部尝试（推荐）',
+                              style: TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _fallbackMethod = v);
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _fallbackMethod == 'specific'
+                  ? '优先尝试 Base64 JSON 或 URL 上传（取决于主方式）。'
+                  : _fallbackMethod == 'generic'
+                      ? '先应用压缩，再尝试切块，最后重新上传。'
+                      : _fallbackMethod == 'all'
+                          ? '先尝试特定兜底，再尝试通用兜底。最大化成功率。'
+                          : '文件超过限制时直接拒绝，不尝试任何兜底。',
+              style: TextStyle(
+                fontSize: 12,
+                color: cs.onSurfaceVariant.withAlpha(180),
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // ════════════════════════════════════════════════════════════
             // 音频预处理
             // ════════════════════════════════════════════════════════════
             Text(
@@ -1173,98 +1264,6 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                           : _compression == 'mp3'
                               ? 'MP3 编码器，需系统 ffmpeg。通用兼容性最好。'
                               : '不压缩，以原始 WAV 格式发送。',
-              style: TextStyle(
-                fontSize: 12,
-                color: cs.onSurfaceVariant.withAlpha(180),
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // ════════════════════════════════════════════════════════════
-            // 兜底策略
-            // ════════════════════════════════════════════════════════════
-            Text(
-              '兜底策略',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 18,
-                color: cs.primary,
-                letterSpacing: 0.3,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '当文件超过大小限制时的处理方式。特定兜底（Base64/URL）优先于通用兜底（压缩/切块）。',
-              style: TextStyle(
-                fontSize: 13,
-                color: cs.onSurfaceVariant,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Text(
-                  '兜底方式',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: cs.onSurface,
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: cs.outlineVariant),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _fallbackMethod,
-                      isDense: true,
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'none',
-                          child:
-                              Text('无（直接拒绝）', style: TextStyle(fontSize: 13)),
-                        ),
-                        DropdownMenuItem(
-                          value: 'specific',
-                          child: Text('特定兜底（Base64/URL）',
-                              style: TextStyle(fontSize: 13)),
-                        ),
-                        DropdownMenuItem(
-                          value: 'generic',
-                          child: Text('通用兜底（压缩/切块）',
-                              style: TextStyle(fontSize: 13)),
-                        ),
-                        DropdownMenuItem(
-                          value: 'all',
-                          child: Text('全部尝试（推荐）',
-                              style: TextStyle(
-                                  fontSize: 13, fontWeight: FontWeight.w600)),
-                        ),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) setState(() => _fallbackMethod = v);
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _fallbackMethod == 'specific'
-                  ? '优先尝试 Base64 JSON 或 URL 上传（取决于主方式）。'
-                  : _fallbackMethod == 'generic'
-                      ? '先应用压缩，再尝试切块，最后重新上传。'
-                      : _fallbackMethod == 'all'
-                          ? '先尝试特定兜底，再尝试通用兜底。最大化成功率。'
-                          : '文件超过限制时直接拒绝，不尝试任何兜底。',
               style: TextStyle(
                 fontSize: 12,
                 color: cs.onSurfaceVariant.withAlpha(180),
