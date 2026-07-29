@@ -402,7 +402,8 @@ void main() {
       expect(
         methodCode.contains('FileManifest.writeFile'),
         isTrue,
-        reason: '_saveAudioSeparationFile must write audio data via FileManifest',
+        reason:
+            '_saveAudioSeparationFile must write audio data via FileManifest',
       );
       expect(
         methodCode.contains('AudioRecord('),
@@ -417,7 +418,8 @@ void main() {
       expect(
         methodCode.contains('audioRecordsNotifier.loadRecords'),
         isTrue,
-        reason: '_saveAudioSeparationFile must refresh the audio records provider',
+        reason:
+            '_saveAudioSeparationFile must refresh the audio records provider',
       );
       expect(
         methodCode.contains('FileManifest.readFilePath'),
