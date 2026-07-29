@@ -1212,8 +1212,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // CRITICAL: Update _history FIRST, before any debug/log calls that
     // could throw and prevent the update. Without this, the next message
     // sees stale _history missing previous assistant messages.
-    _history.clear();
-    _history.addAll(result.history);
+    // Guard: only update if the user is still viewing this conversation.
+    // If they switched away mid-stream, _history now holds the OTHER
+    // conversation's data and overwriting it would corrupt the display.
+    if (ref.read(activeConversationIdProvider) == effectiveConvId) {
+      _history.clear();
+      _history.addAll(result.history);
+    }
 
     // Clear the local streaming flag IMMEDIATELY (before any await below)
     // so the streamingConversationsProvider listener's post-frame callback
