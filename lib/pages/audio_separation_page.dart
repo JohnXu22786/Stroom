@@ -56,12 +56,6 @@ Future<Uint8List> _extractAudioIsolate(
       () => extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat));
 }
 
-/// Yields to the event loop so the Flutter framework can render a frame
-/// before the next synchronous operation. Call this after every
-/// [BackgroundTaskNotifier] state update so the task card appears
-/// immediately rather than after the entire extraction completes.
-Future<void> _yieldFrame() => Future<void>.delayed(Duration.zero);
-
 /// Computes audio hash and detects format in a background isolate.
 /// Both [computeAudioHash] (MD5 over raw audio data) and
 /// [detectAudioFormat] (magic-byte scanning) are CPU-bound and
@@ -72,6 +66,94 @@ Future<(String, String)> _computeAudioMetaInIsolate(Uint8List audioBytes) {
     final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
     return (hash, format);
   });
+}
+
+/// Processes the audio separation pipeline for each video, completely
+/// decoupled from the widget lifecycle. All state is passed in as
+/// captured values — no access to `this`, `context`, or `ref`.
+///
+/// Called via [Future.delayed] after [Navigator.pop] so the pop
+/// animation is already underway before any task-card state updates
+/// trigger home-page rebuilds.
+Future<void> _runAudioSeparation({
+  required List<SelectedVideo> videos,
+  required BackgroundTaskNotifier bgNotifier,
+  required AudioRecordsNotifier audioRecordsNotifier,
+  required String saveFolder,
+}) async {
+  for (final video in videos) {
+    final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
+    final taskId = bgNotifier.addTask(
+      type: BackgroundTaskType.audioSeparation,
+      title: title,
+      retryData: null,
+    );
+
+    try {
+      // Step 0: 分离音频
+      bgNotifier.updateStep(taskId, 0, running: true);
+      final audioBytes = await _extractAudioIsolate(video.bytes, video.format);
+      bgNotifier.updateStep(taskId, 0, completed: true);
+
+      // Step 1: 保存到文件
+      bgNotifier.updateStep(taskId, 1, running: true);
+      final meta = await _computeAudioMetaInIsolate(audioBytes);
+      final filePath = await _saveAudioSeparationFile(
+        audioBytes,
+        hash: meta.$1,
+        format: meta.$2,
+        audioRecordsNotifier: audioRecordsNotifier,
+        displayName: title,
+        videoName: video.name,
+        saveFolder: saveFolder,
+      );
+      bgNotifier.updateStep(taskId, 1, completed: true);
+      bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
+    } catch (e) {
+      bgNotifier.failTask(taskId, error: '音频提取失败: $e');
+    }
+  }
+
+  unawaited(audioRecordsNotifier.loadRecords());
+}
+
+/// Saves extracted audio bytes to the library and returns the file path.
+/// All parameters are explicitly passed — no dependency on widget state.
+Future<String?> _saveAudioSeparationFile(
+  Uint8List audioBytes, {
+  required String hash,
+  required String format,
+  required AudioRecordsNotifier audioRecordsNotifier,
+  String? displayName,
+  String? videoName,
+  required String saveFolder,
+}) async {
+  if (audioBytes.isEmpty) {
+    throw Exception('提取的音频数据为空');
+  }
+
+  final timestamp = DateTime.now();
+  final effectiveVideoName = videoName ?? '视频音频';
+  final name =
+      displayName ?? '音频分离_${p.basenameWithoutExtension(effectiveVideoName)}';
+
+  await FileManifest.writeFile('$hash.$format', audioBytes);
+
+  final record = AudioRecord(
+    name: name,
+    hash: hash,
+    format: format,
+    createdAt: timestamp,
+    size: audioBytes.length,
+    sourceText: '',
+    folder: saveFolder,
+  );
+  await FileManifest.addRecord(record);
+
+  final filePath = await FileManifest.readFilePath('$hash.$format');
+  unawaited(audioRecordsNotifier.loadRecords());
+
+  return filePath;
 }
 
 class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
@@ -735,135 +817,29 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       });
     }
 
+    // Capture everything the processing pipeline needs BEFORE pop.
+    // After the widget is disposed, `ref` and `_saveFolder` are invalid.
     final videosToProcess = List<SelectedVideo>.from(_selectedVideos);
+    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
+    final audioRecordsNotifier = ref.read(audioRecordsProvider.notifier);
+    final saveFolder = _saveFolder;
 
-    // Pop FIRST — let the pop animation start before any processing.
+    // Pop IMMEDIATELY — schedule the route transition now.
     if (mounted) {
       Navigator.pop(context);
     }
-    await _yieldFrame();
 
-    // Capture notifier references after pop (ref is still valid in the async
-    // continuation; we use captured notifiers, not ref.read(), after this point).
-    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
-    final audioRecordsNotifier = ref.read(audioRecordsProvider.notifier);
-
-    // Process each video: addTask + extract + save, one at a time.
-    // Yield after every state update so the task card renders immediately
-    // rather than waiting for the entire extraction loop to finish.
-    for (int i = 0; i < videosToProcess.length; i++) {
-      final video = videosToProcess[i];
-      final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
-      final taskId = bgNotifier.addTask(
-        type: BackgroundTaskType.audioSeparation,
-        title: title,
-        retryData: null,
-      );
-      await _yieldFrame();
-
-      try {
-        // Step 0: 分离音频 - mark as running
-        bgNotifier.updateStep(taskId, 0, running: true);
-        await _yieldFrame();
-
-        // Run CPU-bound MP4 parsing in a background isolate so the main
-        // thread stays responsive.  Isolate.run 的闭包不能在实例方法中创建
-        //（会隐式捕获 _AudioSeparationPageState，不可发送），
-        // 因此通过顶层辅助函数 _extractAudioIsolate 来创建隔离的闭包。
-        final audioBytes =
-            await _extractAudioIsolate(video.bytes, video.format);
-
-        // Step 0: 分离音频 - mark as completed
-        bgNotifier.updateStep(taskId, 0, completed: true);
-        await _yieldFrame();
-
-        // Step 1: 保存到文件 - mark as running
-        bgNotifier.updateStep(taskId, 1, running: true);
-        await _yieldFrame();
-
-        // Compute hash + format in a background isolate — both
-        // computeAudioHash (MD5) and detectAudioFormat (magic bytes)
-        // are CPU-bound and run synchronously on the main thread.
-        final meta = await _computeAudioMetaInIsolate(audioBytes);
-        final hash = meta.$1;
-        final format = meta.$2;
-
-        // 保存到音频库 (返回文件路径)
-        final filePath = await _saveAudioToLibrary(
-          audioBytes,
-          hash: hash,
-          format: format,
-          audioRecordsNotifier: audioRecordsNotifier,
-          displayName: title,
-          videoName: video.name,
-        );
-
-        // Step 1: 保存到文件 - mark as completed
-        bgNotifier.updateStep(taskId, 1, completed: true);
-        await _yieldFrame();
-
-        // Mark task as completed with file path
-        bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
-        await _yieldFrame();
-      } catch (e) {
-        bgNotifier.failTask(taskId, error: '音频提取失败: $e');
-        await _yieldFrame();
-      }
-    }
-
-    // Fire-and-forget: refresh the audio library list after all tasks complete
-    unawaited(audioRecordsNotifier.loadRecords());
-  }
-
-  /// 保存音频到音频库，并返回保存的文件路径。如果获取路径失败则返回 null。
-  ///
-  /// [hash] and [format] must be pre-computed (callers should use
-  /// [_computeAudioMetaInIsolate] to avoid blocking the main thread).
-  Future<String?> _saveAudioToLibrary(
-    Uint8List audioBytes, {
-    required String hash,
-    required String format,
-    AudioRecordsNotifier? audioRecordsNotifier,
-    String? displayName,
-    String? videoName,
-  }) async {
-    if (audioBytes.isEmpty) {
-      throw Exception('提取的音频数据为空');
-    }
-
-    final timestamp = DateTime.now();
-    final effectiveVideoName = videoName ?? '视频音频';
-    final name =
-        displayName ?? '音频分离_${p.basenameWithoutExtension(effectiveVideoName)}';
-
-    // 保存音频文件
-    await FileManifest.writeFile('$hash.$format', audioBytes);
-
-    // 创建记录
-    final record = AudioRecord(
-      name: name,
-      hash: hash,
-      format: format,
-      createdAt: timestamp,
-      size: audioBytes.length,
-      sourceText: '',
-      folder: _saveFolder,
-    );
-
-    await FileManifest.addRecord(record);
-
-    // 获取文件路径用于"打开文件"按钮
-    final filePath = await FileManifest.readFilePath('$hash.$format');
-
-    // Fire-and-forget: refresh the audio library list asynchronously
-    // Use captured notifier if provided (safer after widget dispose)
-    if (audioRecordsNotifier != null) {
-      unawaited(audioRecordsNotifier.loadRecords());
-    } else {
-      unawaited(ref.read(audioRecordsProvider.notifier).loadRecords());
-    }
-
-    return filePath;
+    // Defer ALL processing. The 100 ms delay gives the pop animation
+    // time to start before any task-card state updates trigger home-page
+    // rebuilds (Riverpod watchers of backgroundTasksProvider).
+    Future<void>.delayed(const Duration(milliseconds: 100), () {
+      unawaited(_runAudioSeparation(
+        videos: videosToProcess,
+        bgNotifier: bgNotifier,
+        audioRecordsNotifier: audioRecordsNotifier,
+        saveFolder: saveFolder,
+      ));
+    });
   }
 
   void _goToAudioLibrary() {

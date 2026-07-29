@@ -374,7 +374,7 @@ void main() {
   });
 
   group('AudioSeparationPage - save-to-library integration', () {
-    testWidgets('_saveAudioToLibrary generates correct AudioRecord', (
+    testWidgets('_saveAudioSeparationFile generates correct AudioRecord', (
       tester,
     ) async {
       final file = File('lib/pages/audio_separation_page.dart');
@@ -382,50 +382,48 @@ void main() {
 
       final content = file.readAsStringSync();
 
-      // Locate the _saveAudioToLibrary method start
+      // Locate the _saveAudioSeparationFile function start
       final methodStart =
-          content.indexOf('Future<String?> _saveAudioToLibrary');
+          content.indexOf('Future<String?> _saveAudioSeparationFile');
       expect(
         methodStart,
         greaterThanOrEqualTo(0),
-        reason: '_saveAudioToLibrary method not found',
+        reason: '_saveAudioSeparationFile function not found',
       );
 
-      // Extract a reasonable chunk after the method signature (the method is
-      // ~30 lines). We search for the first '};' pattern (end of class) or
-      // the next method declaration to bound the search.
+      // Extract a reasonable chunk after the function signature.
       final methodCode = content.substring(
         methodStart,
         content
-            .indexOf('\n  void ', methodStart)
+            .indexOf('\n}\n\n', methodStart)
             .clamp(methodStart + 1, content.length),
       );
 
       expect(
         methodCode.contains('FileManifest.writeFile'),
         isTrue,
-        reason: '_saveAudioToLibrary must write audio data via FileManifest',
+        reason: '_saveAudioSeparationFile must write audio data via FileManifest',
       );
       expect(
         methodCode.contains('AudioRecord('),
         isTrue,
-        reason: '_saveAudioToLibrary must create an AudioRecord instance',
+        reason: '_saveAudioSeparationFile must create an AudioRecord instance',
       );
       expect(
         methodCode.contains('FileManifest.addRecord'),
         isTrue,
-        reason: '_saveAudioToLibrary must add the record via FileManifest',
+        reason: '_saveAudioSeparationFile must add the record via FileManifest',
       );
       expect(
-        methodCode.contains('audioRecordsProvider.notifier'),
+        methodCode.contains('audioRecordsNotifier.loadRecords'),
         isTrue,
-        reason: '_saveAudioToLibrary must refresh the audio records provider',
+        reason: '_saveAudioSeparationFile must refresh the audio records provider',
       );
       expect(
         methodCode.contains('FileManifest.readFilePath'),
         isTrue,
         reason:
-            '_saveAudioToLibrary must get file path via FileManifest.readFilePath',
+            '_saveAudioSeparationFile must get file path via FileManifest.readFilePath',
       );
     });
   });
