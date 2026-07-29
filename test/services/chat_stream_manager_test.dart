@@ -1523,13 +1523,12 @@ void main() {
     );
 
     test(
-      'guards: starting a different conversation abandons the old one',
+      'guards: starting a different conversation does NOT abandon the old one '
+      '(concurrent streaming with per-conversation services)',
       () async {
         final manager = ChatStreamManager();
 
         // Use a WAITING mock to keep convA alive while we start convB.
-        // This simulates real-world: "user switches to another conversation
-        // while the first one is still streaming."
         final blockA = Completer<void>();
         final providerA = _MockProvider(
           [
@@ -1544,10 +1543,10 @@ void main() {
           history: [_userMsg('Q A')],
         );
 
-        // Must verify streaming state synchronously before any microtask runs
         expect(manager.isStreamingFor('convA'), true);
 
-        // Start convB while convA is blocked — convA should be abandoned
+        // Start convB while convA is blocked — with per-conversation
+        // ChatService instances, convA should KEEP streaming concurrently.
         final providerB = _MockProvider([
           [AIStreamEvent('B response')],
         ]);
@@ -1558,20 +1557,16 @@ void main() {
           history: [_userMsg('Q B')],
         );
 
-        // ConvA should be abandoned (no longer tracked)
-        expect(manager.isStreamingFor('convA'), false);
-        // ConvB should be streaming
+        // BOTH conversations should be streaming concurrently
+        expect(manager.isStreamingFor('convA'), true);
         expect(manager.isStreamingFor('convB'), true);
 
-        // Complete convA's blocked provider and let it finish
+        // Complete convA's blocked provider
         blockA.complete();
 
-        // Complete convB
-        final resultB = await futureB;
-        expect(resultB.fullReply, 'B response');
-
-        // ConvA's future should also complete (stream was closed)
-        await futureA;
+        // Both should complete normally
+        expect((await futureB).fullReply, 'B response');
+        expect((await futureA).fullReply, 'A response');
 
         manager.dispose();
       },
