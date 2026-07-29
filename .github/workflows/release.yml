@@ -65,6 +65,13 @@ jobs:
           pub-cache: true
       - run: flutter create --platforms=macos .
       - run: flutter pub get
+      - name: Clean SwiftPM cache and artifacts
+        run: |
+          rm -rf ~/Library/Caches/org.swift.swiftpm
+          rm -rf ~/Library/Developer/Xcode/DerivedData
+          # Remove stale binary artifacts that cause SwiftPM "already exists" errors
+          # (e.g. mdk-sdk from fvp package — known SwiftPM bug Apple FB10471859)
+          find ~/Library/Caches/org.swift.swiftpm -name "*.zip" -delete 2>/dev/null || true
       - name: Configure CocoaPods
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
@@ -96,6 +103,13 @@ jobs:
           pub-cache: true
       - run: flutter create --platforms=macos .
       - run: flutter pub get
+      - name: Clean SwiftPM cache and artifacts
+        run: |
+          rm -rf ~/Library/Caches/org.swift.swiftpm
+          rm -rf ~/Library/Developer/Xcode/DerivedData
+          # Remove stale binary artifacts that cause SwiftPM "already exists" errors
+          # (e.g. mdk-sdk from fvp package — known SwiftPM bug Apple FB10471859)
+          find ~/Library/Caches/org.swift.swiftpm -name "*.zip" -delete 2>/dev/null || true
       - name: Configure CocoaPods
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
@@ -171,6 +185,13 @@ jobs:
           pub-cache: true
       - run: flutter create --platforms=ios .
       - run: flutter pub get
+      - name: Clean SwiftPM cache and artifacts
+        run: |
+          rm -rf ~/Library/Caches/org.swift.swiftpm
+          rm -rf ~/Library/Developer/Xcode/DerivedData
+          # Remove stale binary artifacts that cause SwiftPM "already exists" errors
+          # (e.g. mdk-sdk from fvp package — known SwiftPM bug Apple FB10471859)
+          find ~/Library/Caches/org.swift.swiftpm -name "*.zip" -delete 2>/dev/null || true
       - name: Configure CocoaPods
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
