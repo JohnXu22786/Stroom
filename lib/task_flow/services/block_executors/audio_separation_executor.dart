@@ -109,8 +109,22 @@ Future<String> executeAudioSeparationBlock({
     await FileManifest.writeFile('$hash.$format', audioBytes);
 
     final saveFolder = (block.params['saveFolder'] as String?) ?? '';
+
+    // Deduplicate the record name — same video extracted twice should
+    // produce "音频分离_video" then "音频分离_video (2)", etc.
+    String recordName = title;
+    {
+      final existingRecords = await FileManifest.loadRecords();
+      int dedupIdx = 2;
+      while (existingRecords
+          .any((r) => r.name == recordName && r.folder == saveFolder)) {
+        recordName = '$title ($dedupIdx)';
+        dedupIdx++;
+      }
+    }
+
     final record = AudioRecord(
-      name: title ?? '音频分离_${DateTime.now().millisecondsSinceEpoch}',
+      name: recordName,
       hash: hash,
       format: format,
       createdAt: DateTime.now(),
