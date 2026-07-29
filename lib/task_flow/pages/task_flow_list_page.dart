@@ -5,7 +5,6 @@ import '../../pages/unified_task_list/task_utils.dart';
 import '../models/task_flow_definition.dart';
 import '../providers/task_flow_provider.dart';
 import 'task_flow_builder_page.dart';
-import 'task_flow_execution_page.dart';
 
 /// Page that lists all saved task flows.
 ///
@@ -103,7 +102,10 @@ class TaskFlowListPage extends ConsumerWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => TaskFlowExecutionPage(flowId: flow.id),
+              builder: (_) => TaskFlowBuilderPage(
+                flowId: flow.id,
+                startInRunMode: true,
+              ),
             ),
           );
         },
