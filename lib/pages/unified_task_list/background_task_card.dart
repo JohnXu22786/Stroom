@@ -8,6 +8,7 @@ import '../asr_page.dart';
 import '../ocr_page.dart';
 import '../audio_separation_page.dart';
 import 'task_utils.dart';
+import 'file_opener.dart';
 
 // =============================================================================
 // 后台任务卡片（OCR / ASR / 音频分离）

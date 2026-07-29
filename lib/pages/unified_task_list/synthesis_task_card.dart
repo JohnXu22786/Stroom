@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/task_provider.dart';
 import '../tts_create_page.dart';
 import 'task_utils.dart';
+import 'file_opener.dart';
 
 // =============================================================================
 // 合成任务卡片

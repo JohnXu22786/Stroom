@@ -11,22 +11,25 @@ import 'unified_task_list/synthesis_task_card.dart';
 import 'unified_task_list/background_task_card.dart';
 import 'unified_task_list/task_flow_card.dart';
 import 'unified_task_list/task_utils.dart';
+import 'unified_task_list/task_session_tracker.dart';
 
 // Re-export public APIs for backward compatibility
 export 'unified_task_list/media_preview_sheet.dart' show showMediaPreview;
 export 'unified_task_list/task_utils.dart'
     show
         formatSize,
-        openFile,
         truncateUrl,
         formatDurationSimple,
         parseDurationToSeconds,
         stepIcon,
         UnifiedTaskItem,
+        formatRelativeTime;
+export 'unified_task_list/file_opener.dart' show openFile;
+export 'unified_task_list/task_session_tracker.dart'
+    show
         taskListLastReadProvider,
         persistTaskListLastRead,
-        loadTaskListLastRead,
-        formatRelativeTime;
+        loadTaskListLastRead;
 
 /// Task tab categories.
 enum TaskTab { all, inProgress, completed, failed }
