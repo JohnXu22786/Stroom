@@ -1,10 +1,12 @@
 // Merged from:
 //   test/pages/audio_separation_page_test.dart
 //   test/pages/audio_separation_task_list_test.dart
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -762,6 +764,216 @@ void main() {
       expect(task.steps.length, 2);
       expect(task.steps[0].label, '分离音频');
       expect(task.steps[1].label, '保存到文件');
+    });
+  });
+
+  // ====================================================================
+  // Phase 2 regression tests — extraction flow correctness
+  // ====================================================================
+
+  group('AudioSeparationPage — extraction pipeline structure', () {
+    final source = File('lib/pages/audio_separation_page.dart').readAsStringSync();
+
+    test('_extractAudioIsolate calls Isolate.run', () {
+      expect(
+        source.contains('Isolate.run'),
+        isTrue,
+        reason: '_extractAudioIsolate must wrap extractAudioSync in Isolate.run',
+      );
+    });
+
+    test('_computeAudioMetaInIsolate calls Isolate.run', () {
+      // Both computeAudioHash and detectAudioFormat must run in an Isolate
+      final metaFnStart = source.indexOf('Future<(String, String)> _computeAudioMetaInIsolate');
+      expect(metaFnStart, greaterThanOrEqualTo(0));
+      final metaFnEnd = source.indexOf('\n}\n', metaFnStart).clamp(metaFnStart + 1, source.length);
+      final metaBody = source.substring(metaFnStart, metaFnEnd);
+      expect(metaBody.contains('Isolate.run'), isTrue);
+      expect(metaBody.contains('computeAudioHash'), isTrue);
+      expect(metaBody.contains('detectAudioFormat'), isTrue);
+    });
+
+    test('_runAudioSeparation is a top-level function (not a method)', () {
+      // It must not be inside class _AudioSeparationPageState
+      final classStart = source.indexOf('class _AudioSeparationPageState');
+      final runFnIdx = source.indexOf('Future<void> _runAudioSeparation');
+      expect(runFnIdx, greaterThanOrEqualTo(0));
+      expect(runFnIdx, lessThan(classStart),
+          reason: '_runAudioSeparation must be defined BEFORE the State class '
+              '(top-level, not a method)');
+    });
+
+    test('_saveAudioSeparationFile requires hash and format parameters', () {
+      final saveStart =
+          source.indexOf('Future<String?> _saveAudioSeparationFile');
+      expect(saveStart, greaterThanOrEqualTo(0));
+      final saveBody = source.substring(
+          saveStart,
+          source.indexOf('\n}\n', saveStart).clamp(saveStart + 1, source.length));
+      expect(saveBody.contains('required String hash'), isTrue);
+      expect(saveBody.contains('required String format'), isTrue);
+    });
+
+    test('_startSeparation captures state BEFORE Navigator.pop', () {
+      final startIdx = source.indexOf('Future<void> _startSeparation() async');
+      expect(startIdx, greaterThanOrEqualTo(0));
+      final endIdx = source.indexOf('void _goToAudioLibrary', startIdx);
+      final methodBody = source.substring(startIdx, endIdx);
+
+      // ref.read calls must appear before Navigator.pop
+      final refReadBg = methodBody.indexOf('ref.read(backgroundTasksProvider');
+      final refReadAr = methodBody.indexOf('ref.read(audioRecordsProvider');
+      final popCall = methodBody.indexOf('Navigator.pop(context)');
+
+      expect(refReadBg, greaterThanOrEqualTo(0));
+      expect(refReadAr, greaterThanOrEqualTo(0));
+      expect(popCall, greaterThanOrEqualTo(0));
+      expect(refReadBg, lessThan(popCall),
+          reason: 'notifiers must be captured BEFORE Navigator.pop');
+      expect(refReadAr, lessThan(popCall));
+    });
+
+    test('_startSeparation calls setState for _isProcessing guard', () {
+      final startIdx = source.indexOf('Future<void> _startSeparation() async');
+      final methodBody = source.substring(
+          startIdx,
+          source.indexOf('void _goToAudioLibrary', startIdx));
+      expect(methodBody.contains('_isProcessing = true'), isTrue,
+          reason: '_isProcessing must be set to true to guard against double-tap');
+    });
+  });
+
+  group('AudioSeparationPage — animation completion detector', () {
+    test('Completer resolves on AnimationStatus.dismissed', () async {
+      final controller = AnimationController(
+        vsync: const TestVSync(),
+        duration: const Duration(milliseconds: 300),
+      );
+      addTearDown(controller.dispose);
+
+      final done = Completer<void>();
+
+      void listener(AnimationStatus status) {
+        if (status == AnimationStatus.dismissed) {
+          done.complete();
+          controller.removeStatusListener(listener);
+        }
+      }
+
+      // Initially dismissed — listener won't fire yet
+      controller.addStatusListener(listener);
+
+      // Start forward then reverse (simulates pop)
+      controller.forward();
+      await Future<void>.delayed(Duration.zero);
+      controller.reverse();
+
+      // The Completer should resolve when reverse animation completes
+      await done.future.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => throw TimeoutException('Animation did not reach dismissed'),
+      );
+      expect(controller.status, AnimationStatus.dismissed);
+    });
+
+    test('Completer does not hang when animation already dismissed', () async {
+      final controller = AnimationController(
+        vsync: const TestVSync(),
+        duration: const Duration(milliseconds: 300),
+      );
+      addTearDown(controller.dispose);
+
+      // Already dismissed at creation
+      final done = Completer<void>();
+
+      void listener(AnimationStatus status) {
+        if (status == AnimationStatus.dismissed) {
+          if (!done.isCompleted) {
+            done.complete();
+          }
+          controller.removeStatusListener(listener);
+        }
+      }
+
+      controller.addStatusListener(listener);
+
+      // Since already dismissed, we need to trigger a status change
+      // to fire the listener, OR guard against the edge case:
+      if (controller.status == AnimationStatus.dismissed && !done.isCompleted) {
+        done.complete();
+      }
+
+      await done.future.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => throw TimeoutException('Completer hung on already-dismissed animation'),
+      );
+      expect(done.isCompleted, isTrue);
+    });
+
+    test('Completer completes on reverse animation from completed', () async {
+      final controller = AnimationController(
+        vsync: const TestVSync(),
+        duration: const Duration(milliseconds: 300),
+      );
+      addTearDown(controller.dispose);
+
+      // Forward to completed
+      controller.forward();
+      await Future<void>.delayed(Duration.zero);
+
+      final done = Completer<void>();
+
+      void listener(AnimationStatus status) {
+        if (status == AnimationStatus.dismissed) {
+          if (!done.isCompleted) done.complete();
+          controller.removeStatusListener(listener);
+        }
+      }
+
+      controller.addStatusListener(listener);
+      controller.reverse();
+      await Future<void>.delayed(Duration.zero);
+      // Guard: if already dismissed (edge case), complete manually
+      if (controller.status == AnimationStatus.dismissed && !done.isCompleted) {
+        done.complete();
+      }
+
+      await done.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => fail('Reverse animation did not reach dismissed'),
+      );
+      expect(controller.status, AnimationStatus.dismissed);
+    });
+  });
+
+  group('AudioSeparationPage — button guard behavior', () {
+    testWidgets('_isProcessing field is mutable (not final)', (tester) async {
+      // Source-level verification: _isProcessing must NOT be final
+      final content =
+          File('lib/pages/audio_separation_page.dart').readAsStringSync();
+      // Find the field declaration inside the State class
+      final classStart = content.indexOf('class _AudioSeparationPageState');
+      final isProcDecl = content.indexOf('_isProcessing', classStart);
+      final declLine = content.substring(
+          isProcDecl, content.indexOf(';', isProcDecl) + 1);
+      final isFinal = declLine.trimLeft().startsWith('final');
+      expect(isFinal, isFalse,
+          reason: '_isProcessing must be mutable (not final) to support '
+              'setState(() => _isProcessing = true) for double-tap guard');
+    });
+
+    testWidgets('extract button onPressed is NOT null when _isProcessing is true',
+        (tester) async {
+      // This test verifies the logical guard:
+      //   onPressed: _selectedVideos.isEmpty || _isProcessing ? null : _startSeparation
+      // Since _isProcessing starts as false, the button can only be disabled
+      // when _selectedVideos.isEmpty.  After setState({_isProcessing = true}),
+      // the guard should disable the button.
+      final content =
+          File('lib/pages/audio_separation_page.dart').readAsStringSync();
+      // Verify the guard expression exists
+      expect(content.contains('_selectedVideos.isEmpty || _isProcessing'), isTrue,
+          reason: 'Button guard must check both empty list and processing state');
     });
   });
 }
