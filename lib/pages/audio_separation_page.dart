@@ -56,6 +56,24 @@ Future<Uint8List> _extractAudioIsolate(
       () => extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat));
 }
 
+/// Yields to the event loop so the Flutter framework can render a frame
+/// before the next synchronous operation. Call this after every
+/// [BackgroundTaskNotifier] state update so the task card appears
+/// immediately rather than after the entire extraction completes.
+Future<void> _yieldFrame() => Future<void>.delayed(Duration.zero);
+
+/// Computes audio hash and detects format in a background isolate.
+/// Both [computeAudioHash] (MD5 over raw audio data) and
+/// [detectAudioFormat] (magic-byte scanning) are CPU-bound and
+/// would freeze the GUI if run on the main isolate.
+Future<(String, String)> _computeAudioMetaInIsolate(Uint8List audioBytes) {
+  return Isolate.run(() {
+    final hash = computeAudioHash(audioBytes);
+    final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
+    return (hash, format);
+  });
+}
+
 class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   // 音频分离引擎
   final AudioSeparationEngine _engine = AudioSeparationEngine();
@@ -63,7 +81,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   // 选中的视频文件列表（支持多选）
   final List<SelectedVideo> _selectedVideos = [];
 
-  final bool _isProcessing = false;
+  bool _isProcessing = false;
   bool _hasError = false;
   String _errorMessage = '';
   bool _engineChecked = false;
@@ -710,14 +728,20 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       return;
     }
 
+    // Guard against double-tap: disable the button immediately.
+    if (mounted) {
+      setState(() {
+        _isProcessing = true;
+      });
+    }
+
     final videosToProcess = List<SelectedVideo>.from(_selectedVideos);
 
-    // Pop FIRST — matches the original working flow (commit 912d58d).
-    // This avoids any Riverpod rebuild delay from addTask() before navigation.
+    // Pop FIRST — let the pop animation start before any processing.
     if (mounted) {
       Navigator.pop(context);
     }
-    await Future<void>.delayed(Duration.zero);
+    await _yieldFrame();
 
     // Capture notifier references after pop (ref is still valid in the async
     // continuation; we use captured notifiers, not ref.read(), after this point).
@@ -725,8 +749,8 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     final audioRecordsNotifier = ref.read(audioRecordsProvider.notifier);
 
     // Process each video: addTask + extract + save, one at a time.
-    // retryData is null — audio separation uses ffmpeg (local engine, not API)
-    // so base64 encoding the video bytes is unnecessary overhead.
+    // Yield after every state update so the task card renders immediately
+    // rather than waiting for the entire extraction loop to finish.
     for (int i = 0; i < videosToProcess.length; i++) {
       final video = videosToProcess[i];
       final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
@@ -735,10 +759,12 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         title: title,
         retryData: null,
       );
+      await _yieldFrame();
 
       try {
         // Step 0: 分离音频 - mark as running
         bgNotifier.updateStep(taskId, 0, running: true);
+        await _yieldFrame();
 
         // Run CPU-bound MP4 parsing in a background isolate so the main
         // thread stays responsive.  Isolate.run 的闭包不能在实例方法中创建
@@ -749,13 +775,24 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
         // Step 0: 分离音频 - mark as completed
         bgNotifier.updateStep(taskId, 0, completed: true);
+        await _yieldFrame();
 
         // Step 1: 保存到文件 - mark as running
         bgNotifier.updateStep(taskId, 1, running: true);
+        await _yieldFrame();
+
+        // Compute hash + format in a background isolate — both
+        // computeAudioHash (MD5) and detectAudioFormat (magic bytes)
+        // are CPU-bound and run synchronously on the main thread.
+        final meta = await _computeAudioMetaInIsolate(audioBytes);
+        final hash = meta.$1;
+        final format = meta.$2;
 
         // 保存到音频库 (返回文件路径)
         final filePath = await _saveAudioToLibrary(
           audioBytes,
+          hash: hash,
+          format: format,
           audioRecordsNotifier: audioRecordsNotifier,
           displayName: title,
           videoName: video.name,
@@ -763,11 +800,14 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
         // Step 1: 保存到文件 - mark as completed
         bgNotifier.updateStep(taskId, 1, completed: true);
+        await _yieldFrame();
 
         // Mark task as completed with file path
         bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
+        await _yieldFrame();
       } catch (e) {
         bgNotifier.failTask(taskId, error: '音频提取失败: $e');
+        await _yieldFrame();
       }
     }
 
@@ -776,8 +816,13 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   }
 
   /// 保存音频到音频库，并返回保存的文件路径。如果获取路径失败则返回 null。
+  ///
+  /// [hash] and [format] must be pre-computed (callers should use
+  /// [_computeAudioMetaInIsolate] to avoid blocking the main thread).
   Future<String?> _saveAudioToLibrary(
     Uint8List audioBytes, {
+    required String hash,
+    required String format,
     AudioRecordsNotifier? audioRecordsNotifier,
     String? displayName,
     String? videoName,
@@ -790,13 +835,6 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     final effectiveVideoName = videoName ?? '视频音频';
     final name =
         displayName ?? '音频分离_${p.basenameWithoutExtension(effectiveVideoName)}';
-
-    final hash = computeAudioHash(audioBytes);
-    // 检测原始格式（可能为 'aac'）后规范化为面向用户的扩展名（如 'm4a'），
-    // 这样保存的文件以 .m4a 命名、AudioRecord.format 也为 'm4a'，与显示名
-    // (M4A) 保持一致。
-    final detectedFormat = detectAudioFormat(audioBytes);
-    final format = normalizeAudioFormat(detectedFormat);
 
     // 保存音频文件
     await FileManifest.writeFile('$hash.$format', audioBytes);
