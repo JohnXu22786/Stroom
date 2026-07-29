@@ -55,8 +55,7 @@ class SelectedVideo {
 /// the intermediate transfer of extracted audio bytes back to the main
 /// thread before hash/format computation.
 Future<({Uint8List audioBytes, String hash, String format})>
-    _extractAndComputeMetaInIsolate(
-        Uint8List videoBytes, String videoFormat) {
+    _extractAndComputeMetaInIsolate(Uint8List videoBytes, String videoFormat) {
   return Isolate.run(() {
     final audioBytes =
         extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat);
@@ -74,56 +73,56 @@ Future<({Uint8List audioBytes, String hash, String format})>
 /// animation is already underway before any task-card state updates
 /// trigger home-page rebuilds.
 Future<void> _runAudioSeparation({
-    required List<SelectedVideo> videos,
-    required BackgroundTaskNotifier bgNotifier,
-    required AudioRecordsNotifier audioRecordsNotifier,
-    required String saveFolder,
-  }) async {
-    for (final video in videos) {
-      final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
-      final taskId = bgNotifier.addTask(
-        type: BackgroundTaskType.audioSeparation,
-        title: title,
-        retryData: null,
-      );
+  required List<SelectedVideo> videos,
+  required BackgroundTaskNotifier bgNotifier,
+  required AudioRecordsNotifier audioRecordsNotifier,
+  required String saveFolder,
+}) async {
+  for (final video in videos) {
+    final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
+    final taskId = bgNotifier.addTask(
+      type: BackgroundTaskType.audioSeparation,
+      title: title,
+      retryData: null,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    try {
+      bgNotifier.updateStep(taskId, 0, running: true);
       await Future<void>.delayed(Duration.zero);
 
-      try {
-        bgNotifier.updateStep(taskId, 0, running: true);
-        await Future<void>.delayed(Duration.zero);
+      final result =
+          await _extractAndComputeMetaInIsolate(video.bytes, video.format);
 
-        final result = await _extractAndComputeMetaInIsolate(
-            video.bytes, video.format);
+      bgNotifier.updateStep(taskId, 0, completed: true);
+      await Future<void>.delayed(Duration.zero);
 
-        bgNotifier.updateStep(taskId, 0, completed: true);
-        await Future<void>.delayed(Duration.zero);
+      bgNotifier.updateStep(taskId, 1, running: true);
+      await Future<void>.delayed(Duration.zero);
 
-        bgNotifier.updateStep(taskId, 1, running: true);
-        await Future<void>.delayed(Duration.zero);
+      final filePath = await _saveAudioSeparationFile(
+        result.audioBytes,
+        hash: result.hash,
+        format: result.format,
+        audioRecordsNotifier: audioRecordsNotifier,
+        displayName: title,
+        videoName: video.name,
+        saveFolder: saveFolder,
+      );
 
-        final filePath = await _saveAudioSeparationFile(
-          result.audioBytes,
-          hash: result.hash,
-          format: result.format,
-          audioRecordsNotifier: audioRecordsNotifier,
-          displayName: title,
-          videoName: video.name,
-          saveFolder: saveFolder,
-        );
+      bgNotifier.updateStep(taskId, 1, completed: true);
+      await Future<void>.delayed(Duration.zero);
 
-        bgNotifier.updateStep(taskId, 1, completed: true);
-        await Future<void>.delayed(Duration.zero);
-
-        bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
-        await Future<void>.delayed(Duration.zero);
-      } catch (e) {
-        bgNotifier.failTask(taskId, error: '音频提取失败: $e');
-        await Future<void>.delayed(Duration.zero);
-      }
+      bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
+      await Future<void>.delayed(Duration.zero);
+    } catch (e) {
+      bgNotifier.failTask(taskId, error: '音频提取失败: $e');
+      await Future<void>.delayed(Duration.zero);
     }
-
-    unawaited(audioRecordsNotifier.loadRecords());
   }
+
+  unawaited(audioRecordsNotifier.loadRecords());
+}
 
 /// Saves extracted audio bytes to the library and returns the file path.
 /// All parameters are explicitly passed — no dependency on widget state.

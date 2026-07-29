@@ -775,10 +775,13 @@ void main() {
     final source =
         File('lib/pages/audio_separation_page.dart').readAsStringSync();
 
-    test('_extractAndComputeMetaInIsolate runs extraction+hash+format in one Isolate.run', () {
+    test(
+        '_extractAndComputeMetaInIsolate runs extraction+hash+format in one Isolate.run',
+        () {
       final fnStart = source.indexOf('_extractAndComputeMetaInIsolate');
       expect(fnStart, greaterThanOrEqualTo(0));
-      final fnEnd = source.indexOf('\n}\n', fnStart).clamp(fnStart + 1, source.length);
+      final fnEnd =
+          source.indexOf('\n}\n', fnStart).clamp(fnStart + 1, source.length);
       final fnBody = source.substring(fnStart, fnEnd);
       expect(fnBody.contains('Isolate.run'), isTrue);
       expect(fnBody.contains('extractAudioSync'), isTrue);
@@ -789,10 +792,12 @@ void main() {
     test('_runAudioSeparation yields between state updates', () {
       final fnStart = source.indexOf('Future<void> _runAudioSeparation');
       expect(fnStart, greaterThanOrEqualTo(0));
-      final fnEnd = source.indexOf('\n}\n', fnStart).clamp(fnStart + 1, source.length);
+      final fnEnd =
+          source.indexOf('\n}\n', fnStart).clamp(fnStart + 1, source.length);
       final fnBody = source.substring(fnStart, fnEnd);
       // Must contain at least 3 yield calls (addTask + updateStep × N + completeTask)
-      final yieldCount = 'await Future<void>.delayed(Duration.zero)'.allMatches(fnBody).length;
+      final yieldCount =
+          'await Future<void>.delayed(Duration.zero)'.allMatches(fnBody).length;
       expect(yieldCount, greaterThanOrEqualTo(3),
           reason: '_runAudioSeparation must yield after each state update');
     });
