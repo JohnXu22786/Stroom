@@ -853,8 +853,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     // route.popped won't work — it completes synchronously in
     // ModalRoute.didPop, BEFORE the animation even starts.)
     final animation = route?.animation;
-    if (animation != null &&
-        animation.status != AnimationStatus.dismissed) {
+    if (animation != null && animation.status != AnimationStatus.dismissed) {
       final done = Completer<void>();
       void listener(AnimationStatus s) {
         if (s == AnimationStatus.dismissed) {
