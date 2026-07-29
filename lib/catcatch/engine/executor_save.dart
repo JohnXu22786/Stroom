@@ -65,9 +65,17 @@ Future<void> registerCompletedVideo(String filePath, CatCatchTask task) async {
   final hash = md5.convert(fileBytes).toString();
 
   // Build record name from the file path (uniqueExecutorPath already handles
-  // file-system dedup with (2), (3), ... suffixes).
-  final recordName = p.basenameWithoutExtension(filePath);
+  // file-system dedup).  Still check the manifest for name+folder collisions
+  // as defense-in-depth against edge cases like manual file moves.
+  String recordName = p.basenameWithoutExtension(filePath);
   final videoFolder = task.metadata['videoFolder'] ?? '';
+
+  final records = await VideoManifest.loadRecords();
+  int dedupIdx = 2;
+  while (records.any((r) => r.name == recordName && r.folder == videoFolder)) {
+    recordName = '${p.basenameWithoutExtension(filePath)} ($dedupIdx)';
+    dedupIdx++;
+  }
 
   // Only write the physical file once — hash-addressed storage.
   final existing = await VideoManifest.getRecordByHash(hash);
@@ -103,8 +111,15 @@ Future<void> registerCompletedAudio(String filePath, CatCatchTask task) async {
   final fileBytes = await file.readAsBytes();
   final hash = md5.convert(fileBytes).toString();
 
-  final recordName = p.basenameWithoutExtension(filePath);
+  String recordName = p.basenameWithoutExtension(filePath);
   final audioFolder = task.metadata['audioFolder'] ?? '';
+
+  final records = await FileManifest.loadRecords();
+  int dedupIdx = 2;
+  while (records.any((r) => r.name == recordName && r.folder == audioFolder)) {
+    recordName = '${p.basenameWithoutExtension(filePath)} ($dedupIdx)';
+    dedupIdx++;
+  }
 
   // Only write the physical file once — hash-addressed storage.
   final existing = await FileManifest.getRecordByHash(hash);
