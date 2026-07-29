@@ -772,21 +772,26 @@ void main() {
   // ====================================================================
 
   group('AudioSeparationPage — extraction pipeline structure', () {
-    final source = File('lib/pages/audio_separation_page.dart').readAsStringSync();
+    final source =
+        File('lib/pages/audio_separation_page.dart').readAsStringSync();
 
     test('_extractAudioIsolate calls Isolate.run', () {
       expect(
         source.contains('Isolate.run'),
         isTrue,
-        reason: '_extractAudioIsolate must wrap extractAudioSync in Isolate.run',
+        reason:
+            '_extractAudioIsolate must wrap extractAudioSync in Isolate.run',
       );
     });
 
     test('_computeAudioMetaInIsolate calls Isolate.run', () {
       // Both computeAudioHash and detectAudioFormat must run in an Isolate
-      final metaFnStart = source.indexOf('Future<(String, String)> _computeAudioMetaInIsolate');
+      final metaFnStart =
+          source.indexOf('Future<(String, String)> _computeAudioMetaInIsolate');
       expect(metaFnStart, greaterThanOrEqualTo(0));
-      final metaFnEnd = source.indexOf('\n}\n', metaFnStart).clamp(metaFnStart + 1, source.length);
+      final metaFnEnd = source
+          .indexOf('\n}\n', metaFnStart)
+          .clamp(metaFnStart + 1, source.length);
       final metaBody = source.substring(metaFnStart, metaFnEnd);
       expect(metaBody.contains('Isolate.run'), isTrue);
       expect(metaBody.contains('computeAudioHash'), isTrue);
@@ -809,7 +814,9 @@ void main() {
       expect(saveStart, greaterThanOrEqualTo(0));
       final saveBody = source.substring(
           saveStart,
-          source.indexOf('\n}\n', saveStart).clamp(saveStart + 1, source.length));
+          source
+              .indexOf('\n}\n', saveStart)
+              .clamp(saveStart + 1, source.length));
       expect(saveBody.contains('required String hash'), isTrue);
       expect(saveBody.contains('required String format'), isTrue);
     });
@@ -836,10 +843,10 @@ void main() {
     test('_startSeparation calls setState for _isProcessing guard', () {
       final startIdx = source.indexOf('Future<void> _startSeparation() async');
       final methodBody = source.substring(
-          startIdx,
-          source.indexOf('void _goToAudioLibrary', startIdx));
+          startIdx, source.indexOf('void _goToAudioLibrary', startIdx));
       expect(methodBody.contains('_isProcessing = true'), isTrue,
-          reason: '_isProcessing must be set to true to guard against double-tap');
+          reason:
+              '_isProcessing must be set to true to guard against double-tap');
     });
   });
 
@@ -871,7 +878,8 @@ void main() {
       // The Completer should resolve when reverse animation completes
       await done.future.timeout(
         const Duration(seconds: 2),
-        onTimeout: () => throw TimeoutException('Animation did not reach dismissed'),
+        onTimeout: () =>
+            throw TimeoutException('Animation did not reach dismissed'),
       );
       expect(controller.status, AnimationStatus.dismissed);
     });
@@ -905,7 +913,8 @@ void main() {
 
       await done.future.timeout(
         const Duration(seconds: 2),
-        onTimeout: () => throw TimeoutException('Completer hung on already-dismissed animation'),
+        onTimeout: () => throw TimeoutException(
+            'Completer hung on already-dismissed animation'),
       );
       expect(done.isCompleted, isTrue);
     });
@@ -954,15 +963,16 @@ void main() {
       // Find the field declaration inside the State class
       final classStart = content.indexOf('class _AudioSeparationPageState');
       final isProcDecl = content.indexOf('_isProcessing', classStart);
-      final declLine = content.substring(
-          isProcDecl, content.indexOf(';', isProcDecl) + 1);
+      final declLine =
+          content.substring(isProcDecl, content.indexOf(';', isProcDecl) + 1);
       final isFinal = declLine.trimLeft().startsWith('final');
       expect(isFinal, isFalse,
           reason: '_isProcessing must be mutable (not final) to support '
               'setState(() => _isProcessing = true) for double-tap guard');
     });
 
-    testWidgets('extract button onPressed is NOT null when _isProcessing is true',
+    testWidgets(
+        'extract button onPressed is NOT null when _isProcessing is true',
         (tester) async {
       // This test verifies the logical guard:
       //   onPressed: _selectedVideos.isEmpty || _isProcessing ? null : _startSeparation
@@ -972,8 +982,10 @@ void main() {
       final content =
           File('lib/pages/audio_separation_page.dart').readAsStringSync();
       // Verify the guard expression exists
-      expect(content.contains('_selectedVideos.isEmpty || _isProcessing'), isTrue,
-          reason: 'Button guard must check both empty list and processing state');
+      expect(
+          content.contains('_selectedVideos.isEmpty || _isProcessing'), isTrue,
+          reason:
+              'Button guard must check both empty list and processing state');
     });
   });
 }
