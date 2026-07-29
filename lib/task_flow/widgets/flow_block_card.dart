@@ -7,11 +7,15 @@ import 'io_type_indicator.dart';
 /// Shows the block's icon, label, input/output types, and a brief
 /// summary of its configured parameters. Supports drag-to-reorder,
 /// tap to edit params, and delete.
+///
+/// When [readOnly] is true, the settings and delete buttons are hidden,
+/// and the tap hint changes to "点击查看参数" (read-only view).
 class FlowBlockCard extends StatelessWidget {
   final TaskFlowBlock block;
   final int index;
   final bool isFirst;
   final bool isLast;
+  final bool readOnly;
   final VoidCallback? onTap;
   final VoidCallback? onSettings;
   final VoidCallback? onDelete;
@@ -22,6 +26,7 @@ class FlowBlockCard extends StatelessWidget {
     required this.index,
     this.isFirst = false,
     this.isLast = false,
+    this.readOnly = false,
     this.onTap,
     this.onSettings,
     this.onDelete,
@@ -112,17 +117,18 @@ class FlowBlockCard extends StatelessWidget {
                           ],
                         ),
                       ),
-                      // Settings button
-                      IconButton(
-                        icon: Icon(Icons.settings, size: 16, color: cs.primary),
-                        onPressed: onSettings ?? onTap,
-                        padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints(minWidth: 28, minHeight: 28),
-                        tooltip: '设置参数',
-                      ),
-                      // Delete button (only shown for last block)
-                      if (onDelete != null)
+                      // Settings button (hidden in readOnly)
+                      if (!readOnly)
+                        IconButton(
+                          icon: Icon(Icons.settings, size: 16, color: cs.primary),
+                          onPressed: onSettings ?? onTap,
+                          padding: EdgeInsets.zero,
+                          constraints:
+                              const BoxConstraints(minWidth: 28, minHeight: 28),
+                          tooltip: '设置参数',
+                        ),
+                      // Delete button (only for last block, hidden in readOnly)
+                      if (onDelete != null && !readOnly)
                         IconButton(
                           icon: Icon(Icons.close, size: 16, color: cs.error),
                           onPressed: onDelete,
@@ -192,7 +198,7 @@ class FlowBlockCard extends StatelessWidget {
                   Align(
                     alignment: Alignment.centerRight,
                     child: Text(
-                      '点击设置参数',
+                      readOnly ? '点击查看参数' : '点击设置参数',
                       style: TextStyle(
                         fontSize: 9,
                         color: cs.primary.withValues(alpha: 0.6),

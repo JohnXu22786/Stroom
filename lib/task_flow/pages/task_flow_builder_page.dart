@@ -9,6 +9,7 @@ import '../providers/task_flow_provider.dart';
 import '../services/task_flow_execution_service.dart';
 import '../widgets/block_chain_editor.dart';
 import '../widgets/block_editor_dialog.dart';
+import '../widgets/flow_block_card.dart';
 
 /// Unified page for editing AND launching a task flow.
 ///
@@ -44,6 +45,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   String? _editingFlowId;
   IOType _inputType = IOType.text;
   bool _isRunMode = false;
+  bool _enteredFromRunMode = false;
 
   String _initialName = '';
   String _initialDesc = '';
@@ -65,6 +67,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       _editingFlowId = widget.flowId;
       _isEditing = true;
       _isRunMode = widget.startInRunMode;
+      _enteredFromRunMode = widget.startInRunMode;
 
       final flow = ref.read(taskFlowListProvider).firstWhere(
             (f) => f.id == widget.flowId,
@@ -335,6 +338,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             ))
         .toList();
 
+    if (_enteredFromRunMode) {
+      // Return to run mode with fresh state snapshots
+      setState(() => _isRunMode = true);
+      return;
+    }
     Navigator.of(context).pop();
   }
 
@@ -377,19 +385,28 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           ),
         ],
       ),
-      body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _buildRunOverviewCard(flowName, cs),
-            const SizedBox(height: 20),
-            _buildRunInputSection(cs),
-            const SizedBox(height: 16),
-            ..._blocks.asMap().entries.map((entry) => _buildRunStepCard(
-                block: entry.value, index: entry.key, cs: cs)),
-          ],
-        ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _buildRunOverviewCard(flowName, cs),
+          const SizedBox(height: 20),
+          _buildRunInputSection(cs),
+          const SizedBox(height: 16),
+          // Read-only block chain (mirrors edit page layout)
+          _buildRunInitialInput(cs),
+          ..._blocks.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final block = entry.value;
+            final def = block.getDefinition();
+            return FlowBlockCard(
+              block: block,
+              index: idx + 1,
+              isFirst: idx == 0,
+              readOnly: true,
+              onTap: () => _showBlockInfo(def, block),
+            );
+          }),
+        ],
       ),
     );
   }
@@ -418,37 +435,6 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             Text(_descController.text.trim(),
                 style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
           ],
-          const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: _blocks.asMap().entries.map((entry) {
-                final def = entry.value.getDefinition();
-                return Row(children: [
-                  if (entry.key > 0)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Icon(Icons.arrow_forward,
-                          size: 14, color: cs.onSurfaceVariant),
-                    ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: def?.color.withValues(alpha: 0.12) ??
-                          Colors.grey.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(def?.label ?? entry.value.typeKey.name,
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: def?.color ?? Colors.grey,
-                            fontWeight: FontWeight.w500)),
-                  ),
-                ]);
-              }).toList(),
-            ),
-          ),
         ],
       ),
     );
@@ -536,53 +522,138 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     );
   }
 
-  Widget _buildRunStepCard({
-    required TaskFlowBlock block,
-    required int index,
-    required ColorScheme cs,
-  }) {
-    final def = block.getDefinition();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (index > 0)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Icon(Icons.arrow_downward,
-                  size: 18, color: cs.onSurfaceVariant),
+  Widget _buildRunInitialInput(ColorScheme cs) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: cs.tertiary.withValues(alpha: 0.4),
+              width: 1,
             ),
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: cs.outlineVariant, width: 0.5),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(def?.icon ?? Icons.extension,
-                      size: 16, color: cs.onSurfaceVariant),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                      '${index + 1}. ${def?.label ?? block.typeKey.name}',
-                      style: TextStyle(
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: cs.tertiary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.input,
+                          size: 18, color: Colors.blueGrey),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '0. 初始输入',
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: cs.onSurface)),
+                          color: cs.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ]),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Text(
+                          '输入类型: ${_inputType.label}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '用户运行任务流时输入',
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: cs.tertiary.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ),
+              ],
             ),
+          ),
+        ),
+        if (_blocks.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Icon(Icons.arrow_downward,
+              size: 18, color: cs.onSurfaceVariant),
+          const SizedBox(height: 4),
+        ],
+      ],
+    );
+  }
+
+  void _showBlockInfo(BlockTypeDefinition? def, TaskFlowBlock block) {
+    final cs = Theme.of(context).colorScheme;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(def?.label ?? block.typeKey.name),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('输入: ${def?.inputType.label ?? '-'}',
+                  style: TextStyle(fontSize: 14, color: cs.onSurface)),
+              const SizedBox(height: 4),
+              Text('输出: ${def?.outputType.label ?? '-'}',
+                  style: TextStyle(fontSize: 14, color: cs.onSurface)),
+              if (block.params.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text('参数:',
+                    style: TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                ...block.params.entries.map((e) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${e.key}: ',
+                              style: TextStyle(
+                                  fontSize: 13, color: cs.primary)),
+                          Expanded(
+                            child: Text('${e.value}',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: cs.onSurfaceVariant)),
+                          ),
+                        ],
+                      ),
+                    )),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('关闭'),
           ),
         ],
       ),
