@@ -69,9 +69,8 @@ Future<({Uint8List audioBytes, String hash, String format})>
 /// decoupled from the widget lifecycle. All state is passed in as
 /// captured values — no access to `this`, `context`, or `ref`.
 ///
-/// Called via [Future.delayed] after [Navigator.pop] so the pop
-/// animation is already underway before any task-card state updates
-/// trigger home-page rebuilds.
+/// Called via [unawaited] from [_startSeparation] after the pop
+/// animation has fully completed.
 Future<void> _runAudioSeparation({
   required List<SelectedVideo> videos,
   required BackgroundTaskNotifier bgNotifier,
@@ -116,7 +115,13 @@ Future<void> _runAudioSeparation({
       bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
       await Future<void>.delayed(Duration.zero);
     } catch (e) {
-      bgNotifier.failTask(taskId, error: '音频提取失败: $e');
+      try {
+        bgNotifier.failTask(taskId, error: '音频提取失败: $e');
+      } catch (_) {
+        // failTask itself may throw (e.g. if the notifier has been
+        // disposed).  Since _runAudioSeparation is fire-and-forget
+        // (unawaited), an uncaught exception would crash the app.
+      }
       await Future<void>.delayed(Duration.zero);
     }
   }
@@ -848,21 +853,29 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     // route.popped won't work — it completes synchronously in
     // ModalRoute.didPop, BEFORE the animation even starts.)
     final animation = route?.animation;
-    if (animation != null && animation.status != AnimationStatus.dismissed) {
+    if (animation != null &&
+        animation.status != AnimationStatus.dismissed) {
       final done = Completer<void>();
       void listener(AnimationStatus s) {
-        if (s == AnimationStatus.dismissed) {
-          done.complete();
+        if (s == AnimationStatus.dismissed || s == AnimationStatus.completed) {
+          if (!done.isCompleted) done.complete();
           animation.removeStatusListener(listener);
         }
       }
 
       animation.addStatusListener(listener);
-      await done.future;
+      await done.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          animation.removeStatusListener(listener);
+        },
+      );
     } else if (route == null) {
-      // Fallback: should never happen in a route context.
+      // No route — unexpected, but guard with a fallback delay.
       await Future<void>.delayed(const Duration(milliseconds: 400));
     }
+    // Implicit else: animation already dismissed or completed — no
+    // wait needed; fall through to fire-and-forget immediately.
 
     // Route transition is complete — now fire-and-forget the pipeline.
     // _runAudioSeparation is a top-level function with no access to
