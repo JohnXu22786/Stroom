@@ -50,14 +50,21 @@ class AvailableModel {
 
 /// 桥接层：将我们的供应商/模型配置系统适配到 flutter_chat_ui 的流式调用
 class ChatAdapter {
-  ChatService? _chatService;
+  /// Per-conversation ChatService instances, keyed by conversation ID.
+  /// Each conversation gets its own independent HTTP connection, enabling
+  /// multiple conversations to stream concurrently without interference.
+  final Map<String, ChatService> _activeServices = {};
 
-  /// The [ChatService] instance currently handling API requests.
-  /// May be replaced by [configure] or [selectModel] mid-session.
-  /// Callers that need to read per-request data (lastRequestBody etc.)
-  /// after a request completes should capture this reference before
-  /// the request starts, to guard against the service being swapped.
-  ChatService? get currentChatService => _chatService;
+  /// Cached parts of the last [configure] / [selectModel] call, used as
+  /// a template to create new per-conversation services on demand.
+  BaseChatProvider? _cachedProvider;
+  ModelConfig? _cachedModelConfig;
+  ProviderConfigItem? _cachedProviderConfig;
+
+  /// The [ChatService] instance most recently created or explicitly set.
+  /// Returns null when no service has been configured yet. For per-conversation
+  /// access use [_getOrCreateService] or [_activeServices].
+  ChatService? get currentChatService => _activeServices.values.firstOrNull;
 
   /// MCP 客户端管理器
   final McpClientManager _mcpClientManager = McpClientManager();
@@ -71,13 +78,13 @@ class ChatAdapter {
   /// 当前选中的模型索引（指向 configs[currentConfigIndex].models）
   int currentModelIndex = -1;
 
-  bool get isConfigured => _chatService != null;
+  bool get isConfigured => _cachedProvider != null;
 
   /// Whether the current model has reasoning parameters configured.
   /// A model with only an empty toggle (all fields empty) has no reasoning
   /// params configured, so the chat page should not show the reasoning toggle.
   bool get hasReasoningParams {
-    final config = _chatService?.modelConfig;
+    final config = _cachedModelConfig;
     if (config == null || config.reasoningParams.isEmpty) return false;
     // At least one param must be actually configured (not all-empty toggle)
     return config.reasoningParams.any((rp) {
@@ -90,19 +97,68 @@ class ChatAdapter {
 
   /// Gets the reasoning parameters from the current model config.
   List<ReasoningParam> get reasoningParams {
-    return _chatService?.modelConfig?.reasoningParams ?? [];
+    return _cachedModelConfig?.reasoningParams ?? [];
   }
 
   /// Gets the model-level custom parameters (模型页自定义参数)
   /// from the current model config.
   /// These are distinct from reasoning/inference parameters.
   List<CustomParam> get customParams {
-    return _chatService?.modelConfig?.customParams ?? [];
+    return _cachedModelConfig?.customParams ?? [];
   }
 
   /// 获取当前 MCP 工具定义列表
   List<ToolDefinition> get mcpToolDefinitions =>
       List.unmodifiable(_mcpToolDefinitions);
+
+  // ── Per-conversation service management ───────────────────────────────
+
+  /// Creates (or returns an existing) [ChatService] for the given
+  /// conversation. Each conversation gets an independent HTTP connection,
+  /// enabling concurrent streaming across multiple conversations.
+  /// Returns null if the adapter hasn't been configured yet.
+  ChatService? getOrCreateService(String convId) {
+    if (_cachedProvider == null || _cachedModelConfig == null) return null;
+    return _activeServices.putIfAbsent(convId, () {
+      final svc = ChatService(
+        provider: _cachedProvider!,
+        modelConfig: _cachedModelConfig!,
+        providerConfig: _cachedProviderConfig,
+      );
+      // Apply any assistant settings that were set on the "template"
+      if (_cachedAssistantPrompt != null) {
+        svc.setAssistantPrompt(_cachedAssistantPrompt);
+      }
+      if (_cachedAssistantSettings != null) {
+        svc.setAssistantSettings(_cachedAssistantSettings);
+      }
+      if (_cachedAssistantCustomParams != null) {
+        svc.setAssistantCustomParams(_cachedAssistantCustomParams);
+      }
+      return svc;
+    });
+  }
+
+  /// Cancels and disposes the [ChatService] for [convId].
+  void cancelService(String convId) {
+    final svc = _activeServices.remove(convId);
+    svc?.cancel();
+    svc?.dispose();
+  }
+
+  /// Cancels and disposes ALL per-conversation services.
+  void cancelAllServices() {
+    for (final svc in _activeServices.values) {
+      svc.cancel();
+      svc.dispose();
+    }
+    _activeServices.clear();
+  }
+
+  // Cached assistant config applied to newly created services.
+  String? _cachedAssistantPrompt;
+  AssistantSettings? _cachedAssistantSettings;
+  List<CustomParameter>? _cachedAssistantCustomParams;
 
   /// 初始化内置工具（HTTP 工具），与 MCP SSE 服务器初始化独立。
   ///
@@ -401,7 +457,9 @@ class ChatAdapter {
         entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
     if (llmEntry == null || llmEntry.configs.isEmpty) {
       debugPrint('ChatAdapter.configure: no LLM entry or configs');
-      _chatService = null;
+      _cachedProvider = null;
+      _cachedModelConfig = null;
+      _cachedProviderConfig = null;
       currentConfigIndex = -1;
       currentModelIndex = -1;
       return;
@@ -409,7 +467,9 @@ class ChatAdapter {
     final config = llmEntry.configs.first;
     if (config.host.isEmpty || config.key.isEmpty) {
       debugPrint('ChatAdapter.configure: first config host or key empty');
-      _chatService = null;
+      _cachedProvider = null;
+      _cachedModelConfig = null;
+      _cachedProviderConfig = null;
       currentConfigIndex = -1;
       currentModelIndex = -1;
       return;
@@ -417,7 +477,9 @@ class ChatAdapter {
     final modelConfig = config.models.isNotEmpty ? config.models.first : null;
     if (modelConfig == null) {
       debugPrint('ChatAdapter.configure: no models in first config');
-      _chatService = null;
+      _cachedProvider = null;
+      _cachedModelConfig = null;
+      _cachedProviderConfig = null;
       currentConfigIndex = -1;
       currentModelIndex = -1;
       return;
@@ -430,16 +492,16 @@ class ChatAdapter {
       baseUrl: config.host,
       apiKey: config.key,
     );
-    _chatService = ChatService(
-      provider: provider,
-      modelConfig: modelConfig,
-      providerConfig: config, // Pass provider-level params for merging
-    );
+    _cachedProvider = provider;
+    _cachedModelConfig = modelConfig;
+    _cachedProviderConfig = config;
     currentConfigIndex = 0;
     currentModelIndex = 0;
   }
 
-  /// 根据 configIndex / modelIndex 重新创建 ChatService
+  /// 根据 configIndex / modelIndex 更新模板配置
+  /// Existing per-conversation services keep their old config until the
+  /// conversation's stream completes; new streams pick up the updated model.
   void selectModel(
     ProviderEntriesState entriesState,
     int configIndex,
@@ -451,7 +513,9 @@ class ChatAdapter {
         configIndex < 0 ||
         configIndex >= llmEntry.configs.length) {
       debugPrint('ChatAdapter.selectModel: invalid configIndex=$configIndex');
-      _chatService = null;
+      _cachedProvider = null;
+      _cachedModelConfig = null;
+      _cachedProviderConfig = null;
       currentConfigIndex = -1;
       currentModelIndex = -1;
       return;
@@ -461,14 +525,18 @@ class ChatAdapter {
       debugPrint(
         'ChatAdapter.selectModel: config[$configIndex] host or key empty',
       );
-      _chatService = null;
+      _cachedProvider = null;
+      _cachedModelConfig = null;
+      _cachedProviderConfig = null;
       currentConfigIndex = -1;
       currentModelIndex = -1;
       return;
     }
     if (modelIndex < 0 || modelIndex >= config.models.length) {
       debugPrint('ChatAdapter.selectModel: invalid modelIndex=$modelIndex');
-      _chatService = null;
+      _cachedProvider = null;
+      _cachedModelConfig = null;
+      _cachedProviderConfig = null;
       currentConfigIndex = -1;
       currentModelIndex = -1;
       return;
@@ -482,34 +550,38 @@ class ChatAdapter {
       baseUrl: config.host,
       apiKey: config.key,
     );
-    _chatService = ChatService(
-      provider: provider,
-      modelConfig: modelConfig,
-      providerConfig: config,
-    );
+    _cachedProvider = provider;
+    _cachedModelConfig = modelConfig;
+    _cachedProviderConfig = config;
     currentConfigIndex = configIndex;
     currentModelIndex = modelIndex;
   }
 
-  /// 取消当前流
+  /// 取消所有活跃流的 HTTP 请求
   void cancel() {
-    _chatService?.cancel();
+    for (final svc in _activeServices.values) {
+      svc.cancel();
+    }
   }
 
   /// Injects a [ChatService] instance for testing.
-  /// Overwrites any existing service. Only intended for test use.
+  /// Stores it as the template for future per-conversation services.
   @visibleForTesting
   void forceService(ChatService service) {
-    _chatService = service;
+    // Extract config from the service for use as template.
+    _cachedProvider = service.provider;
+    _cachedModelConfig = service.modelConfig;
+    _cachedProviderConfig = service.providerConfig;
     currentConfigIndex = 0;
     currentModelIndex = 0;
   }
 
-  /// 释放资源
+  /// 释放所有资源
   void dispose() {
-    cancel();
-    _chatService?.dispose();
-    _chatService = null;
+    cancelAllServices();
+    _cachedProvider = null;
+    _cachedModelConfig = null;
+    _cachedProviderConfig = null;
     currentConfigIndex = -1;
     currentModelIndex = -1;
     disposeMcp();
@@ -528,20 +600,29 @@ class ChatAdapter {
   /// Pass assistant-level custom parameters to the underlying ChatService.
   /// These will be merged into the API request body alongside model-level params.
   void setAssistantCustomParams(List<CustomParameter>? params) {
-    _chatService?.setAssistantCustomParams(params);
+    _cachedAssistantCustomParams = params;
+    for (final svc in _activeServices.values) {
+      svc.setAssistantCustomParams(params);
+    }
   }
 
   /// Pass the assistant's system prompt to the underlying ChatService.
   /// This prompt will be prepended as a system-role message in API requests.
   void setAssistantPrompt(String? prompt) {
-    _chatService?.setAssistantPrompt(prompt);
+    _cachedAssistantPrompt = prompt;
+    for (final svc in _activeServices.values) {
+      svc.setAssistantPrompt(prompt);
+    }
   }
 
   /// Pass assistant-level settings to the underlying ChatService.
   /// When an assistant setting's enable flag is true, it overrides the
   /// corresponding model parameter. When false, the model parameter is used.
   void setAssistantSettings(AssistantSettings? settings) {
-    _chatService?.setAssistantSettings(settings);
+    _cachedAssistantSettings = settings;
+    for (final svc in _activeServices.values) {
+      svc.setAssistantSettings(settings);
+    }
   }
 
   Stream<String> sendStream(
@@ -550,11 +631,14 @@ class ChatAdapter {
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
+    String convId = '',
   }) {
-    if (_chatService == null) {
+    final svc =
+        convId.isNotEmpty ? getOrCreateService(convId) : currentChatService;
+    if (svc == null) {
       return Stream.error('请先配置聊天供应商');
     }
-    return _chatService!.sendStream(
+    return svc.sendStream(
       text,
       history: history,
       reasoning: reasoning,
@@ -565,6 +649,7 @@ class ChatAdapter {
 
   /// Send a message with tool call support.
   /// Returns a stream of [ChatEvent] (text chunks and tool call events).
+  /// [convId] routes the request to the correct per-conversation service.
   Stream<ChatEvent> sendStreamWithTools(
     String text, {
     required List<ChatMessage> history,
@@ -572,11 +657,14 @@ class ChatAdapter {
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
     List<ToolDefinition> tools = const [],
+    String convId = '',
   }) {
-    if (_chatService == null) {
+    final svc =
+        convId.isNotEmpty ? getOrCreateService(convId) : currentChatService;
+    if (svc == null) {
       return Stream.error('请先配置聊天供应商');
     }
-    return _chatService!.sendStreamWithTools(
+    return svc.sendStreamWithTools(
       text,
       history: history,
       reasoning: reasoning,
@@ -586,16 +674,18 @@ class ChatAdapter {
     );
   }
 
-  String get reasoningContent => _chatService?.reasoningContent ?? '';
+  String get reasoningContent => currentChatService?.reasoningContent ?? '';
 
-  Map<String, dynamic>? get lastRequestBody => _chatService?.lastRequestBody;
-  Map<String, dynamic>? get lastResponseData => _chatService?.lastResponseData;
+  Map<String, dynamic>? get lastRequestBody =>
+      currentChatService?.lastRequestBody;
+  Map<String, dynamic>? get lastResponseData =>
+      currentChatService?.lastResponseData;
   Map<String, String>? get lastRequestHeaders =>
-      _chatService?.lastRequestHeaders;
-  String? get lastRequestUrl => _chatService?.lastRequestUrl;
-  int? get lastResponseStatusCode => _chatService?.lastResponseStatusCode;
+      currentChatService?.lastRequestHeaders;
+  String? get lastRequestUrl => currentChatService?.lastRequestUrl;
+  int? get lastResponseStatusCode => currentChatService?.lastResponseStatusCode;
   Map<String, List<String>>? get lastResponseHeaders =>
-      _chatService?.lastResponseHeaders;
+      currentChatService?.lastResponseHeaders;
 }
 
 /// Resolve the set of tool names to enable for the current conversation.

@@ -940,14 +940,11 @@ class _HomePageState extends ConsumerState<HomePage> {
           children: [
             // 桌面端显示侧边栏导航
             if (!isMobile) _buildNavigationRail(context),
-            // 页面内容区域，使用IndexedStack保持各页面状态
+            // Page content area. Widgets are rebuilt on navigation
+            // (no IndexedStack keep-alive) because ChatStreamManager
+            // now handles background streaming independently.
             Expanded(
-              child: IndexedStack(
-                index: selectedPage.index,
-                children: AppPage.values.map((page) {
-                  return _buildPageContent(page);
-                }).toList(),
-              ),
+              child: _buildPageContent(AppPage.values[selectedPage.index]),
             ),
           ],
         ),
