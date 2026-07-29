@@ -47,24 +47,22 @@ class SelectedVideo {
   });
 }
 
-/// Top-level helper: runs extractAudioSync inside Isolate.run.
-/// Must be a top-level function (not a method) so the closure does NOT
-/// capture `this` (which would fail sendability check for Isolate.run).
-Future<Uint8List> _extractAudioIsolate(
-    Uint8List videoBytes, String videoFormat) {
-  return Isolate.run(
-      () => extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat));
-}
-
-/// Computes audio hash and detects format in a background isolate.
-/// Both [computeAudioHash] (MD5 over raw audio data) and
-/// [detectAudioFormat] (magic-byte scanning) are CPU-bound and
-/// would freeze the GUI if run on the main isolate.
-Future<(String, String)> _computeAudioMetaInIsolate(Uint8List audioBytes) {
+/// Runs the full extraction pipeline for one video in a single background
+/// Isolate: MP4 parsing, audio extraction, MD5 hash, and format detection.
+///
+/// Combining all CPU-bound work into one [Isolate.run] call avoids the
+/// overhead of spawning and tearing down a second isolate, and eliminates
+/// the intermediate transfer of extracted audio bytes back to the main
+/// thread before hash/format computation.
+Future<({Uint8List audioBytes, String hash, String format})>
+    _extractAndComputeMetaInIsolate(
+        Uint8List videoBytes, String videoFormat) {
   return Isolate.run(() {
+    final audioBytes =
+        extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat);
     final hash = computeAudioHash(audioBytes);
     final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
-    return (hash, format);
+    return (audioBytes: audioBytes, hash: hash, format: format);
   });
 }
 
@@ -76,46 +74,56 @@ Future<(String, String)> _computeAudioMetaInIsolate(Uint8List audioBytes) {
 /// animation is already underway before any task-card state updates
 /// trigger home-page rebuilds.
 Future<void> _runAudioSeparation({
-  required List<SelectedVideo> videos,
-  required BackgroundTaskNotifier bgNotifier,
-  required AudioRecordsNotifier audioRecordsNotifier,
-  required String saveFolder,
-}) async {
-  for (final video in videos) {
-    final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
-    final taskId = bgNotifier.addTask(
-      type: BackgroundTaskType.audioSeparation,
-      title: title,
-      retryData: null,
-    );
-
-    try {
-      // Step 0: 分离音频
-      bgNotifier.updateStep(taskId, 0, running: true);
-      final audioBytes = await _extractAudioIsolate(video.bytes, video.format);
-      bgNotifier.updateStep(taskId, 0, completed: true);
-
-      // Step 1: 保存到文件
-      bgNotifier.updateStep(taskId, 1, running: true);
-      final meta = await _computeAudioMetaInIsolate(audioBytes);
-      final filePath = await _saveAudioSeparationFile(
-        audioBytes,
-        hash: meta.$1,
-        format: meta.$2,
-        audioRecordsNotifier: audioRecordsNotifier,
-        displayName: title,
-        videoName: video.name,
-        saveFolder: saveFolder,
+    required List<SelectedVideo> videos,
+    required BackgroundTaskNotifier bgNotifier,
+    required AudioRecordsNotifier audioRecordsNotifier,
+    required String saveFolder,
+  }) async {
+    for (final video in videos) {
+      final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
+      final taskId = bgNotifier.addTask(
+        type: BackgroundTaskType.audioSeparation,
+        title: title,
+        retryData: null,
       );
-      bgNotifier.updateStep(taskId, 1, completed: true);
-      bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
-    } catch (e) {
-      bgNotifier.failTask(taskId, error: '音频提取失败: $e');
-    }
-  }
+      await Future<void>.delayed(Duration.zero);
 
-  unawaited(audioRecordsNotifier.loadRecords());
-}
+      try {
+        bgNotifier.updateStep(taskId, 0, running: true);
+        await Future<void>.delayed(Duration.zero);
+
+        final result = await _extractAndComputeMetaInIsolate(
+            video.bytes, video.format);
+
+        bgNotifier.updateStep(taskId, 0, completed: true);
+        await Future<void>.delayed(Duration.zero);
+
+        bgNotifier.updateStep(taskId, 1, running: true);
+        await Future<void>.delayed(Duration.zero);
+
+        final filePath = await _saveAudioSeparationFile(
+          result.audioBytes,
+          hash: result.hash,
+          format: result.format,
+          audioRecordsNotifier: audioRecordsNotifier,
+          displayName: title,
+          videoName: video.name,
+          saveFolder: saveFolder,
+        );
+
+        bgNotifier.updateStep(taskId, 1, completed: true);
+        await Future<void>.delayed(Duration.zero);
+
+        bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
+        await Future<void>.delayed(Duration.zero);
+      } catch (e) {
+        bgNotifier.failTask(taskId, error: '音频提取失败: $e');
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    unawaited(audioRecordsNotifier.loadRecords());
+  }
 
 /// Saves extracted audio bytes to the library and returns the file path.
 /// All parameters are explicitly passed — no dependency on widget state.

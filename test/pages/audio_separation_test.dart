@@ -775,27 +775,26 @@ void main() {
     final source =
         File('lib/pages/audio_separation_page.dart').readAsStringSync();
 
-    test('_extractAudioIsolate calls Isolate.run', () {
-      expect(
-        source.contains('Isolate.run'),
-        isTrue,
-        reason:
-            '_extractAudioIsolate must wrap extractAudioSync in Isolate.run',
-      );
+    test('_extractAndComputeMetaInIsolate runs extraction+hash+format in one Isolate.run', () {
+      final fnStart = source.indexOf('_extractAndComputeMetaInIsolate');
+      expect(fnStart, greaterThanOrEqualTo(0));
+      final fnEnd = source.indexOf('\n}\n', fnStart).clamp(fnStart + 1, source.length);
+      final fnBody = source.substring(fnStart, fnEnd);
+      expect(fnBody.contains('Isolate.run'), isTrue);
+      expect(fnBody.contains('extractAudioSync'), isTrue);
+      expect(fnBody.contains('computeAudioHash'), isTrue);
+      expect(fnBody.contains('detectAudioFormat'), isTrue);
     });
 
-    test('_computeAudioMetaInIsolate calls Isolate.run', () {
-      // Both computeAudioHash and detectAudioFormat must run in an Isolate
-      final metaFnStart =
-          source.indexOf('Future<(String, String)> _computeAudioMetaInIsolate');
-      expect(metaFnStart, greaterThanOrEqualTo(0));
-      final metaFnEnd = source
-          .indexOf('\n}\n', metaFnStart)
-          .clamp(metaFnStart + 1, source.length);
-      final metaBody = source.substring(metaFnStart, metaFnEnd);
-      expect(metaBody.contains('Isolate.run'), isTrue);
-      expect(metaBody.contains('computeAudioHash'), isTrue);
-      expect(metaBody.contains('detectAudioFormat'), isTrue);
+    test('_runAudioSeparation yields between state updates', () {
+      final fnStart = source.indexOf('Future<void> _runAudioSeparation');
+      expect(fnStart, greaterThanOrEqualTo(0));
+      final fnEnd = source.indexOf('\n}\n', fnStart).clamp(fnStart + 1, source.length);
+      final fnBody = source.substring(fnStart, fnEnd);
+      // Must contain at least 3 yield calls (addTask + updateStep × N + completeTask)
+      final yieldCount = 'await Future<void>.delayed(Duration.zero)'.allMatches(fnBody).length;
+      expect(yieldCount, greaterThanOrEqualTo(3),
+          reason: '_runAudioSeparation must yield after each state update');
     });
 
     test('_runAudioSeparation is a top-level function (not a method)', () {
