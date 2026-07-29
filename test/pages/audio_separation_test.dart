@@ -974,8 +974,7 @@ void main() {
               'setState(() => _isProcessing = true) for double-tap guard');
     });
 
-    test(
-        'extract button onPressed is NOT null when _isProcessing is true',
+    test('extract button onPressed is NOT null when _isProcessing is true',
         () async {
       // This test verifies the logical guard:
       //   onPressed: _selectedVideos.isEmpty || _isProcessing ? null : _startSeparation
