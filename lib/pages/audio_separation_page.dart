@@ -835,14 +835,28 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     // Riverpod state updates that cascade to home-page watchers;
     // if those rebuilds happen during the pop animation they
     // compete with the transition frames and freeze it mid-flight.
-    if (route != null) {
-      await route.popped;
-    } else {
+    //
+    // We use the route's AnimationController status to detect
+    // the exact moment the exit transition completes.  (Using
+    // route.popped won't work — it completes synchronously in
+    // ModalRoute.didPop, BEFORE the animation even starts.)
+    if (route?.animation case final anim
+        when anim.status != AnimationStatus.dismissed) {
+      final done = Completer<void>();
+      void listener(AnimationStatus s) {
+        if (s == AnimationStatus.dismissed) {
+          done.complete();
+          anim.removeStatusListener(listener);
+        }
+      }
+      anim.addStatusListener(listener);
+      await done.future;
+    } else if (route == null) {
       // Fallback: should never happen in a route context.
       await Future<void>.delayed(const Duration(milliseconds: 400));
     }
 
-    // Route is fully popped — now fire-and-forget the pipeline.
+    // Route transition is complete — now fire-and-forget the pipeline.
     // _runAudioSeparation is a top-level function with no access to
     // `this`, `ref`, or `context`, so it's safe to call after dispose.
     unawaited(_runAudioSeparation(
