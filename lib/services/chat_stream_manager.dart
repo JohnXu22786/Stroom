@@ -386,14 +386,15 @@ class ChatStreamManager {
 
     // Now safe to yield to event loop — all state is established and the
     // provider stream is already created.
-    await AppLogService.info('ChatStreamManager',
-        '[STREAM-MGR] startStreaming: begin, convId=$convId, historyLen=${history.length}');
 
     Object? streamError;
     Map<String, dynamic>? rawRequestCapture;
     Map<String, dynamic>? rawResponseCapture;
 
     try {
+      await AppLogService.info('ChatStreamManager',
+          '[STREAM-MGR] startStreaming: begin, convId=$convId, historyLen=${history.length}');
+
       await for (final event in stream) {
         if (state.cancelledByUser) break;
 
