@@ -3,8 +3,6 @@ import 'dart:typed_data';
 
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/task_provider_shared.dart';
-import '../../../utils/audio_utils.dart';
-import '../../../utils/file_manifest.dart';
 import '../../../utils/text_manifest.dart';
 import '../../providers/task_flow_execution_provider.dart';
 
@@ -27,8 +25,18 @@ Future<String?> saveTextForFlow(String text,
   final hash = computeTextHash(bytes);
   final storageFileName = '$hash.txt';
   final filePath = await TextManifest.writeText(storageFileName, text);
+
+  String baseName = title ?? 'FLOW_${DateTime.now().millisecondsSinceEpoch}';
+  String recordName = baseName;
+  final records = await TextManifest.loadRecords();
+  int dedupIdx = 2;
+  while (records.any((r) => r.name == recordName && r.folder == saveFolder)) {
+    recordName = '$baseName ($dedupIdx)';
+    dedupIdx++;
+  }
+
   await TextManifest.addRecord(TextRecord(
-    name: title ?? 'FLOW_${DateTime.now().millisecondsSinceEpoch}',
+    name: recordName,
     hash: hash,
     format: 'txt',
     createdAt: DateTime.now(),
@@ -37,28 +45,4 @@ Future<String?> saveTextForFlow(String text,
     textLength: text.length,
   ));
   return filePath;
-}
-
-Future<String?> saveAudioForFlow(
-  Uint8List audioBytes, {
-  String saveFolder = '',
-  String? title,
-}) async {
-  if (audioBytes.isEmpty) throw Exception('提取的音频数据为空');
-  final hash = computeAudioHash(audioBytes);
-  final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
-
-  await FileManifest.writeFile('$hash.$format', audioBytes);
-
-  final record = AudioRecord(
-    name: title ?? '音频分离_${DateTime.now().millisecondsSinceEpoch}',
-    hash: hash,
-    format: format,
-    createdAt: DateTime.now(),
-    size: audioBytes.length,
-    folder: saveFolder,
-  );
-  await FileManifest.addRecord(record);
-
-  return await FileManifest.readFilePath('$hash.$format');
 }
