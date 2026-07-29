@@ -823,23 +823,34 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final audioRecordsNotifier = ref.read(audioRecordsProvider.notifier);
     final saveFolder = _saveFolder;
+    final route = ModalRoute.of(context);
 
     // Pop IMMEDIATELY — schedule the route transition now.
     if (mounted) {
       Navigator.pop(context);
     }
 
-    // Defer ALL processing. The 100 ms delay gives the pop animation
-    // time to start before any task-card state updates trigger home-page
-    // rebuilds (Riverpod watchers of backgroundTasksProvider).
-    Future<void>.delayed(const Duration(milliseconds: 100), () {
-      unawaited(_runAudioSeparation(
-        videos: videosToProcess,
-        bgNotifier: bgNotifier,
-        audioRecordsNotifier: audioRecordsNotifier,
-        saveFolder: saveFolder,
-      ));
-    });
+    // Wait for the pop animation to finish BEFORE starting any
+    // processing.  addTask / updateStep / completeTask trigger
+    // Riverpod state updates that cascade to home-page watchers;
+    // if those rebuilds happen during the pop animation they
+    // compete with the transition frames and freeze it mid-flight.
+    if (route != null) {
+      await route.popped;
+    } else {
+      // Fallback: should never happen in a route context.
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    }
+
+    // Route is fully popped — now fire-and-forget the pipeline.
+    // _runAudioSeparation is a top-level function with no access to
+    // `this`, `ref`, or `context`, so it's safe to call after dispose.
+    unawaited(_runAudioSeparation(
+      videos: videosToProcess,
+      bgNotifier: bgNotifier,
+      audioRecordsNotifier: audioRecordsNotifier,
+      saveFolder: saveFolder,
+    ));
   }
 
   void _goToAudioLibrary() {
