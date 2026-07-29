@@ -60,12 +60,12 @@ class ChatAdapter {
   BaseChatProvider? _cachedProvider;
   ModelConfig? _cachedModelConfig;
   ProviderConfigItem? _cachedProviderConfig;
+
   /// The first active [ChatService] instance, or null if none are running.
   /// **Warning**: nondeterministic when multiple conversations are streaming
   /// concurrently. Use [getOrCreateService] with an explicit convId for
   /// per-conversation access.
-  ChatService? get currentChatService =>
-      _activeServices.values.firstOrNull;
+  ChatService? get currentChatService => _activeServices.values.firstOrNull;
 
   /// MCP 客户端管理器
   final McpClientManager _mcpClientManager = McpClientManager();
