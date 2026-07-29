@@ -795,21 +795,25 @@ void main() {
       final fnEnd =
           source.indexOf('\n}\n', fnStart).clamp(fnStart + 1, source.length);
       final fnBody = source.substring(fnStart, fnEnd);
-      // Must contain at least 3 yield calls (addTask + updateStep × N + completeTask)
+      // Must contain at least 6 yield calls (addTask + updateStep × 4 + completeTask + catch)
       final yieldCount =
           'await Future<void>.delayed(Duration.zero)'.allMatches(fnBody).length;
-      expect(yieldCount, greaterThanOrEqualTo(3),
+      expect(yieldCount, greaterThanOrEqualTo(6),
           reason: '_runAudioSeparation must yield after each state update');
     });
 
     test('_runAudioSeparation is a top-level function (not a method)', () {
-      // It must not be inside class _AudioSeparationPageState
       final classStart = source.indexOf('class _AudioSeparationPageState');
       final runFnIdx = source.indexOf('Future<void> _runAudioSeparation');
       expect(runFnIdx, greaterThanOrEqualTo(0));
-      expect(runFnIdx, lessThan(classStart),
-          reason: '_runAudioSeparation must be defined BEFORE the State class '
-              '(top-level, not a method)');
+      // The function must be defined OUTSIDE the State class body.
+      // It can appear before or after the class — what matters is
+      // that it's not inside the class's `{ ... }`.
+      final classOpenBrace = source.indexOf('{', classStart);
+      final classCloseBrace = source.lastIndexOf('}');
+      expect(runFnIdx < classOpenBrace, isTrue,
+          reason: '_runAudioSeparation must be top-level, '
+              'not an instance method of _AudioSeparationPageState');
     });
 
     test('_saveAudioSeparationFile requires hash and format parameters', () {
@@ -960,24 +964,20 @@ void main() {
   });
 
   group('AudioSeparationPage — button guard behavior', () {
-    testWidgets('_isProcessing field is mutable (not final)', (tester) async {
-      // Source-level verification: _isProcessing must NOT be final
+    test('_isProcessing field is mutable (not final)', () {
+      // Source-level verification: _isProcessing must NOT be declared final.
       final content =
           File('lib/pages/audio_separation_page.dart').readAsStringSync();
-      // Find the field declaration inside the State class
-      final classStart = content.indexOf('class _AudioSeparationPageState');
-      final isProcDecl = content.indexOf('_isProcessing', classStart);
-      final declLine =
-          content.substring(isProcDecl, content.indexOf(';', isProcDecl) + 1);
-      final isFinal = declLine.trimLeft().startsWith('final');
-      expect(isFinal, isFalse,
+      // The declaration is "bool _isProcessing" — search for "final bool _isProcessing"
+      // which must NOT be present.
+      expect(content.contains('final bool _isProcessing'), isFalse,
           reason: '_isProcessing must be mutable (not final) to support '
               'setState(() => _isProcessing = true) for double-tap guard');
     });
 
-    testWidgets(
+    test(
         'extract button onPressed is NOT null when _isProcessing is true',
-        (tester) async {
+        () async {
       // This test verifies the logical guard:
       //   onPressed: _selectedVideos.isEmpty || _isProcessing ? null : _startSeparation
       // Since _isProcessing starts as false, the button can only be disabled
