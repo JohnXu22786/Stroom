@@ -115,6 +115,16 @@ List<MessageSegment> buildAgentChainSegments({
 /// Uses [roundStarts] — indices into [toolCalls] where each assistant
 /// "step" begins — to group consecutive tool calls that belong to the
 /// same round (e.g. multiple tools called simultaneously).
+/// Index of the last non-empty reasoning section. Differs from
+/// `sections.length - 1` when a placeholder empty string was appended
+/// for the next round (see _buildWithRounds / _buildLegacy).
+int _lastNonEmptyIndex(List<String> sections) {
+  for (int j = sections.length - 1; j >= 0; j--) {
+    if (sections[j].isNotEmpty) return j;
+  }
+  return -1;
+}
+
 List<MessageSegment> _buildWithRounds(
   List<String> reasoningSections,
   List<String> textChunks,
@@ -130,8 +140,8 @@ List<MessageSegment> _buildWithRounds(
     if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
       segments.add(ReasoningSegment(
         sectionIndex: i,
-        isStreaming:
-            isLastReasoningStreaming && i == reasoningSections.length - 1,
+        isStreaming: isLastReasoningStreaming &&
+            i == _lastNonEmptyIndex(reasoningSections),
       ));
     }
 
@@ -155,8 +165,8 @@ List<MessageSegment> _buildWithRounds(
     if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
       segments.add(ReasoningSegment(
         sectionIndex: i,
-        isStreaming:
-            isLastReasoningStreaming && i == reasoningSections.length - 1,
+        isStreaming: isLastReasoningStreaming &&
+            i == _lastNonEmptyIndex(reasoningSections),
       ));
     }
     if (i < textChunks.length && textChunks[i].isNotEmpty) {
@@ -190,8 +200,8 @@ List<MessageSegment> _buildLegacy(
     if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
       segments.add(ReasoningSegment(
         sectionIndex: i,
-        isStreaming:
-            isLastReasoningStreaming && i == reasoningSections.length - 1,
+        isStreaming: isLastReasoningStreaming &&
+            i == _lastNonEmptyIndex(reasoningSections),
       ));
     }
 

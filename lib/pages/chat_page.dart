@@ -2047,9 +2047,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
         if (msgId == null) return;
         _reasoningContents[msgId] = List<String>.from(next);
         _rebuildLiveSegments(msgId);
-        if (next.length > (prev?.length ?? 0)) {
-          _isReasoningCompletedForMsg[msgId] = false;
-        }
+        // Reset reasoning-completed flag whenever reasoning sections change.
+        // Previously only reset when section count grew, but content updates
+        // (e.g. ReasoningEvent filling an empty placeholder) don't change
+        // the count. Without this, the button shows "思考完成" while new
+        // reasoning is still arriving.
+        _isReasoningCompletedForMsg[msgId] = false;
         if (mounted) setState(() {});
       });
 
