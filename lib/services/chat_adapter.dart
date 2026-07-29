@@ -60,11 +60,12 @@ class ChatAdapter {
   BaseChatProvider? _cachedProvider;
   ModelConfig? _cachedModelConfig;
   ProviderConfigItem? _cachedProviderConfig;
-
-  /// The [ChatService] instance most recently created or explicitly set.
-  /// Returns null when no service has been configured yet. For per-conversation
-  /// access use [_getOrCreateService] or [_activeServices].
-  ChatService? get currentChatService => _activeServices.values.firstOrNull;
+  /// The first active [ChatService] instance, or null if none are running.
+  /// **Warning**: nondeterministic when multiple conversations are streaming
+  /// concurrently. Use [getOrCreateService] with an explicit convId for
+  /// per-conversation access.
+  ChatService? get currentChatService =>
+      _activeServices.values.firstOrNull;
 
   /// MCP 客户端管理器
   final McpClientManager _mcpClientManager = McpClientManager();
@@ -160,6 +161,11 @@ class ChatAdapter {
   AssistantSettings? _cachedAssistantSettings;
   List<CustomParameter>? _cachedAssistantCustomParams;
 
+  /// Hash of the last entries state used for MCP initialization.
+  /// Prevents redundant re-discovery across page mounts, but allows
+  /// re-initialization when the provider config actually changes.
+  int? _lastMcpEntriesHash;
+
   /// 初始化内置工具（HTTP 工具），与 MCP SSE 服务器初始化独立。
   ///
   /// 此方法确保 HTTP 工具（如 brave_web_search、bocha_web_search 等）
@@ -221,6 +227,12 @@ class ChatAdapter {
   /// 确保所有 MCP 供应商的工具都在工具列表中可见，不会区分"纯 Dart HTTP 工具"和
   /// "SSE MCP 工具"。
   Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
+    // Skip if config hasn't changed since last init (prevents redundant
+    // network discovery on every page mount after IndexedStack removal).
+    final hash = Object.hashAll(entriesState.entries.map((e) => e.hashCode));
+    if (_lastMcpEntriesHash == hash) return;
+    _lastMcpEntriesHash = hash;
+
     final mcpEntry =
         entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
     if (mcpEntry == null || mcpEntry.configs.isEmpty) return;
@@ -579,6 +591,7 @@ class ChatAdapter {
   /// 释放所有资源
   void dispose() {
     cancelAllServices();
+    _lastMcpEntriesHash = null;
     _cachedProvider = null;
     _cachedModelConfig = null;
     _cachedProviderConfig = null;

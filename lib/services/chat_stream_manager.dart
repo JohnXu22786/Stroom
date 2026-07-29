@@ -98,6 +98,8 @@ class StreamResult {
 class _ConversationStreamState {
   final String convId;
   bool cancelledByUser = false;
+  /// Guards against overlapping periodic persist calls from the timer.
+  bool _isPersisting = false;
   String? streamingMsgId;
   String fullReply = '';
   String reasoningBuffer = '';
@@ -769,9 +771,12 @@ class ChatStreamManager {
     if (s.persistTimer == null) return;
     if (s.cancelledByUser) return;
     if (s.fullReply.isEmpty && s.reasoningBuffer.isEmpty) return;
+    if (s._isPersisting) return;
+    s._isPersisting = true;
     final ref = _ref;
     if (ref == null) {
       debugPrint('[ChatStreamManager] 定期持久化失败: _ref is null');
+      s._isPersisting = false;
       return;
     }
     try {
@@ -806,6 +811,8 @@ class ChatStreamManager {
           );
     } catch (e) {
       debugPrint('[ChatStreamManager] 定期持久化失败: $e');
+    } finally {
+      s._isPersisting = false;
     }
   }
 

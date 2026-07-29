@@ -805,10 +805,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
       await AppLogService.info(
           'ChatPage', '控制器消息插入完成，共 ${newCtrl.messages.length} 条');
       // ── Atomically swap controllers ──
-      // The widget now references _controller; oldCtrl stays visible
-      // through the frame before setState().
       _controller = newCtrl;
-      oldCtrl?.dispose();
+      // Defer disposing the old controller until after the widget tree
+      // has rebuilt (next frame). Between the swap above and setState()
+      // below, callbacks may still reference the old controller.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        oldCtrl?.dispose();
+      });
       // Restore streaming state that we saved before the clear,
       // so the live streaming UI continues to work while we
       // display the now-loaded historical messages.
@@ -2196,6 +2199,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
         // losing _chatSegments for completed messages (plain text only, no
         // tool call cards or reasoning buttons).
         _history.clear();
+        // Also clear per-message maps so stale entries from the previous
+        // conversation don't leak into _loadConversationMessages'
+        // save/restore block, which would cross-contaminate segment data.
+        _chatSegments.clear();
+        _reasoningContents.clear();
+        _finalizedMessages.clear();
+        _isReasoningCompletedForMsg.clear();
         manager.activateConversation(next);
         // Only schedule _loadConversationMessages for actual conversation
         // SWITCHES (prev != null), not for the initial registration of this
@@ -2203,9 +2213,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
         // _loadConversationMessages + _restoreStreamingState, so a second
         // load would clear the in-progress UI and cause user messages to
         // appear incomplete for 1-2 seconds before re-rendering.
+        // Capture the target conversation ID so rapid C1→C2→C3 switches
+        // don't load the wrong conversation (the post-frame reads
+        // activeConversationIdProvider which may have changed).
         if (prev != null) {
+          final capturedConvId = next;
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _loadConversationMessages();
+            if (mounted &&
+                ref.read(activeConversationIdProvider) == capturedConvId) {
+              _loadConversationMessages();
+            }
           });
         }
       }
