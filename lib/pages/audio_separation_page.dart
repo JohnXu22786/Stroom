@@ -840,16 +840,17 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     // the exact moment the exit transition completes.  (Using
     // route.popped won't work — it completes synchronously in
     // ModalRoute.didPop, BEFORE the animation even starts.)
-    if (route?.animation case final anim
-        when anim.status != AnimationStatus.dismissed) {
+    final animation = route?.animation;
+    if (animation != null && animation.status != AnimationStatus.dismissed) {
       final done = Completer<void>();
       void listener(AnimationStatus s) {
         if (s == AnimationStatus.dismissed) {
           done.complete();
-          anim.removeStatusListener(listener);
+          animation.removeStatusListener(listener);
         }
       }
-      anim.addStatusListener(listener);
+
+      animation.addStatusListener(listener);
       await done.future;
     } else if (route == null) {
       // Fallback: should never happen in a route context.
