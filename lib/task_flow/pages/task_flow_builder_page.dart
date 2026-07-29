@@ -143,6 +143,15 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     return result == true;
   }
 
+  /// Returns to run mode if entered from there, otherwise pops.
+  void _goBackFromEdit() {
+    if (_enteredFromRunMode) {
+      setState(() => _isRunMode = true);
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
   // =========================================================================
   // Build entry – mode dispatch
   // =========================================================================
@@ -166,12 +175,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         if (didPop) return;
         if (!mounted) return;
         if (!_isDirty) {
-          Navigator.of(context).pop();
+          _goBackFromEdit();
           return;
         }
         final shouldDiscard = await _showUnsavedChangesDialog();
         if (shouldDiscard && context.mounted) {
-          Navigator.of(context).pop();
+          _goBackFromEdit();
         }
       },
       child: Scaffold(
@@ -378,10 +387,13 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         title: Text(flowName),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () => setState(() => _isRunMode = false),
-            tooltip: '编辑',
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: IconButton(
+              icon: const Icon(Icons.edit),
+              onPressed: () => setState(() => _isRunMode = false),
+              tooltip: '编辑',
+            ),
           ),
         ],
       ),
@@ -599,8 +611,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         ),
         if (_blocks.isNotEmpty) ...[
           const SizedBox(height: 4),
-          Icon(Icons.arrow_downward,
-              size: 18, color: cs.onSurfaceVariant),
+          Icon(Icons.arrow_downward, size: 18, color: cs.onSurfaceVariant),
           const SizedBox(height: 4),
         ],
       ],
@@ -626,8 +637,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               if (block.params.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 const Text('参数:',
-                    style: TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w600)),
+                    style:
+                        TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
                 ...block.params.entries.map((e) => Padding(
                       padding: const EdgeInsets.only(bottom: 4),
@@ -635,13 +646,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('${e.key}: ',
-                              style: TextStyle(
-                                  fontSize: 13, color: cs.primary)),
+                              style:
+                                  TextStyle(fontSize: 13, color: cs.primary)),
                           Expanded(
                             child: Text('${e.value}',
                                 style: TextStyle(
-                                    fontSize: 13,
-                                    color: cs.onSurfaceVariant)),
+                                    fontSize: 13, color: cs.onSurfaceVariant)),
                           ),
                         ],
                       ),
