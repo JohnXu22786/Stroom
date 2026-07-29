@@ -47,6 +47,7 @@ class BlockChainEditor extends StatelessWidget {
                 return FlowBlockCard(
                   block: block,
                   index: displayIndex,
+                  isFirst: index == 0,
                   onTap: () => onEditBlock(index),
                   onSettings: () => onEditBlock(index),
                   onDelete: isLast ? () => onDeleteBlock(index) : null,
