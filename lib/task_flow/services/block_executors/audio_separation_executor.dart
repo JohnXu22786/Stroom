@@ -30,12 +30,14 @@ Future<Uint8List> _readAndExtractInIsolate(
 /// Computes the audio hash and detects the format in a background isolate.
 /// Both operations are CPU-bound (MD5 over raw PCM, magic-byte scanning)
 /// and would freeze the GUI if run on the main isolate.
-Future<(String hash, String format)> _computeAudioMetaInIsolate(
-    Uint8List audioBytes) {
+Future<(String, String)> _computeAudioMetaInIsolate(Uint8List audioBytes) {
   return Isolate.run(() {
     final hash = computeAudioHash(audioBytes);
     final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
-    return (hash, format);
+    return (
+      hash,
+      format
+    ); // positional record — avoids destructuring issues in CI
   });
 }
 
@@ -100,7 +102,9 @@ Future<String> executeAudioSeparationBlock({
     bgNotifier.updateStep(taskId, 1, running: true);
     await _yieldToUi();
 
-    final (:hash, :format) = await _computeAudioMetaInIsolate(audioBytes);
+    final meta = await _computeAudioMetaInIsolate(audioBytes);
+    final hash = meta.$1;
+    final format = meta.$2;
     await FileManifest.writeFile('$hash.$format', audioBytes);
 
     final saveFolder = (block.params['saveFolder'] as String?) ?? '';
