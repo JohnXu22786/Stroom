@@ -328,32 +328,9 @@ class ChatStreamManager {
       }
     }
 
-    // Abandon streams for other conversations before starting this one.
-    // The adapter supports only one concurrent request, so cancel any
-    // active request. The old conversation's per-conversation state is
-    // preserved in memory (so _saveMessages can persist partial results),
-    // but _adapter.cancel() closes the ChatService's event controller,
-    // causing the old stream's await-for loop to exit cleanly via the
-    // done event. Writes to family providers are harmless since nobody
-    // watches the old conversation's providers after switch.
-    if (_streams.isNotEmpty) {
-      final oldKeys = List<String>.from(_streams.keys);
-      for (final oldConvId in oldKeys) {
-        if (oldConvId == convId) continue;
-        final oldState = _streams[oldConvId];
-        if (oldState != null) {
-          oldState.cancelledByUser = true;
-          oldState.persistTimer?.cancel();
-          oldState.persistTimer = null;
-        }
-        _streams.remove(oldConvId);
-      }
-      // Cancel the adapter's current request so the new one can start.
-      // ChatService.cancel() closes _chatEventController, causing the old
-      // stream's await-for loop to exit cleanly via the done event.
-      _adapter.cancel();
-    }
-
+    // Each conversation gets its own ChatService via the adapter, so
+    // multiple conversations can stream concurrently. No need to
+    // abandon other conversations' streams.
     // Create per-conversation state and its result completer.
     // ALL synchronous setup must happen BEFORE the first await so
     // that isStreaming / isStreamingFor are correct immediately.
@@ -386,14 +363,13 @@ class ChatStreamManager {
     });
 
     // Snapshot the ChatService instance BEFORE the first await so that
-    // sendStreamWithTools and the finally-block capture use the same
-    // service that was active when this startStreaming was called.
-    // After the first await, _adapter.currentChatService may be replaced
-    // by configure() / selectModel() or forceService() from another call.
-    final _snappedChatService = _adapter.currentChatService;
+    // Snapshot this conversation's ChatService before any await.
+    // The adapter creates a per-conversation service on demand, so
+    // capture it here for raw data (lastRequestBody etc.) in finally.
+    final _snappedChatService = _adapter.getOrCreateService(convId);
 
     // Start the provider stream BEFORE yielding to the event loop so
-    // that _chatService is guaranteed to be the one we just captured.
+    // that the ChatService is guaranteed to be the one we just created.
     // The stream controller will buffer any events produced before the
     // await-for loop subscribes below.
     final stream = _adapter.sendStreamWithTools(
@@ -403,6 +379,7 @@ class ChatStreamManager {
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
       tools: tools,
+      convId: convId,
     );
 
     // Now safe to yield to event loop — all state is established and the
@@ -688,6 +665,10 @@ class ChatStreamManager {
       };
       activeSet.remove(convId);
       _setProvider(streamingConversationsProvider, activeSet);
+      // Dispose the per-conversation ChatService so a subsequent
+      // startStreaming for the same convId creates a fresh service
+      // with the latest config (from forceService / selectModel).
+      _adapter.cancelService(convId);
     }
 
     // Do NOT clear segment-related providers here (streamingFullReplyProvider,
@@ -709,13 +690,16 @@ class ChatStreamManager {
       final state = _streams[convId];
       if (state == null) return;
       state.cancelledByUser = true;
+      // Cancel only this conversation's HTTP request.
+      _adapter.cancelService(convId);
     } else {
       if (_streams.isEmpty) return;
       for (final s in _streams.values) {
         s.cancelledByUser = true;
       }
+      // Cancel all services.
+      _adapter.cancelAllServices();
     }
-    _adapter.cancel();
   }
 
   /// 释放资源。

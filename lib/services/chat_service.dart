@@ -91,6 +91,14 @@ class ChatService {
   /// The model config used by this service instance.
   ModelConfig? get modelConfig => _modelConfig;
 
+  /// The provider used by this service instance (for test use only).
+  @visibleForTesting
+  BaseChatProvider? get provider => _provider;
+
+  /// The provider config used by this service instance (for test use only).
+  @visibleForTesting
+  ProviderConfigItem? get providerConfig => _providerConfig;
+
   Map<String, dynamic>? get lastRequestBody =>
       _lastRequestBody ?? _provider?.lastRequestBody;
   Map<String, dynamic>? get lastResponseData =>
