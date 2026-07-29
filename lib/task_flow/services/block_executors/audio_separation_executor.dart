@@ -7,8 +7,9 @@ import 'package:uuid/uuid.dart';
 
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/task_provider_shared.dart';
-import '../../../services/app_log_service.dart';
 import '../../../utils/audio_separation.dart';
+import '../../../utils/audio_utils.dart';
+import '../../../utils/file_manifest.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_definition.dart';
@@ -16,8 +17,8 @@ import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
 import 'shared_helpers.dart';
 
-/// Reads the video file and extracts audio — all in a background isolate
-/// so the GUI stays responsive even for large files.
+/// Reads a video file and extracts its audio track — all in a background
+/// isolate so the GUI stays responsive even for 100+ MB files.
 Future<Uint8List> _readAndExtractInIsolate(
     String filePath, String videoFormat) {
   return Isolate.run(() {
@@ -25,6 +26,22 @@ Future<Uint8List> _readAndExtractInIsolate(
     return extractAudioSync(videoBytes: bytes, videoFormat: videoFormat);
   });
 }
+
+/// Computes the audio hash and detects the format in a background isolate.
+/// Both operations are CPU-bound (MD5 over raw PCM, magic-byte scanning)
+/// and would freeze the GUI if run on the main isolate.
+Future<(String hash, String format)> _computeAudioMetaInIsolate(
+    Uint8List audioBytes) {
+  return Isolate.run(() {
+    final hash = computeAudioHash(audioBytes);
+    final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
+    return (hash, format);
+  });
+}
+
+/// Inserts a microtask yield so the event loop can process pending
+/// UI rebuilds triggered by state updates before continuing.
+Future<void> _yieldToUi() => Future(() {});
 
 Future<String> executeAudioSeparationBlock({
   required BlockTypeDefinition def,
@@ -44,6 +61,7 @@ Future<String> executeAudioSeparationBlock({
   execNotifier.updateSubTaskStatus(execId, flowSubTask.id, TaskStatus.running);
   bgNotifier.addTask(
       type: BackgroundTaskType.audioSeparation, title: title, taskId: taskId);
+  await _yieldToUi(); // let the UI show "running" before heavy work
 
   Uint8List audioBytes;
   try {
@@ -56,10 +74,12 @@ Future<String> executeAudioSeparationBlock({
           blockType: def.typeKey.name, blockTitle: def.label);
     }
 
-    // Read + extract audio in a background isolate so GUI stays responsive
+    // Step 0: read file + extract audio — both in isolate
     bgNotifier.updateStep(taskId, 0, running: true);
+    await _yieldToUi();
     audioBytes = await _readAndExtractInIsolate(input, inputFormat);
     bgNotifier.updateStep(taskId, 0, completed: true);
+    await _yieldToUi();
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
     failSubTask(
@@ -76,11 +96,24 @@ Future<String> executeAudioSeparationBlock({
           blockType: def.typeKey.name, blockTitle: def.label);
     }
 
+    // Step 1: hash + format detection in isolate, then save on main thread
     bgNotifier.updateStep(taskId, 1, running: true);
-    final saveFolder = block.params['saveFolder'] ?? '';
-    final filePath = await saveAudioForFlow(audioBytes,
-        saveFolder: saveFolder, title: title);
-    bgNotifier.updateStep(taskId, 1, completed: true);
+    await _yieldToUi();
+
+    final (:hash, :format) = await _computeAudioMetaInIsolate(audioBytes);
+    await FileManifest.writeFile('$hash.$format', audioBytes);
+
+    final saveFolder = (block.params['saveFolder'] as String?) ?? '';
+    final record = AudioRecord(
+      name: title ?? '音频分离_${DateTime.now().millisecondsSinceEpoch}',
+      hash: hash,
+      format: format,
+      createdAt: DateTime.now(),
+      size: audioBytes.length,
+      folder: saveFolder,
+    );
+    await FileManifest.addRecord(record);
+    final filePath = await FileManifest.readFilePath('$hash.$format');
 
     if (filePath == null) {
       failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
@@ -88,6 +121,9 @@ Future<String> executeAudioSeparationBlock({
       throw BlockExecutionException('无法保存提取的音频文件',
           blockType: def.typeKey.name, blockTitle: def.label);
     }
+
+    bgNotifier.updateStep(taskId, 1, completed: true);
+    await _yieldToUi();
 
     bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
     execNotifier.updateSubTaskStatus(

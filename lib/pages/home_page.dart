@@ -474,6 +474,59 @@ class _HomePageState extends ConsumerState<HomePage> {
     for (final t in backgroundTasks) {
       countCatchStatusName(t.status.name);
     }
+
+    // Exclude individual tasks that belong to a task flow — they are
+    // already counted as part of their parent flow execution below.
+    final flowSubTaskIds = <String>{
+      for (final e in flowExecutions)
+        for (final st in e.subTasks) st.subTaskId,
+    };
+    inProgressCount -= catcatchTasks
+        .where((t) => flowSubTaskIds.contains(t.id))
+        .where((t) =>
+            t.status.name == 'running' ||
+            t.status.name == 'paused' ||
+            t.status.name == 'waiting')
+        .length;
+    inProgressCount -= synthesisTasks
+        .where((t) => flowSubTaskIds.contains(t.id))
+        .where((t) =>
+            t.status.name == 'running' ||
+            t.status.name == 'paused' ||
+            t.status.name == 'waiting')
+        .length;
+    inProgressCount -= backgroundTasks
+        .where((t) => flowSubTaskIds.contains(t.id))
+        .where((t) =>
+            t.status.name == 'running' ||
+            t.status.name == 'paused' ||
+            t.status.name == 'waiting')
+        .length;
+    completedCount -= catcatchTasks
+        .where((t) => flowSubTaskIds.contains(t.id))
+        .where((t) => t.status.name == 'completed')
+        .length;
+    completedCount -= synthesisTasks
+        .where((t) => flowSubTaskIds.contains(t.id))
+        .where((t) => t.status.name == 'completed')
+        .length;
+    completedCount -= backgroundTasks
+        .where((t) => flowSubTaskIds.contains(t.id))
+        .where((t) => t.status.name == 'completed')
+        .length;
+    failedCount -= catcatchTasks
+        .where((t) => flowSubTaskIds.contains(t.id))
+        .where((t) => t.status.name == 'failed')
+        .length;
+    failedCount -= synthesisTasks
+        .where((t) => flowSubTaskIds.contains(t.id))
+        .where((t) => t.status.name == 'failed')
+        .length;
+    failedCount -= backgroundTasks
+        .where((t) => flowSubTaskIds.contains(t.id))
+        .where((t) => t.status.name == 'failed')
+        .length;
+
     for (final e in flowExecutions) {
       switch (e.status) {
         case FlowExecutionStatus.running:
