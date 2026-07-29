@@ -810,7 +810,6 @@ void main() {
       // It can appear before or after the class — what matters is
       // that it's not inside the class's `{ ... }`.
       final classOpenBrace = source.indexOf('{', classStart);
-      final classCloseBrace = source.lastIndexOf('}');
       expect(runFnIdx < classOpenBrace, isTrue,
           reason: '_runAudioSeparation must be top-level, '
               'not an instance method of _AudioSeparationPageState');
