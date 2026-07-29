@@ -857,7 +857,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         animation.status != AnimationStatus.dismissed) {
       final done = Completer<void>();
       void listener(AnimationStatus s) {
-        if (s == AnimationStatus.dismissed || s == AnimationStatus.completed) {
+        if (s == AnimationStatus.dismissed) {
           if (!done.isCompleted) done.complete();
           animation.removeStatusListener(listener);
         }
@@ -874,8 +874,8 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       // No route — unexpected, but guard with a fallback delay.
       await Future<void>.delayed(const Duration(milliseconds: 400));
     }
-    // Implicit else: animation already dismissed or completed — no
-    // wait needed; fall through to fire-and-forget immediately.
+    // Implicit else: animation already dismissed — no wait needed;
+    // fall through to fire-and-forget immediately.
 
     // Route transition is complete — now fire-and-forget the pipeline.
     // _runAudioSeparation is a top-level function with no access to
