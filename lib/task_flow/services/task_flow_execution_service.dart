@@ -77,6 +77,8 @@ class TaskFlowExecutionService {
     String currentData = inputText;
 
     for (int i = 0; i < flow.blocks.length; i++) {
+      // Let the UI render before starting each block
+      await Future.delayed(Duration.zero);
       final block = flow.blocks[i];
       final def = block.getDefinition();
 

@@ -41,9 +41,9 @@ Future<(String, String)> _computeAudioMetaInIsolate(Uint8List audioBytes) {
   });
 }
 
-/// Inserts a microtask yield so the event loop can process pending
-/// UI rebuilds triggered by state updates before continuing.
-Future<void> _yieldToUi() => Future(() {});
+/// Yields to the event loop so the Flutter framework can render a frame
+/// (process pending widget builds) before the next CPU-intensive operation.
+Future<void> _yieldFrame() => Future.delayed(Duration.zero);
 
 Future<String> executeAudioSeparationBlock({
   required BlockTypeDefinition def,
@@ -63,11 +63,10 @@ Future<String> executeAudioSeparationBlock({
   execNotifier.updateSubTaskStatus(execId, flowSubTask.id, TaskStatus.running);
   bgNotifier.addTask(
       type: BackgroundTaskType.audioSeparation, title: title, taskId: taskId);
-  await _yieldToUi(); // let the UI show "running" before heavy work
+  await _yieldFrame();
 
   Uint8List audioBytes;
   try {
-    // Validate file exists before handing off to isolate
     final file = File(input);
     if (!await file.exists()) {
       failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
@@ -76,12 +75,14 @@ Future<String> executeAudioSeparationBlock({
           blockType: def.typeKey.name, blockTitle: def.label);
     }
 
-    // Step 0: read file + extract audio — both in isolate
+    await _yieldFrame();
     bgNotifier.updateStep(taskId, 0, running: true);
-    await _yieldToUi();
+
+    await _yieldFrame();
     audioBytes = await _readAndExtractInIsolate(input, inputFormat);
+
+    await _yieldFrame();
     bgNotifier.updateStep(taskId, 0, completed: true);
-    await _yieldToUi();
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
     failSubTask(
@@ -98,10 +99,10 @@ Future<String> executeAudioSeparationBlock({
           blockType: def.typeKey.name, blockTitle: def.label);
     }
 
-    // Step 1: hash + format detection in isolate, then save on main thread
+    await _yieldFrame();
     bgNotifier.updateStep(taskId, 1, running: true);
-    await _yieldToUi();
 
+    await _yieldFrame();
     final meta = await _computeAudioMetaInIsolate(audioBytes);
     final hash = meta.$1;
     final format = meta.$2;
@@ -126,9 +127,10 @@ Future<String> executeAudioSeparationBlock({
           blockType: def.typeKey.name, blockTitle: def.label);
     }
 
+    await _yieldFrame();
     bgNotifier.updateStep(taskId, 1, completed: true);
-    await _yieldToUi();
 
+    await _yieldFrame();
     bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
     execNotifier.updateSubTaskStatus(
         execId, flowSubTask.id, TaskStatus.completed);

@@ -64,11 +64,18 @@ Future<void> registerCompletedVideo(String filePath, CatCatchTask task) async {
   final fileBytes = await file.readAsBytes();
   final hash = md5.convert(fileBytes).toString();
 
-  final existing = await VideoManifest.getRecordByHash(hash);
-  if (existing != null) return;
-
+  // Build record name from the file path (uniqueExecutorPath already handles
+  // file-system dedup with (2), (3), ... suffixes).
   final recordName = p.basenameWithoutExtension(filePath);
   final videoFolder = task.metadata['videoFolder'] ?? '';
+
+  // Only write the physical file once — hash-addressed storage.
+  final existing = await VideoManifest.getRecordByHash(hash);
+  if (existing == null) {
+    await VideoManifest.writeFile('$hash.$ext', fileBytes);
+  }
+
+  // Always register a record so every download appears in the gallery.
   final record = VideoRecord(
     name: recordName,
     hash: hash,
@@ -78,7 +85,6 @@ Future<void> registerCompletedVideo(String filePath, CatCatchTask task) async {
     duration: task.expectedDurationSec * 1000,
     folder: videoFolder,
   );
-  await VideoManifest.writeFile('$hash.$ext', fileBytes);
   await VideoManifest.addRecord(record);
   AppLogService.info(
       'CatCatch', '视频已保存: $recordName.$ext (${fileBytes.length} bytes)');
@@ -97,11 +103,16 @@ Future<void> registerCompletedAudio(String filePath, CatCatchTask task) async {
   final fileBytes = await file.readAsBytes();
   final hash = md5.convert(fileBytes).toString();
 
-  final existing = await FileManifest.getRecordByHash(hash);
-  if (existing != null) return;
-
   final recordName = p.basenameWithoutExtension(filePath);
   final audioFolder = task.metadata['audioFolder'] ?? '';
+
+  // Only write the physical file once — hash-addressed storage.
+  final existing = await FileManifest.getRecordByHash(hash);
+  if (existing == null) {
+    await FileManifest.writeFile('$hash.$ext', fileBytes);
+  }
+
+  // Always register a record so every download appears in the gallery.
   final record = AudioRecord(
     name: recordName,
     hash: hash,
@@ -111,7 +122,6 @@ Future<void> registerCompletedAudio(String filePath, CatCatchTask task) async {
     duration: task.expectedDurationSec,
     folder: audioFolder,
   );
-  await FileManifest.writeFile('$hash.$ext', fileBytes);
   await FileManifest.addRecord(record);
   debugPrint(
       '[TaskExecutor] Registered audio to gallery: $recordName.$ext (folder: $audioFolder)');
