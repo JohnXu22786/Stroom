@@ -98,6 +98,7 @@ class StreamResult {
 class _ConversationStreamState {
   final String convId;
   bool cancelledByUser = false;
+
   /// Guards against overlapping periodic persist calls from the timer.
   bool _isPersisting = false;
   String? streamingMsgId;
