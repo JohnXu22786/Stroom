@@ -635,6 +635,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
           '[STREAM-LOAD] _loadConversationMessages: already loading, skip');
       return;
     }
+    // Guard: do NOT reload while editing or retrying — the edit flow
+    // truncates _history and would be corrupted by a concurrent reload.
+    if (_isModifyingHistory) return;
 
     // Guard: do NOT reload messages while streaming is active AND history
     // is already populated. The streaming loop relies on _chatSegments and
@@ -1155,7 +1158,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _isStreamingActive = true;
     if (mounted) setState(() {});
 
-    final aiMsgId = 'a${DateTime.now().millisecondsSinceEpoch}';
+    final aiMsgId = 'a${DateTime.now().microsecondsSinceEpoch}';
     _streamingMsgId = aiMsgId;
     _chatSegments[aiMsgId] = [];
     _reasoningContents[aiMsgId] = [];
@@ -1371,8 +1374,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1) return;
     final activeId = ref.read(activeConversationIdProvider);
-    if (activeId != null &&
-        ref.read(streamingConversationsProvider).contains(activeId)) {
+    // Check both the provider set AND the local flag — there's a
+    // microsecond window between _isStreamingActive=true (set
+    // synchronously in _startStreaming at line 1085) and the
+    // streamingConversationsProvider update (pushed by the manager).
+    if ((activeId != null &&
+            ref.read(streamingConversationsProvider).contains(activeId)) ||
+        _isStreamingActive) {
       return;
     }
     final msg = _history[index];
@@ -1418,6 +1426,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     String newText,
     List<Attachment> newAttachments,
   ) async {
+    // Re-entrancy guard: prevent concurrent edit operations (e.g.
+    // rapid double-tap on "Send" in edit mode).
+    if (_isModifyingHistory) return;
     _isModifyingHistory = true;
     try {
       final index = _history.indexWhere((m) => m.id == messageId);
@@ -1440,6 +1451,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
             _finalizedMessages.remove(r.id);
             _isReasoningCompletedForMsg.remove(r.id);
             _messageKeys.remove(r.id);
+            // Delete orphaned attachment files so repeated edits don't
+            // accumulate garbage on disk. Same logic as _deleteMessage.
+            for (final att in r.attachments) {
+              try {
+                await AttachmentStorage.deleteFile(att.storagePath);
+              } catch (_) {}
+            }
           }
           // Safety: keep pagination index within bounds
           _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);

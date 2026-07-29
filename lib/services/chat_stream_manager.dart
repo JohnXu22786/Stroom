@@ -345,7 +345,7 @@ class ChatStreamManager {
     state.lastReasoningUpdate = DateTime.now();
 
     final aiMsgId =
-        streamingMsgId ?? 'a${DateTime.now().millisecondsSinceEpoch}';
+        streamingMsgId ?? 'a${DateTime.now().microsecondsSinceEpoch}';
     state.streamingMsgId = aiMsgId;
 
     _streams[convId] = state;
