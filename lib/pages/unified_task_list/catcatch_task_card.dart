@@ -7,6 +7,7 @@ import '../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../utils/audio_utils.dart';
 import '../catcatch_page.dart';
 import 'task_utils.dart';
+import 'file_opener.dart';
 import 'media_preview_sheet.dart';
 
 // =============================================================================

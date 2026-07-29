@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
 import 'package:stroom/pages/unified_task_list/task_utils.dart';
+import 'package:stroom/pages/unified_task_list/task_session_tracker.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/providers/background_task_provider.dart';
