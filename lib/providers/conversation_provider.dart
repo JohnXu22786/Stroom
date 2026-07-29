@@ -115,6 +115,12 @@ class Conversation {
   /// set survives serialization.
   bool hasExplicitEnabledMcpTools = false;
 
+  /// The display name of the model that was last used to send a message
+  /// in this conversation. When set, the chat page restores this model
+  /// on re-entry, taking priority over the globally saved model index.
+  /// Null for conversations that haven't sent any messages yet.
+  String? lastUsedModelName;
+
   Conversation({
     String? id,
     required this.title,
@@ -127,6 +133,7 @@ class Conversation {
     this.draftText = '',
     Set<String>? enabledMcpToolNames,
     this.hasExplicitEnabledMcpTools = false,
+    this.lastUsedModelName,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
@@ -151,6 +158,8 @@ class Conversation {
         // to the "auto-enable all" default.
         if (hasExplicitEnabledMcpTools)
           'enabledMcpToolNames': enabledMcpToolNames.toList(),
+        if (lastUsedModelName != null && lastUsedModelName!.isNotEmpty)
+          'lastUsedModelName': lastUsedModelName,
       };
 
   factory Conversation.fromMap(Map<String, dynamic> map) {
@@ -203,6 +212,7 @@ class Conversation {
     // all available tools). Persisted explicitly so an empty
     // enabledMcpToolNames set survives serialization.
     final hasExplicit = map['hasExplicitEnabledMcpTools'] as bool? ?? false;
+    final lastUsedModel = map['lastUsedModelName'] as String?;
 
     return Conversation(
       id: map['id'] as String?,
@@ -216,6 +226,7 @@ class Conversation {
       draftText: map['draftText'] as String? ?? '',
       enabledMcpToolNames: enabledMcpToolNames,
       hasExplicitEnabledMcpTools: hasExplicit,
+      lastUsedModelName: lastUsedModel,
     );
   }
 
@@ -486,6 +497,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
                 draftText: c.draftText,
                 enabledMcpToolNames: c.enabledMcpToolNames,
                 hasExplicitEnabledMcpTools: c.hasExplicitEnabledMcpTools,
+                lastUsedModelName: c.lastUsedModelName,
               ))
           .toList();
       final json = jsonEncode(stripped.map((e) => e.toMap()).toList());
@@ -674,6 +686,17 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       if (c.id != conversationId) return c;
       c.enabledMcpToolNames = Set<String>.from(enabledTools);
       c.hasExplicitEnabledMcpTools = true;
+      return c;
+    }).toList();
+    _persist();
+  }
+
+  /// Updates the last used model name for a conversation.
+  /// This is used to restore the model when re-entering the conversation.
+  void updateLastUsedModel(String conversationId, String modelName) {
+    state = state.map((c) {
+      if (c.id != conversationId) return c;
+      c.lastUsedModelName = modelName;
       return c;
     }).toList();
     _persist();
