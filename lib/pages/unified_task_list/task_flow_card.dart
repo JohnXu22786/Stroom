@@ -237,9 +237,10 @@ class _ExpandedContent extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: TextButton.icon(
               onPressed: () => _confirmDelete(context, ref, executionId),
-              icon: Icon(Icons.delete_outline, size: 16, color: cs.error),
-              label:
-                  Text('删除', style: TextStyle(fontSize: 13, color: cs.error)),
+              icon:
+                  const Icon(Icons.delete_outline, size: 16, color: Colors.red),
+              label: const Text('删除',
+                  style: TextStyle(fontSize: 13, color: Colors.red)),
             ),
           ),
         ),
