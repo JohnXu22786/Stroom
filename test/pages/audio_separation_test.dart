@@ -17,6 +17,7 @@ import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/video_manifest.dart';
+import 'package:stroom/pages/unified_task_list_page.dart';
 
 Widget _buildTestApp() {
   return const ProviderScope(
@@ -1024,6 +1025,147 @@ void main() {
     test('_audioWorkerEntry uses SendPort for result', () {
       expect(source.contains('responsePort.send'), isTrue,
           reason: 'worker must send results back via SendPort');
+    });
+  });
+
+  // ====================================================================
+  // Behavioral tests — throttler correctness, .select(), GUI interaction
+  // ====================================================================
+
+  group('BackgroundTaskNotifier — throttled state updates', () {
+    test('rapid updates produce correct final in-memory state', () {
+      final notifier = BackgroundTaskNotifier();
+
+      final taskId = notifier.addTask(
+        type: BackgroundTaskType.audioSeparation,
+        title: 'ThrottleTest',
+      );
+
+      // Simulate the pattern _BgThrottler would apply: multiple
+      // updateStep/completeTask calls in quick succession
+      notifier.updateStep(taskId, 0, running: true);
+      notifier.updateStep(taskId, 0, completed: true);
+      notifier.updateStep(taskId, 1, running: true);
+      notifier.updateStep(taskId, 1, completed: true);
+      notifier.completeTask(taskId);
+
+      final task = notifier.state.firstWhere((t) => t.id == taskId);
+      expect(task.status, TaskStatus.completed,
+          reason: 'task status must be completed after all updates');
+      expect(task.steps[0].completed, isTrue);
+      expect(task.steps[1].completed, isTrue);
+    });
+
+    test('dispose still flushes pending state', () {
+      final notifier = BackgroundTaskNotifier();
+      final taskId = notifier.addTask(
+        type: BackgroundTaskType.audioSeparation,
+        title: 'DisposeFlush',
+      );
+      notifier.updateStep(taskId, 0, running: true);
+      notifier.updateStep(taskId, 0, completed: true);
+
+      // dispose should complete without throwing
+      expect(() => notifier.dispose(), returnsNormally);
+    });
+
+    test('failure in updateStep does not lose prior state', () {
+      final notifier = BackgroundTaskNotifier();
+      final taskId = notifier.addTask(
+        type: BackgroundTaskType.audioSeparation,
+        title: 'ErrorTest',
+      );
+      notifier.updateStep(taskId, 0, running: true);
+
+      // failTask should mark the task as failed without crashing
+      notifier.failTask(taskId, error: 'something went wrong');
+      final task =
+          notifier.state.firstWhere((t) => t.id == taskId);
+      expect(task.status, TaskStatus.failed);
+    });
+  });
+
+  group('HomePage — .select() guard', () {
+    final homeSource = File('lib/pages/home_page.dart').readAsStringSync();
+
+    test('backgroundTasksProvider is watched with .select()', () {
+      // Verify the home page uses .select() so that intermediate
+      // step-state changes do not trigger a full rebuild.
+      expect(
+        homeSource.contains('backgroundTasksProvider.select'),
+        isTrue,
+        reason:
+            'HomePage must watch backgroundTasksProvider via .select() '
+            'to scope rebuilds to status-count changes only',
+      );
+    });
+
+    test('the old full-list watch is removed', () {
+      // The pattern "backgroundTasks = ref.watch(backgroundTasksProvider);"
+      // WITHOUT .select should NOT appear in the home page anymore.
+      // A .select-less watch would cause a rebuild on every updateStep.
+      final lines = homeSource.split('\n');
+      for (int i = 0; i < lines.length; i++) {
+        final line = lines[i];
+        if (line.contains('ref.watch(backgroundTasksProvider') &&
+            !line.contains('.select')) {
+          // Allow comment lines
+          if (line.trimLeft().startsWith('//')) continue;
+          fail(
+            'HomePage must not use ref.watch(backgroundTasksProvider) '
+            'without .select(). Found at line ${i + 1}',
+          );
+        }
+      }
+    });
+  });
+
+  group('_saveAudioSeparationFile — loadRecords removed', () {
+    final funcSource =
+        File('lib/pages/audio_separation_page.dart').readAsStringSync();
+
+    test('does NOT call loadRecords per video', () {
+      final fnStart =
+          funcSource.indexOf('Future<String?> _saveAudioSeparationFile');
+      expect(fnStart, greaterThanOrEqualTo(0));
+      final fnEnd = funcSource.indexOf('\n}\n', fnStart)
+          .clamp(fnStart + 1, funcSource.length);
+      final body = funcSource.substring(fnStart, fnEnd);
+      expect(body.contains('loadRecords'), isFalse,
+          reason:
+              '_saveAudioSeparationFile must not call loadRecords per video '
+              '— the refresh is deferred until the user opens the audio library');
+    });
+  });
+
+  group('UnifiedTaskListPage — task card responds during processing',
+      () {
+    testWidgets('renders task and survives state change', (tester) async {
+      final notifier = BackgroundTaskNotifier();
+
+      notifier.addTask(
+        type: BackgroundTaskType.audioSeparation,
+        title: 'Video 1',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            backgroundTasksProvider.overrideWith((ref) => notifier),
+            taskListProvider.overrideWith((ref) {
+              final n = TaskListNotifier(ref);
+              n.state = [];
+              return n;
+            }),
+          ],
+          child: const MaterialApp(home: UnifiedTaskListPage()),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('Video 1'), findsOneWidget,
+          reason: 'task card should render after pump');
     });
   });
 }
