@@ -16,7 +16,6 @@ import 'providers/notification_provider.dart';
 import 'pages/unified_task_list/task_utils.dart';
 import 'services/background_service.dart';
 import 'services/notification_service.dart';
-import 'pages/audio_separation_page.dart';
 
 /// 初始化 ProviderScope 的 overrides
 final catcatchStartupProvider = FutureProvider<void>((ref) async {
@@ -150,11 +149,6 @@ Future<void> main() async {
         }
         registerBuiltinProviders();
         registerBuiltinProviderTypes();
-
-        // Pre-warm the audio separation worker isolate — eliminates
-        // the ~5–50ms Isolate.spawn overhead from the first
-        // extraction's click→pop path.
-        unawaited(prewarmAudioSeparationWorker());
 
         // 使用 StartupApp 作为入口，它会在启动页面完成后切换到 Application
         runApp(const ProviderScope(child: StartupApp()));

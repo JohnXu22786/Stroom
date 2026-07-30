@@ -243,8 +243,6 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   BackgroundTaskNotifier() : super([]);
 
-  Timer? _persistTimer;
-
   /// Add a new background task and return its ID.
   /// Initializes default step chain based on task type.
   /// [retryData] stores the original input parameters (images, audio, model, etc.)
@@ -270,7 +268,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       retryData: retryData,
     );
     state = [task, ...state];
-    _schedulePersist();
+    _persistTasks();
     return id;
   }
 
@@ -285,7 +283,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         statusChangedAt: DateTime.now(),
       );
     }).toList();
-    _schedulePersist();
+    _persistTasks();
   }
 
   /// Mark a task as completed and keep it in the list (visible to user).
@@ -315,7 +313,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (t.id != taskId) return t;
       return t.copyWith(result: result, error: t.error);
     }).toList();
-    _schedulePersist();
+    _persistTasks();
   }
 
   /// Set the full step chain for a task.
@@ -324,7 +322,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (t.id != taskId) return t;
       return t.copyWith(steps: steps);
     }).toList();
-    _schedulePersist();
+    _persistTasks();
   }
 
   /// Set raw request/response diagnostic data for error viewing.
@@ -340,7 +338,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         rawResponse: rawResponse,
       );
     }).toList();
-    _schedulePersist();
+    _persistTasks();
   }
 
   /// Update a single step by index (e.g. mark as completed/running/failed).
@@ -372,13 +370,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       steps[index] = steps[index].copyWith(status: newStatus, error: error);
       return t.copyWith(steps: steps);
     }).toList();
-    _schedulePersist();
+    _persistTasks();
   }
 
   /// Remove a task from the list.
   void removeTask(String taskId) {
     state = state.where((t) => t.id != taskId).toList();
-    _schedulePersist();
+    _persistTasks();
   }
 
   /// Update the retry data for a task (used to set retry data after
@@ -388,7 +386,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (t.id != taskId) return t;
       return t.copyWith(retryData: retryData);
     }).toList();
-    _schedulePersist();
+    _persistTasks();
   }
 
   void _updateTask(
@@ -417,7 +415,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
                 : null,
       );
     }).toList();
-    _schedulePersist();
+    _persistTasks();
 
     // Send notification when task completes or fails
     if ((status == TaskStatus.completed || status == TaskStatus.failed) &&
@@ -450,26 +448,6 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   // ============================================================================
   // Persistence
   // ============================================================================
-
-  /// Schedules a debounced persistence write.  Multiple rapid state
-  /// changes (e.g. updateStep called several times in quick succession)
-  /// are coalesced — only the last write within a 250 ms window fires.
-  /// This mirrors the pattern used by [ConversationNotifier] and
-  /// prevents the synchronous `jsonEncode` + file-write storm that
-  /// previously ran on every `addTask` / `updateStep` / `completeTask`.
-  ///
-  /// In test environments ([Platform.environment] contains
-  /// 'FLUTTER_TEST') persistence is skipped entirely so that
-  /// `pumpAndSettle` does not hang on unavailable platform channels.
-  void _schedulePersist() {
-    _persistTimer?.cancel();
-    // Skip persistence in test environments — platform channels for
-    // file I/O are unavailable, and pumpAndSettle hangs on the timer.
-    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
-    _persistTimer = Timer(const Duration(milliseconds: 250), () {
-      unawaited(_persistTasks());
-    });
-  }
 
   Future<void> _persistTasks() async {
     try {
@@ -532,15 +510,5 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     debugPrint(
       '[BackgroundTaskNotifier] Restored ${tasks.length} tasks from persistence',
     );
-  }
-
-  @override
-  void dispose() {
-    _persistTimer?.cancel();
-    // Capture state snapshot before dispose so the write sees the
-    // last in-memory state.  The write is best-effort async — we
-    // cannot await it inside a synchronous dispose().
-    _persistTasks();
-    super.dispose();
   }
 }
