@@ -448,10 +448,20 @@ class _HomePageState extends ConsumerState<HomePage> {
     final backgroundTasks = ref.watch(backgroundTasksProvider);
     final flowExecutions = ref.watch(taskFlowExecutionsProvider);
 
-    // --- Compute status counts for the status card ---
-    int inProgressCount = 0;
-    int completedCount = 0;
-    int failedCount = 0;
+    // --- Compute base status counts from background tasks ---
+    int inProgressCount = 0, completedCount = 0, failedCount = 0;
+    for (final t in backgroundTasks) {
+      switch (t.status) {
+        case TaskStatus.running:
+        case TaskStatus.paused:
+        case TaskStatus.waiting:
+          inProgressCount++;
+        case TaskStatus.completed:
+          completedCount++;
+        case TaskStatus.failed:
+          failedCount++;
+      }
+    }
 
     void countCatchStatusName(String statusName) {
       if (statusName == 'running' ||
@@ -469,9 +479,6 @@ class _HomePageState extends ConsumerState<HomePage> {
       countCatchStatusName(t.status.name);
     }
     for (final t in synthesisTasks) {
-      countCatchStatusName(t.status.name);
-    }
-    for (final t in backgroundTasks) {
       countCatchStatusName(t.status.name);
     }
 

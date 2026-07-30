@@ -452,8 +452,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   Future<void> _persistTasks() async {
     try {
+      final currentState = state; // capture before any await
       final file = await _tasksFile();
-      final data = state.map((t) => t.toMap()).toList();
+      final data = currentState.map((t) => t.toMap()).toList();
       await file.writeAsString(jsonEncode(data));
     } catch (e) {
       debugPrint('[BackgroundTaskNotifier] Failed to persist tasks: $e');

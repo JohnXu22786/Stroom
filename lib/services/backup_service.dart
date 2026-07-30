@@ -131,12 +131,14 @@ class BackupService {
     if (isCancelled != null && isCancelled()) {
       throw const BackupCancelledException();
     }
-    final bytes = await _buildBackupBytes(
-        onProgress: onProgress, isCancelled: isCancelled, selection: selection);
-    if (isCancelled != null && isCancelled()) {
-      throw const BackupCancelledException();
-    }
-    await File(outputPath).writeAsBytes(bytes);
+    // 使用流式写入：逐个文件处理并直接写入磁盘，
+    // 峰值内存从 O(总备份大小) 降低到 O(最大单文件大小)。
+    await _createBackupStreaming(
+      outputPath: outputPath,
+      onProgress: onProgress,
+      isCancelled: isCancelled,
+      selection: selection,
+    );
     await AppLogService.info('BackupService', 'createBackup: success');
     return outputPath;
   }
@@ -158,7 +160,333 @@ class BackupService {
   }
 
   // ================================================================
-  // 核心：在内存中构建备份归档
+  // 核心：流式备份 — 逐个文件写入磁盘，store 模式，无内存积累
+  // ================================================================
+
+  /// 流式创建备份：使用 [ZipEncoder] + 自定义文件流，store 模式
+  ///（不压缩）逐个文件写入磁盘。
+  ///
+  /// deflate 压缩模式下 [ZipEncoder] 会通过 [OutputMemoryStream] 将每个
+  /// 文件的压缩结果完整缓存在内存中（一个大视频文件就足以 OOM），因此此处
+  /// 使用 store 模式（[CompressionType.none]），配合自实现的
+  /// [_FileInputStream]/[_FileOutputStream]，确保文件数据直接从磁盘流
+  /// 经 ZIP 写入目标文件，不经过任何内存缓冲。
+  ///
+  /// 峰值内存：O(最大单文件的分块读取缓冲 64KB + CRC32 计算缓冲 1MB)，
+  /// 不随备份文件数量或单文件大小增长。
+  ///
+  /// 仅限原生平台（使用 dart:io）。Web 平台请使用 [_buildBackupBytes]。
+  static Future<void> _createBackupStreaming({
+    required String outputPath,
+    void Function(double progress)? onProgress,
+    bool Function()? isCancelled,
+    BackupSelection selection = BackupSelection.all,
+  }) async {
+    void checkCancelled() {
+      if (isCancelled != null && isCancelled()) {
+        throw const BackupCancelledException();
+      }
+    }
+
+    onProgress?.call(0.0);
+    await _yieldToEventLoop();
+    checkCancelled();
+
+    // 使用 ZipEncoder + 自定义文件输出流（store 模式，无压缩内存缓冲）
+    final output = _FileOutputStream(outputPath);
+    final encoder = ZipEncoder();
+    encoder.startEncode(output);
+
+    try {
+      // 1. manifest.json
+      debugPrint('[BackupService] streaming: building manifest');
+      _addInMemoryFile(
+          encoder,
+          'manifest.json',
+          jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': appVersion,
+          }));
+      onProgress?.call(0.05);
+      await _yieldToEventLoop();
+      checkCancelled();
+
+      // 2. SharedPreferences — 拆分聊天记录和设置
+      if (selection.chatRecordsAndAttachments || selection.settings) {
+        debugPrint('[BackupService] streaming: reading preferences');
+        final prefs = await SharedPreferences.getInstance();
+        final chatData = <String, dynamic>{};
+        final settingsData = <String, dynamic>{};
+        for (final key in prefs.getKeys()) {
+          if (key.startsWith('flutter.')) continue;
+          if (_isChatPrefKey(key)) {
+            if (selection.chatRecordsAndAttachments) {
+              chatData[key] = prefs.get(key);
+            }
+          } else {
+            if (selection.settings) {
+              settingsData[key] = prefs.get(key);
+            }
+          }
+        }
+        if (chatData.isNotEmpty) {
+          _addInMemoryFile(encoder, 'chat_data.json', jsonEncode(chatData));
+        }
+        if (settingsData.isNotEmpty) {
+          _addInMemoryFile(encoder, 'settings.json', jsonEncode(settingsData));
+        }
+      }
+      onProgress?.call(0.15);
+      await _yieldToEventLoop();
+      checkCancelled();
+
+      // 3. 任务文件 + Anki + Cookies
+      if (selection.tasks) {
+        debugPrint('[BackupService] streaming: adding task files');
+        final appDir = await AppStorage.directory;
+        await _addDiskFile(encoder, 'synthesis/tasks.json',
+            p.join(appDir, 'synthesis', 'tasks.json'));
+        await _addDiskFile(encoder, 'catcatch/tasks.json',
+            p.join(appDir, 'catcatch', 'tasks.json'));
+      }
+      if (selection.ankiData) {
+        try {
+          final appDir = await AppStorage.directory;
+          final ankiDb = p.join(appDir, 'collection.anki2');
+          if (File(ankiDb).existsSync()) {
+            await _addDiskFile(encoder, 'anki/collection.anki2', ankiDb);
+          }
+        } catch (_) {}
+      }
+      if (selection.browserCookies) {
+        try {
+          final appDir = await AppStorage.directory;
+          final cookiesFile = p.join(appDir, 'browser_cookies.json');
+          if (File(cookiesFile).existsSync()) {
+            await _addDiskFile(encoder, 'browser_cookies.json', cookiesFile);
+          }
+        } catch (_) {}
+      }
+      onProgress?.call(0.25);
+      await _yieldToEventLoop();
+      checkCancelled();
+
+      // 4. 二进制文件 — 逐个处理，用到时才加载数据库记录
+      debugPrint('[BackupService] streaming: adding binary files');
+      final appDir = await AppStorage.directory;
+      final useStreaming = !kIsWeb && !WebFileStore.isTestMode;
+      List<Map<String, dynamic>>? manifestImageRecords;
+      List<Map<String, dynamic>>? manifestAudioRecords;
+      List<Map<String, dynamic>>? manifestVideoRecords;
+      List<Map<String, dynamic>>? manifestTextRecords;
+      List<String>? manifestTextFolders;
+      List<String>? manifestAudioFolders;
+      List<String>? manifestImageFolders;
+      List<String>? manifestVideoFolders;
+
+      // 图片
+      if (selection.pictures) {
+        final records = await ManifestDatabase.getAllImageRecords();
+        manifestImageRecords = records;
+        manifestImageFolders = await ManifestDatabase.getAllFolders(
+            recordTable: ManifestTables.imageRecords);
+        for (var i = 0; i < records.length; i++) {
+          final record = records[i];
+          final hash = record['hash'] as String?;
+          final format = record['format'] as String? ?? 'jpg';
+          if (hash == null) continue;
+          await _addBinaryFile(encoder, 'pictures/$hash.$format',
+              p.join(appDir, 'pictures', '$hash.$format'), useStreaming);
+          await _addBinaryFile(encoder, 'pictures/${hash}_thumb.png',
+              p.join(appDir, 'pictures', '${hash}_thumb.png'), useStreaming);
+          if (i % 10 == 0) {
+            await _yieldToEventLoop();
+            checkCancelled();
+          }
+        }
+      }
+      onProgress?.call(0.45);
+      await _yieldToEventLoop();
+      checkCancelled();
+
+      // 音频
+      if (selection.audio) {
+        final records = await ManifestDatabase.getAllAudioRecords();
+        manifestAudioRecords = records;
+        manifestAudioFolders = await ManifestDatabase.getAllFolders(
+            recordTable: ManifestTables.audioRecords);
+        for (var i = 0; i < records.length; i++) {
+          final record = records[i];
+          final hash = record['hash'] as String?;
+          final format = record['format'] as String? ?? 'wav';
+          if (hash == null) continue;
+          await _addBinaryFile(encoder, 'tts_audio/$hash.$format',
+              p.join(appDir, 'tts_audio', '$hash.$format'), useStreaming);
+          await _addBinaryFile(encoder, 'tts_audio/$hash.txt',
+              p.join(appDir, 'tts_audio', '$hash.txt'), useStreaming);
+          if (i % 10 == 0) {
+            await _yieldToEventLoop();
+            checkCancelled();
+          }
+        }
+      }
+      onProgress?.call(0.6);
+      await _yieldToEventLoop();
+      checkCancelled();
+
+      // 视频
+      if (selection.videos) {
+        final records = await ManifestDatabase.getAllVideoRecords();
+        manifestVideoRecords = records;
+        manifestVideoFolders = await ManifestDatabase.getAllFolders(
+            recordTable: ManifestTables.videoRecords);
+        for (var i = 0; i < records.length; i++) {
+          final record = records[i];
+          final hash = record['hash'] as String?;
+          final format = record['format'] as String? ?? 'mp4';
+          if (hash == null) continue;
+          await _addBinaryFile(encoder, 'videos/$hash.$format',
+              p.join(appDir, 'videos', '$hash.$format'), useStreaming);
+          if (i % 10 == 0) {
+            await _yieldToEventLoop();
+            checkCancelled();
+          }
+        }
+      }
+      onProgress?.call(0.75);
+      await _yieldToEventLoop();
+      checkCancelled();
+
+      // 文本
+      if (selection.texts) {
+        final records = await ManifestDatabase.getAllTextRecords();
+        manifestTextRecords = records;
+        manifestTextFolders = await ManifestDatabase.getAllFolders(
+            recordTable: ManifestTables.textRecords);
+        for (var i = 0; i < records.length; i++) {
+          final record = records[i];
+          final hash = record['hash'] as String?;
+          if (hash == null) continue;
+          await _addBinaryFile(encoder, 'texts/$hash.txt',
+              p.join(appDir, 'texts', '$hash.txt'), useStreaming);
+          if (i % 10 == 0) {
+            await _yieldToEventLoop();
+            checkCancelled();
+          }
+        }
+      }
+      onProgress?.call(0.85);
+      await _yieldToEventLoop();
+      checkCancelled();
+
+      // 附件
+      if (selection.chatRecordsAndAttachments) {
+        final attachmentPaths = await collectAttachmentPaths();
+        for (final storagePath in attachmentPaths) {
+          final parts = storagePath.split('/');
+          if (parts.length < 2) continue;
+          final subDir = parts[0];
+          final fileName = parts.sublist(1).join('/');
+          await _addBinaryFile(encoder, storagePath,
+              p.join(appDir, subDir, fileName), useStreaming);
+        }
+      }
+      onProgress?.call(0.93);
+      await _yieldToEventLoop();
+      checkCancelled();
+
+      // 5. stroom_manifest.json
+      debugPrint('[BackupService] streaming: writing manifest');
+      _addInMemoryFile(
+          encoder,
+          'stroom_manifest.json',
+          jsonEncode({
+            'image_records': manifestImageRecords ?? <Map<String, dynamic>>[],
+            'audio_records': manifestAudioRecords ?? <Map<String, dynamic>>[],
+            'video_records': manifestVideoRecords ?? <Map<String, dynamic>>[],
+            'text_records': manifestTextRecords ?? <Map<String, dynamic>>[],
+            'folders': <String>[],
+            ManifestTables.textFolders: manifestTextFolders ?? <String>[],
+            ManifestTables.audioFolders: manifestAudioFolders ?? <String>[],
+            ManifestTables.imageFolders: manifestImageFolders ?? <String>[],
+            ManifestTables.videoFolders: manifestVideoFolders ?? <String>[],
+          }));
+
+      // 6. 完成编码
+      debugPrint('[BackupService] streaming: finishing archive');
+      encoder.endEncode();
+      onProgress?.call(1.0);
+    } catch (_) {
+      output.closeSync();
+      rethrow;
+    }
+    await output.close();
+  }
+
+  /// 添加内存中的数据到 ZIP（store 模式，数据小无需压缩）。
+  static void _addInMemoryFile(ZipEncoder encoder, String name, String json) {
+    final data = Uint8List.fromList(utf8.encode(json));
+    final af = ArchiveFile(name, data.length, data);
+    af.compression = CompressionType.none;
+    encoder.add(af);
+  }
+
+  /// 流式添加磁盘文件到 ZIP（store 模式，直接从磁盘读取，不加载到内存）。
+  static Future<void> _addDiskFile(
+      ZipEncoder encoder, String archiveName, String sourcePath) async {
+    try {
+      final file = File(sourcePath);
+      if (await file.exists()) {
+        final input = _FileInputStream(sourcePath);
+        final af = ArchiveFile.stream(archiveName, input);
+        af.compression = CompressionType.none;
+        encoder.add(af);
+      }
+    } catch (e) {
+      debugPrint('添加文件 $archiveName 失败: $e');
+    }
+  }
+
+  /// 流式添加二进制文件到 ZIP。
+  ///
+  /// [useStreaming] 为 true 时使用 [_FileInputStream] 从磁盘流式读取；
+  /// false 时回退到 [readBackupFile] 内存读取（Web/测试模式）。
+  static Future<void> _addBinaryFile(
+    ZipEncoder encoder,
+    String archiveName,
+    String filePath,
+    bool useStreaming,
+  ) async {
+    try {
+      if (useStreaming) {
+        final file = File(filePath);
+        if (await file.exists()) {
+          final input = _FileInputStream(filePath);
+          final af = ArchiveFile.stream(archiveName, input);
+          af.compression = CompressionType.none;
+          encoder.add(af);
+        }
+      } else {
+        // Web/测试模式：从内存读取
+        final parts = archiveName.split('/');
+        if (parts.length < 2) return;
+        final subDir = parts[0];
+        final fileName = parts.sublist(1).join('/');
+        final data = await readBackupFile(subDir, fileName);
+        if (data != null) {
+          final af = ArchiveFile(archiveName, data.length, data);
+          af.compression = CompressionType.none;
+          encoder.add(af);
+        }
+      }
+    } catch (e) {
+      debugPrint('添加文件 $archiveName 失败: $e');
+    }
+  }
+
+  // ================================================================
+  // 核心：在内存中构建备份归档（Web/导出用）
   // ================================================================
 
   /// 判断 SharedPreferences 键是否为聊天相关键。
@@ -1106,4 +1434,134 @@ class BackupService {
     BackupSelection selection = BackupSelection.all,
   }) =>
       _restoreDatabaseFromJson(json, selection: selection);
+}
+
+/// 从磁盘流式读取的 [InputStream] 实现（不将整个文件加载到内存）。
+///
+/// 每次以 [kChunkSize] 大小分块读取，配合 store 模式 ZIP 编码，
+/// 确保单文件处理的内存峰值仅为块大小，不随文件大小增长。
+class _FileInputStream extends InputStream {
+  static const int kChunkSize = 65536;
+
+  final RandomAccessFile _file;
+  final int _fileLength;
+  int _pos = 0;
+
+  _FileInputStream(String path)
+      : _file = File(path).openSync(),
+        _fileLength = File(path).lengthSync(),
+        super(byteOrder: ByteOrder.littleEndian);
+
+  @override
+  int get position => _pos;
+
+  @override
+  set position(int v) {
+    _pos = v;
+    _file.setPositionSync(v);
+  }
+
+  @override
+  int get length => _fileLength;
+
+  @override
+  bool get isEOS => _pos >= _fileLength;
+
+  @override
+  bool open() => true;
+
+  @override
+  Future<void> close() async => _file.closeSync();
+
+  @override
+  void closeSync() => _file.closeSync();
+
+  @override
+  void reset() => position = 0;
+
+  @override
+  void setPosition(int v) => position = v;
+
+  @override
+  void rewind([int length = 1]) => position = _pos - length;
+
+  @override
+  void skip(int length) => position = _pos + length;
+
+  @override
+  InputStream subset({int? position, int? length, int? bufferSize}) {
+    final pos = position ?? _pos;
+    final len = length ?? (_fileLength - pos);
+    final saved = _pos;
+    _file.setPositionSync(pos);
+    final data = _file.readSync(len);
+    _file.setPositionSync(saved);
+    return InputMemoryStream(data);
+  }
+
+  @override
+  int readByte() {
+    _pos++;
+    return _file.readByteSync();
+  }
+
+  @override
+  Uint8List toUint8List() {
+    final remaining = _fileLength - _pos;
+    final data = _file.readSync(remaining);
+    _pos = _fileLength;
+    return data;
+  }
+}
+
+/// 流式写入 ZIP 文件的 [OutputStream] 实现（不将整个 ZIP 保留在内存）。
+class _FileOutputStream extends OutputStream {
+  final RandomAccessFile _file;
+  int _length = 0;
+
+  _FileOutputStream(String path)
+      : _file = File(path).openSync(mode: FileMode.write),
+        super(byteOrder: ByteOrder.littleEndian);
+
+  @override
+  int get length => _length;
+
+  @override
+  void clear() => _length = 0;
+
+  @override
+  void flush() {}
+
+  @override
+  void writeByte(int value) {
+    _file.writeByteSync(value);
+    _length++;
+  }
+
+  @override
+  void writeBytes(List<int> bytes, {int? length}) {
+    final len = length ?? bytes.length;
+    _file.writeFromSync(bytes, 0, len);
+    _length += len;
+  }
+
+  @override
+  void writeStream(InputStream stream) {
+    const int chunkSize = _FileInputStream.kChunkSize;
+    while (!stream.isEOS) {
+      final count = chunkSize < stream.length ? chunkSize : stream.length;
+      final chunk = stream.readBytes(count).toUint8List();
+      _file.writeFromSync(chunk);
+      _length += chunk.length;
+    }
+  }
+
+  @override
+  Uint8List subset(int start, [int? end]) => Uint8List(0); // 流式写入不支持随机读取
+
+  @override
+  Future<void> close() async => _file.closeSync();
+
+  @override
+  void closeSync() => _file.closeSync();
 }

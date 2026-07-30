@@ -1274,5 +1274,72 @@ void main() {
       );
       expect(resolved, isEmpty);
     });
+
+    test(
+        'resolver auto-enables newly discovered tools when conv has no '
+        'explicit prefs', () {
+      // Simulate the MCP-after-initial-load scenario:
+      // 1. Initial load: only HTTP tools are known
+      // 2. After MCP discovery: additional MCP tools appear in allTools
+      // The resolver should auto-enable the new tools because the
+      // conversation has no explicit prefs (new conversation).
+      final mcpTools = <ToolDefinition>[
+        const ToolDefinition(
+          name: 'exa_mcp',
+          description: 'Exa',
+          parameters: {'type': 'object'},
+        ),
+        const ToolDefinition(
+          name: 'tavily_mcp',
+          description: 'Tavily',
+          parameters: {'type': 'object'},
+        ),
+      ];
+
+      final resolved = resolveEnabledToolNames(
+        allTools: mcpTools,
+        savedEnabledNames: <String>{},
+        hasExplicitSavedPrefs: false,
+      );
+
+      expect(resolved, equals({'exa_mcp', 'tavily_mcp'}),
+          reason: 'Newly discovered MCP tools should be auto-enabled when '
+              'the conversation has no explicit saved preferences.');
+    });
+
+    test(
+        'resolver does NOT auto-enable newly discovered tools when conv has '
+        'explicit prefs', () {
+      // Simulate the MCP-after-initial-load scenario for a conversation
+      // where the user has already touched the tool toggles. Newly
+      // discovered MCP tools should NOT be auto-enabled because the user
+      // has expressed their preference (even if it's a specific subset).
+      final initialTools = <ToolDefinition>[
+        const ToolDefinition(
+          name: 'brave_web_search',
+          description: 'Brave',
+          parameters: {'type': 'object'},
+        ),
+      ];
+      final additionalMcpTools = <ToolDefinition>[
+        const ToolDefinition(
+          name: 'exa_mcp',
+          description: 'Exa',
+          parameters: {'type': 'object'},
+        ),
+      ];
+
+      // User had already toggled brave_web_search on before
+      // MCP tools were available. hasExplicitSavedPrefs is true.
+      final resolved = resolveEnabledToolNames(
+        allTools: [...initialTools, ...additionalMcpTools],
+        savedEnabledNames: {'brave_web_search'},
+        hasExplicitSavedPrefs: true,
+      );
+
+      expect(resolved, equals({'brave_web_search'}),
+          reason: 'When user has explicit prefs, newly discovered MCP tools '
+              'should NOT be auto-enabled — they must be explicitly toggled.');
+    });
   });
 }

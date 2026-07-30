@@ -253,48 +253,51 @@ void main() {
 
       // === Key scenario ===
       // 当天 24h 内: 2 个备份
-      // 前日: 3 个备份（同一天），2-days-ago: 1 个，3-days-ago: 1 个
+      // 前 2 日: 3 个备份（同一天），前 3 日: 1 个，前 4 日: 1 个
       // Total: 7
       //
       // 新规则：当天最多 3 个，前 2 天各保留最后 1 个
-      // → 保留: 2 个今天 + 1 个昨天的最后备份 + 1 个 2-days-ago = 4
-      // → 删除: 2 个旧昨天备份 + 1 个 3-days-ago = 3
+      // → 保留: 2 个今天 + 1 个前 2 日的最后备份 + 1 个前 3 日 = 4
+      // → 删除: 2 个旧前 2 日备份 + 1 个前 4 日 = 3
       //
-      // 使用 now - 26h/27h/28h 确保同一日历时，避免跨 UTC 日边界。
-      // 这些偏移量都 >24h，且最多间隔 2h，不会跨越午夜边界。
-      // 之所以不用 now - 25h，是因为 now=01:00 UTC 时 25h=00:00(今日)
-      // 而 26h=23:00(前日)，跨日。26h-28h 始终在同一日。
+      // 使用固定参考时间（今天 12:00）而非 DateTime.now() 偏移，避免跨日边界。
+      // cleanupOldBackups 内部用 DateTime.now() 计算 24h 边界，但文件的时间戳
+      // 仅决定日历日分组和排序——只要同一日的 3 个文件的时间戳在同一天，即可
+      // 验证"同日多个备份只保留最新 1 个"的行为。固定到 12:00 保证所有日期
+      // 计算不依赖 now.hour。
 
       final now = DateTime.now();
+      final todayRef = DateTime(now.year, now.month, now.day, 12, 0, 0);
 
-      // 2 from today (2h and 4h ago — within 24h)
-      final today1 = now.subtract(const Duration(hours: 2));
+      // 2 from today (within 24h of real now)
+      // todayRef = 12:00, 减去 2h/4h 仍 <24h 且 >0h
+      final today1 = todayRef.subtract(const Duration(hours: 2));
       final fToday1 = '${dir.path}/backup_${_ts(today1)}.zip';
       await File(fToday1).writeAsString('today_1');
-      final today2 = now.subtract(const Duration(hours: 4));
+      final today2 = todayRef.subtract(const Duration(hours: 4));
       final fToday2 = '${dir.path}/backup_${_ts(today2)}.zip';
       await File(fToday2).writeAsString('today_2');
 
-      // 3 from the same past day (beyond 24h, same calendar day)
-      // Offsets 26h/27h/28h: always >24h and span only 2h so cannot cross
-      // a calendar day boundary regardless of when the test runs.
-      final p1 = now.subtract(const Duration(hours: 26));
+      // 3 from the same past day (D-2, always >24h and same calendar day)
+      final pastDay = todayRef.subtract(const Duration(days: 2));
+      // 用分钟间隔（30min/15min/0min）替代小时间隔，避免整点问题
+      final p1 = pastDay.add(const Duration(minutes: 30));
       final fp1 = '${dir.path}/backup_${_ts(p1)}.zip';
       await File(fp1).writeAsString('past_latest');
-      final p2 = now.subtract(const Duration(hours: 27));
+      final p2 = pastDay.add(const Duration(minutes: 15));
       final fp2 = '${dir.path}/backup_${_ts(p2)}.zip';
       await File(fp2).writeAsString('past_mid');
-      final p3 = now.subtract(const Duration(hours: 28));
+      final p3 = pastDay;
       final fp3 = '${dir.path}/backup_${_ts(p3)}.zip';
       await File(fp3).writeAsString('past_oldest');
 
-      // 1 from further past (51h = ~2 days, on a different calendar day)
-      final further = now.subtract(const Duration(hours: 51));
+      // 1 from further past (D-3)
+      final further = todayRef.subtract(const Duration(days: 3));
       final fFurther = '${dir.path}/backup_${_ts(further)}.zip';
-      await File(fFurther).writeAsString('further_day');
+      await File(fFurther).writeAsString('further');
 
-      // 1 from even further past (75h = ~3 days, on yet another calendar day)
-      final oldest = now.subtract(const Duration(hours: 75));
+      // 1 from even further past (D-4)
+      final oldest = todayRef.subtract(const Duration(days: 4));
       final fOldest = '${dir.path}/backup_${_ts(oldest)}.zip';
       await File(fOldest).writeAsString('oldest');
 
@@ -312,11 +315,11 @@ void main() {
       final kept = [
         if (fToday1Survived) 'today_1',
         if (fToday2Survived) 'today_2',
-        if (fp1Survived) 'past_latest(26h)',
-        if (fp2Survived) 'past_mid(27h)',
-        if (fp3Survived) 'past_oldest(28h)',
-        if (fFurtherSurvived) 'further_day(51h)',
-        if (fOldestSurvived) 'oldest(75h)',
+        if (fp1Survived) 'past_latest',
+        if (fp2Survived) 'past_mid',
+        if (fp3Survived) 'past_oldest',
+        if (fFurtherSurvived) 'further',
+        if (fOldestSurvived) 'oldest',
       ];
 
       expect(kept.length, equals(4),
@@ -327,15 +330,15 @@ void main() {
       expect(fToday1Survived, isTrue, reason: 'Should keep today_1');
       expect(fToday2Survived, isTrue, reason: 'Should keep today_2');
       expect(fp1Survived, isTrue,
-          reason: 'Should keep the latest from the past day (26h)');
+          reason: 'Should keep the latest from the past day');
       expect(fp2Survived, isFalse,
-          reason: 'Should delete older from past day (27h) for day diversity');
+          reason: 'Should delete older from past day for day diversity');
       expect(fp3Survived, isFalse,
-          reason: 'Should delete oldest from past day (28h) for day diversity');
+          reason: 'Should delete oldest from past day for day diversity');
       expect(fFurtherSurvived, isTrue,
-          reason: 'Should keep backup from further day (51h)');
+          reason: 'Should keep backup from further past day');
       expect(fOldestSurvived, isFalse,
-          reason: 'Should delete oldest (75h) — only keep 2 past days');
+          reason: 'Should delete oldest — only keep 2 past days');
 
       // Cleanup
       await dir.delete(recursive: true);
