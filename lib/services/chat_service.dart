@@ -306,9 +306,24 @@ class ChatService {
           ...extraParams,
         };
         int loopProtection = 0;
+        final maxRounds = _assistantSettings?.enableMaxToolCalls == true
+            ? _assistantSettings!.maxToolCalls
+            : null;
 
-        while (!_isCancelledByUser && loopProtection < 10) {
+        while (!_isCancelledByUser &&
+            (maxRounds == null || loopProtection < maxRounds)) {
           loopProtection++;
+          if (maxRounds != null && loopProtection % 50 == 0) {
+            AppLogService.info(
+                'ChatService', '工具调用循环: 第 $loopProtection 轮');
+          }
+          if (maxRounds != null && loopProtection >= maxRounds) {
+            AppLogService.info('ChatService',
+                '工具调用循环达到上限 ($maxRounds 轮)，终止');
+            controller.add(TextEvent(
+                '\n\n[已达到工具调用上限 $maxRounds 轮，对话已中断]'));
+            break;
+          }
           _streamSubscription?.cancel();
           _cancelToken?.cancel();
           _cancelToken = CancelToken();

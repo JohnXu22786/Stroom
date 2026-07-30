@@ -766,14 +766,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
         }
 
         // Build unified segments for the full Agent chain.
-        final segments = msg.blocks != null && msg.blocks!.isNotEmpty
-            ? blocksToSegments(msg.blocks!)
-            : buildAgentChainSegments(
-                reasoningSections: msg.reasoningSections ?? [],
-                textChunks: msg.textSections ?? [],
-                toolCalls: msg.toolCalls ?? [],
-                toolCallRoundStarts: msg.toolCallRoundStarts,
-              );
+        // Build segments from blocks (unified path since v0.4.50).
+        // If blocks are absent (periodic persist or old data), build
+        // them from legacy fields on the fly.
+        final blocks = msg.blocks ??
+            legacyToBlocks(
+              reasoningSections: msg.reasoningSections ?? [],
+              textChunks: msg.textSections ?? [],
+              toolCalls: msg.toolCalls ?? [],
+              toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
+            );
+        final segments = blocksToSegments(blocks);
         // Fallback: no textSections, use content as single trailing block
         if (segments.isEmpty && msg.content.isNotEmpty) {
           segments.add(TextSegment(msg.content));
@@ -1297,28 +1300,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   /// Builds the final [_chatSegments] entry for a completed assistant message.
   void _buildFinalSegments(ChatMessage msg) {
-    final segments = buildAgentChainSegments(
-      reasoningSections: msg.reasoningSections ?? [],
-      textChunks: msg.textSections ?? [],
-      toolCalls: msg.toolCalls ?? [],
-      // Explicitly false: streaming is done. All reasoning sections should
-      // show "思考完成" (thinking complete), not "思考中" (thinking in progress).
-      isLastReasoningStreaming: false,
-      // Use round boundaries persisted on the message (tracked during
-      // streaming) so that consecutive tool calls in the same assistant
-      // step are grouped together. Null for old data → legacy algorithm.
-      toolCallRoundStarts: msg.toolCallRoundStarts,
-    );
+    final blocks = msg.blocks ??
+        legacyToBlocks(
+          reasoningSections: msg.reasoningSections ?? [],
+          textChunks: msg.textSections ?? [],
+          toolCalls: msg.toolCalls ?? [],
+          toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
+        );
+    final segments = blocksToSegments(blocks);
 
-    // Fallback: no textSections at all, put content at the end
+    // Fallback: no blocks produced anything, use content as single block
     if (segments.isEmpty && msg.content.isNotEmpty) {
-      segments.add(TextSegment(msg.content));
-    } else if (msg.textSections == null && msg.content.isNotEmpty) {
       segments.add(TextSegment(msg.content));
     }
 
-    // Always update, even if empty, so that stale live segments
-    // (which have isStreaming=true on reasoning) don't persist.
     _chatSegments[msg.id] = segments;
     _finalizedMessages.add(msg.id);
     _isReasoningCompletedForMsg[msg.id] = true;
