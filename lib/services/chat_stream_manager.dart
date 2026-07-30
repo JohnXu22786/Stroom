@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' show Ref;
 import 'package:flutter_riverpod/legacy.dart' show StateProvider;
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
+import '../models/message_block.dart';
 import '../models/tool_call.dart';
 import '../pages/chat/chat_types.dart';
 import '../providers/chat_stream_provider.dart';
@@ -68,6 +69,7 @@ class StreamResult {
   /// Used by [buildAgentChainSegments] to group consecutive tool calls
   /// that belong to the same assistant step (separated by non-empty text).
   final List<int> toolCallRoundStarts;
+  final List<MessageBlock> blocks;
 
   /// Whether the stream was cancelled by the user.
   final bool cancelled;
@@ -81,6 +83,7 @@ class StreamResult {
     this.textSections = const [],
     this.toolCalls = const [],
     this.toolCallRoundStarts = const [],
+    this.blocks = const [],
     this.cancelled = false,
   });
 
@@ -129,6 +132,7 @@ class _ConversationStreamState {
   /// would cause a duplicate [0, 0], splitting round 0's tools across
   /// phantom rounds.
   List<int> toolCallRoundStarts = [];
+  List<MessageBlock> blocks = [];
 
   /// Throttle timers
   DateTime lastTextUpdate = DateTime.now();
@@ -598,6 +602,12 @@ class ChatStreamManager {
           toolCallRoundStarts: state.toolCallRoundStarts.isNotEmpty
               ? List<int>.from(state.toolCallRoundStarts)
               : null,
+          blocks: legacyToBlocks(
+            reasoningSections: state.reasoningSections,
+            textChunks: state.textChunks,
+            toolCalls: state.accumulatedToolCalls,
+            toolCallRoundStarts: state.toolCallRoundStarts,
+          ),
         );
         state.history.add(msg);
         assistantMessage = msg;
@@ -630,6 +640,12 @@ class ChatStreamManager {
       textSections: List.from(state.textChunks),
       toolCalls: List.from(state.accumulatedToolCalls),
       toolCallRoundStarts: List.from(state.toolCallRoundStarts),
+      blocks: legacyToBlocks(
+        reasoningSections: state.reasoningSections,
+        textChunks: state.textChunks,
+        toolCalls: state.accumulatedToolCalls,
+        toolCallRoundStarts: state.toolCallRoundStarts,
+      ),
       cancelled: wasCancelled,
     );
 
