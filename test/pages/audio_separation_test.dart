@@ -770,15 +770,18 @@ void main() {
     final source =
         File('lib/pages/audio_separation_page.dart').readAsStringSync();
 
-    test('_workerExtract sends to long-lived worker via SendPort', () {
+    test('_workerExtract uses Isolate.run (not SendPort worker)', () {
       final fnStart = source.indexOf('_workerExtract');
       expect(fnStart, greaterThanOrEqualTo(0));
       final fnEnd =
           source.indexOf('\n}\n', fnStart).clamp(fnStart + 1, source.length);
       final fnBody = source.substring(fnStart, fnEnd);
-      expect(fnBody.contains('_ensureWorker'), isTrue);
-      expect(fnBody.contains('_workerSendPort'), isTrue);
-      expect(fnBody.contains('responsePort'), isTrue);
+      expect(fnBody.contains('Isolate.run'), isTrue,
+          reason: '_workerExtract must use Isolate.run whose Future-based '
+              'await reliably yields to the event loop');
+      expect(fnBody.contains('extractAudioSync'), isTrue);
+      expect(fnBody.contains('computeAudioHash'), isTrue);
+      expect(fnBody.contains('detectAudioFormat'), isTrue);
     });
 
     test('_runAudioSeparation yields at most 4 times after grouping', () {
@@ -1009,22 +1012,6 @@ void main() {
       notifier.dispose();
       // No crash = pass (the synchronous _persistTasks in dispose
       // did not throw and attempted the write)
-    });
-  });
-
-  group('AudioSeparationPage — worker isolate extraction', () {
-    final source =
-        File('lib/pages/audio_separation_page.dart').readAsStringSync();
-
-    test('_ensureWorker spawns Isolate with ReceivePort', () {
-      final fnIdx = source.indexOf('_ensureWorker');
-      expect(fnIdx, greaterThanOrEqualTo(0),
-          reason: '_ensureWorker must exist');
-    });
-
-    test('_audioWorkerEntry uses SendPort for result', () {
-      expect(source.contains('responsePort.send'), isTrue,
-          reason: 'worker must send results back via SendPort');
     });
   });
 
