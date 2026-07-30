@@ -11,7 +11,6 @@ import 'package:path/path.dart' as p;
 
 import '../utils/audio_separation.dart';
 import '../utils/audio_utils.dart' show detectAudioFormat, normalizeAudioFormat;
-import '../providers/tts_state_provider.dart';
 import '../providers/background_task_provider.dart';
 import '../utils/file_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
@@ -158,7 +157,12 @@ class _BgThrottler {
     final ops = List<void Function()>.from(_queue);
     _queue.clear();
     for (final op in ops) {
-      op();
+      try {
+        op();
+      } catch (_) {
+        // If one op throws, still apply the rest so a single
+        // failing updateStep doesn't drop the entire batch.
+      }
     }
   }
 
@@ -903,6 +907,8 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         const Duration(seconds: 5),
         onTimeout: () {
           animation.removeStatusListener(listener);
+          // Timeout waiting for dismissed — proceed anyway rather
+          // than silently dropping the extraction.
         },
       );
     } else if (route == null) {
