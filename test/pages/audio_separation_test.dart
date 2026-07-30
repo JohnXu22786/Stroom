@@ -968,8 +968,10 @@ void main() {
         () async {
       final content =
           File('lib/pages/audio_separation_page.dart').readAsStringSync();
-      expect(content.contains('_selectedVideos.isEmpty || _isProcessing'), isTrue,
-          reason: 'Button guard must check both empty list and processing state');
+      expect(
+          content.contains('_selectedVideos.isEmpty || _isProcessing'), isTrue,
+          reason:
+              'Button guard must check both empty list and processing state');
       // Also verify the internal guard inside _startSeparation itself
       expect(content.contains('if (_isProcessing) return'), isTrue,
           reason: '_startSeparation must have its own double-tap guard');
