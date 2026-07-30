@@ -530,8 +530,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   @override
   void dispose() {
     _persistTimer?.cancel();
-    // Flush any pending writes synchronously before teardown so
-    // the last state change is not lost on app shutdown.
+    // Flush any pending writes before teardown so the last state
+    // change is not lost on normal app shutdown.
     _persistTasks();
     super.dispose();
   }

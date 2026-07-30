@@ -80,6 +80,7 @@ Future<void> _ensureWorker() async {
     }
   } finally {
     _workerStarting!.complete();
+    _workerStarting = null; // allow retry on next call if spawn failed
   }
 }
 
@@ -90,22 +91,28 @@ Future<({Uint8List audioBytes, String hash, String format})> _workerExtract(
     Uint8List videoBytes, String videoFormat) async {
   await _ensureWorker();
   final responsePort = ReceivePort();
-  _workerSendPort!.send({
-    'type': 'extract',
-    'videoBytes': videoBytes,
-    'videoFormat': videoFormat,
-    'responsePort': responsePort.sendPort,
-  });
-  final result = await responsePort.first as Map<String, dynamic>;
-  responsePort.close();
-  if (result.containsKey('error')) {
-    throw Exception(result['error']);
+  try {
+    _workerSendPort!.send({
+      'type': 'extract',
+      'videoBytes': videoBytes,
+      'videoFormat': videoFormat,
+      'responsePort': responsePort.sendPort,
+    });
+    final result = await responsePort.first.timeout(
+      const Duration(seconds: 30),
+      onTimeout: () => throw TimeoutException('Worker isolate did not respond'),
+    ) as Map<String, dynamic>;
+    if (result.containsKey('error')) {
+      throw Exception(result['error']);
+    }
+    return (
+      audioBytes: result['audioBytes'] as Uint8List,
+      hash: result['hash'] as String,
+      format: result['format'] as String,
+    );
+  } finally {
+    responsePort.close();
   }
-  return (
-    audioBytes: result['audioBytes'] as Uint8List,
-    hash: result['hash'] as String,
-    format: result['format'] as String,
-  );
 }
 
 /// Worker Isolate entry point.  Listens on its own [ReceivePort] for
@@ -160,8 +167,7 @@ Future<void> _runAudioSeparation({
     await Future<void>.delayed(Duration.zero);
 
     try {
-      final result =
-          await _workerExtract(video.bytes, video.format);
+      final result = await _workerExtract(video.bytes, video.format);
 
       bgNotifier.updateStep(taskId, 0, completed: true);
       bgNotifier.updateStep(taskId, 1, running: true);
