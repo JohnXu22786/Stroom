@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:stroom/models/message_block.dart';
 import 'package:stroom/models/tool_call.dart';
 
 /// Segments that make up an AI message, rendered in order.
@@ -236,6 +237,87 @@ final reasoningEffortProvider = StateProvider<String>((ref) => 'medium');
 /// value is the selected option string (e.g. 'high', 'enabled').
 final reasoningParamValuesProvider =
     StateProvider<Map<String, String>>((ref) => {});
+
+// ── Block converters ─────────────────────────────────────────────────
+
+List<MessageSegment> blocksToSegments(List<MessageBlock> blocks) {
+  final segs = <MessageSegment>[];
+  for (final b in blocks) {
+    switch (b) {
+      case TextBlock(:final text):
+        segs.add(TextSegment(text));
+      case ReasoningBlock(:final isComplete):
+        segs.add(ReasoningSegment(
+          sectionIndex: segs.whereType<ReasoningSegment>().length,
+          isStreaming: !isComplete,
+        ));
+      case ToolCallBlock(
+          :final id,
+          :final name,
+          :final arguments,
+          :final status,
+          :final result
+        ):
+        segs.add(ToolCallSegment(ToolCallData(
+          id: id,
+          name: name,
+          arguments: arguments,
+          status: status,
+          result: result,
+        )));
+      case ErrorBlock(:final message):
+        segs.add(TextSegment('[Error: $message]'));
+    }
+  }
+  return segs;
+}
+
+List<MessageBlock> legacyToBlocks({
+  required List<String> reasoningSections,
+  required List<String> textChunks,
+  required List<ToolCallData> toolCalls,
+  required List<int> toolCallRoundStarts,
+}) {
+  final blocks = <MessageBlock>[];
+  final numRounds = toolCallRoundStarts.isNotEmpty
+      ? toolCallRoundStarts.length
+      : (toolCalls.isNotEmpty ? 1 : 0);
+
+  for (var i = 0; i < numRounds; i++) {
+    if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
+      blocks.add(ReasoningBlock(text: reasoningSections[i], isComplete: true));
+    }
+    if (i < textChunks.length && textChunks[i].isNotEmpty) {
+      blocks.add(TextBlock(text: textChunks[i]));
+    }
+    final start = toolCallRoundStarts.isNotEmpty ? toolCallRoundStarts[i] : i;
+    final end =
+        i + 1 < toolCallRoundStarts.length && toolCallRoundStarts.isNotEmpty
+            ? toolCallRoundStarts[i + 1]
+            : toolCalls.length;
+    for (var j = start; j < end && j < toolCalls.length; j++) {
+      final tc = toolCalls[j];
+      blocks.add(ToolCallBlock(
+        id: tc.id,
+        name: tc.name,
+        arguments: tc.arguments,
+        status: tc.status,
+        result: tc.result,
+      ));
+    }
+  }
+  for (var i = numRounds; i < reasoningSections.length; i++) {
+    if (reasoningSections[i].isNotEmpty) {
+      blocks.add(ReasoningBlock(text: reasoningSections[i], isComplete: true));
+    }
+  }
+  for (var i = numRounds; i < textChunks.length; i++) {
+    if (textChunks[i].isNotEmpty) {
+      blocks.add(TextBlock(text: textChunks[i]));
+    }
+  }
+  return blocks;
+}
 
 /// Shared state provider tracking which tool names are enabled by the user.
 /// Applies to both built-in and MCP tools uniformly.

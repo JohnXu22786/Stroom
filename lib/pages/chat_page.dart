@@ -766,14 +766,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
         }
 
         // Build unified segments for the full Agent chain.
-        final segments = buildAgentChainSegments(
-          reasoningSections: msg.reasoningSections ?? [],
-          textChunks: msg.textSections ?? [],
-          toolCalls: msg.toolCalls ?? [],
-          // Use persisted round boundaries for correct multi-tool grouping.
-          // Null for old data → falls back to legacy 1:1 algorithm.
-          toolCallRoundStarts: msg.toolCallRoundStarts,
-        );
+        final segments = msg.blocks != null && msg.blocks!.isNotEmpty
+            ? blocksToSegments(msg.blocks!)
+            : buildAgentChainSegments(
+                reasoningSections: msg.reasoningSections ?? [],
+                textChunks: msg.textSections ?? [],
+                toolCalls: msg.toolCalls ?? [],
+                toolCallRoundStarts: msg.toolCallRoundStarts,
+              );
         // Fallback: no textSections, use content as single trailing block
         if (segments.isEmpty && msg.content.isNotEmpty) {
           segments.add(TextSegment(msg.content));
