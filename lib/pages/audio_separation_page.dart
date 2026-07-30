@@ -159,9 +159,10 @@ class _BgThrottler {
     for (final op in ops) {
       try {
         op();
-      } catch (_) {
+      } catch (e) {
         // If one op throws, still apply the rest so a single
         // failing updateStep doesn't drop the entire batch.
+        debugPrint('[BgThrottler] Error applying batched op: $e');
       }
     }
   }
@@ -854,6 +855,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
   Future<void> _startSeparation() async {
     if (_selectedVideos.isEmpty) return;
+    if (_isProcessing) return; // already started — guard against double-tap
 
     if (!_engineAvailable) {
       setState(() {

@@ -964,20 +964,15 @@ void main() {
               'setState(() => _isProcessing = true) for double-tap guard');
     });
 
-    test('extract button onPressed is NOT null when _isProcessing is true',
+    test('extract button guard checks both _selectedVideos and _isProcessing',
         () async {
-      // This test verifies the logical guard:
-      //   onPressed: _selectedVideos.isEmpty || _isProcessing ? null : _startSeparation
-      // Since _isProcessing starts as false, the button can only be disabled
-      // when _selectedVideos.isEmpty.  After setState({_isProcessing = true}),
-      // the guard should disable the button.
       final content =
           File('lib/pages/audio_separation_page.dart').readAsStringSync();
-      // Verify the guard expression exists
-      expect(
-          content.contains('_selectedVideos.isEmpty || _isProcessing'), isTrue,
-          reason:
-              'Button guard must check both empty list and processing state');
+      expect(content.contains('_selectedVideos.isEmpty || _isProcessing'), isTrue,
+          reason: 'Button guard must check both empty list and processing state');
+      // Also verify the internal guard inside _startSeparation itself
+      expect(content.contains('if (_isProcessing) return'), isTrue,
+          reason: '_startSeparation must have its own double-tap guard');
     });
   });
 
@@ -1023,6 +1018,7 @@ void main() {
   group('BackgroundTaskNotifier — throttled state updates', () {
     test('rapid updates produce correct final in-memory state', () {
       final notifier = BackgroundTaskNotifier();
+      addTearDown(notifier.dispose);
 
       final taskId = notifier.addTask(
         type: BackgroundTaskType.audioSeparation,
@@ -1059,6 +1055,7 @@ void main() {
 
     test('failure in updateStep does not lose prior state', () {
       final notifier = BackgroundTaskNotifier();
+      addTearDown(notifier.dispose);
       final taskId = notifier.addTask(
         type: BackgroundTaskType.audioSeparation,
         title: 'ErrorTest',
