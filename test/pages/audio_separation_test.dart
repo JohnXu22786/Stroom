@@ -1079,8 +1079,7 @@ void main() {
 
       // failTask should mark the task as failed without crashing
       notifier.failTask(taskId, error: 'something went wrong');
-      final task =
-          notifier.state.firstWhere((t) => t.id == taskId);
+      final task = notifier.state.firstWhere((t) => t.id == taskId);
       expect(task.status, TaskStatus.failed);
     });
   });
@@ -1094,8 +1093,7 @@ void main() {
       expect(
         homeSource.contains('backgroundTasksProvider.select'),
         isTrue,
-        reason:
-            'HomePage must watch backgroundTasksProvider via .select() '
+        reason: 'HomePage must watch backgroundTasksProvider via .select() '
             'to scope rebuilds to status-count changes only',
       );
     });
@@ -1128,7 +1126,8 @@ void main() {
       final fnStart =
           funcSource.indexOf('Future<String?> _saveAudioSeparationFile');
       expect(fnStart, greaterThanOrEqualTo(0));
-      final fnEnd = funcSource.indexOf('\n}\n', fnStart)
+      final fnEnd = funcSource
+          .indexOf('\n}\n', fnStart)
           .clamp(fnStart + 1, funcSource.length);
       final body = funcSource.substring(fnStart, fnEnd);
       expect(body.contains('loadRecords'), isFalse,
@@ -1138,8 +1137,7 @@ void main() {
     });
   });
 
-  group('UnifiedTaskListPage — task card responds during processing',
-      () {
+  group('UnifiedTaskListPage — task card responds during processing', () {
     testWidgets('renders task and survives state change', (tester) async {
       final notifier = BackgroundTaskNotifier();
 
