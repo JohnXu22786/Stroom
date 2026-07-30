@@ -784,16 +784,17 @@ void main() {
       expect(fnBody.contains('detectAudioFormat'), isTrue);
     });
 
-    test('_runAudioSeparation yields at most 4 times after grouping', () {
+    test('_runAudioSeparation uses _BgThrottler to batch state updates', () {
       final fnStart = source.indexOf('Future<void> _runAudioSeparation');
       expect(fnStart, greaterThanOrEqualTo(0));
       final fnEnd =
           source.indexOf('\n}\n', fnStart).clamp(fnStart + 1, source.length);
       final fnBody = source.substring(fnStart, fnEnd);
-      final yieldCount =
-          'await Future<void>.delayed(Duration.zero)'.allMatches(fnBody).length;
-      expect(yieldCount, lessThanOrEqualTo(4),
-          reason: 'state updates must be grouped to reduce rebuilds');
+      expect(fnBody.contains('_BgThrottler'), isTrue,
+          reason: '_runAudioSeparation must use _BgThrottler '
+              'to batch state updates instead of calling updateStep directly');
+      expect(fnBody.contains('await Future<void>.delayed'), isFalse,
+          reason: 'explicit yields have been replaced by throttler batching');
     });
 
     test('_runAudioSeparation is a top-level function (not a method)', () {
