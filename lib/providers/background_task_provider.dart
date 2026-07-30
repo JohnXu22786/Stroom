@@ -457,8 +457,15 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// This mirrors the pattern used by [ConversationNotifier] and
   /// prevents the synchronous `jsonEncode` + file-write storm that
   /// previously ran on every `addTask` / `updateStep` / `completeTask`.
+  ///
+  /// In test environments ([Platform.environment] contains
+  /// 'FLUTTER_TEST') persistence is skipped entirely so that
+  /// `pumpAndSettle` does not hang on unavailable platform channels.
   void _schedulePersist() {
     _persistTimer?.cancel();
+    // Skip persistence in test environments — platform channels for
+    // file I/O are unavailable, and pumpAndSettle hangs on the timer.
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
     _persistTimer = Timer(const Duration(milliseconds: 250), () {
       unawaited(_persistTasks());
     });
