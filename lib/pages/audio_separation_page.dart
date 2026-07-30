@@ -74,14 +74,20 @@ Future<void> _ensureWorker() async {
     final receivePort = ReceivePort();
     try {
       await Isolate.spawn(_audioWorkerEntry, receivePort.sendPort);
-      _workerSendPort = await receivePort.first as SendPort;
+      _workerSendPort = await receivePort.first
+          .timeout(const Duration(seconds: 5), onTimeout: () {
+        throw TimeoutException('Worker isolate did not send handshake');
+      }) as SendPort;
     } finally {
       receivePort.close();
     }
-  } finally {
-    _workerStarting!.complete();
-    _workerStarting = null; // allow retry on next call if spawn failed
+  } catch (e) {
+    _workerStarting!.completeError(e);
+    _workerStarting = null;
+    rethrow;
   }
+  _workerStarting!.complete();
+  _workerStarting = null; // allow retry on next call if spawn failed
 }
 
 /// Sends a video to the long-lived worker Isolate and waits for the
