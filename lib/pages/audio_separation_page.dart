@@ -48,108 +48,24 @@ class SelectedVideo {
 }
 
 // ====================================================================
-// Long-lived worker Isolate — spawned once, reused for every video.
-// Eliminates the per-video Isolate.spawn/teardown overhead (~5–50 ms)
-// that Isolate.run incurs on the main thread.
+// Worker — runs extraction + hash + format detection in a fresh
+// Isolate per video via Isolate.run.  Each spawn costs ~5–50 ms but
+// Isolate.run's Future-based await reliably yields to the event loop,
+// keeping the GUI responsive during the 5-50 s of CPU work.
 // ====================================================================
 
-SendPort? _workerSendPort;
-Completer<void>? _workerStarting; // guards concurrent _ensureWorker calls
-
-/// Ensures the long-lived audio-processing worker Isolate is running.
-/// Safe to call multiple times — only spawns on the first call.
-/// Uses a [Completer] to serialise concurrent callers so that at most
-/// one isolate is ever spawned.
-Future<void> _ensureWorker() async {
-  if (_workerSendPort != null) return;
-
-  // Serialise callers — the first caller spawns, subsequent callers
-  // wait on the completer.
-  if (_workerStarting != null) {
-    await _workerStarting!.future;
-    return;
-  }
-  _workerStarting = Completer<void>();
-  try {
-    final receivePort = ReceivePort();
-    try {
-      await Isolate.spawn(_audioWorkerEntry, receivePort.sendPort);
-      _workerSendPort = await receivePort.first
-          .timeout(const Duration(seconds: 5), onTimeout: () {
-        throw TimeoutException('Worker isolate did not send handshake');
-      }) as SendPort;
-    } finally {
-      receivePort.close();
-    }
-  } catch (e) {
-    _workerStarting!.completeError(e);
-    _workerStarting = null;
-    rethrow;
-  }
-  _workerStarting!.complete();
-  _workerStarting = null; // allow retry on next call if spawn failed
-}
-
-/// Sends a video to the long-lived worker Isolate and waits for the
-/// result.  The worker performs extraction, MD5 hash, and format
-/// detection inside a single isolate that stays alive between calls.
+/// Runs extraction, MD5 hash, and format detection for one video in a
+/// single [Isolate.run] call.  Returns the extracted audio bytes and
+/// metadata.  The caller awaits the returned [Future] — during the
+/// isolate's CPU work the main thread is free to process frames.
 Future<({Uint8List audioBytes, String hash, String format})> _workerExtract(
-    Uint8List videoBytes, String videoFormat) async {
-  await _ensureWorker();
-  final responsePort = ReceivePort();
-  try {
-    _workerSendPort!.send({
-      'type': 'extract',
-      'videoBytes': videoBytes,
-      'videoFormat': videoFormat,
-      'responsePort': responsePort.sendPort,
-    });
-    final result = await responsePort.first.timeout(
-      const Duration(seconds: 30),
-      onTimeout: () => throw TimeoutException('Worker isolate did not respond'),
-    ) as Map<String, dynamic>;
-    if (result.containsKey('error')) {
-      throw Exception(result['error']);
-    }
-    return (
-      audioBytes: result['audioBytes'] as Uint8List,
-      hash: result['hash'] as String,
-      format: result['format'] as String,
-    );
-  } finally {
-    responsePort.close();
-  }
-}
-
-/// Pre-warms the long-lived audio-processing worker isolate.
-/// Call this at app startup so the first extraction does not
-/// pay the Isolate.spawn cost (~5–50 ms main-thread overhead).
-Future<void> prewarmAudioSeparationWorker() => _ensureWorker();
-
-/// Worker Isolate entry point.  Listens on its own [ReceivePort] for
-/// extraction requests and sends results back via per-request response
-/// [SendPort]s.
-void _audioWorkerEntry(SendPort mainSendPort) {
-  final port = ReceivePort();
-  mainSendPort.send(port.sendPort);
-  port.listen((msg) {
-    if (msg is! Map<String, dynamic>) return;
-    final videoBytes = msg['videoBytes'] as Uint8List;
-    final videoFormat = msg['videoFormat'] as String;
-    final responsePort = msg['responsePort'] as SendPort;
-    try {
-      final audioBytes =
-          extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat);
-      final hash = computeAudioHash(audioBytes);
-      final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
-      responsePort.send({
-        'audioBytes': audioBytes,
-        'hash': hash,
-        'format': format,
-      });
-    } catch (e) {
-      responsePort.send({'error': e.toString()});
-    }
+    Uint8List videoBytes, String videoFormat) {
+  return Isolate.run(() {
+    final audioBytes =
+        extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat);
+    final hash = computeAudioHash(audioBytes);
+    final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
+    return (audioBytes: audioBytes, hash: hash, format: format);
   });
 }
 
