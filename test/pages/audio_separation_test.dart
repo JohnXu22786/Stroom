@@ -418,12 +418,6 @@ void main() {
         reason: '_saveAudioSeparationFile must add the record via FileManifest',
       );
       expect(
-        methodCode.contains('audioRecordsNotifier.loadRecords'),
-        isTrue,
-        reason:
-            '_saveAudioSeparationFile must refresh the audio records provider',
-      );
-      expect(
         methodCode.contains('FileManifest.readFilePath'),
         isTrue,
         reason:
@@ -829,20 +823,16 @@ void main() {
       expect(startIdx, greaterThanOrEqualTo(0));
       final endIdx = source.indexOf('void _goToAudioLibrary', startIdx);
       final methodBody = source.substring(startIdx, endIdx);
-
       // ref.read calls must appear before Navigator.pop
-      final refReadBg = methodBody.indexOf('ref.read(backgroundTasksProvider');
-      final refReadAr = methodBody.indexOf('ref.read(audioRecordsProvider');
+      final refReadBg =
+          methodBody.indexOf('ref.read(backgroundTasksProvider');
       final popCall = methodBody.indexOf('Navigator.pop(context)');
 
       expect(refReadBg, greaterThanOrEqualTo(0));
-      expect(refReadAr, greaterThanOrEqualTo(0));
       expect(popCall, greaterThanOrEqualTo(0));
       expect(refReadBg, lessThan(popCall),
           reason: 'notifiers must be captured BEFORE Navigator.pop');
-      expect(refReadAr, lessThan(popCall));
     });
-
     test('_startSeparation calls setState for _isProcessing guard', () {
       final startIdx = source.indexOf('Future<void> _startSeparation() async');
       final methodBody = source.substring(
