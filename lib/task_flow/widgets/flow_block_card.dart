@@ -120,7 +120,8 @@ class FlowBlockCard extends StatelessWidget {
                       // Settings button (hidden in readOnly)
                       if (!readOnly)
                         IconButton(
-                          icon: Icon(Icons.settings, size: 16, color: cs.primary),
+                          icon:
+                              Icon(Icons.settings, size: 16, color: cs.primary),
                           onPressed: onSettings ?? onTap,
                           padding: EdgeInsets.zero,
                           constraints:
