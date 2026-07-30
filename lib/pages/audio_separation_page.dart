@@ -11,7 +11,6 @@ import 'package:path/path.dart' as p;
 
 import '../utils/audio_separation.dart';
 import '../utils/audio_utils.dart' show detectAudioFormat, normalizeAudioFormat;
-import '../providers/tts_state_provider.dart';
 import '../providers/background_task_provider.dart';
 import '../utils/file_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
@@ -47,24 +46,25 @@ class SelectedVideo {
   });
 }
 
-/// Top-level helper: runs extractAudioSync inside Isolate.run.
-/// Must be a top-level function (not a method) so the closure does NOT
-/// capture `this` (which would fail sendability check for Isolate.run).
-Future<Uint8List> _extractAudioIsolate(
-    Uint8List videoBytes, String videoFormat) {
-  return Isolate.run(
-      () => extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat));
-}
+// ====================================================================
+// Worker — runs extraction + hash + format detection in a fresh
+// Isolate per video via Isolate.run.  Each spawn costs ~5–50 ms but
+// Isolate.run's Future-based await reliably yields to the event loop,
+// keeping the GUI responsive during the 5-50 s of CPU work.
+// ====================================================================
 
-/// Computes audio hash and detects format in a background isolate.
-/// Both [computeAudioHash] (MD5 over raw audio data) and
-/// [detectAudioFormat] (magic-byte scanning) are CPU-bound and
-/// would freeze the GUI if run on the main isolate.
-Future<(String, String)> _computeAudioMetaInIsolate(Uint8List audioBytes) {
+/// Runs extraction, MD5 hash, and format detection for one video in a
+/// single [Isolate.run] call.  Returns the extracted audio bytes and
+/// metadata.  The caller awaits the returned [Future] — during the
+/// isolate's CPU work the main thread is free to process frames.
+Future<({Uint8List audioBytes, String hash, String format})> _workerExtract(
+    Uint8List videoBytes, String videoFormat) {
   return Isolate.run(() {
+    final audioBytes =
+        extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat);
     final hash = computeAudioHash(audioBytes);
     final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
-    return (hash, format);
+    return (audioBytes: audioBytes, hash: hash, format: format);
   });
 }
 
@@ -72,49 +72,105 @@ Future<(String, String)> _computeAudioMetaInIsolate(Uint8List audioBytes) {
 /// decoupled from the widget lifecycle. All state is passed in as
 /// captured values — no access to `this`, `context`, or `ref`.
 ///
-/// Called via [Future.delayed] after [Navigator.pop] so the pop
-/// animation is already underway before any task-card state updates
-/// trigger home-page rebuilds.
+/// State updates are NOT applied directly to [bgNotifier].  Instead they
+/// accumulate in a 250 ms throttling buffer.  The buffer flushes at most
+/// 4×/second, applying all queued mutations in one batch so Riverpod
+/// watchers only rebuild once per flush window — regardless of how many
+/// videos or step transitions are processed.
 Future<void> _runAudioSeparation({
   required List<SelectedVideo> videos,
   required BackgroundTaskNotifier bgNotifier,
-  required AudioRecordsNotifier audioRecordsNotifier,
   required String saveFolder,
 }) async {
-  for (final video in videos) {
-    final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
-    final taskId = bgNotifier.addTask(
-      type: BackgroundTaskType.audioSeparation,
-      title: title,
-      retryData: null,
-    );
-
-    try {
-      // Step 0: 分离音频
-      bgNotifier.updateStep(taskId, 0, running: true);
-      final audioBytes = await _extractAudioIsolate(video.bytes, video.format);
-      bgNotifier.updateStep(taskId, 0, completed: true);
-
-      // Step 1: 保存到文件
-      bgNotifier.updateStep(taskId, 1, running: true);
-      final meta = await _computeAudioMetaInIsolate(audioBytes);
-      final filePath = await _saveAudioSeparationFile(
-        audioBytes,
-        hash: meta.$1,
-        format: meta.$2,
-        audioRecordsNotifier: audioRecordsNotifier,
-        displayName: title,
-        videoName: video.name,
-        saveFolder: saveFolder,
+  final throttler = _BgThrottler(bgNotifier);
+  try {
+    for (final video in videos) {
+      final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
+      final taskId = bgNotifier.addTask(
+        type: BackgroundTaskType.audioSeparation,
+        title: title,
+        retryData: null,
       );
-      bgNotifier.updateStep(taskId, 1, completed: true);
-      bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
-    } catch (e) {
-      bgNotifier.failTask(taskId, error: '音频提取失败: $e');
+      throttler.updateStep(taskId, 0, running: true);
+
+      try {
+        final result = await _workerExtract(video.bytes, video.format);
+
+        throttler.updateStep(taskId, 0, completed: true);
+        throttler.updateStep(taskId, 1, running: true);
+
+        final filePath = await _saveAudioSeparationFile(
+          result.audioBytes,
+          hash: result.hash,
+          format: result.format,
+          displayName: title,
+          videoName: video.name,
+          saveFolder: saveFolder,
+        );
+
+        throttler.updateStep(taskId, 1, completed: true);
+        throttler.completeTask(taskId, downloadedFilePath: filePath);
+      } catch (e) {
+        throttler.failTask(taskId, error: '音频提取失败: $e');
+      }
+    }
+  } finally {
+    throttler.dispose(); // flush any remaining queued ops
+  }
+}
+
+/// Throttles [BackgroundTaskNotifier] mutations so that multiple
+/// rapid updates (e.g. several updateStep calls in quick succession)
+/// are coalesced into a single batch flush every 250 ms.
+///
+/// [addTask] is NOT throttled — it returns the task ID immediately
+/// so the caller can reference it in subsequent updateStep calls.
+class _BgThrottler {
+  final BackgroundTaskNotifier _notifier;
+  Timer? _timer;
+  final List<void Function()> _queue = [];
+
+  _BgThrottler(this._notifier);
+
+  void updateStep(String taskId, int index,
+          {bool? completed, bool? running, bool? failed, bool? skipped}) =>
+      _enqueue(() => _notifier.updateStep(taskId, index,
+          completed: completed,
+          running: running,
+          failed: failed,
+          skipped: skipped));
+
+  void completeTask(String taskId, {String? downloadedFilePath}) =>
+      _enqueue(() => _notifier.completeTask(taskId,
+          downloadedFilePath: downloadedFilePath));
+
+  void failTask(String taskId, {String? error}) =>
+      _enqueue(() => _notifier.failTask(taskId, error: error));
+
+  void _enqueue(void Function() op) {
+    _queue.add(op);
+    _timer ??= Timer(const Duration(milliseconds: 250), _flush);
+  }
+
+  void _flush() {
+    _timer = null;
+    final ops = List<void Function()>.from(_queue);
+    _queue.clear();
+    for (final op in ops) {
+      try {
+        op();
+      } catch (e) {
+        // If one op throws, still apply the rest so a single
+        // failing updateStep doesn't drop the entire batch.
+        debugPrint('[BgThrottler] Error applying batched op: $e');
+      }
     }
   }
 
-  unawaited(audioRecordsNotifier.loadRecords());
+  void dispose() {
+    _timer?.cancel();
+    _flush();
+  }
 }
 
 /// Saves extracted audio bytes to the library and returns the file path.
@@ -123,7 +179,6 @@ Future<String?> _saveAudioSeparationFile(
   Uint8List audioBytes, {
   required String hash,
   required String format,
-  required AudioRecordsNotifier audioRecordsNotifier,
   String? displayName,
   String? videoName,
   required String saveFolder,
@@ -151,7 +206,6 @@ Future<String?> _saveAudioSeparationFile(
   await FileManifest.addRecord(record);
 
   final filePath = await FileManifest.readFilePath('$hash.$format');
-  unawaited(audioRecordsNotifier.loadRecords());
 
   return filePath;
 }
@@ -801,6 +855,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
   Future<void> _startSeparation() async {
     if (_selectedVideos.isEmpty) return;
+    if (_isProcessing) return; // already started — guard against double-tap
 
     if (!_engineAvailable) {
       setState(() {
@@ -821,25 +876,58 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     // After the widget is disposed, `ref` and `_saveFolder` are invalid.
     final videosToProcess = List<SelectedVideo>.from(_selectedVideos);
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
-    final audioRecordsNotifier = ref.read(audioRecordsProvider.notifier);
     final saveFolder = _saveFolder;
+    final route = ModalRoute.of(context);
 
     // Pop IMMEDIATELY — schedule the route transition now.
     if (mounted) {
       Navigator.pop(context);
     }
 
-    // Defer ALL processing. The 100 ms delay gives the pop animation
-    // time to start before any task-card state updates trigger home-page
-    // rebuilds (Riverpod watchers of backgroundTasksProvider).
-    Future<void>.delayed(const Duration(milliseconds: 100), () {
-      unawaited(_runAudioSeparation(
-        videos: videosToProcess,
-        bgNotifier: bgNotifier,
-        audioRecordsNotifier: audioRecordsNotifier,
-        saveFolder: saveFolder,
-      ));
-    });
+    // Wait for the pop animation to finish BEFORE starting any
+    // processing.  addTask / updateStep / completeTask trigger
+    // Riverpod state updates that cascade to home-page watchers;
+    // if those rebuilds happen during the pop animation they
+    // compete with the transition frames and freeze it mid-flight.
+    //
+    // We use the route's AnimationController status to detect
+    // the exact moment the exit transition completes.  (Using
+    // route.popped won't work — it completes synchronously in
+    // ModalRoute.didPop, BEFORE the animation even starts.)
+    final animation = route?.animation;
+    if (animation != null && animation.status != AnimationStatus.dismissed) {
+      final done = Completer<void>();
+      void listener(AnimationStatus s) {
+        if (s == AnimationStatus.dismissed) {
+          if (!done.isCompleted) done.complete();
+          animation.removeStatusListener(listener);
+        }
+      }
+
+      animation.addStatusListener(listener);
+      await done.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          animation.removeStatusListener(listener);
+          // Timeout waiting for dismissed — proceed anyway rather
+          // than silently dropping the extraction.
+        },
+      );
+    } else if (route == null) {
+      // No route — unexpected, but guard with a fallback delay.
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    }
+    // Implicit else: animation already dismissed — no wait needed;
+    // fall through to fire-and-forget immediately.
+
+    // Route transition is complete — now fire-and-forget the pipeline.
+    // _runAudioSeparation is a top-level function with no access to
+    // `this`, `ref`, or `context`, so it's safe to call after dispose.
+    unawaited(_runAudioSeparation(
+      videos: videosToProcess,
+      bgNotifier: bgNotifier,
+      saveFolder: saveFolder,
+    ));
   }
 
   void _goToAudioLibrary() {

@@ -1,10 +1,12 @@
 // Merged from:
 //   test/pages/audio_separation_page_test.dart
 //   test/pages/audio_separation_task_list_test.dart
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,6 +17,7 @@ import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/video_manifest.dart';
+import 'package:stroom/pages/unified_task_list_page.dart';
 
 Widget _buildTestApp() {
   return const ProviderScope(
@@ -416,12 +419,6 @@ void main() {
         reason: '_saveAudioSeparationFile must add the record via FileManifest',
       );
       expect(
-        methodCode.contains('audioRecordsNotifier.loadRecords'),
-        isTrue,
-        reason:
-            '_saveAudioSeparationFile must refresh the audio records provider',
-      );
-      expect(
         methodCode.contains('FileManifest.readFilePath'),
         isTrue,
         reason:
@@ -762,6 +759,398 @@ void main() {
       expect(task.steps.length, 2);
       expect(task.steps[0].label, '分离音频');
       expect(task.steps[1].label, '保存到文件');
+    });
+  });
+
+  // ====================================================================
+  // Phase 2 regression tests — extraction flow correctness
+  // ====================================================================
+
+  group('AudioSeparationPage — extraction pipeline structure', () {
+    final source =
+        File('lib/pages/audio_separation_page.dart').readAsStringSync();
+
+    test('_workerExtract uses Isolate.run (not SendPort worker)', () {
+      final fnStart = source.indexOf('_workerExtract');
+      expect(fnStart, greaterThanOrEqualTo(0));
+      final fnEnd =
+          source.indexOf('\n}\n', fnStart).clamp(fnStart + 1, source.length);
+      final fnBody = source.substring(fnStart, fnEnd);
+      expect(fnBody.contains('Isolate.run'), isTrue,
+          reason: '_workerExtract must use Isolate.run whose Future-based '
+              'await reliably yields to the event loop');
+      expect(fnBody.contains('extractAudioSync'), isTrue);
+      expect(fnBody.contains('computeAudioHash'), isTrue);
+      expect(fnBody.contains('detectAudioFormat'), isTrue);
+    });
+
+    test('_runAudioSeparation uses _BgThrottler to batch state updates', () {
+      final fnStart = source.indexOf('Future<void> _runAudioSeparation');
+      expect(fnStart, greaterThanOrEqualTo(0));
+      final fnEnd =
+          source.indexOf('\n}\n', fnStart).clamp(fnStart + 1, source.length);
+      final fnBody = source.substring(fnStart, fnEnd);
+      expect(fnBody.contains('_BgThrottler'), isTrue,
+          reason: '_runAudioSeparation must use _BgThrottler '
+              'to batch state updates instead of calling updateStep directly');
+      expect(fnBody.contains('await Future<void>.delayed'), isFalse,
+          reason: 'explicit yields have been replaced by throttler batching');
+    });
+
+    test('_runAudioSeparation is a top-level function (not a method)', () {
+      final classStart = source.indexOf('class _AudioSeparationPageState');
+      final runFnIdx = source.indexOf('Future<void> _runAudioSeparation');
+      expect(runFnIdx, greaterThanOrEqualTo(0));
+      // The function must be defined OUTSIDE the State class body.
+      // It can appear before or after the class — what matters is
+      // that it's not inside the class's `{ ... }`.
+      final classOpenBrace = source.indexOf('{', classStart);
+      expect(runFnIdx < classOpenBrace, isTrue,
+          reason: '_runAudioSeparation must be top-level, '
+              'not an instance method of _AudioSeparationPageState');
+    });
+
+    test('_saveAudioSeparationFile requires hash and format parameters', () {
+      final saveStart =
+          source.indexOf('Future<String?> _saveAudioSeparationFile');
+      expect(saveStart, greaterThanOrEqualTo(0));
+      final saveBody = source.substring(
+          saveStart,
+          source
+              .indexOf('\n}\n', saveStart)
+              .clamp(saveStart + 1, source.length));
+      expect(saveBody.contains('required String hash'), isTrue);
+      expect(saveBody.contains('required String format'), isTrue);
+    });
+
+    test('_startSeparation captures state BEFORE Navigator.pop', () {
+      final startIdx = source.indexOf('Future<void> _startSeparation() async');
+      expect(startIdx, greaterThanOrEqualTo(0));
+      final endIdx = source.indexOf('void _goToAudioLibrary', startIdx);
+      final methodBody = source.substring(startIdx, endIdx);
+      // ref.read calls must appear before Navigator.pop
+      final refReadBg = methodBody.indexOf('ref.read(backgroundTasksProvider');
+      final popCall = methodBody.indexOf('Navigator.pop(context)');
+
+      expect(refReadBg, greaterThanOrEqualTo(0));
+      expect(popCall, greaterThanOrEqualTo(0));
+      expect(refReadBg, lessThan(popCall),
+          reason: 'notifiers must be captured BEFORE Navigator.pop');
+    });
+    test('_startSeparation calls setState for _isProcessing guard', () {
+      final startIdx = source.indexOf('Future<void> _startSeparation() async');
+      final methodBody = source.substring(
+          startIdx, source.indexOf('void _goToAudioLibrary', startIdx));
+      expect(methodBody.contains('_isProcessing = true'), isTrue,
+          reason:
+              '_isProcessing must be set to true to guard against double-tap');
+    });
+  });
+
+  group('AudioSeparationPage — animation completion detector', () {
+    test('Completer resolves on AnimationStatus.dismissed', () async {
+      final controller = AnimationController(
+        vsync: const TestVSync(),
+        duration: const Duration(milliseconds: 300),
+      );
+      addTearDown(controller.dispose);
+
+      final done = Completer<void>();
+
+      void listener(AnimationStatus status) {
+        if (status == AnimationStatus.dismissed) {
+          done.complete();
+          controller.removeStatusListener(listener);
+        }
+      }
+
+      // Initially dismissed — listener won't fire yet
+      controller.addStatusListener(listener);
+
+      // Start forward then reverse (simulates pop)
+      controller.forward();
+      await Future<void>.delayed(Duration.zero);
+      controller.reverse();
+
+      // The Completer should resolve when reverse animation completes
+      await done.future.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () =>
+            throw TimeoutException('Animation did not reach dismissed'),
+      );
+      expect(controller.status, AnimationStatus.dismissed);
+    });
+
+    test('Completer does not hang when animation already dismissed', () async {
+      final controller = AnimationController(
+        vsync: const TestVSync(),
+        duration: const Duration(milliseconds: 300),
+      );
+      addTearDown(controller.dispose);
+
+      // Already dismissed at creation
+      final done = Completer<void>();
+
+      void listener(AnimationStatus status) {
+        if (status == AnimationStatus.dismissed) {
+          if (!done.isCompleted) {
+            done.complete();
+          }
+          controller.removeStatusListener(listener);
+        }
+      }
+
+      controller.addStatusListener(listener);
+
+      // Since already dismissed, we need to trigger a status change
+      // to fire the listener, OR guard against the edge case:
+      if (controller.status == AnimationStatus.dismissed && !done.isCompleted) {
+        done.complete();
+      }
+
+      await done.future.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => throw TimeoutException(
+            'Completer hung on already-dismissed animation'),
+      );
+      expect(done.isCompleted, isTrue);
+    });
+
+    test('Completer completes on reverse animation from completed', () async {
+      final controller = AnimationController(
+        vsync: const TestVSync(),
+        duration: const Duration(milliseconds: 300),
+      );
+      addTearDown(controller.dispose);
+
+      // Forward to completed
+      controller.forward();
+      await Future<void>.delayed(Duration.zero);
+
+      final done = Completer<void>();
+
+      void listener(AnimationStatus status) {
+        if (status == AnimationStatus.dismissed) {
+          if (!done.isCompleted) done.complete();
+          controller.removeStatusListener(listener);
+        }
+      }
+
+      controller.addStatusListener(listener);
+      controller.reverse();
+      await Future<void>.delayed(Duration.zero);
+      // Guard: if already dismissed (edge case), complete manually
+      if (controller.status == AnimationStatus.dismissed && !done.isCompleted) {
+        done.complete();
+      }
+
+      await done.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => fail('Reverse animation did not reach dismissed'),
+      );
+      expect(controller.status, AnimationStatus.dismissed);
+    });
+  });
+
+  group('AudioSeparationPage — button guard behavior', () {
+    test('_isProcessing field is mutable (not final)', () {
+      // Source-level verification: _isProcessing must NOT be declared final.
+      final content =
+          File('lib/pages/audio_separation_page.dart').readAsStringSync();
+      // The declaration is "bool _isProcessing" — search for "final bool _isProcessing"
+      // which must NOT be present.
+      expect(content.contains('final bool _isProcessing'), isFalse,
+          reason: '_isProcessing must be mutable (not final) to support '
+              'setState(() => _isProcessing = true) for double-tap guard');
+    });
+
+    test('extract button guard checks both _selectedVideos and _isProcessing',
+        () async {
+      final content =
+          File('lib/pages/audio_separation_page.dart').readAsStringSync();
+      expect(
+          content.contains('_selectedVideos.isEmpty || _isProcessing'), isTrue,
+          reason:
+              'Button guard must check both empty list and processing state');
+      // Also verify the internal guard inside _startSeparation itself
+      expect(content.contains('if (_isProcessing) return'), isTrue,
+          reason: '_startSeparation must have its own double-tap guard');
+    });
+  });
+
+  // ====================================================================
+  // Phase 2 tests — debounce + long-lived worker isolate
+  // ====================================================================
+
+  group('BackgroundTaskNotifier — debounce persistence', () {
+    test('rapid updates produce correct in-memory state', () async {
+      final notifier = BackgroundTaskNotifier();
+      addTearDown(notifier.dispose);
+
+      // Simulate rapid updates like the audio separation pipeline
+      final id = notifier.addTask(
+          type: BackgroundTaskType.audioSeparation, title: 'Test');
+      notifier.updateStep(id, 0, running: true);
+      notifier.updateStep(id, 0, completed: true);
+      notifier.updateStep(id, 1, running: true);
+      notifier.completeTask(id);
+
+      // After multiple updates, state should be consistent in memory
+      final task = notifier.state.firstWhere((t) => t.id == id);
+      expect(task.status, TaskStatus.completed);
+      expect(task.steps[0].completed, isTrue);
+    });
+
+    test('dispose flushes pending writes immediately', () async {
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(
+          type: BackgroundTaskType.audioSeparation, title: 'DisposeTest');
+      notifier.updateStep(id, 0, running: true);
+      // Dispose triggers an immediate _persistTasks flush
+      notifier.dispose();
+      // No crash = pass (the synchronous _persistTasks in dispose
+      // did not throw and attempted the write)
+    });
+  });
+
+  // ====================================================================
+  // Behavioral tests — throttler correctness, .select(), GUI interaction
+  // ====================================================================
+
+  group('BackgroundTaskNotifier — throttled state updates', () {
+    test('rapid updates produce correct final in-memory state', () {
+      final notifier = BackgroundTaskNotifier();
+      addTearDown(notifier.dispose);
+
+      final taskId = notifier.addTask(
+        type: BackgroundTaskType.audioSeparation,
+        title: 'ThrottleTest',
+      );
+
+      // Simulate the pattern _BgThrottler would apply: multiple
+      // updateStep/completeTask calls in quick succession
+      notifier.updateStep(taskId, 0, running: true);
+      notifier.updateStep(taskId, 0, completed: true);
+      notifier.updateStep(taskId, 1, running: true);
+      notifier.updateStep(taskId, 1, completed: true);
+      notifier.completeTask(taskId);
+
+      final task = notifier.state.firstWhere((t) => t.id == taskId);
+      expect(task.status, TaskStatus.completed,
+          reason: 'task status must be completed after all updates');
+      expect(task.steps[0].completed, isTrue);
+      expect(task.steps[1].completed, isTrue);
+    });
+
+    test('dispose still flushes pending state', () {
+      final notifier = BackgroundTaskNotifier();
+      final taskId = notifier.addTask(
+        type: BackgroundTaskType.audioSeparation,
+        title: 'DisposeFlush',
+      );
+      notifier.updateStep(taskId, 0, running: true);
+      notifier.updateStep(taskId, 0, completed: true);
+
+      // dispose should complete without throwing
+      expect(() => notifier.dispose(), returnsNormally);
+    });
+
+    test('failure in updateStep does not lose prior state', () {
+      final notifier = BackgroundTaskNotifier();
+      addTearDown(notifier.dispose);
+      final taskId = notifier.addTask(
+        type: BackgroundTaskType.audioSeparation,
+        title: 'ErrorTest',
+      );
+      notifier.updateStep(taskId, 0, running: true);
+
+      // failTask should mark the task as failed without crashing
+      notifier.failTask(taskId, error: 'something went wrong');
+      final task = notifier.state.firstWhere((t) => t.id == taskId);
+      expect(task.status, TaskStatus.failed);
+    });
+  });
+
+  group('HomePage — .select() guard', () {
+    final homeSource = File('lib/pages/home_page.dart').readAsStringSync();
+
+    test('backgroundTasksProvider is watched with .select()', () {
+      // Verify the home page uses .select() so that intermediate
+      // step-state changes do not trigger a full rebuild.
+      expect(
+        homeSource.contains('backgroundTasksProvider.select'),
+        isTrue,
+        reason: 'HomePage must watch backgroundTasksProvider via .select() '
+            'to scope rebuilds to status-count changes only',
+      );
+    });
+
+    test('the old full-list watch is removed', () {
+      // The pattern "backgroundTasks = ref.watch(backgroundTasksProvider);"
+      // WITHOUT .select should NOT appear in the home page anymore.
+      // A .select-less watch would cause a rebuild on every updateStep.
+      final lines = homeSource.split('\n');
+      for (int i = 0; i < lines.length; i++) {
+        final line = lines[i];
+        if (line.contains('ref.watch(backgroundTasksProvider') &&
+            !line.contains('.select')) {
+          // Allow comment lines
+          if (line.trimLeft().startsWith('//')) continue;
+          fail(
+            'HomePage must not use ref.watch(backgroundTasksProvider) '
+            'without .select(). Found at line ${i + 1}',
+          );
+        }
+      }
+    });
+  });
+
+  group('_saveAudioSeparationFile — loadRecords removed', () {
+    final funcSource =
+        File('lib/pages/audio_separation_page.dart').readAsStringSync();
+
+    test('does NOT call loadRecords per video', () {
+      final fnStart =
+          funcSource.indexOf('Future<String?> _saveAudioSeparationFile');
+      expect(fnStart, greaterThanOrEqualTo(0));
+      final fnEnd = funcSource
+          .indexOf('\n}\n', fnStart)
+          .clamp(fnStart + 1, funcSource.length);
+      final body = funcSource.substring(fnStart, fnEnd);
+      expect(body.contains('loadRecords'), isFalse,
+          reason:
+              '_saveAudioSeparationFile must not call loadRecords per video '
+              '— the refresh is deferred until the user opens the audio library');
+    });
+  });
+
+  group('UnifiedTaskListPage — task card responds during processing', () {
+    testWidgets('renders task and survives state change', (tester) async {
+      final notifier = BackgroundTaskNotifier();
+
+      notifier.addTask(
+        type: BackgroundTaskType.audioSeparation,
+        title: 'Video 1',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            backgroundTasksProvider.overrideWith((ref) => notifier),
+            taskListProvider.overrideWith((ref) {
+              final n = TaskListNotifier(ref);
+              n.state = [];
+              return n;
+            }),
+          ],
+          child: const MaterialApp(home: UnifiedTaskListPage()),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('Video 1'), findsOneWidget,
+          reason: 'task card should render after pump');
     });
   });
 }

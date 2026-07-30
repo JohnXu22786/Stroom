@@ -441,12 +441,32 @@ class _HomePageState extends ConsumerState<HomePage> {
     final cs = Theme.of(context).colorScheme;
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
-    final backgroundTasks = ref.watch(backgroundTasksProvider);
+    // Use .select() so the home page ONLY rebuilds when a background
+    // task transitions between running/completed/failed — not on every
+    // intermediate step update (e.g. updateStep from running → running
+    // on a different step index).  This keeps the GUI responsive during
+    // CPU-bound extraction pipelines.
+    final bgStatusCounts = ref.watch(backgroundTasksProvider.select((tasks) {
+      int p = 0, c = 0, f = 0;
+      for (final t in tasks) {
+        switch (t.status) {
+          case TaskStatus.running:
+          case TaskStatus.paused:
+          case TaskStatus.waiting:
+            p++;
+          case TaskStatus.completed:
+            c++;
+          case TaskStatus.failed:
+            f++;
+        }
+      }
+      return (inProgress: p, completed: c, failed: f);
+    }));
 
     // --- Compute status counts for the status card ---
-    int inProgressCount = 0;
-    int completedCount = 0;
-    int failedCount = 0;
+    int inProgressCount = bgStatusCounts.inProgress;
+    int completedCount = bgStatusCounts.completed;
+    int failedCount = bgStatusCounts.failed;
 
     void countCatchStatusName(String statusName) {
       if (statusName == 'running' ||
@@ -464,9 +484,6 @@ class _HomePageState extends ConsumerState<HomePage> {
       countCatchStatusName(t.status.name);
     }
     for (final t in synthesisTasks) {
-      countCatchStatusName(t.status.name);
-    }
-    for (final t in backgroundTasks) {
       countCatchStatusName(t.status.name);
     }
 
