@@ -384,6 +384,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final entriesState = ref.read(providerEntriesProvider);
     _adapter.initializeBuiltinTools(entriesState);
 
+    // Restore saved model selection EARLY — before loading messages or MCP
+    // initialization — so the model chip shows the correct model on the
+    // very first build frame instead of flashing model 0 first.
+    SharedPreferences.getInstance().then((prefs) {
+      if (mounted) _restoreSavedModelSelection(prefs);
+    });
+
     // Load conversation messages EARLY — before MCP server initialization —
     // so chat history appears immediately without waiting for potentially
     // slow MCP discovery. Messages will still show even if MCP servers
@@ -398,18 +405,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
       await _adapter.initializeMcpServers(entriesState);
       await AppLogService.info('ChatPage', 'MCP 服务器初始化完成');
     } finally {
+      // After MCP tools are discovered, re-sync the enabled tool names
+      // provider so that newly discovered MCP tools are reflected in both
+      // the tool panel display AND the enabled state. Without this, only
+      // HTTP tools known at _loadConversationMessages time would be in the
+      // enabled set, and MCP tools would appear unchecked in the panel.
+      _syncEnabledToolsAfterMcpInit();
+
       // Rebuild UI so the tool panel reflects the newly discovered MCP tools.
       // Must check mounted because the async gap may outlive the widget.
       if (mounted) setState(() {});
-      // Do NOT auto-enable all tools. All tools default to OFF.
-      // Per-conversation enabled tools are restored in _loadConversationMessages.
       // Using finally ensures MCP discovery errors don't prevent the rest.
     }
-    // Restore saved model selection and restore per-model settings
-    SharedPreferences.getInstance().then((prefs) {
-      if (!mounted) return;
-      _restoreSavedModelSelection(prefs);
-    });
     // Restore streaming state if a stream was active when the page was
     // previously disposed (user navigated away during generation and then
     // came back). This re-inserts the streaming message placeholder with
@@ -535,6 +542,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
       if (conv == null) {
         await AppLogService.warning(
             'ChatPage', '未找到 activeConversationId=$activeId 对应的对话');
+      }
+
+      // Restore per-conversation model selection if this conversation was
+      // previously used with a specific model. The conversation's last used
+      // model takes priority over the globally saved model index.
+      if (conv != null &&
+          conv.lastUsedModelName != null &&
+          conv.lastUsedModelName!.isNotEmpty) {
+        _selectModelByName(conv.lastUsedModelName!);
       }
 
       // Restore per-conversation enabled MCP/built-in tool names.
@@ -674,6 +690,36 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
   }
 
+  /// Re-syncs [enabledToolNamesProvider] with the adapter's full tool list
+  /// after MCP server discovery completes.
+  ///
+  /// Without this, [enabledToolNamesProvider] retains the tool set computed
+  /// during [_loadConversationMessages], which ran before MCP servers were
+  /// initialized. Newly discovered MCP tools would appear in the panel
+  /// (via [_adapter.getAllToolDefinitions]) but remain unchecked because
+  /// they're absent from the provider state.
+  ///
+  /// This method re-reads the conversation's saved tool preferences (if any)
+  /// and re-resolves the enabled set against the now-complete tool list.
+  /// For conversations without explicit prefs, all tools (including newly
+  /// discovered MCP tools) are auto-enabled.
+  void _syncEnabledToolsAfterMcpInit() {
+    final convId = ref.read(activeConversationIdProvider);
+    if (convId == null) return;
+    final convs = ref.read(conversationsProvider);
+    final conv = convs.where((c) => c.id == convId).firstOrNull;
+    final convEnabled = (conv != null)
+        ? Set<String>.from(conv.enabledMcpToolNames)
+        : <String>{};
+    final hasExplicitPrefs = conv?.hasExplicitEnabledMcpTools ?? false;
+    // Re-resolve with the full tool list (now including MCP tools)
+    ref.read(enabledToolNamesProvider.notifier).state = resolveEnabledToolNames(
+      allTools: _adapter.getAllToolDefinitions(),
+      savedEnabledNames: convEnabled,
+      hasExplicitSavedPrefs: hasExplicitPrefs,
+    );
+  }
+
   Future<void> _saveMessages({String? capturedConvId}) async {
     try {
       final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
@@ -753,6 +799,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
                             .map((e) => e.toString())
                             .toList();
                   }
+                }
+                // Preserve per-conversation model selection so the model
+                // last used in this conversation is not lost when saving
+                // via the fallback path.
+                if (existing['lastUsedModelName'] is String) {
+                  targetMap['lastUsedModelName'] =
+                      existing['lastUsedModelName'] as String;
                 }
                 list[existingIdx] = targetMap;
               } else {
@@ -838,6 +891,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // This ensures the tool preferences are persisted even if the user
     // switches conversations or navigates away during streaming.
     _saveEnabledToolsToConversation();
+
+    // Save the current model as the conversation's last used model so it
+    // can be restored when re-entering this conversation. Per the
+    // requirement, the conversation's last used model takes priority over
+    // the globally saved model index.
+    final currentModelName = _getCurrentModelName();
+    if (convId != null && currentModelName.isNotEmpty) {
+      ref
+          .read(conversationsProvider.notifier)
+          .updateLastUsedModel(convId, currentModelName);
+    }
 
     final userMsgId = 'u${DateTime.now().millisecondsSinceEpoch}';
 
@@ -2090,13 +2154,32 @@ class _ChatPageState extends ConsumerState<ChatPage>
           final entriesState = ref.read(providerEntriesProvider);
           _adapter.initializeBuiltinTools(entriesState);
           await _adapter.initializeMcpServers(entriesState);
+          // Re-sync enabled tools after MCP discovery so newly discovered
+          // MCP tools are reflected in both the panel and the enabled state.
+          _syncEnabledToolsAfterMcpInit();
           if (mounted) setState(() {});
           // _configureAdapter resets the adapter to model 0. Restore the
           // saved model selection so the adapter and reasoning params
-          // stay in sync with the persisted choice.
-          SharedPreferences.getInstance().then((prefs) {
-            if (mounted) _restoreSavedModelSelection(prefs);
-          });
+          // stay in sync with the persisted choice. Prefer the conversation's
+          // last used model over the globally saved model index.
+          final convId = ref.read(activeConversationIdProvider);
+          if (convId != null) {
+            final convs = ref.read(conversationsProvider);
+            final conv = convs.where((c) => c.id == convId).firstOrNull;
+            if (conv != null &&
+                conv.lastUsedModelName != null &&
+                conv.lastUsedModelName!.isNotEmpty) {
+              _selectModelByName(conv.lastUsedModelName!);
+            } else {
+              SharedPreferences.getInstance().then((prefs) {
+                if (mounted) _restoreSavedModelSelection(prefs);
+              });
+            }
+          } else {
+            SharedPreferences.getInstance().then((prefs) {
+              if (mounted) _restoreSavedModelSelection(prefs);
+            });
+          }
         });
       }
     });
@@ -3235,6 +3318,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
         debugPrint('_onModelSelectionChanged save index failed: $e');
       }
     });
+    // Save the selected model as the conversation's last used model so it
+    // persists when re-entering the conversation.
+    final convId = ref.read(activeConversationIdProvider);
+    if (convId != null && selectedName.isNotEmpty) {
+      ref
+          .read(conversationsProvider.notifier)
+          .updateLastUsedModel(convId, selectedName);
+    }
   }
 
   /// Called when models are reordered by drag-and-drop in the model panel.
@@ -3245,6 +3336,37 @@ class _ChatPageState extends ConsumerState<ChatPage>
         prefs.setStringList('model_order', reordered);
       } catch (e) {
         debugPrint('_onModelsReordered failed: $e');
+      }
+    });
+  }
+
+  /// Selects a model by its display name.
+  ///
+  /// Searches the adapter's available models for one matching [modelName]
+  /// and selects it, updating [_selectedModelIndex], the adapter state,
+  /// and per-model settings. If the model is not found (e.g. it was deleted
+  /// from the provider config), this is a no-op.
+  ///
+  /// Used to restore per-conversation model selection from
+  /// [Conversation.lastUsedModelName].
+  void _selectModelByName(String modelName) {
+    final entriesState = ref.read(providerEntriesProvider);
+    final models = _adapter.availableModels(entriesState);
+    final displayNames = _getModelNames();
+    final modelIdx = models.indexWhere((m) => m.displayName == modelName);
+    if (modelIdx < 0) return;
+    final displayIdx = displayNames.indexOf(modelName);
+    if (displayIdx < 0) return;
+
+    final model = models[modelIdx];
+    _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
+    setState(() => _selectedModelIndex = displayIdx);
+    // Restore per-model settings for this model
+    SharedPreferences.getInstance().then((prefs) {
+      try {
+        _restorePerModelSettings(prefs, displayIdx);
+      } catch (e) {
+        debugPrint('_selectModelByName restore settings failed: $e');
       }
     });
   }

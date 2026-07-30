@@ -44,6 +44,9 @@ class AutoBackupService {
   static bool _isRunning = false;
   static bool _cancelRequested = false;
 
+  /// 最近一次备份失败的错误信息（用于调用方判断错误类型）。
+  static String? lastError;
+
   /// 当前是否正在执行自动备份。
   static bool get isRunning => _isRunning;
 
@@ -103,6 +106,7 @@ class AutoBackupService {
 
     await AppLogService.info(
         'AutoBackupService', '开始执行自动备份 (isPreMigration=$isPreMigration)');
+    lastError = null;
     if (_cancelRequested) {
       _isRunning = false;
       _cancelRequested = false;
@@ -202,10 +206,12 @@ class AutoBackupService {
     } on BackupCancelledException {
       debugPrint('[AutoBackupService] 备份被取消');
       await AppLogService.warning('AutoBackupService', '备份被取消');
+      lastError = null;
       return false;
     } catch (e) {
       debugPrint('[AutoBackupService] 备份失败: $e');
       await AppLogService.error('AutoBackupService', '备份失败', e);
+      lastError = e.toString();
       return false;
     } finally {
       // 清理 SAF 遗留的系统临时文件（无论成功失败）
