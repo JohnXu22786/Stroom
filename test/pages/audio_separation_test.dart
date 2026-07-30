@@ -1,10 +1,12 @@
 // Merged from:
 //   test/pages/audio_separation_page_test.dart
 //   test/pages/audio_separation_task_list_test.dart
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -758,7 +760,6 @@ void main() {
       expect(task.steps[1].label, '保存到文件');
     });
   });
-<<<<<<< Updated upstream
 
   // ====================================================================
   // Phase 2 regression tests — extraction flow correctness
@@ -1026,6 +1027,4 @@ void main() {
           reason: 'worker must send results back via SendPort');
     });
   });
-=======
->>>>>>> Stashed changes
 }
