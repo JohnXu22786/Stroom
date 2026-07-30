@@ -121,6 +121,11 @@ Future<({Uint8List audioBytes, String hash, String format})> _workerExtract(
   }
 }
 
+/// Pre-warms the long-lived audio-processing worker isolate.
+/// Call this at app startup so the first extraction does not
+/// pay the Isolate.spawn cost (~5–50 ms main-thread overhead).
+Future<void> prewarmAudioSeparationWorker() => _ensureWorker();
+
 /// Worker Isolate entry point.  Listens on its own [ReceivePort] for
 /// extraction requests and sends results back via per-request response
 /// [SendPort]s.
