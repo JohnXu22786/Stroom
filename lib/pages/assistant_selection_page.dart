@@ -288,6 +288,8 @@ void showAssistantFullEditDialog(
   bool enableTopP = assistant.settings.enableTopP;
   int maxTokens = assistant.settings.maxTokens;
   bool enableMaxTokens = assistant.settings.enableMaxTokens;
+  int maxToolCalls = assistant.settings.maxToolCalls;
+  bool enableMaxToolCalls = assistant.settings.enableMaxToolCalls;
   bool streamOutput = assistant.settings.streamOutput;
   bool enableWebSearch = assistant.settings.enableWebSearch;
   double frequencyPenalty = assistant.settings.frequencyPenalty;
@@ -504,6 +506,37 @@ void showAssistantFullEditDialog(
                                   label: '$maxTokens',
                                   onChanged: (v) =>
                                       setDlgState(() => maxTokens = v.round()),
+                                ),
+                              ),
+                            const Divider(),
+
+                            // Max Tool Calls
+                            SwitchListTile(
+                              title: const Text('工具调用上限 (Max Tool Calls)'),
+                              subtitle: enableMaxToolCalls
+                                  ? Text('$maxToolCalls 轮')
+                                  : const Text('无限制'),
+                              value: enableMaxToolCalls,
+                              onChanged: (v) =>
+                                  setDlgState(() => enableMaxToolCalls = v),
+                            ),
+                            if (enableMaxToolCalls)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16),
+                                child: TextField(
+                                  decoration: const InputDecoration(
+                                    labelText: '轮数',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  controller: TextEditingController(
+                                      text: '$maxToolCalls'),
+                                  onChanged: (v) {
+                                    final n = int.tryParse(v);
+                                    if (n != null && n > 0) maxToolCalls = n;
+                                  },
                                 ),
                               ),
                             const Divider(),
@@ -748,6 +781,8 @@ void showAssistantFullEditDialog(
                     enableTopP: enableTopP,
                     maxTokens: maxTokens,
                     enableMaxTokens: enableMaxTokens,
+                    maxToolCalls: maxToolCalls,
+                    enableMaxToolCalls: enableMaxToolCalls,
                     streamOutput: streamOutput,
                     enableWebSearch: enableWebSearch,
                     frequencyPenalty: frequencyPenalty,
