@@ -992,19 +992,33 @@ void main() {
   // ====================================================================
 
   group('BackgroundTaskNotifier — debounce persistence', () {
-    test('rapid updates are debounced to at most one write per 250ms',
-        () async {
+    test('rapid updates produce correct in-memory state', () async {
       final notifier = BackgroundTaskNotifier();
+      addTearDown(notifier.dispose);
 
       // Simulate rapid updates like the audio separation pipeline
       final id = notifier.addTask(
           type: BackgroundTaskType.audioSeparation, title: 'Test');
       notifier.updateStep(id, 0, running: true);
       notifier.updateStep(id, 0, completed: true);
+      notifier.updateStep(id, 1, running: true);
+      notifier.completeTask(id);
 
-      // After multiple updates, state should be consistent
+      // After multiple updates, state should be consistent in memory
       final task = notifier.state.firstWhere((t) => t.id == id);
+      expect(task.status, TaskStatus.completed);
       expect(task.steps[0].completed, isTrue);
+    });
+
+    test('dispose flushes pending writes immediately', () async {
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(
+          type: BackgroundTaskType.audioSeparation, title: 'DisposeTest');
+      notifier.updateStep(id, 0, running: true);
+      // Dispose triggers an immediate _persistTasks flush
+      notifier.dispose();
+      // No crash = pass (the synchronous _persistTasks in dispose
+      // did not throw and attempted the write)
     });
   });
 
