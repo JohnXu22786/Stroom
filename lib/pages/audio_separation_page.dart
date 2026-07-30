@@ -47,22 +47,73 @@ class SelectedVideo {
   });
 }
 
-/// Runs the full extraction pipeline for one video in a single background
-/// Isolate: MP4 parsing, audio extraction, MD5 hash, and format detection.
-///
-/// Combining all CPU-bound work into one [Isolate.run] call avoids the
-/// overhead of spawning and tearing down a second isolate, and eliminates
-/// the intermediate transfer of extracted audio bytes back to the main
-/// thread before hash/format computation.
-Future<({Uint8List audioBytes, String hash, String format})>
-    _extractAndComputeMetaInIsolate(Uint8List videoBytes, String videoFormat) {
-  return Isolate.run(() {
-    final audioBytes =
-        extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat);
-    final hash = computeAudioHash(audioBytes);
-    final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
-    return (audioBytes: audioBytes, hash: hash, format: format);
+// ====================================================================
+// Long-lived worker Isolate — spawned once, reused for every video.
+// Eliminates the per-video Isolate.spawn/teardown overhead (~5–50 ms)
+// that Isolate.run incurs on the main thread.
+// ====================================================================
+
+SendPort? _workerSendPort;
+
+/// Ensures the long-lived audio-processing worker Isolate is running.
+/// Safe to call multiple times — only spawns on the first call.
+Future<void> _ensureWorker() async {
+  if (_workerSendPort != null) return;
+  final receivePort = ReceivePort();
+  await Isolate.spawn(_audioWorkerEntry, receivePort.sendPort);
+  _workerSendPort = await receivePort.first as SendPort;
+}
+
+/// Sends a video to the long-lived worker Isolate and waits for the
+/// result.  The worker performs extraction, MD5 hash, and format
+/// detection inside a single isolate that stays alive between calls.
+Future<({Uint8List audioBytes, String hash, String format})> _workerExtract(
+    Uint8List videoBytes, String videoFormat) async {
+  await _ensureWorker();
+  final responsePort = ReceivePort();
+  _workerSendPort!.send({
+    'type': 'extract',
+    'videoBytes': videoBytes,
+    'videoFormat': videoFormat,
+    'responsePort': responsePort.sendPort,
   });
+  final result = await responsePort.first as Map<String, dynamic>;
+  responsePort.close();
+  if (result.containsKey('error')) {
+    throw Exception(result['error']);
+  }
+  return (
+    audioBytes: result['audioBytes'] as Uint8List,
+    hash: result['hash'] as String,
+    format: result['format'] as String,
+  );
+}
+
+/// Worker Isolate entry point.  Listens on its own [ReceivePort] for
+/// extraction requests and sends results back via per-request response
+/// [SendPort]s.
+void _audioWorkerEntry(SendPort mainSendPort) async {
+  final port = ReceivePort();
+  mainSendPort.send(port.sendPort);
+  await for (final msg in port) {
+    if (msg is! Map<String, dynamic>) continue;
+    final videoBytes = msg['videoBytes'] as Uint8List;
+    final videoFormat = msg['videoFormat'] as String;
+    final responsePort = msg['responsePort'] as SendPort;
+    try {
+      final audioBytes =
+          extractAudioSync(videoBytes: videoBytes, videoFormat: videoFormat);
+      final hash = computeAudioHash(audioBytes);
+      final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
+      responsePort.send({
+        'audioBytes': audioBytes,
+        'hash': hash,
+        'format': format,
+      });
+    } catch (e) {
+      responsePort.send({'error': e.toString()});
+    }
+  }
 }
 
 /// Processes the audio separation pipeline for each video, completely
@@ -84,18 +135,16 @@ Future<void> _runAudioSeparation({
       title: title,
       retryData: null,
     );
+    // Group state updates before each yield to reduce rebuilds.
+    // (bgNotifier debounce already coalesces persistence writes.)
+    bgNotifier.updateStep(taskId, 0, running: true);
     await Future<void>.delayed(Duration.zero);
 
     try {
-      bgNotifier.updateStep(taskId, 0, running: true);
-      await Future<void>.delayed(Duration.zero);
-
       final result =
-          await _extractAndComputeMetaInIsolate(video.bytes, video.format);
+          await _workerExtract(video.bytes, video.format);
 
       bgNotifier.updateStep(taskId, 0, completed: true);
-      await Future<void>.delayed(Duration.zero);
-
       bgNotifier.updateStep(taskId, 1, running: true);
       await Future<void>.delayed(Duration.zero);
 
@@ -110,7 +159,6 @@ Future<void> _runAudioSeparation({
       );
 
       bgNotifier.updateStep(taskId, 1, completed: true);
-      await Future<void>.delayed(Duration.zero);
 
       bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
       await Future<void>.delayed(Duration.zero);

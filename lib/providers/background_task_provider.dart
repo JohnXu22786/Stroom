@@ -243,6 +243,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   BackgroundTaskNotifier() : super([]);
 
+  Timer? _persistTimer;
+
   /// Add a new background task and return its ID.
   /// Initializes default step chain based on task type.
   /// [retryData] stores the original input parameters (images, audio, model, etc.)
@@ -268,7 +270,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       retryData: retryData,
     );
     state = [task, ...state];
-    _persistTasks();
+    _schedulePersist();
     return id;
   }
 
@@ -283,7 +285,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         statusChangedAt: DateTime.now(),
       );
     }).toList();
-    _persistTasks();
+    _schedulePersist();
   }
 
   /// Mark a task as completed and keep it in the list (visible to user).
@@ -313,7 +315,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (t.id != taskId) return t;
       return t.copyWith(result: result, error: t.error);
     }).toList();
-    _persistTasks();
+    _schedulePersist();
   }
 
   /// Set the full step chain for a task.
@@ -322,7 +324,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (t.id != taskId) return t;
       return t.copyWith(steps: steps);
     }).toList();
-    _persistTasks();
+    _schedulePersist();
   }
 
   /// Set raw request/response diagnostic data for error viewing.
@@ -338,7 +340,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         rawResponse: rawResponse,
       );
     }).toList();
-    _persistTasks();
+    _schedulePersist();
   }
 
   /// Update a single step by index (e.g. mark as completed/running/failed).
@@ -370,13 +372,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       steps[index] = steps[index].copyWith(status: newStatus, error: error);
       return t.copyWith(steps: steps);
     }).toList();
-    _persistTasks();
+    _schedulePersist();
   }
 
   /// Remove a task from the list.
   void removeTask(String taskId) {
     state = state.where((t) => t.id != taskId).toList();
-    _persistTasks();
+    _schedulePersist();
   }
 
   /// Update the retry data for a task (used to set retry data after
@@ -386,7 +388,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (t.id != taskId) return t;
       return t.copyWith(retryData: retryData);
     }).toList();
-    _persistTasks();
+    _schedulePersist();
   }
 
   void _updateTask(
@@ -415,7 +417,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
                 : null,
       );
     }).toList();
-    _persistTasks();
+    _schedulePersist();
 
     // Send notification when task completes or fails
     if ((status == TaskStatus.completed || status == TaskStatus.failed) &&
@@ -448,6 +450,19 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   // ============================================================================
   // Persistence
   // ============================================================================
+
+  /// Schedules a debounced persistence write.  Multiple rapid state
+  /// changes (e.g. updateStep called several times in quick succession)
+  /// are coalesced — only the last write within a 250 ms window fires.
+  /// This mirrors the pattern used by [ConversationNotifier] and
+  /// prevents the synchronous `jsonEncode` + file-write storm that
+  /// previously ran on every `addTask` / `updateStep` / `completeTask`.
+  void _schedulePersist() {
+    _persistTimer?.cancel();
+    _persistTimer = Timer(const Duration(milliseconds: 250), () {
+      unawaited(_persistTasks());
+    });
+  }
 
   Future<void> _persistTasks() async {
     try {
@@ -510,5 +525,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     debugPrint(
       '[BackgroundTaskNotifier] Restored ${tasks.length} tasks from persistence',
     );
+  }
+
+  @override
+  void dispose() {
+    _persistTimer?.cancel();
+    super.dispose();
   }
 }

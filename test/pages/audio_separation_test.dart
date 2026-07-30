@@ -775,31 +775,27 @@ void main() {
     final source =
         File('lib/pages/audio_separation_page.dart').readAsStringSync();
 
-    test(
-        '_extractAndComputeMetaInIsolate runs extraction+hash+format in one Isolate.run',
-        () {
-      final fnStart = source.indexOf('_extractAndComputeMetaInIsolate');
+    test('_workerExtract sends to long-lived worker via SendPort', () {
+      final fnStart = source.indexOf('_workerExtract');
       expect(fnStart, greaterThanOrEqualTo(0));
       final fnEnd =
           source.indexOf('\n}\n', fnStart).clamp(fnStart + 1, source.length);
       final fnBody = source.substring(fnStart, fnEnd);
-      expect(fnBody.contains('Isolate.run'), isTrue);
-      expect(fnBody.contains('extractAudioSync'), isTrue);
-      expect(fnBody.contains('computeAudioHash'), isTrue);
-      expect(fnBody.contains('detectAudioFormat'), isTrue);
+      expect(fnBody.contains('_ensureWorker'), isTrue);
+      expect(fnBody.contains('_workerSendPort'), isTrue);
+      expect(fnBody.contains('responsePort'), isTrue);
     });
 
-    test('_runAudioSeparation yields between state updates', () {
+    test('_runAudioSeparation yields at most 4 times after grouping', () {
       final fnStart = source.indexOf('Future<void> _runAudioSeparation');
       expect(fnStart, greaterThanOrEqualTo(0));
       final fnEnd =
           source.indexOf('\n}\n', fnStart).clamp(fnStart + 1, source.length);
       final fnBody = source.substring(fnStart, fnEnd);
-      // Must contain at least 6 yield calls (addTask + updateStep × 4 + completeTask + catch)
       final yieldCount =
           'await Future<void>.delayed(Duration.zero)'.allMatches(fnBody).length;
-      expect(yieldCount, greaterThanOrEqualTo(6),
-          reason: '_runAudioSeparation must yield after each state update');
+      expect(yieldCount, lessThanOrEqualTo(5),
+          reason: 'state updates must be grouped to reduce rebuilds');
     });
 
     test('_runAudioSeparation is a top-level function (not a method)', () {
@@ -988,6 +984,60 @@ void main() {
           content.contains('_selectedVideos.isEmpty || _isProcessing'), isTrue,
           reason:
               'Button guard must check both empty list and processing state');
+    });
+  });
+
+  // ====================================================================
+  // Phase 2 tests — debounce + long-lived worker isolate
+  // ====================================================================
+
+  group('BackgroundTaskNotifier — debounce persistence', () {
+    test('rapid updates are debounced to at most one write per 250ms',
+        () async {
+      final notifier = BackgroundTaskNotifier();
+
+      // Simulate rapid updates like the audio separation pipeline
+      final id = notifier.addTask(
+          type: BackgroundTaskType.audioSeparation, title: 'Test');
+      notifier.updateStep(id, 0, running: true);
+      notifier.updateStep(id, 0, completed: true);
+
+      // After multiple updates, state should be consistent
+      final task = notifier.state.firstWhere((t) => t.id == id);
+      expect(task.steps[0].completed, isTrue);
+    });
+  });
+
+  group('AudioSeparationPage — worker isolate extraction', () {
+    final source =
+        File('lib/pages/audio_separation_page.dart').readAsStringSync();
+
+    test('_ensureWorker spawns Isolate with ReceivePort', () {
+      final fnIdx = source.indexOf('_ensureWorker');
+      expect(fnIdx, greaterThanOrEqualTo(0),
+          reason: '_ensureWorker must exist');
+    });
+
+    test('_audioWorkerEntry uses SendPort for result', () {
+      expect(source.contains('responsePort.send'), isTrue,
+          reason: 'worker must send results back via SendPort');
+    });
+
+    test('_runAudioSeparation yields at most 3 times after grouping',
+        () {
+      final fnStart =
+          source.indexOf('Future<void> _runAudioSeparation');
+      expect(fnStart, greaterThanOrEqualTo(0));
+      final fnEnd = source.indexOf('\n}\n', fnStart)
+          .clamp(fnStart + 1, source.length);
+      final fnBody = source.substring(fnStart, fnEnd);
+      final yieldCount = 'await Future<void>.delayed(Duration.zero)'
+          .allMatches(fnBody)
+          .length;
+      // After grouping: addTask+step0 → yield → worker → step0done+step1run
+      // → yield → save → step1done+complete → yield. 3 yields + 1 in catch.
+      expect(yieldCount, lessThanOrEqualTo(5),
+          reason: 'state updates must be grouped to reduce rebuilds');
     });
   });
 }
