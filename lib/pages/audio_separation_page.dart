@@ -54,14 +54,33 @@ class SelectedVideo {
 // ====================================================================
 
 SendPort? _workerSendPort;
+Completer<void>? _workerStarting; // guards concurrent _ensureWorker calls
 
 /// Ensures the long-lived audio-processing worker Isolate is running.
 /// Safe to call multiple times — only spawns on the first call.
+/// Uses a [Completer] to serialise concurrent callers so that at most
+/// one isolate is ever spawned.
 Future<void> _ensureWorker() async {
   if (_workerSendPort != null) return;
-  final receivePort = ReceivePort();
-  await Isolate.spawn(_audioWorkerEntry, receivePort.sendPort);
-  _workerSendPort = await receivePort.first as SendPort;
+
+  // Serialise callers — the first caller spawns, subsequent callers
+  // wait on the completer.
+  if (_workerStarting != null) {
+    await _workerStarting!.future;
+    return;
+  }
+  _workerStarting = Completer<void>();
+  try {
+    final receivePort = ReceivePort();
+    try {
+      await Isolate.spawn(_audioWorkerEntry, receivePort.sendPort);
+      _workerSendPort = await receivePort.first as SendPort;
+    } finally {
+      receivePort.close();
+    }
+  } finally {
+    _workerStarting!.complete();
+  }
 }
 
 /// Sends a video to the long-lived worker Isolate and waits for the
@@ -92,11 +111,11 @@ Future<({Uint8List audioBytes, String hash, String format})> _workerExtract(
 /// Worker Isolate entry point.  Listens on its own [ReceivePort] for
 /// extraction requests and sends results back via per-request response
 /// [SendPort]s.
-void _audioWorkerEntry(SendPort mainSendPort) async {
+void _audioWorkerEntry(SendPort mainSendPort) {
   final port = ReceivePort();
   mainSendPort.send(port.sendPort);
-  await for (final msg in port) {
-    if (msg is! Map<String, dynamic>) continue;
+  port.listen((msg) {
+    if (msg is! Map<String, dynamic>) return;
     final videoBytes = msg['videoBytes'] as Uint8List;
     final videoFormat = msg['videoFormat'] as String;
     final responsePort = msg['responsePort'] as SendPort;
@@ -113,7 +132,7 @@ void _audioWorkerEntry(SendPort mainSendPort) async {
     } catch (e) {
       responsePort.send({'error': e.toString()});
     }
-  }
+  });
 }
 
 /// Processes the audio separation pipeline for each video, completely
