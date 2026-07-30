@@ -794,7 +794,7 @@ void main() {
       final fnBody = source.substring(fnStart, fnEnd);
       final yieldCount =
           'await Future<void>.delayed(Duration.zero)'.allMatches(fnBody).length;
-      expect(yieldCount, lessThanOrEqualTo(5),
+      expect(yieldCount, lessThanOrEqualTo(4),
           reason: 'state updates must be grouped to reduce rebuilds');
     });
 
@@ -1035,23 +1035,6 @@ void main() {
     test('_audioWorkerEntry uses SendPort for result', () {
       expect(source.contains('responsePort.send'), isTrue,
           reason: 'worker must send results back via SendPort');
-    });
-
-    test('_runAudioSeparation yields at most 3 times after grouping',
-        () {
-      final fnStart =
-          source.indexOf('Future<void> _runAudioSeparation');
-      expect(fnStart, greaterThanOrEqualTo(0));
-      final fnEnd = source.indexOf('\n}\n', fnStart)
-          .clamp(fnStart + 1, source.length);
-      final fnBody = source.substring(fnStart, fnEnd);
-      final yieldCount = 'await Future<void>.delayed(Duration.zero)'
-          .allMatches(fnBody)
-          .length;
-      // After grouping: addTask+step0 → yield → worker → step0done+step1run
-      // → yield → save → step1done+complete → yield. 3 yields + 1 in catch.
-      expect(yieldCount, lessThanOrEqualTo(5),
-          reason: 'state updates must be grouped to reduce rebuilds');
     });
   });
 }
