@@ -157,60 +157,99 @@ void _audioWorkerEntry(SendPort mainSendPort) {
 /// decoupled from the widget lifecycle. All state is passed in as
 /// captured values — no access to `this`, `context`, or `ref`.
 ///
-/// Called via [unawaited] from [_startSeparation] after the pop
-/// animation has fully completed.
+/// State updates are NOT applied directly to [bgNotifier].  Instead they
+/// accumulate in a 250 ms throttling buffer.  The buffer flushes at most
+/// 4×/second, applying all queued mutations in one batch so Riverpod
+/// watchers only rebuild once per flush window — regardless of how many
+/// videos or step transitions are processed.
 Future<void> _runAudioSeparation({
   required List<SelectedVideo> videos,
   required BackgroundTaskNotifier bgNotifier,
-  required AudioRecordsNotifier audioRecordsNotifier,
   required String saveFolder,
 }) async {
-  for (final video in videos) {
-    final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
-    final taskId = bgNotifier.addTask(
-      type: BackgroundTaskType.audioSeparation,
-      title: title,
-      retryData: null,
-    );
-    // Group state updates before each yield to reduce rebuilds.
-    // (bgNotifier debounce already coalesces persistence writes.)
-    bgNotifier.updateStep(taskId, 0, running: true);
-    await Future<void>.delayed(Duration.zero);
-
-    try {
-      final result = await _workerExtract(video.bytes, video.format);
-
-      bgNotifier.updateStep(taskId, 0, completed: true);
-      bgNotifier.updateStep(taskId, 1, running: true);
-      await Future<void>.delayed(Duration.zero);
-
-      final filePath = await _saveAudioSeparationFile(
-        result.audioBytes,
-        hash: result.hash,
-        format: result.format,
-        audioRecordsNotifier: audioRecordsNotifier,
-        displayName: title,
-        videoName: video.name,
-        saveFolder: saveFolder,
+  final throttler = _BgThrottler(bgNotifier);
+  try {
+    for (final video in videos) {
+      final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
+      final taskId = bgNotifier.addTask(
+        type: BackgroundTaskType.audioSeparation,
+        title: title,
+        retryData: null,
       );
+      throttler.updateStep(taskId, 0, running: true);
 
-      bgNotifier.updateStep(taskId, 1, completed: true);
-
-      bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
-      await Future<void>.delayed(Duration.zero);
-    } catch (e) {
       try {
-        bgNotifier.failTask(taskId, error: '音频提取失败: $e');
-      } catch (_) {
-        // failTask itself may throw (e.g. if the notifier has been
-        // disposed).  Since _runAudioSeparation is fire-and-forget
-        // (unawaited), an uncaught exception would crash the app.
+        final result = await _workerExtract(video.bytes, video.format);
+
+        throttler.updateStep(taskId, 0, completed: true);
+        throttler.updateStep(taskId, 1, running: true);
+
+        final filePath = await _saveAudioSeparationFile(
+          result.audioBytes,
+          hash: result.hash,
+          format: result.format,
+          displayName: title,
+          videoName: video.name,
+          saveFolder: saveFolder,
+        );
+
+        throttler.updateStep(taskId, 1, completed: true);
+        throttler.completeTask(taskId, downloadedFilePath: filePath);
+      } catch (e) {
+        throttler.failTask(taskId, error: '音频提取失败: $e');
       }
-      await Future<void>.delayed(Duration.zero);
+    }
+  } finally {
+    throttler.dispose(); // flush any remaining queued ops
+  }
+}
+
+/// Throttles [BackgroundTaskNotifier] mutations so that multiple
+/// rapid updates (e.g. several updateStep calls in quick succession)
+/// are coalesced into a single batch flush every 250 ms.
+///
+/// [addTask] is NOT throttled — it returns the task ID immediately
+/// so the caller can reference it in subsequent updateStep calls.
+class _BgThrottler {
+  final BackgroundTaskNotifier _notifier;
+  Timer? _timer;
+  final List<void Function()> _queue = [];
+
+  _BgThrottler(this._notifier);
+
+  void updateStep(String taskId, int index,
+          {bool? completed, bool? running, bool? failed, bool? skipped}) =>
+      _enqueue(() => _notifier.updateStep(taskId, index,
+          completed: completed,
+          running: running,
+          failed: failed,
+          skipped: skipped));
+
+  void completeTask(String taskId, {String? downloadedFilePath}) =>
+      _enqueue(() => _notifier.completeTask(taskId,
+          downloadedFilePath: downloadedFilePath));
+
+  void failTask(String taskId, {String? error}) =>
+      _enqueue(() => _notifier.failTask(taskId, error: error));
+
+  void _enqueue(void Function() op) {
+    _queue.add(op);
+    _timer ??= Timer(const Duration(milliseconds: 250), _flush);
+  }
+
+  void _flush() {
+    _timer = null;
+    final ops = List<void Function()>.from(_queue);
+    _queue.clear();
+    for (final op in ops) {
+      op();
     }
   }
 
-  unawaited(audioRecordsNotifier.loadRecords());
+  void dispose() {
+    _timer?.cancel();
+    _flush();
+  }
 }
 
 /// Saves extracted audio bytes to the library and returns the file path.
@@ -219,7 +258,6 @@ Future<String?> _saveAudioSeparationFile(
   Uint8List audioBytes, {
   required String hash,
   required String format,
-  required AudioRecordsNotifier audioRecordsNotifier,
   String? displayName,
   String? videoName,
   required String saveFolder,
@@ -247,7 +285,6 @@ Future<String?> _saveAudioSeparationFile(
   await FileManifest.addRecord(record);
 
   final filePath = await FileManifest.readFilePath('$hash.$format');
-  unawaited(audioRecordsNotifier.loadRecords());
 
   return filePath;
 }
@@ -917,7 +954,6 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     // After the widget is disposed, `ref` and `_saveFolder` are invalid.
     final videosToProcess = List<SelectedVideo>.from(_selectedVideos);
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
-    final audioRecordsNotifier = ref.read(audioRecordsProvider.notifier);
     final saveFolder = _saveFolder;
     final route = ModalRoute.of(context);
 
@@ -966,7 +1002,6 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     unawaited(_runAudioSeparation(
       videos: videosToProcess,
       bgNotifier: bgNotifier,
-      audioRecordsNotifier: audioRecordsNotifier,
       saveFolder: saveFolder,
     ));
   }
