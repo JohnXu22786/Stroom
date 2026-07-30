@@ -306,13 +306,15 @@ List<MessageBlock> legacyToBlocks({
       ));
     }
   }
-  for (var i = numRounds; i < reasoningSections.length; i++) {
-    if (reasoningSections[i].isNotEmpty) {
+  // Remaining reasoning/text after all tool rounds — interleaved, matching _buildWithRounds
+  final maxRemaining = reasoningSections.length > textChunks.length
+      ? reasoningSections.length
+      : textChunks.length;
+  for (var i = numRounds; i < maxRemaining; i++) {
+    if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
       blocks.add(ReasoningBlock(text: reasoningSections[i], isComplete: true));
     }
-  }
-  for (var i = numRounds; i < textChunks.length; i++) {
-    if (textChunks[i].isNotEmpty) {
+    if (i < textChunks.length && textChunks[i].isNotEmpty) {
       blocks.add(TextBlock(text: textChunks[i]));
     }
   }
