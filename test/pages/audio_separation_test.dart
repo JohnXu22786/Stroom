@@ -824,8 +824,7 @@ void main() {
       final endIdx = source.indexOf('void _goToAudioLibrary', startIdx);
       final methodBody = source.substring(startIdx, endIdx);
       // ref.read calls must appear before Navigator.pop
-      final refReadBg =
-          methodBody.indexOf('ref.read(backgroundTasksProvider');
+      final refReadBg = methodBody.indexOf('ref.read(backgroundTasksProvider');
       final popCall = methodBody.indexOf('Navigator.pop(context)');
 
       expect(refReadBg, greaterThanOrEqualTo(0));
