@@ -317,13 +317,7 @@ class ChatService {
             AppLogService.info(
                 'ChatService', '工具调用循环: 第 $loopProtection 轮');
           }
-          if (maxRounds != null && loopProtection >= maxRounds) {
-            AppLogService.info('ChatService',
-                '工具调用循环达到上限 ($maxRounds 轮)，终止');
-            controller.add(TextEvent(
-                '\n\n[已达到工具调用上限 $maxRounds 轮，对话已中断]'));
-            break;
-          }
+
           _streamSubscription?.cancel();
           _cancelToken?.cancel();
           _cancelToken = CancelToken();
@@ -475,6 +469,16 @@ class ChatService {
             // Reset per-round buffers for the next iteration
             _contentBuffer = '';
             _lastReasoningLength = _reasoningBuffer.length;
+          }
+          // When the limit was hit (not user cancelled), emit a termination
+          // message so the user knows why the stream stopped.
+          if (maxRounds != null && loopProtection >= maxRounds) {
+            AppLogService.info('ChatService',
+                '工具调用循环达到上限 ($maxRounds 轮)，终止');
+            if (!controller.isClosed) {
+              controller.add(TextEvent(
+                  '\n\n[已达到工具调用上限 $maxRounds 轮，对话已中断]'));
+            }
           }
         }
       } catch (e) {
