@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:uuid/uuid.dart';
 
 import '../utils/data_sanitizer.dart';
+import 'message_block.dart';
 import 'tool_call.dart';
 
 /// 简化的聊天消息模型，仅用于持久化到 SharedPreferences
@@ -149,6 +150,8 @@ class ChatMessage {
   /// When null (old data), the legacy 1:1 pairing algorithm is used.
   final List<int>? toolCallRoundStarts;
 
+  final List<MessageBlock>? blocks;
+
   ChatMessage({
     String? id,
     required this.role,
@@ -164,6 +167,7 @@ class ChatMessage {
     this.reasoningSections,
     this.textSections,
     this.toolCallRoundStarts,
+    this.blocks,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         attachments = attachments ?? [];
@@ -284,6 +288,8 @@ class ChatMessage {
         // Persist round boundary indices for multi-tool grouping.
         if (toolCallRoundStarts != null && toolCallRoundStarts!.isNotEmpty)
           'toolCallRoundStarts': toolCallRoundStarts!.toList(),
+        if (blocks != null && blocks!.isNotEmpty)
+          'blocks': blocks!.map((b) => b.toMap()).toList(),
       };
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
@@ -389,7 +395,18 @@ class ChatMessage {
       reasoningSections: reasoningSections,
       textSections: textSections,
       toolCallRoundStarts: toolCallRoundStarts,
+      blocks: _parseBlocks(map['blocks']),
     );
+  }
+
+  static List<MessageBlock>? _parseBlocks(dynamic raw) {
+    if (raw is! List || raw.isEmpty) return null;
+    try {
+      final list = MessageBlock.fromJsonList(raw);
+      return list.isNotEmpty ? list : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   @override

@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/tool_call.dart';
+import '../pages/chat/chat_types.dart' show legacyToBlocks;
 import 'app_log_service.dart';
 import 'auto_backup_service.dart';
 import 'backup_location_manager.dart';
@@ -56,7 +58,7 @@ class DataMigrationService {
   /// - v0: 初始版本（无版本号记录）
   /// - v1: 引入 data_format_version; 迁移 old chat_configs → provider_entries
   /// - v2: 移除共享 folders 表, 全部改为每个类型独立的文件夹表
-  static const int currentFormatVersion = 2;
+  static const int currentFormatVersion = 3;
 
   // ================================================================
   // 版本检查
@@ -258,6 +260,9 @@ class DataMigrationService {
         break;
       case 1:
         await _migrateV1ToV2();
+        break;
+      case 2:
+        await _migrateV2ToV3();
         break;
       default:
         debugPrint('[DataMigrationService] No migration steps defined '
@@ -510,6 +515,47 @@ class DataMigrationService {
     } catch (e) {
       // 迁移失败不阻塞启动，记录日志后继续
       debugPrint('[DataMigrationService] v1→v2 migration failed: $e');
+    }
+  }
+
+  /// v2→v3: Convert old assistant messages to unified block format.
+  static Future<void> _migrateV2ToV3() async {
+    debugPrint('[DataMigrationService] v2→v3: Starting block migration');
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('conversations');
+    if (raw == null || raw.isEmpty) return;
+
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      var migrated = 0;
+      for (final c in list) {
+        final messages = (c['messages'] as List<dynamic>?) ?? [];
+        for (final m in messages) {
+          if (m['role'] != 'assistant') continue;
+          if (m['blocks'] != null && (m['blocks'] as List).isNotEmpty) continue;
+          final blocks = legacyToBlocks(
+            reasoningSections:
+                (m['reasoningSections'] as List<dynamic>?)?.cast<String>() ??
+                    [],
+            textChunks:
+                (m['textSections'] as List<dynamic>?)?.cast<String>() ?? [],
+            toolCalls: ((m['toolCalls'] as List<dynamic>?) ?? [])
+                .map(
+                    (tc) => ToolCallData.fromMap(Map<String, dynamic>.from(tc)))
+                .toList(),
+            toolCallRoundStarts:
+                (m['toolCallRoundStarts'] as List<dynamic>?)?.cast<int>() ?? [],
+          );
+          if (blocks.isNotEmpty) {
+            m['blocks'] = blocks.map((b) => b.toMap()).toList();
+            migrated++;
+          }
+        }
+      }
+      await prefs.setString('conversations', jsonEncode(list));
+      debugPrint('[DataMigrationService] v2→v3: Migrated $migrated messages');
+    } catch (e) {
+      debugPrint('[DataMigrationService] v2→v3 migration failed: $e');
     }
   }
 }
