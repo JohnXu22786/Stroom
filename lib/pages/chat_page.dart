@@ -442,30 +442,25 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
       if (!alreadyInController) {
         _chatSegments[msgId] = [];
-        final placeholder = Message.textStream(
-          id: msgId,
-          authorId: _aiUser.id,
-          createdAt: DateTime.now(),
-          streamId: msgId,
-        );
-        restoreController?.insertMessage(placeholder).then((_) {
+        // Insert directly as Message.text so it renders through the
+        // normal textMessageBuilder (gray bubble + segments) instead of
+        // textStreamMessageBuilder (raw white-background Markdown).
+        restoreController
+            ?.insertMessage(
+          Message.text(
+            id: msgId,
+            authorId: _aiUser.id,
+            text: fullReply,
+            createdAt: DateTime.now(),
+          ),
+        )
+            .then((_) {
           if (!mounted ||
               _controller != restoreController ||
               ref.read(activeConversationIdProvider) != activeConvId ||
               !manager.isStreamingFor(activeConvId) ||
               manager.streamingMsgIdFor(activeConvId) != msgId) {
             return;
-          }
-          if (fullReply.isNotEmpty) {
-            restoreController.updateMessage(
-              placeholder,
-              Message.text(
-                id: msgId,
-                authorId: _aiUser.id,
-                text: fullReply,
-                createdAt: DateTime.now(),
-              ),
-            );
           }
           _rebuildLiveSegments(msgId);
           setState(() {});
@@ -856,8 +851,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
       for (var i = loadedUpToIndex; i < loadedHistory.length; i++) {
         final msg = loadedHistory[i];
         // When loading during an active stream, skip the streaming
-        // message — _restoreStreamingState already inserted it into
-        // the controller as a live Message.textStream.
+        // message — it is restored separately below (line ~930) as a
+        // live Message.text with the current fullReply from the manager.
         if (msg.id == savedStreamingMsgId && keepLiveStream()) continue;
         await newCtrl.insertMessage(
           Message.text(
@@ -927,17 +922,22 @@ class _ChatPageState extends ConsumerState<ChatPage>
         // Re-insert the streaming placeholder into the new controller.
         // We skipped it during the load loop above (it may not be in DB
         // yet if periodic persist hasn't run), so restore it now as a
-        // live Message.textStream that streaming listeners can update.
+        // live Message.text so it renders through the normal textMessageBuilder
+        // (gray bubble + segments) instead of textStreamMessageBuilder (raw
+        // white-background Markdown). Streaming listeners will continue to
+        // update it via _updateStreamingMessage.
         final inCtrl =
             _controller?.messages.any((m) => m.id == savedStreamingMsgId) ??
                 false;
         if (!inCtrl) {
+          final restoredFullReply =
+              ref.read(chatStreamManagerProvider).fullReplyFor(activeId);
           _controller?.insertMessage(
-            Message.textStream(
+            Message.text(
               id: savedStreamingMsgId,
               authorId: _aiUser.id,
+              text: restoredFullReply,
               createdAt: DateTime.now(),
-              streamId: savedStreamingMsgId,
             ),
           );
         }
