@@ -650,7 +650,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       }
       return c;
     }).toList();
-    await _persist();
+    await _persistNow();
   }
 
   /// Saves the draft text for a specific conversation.
