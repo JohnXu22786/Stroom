@@ -75,6 +75,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   late final TextEditingController _hostController;
   late final TextEditingController _keyController;
   bool _obscureKey = true;
+  late String _endpointType;
 
   // Provider-level params (same structure as model params)
   late double _temperature;
@@ -115,6 +116,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     _nameController = TextEditingController(text: c.providerName);
     _hostController = TextEditingController(text: c.host);
     _keyController = TextEditingController(text: c.key);
+    _endpointType = c.endpointType;
 
     _temperature = (c.typeConfig['temperature'] as num?)?.toDouble() ?? 0.7;
     _topP = (c.typeConfig['topP'] as num?)?.toDouble() ?? 1.0;
@@ -693,6 +695,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       typeConfig: typeConfig,
       customParams: _customParams.map((p) => p.copy()).toList(),
       reasoningParams: _reasoningParams.map((p) => p.copy()).toList(),
+      endpointType: _endpointType,
     );
   }
 
@@ -742,6 +745,40 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
             ),
             obscureText: _obscureKey,
           ),
+          if (_isLlmType) ...[
+            const SizedBox(height: 16),
+            // 端点类型：该供应商下所有对话统一使用的协议格式
+            DropdownButtonFormField<String>(
+              initialValue: _endpointType,
+              decoration: const InputDecoration(
+                labelText: '端点类型',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.hub_outlined, color: Colors.blue),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'openai',
+                  child: Text('OpenAI 兼容 (Chat Completions)'),
+                ),
+                DropdownMenuItem(
+                  value: 'anthropic',
+                  child: Text('Anthropic 格式 (Messages API)'),
+                ),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => _endpointType = v);
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _endpointType == 'anthropic'
+                  ? '使用官方 Anthropic Messages API 格式（x-api-key 请求头），'
+                      'API 地址示例: https://api.anthropic.com/v1/messages'
+                  : '使用官方 OpenAI Chat Completions 兼容格式（Bearer 请求头），'
+                      'API 地址示例: https://api.openai.com/v1/chat/completions',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+          ],
         ],
       ),
     );

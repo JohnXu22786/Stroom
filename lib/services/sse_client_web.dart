@@ -3,6 +3,20 @@ import 'dart:html' as html;
 
 import 'package:dio/dio.dart';
 
+/// SSE 事件帧：事件名 + 数据。
+///
+/// 供需要区分事件名的协议使用（如 Anthropic Messages 流式接口的
+/// message_start / content_block_delta / message_stop 等事件）。
+class SseFrame {
+  final String event;
+  final String data;
+
+  const SseFrame(this.event, this.data);
+
+  @override
+  String toString() => 'SseFrame(event: $event, data: ${data.length} chars)';
+}
+
 /// Web 平台的 SSE 流式客户端
 /// 使用 dart:html HttpRequest.onProgress 实现真正的逐 token 流式
 Stream<String> sseStream(
@@ -88,6 +102,139 @@ Stream<String> sseStream(
           controller.add(line);
         }
       }
+    }
+    if (!controller.isClosed) controller.close();
+    progressSub.cancel();
+    errorSub.cancel();
+    xhr.abort();
+  });
+
+  void cleanupSubs() {
+    progressSub.cancel();
+    errorSub.cancel();
+    loadEndSub.cancel();
+  }
+
+  cancelToken?.whenCancel.then((_) {
+    if (!controller.isClosed) {
+      cleanupSubs();
+      xhr.abort();
+      controller.close();
+    }
+  });
+
+  // Poll cancel token periodically
+  Timer? cancelCheckTimer;
+  if (cancelToken != null) {
+    cancelCheckTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (cancelToken.isCancelled && !controller.isClosed) {
+        cancelCheckTimer?.cancel();
+        cleanupSubs();
+        xhr.abort();
+        controller.close();
+      }
+    });
+  }
+
+  controller.onCancel = () {
+    cancelCheckTimer?.cancel();
+    cleanupSubs();
+    xhr.abort();
+  };
+
+  xhr.send(body);
+
+  yield* controller.stream;
+}
+
+/// Web 平台的 SSE 事件流式客户端（带事件名）。
+///
+/// 与 [sseStream] 相同的传输方式，但保留 `event:` 事件名，
+/// 并以 [SseFrame] 为单位产出。用于 Anthropic 等按事件类型
+/// 区分载荷的协议。
+Stream<SseFrame> sseEventStream(
+  String url,
+  Map<String, String> headers,
+  String body, {
+  CancelToken? cancelToken,
+
+  /// Callback invoked with the initial HTTP response headers, if available.
+  void Function(Map<String, List<String>> headers)? onResponseHeaders,
+}) async* {
+  final controller = StreamController<SseFrame>();
+  int processedLines = 0;
+  String lastEvent = '';
+
+  /// 处理 [fullText] 中的行。progress 阶段传 [explicitEnd]=null：
+  /// 最后一行可能不完整（半截 token），跳过；loadEnd 阶段传完整行数：
+  /// 无尾换行的最后一行也是完整数据，必须处理（否则 Anthropic 的
+  /// 最终 message_delta / stop_reason 会丢失）。
+  void processLines(String fullText, int? explicitEnd) {
+    final lines = fullText.split('\n');
+    final completeCount = explicitEnd ?? lines.length - 1;
+    if (completeCount <= processedLines) return;
+    for (var i = processedLines; i < completeCount; i++) {
+      final line = lines[i];
+      if (line.startsWith('event: ')) {
+        lastEvent = line.substring(7).trim();
+      } else if (line.startsWith('data: ')) {
+        final data = line.substring(6).trim();
+        if (!controller.isClosed) {
+          controller.add(SseFrame(lastEvent, data));
+        }
+        lastEvent = '';
+      } else if (line.isEmpty) {
+        lastEvent = '';
+      }
+    }
+    processedLines = completeCount;
+  }
+
+  final xhr = html.HttpRequest();
+  xhr.open('POST', url);
+  headers.forEach((k, v) => xhr.setRequestHeader(k, v));
+  xhr.responseType = 'text';
+  xhr.timeout = 30000; // 30 second timeout
+
+  final progressSub = xhr.onProgress.listen((_) {
+    final fullText = xhr.responseText ?? '';
+    // 最后一行可能不完整，只处理前面完整的行
+    processLines(fullText, null);
+  });
+
+  final errorSub = xhr.onError.listen((event) {
+    if (!controller.isClosed) {
+      final statusCode = xhr.status;
+      final statusText = xhr.statusText;
+      final errorMsg = statusCode != 0
+          ? '网络请求失败 (HTTP $statusCode${(statusText ?? '').isNotEmpty ? ": $statusText" : ""})'
+          : '网络请求失败: 无法连接到服务器';
+      controller.addError(Exception(errorMsg));
+    }
+  });
+
+  final loadEndSub = xhr.onLoadEnd.listen((_) {
+    // Capture response headers from the first response
+    if (onResponseHeaders != null && xhr.status != 0) {
+      final headerMap = <String, List<String>>{};
+      final allHeaders = xhr.getAllResponseHeaders();
+      if (allHeaders.isNotEmpty) {
+        for (final line in allHeaders.split('\n')) {
+          final colonPos = line.indexOf(':');
+          if (colonPos > 0) {
+            final key = line.substring(0, colonPos).trim().toLowerCase();
+            final value = line.substring(colonPos + 1).trim();
+            headerMap.putIfAbsent(key, () => []).add(value);
+          }
+        }
+      }
+      onResponseHeaders(headerMap);
+    }
+    // Process all remaining lines (don't drop the last complete line,
+    // even when the response has no trailing newline)
+    final remainingText = xhr.responseText ?? '';
+    if (remainingText.isNotEmpty) {
+      processLines(remainingText, remainingText.split('\n').length);
     }
     if (!controller.isClosed) controller.close();
     progressSub.cancel();

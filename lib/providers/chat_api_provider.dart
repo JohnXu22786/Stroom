@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import '../models/ai_stream_event.dart';
 import '../services/sse_client.dart';
+import 'anthropic_chat_provider.dart';
 import 'chat_api_shared.dart';
 export 'chat_api_shared.dart';
 
@@ -230,6 +231,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     if (_apiKey.isEmpty) throw Exception('API key not configured');
 
@@ -315,6 +317,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     if (_apiKey.isEmpty) {
       throw Exception('API key not configured');
@@ -481,14 +484,23 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 /// [baseUrl] API 基础 URL
 /// [apiKey] API 密钥
 /// [model] 可选，默认模型 ID
+/// [endpointType] 端点类型：'openai'（默认，OpenAI 兼容）| 'anthropic'
+///   （官方 Anthropic Messages API）。模型级覆盖 > 供应商级 > 'openai'。
 BaseChatProvider createChatProviderFromConfig({
   required String providerName,
   required String baseUrl,
   required String apiKey,
   String? model,
+  String endpointType = 'openai',
 }) {
-  // For now, always return OpenAICompatibleChatProvider
-  // Future: support other provider types
+  if (endpointType == 'anthropic') {
+    return AnthropicChatProvider(
+      baseUrl: baseUrl,
+      apiKey: apiKey,
+      name: providerName,
+    );
+  }
+  // OpenAI-compatible（默认）
   return OpenAICompatibleChatProvider(
     baseUrl: baseUrl,
     apiKey: apiKey,

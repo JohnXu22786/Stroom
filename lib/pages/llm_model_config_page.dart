@@ -38,6 +38,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   bool _enableMaxTokens = false;
   bool _enableSeed = false;
 
+  // 端点类型覆盖（默认关 = 继承供应商的端点类型）
+  bool _overrideEndpointType = false;
+  String _endpointType = 'openai';
+
   bool _isSaving = false;
 
   bool get _isEditing => widget.model != null;
@@ -120,6 +124,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     if ((m.typeConfig['seed']?.toString() ?? '') != _seedController.text) {
       return true;
     }
+    // 端点类型覆盖
+    final mOverride = m.endpointType;
+    if ((mOverride != null) != _overrideEndpointType) return true;
+    if (_overrideEndpointType && _endpointType != mOverride) return true;
     // Custom params and reasoning params (simple check via serialization)
     final originalCustom = m.customParams.map((p) => p.toMap()).toList();
     final currentCustom = _customParams.map((p) => p.toMap()).toList();
@@ -172,6 +180,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     _seedController = TextEditingController(
       text: seed != null ? seed.toString() : '',
     );
+
+    // 端点类型覆盖（默认关 = 继承供应商）
+    _overrideEndpointType = m?.endpointType != null;
+    _endpointType = m?.endpointType ?? 'openai';
 
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
     // Initialize JSON validation for existing params
@@ -1288,6 +1300,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       typeConfig: typeConfig,
       customParams: _customParams.map((p) => p.copy()).toList(),
       reasoningParams: _reasoningParams.map((p) => p.copy()).toList(),
+      endpointType: _overrideEndpointType ? _endpointType : null,
     );
 
     Navigator.pop(context, result);
@@ -1459,6 +1472,61 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             Text(
               '开启的参数将作为默认值发送到 API 请求中',
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+
+            // 端点类型覆盖（默认关 = 继承供应商）
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('自定义端点类型'),
+                      subtitle: const Text('关闭时使用供应商设置的端点类型'),
+                      value: _overrideEndpointType,
+                      onChanged: (v) =>
+                          setState(() => _overrideEndpointType = v),
+                    ),
+                    if (_overrideEndpointType)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _endpointType,
+                          decoration: const InputDecoration(
+                            labelText: '端点类型',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(
+                              Icons.hub_outlined,
+                              color: Colors.blue,
+                            ),
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'openai',
+                              child: Text('OpenAI 兼容 (Chat Completions)'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'anthropic',
+                              child: Text('Anthropic 格式 (Messages API)'),
+                            ),
+                          ],
+                          onChanged: (v) {
+                            if (v != null) setState(() => _endpointType = v);
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '端点类型需与供应商的 API 地址匹配；'
+              '切换端点类型后，本模型的新对话请求将使用新格式。',
+              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 12),
 

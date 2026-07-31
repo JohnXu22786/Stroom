@@ -47,6 +47,7 @@ class _MockProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     if (throwOnSubscribe) {
       throw Exception('Simulated provider error');
@@ -73,6 +74,7 @@ class _MockProvider extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     return 'Mock response';
   }
@@ -108,6 +110,7 @@ class _MockToolCallsProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     _callCount++;
     if (_callCount == 1) {
@@ -136,6 +139,7 @@ class _MockToolCallsProvider extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     return 'Mock response';
   }

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 
 import '../models/ai_stream_event.dart';
 
@@ -38,7 +37,6 @@ Map<String, String> get openRouterAppHeaders => {
 /// map, or `null` if the data is not a [ResponseBody].
 ///
 /// Extracted as a top-level function for testability.
-@visibleForTesting
 Future<Map<String, dynamic>?> parseStreamErrorBody(DioException e) async {
   if (e.response?.data is ResponseBody) {
     try {
@@ -89,6 +87,7 @@ abstract class BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   });
 
   Stream<AIStreamEvent> chatStream(
@@ -101,6 +100,7 @@ abstract class BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   });
 
   Map<String, dynamic> get defaultParams;

@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/ai_stream_event.dart';
+import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/chat_event.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
@@ -48,6 +49,7 @@ class _MockToolCallProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     _callCount++;
     lastStreamMessages = messages;
@@ -72,6 +74,7 @@ class _MockToolCallProvider extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     return 'Mock response';
   }
@@ -367,6 +370,10 @@ void main() {
         provider: mockProvider,
         modelConfig: _createMockModelConfig(),
       );
+      // 配置 maxToolCalls=10：与测试名一致（此前缺失导致循环无上限）
+      service.setAssistantSettings(
+        AssistantSettings(maxToolCalls: 10, enableMaxToolCalls: true),
+      );
 
       ChatService.registerTool(
         const ToolDefinition(
@@ -400,9 +407,11 @@ void main() {
           )
           .asFuture();
 
-      // Should have at most 10 tool call rounds
+      // maxToolCalls=10：最多 10 轮工具调用 + 1 轮收尾轮
+      // （收尾轮 tools 已禁用，但 mock 不尊重禁用仍返回工具调用，
+      // 循环在总轮数（maxRounds+1）处强制退出）
       final toolStartEvents = events.whereType<ToolCallStartEvent>().toList();
-      expect(toolStartEvents.length, lessThanOrEqualTo(10));
+      expect(toolStartEvents.length, lessThanOrEqualTo(11));
       // Should have at least 1 tool call since mock always returns tool calls
       expect(toolStartEvents.length, greaterThan(0));
     });

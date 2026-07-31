@@ -7,6 +7,7 @@ import '../models/mcp.dart';
 import '../models/tool_call.dart';
 import '../models/tts_models.dart' show CustomParam;
 import '../providers/provider_config.dart';
+import 'chat_protocol.dart';
 import 'chat_service.dart';
 import 'http_tool_service.dart';
 import 'todo_tool_service.dart';
@@ -60,6 +61,19 @@ class ChatAdapter {
   BaseChatProvider? _cachedProvider;
   ModelConfig? _cachedModelConfig;
   ProviderConfigItem? _cachedProviderConfig;
+
+  /// 有效端点类型（模型覆盖 > 供应商 > 'openai'），
+  /// 由 [configure] / [selectModel] 解析并缓存，用于创建协议与服务。
+  String _cachedEndpointType = 'openai';
+
+  /// 当前有效端点类型（'openai' | 'anthropic'）。
+  String get endpointType => _cachedEndpointType;
+
+  /// 当前缓存的模型配置（供上下文管理估算用）。
+  ModelConfig? get modelConfig => _cachedModelConfig;
+
+  /// 当前缓存的对话助手 system prompt（供上下文管理注入用）。
+  String? get assistantPrompt => _cachedAssistantPrompt;
 
   /// The first active [ChatService] instance, or null if none are running.
   /// **Warning**: nondeterministic when multiple conversations are streaming
@@ -125,6 +139,7 @@ class ChatAdapter {
         provider: _cachedProvider!,
         modelConfig: _cachedModelConfig!,
         providerConfig: _cachedProviderConfig,
+        endpointType: _cachedEndpointType,
       );
       // Apply any assistant settings that were set on the "template"
       if (_cachedAssistantPrompt != null) {
@@ -472,6 +487,7 @@ class ChatAdapter {
       _cachedProvider = null;
       _cachedModelConfig = null;
       _cachedProviderConfig = null;
+      _cachedEndpointType = 'openai';
       currentConfigIndex = -1;
       currentModelIndex = -1;
       return;
@@ -482,6 +498,7 @@ class ChatAdapter {
       _cachedProvider = null;
       _cachedModelConfig = null;
       _cachedProviderConfig = null;
+      _cachedEndpointType = 'openai';
       currentConfigIndex = -1;
       currentModelIndex = -1;
       return;
@@ -492,21 +509,27 @@ class ChatAdapter {
       _cachedProvider = null;
       _cachedModelConfig = null;
       _cachedProviderConfig = null;
+      _cachedEndpointType = 'openai';
       currentConfigIndex = -1;
       currentModelIndex = -1;
       return;
     }
+    final endpointType = effectiveEndpointType(
+        modelConfig.endpointType, config.endpointType);
     debugPrint(
-      'ChatAdapter.configure: host=${config.host} model=${modelConfig.modelId}',
+      'ChatAdapter.configure: host=${config.host} model=${modelConfig.modelId} '
+      'endpoint=$endpointType',
     );
     final provider = createChatProviderFromConfig(
       providerName: config.providerName,
       baseUrl: config.host,
       apiKey: config.key,
+      endpointType: endpointType,
     );
     _cachedProvider = provider;
     _cachedModelConfig = modelConfig;
     _cachedProviderConfig = config;
+    _cachedEndpointType = endpointType;
     currentConfigIndex = 0;
     currentModelIndex = 0;
   }
@@ -528,6 +551,7 @@ class ChatAdapter {
       _cachedProvider = null;
       _cachedModelConfig = null;
       _cachedProviderConfig = null;
+      _cachedEndpointType = 'openai';
       currentConfigIndex = -1;
       currentModelIndex = -1;
       return;
@@ -540,6 +564,7 @@ class ChatAdapter {
       _cachedProvider = null;
       _cachedModelConfig = null;
       _cachedProviderConfig = null;
+      _cachedEndpointType = 'openai';
       currentConfigIndex = -1;
       currentModelIndex = -1;
       return;
@@ -549,22 +574,28 @@ class ChatAdapter {
       _cachedProvider = null;
       _cachedModelConfig = null;
       _cachedProviderConfig = null;
+      _cachedEndpointType = 'openai';
       currentConfigIndex = -1;
       currentModelIndex = -1;
       return;
     }
     final modelConfig = config.models[modelIndex];
+    final endpointType = effectiveEndpointType(
+        modelConfig.endpointType, config.endpointType);
     debugPrint(
-      'ChatAdapter.selectModel: using config[$configIndex] host=${config.host} model=${modelConfig.modelId}',
+      'ChatAdapter.selectModel: using config[$configIndex] '
+      'host=${config.host} model=${modelConfig.modelId} endpoint=$endpointType',
     );
     final provider = createChatProviderFromConfig(
       providerName: config.providerName,
       baseUrl: config.host,
       apiKey: config.key,
+      endpointType: endpointType,
     );
     _cachedProvider = provider;
     _cachedModelConfig = modelConfig;
     _cachedProviderConfig = config;
+    _cachedEndpointType = endpointType;
     currentConfigIndex = configIndex;
     currentModelIndex = modelIndex;
   }
@@ -584,6 +615,8 @@ class ChatAdapter {
     _cachedProvider = service.provider;
     _cachedModelConfig = service.modelConfig;
     _cachedProviderConfig = service.providerConfig;
+    // 传播注入服务的端点类型，保证派生 service 的协议一致
+    _cachedEndpointType = service.protocol.name;
     currentConfigIndex = 0;
     currentModelIndex = 0;
   }
@@ -595,6 +628,7 @@ class ChatAdapter {
     _cachedProvider = null;
     _cachedModelConfig = null;
     _cachedProviderConfig = null;
+    _cachedEndpointType = 'openai';
     currentConfigIndex = -1;
     currentModelIndex = -1;
     disposeMcp();

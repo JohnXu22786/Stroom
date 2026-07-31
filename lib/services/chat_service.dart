@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
@@ -12,8 +11,8 @@ import '../models/chat_message.dart';
 import '../models/tool_call.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
-import 'attachment_storage.dart';
-import 'chat_service_shared.dart';
+import 'chat_protocol.dart';
+import 'chat_service_shared.dart' show setNestedParam;
 import 'mcp_client.dart';
 import 'app_log_service.dart';
 
@@ -46,9 +45,31 @@ class ChatService {
   final BaseChatProvider? _provider;
   final ModelConfig? _modelConfig;
 
+  /// 工具结果最大保留字符数（对齐 opencode TOOL_OUTPUT_MAX_CHARS）。
+  /// 超长结果在入库/进链前截断，防止 SharedPreferences 膨胀与上下文占用。
+  static const int maxToolResultChars = 2000;
+
+  /// 中断工具结果的占位文本（用户取消时对未完成工具补发）。
+  static const String kToolInterruptedPlaceholder = '[工具执行被中断]';
+
+  /// 达到工具调用上限时，追加到请求的提示消息（opencode MAX_STEPS_PROMPT
+  /// 改编）：要求模型禁用工具、仅文本总结。
+  static const String maxStepsPrompt = '''
+已达到本任务的工具调用上限。工具已禁用，请仅用文本回应。
+
+要求：
+1. 不要再调用任何工具
+2. 总结到目前为止已完成的工作
+3. 列出尚未完成的任务
+4. 给出下一步建议''';
+
   /// Provider-level params to merge with model params.
   /// Provider params serve as defaults; model params override on collision.
   final ProviderConfigItem? _providerConfig;
+
+  /// 协议层：负责中立历史 → API 格式消息的构建与工具链重建。
+  /// 由端点类型决定（openai / anthropic），ChatService 本身格式无关。
+  final ChatProtocol _protocol;
   bool _isCancelledByUser = false;
   CancelToken? _cancelToken;
   StreamSubscription<AIStreamEvent>? _streamSubscription;
@@ -68,6 +89,10 @@ class ChatService {
   /// Tracks how much of [_reasoningBuffer] was accumulated in previous rounds,
   /// so we can extract only the current round's reasoning for the assistant message.
   int _lastReasoningLength = 0;
+
+  /// Anthropic extended thinking 签名（当前轮）。
+  /// 由 provider 在流结束时产出，用于下一轮链重建时续接 thinking 块。
+  String _thinkingSignature = '';
   Map<String, dynamic>? _lastRequestBody;
   Map<String, dynamic>? _lastResponseData;
   Map<String, String>? _lastRequestHeaders;
@@ -77,13 +102,23 @@ class ChatService {
 
   /// Construct an instance backed by a real provider and model config.
   /// Optionally accepts [providerConfig] for provider-level params to merge.
+  ///
+  /// [endpointType] 为有效端点类型（模型覆盖 > 供应商 > 'openai'），
+  /// 由 ChatAdapter 解析后传入；也可直接注入 [protocol] 覆盖。
   ChatService({
     required BaseChatProvider provider,
     required ModelConfig modelConfig,
     ProviderConfigItem? providerConfig,
+    String endpointType = 'openai',
+    ChatProtocol? protocol,
   })  : _provider = provider,
         _modelConfig = modelConfig,
-        _providerConfig = providerConfig;
+        _providerConfig = providerConfig,
+        _protocol = protocol ?? createChatProtocol(endpointType);
+
+  /// The protocol used by this service instance (for test use only).
+  @visibleForTesting
+  ChatProtocol get protocol => _protocol;
 
   /// Whether there's an active streaming session (instance or static).
   bool get isStreamActive => _controller != null && !_controller!.isClosed;
@@ -193,7 +228,12 @@ class ChatService {
     Future.microtask(() async {
       try {
         if (_isCancelledByUser) return;
-        final apiMessages = await _prepareApiMessages(history);
+        final req = await _protocol.buildRequest(
+          history: history,
+          assistantPrompt: _assistantPrompt,
+          contextSummary: _contextSummary,
+        );
+        final apiMessages = req.messages;
         _lastRequestBody = {
           'model': _modelConfig?.modelId,
           'messages': apiMessages,
@@ -211,6 +251,7 @@ class ChatService {
           reasoningEffort: reasoningEffort,
           maxTokens: _effectiveMaxTokens, // null when toggle is OFF
           temperature: _effectiveTemperature, // null when toggle is OFF
+          system: req.system,
           extraParams: extraParams,
           cancelToken: _cancelToken,
         )
@@ -273,6 +314,7 @@ class ChatService {
     _reasoningBuffer = '';
     _contentBuffer = '';
     _lastReasoningLength = 0;
+    _thinkingSignature = '';
 
     final controller = StreamController<ChatEvent>(
       onCancel: () {
@@ -290,12 +332,17 @@ class ChatService {
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
     );
-    final toolDefs = tools.map((t) => t.toJson()).toList();
+    final toolDefs = _protocol.toolDefsToJson(tools);
 
     Future.microtask(() async {
       try {
         if (_isCancelledByUser) return;
-        var messages = await _prepareApiMessages(history);
+        final req = await _protocol.buildRequest(
+          history: history,
+          assistantPrompt: _assistantPrompt,
+          contextSummary: _contextSummary,
+        );
+        var messages = req.messages;
         _lastRequestBody = {
           'model': _modelConfig?.modelId,
           'messages': messages,
@@ -309,9 +356,13 @@ class ChatService {
         final maxRounds = _assistantSettings?.enableMaxToolCalls == true
             ? _assistantSettings!.maxToolCalls
             : null;
+        // 对齐 opencode steps 语义：maxRounds 轮内工具可用；
+        // 若模型在最后一轮仍请求工具（超限），追加一轮"收尾轮"
+        // （tools 禁用 + 文本收尾提示词），让模型总结而不是硬跑。
+        final totalRounds = maxRounds == null ? null : maxRounds + 1;
 
         while (!_isCancelledByUser &&
-            (maxRounds == null || loopProtection < maxRounds)) {
+            (totalRounds == null || loopProtection < totalRounds)) {
           loopProtection++;
           if (maxRounds != null && loopProtection % 50 == 0) {
             AppLogService.info(
@@ -325,21 +376,41 @@ class ChatService {
           final completer = Completer<void>();
           final toolCallRefs = <Map<String, dynamic>>[];
 
+          // ── Max-steps 语义（opencode MAX_STEPS_PROMPT）──
+          // 收尾轮：不传工具定义（模型无法调用工具）+ 前置文本收尾提示，
+          // 要求模型总结已做/未做/下一步。不注入 tool_choice：
+          // tools 缺失时部分严格端点会拒绝 tool_choice 字段。
+          final isLastStep =
+              maxRounds != null && loopProtection > maxRounds;
+          var roundMessages = messages;
+          if (isLastStep) {
+            roundMessages = [
+              ...messages,
+              {'role': 'assistant', 'content': maxStepsPrompt},
+            ];
+          }
+
           _streamSubscription = _provider!
               .chatStream(
-            messages,
+            roundMessages,
             model: _modelConfig!.modelId,
             reasoning: reasoning,
             reasoningEffort: reasoningEffort,
             maxTokens: _effectiveMaxTokens, // null when toggle is OFF
             temperature: _effectiveTemperature, // null when toggle is OFF
-            tools: toolDefs.isNotEmpty ? toolDefs : null,
+            tools: isLastStep || toolDefs.isEmpty ? null : toolDefs,
+            system: req.system,
             extraParams: extraParams,
             cancelToken: _cancelToken,
           )
               .listen(
             (event) {
               if (_isCancelledByUser) return;
+              // Anthropic extended thinking 签名（协议续接用，静默透传）
+              if (event.thinkingSignature != null &&
+                  event.thinkingSignature!.isNotEmpty) {
+                _thinkingSignature = event.thinkingSignature!;
+              }
               if (event.isReasoning) {
                 _reasoningBuffer += event.text;
                 // Emit reasoning text as ReasoningEvent so the UI
@@ -389,18 +460,17 @@ class ChatService {
             _lastReasoningLength,
           );
 
-          // Collect all tool calls and results first, then add ONE assistant
-          // message with ALL tool_calls (OpenAI-compatible spec: tool_calls in
-          // a single assistant message, not separate messages per tool call).
-          final allToolCalls = <Map<String, dynamic>>[];
-          final allToolResults = <Map<String, dynamic>>[];
+          // Collect all tool calls and results first, then build the chain
+          // messages via the protocol (format-specific). The neutral
+          // representation keeps the loop independent of the API format.
+          final neutralCalls = <NeutralToolCall>[];
+          final results = <ToolCallResult>[];
 
           for (final tc in toolCallRefs) {
             if (_isCancelledByUser) break;
-            final fn = tc['function'] as Map<String, dynamic>? ?? {};
-            final name = fn['name'] as String? ?? 'unknown';
-            final rawArgs = fn['arguments'] as String? ?? '{}';
-            final toolCallId = tc['id'] as String? ?? '';
+            final neutral = normalizeToolCall(tc);
+            final name = neutral.name;
+            final rawArgs = neutral.argumentsJson;
 
             Map<String, dynamic> parsedArgs = {};
             try {
@@ -411,7 +481,7 @@ class ChatService {
             }
 
             final toolCallData = ToolCallData(
-              id: toolCallId,
+              id: neutral.id,
               name: name,
               arguments: parsedArgs,
               status: ToolCallStatus.running,
@@ -426,59 +496,41 @@ class ChatService {
             } catch (e) {
               result = 'Error: $e';
             }
+            // 工具结果截断：超长结果保留前缀（入库/进链/持久化前）
+            if (result.length > maxToolResultChars) {
+              result = '${result.substring(0, maxToolResultChars)}\n... [已截断]';
+            }
+            // 执行期间被取消：跳过 complete 事件（controller 已关闭，
+            // 且避免把"恰在取消时完成"的工具误标为正常结果）
+            if (_isCancelledByUser) break;
 
-            controller.add(ToolCallCompleteEvent(toolCallId, result));
+            controller.add(ToolCallCompleteEvent(neutral.id, result));
 
-            allToolCalls.add({
-              'id': toolCallId,
-              'type': 'function',
-              'function': {'name': name, 'arguments': rawArgs},
-            });
-            allToolResults.add({
-              'role': 'tool',
-              'tool_call_id': toolCallId,
-              'content': result,
-            });
+            neutralCalls.add(neutral);
+            results.add(ToolCallResult(toolCallId: neutral.id, result: result));
           }
 
-          if (!_isCancelledByUser) {
-            // Per DeepSeek Tool Calls guide: messages.append(message)
-            // preserves the COMPLETE assistant message (including
-            // reasoning_content) when sending subsequent requests
-            // in the same tool call chain.
-            // https://api-docs.deepseek.com/guides/tool_calls
-            final assistantMsg = <String, dynamic>{
-              'role': 'assistant',
-              'tool_calls': allToolCalls,
-            };
-            if (_contentBuffer.isNotEmpty) {
-              assistantMsg['content'] = _contentBuffer;
-            } else {
-              assistantMsg['content'] = null;
-            }
-            // Preserve reasoning content so the model retains full context
-            // across tool call chain rounds.
-            if (roundReasoning.isNotEmpty) {
-              assistantMsg['reasoning_content'] = roundReasoning;
-            }
-            messages.add(assistantMsg);
+          // 注意：用户取消时（cancel() 已关闭 controller）无法再补发事件；
+          // 中断工具标记由 ChatStreamManager 在 post-stream 阶段完成
+          // （把 running/pending 工具标为 kToolInterruptedPlaceholder）。
 
-            // Add all tool results after the single assistant message
-            messages.addAll(allToolResults);
+          if (!_isCancelledByUser) {
+            // Build the assistant chain message + tool results via the
+            // protocol: OpenAI 为单条 assistant(tool_calls) + N 条 tool 消息；
+            // Anthropic 为 assistant(thinking/text/tool_use 块) + 单条
+            // user(tool_result 块)。历史保持中立，格式切换安全。
+            messages.addAll(_protocol.buildAssistantChainMessage(
+              content: _contentBuffer,
+              toolCalls: neutralCalls,
+              roundReasoning: roundReasoning,
+              thinkingSignature: _thinkingSignature,
+            ));
+            messages.addAll(_protocol.buildToolResultMessages(results));
 
             // Reset per-round buffers for the next iteration
             _contentBuffer = '';
             _lastReasoningLength = _reasoningBuffer.length;
-          }
-          // When the limit was hit (not user cancelled), emit a termination
-          // message so the user knows why the stream stopped.
-          if (maxRounds != null && loopProtection >= maxRounds) {
-            AppLogService.info('ChatService',
-                '工具调用循环达到上限 ($maxRounds 轮)，终止');
-            if (!controller.isClosed) {
-              controller.add(TextEvent(
-                  '\n\n[已达到工具调用上限 $maxRounds 轮，对话已中断]'));
-            }
+            _thinkingSignature = '';
           }
         }
       } catch (e) {
@@ -499,285 +551,6 @@ class ChatService {
 
   String get reasoningContent => _reasoningBuffer;
 
-  /// Convert [ChatMessage] list to API‑format message maps.
-  ///
-  /// Messages with image attachments are converted to the OpenAI multimodal
-  /// content‑array format. Non‑image attachments are currently skipped.
-  ///
-  /// If an assistant prompt is configured via [setAssistantPrompt], it is
-  /// prepended as the first message with role 'system'.
-  Future<List<Map<String, dynamic>>> _prepareApiMessages(
-    List<ChatMessage> history,
-  ) async {
-    final result = <Map<String, dynamic>>[];
-
-    // Prepend assistant system prompt if configured
-    if (_assistantPrompt != null && _assistantPrompt!.trim().isNotEmpty) {
-      result.add({'role': 'system', 'content': _assistantPrompt!});
-    }
-
-    for (final msg in history) {
-      if (msg.attachments.isEmpty) {
-        result.add({'role': msg.role, 'content': msg.content});
-      } else {
-        final parts = <Map<String, dynamic>>[];
-        if (msg.content.isNotEmpty) {
-          parts.add({'type': 'text', 'text': msg.content});
-        }
-        for (final att in msg.attachments) {
-          if (att.fileType == 'image') {
-            // Use cached base64 if available, otherwise read from disk
-            String b64;
-            if (att.base64Data != null && att.base64Data!.isNotEmpty) {
-              // Size check: skip oversized images even when cached
-              if (att.fileSize > 10 * 1024 * 1024) {
-                parts.add({
-                  'type': 'text',
-                  'text': '[图片过大已跳过: ${att.fileName}]',
-                });
-                continue;
-              }
-              b64 = att.base64Data!;
-            } else {
-              final bytes = await AttachmentStorage.readFile(att.storagePath);
-              if (bytes != null && bytes.isNotEmpty) {
-                if (bytes.length > 10 * 1024 * 1024) {
-                  parts.add({
-                    'type': 'text',
-                    'text': '[图片过大已跳过: ${att.fileName}]',
-                  });
-                  continue;
-                }
-                b64 = base64Encode(bytes);
-                // Also cache it back for future use
-                att.base64Data = b64;
-              } else {
-                parts.add({
-                  'type': 'text',
-                  'text': '[图片加载失败: ${att.fileName}]',
-                });
-                continue;
-              }
-            }
-            final ext = imageExtension(att.mimeType);
-            parts.add({
-              'type': 'image_url',
-              'image_url': {'url': 'data:image/$ext;base64,$b64'},
-            });
-          } else if (att.fileType == 'audio') {
-            // ── Audio files: use input_audio format ──
-            final String b64;
-            if (att.base64Data != null && att.base64Data!.isNotEmpty) {
-              // Size check: skip oversized audio even when cached
-              if (att.fileSize > 10 * 1024 * 1024) {
-                parts.add({
-                  'type': 'text',
-                  'text': '[音频文件过大已跳过: ${att.fileName}]',
-                });
-                continue;
-              }
-              b64 = att.base64Data!;
-            } else {
-              // Check fileSize before reading to avoid loading huge files
-              if (att.fileSize > 10 * 1024 * 1024) {
-                parts.add({
-                  'type': 'text',
-                  'text': '[音频文件过大已跳过: ${att.fileName}]',
-                });
-                continue;
-              }
-              final bytes = await AttachmentStorage.readFile(att.storagePath);
-              if (bytes != null && bytes.isNotEmpty) {
-                b64 = base64Encode(bytes);
-                // Cache base64 for future use
-                att.base64Data = b64;
-              } else {
-                parts.add({
-                  'type': 'text',
-                  'text': '[音频加载失败: ${att.fileName}]',
-                });
-                continue;
-              }
-            }
-            final audioFormat = audioFormatFromMimeType(att.mimeType);
-            parts.add({
-              'type': 'input_audio',
-              'input_audio': {
-                'data': b64,
-                'format': audioFormat,
-              },
-            });
-          } else if (att.fileType == 'video') {
-            // ── Video files: send as video_url with base64 data URI ──
-            // OpenRouter supports the `video_url` content type for video files.
-            // Format: { type: "video_url", video_url: { url: "data:video/mp4;base64,..." } }
-            final String b64;
-            if (att.base64Data != null && att.base64Data!.isNotEmpty) {
-              if (att.fileSize > 10 * 1024 * 1024) {
-                parts.add({
-                  'type': 'text',
-                  'text': '[视频文件过大已跳过: ${att.fileName}]',
-                });
-                continue;
-              }
-              b64 = att.base64Data!;
-            } else {
-              if (att.fileSize > 10 * 1024 * 1024) {
-                parts.add({
-                  'type': 'text',
-                  'text': '[视频文件过大已跳过: ${att.fileName}]',
-                });
-                continue;
-              }
-              final bytes = await AttachmentStorage.readFile(att.storagePath);
-              if (bytes != null && bytes.isNotEmpty) {
-                b64 = base64Encode(bytes);
-                att.base64Data = b64;
-              } else {
-                parts.add({
-                  'type': 'text',
-                  'text': '[视频加载失败: ${att.fileName}]',
-                });
-                continue;
-              }
-            }
-            parts.add({
-              'type': 'video_url',
-              'video_url': {
-                'url': 'data:${att.mimeType};base64,$b64',
-              },
-            });
-          } else {
-            // Try to read text content for text-based files
-            final textExts = [
-              // Documentation & markup
-              'txt',
-              'md',
-              'tex',
-              'rst',
-              'asciidoc',
-              // Data & config
-              'json',
-              'csv',
-              'log',
-              'yaml',
-              'yml',
-              'xml',
-              'toml',
-              'ini',
-              'cfg',
-              'conf',
-              'env',
-              'properties',
-              'plist',
-              // Web
-              'html',
-              'htm',
-              'css',
-              'scss',
-              'less',
-              'svg',
-              // Shell & scripts
-              'sh',
-              'bash',
-              'zsh',
-              'ps1',
-              'bat',
-              'cmd',
-              'py',
-              'js',
-              'ts',
-              'jsx',
-              'tsx',
-              'dart',
-              'java',
-              'cpp',
-              'c',
-              'h',
-              'hpp',
-              'rs',
-              'go',
-              'rb',
-              'php',
-              'swift',
-              'kt',
-              'scala',
-              'r',
-              'lua',
-              'pl',
-              'sql',
-              // Git & project
-              'gitignore',
-              'editorconfig',
-              'makefile',
-              'dockerfile',
-            ];
-            final ext = att.fileName.split('.').last.toLowerCase();
-            if (textExts.contains(ext)) {
-              try {
-                final bytes = await AttachmentStorage.readFile(att.storagePath);
-                if (bytes == null || bytes.isEmpty) {
-                  throw Exception('file not readable');
-                }
-                final textContent = utf8.decode(bytes);
-                final truncated = textContent.length > 4000
-                    ? '${textContent.substring(0, 4000)}\n... [truncated]'
-                    : textContent;
-                parts.add({
-                  'type': 'text',
-                  'text': '以下为文件 ${att.fileName} 的内容:\n$truncated',
-                });
-              } catch (e) {
-                AppLogService.warning(
-                    'ChatService', '读取附件文件失败: ${att.fileName}: $e');
-                parts.add({
-                  'type': 'text',
-                  'text': '[${att.fileName} - 无法读取文件内容]',
-                });
-              }
-            } else {
-              // ── Non-text document files: send as file content part ──
-              // OpenRouter supports the `file` content type for PDFs and other
-              // documents. Format: { type: "file", file: { filename: "...",
-              // file_data: "data:application/pdf;base64,..." } }
-              if (att.fileSize > 10 * 1024 * 1024) {
-                parts.add({
-                  'type': 'text',
-                  'text': '[文件过大已跳过: ${att.fileName}]',
-                });
-              } else {
-                Uint8List? bytes;
-                if (att.base64Data != null && att.base64Data!.isNotEmpty) {
-                  bytes = base64Decode(att.base64Data!);
-                } else {
-                  bytes = await AttachmentStorage.readFile(att.storagePath);
-                }
-                if (bytes != null && bytes.isNotEmpty) {
-                  final b64 = base64Encode(bytes);
-                  final dataUri = 'data:${att.mimeType};base64,$b64';
-                  parts.add({
-                    'type': 'file',
-                    'file': {
-                      'filename': att.fileName,
-                      'file_data': dataUri,
-                    },
-                  });
-                } else {
-                  parts.add({
-                    'type': 'text',
-                    'text': '[${att.fileName} - 无法读取文件内容]',
-                  });
-                }
-              }
-            }
-          }
-        }
-        result.add({'role': msg.role, 'content': parts});
-      }
-    }
-    return result;
-  }
-
   /// Non-streaming version - collects stream into a single string.
   Future<String> send(
     String userMessage, {
@@ -795,6 +568,44 @@ class ChatService {
       chunks.add(chunk);
     }
     return chunks.join('');
+  }
+
+  /// 发送一次性系统提示词请求（标题生成 / 上下文压缩等内部任务用）。
+  ///
+  /// 不走对话助手的 system prompt / 工具参数 / 推理参数：
+  /// 使用 [systemPrompt] 作为 system 内容，[history] 作为消息历史。
+  /// [contextSummary] 可选注入压缩摘要。
+  ///
+  /// 内部任务请求需要轻量（maxTokens 通常较小、无工具），
+  /// 与主对话请求相互独立。
+  Future<String> sendPrompt({
+    required String systemPrompt,
+    required List<ChatMessage> history,
+    int? maxTokens,
+    String? contextSummary,
+  }) async {
+    final req = await _protocol.buildRequest(
+      history: history,
+      assistantPrompt: systemPrompt,
+      contextSummary: contextSummary,
+    );
+    _cancelToken = CancelToken();
+    final chunks = <String>[];
+    try {
+      await for (final event in _provider!.chatStream(
+        req.messages,
+        model: _modelConfig!.modelId,
+        maxTokens: maxTokens,
+        system: req.system,
+        cancelToken: _cancelToken,
+      )) {
+        if (event.isReasoning || event.isToolCallEvent) continue;
+        if (event.text.isNotEmpty) chunks.add(event.text);
+      }
+    } finally {
+      _cancelToken = null;
+    }
+    return chunks.join('').trim();
   }
 
   /// Cancel the current stream
@@ -907,6 +718,14 @@ class ChatService {
   /// system-role message in the API request.
   void setAssistantPrompt(String? prompt) {
     _assistantPrompt = prompt;
+  }
+
+  /// 上下文压缩产生的锚定摘要（对话被压缩过时为非空）。
+  String? _contextSummary;
+
+  /// 设置对话的上下文压缩摘要，以 system 级内容注入请求。
+  void setContextSummary(String? summary) {
+    _contextSummary = summary;
   }
 
   /// Optional assistant-level settings to override model params.

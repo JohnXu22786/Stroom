@@ -33,6 +33,7 @@ class _MockProvider extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     throw UnimplementedError();
   }
@@ -48,6 +49,7 @@ class _MockProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     lastRequestBody = {
       'model': model ?? defaultParams['model'],

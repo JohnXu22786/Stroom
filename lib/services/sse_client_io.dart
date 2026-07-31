@@ -53,6 +53,70 @@ Stream<String> sseStream(
   }
 }
 
+/// SSE 事件帧：事件名 + 数据。
+///
+/// 供需要区分事件名的协议使用（如 Anthropic Messages 流式接口的
+/// message_start / content_block_delta / message_stop 等事件）。
+class SseFrame {
+  final String event;
+  final String data;
+
+  const SseFrame(this.event, this.data);
+
+  @override
+  String toString() => 'SseFrame(event: $event, data: ${data.length} chars)';
+}
+
+/// 原生平台的 SSE 事件流式客户端（带事件名）。
+///
+/// 与 [sseStream] 相同的传输方式，但保留 `event:` 事件名，
+/// 并以 [SseFrame] 为单位产出。用于 Anthropic 等按事件类型
+/// 区分载荷的协议。
+Stream<SseFrame> sseEventStream(
+  String url,
+  Map<String, String> headers,
+  String body, {
+  CancelToken? cancelToken,
+
+  /// Callback invoked with the initial HTTP response headers, if available.
+  void Function(Map<String, List<String>> headers)? onResponseHeaders,
+}) async* {
+  final dio = Dio(BaseOptions(
+    headers: headers,
+    connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 60),
+  ));
+
+  final response = await dio.post(
+    url,
+    options: Options(responseType: ResponseType.stream),
+    data: body,
+    cancelToken: cancelToken,
+  );
+
+  onResponseHeaders?.call(response.headers.map);
+
+  final rawStream = response.data.stream as Stream<Uint8List>;
+  final lineStream = rawStream
+      .cast<List<int>>()
+      .transform(utf8.decoder)
+      .transform(const LineSplitter());
+
+  String currentEvent = '';
+  await for (final line in lineStream) {
+    if (line.startsWith('event: ')) {
+      currentEvent = line.substring('event: '.length).trim();
+    } else if (line.startsWith('data: ')) {
+      final data = line.substring('data: '.length).trim();
+      yield SseFrame(currentEvent, data);
+      currentEvent = '';
+    } else if (line.isEmpty) {
+      // Empty line terminates the current event block
+      currentEvent = '';
+    }
+  }
+}
+
 /// 建立持久的 SSE GET 连接（用于标准 MCP SSE 协议）。
 /// 返回一个流，每一行都是一条 SSE 事件（完整行，含 event / data 前缀）。
 /// 调用方需要自己解析 event 和 data 行。

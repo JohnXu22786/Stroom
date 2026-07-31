@@ -52,6 +52,7 @@ class CapturingChatProvider extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     throw UnimplementedError();
   }
@@ -67,6 +68,7 @@ class CapturingChatProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     if (throwError) {
       throw Exception('Simulated error');
@@ -118,6 +120,7 @@ class _MessageCaptureProvider extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     throw UnimplementedError();
   }
@@ -133,6 +136,7 @@ class _MessageCaptureProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     lastMessages = messages;
     if (!_streamCompleter.isCompleted) {
@@ -176,6 +180,7 @@ class _StallingChatProvider extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     throw UnimplementedError();
   }
@@ -191,6 +196,7 @@ class _StallingChatProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     _controller = StreamController<AIStreamEvent>();
     cancelToken?.whenCancel.then((_) {

@@ -56,6 +56,7 @@ class _RequestCaptureProvider extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     throw UnimplementedError();
   }
@@ -71,6 +72,7 @@ class _RequestCaptureProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     capturedExtraParams = extraParams;
     capturedMaxTokens = maxTokens;
@@ -119,6 +121,7 @@ class _RequestBodyExtraCapture extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     throw UnimplementedError();
   }
@@ -134,6 +137,7 @@ class _RequestBodyExtraCapture extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     capturedExtraParams = extraParams;
     capturedMaxTokens = maxTokens;
@@ -181,6 +185,7 @@ class _CapturingProvider extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     throw UnimplementedError();
   }
@@ -196,6 +201,7 @@ class _CapturingProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     capturedExtraParams = extraParams;
     capturedMaxTokens = maxTokens;
@@ -242,6 +248,7 @@ class _ParamCaptureProvider extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     throw UnimplementedError();
   }
@@ -257,6 +264,7 @@ class _ParamCaptureProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     capturedExtraParams = extraParams;
     capturedMaxTokens = maxTokens;
@@ -302,6 +310,7 @@ class _ProviderJsonBodyCapture extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     throw UnimplementedError();
   }
@@ -317,6 +326,7 @@ class _ProviderJsonBodyCapture extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     capturedExtraParams = extraParams;
     // Simulate what _buildBody does + jsonEncode
@@ -370,6 +380,7 @@ class _CaptureProvider extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     throw UnimplementedError();
   }
@@ -385,6 +396,7 @@ class _CaptureProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     capturedExtraParams = extraParams;
     capturedMaxTokens = maxTokens;
@@ -432,6 +444,7 @@ class _JsonSerBodyCapture extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     throw UnimplementedError();
   }
@@ -447,6 +460,7 @@ class _JsonSerBodyCapture extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     capturedExtraParams = extraParams;
     // Simulate what _buildBody does + jsonEncode
@@ -497,6 +511,7 @@ class _MessageCaptureProvider extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     capturedMessages = messages;
     return 'test response';
@@ -513,6 +528,7 @@ class _MessageCaptureProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     capturedMessages = messages;
     yield AIStreamEvent('test response');
