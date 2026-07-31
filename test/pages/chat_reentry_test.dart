@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart' show ToolCallData;
 import 'package:stroom/pages/chat_page.dart';
-import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
@@ -28,14 +27,17 @@ class _TestChatStreamManager extends ChatStreamManager {
   final String _convId;
   final String _msgId;
   final String _fullReply;
+  final List<ChatMessage> _history;
 
   _TestChatStreamManager({
     required String convId,
     required String msgId,
     required String fullReply,
+    List<ChatMessage> history = const [],
   })  : _convId = convId,
         _msgId = msgId,
         _fullReply = fullReply,
+        _history = history,
         super(null);
 
   @override
@@ -51,7 +53,8 @@ class _TestChatStreamManager extends ChatStreamManager {
   List<String> reasoningSectionsFor(String convId) => [];
 
   @override
-  List<ChatMessage> historyFor(String convId) => [];
+  List<ChatMessage> historyFor(String convId) =>
+      convId == _convId ? List.unmodifiable(_history) : const [];
 
   @override
   List<String> textChunksFor(String convId) => const [''];
@@ -152,9 +155,17 @@ void main() {
     // or reasoning buttons. ~0.5s later, a provider update converted it
     // to Message.text (normal gray bubble). The fix: insert Message.text
     // directly from the restored fullReply.
+    //
+    // The mock provides a non-empty live history (user message + partial
+    // assistant reply), so _loadConversationMessages takes its primary
+    // restoration path (re-inserting the skipped streaming message into
+    // the new controller). The post-frame restore callback then runs and
+    // must skip insertion (alreadyInController) instead of doubling the
+    // streaming bubble.
     testWidgets(
-        'restored streaming message is TextMessage (gray bubble) '
-        'not TextStreamMessage (raw white Markdown)', (tester) async {
+        're-entry with live history restores streaming message as '
+        'TextMessage on the primary load path, without duplicate insert',
+        (tester) async {
       SharedPreferences.setMockInitialValues({});
 
       const testConvId = 'conv-stream-1';
@@ -165,6 +176,10 @@ void main() {
         convId: testConvId,
         msgId: testMsgId,
         fullReply: testFullReply,
+        history: [
+          _message(id: 'u1', role: 'user', content: 'Hello'),
+          _message(id: testMsgId, role: 'assistant', content: 'partial'),
+        ],
       );
 
       await tester.pumpWidget(
@@ -183,7 +198,7 @@ void main() {
 
       // Wait for _initialize → _restoreStreamingState →
       // _loadConversationMessages to complete. This includes the
-      // post-frame callback scheduling and the async DB read.
+      // post-frame callback scheduling and the async init work.
       for (int i = 0; i < 30; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
@@ -197,11 +212,24 @@ void main() {
       final controller = chatWidget.chatController;
       final messages = controller.messages;
 
-      // The streaming assistant message should be in the controller.
-      final streamingMsg = messages.where((m) => m.id == testMsgId).firstOrNull;
-      expect(streamingMsg, isNotNull,
-          reason: 'Streaming assistant message should be in the controller');
+      // Historical user message loaded from live history.
+      expect(messages.where((m) => m.id == 'u1'), hasLength(1),
+          reason: 'User message should be loaded into the controller');
 
+      // Order: user message first, restored streaming assistant last.
+      expect(messages.map((m) => m.id).toList(), ['u1', testMsgId],
+          reason: 'Messages should keep history order with the streaming '
+              'assistant message appended last');
+
+      // Exactly ONE streaming message: the primary load path inserts it,
+      // and the post-frame restore callback must skip the duplicate.
+      final streamingMatches =
+          messages.where((m) => m.id == testMsgId).toList();
+      expect(streamingMatches, hasLength(1),
+          reason: 'Streaming message must not be inserted twice (the '
+              'restore callback must skip when already in controller)');
+
+      final streamingMsg = streamingMatches.first;
       // Core assertion: it must be TextMessage (Message.text), which
       // uses textMessageBuilder → gray bubble + segments. It must NOT
       // be TextStreamMessage (Message.textStream), which would use
@@ -212,11 +240,9 @@ void main() {
               'TextStreamMessage would render as raw white-background '
               'Markdown without the gray assistant bubble, tool-call '
               'cards, or reasoning buttons.');
-      expect(streamingMsg, isNot(isA<TextStreamMessage>()),
-          reason: 'Restored streaming message must NOT be TextStreamMessage');
 
       // The restored message should carry the live fullReply text.
-      final textContent = switch (streamingMsg!) {
+      final textContent = switch (streamingMsg) {
         TextMessage m => m.text,
         _ => '',
       };
