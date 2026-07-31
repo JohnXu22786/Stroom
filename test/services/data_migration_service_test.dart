@@ -90,7 +90,7 @@ void main() {
 
   group('DataMigrationService - format version', () {
     test('returns current format version constant', () {
-      expect(DataMigrationService.currentFormatVersion, equals(2));
+      expect(DataMigrationService.currentFormatVersion, equals(3));
     });
 
     test('default stored version is 0 (not yet set)', () async {
@@ -110,7 +110,7 @@ void main() {
   group('DataMigrationService - checkAndMigrate', () {
     test('no migration needed when version matches current', () async {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 2);
+      await prefs.setInt('data_format_version', 3);
 
       final result = await DataMigrationService.checkAndMigrate();
       expect(result.needsMigration, isFalse);
@@ -132,7 +132,7 @@ void main() {
 
       // After migration, version should be updated
       final storedVersion = await DataMigrationService.getStoredFormatVersion();
-      expect(storedVersion, equals(2));
+      expect(storedVersion, equals(3));
     });
 
     test('subsequent call does not need migration', () async {
@@ -148,7 +148,7 @@ void main() {
     test('does NOT run conversation recovery on every startup', () async {
       // Set up: version matches, no migration needed
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 2);
+      await prefs.setInt('data_format_version', 3);
 
       // Even if conversations_bak exists from old sessions,
       // checkAndMigrate should NOT touch it (no recovery on startup)
@@ -235,7 +235,7 @@ void main() {
   group('DataMigrationService - migrateDataFormatIfNeeded', () {
     test('returns needsMigration=false when version matches current', () async {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 2);
+      await prefs.setInt('data_format_version', 3);
 
       final result = await DataMigrationService.migrateDataFormatIfNeeded();
       expect(result.needsMigration, isFalse);
@@ -256,7 +256,7 @@ void main() {
 
       // Version should be updated
       final storedVersion = await DataMigrationService.getStoredFormatVersion();
-      expect(storedVersion, equals(2));
+      expect(storedVersion, equals(3));
     });
 
     test('does NOT create external backup during migration', () async {

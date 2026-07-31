@@ -46,6 +46,19 @@ class ToolCallCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
+              if (data.compactedAt != null)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.blueGrey.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '已压缩',
+                    style: TextStyle(fontSize: 10, color: Colors.blueGrey),
+                  ),
+                ),
               if (data.status == ToolCallStatus.running)
                 SizedBox(
                   width: 14,

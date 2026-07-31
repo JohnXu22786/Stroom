@@ -93,7 +93,8 @@ List<AIStreamEvent> processAnthropicStreamData(
             final index = data['index'] as int? ?? 0;
             final accEntry = acc.toolCalls[index];
             if (accEntry != null) {
-              accEntry['input'] = (accEntry['input'] as String? ?? '') + partial;
+              accEntry['input'] =
+                  (accEntry['input'] as String? ?? '') + partial;
             }
           }
       }
@@ -448,8 +449,7 @@ class AnthropicChatProvider extends BaseChatProvider {
           // 单条数据解析失败（非 JSON、格式异常）跳过该行继续，
           // 避免代理式多余行导致整个流中断。
           if (e is DioException) rethrow;
-          debugPrint(
-              'AnthropicChatProvider: failed to parse SSE chunk: $e');
+          debugPrint('AnthropicChatProvider: failed to parse SSE chunk: $e');
         }
       }
     } catch (e) {

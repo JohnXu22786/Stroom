@@ -514,8 +514,8 @@ class ChatAdapter {
       currentModelIndex = -1;
       return;
     }
-    final endpointType = effectiveEndpointType(
-        modelConfig.endpointType, config.endpointType);
+    final endpointType =
+        effectiveEndpointType(modelConfig.endpointType, config.endpointType);
     debugPrint(
       'ChatAdapter.configure: host=${config.host} model=${modelConfig.modelId} '
       'endpoint=$endpointType',
@@ -580,8 +580,8 @@ class ChatAdapter {
       return;
     }
     final modelConfig = config.models[modelIndex];
-    final endpointType = effectiveEndpointType(
-        modelConfig.endpointType, config.endpointType);
+    final endpointType =
+        effectiveEndpointType(modelConfig.endpointType, config.endpointType);
     debugPrint(
       'ChatAdapter.selectModel: using config[$configIndex] '
       'host=${config.host} model=${modelConfig.modelId} endpoint=$endpointType',

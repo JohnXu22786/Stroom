@@ -522,8 +522,8 @@ void showAssistantFullEditDialog(
                             ),
                             if (enableMaxToolCalls)
                               Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
                                 child: TextField(
                                   decoration: const InputDecoration(
                                     labelText: '轮数',

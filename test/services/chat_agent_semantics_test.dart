@@ -1,0 +1,811 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/models/ai_stream_event.dart';
+import 'package:stroom/models/assistant.dart';
+import 'package:stroom/models/chat_event.dart';
+import 'package:stroom/models/chat_message.dart';
+import 'package:stroom/models/tool_call.dart';
+import 'package:stroom/providers/chat_api_provider.dart';
+import 'package:stroom/providers/chat_manager_provider.dart';
+import 'package:stroom/providers/conversation_provider.dart';
+import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/chat_adapter.dart';
+import 'package:stroom/services/chat_protocol.dart';
+import 'package:stroom/services/chat_service.dart';
+import 'package:stroom/services/chat_stream_manager.dart';
+
+// ============================================================================
+// Agent 语义测试：max-steps / 中断标记 / 上下文压缩 / 自动标题
+// ============================================================================
+
+/// 第一次 chatStream 调用抛异常（模拟压缩请求失败），后续正常。
+class _ThrowingFirstCallProvider extends BaseChatProvider {
+  final List<List<AIStreamEvent>> rounds;
+  int callCount = 0;
+
+  _ThrowingFirstCallProvider(this.rounds);
+
+  @override
+  String get name => 'ThrowingProvider';
+
+  @override
+  List<String> get supportedModelIds => ['test-model'];
+
+  @override
+  Stream<AIStreamEvent> chatStream(
+    List<Map<String, dynamic>> messages, {
+    String? model,
+    int? maxTokens,
+    double? temperature,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    List<Map<String, dynamic>>? tools,
+    Map<String, dynamic>? extraParams,
+    CancelToken? cancelToken,
+    String? system,
+  }) async* {
+    final index = callCount++;
+    if (index == 0) {
+      throw Exception('Simulated compaction failure');
+    }
+    final round = rounds[index - 1];
+    for (final e in round) {
+      yield e;
+    }
+  }
+
+  @override
+  Future<String> chat(
+    List<Map<String, dynamic>> messages, {
+    String? model,
+    int? maxTokens,
+    double? temperature,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    CancelToken? cancelToken,
+    Map<String, dynamic>? extraParams,
+    String? system,
+  }) async {
+    return 'Mock response';
+  }
+
+  @override
+  Map<String, dynamic> get defaultParams => {
+        'model': 'test-model',
+        'max_tokens': 4096,
+        'temperature': 0.7,
+      };
+}
+
+/// 记录每次 chatStream 调用的 (tools, extraParams, system, 最后一条消息)。
+class _RecordingProvider extends BaseChatProvider {
+  final List<List<AIStreamEvent>> rounds;
+  int callCount = 0;
+
+  /// 每次调用的捕获快照。
+  final List<Map<String, dynamic>> captures = [];
+
+  _RecordingProvider(this.rounds);
+
+  @override
+  String get name => 'RecordingProvider';
+
+  @override
+  List<String> get supportedModelIds => ['test-model'];
+
+  @override
+  Stream<AIStreamEvent> chatStream(
+    List<Map<String, dynamic>> messages, {
+    String? model,
+    int? maxTokens,
+    double? temperature,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    List<Map<String, dynamic>>? tools,
+    Map<String, dynamic>? extraParams,
+    CancelToken? cancelToken,
+    String? system,
+  }) async* {
+    final index = callCount++;
+    captures.add({
+      'messages': List<Map<String, dynamic>>.from(messages),
+      'tools': tools == null ? null : List<Map<String, dynamic>>.from(tools),
+      'extraParams': Map<String, dynamic>.from(extraParams ?? {}),
+      'system': system,
+    });
+    if (index < rounds.length) {
+      for (final e in rounds[index]) {
+        yield e;
+      }
+    } else {
+      yield AIStreamEvent('默认回答');
+    }
+  }
+
+  @override
+  Future<String> chat(
+    List<Map<String, dynamic>> messages, {
+    String? model,
+    int? maxTokens,
+    double? temperature,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    CancelToken? cancelToken,
+    Map<String, dynamic>? extraParams,
+    String? system,
+  }) async {
+    return 'Mock response';
+  }
+
+  @override
+  Map<String, dynamic> get defaultParams => {
+        'model': 'test-model',
+        'max_tokens': 4096,
+        'temperature': 0.7,
+      };
+}
+
+ModelConfig _createModelConfig({int context = 4096}) {
+  return ModelConfig(
+    name: 'Test Model',
+    modelId: 'test-model',
+    typeConfig: {'context': context, 'maxTokens': 2048},
+  );
+}
+
+ChatService _makeService(BaseChatProvider provider,
+    {String endpointType = 'openai'}) {
+  return ChatService(
+    provider: provider,
+    modelConfig: _createModelConfig(),
+    endpointType: endpointType,
+  );
+}
+
+/// 创建带预置对话的 ProviderContainer。
+/// override conversationsProvider 绕过异步 _load（避免与 createConversation 竞争）。
+ProviderContainer _makeContainer({List<Conversation>? conversations}) {
+  SharedPreferences.setMockInitialValues({});
+  return ProviderContainer(
+    overrides: [
+      conversationsProvider.overrideWith((ref) {
+        final notifier = ConversationsNotifier(ref);
+        notifier.state = conversations ?? [];
+        return notifier;
+      }),
+    ],
+  );
+}
+
+/// 轮询等待 [condition] 为真（标题生成等 fire-and-forget 任务）。
+Future<void> _waitFor(bool Function() condition, {int timeoutMs = 2000}) async {
+  final deadline = DateTime.now().add(Duration(milliseconds: timeoutMs));
+  while (!condition()) {
+    if (DateTime.now().isAfter(deadline)) break;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+}
+
+void main() {
+  group('max-steps 提示词', () {
+    test('maxRounds 轮工具后追加收尾轮（工具禁用 + 提示消息）', () async {
+      final provider = _RecordingProvider([
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'call_1',
+              'type': 'function',
+              'function': {
+                'name': 'loop_tool',
+                'arguments': '{"i": 1}',
+              },
+            },
+          ]),
+        ],
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'call_2',
+              'type': 'function',
+              'function': {
+                'name': 'loop_tool',
+                'arguments': '{"i": 2}',
+              },
+            },
+          ]),
+        ],
+        [AIStreamEvent('总结完成')],
+      ]);
+      final service = _makeService(provider);
+      service.setAssistantSettings(
+        AssistantSettings(maxToolCalls: 2, enableMaxToolCalls: true),
+      );
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'loop_tool',
+          description: 'loop',
+          parameters: {'type': 'object'},
+        ),
+        (args) => 'ok',
+      );
+
+      final events = <ChatEvent>[];
+      await service
+          .sendStreamWithTools(
+            'go',
+            history: [ChatMessage(role: 'user', content: 'go')],
+            tools: ChatService.getRegisteredToolDefinitions(),
+          )
+          .listen(events.add, onError: (e) => fail('error: $e'))
+          .asFuture();
+
+      // 三次请求：工具轮 ×2 + 收尾轮 ×1
+      expect(provider.captures, hasLength(3));
+
+      // 工具轮：正常带工具，无收尾提示
+      expect(provider.captures[0]['tools'], isNotNull);
+      expect(provider.captures[1]['tools'], isNotNull);
+
+      // 收尾轮：tools 禁用 + MAX_STEPS_PROMPT 前置（不注入 tool_choice，
+      // 避免 tools 缺失时严格端点拒绝该字段）
+      expect(provider.captures[2]['tools'], isNull);
+      expect(
+        (provider.captures[2]['extraParams'] as Map).containsKey('tool_choice'),
+        isFalse,
+      );
+      final lastMsg = (provider.captures[2]['messages'] as List).last as Map;
+      expect(lastMsg['role'], 'assistant');
+      expect(lastMsg['content'], ChatService.maxStepsPrompt);
+
+      // 2 轮工具调用 + 收尾文本；无旧的终止 hack 文本
+      expect(events.whereType<ToolCallStartEvent>().length, 2);
+      expect(
+        events
+            .whereType<TextEvent>()
+            .where((e) => e.text.contains('已达到工具调用上限')),
+        isEmpty,
+        reason: 'max-steps 提示词取代了旧的终止 hack 文本',
+      );
+    });
+
+    test('maxToolCalls=1 仍允许 1 轮工具调用（收尾轮不吞工具轮）', () async {
+      final provider = _RecordingProvider([
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'call_1',
+              'type': 'function',
+              'function': {
+                'name': 'loop_tool',
+                'arguments': '{"i": 1}',
+              },
+            },
+          ]),
+        ],
+        [AIStreamEvent('收尾总结')],
+      ]);
+      final service = _makeService(provider);
+      service.setAssistantSettings(
+        AssistantSettings(maxToolCalls: 1, enableMaxToolCalls: true),
+      );
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'loop_tool',
+          description: 'loop',
+          parameters: {'type': 'object'},
+        ),
+        (args) => 'ok',
+      );
+
+      final events = <ChatEvent>[];
+      await service
+          .sendStreamWithTools(
+            'go',
+            history: [ChatMessage(role: 'user', content: 'go')],
+            tools: ChatService.getRegisteredToolDefinitions(),
+          )
+          .listen(events.add, onError: (e) => fail('error: $e'))
+          .asFuture();
+
+      expect(provider.captures, hasLength(2));
+      // 第 1 轮：工具可用
+      expect(provider.captures[0]['tools'], isNotNull);
+      // 第 2 轮：收尾（禁用工具）
+      expect(provider.captures[1]['tools'], isNull);
+      expect(events.whereType<ToolCallStartEvent>().length, 1);
+    });
+
+    test('未配置 maxToolCalls 时不受影响（无收尾轮）', () async {
+      final provider = _RecordingProvider([
+        [AIStreamEvent('final')],
+      ]);
+      final service = _makeService(provider);
+      await service
+          .sendStreamWithTools(
+            'go',
+            history: [ChatMessage(role: 'user', content: 'go')],
+            tools: const [],
+          )
+          .listen((_) {})
+          .asFuture();
+      expect(provider.captures, hasLength(1));
+      expect(
+        (provider.captures[0]['extraParams'] as Map).containsKey('tool_choice'),
+        isFalse,
+      );
+    });
+  });
+
+  group('中断工具标记（manager 层）', () {
+    test('取消后 running 工具被标记为中断占位并持久化', () async {
+      SharedPreferences.setMockInitialValues({});
+      final manager = ChatStreamManager();
+      final provider = _RecordingProvider([
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'call_slow',
+              'type': 'function',
+              'function': {
+                'name': 'slow_tool',
+                'arguments': '{}',
+              },
+            },
+          ]),
+        ],
+        [AIStreamEvent('answer')],
+      ]);
+      manager.adapter.forceService(_makeService(provider));
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'slow_tool',
+          description: 'slow',
+          parameters: {'type': 'object'},
+        ),
+        (args) async {
+          await Future.delayed(const Duration(milliseconds: 200));
+          return 'slow result';
+        },
+      );
+
+      final resultFuture = manager.startStreaming(
+        text: 'go',
+        convId: 'conv-cancel',
+        history: [ChatMessage(role: 'user', content: 'go')],
+        tools: ChatService.getRegisteredToolDefinitions(),
+      );
+
+      // 等工具开始执行后取消
+      await Future.delayed(const Duration(milliseconds: 50));
+      manager.cancel('conv-cancel');
+      final result = await resultFuture;
+
+      expect(result.cancelled, isTrue);
+      final toolCalls = result.toolCalls;
+      expect(toolCalls, isNotEmpty);
+      expect(toolCalls[0].status, ToolCallStatus.completed);
+      expect(toolCalls[0].result, ChatService.kToolInterruptedPlaceholder);
+      manager.dispose();
+    });
+  });
+
+  group('上下文压缩（compaction）', () {
+    test('压缩请求失败时静默容错，主请求照发', () async {
+      final container = _makeContainer(
+        conversations: [Conversation(id: 'conv-fail', title: '')],
+      );
+      final manager = container.read(chatStreamManagerProvider);
+
+      // 第 1 次调用（压缩）抛异常；第 2 次（主请求）正常
+      final provider = _ThrowingFirstCallProvider([
+        [AIStreamEvent('回答')],
+      ]);
+      manager.adapter.forceService(ChatService(
+        provider: provider,
+        modelConfig: _createModelConfig(context: 20000),
+      ));
+
+      final big = 'x' * 7000;
+      final result = await manager.startStreaming(
+        text: 'q3',
+        convId: 'conv-fail',
+        history: [
+          ChatMessage(role: 'assistant', content: 'old a1 $big'),
+          ChatMessage(role: 'user', content: 'old q1 $big'),
+          ChatMessage(role: 'assistant', content: 'old a2 $big'),
+          ChatMessage(role: 'user', content: 'q2'),
+          ChatMessage(role: 'assistant', content: 'a3'),
+          ChatMessage(role: 'user', content: 'q3'),
+        ],
+      );
+
+      // 压缩失败不阻断：主请求照发，摘要未持久化
+      expect(result.fullReply, '回答');
+      final conv = container
+          .read(conversationsProvider)
+          .where((c) => c.id == 'conv-fail')
+          .first;
+      expect(conv.contextSummary, isNull);
+      container.dispose();
+    });
+
+    test('超限时压缩头部、持久化摘要、主请求使用尾部', () async {
+      final container = _makeContainer(
+        conversations: [Conversation(id: 'conv-c', title: '')],
+      );
+      final manager = container.read(chatStreamManagerProvider);
+
+      // 第 1 次调用 = 压缩请求（摘要）；第 2 次 = 主请求（回答）
+      final provider = _RecordingProvider([
+        [AIStreamEvent('## Objective\n- 旧对话摘要')],
+        [AIStreamEvent('最终回答')],
+      ]);
+      // context 20000 → threshold = max(20000-20000, 4096 floor) = 4096；
+      // 历史 3 条大消息 × 7000 字符 ≈ 5250 tokens > 4096 → 触发
+      manager.adapter.forceService(ChatService(
+        provider: provider,
+        modelConfig: _createModelConfig(context: 20000),
+      ));
+
+      final convId = 'conv-c';
+
+      // 6 条消息：tail 从倒数第 2 个 user 消息开始
+      final big = 'x' * 7000;
+      final history = [
+        ChatMessage(role: 'assistant', content: 'old a1 $big'),
+        ChatMessage(role: 'user', content: 'old q1 $big'),
+        ChatMessage(role: 'assistant', content: 'old a2 $big'),
+        ChatMessage(role: 'user', content: 'q2'),
+        ChatMessage(role: 'assistant', content: 'a3'),
+        ChatMessage(role: 'user', content: 'q3'),
+      ];
+
+      final result = await manager.startStreaming(
+        text: 'q3',
+        convId: convId,
+        history: history,
+      );
+
+      // 压缩请求已执行（摘要持久化）
+      final conv = container
+          .read(conversationsProvider)
+          .where((c) => c.id == convId)
+          .first;
+      expect(conv.contextSummary, contains('Objective'));
+      expect(conv.contextSummary, contains('旧对话摘要'));
+
+      // 压缩请求使用内置压缩助手 prompt（OpenAI 协议：system 消息在前）
+      final sysMsgs = (provider.captures[0]['messages'] as List)
+          .cast<Map>()
+          .where((m) => m['role'] == 'system')
+          .toList();
+      expect(sysMsgs, isNotEmpty);
+      expect(sysMsgs.first['content'], contains('锚定上下文摘要助手'));
+
+      // 主请求 history = tail（头部被摘要替换），且注入摘要
+      // tail = [user q2, assistant a3, user q3] + 新 assistant 回答
+      final tailRoles = result.history.map((m) => m.role).toList();
+      expect(tailRoles, ['user', 'assistant', 'user', 'assistant']);
+      expect(result.history[0].content, 'q2');
+      expect(result.history[3].content, '最终回答');
+      final mainSys = (provider.captures[1]['messages'] as List)
+          .cast<Map>()
+          .where((m) => m['role'] == 'system')
+          .toList();
+      expect(mainSys.any((m) => (m['content'] as String).contains('旧对话摘要')),
+          isTrue,
+          reason: '主请求注入压缩摘要到 system 消息');
+
+      container.dispose();
+    });
+
+    test('估算未超限时不压缩', () async {
+      final container = _makeContainer(
+        conversations: [Conversation(id: 'conv-ok', title: '')],
+      );
+      final manager = container.read(chatStreamManagerProvider);
+
+      // 大 context（不超限）→ 只发生 1 次请求（主请求）
+      final provider = _RecordingProvider([
+        [AIStreamEvent('回答')],
+      ]);
+      manager.adapter.forceService(ChatService(
+        provider: provider,
+        modelConfig: _createModelConfig(context: 1000000),
+      ));
+
+      final result = await manager.startStreaming(
+        text: 'hi',
+        convId: 'conv-ok',
+        history: [
+          ChatMessage(role: 'user', content: 'hi'),
+          ChatMessage(role: 'assistant', content: 'a'),
+        ],
+      );
+
+      // 未压缩：仅主请求 + 标题请求（titleAutoGenerated 触发，异步执行）
+      await _waitFor(() => provider.captures.length >= 2);
+      expect(provider.captures, hasLength(2));
+      expect(result.fullReply, '回答');
+      final conv = container
+          .read(conversationsProvider)
+          .where((c) => c.id == 'conv-ok')
+          .first;
+      expect(conv.contextSummary, isNull);
+      container.dispose();
+    });
+  });
+
+  group('自动标题', () {
+    test('流完成后用标题助手生成 AI 标题', () async {
+      final container = _makeContainer(
+        conversations: [Conversation(id: 'conv-title', title: '')],
+      );
+      final manager = container.read(chatStreamManagerProvider);
+
+      // 调用顺序：主请求 → 标题生成（单条用户消息无旧历史可压缩，
+      // head 为空 → 压缩不触发）
+      final provider = _RecordingProvider([
+        [AIStreamEvent('回答')],
+        [AIStreamEvent('「AI 生成的标题」')],
+      ]);
+      manager.adapter.forceService(_makeService(provider));
+
+      await manager.startStreaming(
+        text: '帮我优化代码',
+        convId: 'conv-title',
+        history: [ChatMessage(role: 'user', content: '帮我优化代码')],
+      );
+
+      // 标题生成是 fire-and-forget（不阻塞结果返回），等待其完成
+      await _waitFor(() => provider.captures.length >= 2);
+      expect(provider.captures, hasLength(2));
+      // 标题请求使用内置标题助手 prompt（OpenAI：system 消息）
+      final titleSys = (provider.captures[1]['messages'] as List)
+          .cast<Map>()
+          .where((m) => m['role'] == 'system')
+          .toList();
+      expect(titleSys, isNotEmpty);
+      expect(titleSys.first['content'], contains('标题生成器'));
+      // 标题已更新（去引号）
+      final conv = container
+          .read(conversationsProvider)
+          .where((c) => c.id == 'conv-title')
+          .first;
+      expect(conv.title, 'AI 生成的标题');
+      expect(conv.titleAutoGenerated, isFalse,
+          reason: 'renameConversation 清除自动标记');
+      container.dispose();
+    });
+
+    test('用户手动改过标题时不覆盖', () async {
+      final container = _makeContainer(
+        conversations: [
+          Conversation(id: 'conv-manual', title: '我的手动标题'),
+        ],
+      );
+      final manager = container.read(chatStreamManagerProvider);
+      final provider = _RecordingProvider([
+        [AIStreamEvent('回答')],
+      ]);
+      manager.adapter.forceService(ChatService(
+        provider: provider,
+        modelConfig: _createModelConfig(context: 1000000),
+      ));
+
+      await manager.startStreaming(
+        text: 'hi',
+        convId: 'conv-manual',
+        history: [ChatMessage(role: 'user', content: 'hi')],
+      );
+
+      // 标题请求未发生（仅主请求）
+      expect(provider.captures, hasLength(1));
+      final conv = container
+          .read(conversationsProvider)
+          .where((c) => c.id == 'conv-manual')
+          .first;
+      expect(conv.title, '我的手动标题');
+      container.dispose();
+    });
+  });
+
+  group('工具结果截断', () {
+    test('超过 2000 字符的工具结果保留前缀并标记截断', () async {
+      final provider = _RecordingProvider([
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'call_big',
+              'type': 'function',
+              'function': {
+                'name': 'big_tool',
+                'arguments': '{}',
+              },
+            },
+          ]),
+        ],
+        [AIStreamEvent('done')],
+      ]);
+      final service = _makeService(provider);
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'big_tool',
+          description: 'big',
+          parameters: {'type': 'object'},
+        ),
+        (args) => 'x' * 5000,
+      );
+
+      final events = <ChatEvent>[];
+      await service
+          .sendStreamWithTools(
+            'go',
+            history: [ChatMessage(role: 'user', content: 'go')],
+            tools: ChatService.getRegisteredToolDefinitions(),
+          )
+          .listen(events.add, onError: (e) => fail('error: $e'))
+          .asFuture();
+
+      final complete = events.whereType<ToolCallCompleteEvent>().single;
+      expect(complete.result.length, lessThan(5000));
+      expect(complete.result, startsWith('x' * 2000));
+      expect(complete.result, contains('[已截断]'));
+
+      // 链中 tool 消息也使用截断结果
+      final toolMsg = (provider.captures[1]['messages'] as List)
+          .cast<Map>()
+          .where((m) => m['role'] == 'tool')
+          .single;
+      expect(toolMsg['content'], complete.result);
+    });
+  });
+
+  group('sendPrompt（内部任务请求）', () {
+    test('跳过推理与工具事件，只收集文本', () async {
+      final provider = _RecordingProvider([
+        [
+          AIStreamEvent('思考中', isReasoning: true),
+          AIStreamEvent('', toolCalls: [
+            {'id': 'x', 'name': 't', 'input': {}},
+          ]),
+          AIStreamEvent('最终标题'),
+        ],
+      ]);
+      final service = _makeService(provider);
+      final result = await service.sendPrompt(
+        systemPrompt: '你是标题生成器',
+        history: [ChatMessage(role: 'user', content: '帮我优化')],
+        maxTokens: 200,
+      );
+      expect(result, '最终标题');
+      // 请求体：system 消息在前，无工具
+      final msgs = (provider.captures[0]['messages'] as List).cast<Map>();
+      expect(msgs.first['role'], 'system');
+      expect(msgs.first['content'], '你是标题生成器');
+      expect(provider.captures[0]['tools'], isNull);
+    });
+  });
+
+  group('OpenAI 协议 system 合并', () {
+    test('assistantPrompt 与 contextSummary 合并为单条 system 消息', () async {
+      final provider = _RecordingProvider([
+        [AIStreamEvent('ok')],
+      ]);
+      final service = _makeService(provider);
+      service.setAssistantPrompt('你是助手');
+      service.setContextSummary('旧对话摘要内容');
+      await service
+          .sendStream(
+            'hi',
+            history: [ChatMessage(role: 'user', content: 'hi')],
+          )
+          .listen((_) {})
+          .asFuture();
+
+      final msgs = (provider.captures[0]['messages'] as List).cast<Map>();
+      final sysMsgs = msgs.where((m) => m['role'] == 'system').toList();
+      expect(sysMsgs, hasLength(1), reason: '严格端点拒绝多条 system 消息');
+      final content = sysMsgs.single['content'] as String;
+      expect(content, contains('你是助手'));
+      expect(content, contains('旧对话摘要内容'));
+    });
+  });
+
+  group('titleAutoGenerated 序列化', () {
+    test('toMap/fromMap 往返', () {
+      final conv = Conversation(
+        title: '自动标题',
+        titleAutoGenerated: true,
+      );
+      final restored = Conversation.fromMap(conv.toMap());
+      expect(restored.titleAutoGenerated, isTrue);
+    });
+
+    test('旧数据缺省 false（不覆盖手动标题语义）', () {
+      final restored = Conversation.fromMap({
+        'id': 'c1',
+        'title': 't',
+        'createdAt': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().toIso8601String(),
+        'messages': <dynamic>[],
+      });
+      expect(restored.titleAutoGenerated, isFalse);
+    });
+  });
+
+  group('协议层换端点（ChatService 级）', () {
+    test('anthropic 端点：请求走 Anthropic 协议（system 顶层 + 链格式）', () async {
+      final provider = _RecordingProvider([
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'toolu_1',
+              'name': 'loop_tool',
+              'input': {'i': 1}
+            },
+          ]),
+        ],
+        [AIStreamEvent('done')],
+      ]);
+      final service = _makeService(provider, endpointType: 'anthropic');
+      expect(service.protocol, isA<AnthropicProtocol>());
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'loop_tool',
+          description: 'loop',
+          parameters: {'type': 'object'},
+        ),
+        (args) => 'ok',
+      );
+
+      await service
+          .sendStreamWithTools(
+            'go',
+            history: [
+              ChatMessage(role: 'user', content: 'go'),
+              ChatMessage(role: 'assistant', content: '前一轮'),
+            ],
+            tools: ChatService.getRegisteredToolDefinitions(),
+          )
+          .listen((_) {})
+          .asFuture();
+
+      // 第 1 轮请求：system 走顶层字段（非 system 消息），
+      // messages 只含 user/assistant
+      final messages1 = (provider.captures[0]['messages'] as List).cast<Map>();
+      expect(
+          messages1.map((m) => m['role']), containsAll(['user', 'assistant']));
+      expect(
+        messages1.any((m) => m['role'] == 'system'),
+        isFalse,
+        reason: 'Anthropic 协议 system 不入 messages',
+      );
+      // 工具定义是 anthropic 形状（name/input_schema，无 function 包装）
+      final tools = (provider.captures[0]['tools'] as List).cast<Map>();
+      expect(tools.first.containsKey('function'), isFalse);
+      expect(tools.first['name'], 'loop_tool');
+      expect(tools.first['input_schema'], isNotNull);
+
+      // 第 2 轮请求：链重建为 assistant(tool_use) + user(tool_result)
+      final messages2 = (provider.captures[1]['messages'] as List).cast<Map>();
+      final assistantMsg =
+          messages2.where((m) => m['role'] == 'assistant').last;
+      final contentBlocks = (assistantMsg['content'] as List).cast<Map>();
+      expect(contentBlocks.any((b) => b['type'] == 'tool_use'), isTrue);
+      final toolUse = contentBlocks.firstWhere((b) => b['type'] == 'tool_use');
+      expect(toolUse['id'], 'toolu_1');
+      expect(toolUse['name'], 'loop_tool');
+      // tool_result 配对
+      final userMsg = messages2.last;
+      final userBlocks = (userMsg['content'] as List).cast<Map>();
+      expect(userBlocks.single['type'], 'tool_result');
+      expect(userBlocks.single['tool_use_id'], 'toolu_1');
+      expect(userBlocks.single['content'], 'ok');
+    });
+  });
+}

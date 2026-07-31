@@ -9,8 +9,12 @@ import '../models/tool_call.dart';
 import '../pages/chat/chat_types.dart';
 import '../providers/chat_stream_provider.dart';
 import '../providers/conversation_provider.dart';
+import '../providers/system_assistant_provider.dart';
+import '../providers/assistant_provider.dart';
 import 'app_log_service.dart';
 import 'chat_adapter.dart';
+import 'chat_service.dart' show ChatService;
+import 'context_manager.dart';
 
 // ============================================================================
 // ChatStreamManager — 对话流式请求管理器
@@ -168,6 +172,20 @@ class ChatStreamManager {
 
   // ── Periodic persistence interval ──
   static const Duration _persistInterval = Duration(seconds: 5);
+
+  // ── 上下文管理常量 ──
+  /// 上下文保留区（输出空间 + 工具执行余量），估算超限时触发压缩。
+  static const int _contextReservedTokens = 20000;
+
+  /// 压缩触发的估算下限：小上下文模型（context ≤ 保留区）也不应在
+  /// 每次发送时都触发压缩——输入低于此值不压缩。
+  static const int _minCompactionThreshold = 4096;
+
+  /// 压缩请求的最大输出 token 数。
+  static const int _compactionMaxTokens = 4096;
+
+  /// 默认上下文窗口（模型未配置 context 时的兜底）。
+  static const int _defaultContextWindow = 32000;
 
   ChatStreamManager([this._ref]);
 
@@ -348,6 +366,16 @@ class ChatStreamManager {
     state.lastTextUpdate = DateTime.now();
     state.lastReasoningUpdate = DateTime.now();
 
+    // ── 上下文管理：发请求前自动 prune 旧工具结果 ──
+    // 软删除（标记 compactedAt + 占位文本），释放 UI 渲染与持久化体积。
+    // 纯自动触发，用户无感知；不足阈值（20K token 估算）时不执行。
+    final pruned = ContextManager.pruneToolResults(state.history);
+    if (!identical(pruned, state.history)) {
+      AppLogService.info(
+          'ChatStreamManager', '[CTX-MGR] 工具结果 prune 执行完成, convId=$convId');
+    }
+    state.history = pruned;
+
     final aiMsgId =
         streamingMsgId ?? 'a${DateTime.now().microsecondsSinceEpoch}';
     state.streamingMsgId = aiMsgId;
@@ -374,6 +402,25 @@ class ChatStreamManager {
     // The adapter creates a per-conversation service on demand, so
     // capture it here for raw data (lastRequestBody etc.) in finally.
     final _snappedChatService = _adapter.getOrCreateService(convId);
+
+    // ── 上下文管理：摘要注入 + 超限自动压缩 ──
+    // 1. 每次请求都注入对话已有的压缩摘要（如有）
+    // 2. 估算输入 token，超限时用压缩助手把头部历史压缩为锚定摘要，
+    //    尾部原文保留并重放（opencode select 语义）
+    try {
+      final conv = _ref
+          ?.read(conversationsProvider)
+          .where((c) => c.id == convId)
+          .firstOrNull;
+      _snappedChatService?.setContextSummary(conv?.contextSummary);
+      await _compactIfNeeded(
+        state: state,
+        convId: convId,
+        tools: tools,
+      );
+    } catch (e, s) {
+      debugPrint('[ChatStreamManager] 上下文管理失败: $e\n$s');
+    }
 
     // Start the provider stream BEFORE yielding to the event loop so
     // that the ChatService is guaranteed to be the one we just created.
@@ -578,6 +625,31 @@ class ChatStreamManager {
     ChatMessage? assistantMessage;
     final wasCancelled = state.cancelledByUser;
 
+    // 中断工具标记：用户取消时，把仍未完成的工具结果标记为中断占位，
+    // 避免 UI 与持久化中工具永远停留在 running 状态。
+    if (wasCancelled) {
+      for (var i = 0; i < state.toolCalls.length; i++) {
+        final tc = state.toolCalls[i];
+        if (tc.status == ToolCallStatus.running ||
+            tc.status == ToolCallStatus.pending) {
+          state.toolCalls[i] = tc.copyWith(
+            status: ToolCallStatus.completed,
+            result: ChatService.kToolInterruptedPlaceholder,
+          );
+        }
+      }
+      for (var i = 0; i < state.accumulatedToolCalls.length; i++) {
+        final tc = state.accumulatedToolCalls[i];
+        if (tc.status == ToolCallStatus.running ||
+            tc.status == ToolCallStatus.pending) {
+          state.accumulatedToolCalls[i] = tc.copyWith(
+            status: ToolCallStatus.completed,
+            result: ChatService.kToolInterruptedPlaceholder,
+          );
+        }
+      }
+    }
+
     try {
       if (state.fullReply.isNotEmpty) {
         final isError = state.fullReply.startsWith('错误:');
@@ -630,7 +702,10 @@ class ChatStreamManager {
           'ChatStreamManager', '[STREAM-MGR] save failed', _);
     }
 
-    // Build the result and complete the resultCompleter AFTER save
+    // Build the result and complete the resultCompleter AFTER save.
+    // 注意：标题生成等 LLM 回环任务绝不能阻塞这里 —— 否则页面
+    // _startStreaming 的 await 被拖住（秒级），且此窗口内用户的再次
+    // 发送会命中 _streams 去重而丢失新消息。
     final result = StreamResult(
       history: List.from(state.history),
       assistantMessage: assistantMessage,
@@ -689,6 +764,19 @@ class ChatStreamManager {
       // startStreaming for the same convId creates a fresh service
       // with the latest config (from forceService / selectModel).
       _adapter.cancelService(convId);
+
+      // ── 自动标题（fire-and-forget，不阻塞结果返回） ──
+      // 放在 cancelService 之后：getOrCreateService 会创建全新 service，
+      // 不会与已 dispose 的旧 service 冲突。失败静默（保留截断标题）。
+      if (!wasCancelled &&
+          !state.fullReply.startsWith('错误:') &&
+          state.history.isNotEmpty) {
+        // ignore: discarded_futures
+        unawaited(_maybeGenerateTitle(
+          convId: convId,
+          history: List<ChatMessage>.from(state.history),
+        ));
+      }
     }
 
     // Do NOT clear segment-related providers here (streamingFullReplyProvider,
@@ -858,6 +946,203 @@ class ChatStreamManager {
       try {
         await AppLogService.error('ChatStreamManager', '保存消息失败', e, s);
       } catch (_) {}
+    }
+  }
+
+  // ── 上下文压缩（compaction） ────────────────────────────────────
+
+  /// 上下文管理：估算输入超限时，用压缩助手把头部历史压缩为锚定摘要。
+  ///
+  /// 成功后：
+  /// - 摘要持久化到 [Conversation.contextSummary]（含前次摘要合并）
+  /// - [state.history] 裁剪为尾部原文（头部被摘要替换）
+  /// - 当前 ChatService 注入摘要（后续请求走 system 级摘要）
+  ///
+  /// 任何失败（未配置、请求失败、结果为空、头部为空）都静默返回 false
+  /// —— 宁可照发也不阻断用户消息。每轮发送最多执行一次，无循环。
+  Future<bool> _compactIfNeeded({
+    required _ConversationStreamState state,
+    required String convId,
+    required List<ToolDefinition> tools,
+  }) async {
+    final ref = _ref;
+    if (ref == null) return false;
+
+    // 1. 估算输入 token
+    final modelConfig = _adapter.modelConfig;
+    final contextLimit =
+        (modelConfig?.typeConfig['context'] as num?)?.toInt() ??
+            _defaultContextWindow;
+    // 阈值 = context - 保留区；小上下文模型下限 _minCompactionThreshold，
+    // 避免"每次发送都压缩"（reviewer: 负数阈值问题）。
+    final rawThreshold = contextLimit - _contextReservedTokens;
+    final threshold = rawThreshold < _minCompactionThreshold
+        ? _minCompactionThreshold
+        : rawThreshold;
+    final estimated = ContextManager.estimateHistoryTokens(
+      state.history,
+      assistantPrompt: _adapter.assistantPrompt,
+      tools: tools,
+    );
+    debugPrint(
+        '[CTX-MGR] convId=$convId estimated=$estimated threshold=$threshold');
+    if (estimated <= threshold) return false;
+
+    // 2. 解析压缩助手（默认内置；用户可替换）
+    final settings = ref.read(systemAssistantSettingsProvider);
+    final userAssistants = ref.read(assistantProvider);
+    final compactionPrompt = resolveSystemAssistantPrompt(
+      assistantId: settings.compactionAssistantId,
+      userAssistants: userAssistants,
+    );
+    if (compactionPrompt == null) return false;
+
+    // 3. 划分头部（可压缩）与尾部（保留原文）
+    final tailStart = _findTailStart(state.history);
+    final head = state.history
+        .sublist(0, tailStart)
+        // 压缩转写剥离附件（媒体不进摘要请求）
+        .map((m) => m.attachments.isEmpty ? m : m.copyWith(attachments: []))
+        .toList();
+    final tail = state.history.sublist(tailStart);
+    if (head.isEmpty) return false;
+
+    // 4. 组装压缩请求：前次摘要（如有）+ 头部转写 + 模板指令
+    final conv = ref
+        .read(conversationsProvider)
+        .where((c) => c.id == convId)
+        .firstOrNull;
+    final previousSummary = conv?.contextSummary;
+
+    final sb = StringBuffer();
+    if (previousSummary != null && previousSummary.isNotEmpty) {
+      sb.writeln('<previous-summary>');
+      sb.writeln(previousSummary.trim());
+      sb.writeln('</previous-summary>');
+      sb.writeln();
+    }
+    sb.writeln('以下是需要压缩的对话历史：');
+    for (final m in head) {
+      final role = m.role == 'user' ? '用户' : '助手';
+      final content = m.content.trim();
+      if (content.isEmpty) continue;
+      sb.writeln('$role: $content');
+    }
+    sb.writeln();
+    sb.writeln('请将以上对话历史压缩为锚定摘要，严格按模板输出。');
+
+    // 5. 执行压缩请求（轻量、无工具、maxTokens 适中）
+    final svc = _adapter.getOrCreateService(convId);
+    if (svc == null) return false;
+    String summary;
+    try {
+      summary = await svc.sendPrompt(
+        systemPrompt: compactionPrompt,
+        history: [ChatMessage(role: 'user', content: sb.toString())],
+        maxTokens: _compactionMaxTokens,
+      );
+    } catch (e) {
+      debugPrint('[ChatStreamManager] 压缩请求失败: $e');
+      return false;
+    }
+    if (summary.isEmpty) return false;
+
+    // 6. 持久化摘要 + 裁剪尾部 + 注入摘要（后续请求走 system 级）
+    await ref
+        .read(conversationsProvider.notifier)
+        .updateContextSummary(convId, summary);
+    state.history = tail;
+    _adapter.getOrCreateService(convId)?.setContextSummary(summary);
+    await AppLogService.info(
+        'ChatStreamManager',
+        '[CTX-MGR] 上下文已压缩, convId=$convId, '
+            'head=${head.length} 条消息 → 摘要 ${summary.length} 字符');
+    return true;
+  }
+
+  /// 找到尾部起始索引：从末尾数第 [tailUserTurns] 个用户消息。
+  /// 尾部 = 从该索引开始的所有消息（保留原文）；
+  /// 头部 = 该索引之前的消息（可压缩）。
+  static int _findTailStart(
+    List<ChatMessage> history, {
+    int tailUserTurns = 2,
+  }) {
+    var turns = 0;
+    for (var i = history.length - 1; i >= 0; i--) {
+      if (history[i].role == 'user') {
+        turns++;
+        if (turns >= tailUserTurns) return i;
+      }
+    }
+    return 0;
+  }
+
+  // ── 自动标题（title agent） ──────────────────────────────────────
+
+  /// 用标题助手为对话生成标题。
+  ///
+  /// 仅当对话标题是自动生成的（[Conversation.titleAutoGenerated]，
+  /// 即用户未手动改过）且已有用户消息时执行。失败静默返回，
+  /// 保留截断标题作为兜底。
+  ///
+  /// 由 startStreaming 尾部 fire-and-forget 调用，绝不能被 await 阻塞
+  /// 结果返回（见 startStreaming 中 complete 前的注释）。
+  Future<void> _maybeGenerateTitle({
+    required String convId,
+    required List<ChatMessage> history,
+  }) async {
+    try {
+      final ref = _ref;
+      if (ref == null) return;
+
+      final conv = ref
+          .read(conversationsProvider)
+          .where((c) => c.id == convId)
+          .firstOrNull;
+      if (conv == null || !conv.titleAutoGenerated) return;
+
+      final firstUser = history.where((m) => m.role == 'user').firstOrNull;
+      if (firstUser == null || firstUser.content.trim().isEmpty) return;
+
+      // 解析标题助手（默认内置；用户可替换）
+      final settings = ref.read(systemAssistantSettingsProvider);
+      final userAssistants = ref.read(assistantProvider);
+      final titlePrompt = resolveSystemAssistantPrompt(
+        assistantId: settings.titleAssistantId,
+        userAssistants: userAssistants,
+      );
+      if (titlePrompt == null) return;
+
+      final svc = _adapter.getOrCreateService(convId);
+      if (svc == null) return;
+
+      String title;
+      try {
+        title = await svc.sendPrompt(
+          systemPrompt: titlePrompt,
+          // 标题任务只需首条用户消息文本，剥离附件避免重新读取大文件
+          history: [firstUser.copyWith(attachments: [])],
+          maxTokens: 200,
+        );
+      } catch (e) {
+        debugPrint('[ChatStreamManager] 标题生成请求失败: $e');
+        return;
+      }
+      // 清理：单行、去引号、截断 50 字符
+      var cleaned = title.replaceAll('\n', ' ').trim();
+      cleaned = cleaned.replaceAll(RegExp(r'^["“”「」]+|["“”「」]+$'), '');
+      cleaned = cleaned.trim();
+      if (cleaned.isEmpty) return;
+      if (cleaned.length > 50) cleaned = cleaned.substring(0, 50);
+
+      await ref
+          .read(conversationsProvider.notifier)
+          .renameConversation(convId, cleaned);
+      await AppLogService.info(
+          'ChatStreamManager', '[TITLE] 自动标题生成完成: $cleaned');
+    } catch (e) {
+      // fire-and-forget 路径：任何异常都静默，避免 unhandled async error
+      debugPrint('[ChatStreamManager] 自动标题失败: $e');
     }
   }
 }

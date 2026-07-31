@@ -60,22 +60,37 @@ class ToolCallBlock extends MessageBlock {
   final ToolCallStatus status;
   final String? result;
 
+  /// 工具结果被 prune 的时间戳（软删除标记）。
+  /// 非 null 时 [result] 已被替换为占位文本。
+  final DateTime? compactedAt;
+
   const ToolCallBlock({
     required this.id,
     required this.name,
     this.arguments = const {},
     this.status = ToolCallStatus.pending,
     this.result,
+    this.compactedAt,
   });
 
   factory ToolCallBlock.fromMap(Map<String, dynamic> map) {
     final args = map['arguments'];
+    DateTime? compactedAt;
+    final compactedRaw = map['compactedAt'];
+    if (compactedRaw is String) {
+      try {
+        compactedAt = DateTime.parse(compactedRaw);
+      } catch (_) {
+        compactedAt = null;
+      }
+    }
     return ToolCallBlock(
       id: (map['id'] as String?) ?? '',
       name: (map['name'] as String?) ?? '',
       arguments: args is Map ? Map<String, dynamic>.from(args) : const {},
       status: _parseStatus(map['status'] as String?),
       result: map['result'] as String?,
+      compactedAt: compactedAt,
     );
   }
 
@@ -94,15 +109,21 @@ class ToolCallBlock extends MessageBlock {
         'arguments': arguments,
         'status': status.name,
         if (result != null) 'result': result,
+        if (compactedAt != null) 'compactedAt': compactedAt!.toIso8601String(),
       };
 
-  ToolCallBlock copyWith({ToolCallStatus? status, String? result}) =>
+  ToolCallBlock copyWith({
+    ToolCallStatus? status,
+    String? result,
+    DateTime? compactedAt,
+  }) =>
       ToolCallBlock(
         id: id,
         name: name,
         arguments: Map.from(arguments),
         status: status ?? this.status,
         result: result ?? this.result,
+        compactedAt: compactedAt ?? this.compactedAt,
       );
 }
 

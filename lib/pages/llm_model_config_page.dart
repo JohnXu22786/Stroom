@@ -1479,7 +1479,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
             Card(
               margin: EdgeInsets.zero,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 child: Column(
                   children: [
                     SwitchListTile(

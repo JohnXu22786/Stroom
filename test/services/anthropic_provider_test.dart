@@ -215,8 +215,8 @@ void main() {
           'type': 'error',
           'error': {'type': 'invalid_request_error', 'message': 'bad'},
         }, acc),
-        throwsA(isA<Exception>().having((e) => e.toString(), 'msg',
-            contains('bad'))),
+        throwsA(isA<Exception>()
+            .having((e) => e.toString(), 'msg', contains('bad'))),
       );
     });
 

@@ -409,6 +409,42 @@ class ChatMessage {
     }
   }
 
+  /// 创建消息副本，允许替换任意字段。
+  /// 主要用于上下文管理（prune）时重建带压缩标记的消息。
+  ChatMessage copyWith({
+    String? role,
+    String? content,
+    DateTime? createdAt,
+    List<Attachment>? attachments,
+    bool? isStreaming,
+    bool? isError,
+    String? reasoningContent,
+    Map<String, dynamic>? rawRequest,
+    Map<String, dynamic>? rawResponse,
+    List<ToolCallData>? toolCalls,
+    List<String>? reasoningSections,
+    List<String>? textSections,
+    List<int>? toolCallRoundStarts,
+    List<MessageBlock>? blocks,
+  }) =>
+      ChatMessage(
+        id: id,
+        role: role ?? this.role,
+        content: content ?? this.content,
+        createdAt: createdAt ?? this.createdAt,
+        attachments: attachments ?? this.attachments,
+        isStreaming: isStreaming ?? this.isStreaming,
+        isError: isError ?? this.isError,
+        reasoningContent: reasoningContent ?? this.reasoningContent,
+        rawRequest: rawRequest ?? this.rawRequest,
+        rawResponse: rawResponse ?? this.rawResponse,
+        toolCalls: toolCalls ?? this.toolCalls,
+        reasoningSections: reasoningSections ?? this.reasoningSections,
+        textSections: textSections ?? this.textSections,
+        toolCallRoundStarts: toolCallRoundStarts ?? this.toolCallRoundStarts,
+        blocks: blocks ?? this.blocks,
+      );
+
   @override
   String toString() => 'ChatMessage(id: $id, role: $role)';
 }

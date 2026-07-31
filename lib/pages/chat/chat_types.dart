@@ -256,7 +256,8 @@ List<MessageSegment> blocksToSegments(List<MessageBlock> blocks) {
           :final name,
           :final arguments,
           :final status,
-          :final result
+          :final result,
+          :final compactedAt
         ):
         segs.add(ToolCallSegment(ToolCallData(
           id: id,
@@ -264,6 +265,7 @@ List<MessageSegment> blocksToSegments(List<MessageBlock> blocks) {
           arguments: arguments,
           status: status,
           result: result,
+          compactedAt: compactedAt,
         )));
       case ErrorBlock(:final message):
         segs.add(TextSegment('[Error: $message]'));
@@ -303,6 +305,7 @@ List<MessageBlock> legacyToBlocks({
         arguments: tc.arguments,
         status: tc.status,
         result: tc.result,
+        compactedAt: tc.compactedAt,
       ));
     }
   }

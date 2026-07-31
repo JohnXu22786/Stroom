@@ -365,8 +365,7 @@ class ChatService {
             (totalRounds == null || loopProtection < totalRounds)) {
           loopProtection++;
           if (maxRounds != null && loopProtection % 50 == 0) {
-            AppLogService.info(
-                'ChatService', '工具调用循环: 第 $loopProtection 轮');
+            AppLogService.info('ChatService', '工具调用循环: 第 $loopProtection 轮');
           }
 
           _streamSubscription?.cancel();
@@ -380,8 +379,7 @@ class ChatService {
           // 收尾轮：不传工具定义（模型无法调用工具）+ 前置文本收尾提示，
           // 要求模型总结已做/未做/下一步。不注入 tool_choice：
           // tools 缺失时部分严格端点会拒绝 tool_choice 字段。
-          final isLastStep =
-              maxRounds != null && loopProtection > maxRounds;
+          final isLastStep = maxRounds != null && loopProtection > maxRounds;
           var roundMessages = messages;
           if (isLastStep) {
             roundMessages = [

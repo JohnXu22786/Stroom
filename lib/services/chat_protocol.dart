@@ -73,9 +73,8 @@ NeutralToolCall normalizeToolCall(Map<String, dynamic> tc) {
   return NeutralToolCall(
     id: tc['id'] as String? ?? '',
     name: tc['name'] as String? ?? 'unknown',
-    argumentsJson: input is Map
-        ? jsonEncode(input)
-        : (input?.toString() ?? '{}'),
+    argumentsJson:
+        input is Map ? jsonEncode(input) : (input?.toString() ?? '{}'),
   );
 }
 
@@ -261,22 +260,20 @@ abstract class ChatProtocol {
   /// 构建工具结果消息，紧跟在助手消息之后。
   List<Map<String, dynamic>> buildToolResultMessages(
       List<ToolCallResult> results);
-
 }
 
 /// 根据端点类型创建协议实例。
 ///
 /// [endpointType] 取值 'anthropic' 或 'openai'（默认）。
 ChatProtocol createChatProtocol(String endpointType) {
-  return endpointType == 'anthropic'
-      ? AnthropicProtocol()
-      : OpenAIProtocol();
+  return endpointType == 'anthropic' ? AnthropicProtocol() : OpenAIProtocol();
 }
 
 /// 计算有效端点类型：模型覆盖 > 供应商 > 'openai'。
 ///
 /// 旧配置（没有 endpointType 字段）天然落到 'openai'，即数据迁移的默认路径。
-String effectiveEndpointType(String? modelEndpointType, String? providerEndpointType) {
+String effectiveEndpointType(
+    String? modelEndpointType, String? providerEndpointType) {
   if (modelEndpointType != null && modelEndpointType.isNotEmpty) {
     return modelEndpointType;
   }
@@ -311,8 +308,7 @@ class OpenAIProtocol implements ChatProtocol {
       systemParts.add(assistantPrompt);
     }
     if (contextSummary != null && contextSummary.trim().isNotEmpty) {
-      systemParts.add(
-          '以下是此前对话的摘要（对话曾被压缩）:\n${contextSummary.trim()}');
+      systemParts.add('以下是此前对话的摘要（对话曾被压缩）:\n${contextSummary.trim()}');
     }
     if (systemParts.isNotEmpty) {
       result.add({'role': 'system', 'content': systemParts.join('\n\n')});
@@ -405,8 +401,8 @@ class OpenAIProtocol implements ChatProtocol {
             });
           } else {
             if (isTextAttachment(att)) {
-              final textContent =
-                  await readTextAttachmentContent(att.fileName, att.storagePath);
+              final textContent = await readTextAttachmentContent(
+                  att.fileName, att.storagePath);
               if (textContent != null) {
                 parts.add({
                   'type': 'text',
@@ -504,7 +500,6 @@ class OpenAIProtocol implements ChatProtocol {
         },
     ];
   }
-
 }
 
 // ============================================================================
@@ -532,9 +527,7 @@ class AnthropicProtocol implements ChatProtocol {
     if (contextSummary != null && contextSummary.trim().isNotEmpty) {
       final summaryBlock = '以下是此前对话的摘要（对话曾被压缩）:\n'
           '${contextSummary.trim()}';
-      system = system == null
-          ? summaryBlock
-          : '$system\n\n$summaryBlock';
+      system = system == null ? summaryBlock : '$system\n\n$summaryBlock';
     }
 
     for (final msg in history) {
@@ -553,13 +546,15 @@ class AnthropicProtocol implements ChatProtocol {
               case AttachmentReadStatus.tooLarge:
                 parts.add({
                   'type': 'text',
-                  'text': '[${att.fileType == 'image' ? '图片' : '文件'}过大已跳过: ${att.fileName}]',
+                  'text':
+                      '[${att.fileType == 'image' ? '图片' : '文件'}过大已跳过: ${att.fileName}]',
                 });
                 continue;
               case AttachmentReadStatus.unreadable:
                 parts.add({
                   'type': 'text',
-                  'text': '[${att.fileType == 'image' ? '图片' : '文件'}加载失败: ${att.fileName}]',
+                  'text':
+                      '[${att.fileType == 'image' ? '图片' : '文件'}加载失败: ${att.fileName}]',
                 });
                 continue;
               case AttachmentReadStatus.ok:
@@ -595,8 +590,8 @@ class AnthropicProtocol implements ChatProtocol {
           } else {
             // ── 文本类文件：读取内容 ──
             if (isTextAttachment(att)) {
-              final textContent =
-                  await readTextAttachmentContent(att.fileName, att.storagePath);
+              final textContent = await readTextAttachmentContent(
+                  att.fileName, att.storagePath);
               if (textContent != null) {
                 parts.add({
                   'type': 'text',
@@ -710,5 +705,4 @@ class AnthropicProtocol implements ChatProtocol {
       },
     ];
   }
-
 }

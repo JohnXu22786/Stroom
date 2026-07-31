@@ -107,7 +107,9 @@ void main() {
         fileSize: 100,
       )..base64Data = 'YXVkaW8=';
       final req = await AnthropicProtocol().buildRequest(
-        history: [ChatMessage(role: 'user', content: '', attachments: [audio])],
+        history: [
+          ChatMessage(role: 'user', content: '', attachments: [audio])
+        ],
       );
       final content = req.messages[0]['content'] as List;
       expect(content, hasLength(1));
@@ -124,7 +126,9 @@ void main() {
       description: '获取天气',
       parameters: {
         'type': 'object',
-        'properties': {'city': {'type': 'string'}},
+        'properties': {
+          'city': {'type': 'string'}
+        },
       },
     );
 
@@ -138,7 +142,9 @@ void main() {
             'description': '获取天气',
             'parameters': {
               'type': 'object',
-              'properties': {'city': {'type': 'string'}},
+              'properties': {
+                'city': {'type': 'string'}
+              },
             },
           },
         },
@@ -153,7 +159,9 @@ void main() {
           'description': '获取天气',
           'input_schema': {
             'type': 'object',
-            'properties': {'city': {'type': 'string'}},
+            'properties': {
+              'city': {'type': 'string'}
+            },
           },
         },
       ]);
