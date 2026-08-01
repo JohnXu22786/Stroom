@@ -73,9 +73,11 @@ class ChatService {
   bool _isCancelledByUser = false;
   CancelToken? _cancelToken;
 
-  /// 内部任务（标题/压缩）进行中的 CancelToken。
-  /// 独立于 [_cancelToken]（主请求），[cancel] 时一并中止。
-  CancelToken? _internalTaskToken;
+  /// 内部任务（标题/压缩）进行中的 CancelToken 列表。
+  /// 独立于 [_cancelToken]（主请求）；多个内部任务可能并发
+  /// （fire-and-forget 标题与下一次发送的压缩），用列表避免单槽覆盖，
+  /// [cancel] 时一并中止全部。
+  final List<CancelToken> _internalTaskTokens = [];
   StreamSubscription<AIStreamEvent>? _streamSubscription;
   StreamController<String>? _controller;
 
@@ -108,17 +110,22 @@ class ChatService {
   Map<String, dynamic>? _accumulatedUsage;
 
   /// 合并一次请求的 usage 到累计。
-  void _accumulateUsage() {
+  ///
+  /// [recordInput] 为 false 时只累计 cost，不累计 input/output tokens
+  /// （压缩请求：其输入 ≈ 压缩前头部大小，不应作为"当前上下文大小"）。
+  void _accumulateUsage({bool recordInput = true}) {
     final usage = _provider?.lastUsage;
     if (usage == null) return;
     final acc = _accumulatedUsage ??= <String, dynamic>{};
-    final input = usage['inputTokens'] as int?;
-    if (input != null) {
-      acc['inputTokens'] = (acc['inputTokens'] as int? ?? 0) + input;
-    }
-    final output = usage['outputTokens'] as int?;
-    if (output != null) {
-      acc['outputTokens'] = (acc['outputTokens'] as int? ?? 0) + output;
+    if (recordInput) {
+      final input = usage['inputTokens'] as int?;
+      if (input != null) {
+        acc['inputTokens'] = (acc['inputTokens'] as int? ?? 0) + input;
+      }
+      final output = usage['outputTokens'] as int?;
+      if (output != null) {
+        acc['outputTokens'] = (acc['outputTokens'] as int? ?? 0) + output;
+      }
     }
     final cost = usage['cost'] as double?;
     if (cost != null) {
@@ -629,15 +636,19 @@ class ChatService {
   /// 同时注册到 [_internalTaskToken] 供 [cancel] 中止。
   ///
   /// [accumulateUsage]：为 true 时把本次请求的 usage 并入服务实例的
-  /// 累计（压缩请求——顺序执行无竞态）；为 false 时不累计且不读取
-  /// provider 的共享 usage 槽（标题请求——fire-and-forget 可能与
-  /// 下一次主请求并发，读取会张冠李戴/双计）。
+  /// 累计；为 false 时不累计且不读取 provider 的共享 usage 槽。
+  ///
+  /// [recordInputTokens]：压缩请求的输入 ≈ 压缩前头部大小，写入
+  /// lastInputTokens 会污染"当前上下文大小"（下次触发判断膨胀、
+  /// 状态行显示虚高）——压缩请求只累计 cost（recordInputTokens: false），
+  /// 输入/输出计量由主请求提供。
   Future<String> sendPrompt({
     required String systemPrompt,
     required List<ChatMessage> history,
     int? maxTokens,
     String? contextSummary,
     bool accumulateUsage = true,
+    bool recordInputTokens = true,
   }) async {
     final req = await _protocol.buildRequest(
       history: history,
@@ -645,7 +656,7 @@ class ChatService {
       contextSummary: contextSummary,
     );
     final token = CancelToken();
-    _internalTaskToken = token;
+    _internalTaskTokens.add(token);
     final chunks = <String>[];
     try {
       await for (final event in _provider!.chatStream(
@@ -659,13 +670,17 @@ class ChatService {
         if (event.text.isNotEmpty) chunks.add(event.text);
       }
       if (accumulateUsage) {
-        _accumulateUsage();
+        _accumulateUsage(recordInput: recordInputTokens);
       }
     } catch (e) {
+      // 错误轮也可能已产生计费 usage，一并累计
+      if (accumulateUsage) {
+        _accumulateUsage(recordInput: recordInputTokens);
+      }
       debugPrint('ChatService sendPrompt stream error: $e');
       rethrow;
     } finally {
-      _internalTaskToken = null;
+      _internalTaskTokens.remove(token);
     }
     return chunks.join('').trim();
   }
@@ -675,9 +690,11 @@ class ChatService {
     _isCancelledByUser = true;
     _cancelToken?.cancel();
     _cancelToken = null;
-    // 中止进行中的内部任务（压缩/标题请求）
-    _internalTaskToken?.cancel();
-    _internalTaskToken = null;
+    // 中止所有进行中的内部任务（压缩/标题请求）
+    for (final t in _internalTaskTokens) {
+      t.cancel();
+    }
+    _internalTaskTokens.clear();
     _streamSubscription?.cancel();
     _streamSubscription = null;
     if (_controller != null && !_controller!.isClosed) {

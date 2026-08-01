@@ -491,9 +491,11 @@ class AnthropicChatProvider extends BaseChatProvider {
               if (input > 0) _lastUsage!['inputTokens'] = input;
               final cost = usage['total_cost'] ?? usage['cost'];
               if (cost is num) {
-                _lastUsage!['cost'] =
-                    ((_lastUsage!['cost'] as num?)?.toDouble() ?? 0) +
-                        cost.toDouble();
+                // 兼容两端点重复上报 total_cost：取较大值而非累加，避免双计
+                final existing = (_lastUsage!['cost'] as num?)?.toDouble() ?? 0;
+                if (cost.toDouble() > existing) {
+                  _lastUsage!['cost'] = cost.toDouble();
+                }
               }
             }
           } else if (data['type'] == 'message_delta') {
@@ -504,10 +506,11 @@ class AnthropicChatProvider extends BaseChatProvider {
               if (output is num) _lastUsage!['outputTokens'] = output.toInt();
               final cost = usage['total_cost'] ?? usage['cost'];
               if (cost is num) {
-                // 与 message_start 的 cost 累加而非覆盖
-                _lastUsage!['cost'] =
-                    ((_lastUsage!['cost'] as num?)?.toDouble() ?? 0) +
-                        cost.toDouble();
+                // 与 message_start 的 cost 取较大值（兼容重复上报）
+                final existing = (_lastUsage!['cost'] as num?)?.toDouble() ?? 0;
+                if (cost.toDouble() > existing) {
+                  _lastUsage!['cost'] = cost.toDouble();
+                }
               }
             }
           }

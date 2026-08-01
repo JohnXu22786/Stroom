@@ -29,6 +29,23 @@ import 'package:stroom/services/context_manager.dart'
 // Agent 语义测试：max-steps / 中断标记 / 上下文压缩 / 自动标题
 // ============================================================================
 
+/// 按调用顺序提供 usage 的 provider（第 N 次 chatStream 用 usageQueue[N]）。
+class _UsageQueueProvider extends _RecordingProvider {
+  List<Map<String, dynamic>>? usageQueue;
+  int _usageIndex = 0;
+
+  _UsageQueueProvider(super.rounds);
+
+  @override
+  Map<String, dynamic>? get lastUsage {
+    final queue = usageQueue;
+    if (queue == null || _usageIndex >= queue.length) return usage;
+    final v = queue[_usageIndex];
+    _usageIndex++;
+    return v;
+  }
+}
+
 /// 第一次 chatStream 调用延迟 [delay] 后再产出（模拟慢压缩请求），
 /// 后续调用正常。记录调用次数与 captures。
 class _DelayedFirstProvider extends _RecordingProvider {
@@ -569,6 +586,50 @@ void main() {
       expect(result.cancelled, isTrue);
       // 压缩请求被取消（未产出）、主请求未发起：无任何完成的调用
       expect(provider.captures, isEmpty);
+      container.dispose();
+    });
+
+    test('压缩请求只累计 cost，不写入 lastInputTokens（防膨胀）', () async {
+      final container = _makeContainer(
+        conversations: [Conversation(id: 'conv-cc2', title: '')],
+      );
+      final manager = container.read(chatStreamManagerProvider);
+      // 压缩请求 usage：input 5000（≈头部大小）+ cost 0.001；
+      // 主请求 usage：input 200 + cost 0.0002
+      final provider = _UsageQueueProvider([
+        [AIStreamEvent('## Objective\n- 摘要')],
+        [AIStreamEvent('回答')],
+      ]);
+      provider.usageQueue = [
+        {'inputTokens': 5000, 'outputTokens': 100, 'cost': 0.001},
+        {'inputTokens': 200, 'outputTokens': 50, 'cost': 0.0002},
+      ];
+      manager.adapter.forceService(ChatService(
+        provider: provider,
+        modelConfig: _createModelConfig(context: 5000),
+      ));
+
+      final big = 'x' * 7000;
+      await manager.startStreaming(
+        text: 'q3',
+        convId: 'conv-cc2',
+        history: [
+          ChatMessage(role: 'assistant', content: 'old a1 $big'),
+          ChatMessage(role: 'user', content: 'old q1 $big'),
+          ChatMessage(role: 'assistant', content: 'old a2 $big'),
+          ChatMessage(role: 'user', content: 'q2'),
+        ],
+      );
+
+      await _waitFor(() => provider.captures.length >= 3); // + 标题
+      final conv = container
+          .read(conversationsProvider)
+          .where((c) => c.id == 'conv-cc2')
+          .first;
+      // 压缩的 input（5000）不写入：lastInputTokens 仅主请求的 200
+      expect(conv.lastInputTokens, 200);
+      // cost 全计入：压缩 0.001 + 主请求 0.0002 = 0.0012
+      expect(conv.totalCost, closeTo(0.0012, 1e-9));
       container.dispose();
     });
 

@@ -95,6 +95,11 @@ class ContextManager {
   }
 
   /// 估算历史（含 system 提示词）的 token 数，供压缩触发判断。
+  ///
+  /// 只估算**实际会发送到 API 的内容**（消息文本 + 附件文件名 +
+  /// 工具定义）。工具调用/结果不进入请求体（buildRequest 只发
+  /// content/attachments），因此不计入——否则估算偏大，
+  /// max(actual, estimated) 会在真实上下文远低于触发线时误触发压缩。
   static int estimateHistoryTokens(
     List<ChatMessage> history, {
     String? assistantPrompt,
@@ -109,16 +114,6 @@ class ContextManager {
       for (final att in msg.attachments) {
         // 附件只估算文件名（内容以 base64 或文本形式随消息发送）
         total += estimateTokens(att.fileName) + 8;
-      }
-      final toolCalls = msg.toolCalls;
-      if (toolCalls != null) {
-        for (final tc in toolCalls) {
-          total += estimateTokens(tc.name);
-          total += estimateJsonTokens(tc.arguments);
-          if (tc.compactedAt == null && tc.result != null) {
-            total += estimateTokens(tc.result!);
-          }
-        }
       }
     }
     for (final def in tools) {

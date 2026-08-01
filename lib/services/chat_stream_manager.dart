@@ -649,7 +649,7 @@ class ChatStreamManager {
     // ── Post-stream processing ──
     ChatMessage? assistantMessage;
     final wasCancelled = state.cancelledByUser;
-    final hadStreamError = streamError is Exception;
+    final hadStreamError = streamError is Exception || streamError is Error;
 
     // 中断工具标记：取消或流错误时，把仍未完成的工具结果标记为中断占位，
     // 避免 UI 与持久化中工具永远停留在 running 状态。
@@ -1075,11 +1075,17 @@ class ChatStreamManager {
         systemPrompt: compactionPrompt,
         history: [ChatMessage(role: 'user', content: sb.toString())],
         maxTokens: _compactionMaxTokens,
+        // 压缩请求的输入 ≈ 压缩前头部大小：只累计 cost，
+        // 不写入 lastInputTokens（避免下次触发判断膨胀/状态行虚高）
+        recordInputTokens: false,
       );
     } catch (e) {
       debugPrint('[ChatStreamManager] 压缩请求失败: $e');
       return false;
     }
+    // 压缩请求期间用户取消：不应用压缩结果（摘要持久化、历史裁剪
+    // 都会覆盖用户可见状态）
+    if (state.cancelledByUser) return false;
     if (summary.isEmpty) return false;
 
     // 6. 持久化摘要 + 裁剪尾部 + 注入摘要（后续请求走 system 级）

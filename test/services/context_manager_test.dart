@@ -240,16 +240,21 @@ void main() {
       expect(total, greaterThan(0));
     });
 
-    test('已压缩的工具结果按占位符估算（体积大幅减小）', () {
+    test('估算不含工具结果（与实际请求一致，prune 前后不变）', () {
       final big = _assistantWithTool(id: 't', result: _bigResult(200000));
+      // 工具结果不进入 API 请求体（buildRequest 只发 content），
+      // 因此估算不含结果内容——prune 前后估算值一致
       final before = ContextManager.estimateHistoryTokens([big]);
-      final pruned = ContextManager.pruneToolResults([
-        big,
-        ChatMessage(role: 'user', content: 'q1'),
-        ChatMessage(role: 'user', content: 'q2'),
-      ]).first;
-      final after = ContextManager.estimateHistoryTokens([pruned]);
-      expect(after, lessThan(before));
+      final after = ContextManager.estimateHistoryTokens([
+        _assistantWithTool(
+          id: 't',
+          result: kCompactedToolResultPlaceholder,
+          compactedAt: DateTime.now(),
+        ),
+      ]);
+      expect(before, after);
+      // 仍包含消息文本本身
+      expect(before, greaterThan(0));
     });
   });
 }

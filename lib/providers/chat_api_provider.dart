@@ -411,6 +411,14 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           final data = jsonDecode(dataStr) as Map<String, dynamic>;
           _lastResponseData = data;
 
+          // 流中的 API 错误 chunk（choices 空 + error 字段）必须上抛，
+          // 否则会被当成正常截断回复（对齐 Anthropic 行为）
+          final apiError = data['error'];
+          if (apiError is Map) {
+            final msg = apiError['message'] ?? apiError.toString();
+            throw Exception('API 流式错误: $msg');
+          }
+
           // 收集实际 token 计量（OpenAI 流式在末尾 chunk 携带 usage）
           final usage = normalizeUsage(data['usage']);
           if (usage != null) _lastUsage = usage;
@@ -457,6 +465,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
             }
           }
         } catch (e) {
+          // API 错误 chunk（Exception）必须上抛；仅解析/形状错误
+          // （FormatException/TypeError，如代理式多余行）跳过继续。
+          if (e is! FormatException && e is! TypeError) rethrow;
           debugPrint(
               'OpenAICompatibleChatProvider: failed to parse SSE chunk: $e');
         }
