@@ -230,10 +230,23 @@ Future<Uint8List?> readRawAttachmentBytes(Attachment att) async {
 /// 中断/未完成工具结果的占位文本（历史重建时保证配对完整性）。
 const String kInterruptedToolResultPlaceholder = '[工具执行被中断]';
 
+/// 发送给模型的工具结果渲染截断（对齐 opencode TOOL_OUTPUT_MAX_CHARS）。
+///
+/// 存储保留完整结果（50KB 内），只在**发送给模型时**截断——
+/// 与 opencode toModelMessages 的 toolOutputMaxChars 语义一致。
+const int kToolOutputMaxChars = 2000;
+
+/// 渲染截断工具结果（发送给模型用）。
+String truncateToolOutput(String text) {
+  if (text.length <= kToolOutputMaxChars) return text;
+  return '${text.substring(0, kToolOutputMaxChars)}\n... [已截断]';
+}
+
 /// 解析历史中单个工具结果的重建文本。
 ///
-/// - 已压缩（compactedAt）：占位符（prune 语义，体积最小）
-/// - 完成且有结果：原文
+/// - 已压缩（compactedAt）：占位符（opencode compacted 渲染语义，
+///   数据仍保留，仅发送时替换）
+/// - 完成且有结果：原文（渲染截断 2K）
 /// - 未完成/失败/结果缺失：中断占位（OpenAI/Anthropic 都要求
 ///   每个工具调用有配对结果，否则下一轮请求报错）
 String rebuildToolResultText(ToolCallData tc) {
@@ -241,7 +254,7 @@ String rebuildToolResultText(ToolCallData tc) {
     return kCompactedToolResultPlaceholder;
   }
   if (tc.status == ToolCallStatus.completed && tc.result != null) {
-    return tc.result!;
+    return truncateToolOutput(tc.result!);
   }
   return kInterruptedToolResultPlaceholder;
 }
@@ -574,7 +587,8 @@ class OpenAIProtocol implements ChatProtocol {
         {
           'role': 'tool',
           'tool_call_id': r.toolCallId,
-          'content': r.result,
+          // 发送给模型时渲染截断（存储完整）
+          'content': truncateToolOutput(r.result),
         },
     ];
   }
@@ -827,7 +841,8 @@ class AnthropicProtocol implements ChatProtocol {
             {
               'type': 'tool_result',
               'tool_use_id': r.toolCallId,
-              'content': r.result,
+              // 发送给模型时渲染截断（存储完整）
+              'content': truncateToolOutput(r.result),
             },
         ],
       },

@@ -20,8 +20,14 @@ import '../utils/token_estimator.dart';
 // 工具结果纳入 API 历史（Anthropic tool_result 配对），占位符直接生效。
 // ============================================================================
 
-/// 工具结果被压缩后的占位文本（与协议层一致）。
+/// 工具结果被压缩后的占位文本（与协议层一致，渲染时替换）。
 const String kCompactedToolResultPlaceholder = '[旧工具结果已清除]';
+
+/// prune 保护的工具（对齐 opencode PRUNE_PROTECTED_TOOLS = ["skill"]）。
+///
+/// 状态性工具的结果即使过期也不 prune：todo 列表是 agent 的
+/// 工作状态，清理后模型会丢失任务上下文。
+const Set<String> kPruneProtectedTools = {'todowrite', 'todoread'};
 
 class ContextManager {
   /// 压缩的最小可压缩量（token 估算值）：低于此值不执行。
@@ -42,6 +48,11 @@ class ContextManager {
     int tailUserTurns = defaultTailUserTurns,
     int pruneMinimumTokens = pruneMinimumTokens,
     int pruneProtectTokens = pruneProtectTokens,
+
+    /// 压缩边界（对齐 opencode "遇到 summary 消息 break loop"）：
+    /// 对话被压缩过时传入尾部起点消息 ID（[Conversation.compactionTailStartId]），
+    /// 扫描到该消息即停止——它及其之前是已压缩内容，不再处理。
+    String? stopAtMessageId,
   }) {
     if (history.isEmpty) return history;
 
@@ -57,6 +68,9 @@ class ContextManager {
         if (userTurns < tailUserTurns) continue;
       }
       if (userTurns < tailUserTurns) continue;
+
+      // 压缩边界：到达尾部起点（已压缩内容）即停止
+      if (stopAtMessageId != null && msg.id == stopAtMessageId) break;
 
       // 收集该消息内的工具结果
       final targets = _collectMessageToolResults(msg);
@@ -149,16 +163,19 @@ class _CompactedMarker extends _PruneTarget {
 ///
 /// toolCalls 与 blocks 是同一工具结果的双写（persistence 冗余），
 /// 按工具 id 去重，避免同一结果被重复计入阈值。
+/// 受保护的工具（[kPruneProtectedTools]，状态性）不参与。
 List<_PruneTarget>? _collectMessageToolResults(ChatMessage msg) {
   final targets = <_PruneTarget>[];
   final seenIds = <String>{};
 
-  void collect(String id, String? result, DateTime? compactedAt) {
+  void collect(String id, String name, String? result, DateTime? compactedAt) {
     if (compactedAt != null) {
       targets.clear();
       targets.add(_CompactedMarker());
       return;
     }
+    // 受保护的工具（对齐 opencode PRUNE_PROTECTED_TOOLS）：不 prune
+    if (kPruneProtectedTools.contains(name)) return;
     if (result == null || result.isEmpty) return;
     if (!seenIds.add(id)) return; // 双写去重
     targets.add(_PruneTarget(
@@ -167,20 +184,22 @@ List<_PruneTarget>? _collectMessageToolResults(ChatMessage msg) {
     ));
   }
 
-  // toolCalls 与 blocks 可能同时存在（双写），统一收集（按 id 去重）
+  // toolCalls 与 blocks 可能同时存在（双写），统一收集（按 id 去重）。
+  // 对齐 opencode：消息内**从新到旧**扫描（parts 倒序）——
+  // 同一消息内较新的工具先进保护窗（40K），更旧的才被收集。
   final toolCalls = msg.toolCalls;
   if (toolCalls != null) {
-    for (final tc in toolCalls) {
+    for (final tc in toolCalls.reversed) {
       if (tc.status != ToolCallStatus.completed) continue;
-      collect(tc.id, tc.result, tc.compactedAt);
+      collect(tc.id, tc.name, tc.result, tc.compactedAt);
     }
   }
   final blocks = msg.blocks;
   if (blocks != null) {
-    for (final b in blocks) {
+    for (final b in blocks.reversed) {
       if (b is ToolCallBlock) {
         if (b.status != ToolCallStatus.completed) continue;
-        collect(b.id, b.result, b.compactedAt);
+        collect(b.id, b.name, b.result, b.compactedAt);
       }
     }
   }
@@ -188,7 +207,11 @@ List<_PruneTarget>? _collectMessageToolResults(ChatMessage msg) {
   return targets;
 }
 
-/// 重建消息：把 [prunedIds] 命中的工具结果替换为占位文本并打上压缩标记。
+/// 重建消息：把 [prunedIds] 命中的工具结果**标记**为已压缩。
+///
+/// 对齐 opencode prune 语义：**只软删除（标记 compactedAt），
+/// 不物理删除 result 数据**——UI/存储中完整结果仍可查看，
+/// 仅发送给模型时（历史重建）渲染为占位符释放上下文。
 ChatMessage _compactMessage(ChatMessage msg, Set<String> prunedIds) {
   List<ToolCallData>? newToolCalls;
   final toolCalls = msg.toolCalls;
@@ -197,11 +220,8 @@ ChatMessage _compactMessage(ChatMessage msg, Set<String> prunedIds) {
     final list = <ToolCallData>[];
     for (final tc in toolCalls) {
       final key = '${msg.id}:${tc.id}';
-      if (prunedIds.contains(key)) {
-        list.add(tc.copyWith(
-          result: kCompactedToolResultPlaceholder,
-          compactedAt: DateTime.now(),
-        ));
+      if (prunedIds.contains(key) && tc.compactedAt == null) {
+        list.add(tc.copyWith(compactedAt: DateTime.now()));
         changed = true;
       } else {
         list.add(tc);
@@ -218,11 +238,8 @@ ChatMessage _compactMessage(ChatMessage msg, Set<String> prunedIds) {
     for (final b in blocks) {
       if (b is ToolCallBlock) {
         final key = '${msg.id}:${b.id}';
-        if (prunedIds.contains(key)) {
-          list.add(b.copyWith(
-            result: kCompactedToolResultPlaceholder,
-            compactedAt: DateTime.now(),
-          ));
+        if (prunedIds.contains(key) && b.compactedAt == null) {
+          list.add(b.copyWith(compactedAt: DateTime.now()));
           changed = true;
         } else {
           list.add(b);

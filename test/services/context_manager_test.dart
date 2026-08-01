@@ -81,7 +81,7 @@ void main() {
       expect(result[1].toolCalls![0].result, _bigResult(100));
     });
 
-    test('超过阈值：旧工具结果被替换为占位文本并标记 compactedAt', () {
+    test('超过阈值：旧工具结果标记 compactedAt 但**数据保留**（软删除）', () {
       // 200000 字符 ≈ 50000 token > 40000 保护线；
       // 旧工具在最近 2 轮用户消息之前，可被扫描到
       final history = [
@@ -94,16 +94,86 @@ void main() {
       // 新工具结果保护（最近 2 轮用户消息内）
       expect(result[3].toolCalls![0].compactedAt, isNull);
       expect(result[3].toolCalls![0].result, _bigResult(100));
-      // 旧工具结果压缩
+      // 旧工具结果标记 compacted——数据保留（opencode 软删除语义：
+      // 只标记，渲染时占位，UI/存储仍可查看完整结果）
       expect(result[0].toolCalls![0].compactedAt, isNotNull);
-      expect(
-        result[0].toolCalls![0].result,
-        kCompactedToolResultPlaceholder,
-      );
-      // blocks 同步压缩（双写一致性）
+      expect(result[0].toolCalls![0].result, _bigResult(200000));
+      // blocks 同步标记（双写一致性），数据同样保留
       final block = result[0].blocks!.whereType<ToolCallBlock>().single;
       expect(block.compactedAt, isNotNull);
-      expect(block.result, kCompactedToolResultPlaceholder);
+      expect(block.result, _bigResult(200000));
+    });
+
+    test('受保护的工具（todo 等状态性工具）不 prune', () {
+      final history = [
+        ChatMessage(
+          role: 'assistant',
+          content: 'a',
+          toolCalls: [
+            ToolCallData(
+              id: 't_todo',
+              name: 'todowrite',
+              arguments: const {},
+              status: ToolCallStatus.completed,
+              result: _bigResult(200000),
+            ),
+            ToolCallData(
+              id: 't_search',
+              name: 'web_search',
+              arguments: const {},
+              status: ToolCallStatus.completed,
+              result: _bigResult(200000),
+            ),
+          ],
+        ),
+        ChatMessage(role: 'user', content: 'q1'),
+        ChatMessage(role: 'user', content: 'q2'),
+      ];
+      final result = ContextManager.pruneToolResults(history);
+      final calls = result[0].toolCalls!;
+      // web_search 被 prune（信息性结果）
+      expect(calls[1].compactedAt, isNotNull);
+      // todowrite 受保护（状态性工具，对齐 opencode PRUNE_PROTECTED_TOOLS）
+      expect(calls[0].compactedAt, isNull);
+    });
+
+    test('压缩边界：扫描到尾部起点消息即停止（对齐 opencode summary break）', () {
+      // 头部（压缩过的内容，早于 tail 起点）有超大工具结果
+      final headMsg = ChatMessage(
+        id: 'head_msg',
+        role: 'assistant',
+        content: 'h',
+        toolCalls: [
+          ToolCallData(
+            id: 't_head',
+            name: 'web_search',
+            arguments: const {},
+            status: ToolCallStatus.completed,
+            result: _bigResult(200000),
+          ),
+        ],
+      );
+      final history = [
+        headMsg,
+        ChatMessage(role: 'user', content: 'q1'),
+        ChatMessage(
+          id: 'tail_start',
+          role: 'user',
+          content: 'q2',
+        ),
+        ChatMessage(role: 'user', content: 'q3'),
+      ];
+      // 无边界：头部工具会被 prune
+      final withoutBoundary = ContextManager.pruneToolResults(history);
+      expect(withoutBoundary[0].toolCalls![0].compactedAt, isNotNull);
+
+      // 有边界（tail 起点 = q2）：q2 及其之前不再处理 → 头部工具保留
+      final withBoundary = ContextManager.pruneToolResults(
+        history,
+        stopAtMessageId: 'tail_start',
+      );
+      expect(withBoundary[0].toolCalls![0].compactedAt, isNull,
+          reason: '头部是已压缩内容（早于尾部起点），不再 prune');
     });
 
     test('保护最近 tailUserTurns 轮用户消息内的工具', () {

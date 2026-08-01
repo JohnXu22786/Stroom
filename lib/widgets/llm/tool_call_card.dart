@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/tool_call.dart';
+import '../../services/context_manager.dart'
+    show kCompactedToolResultPlaceholder;
 
 class ToolCallCard extends StatelessWidget {
   final ToolCallData data;
@@ -92,7 +94,11 @@ class ToolCallCard extends StatelessWidget {
                 border: Border.all(color: borderColor.withValues(alpha: 0.5)),
               ),
               child: Text(
-                data.result!,
+                // 软删除语义：compacted 后渲染占位符（数据仍保留，
+                // 对齐 opencode TUI 的 [Old tool result content cleared]）
+                data.compactedAt != null
+                    ? kCompactedToolResultPlaceholder
+                    : data.result!,
                 style: TextStyle(
                   fontSize: 12,
                   fontFamily: 'monospace',

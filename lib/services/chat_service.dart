@@ -45,9 +45,11 @@ class ChatService {
   final BaseChatProvider? _provider;
   final ModelConfig? _modelConfig;
 
-  /// 工具结果最大保留字符数（对齐 opencode TOOL_OUTPUT_MAX_CHARS）。
-  /// 超长结果在入库/进链前截断，防止 SharedPreferences 膨胀与上下文占用。
-  static const int maxToolResultChars = 2000;
+  /// 工具结果存储上限（对齐 opencode tool-output-store MAX_BYTES = 50KB）。
+  /// 50KB 内**完整保留**（UI 可展开查看、历史重建可发送），
+  /// 发送给模型时另有 2K 渲染截断（协议层 kToolOutputMaxChars，
+  /// 对齐 opencode TOOL_OUTPUT_MAX_CHARS）。
+  static const int maxToolResultBytes = 50 * 1024;
 
   /// 中断工具结果的占位文本（用户取消时对未完成工具补发）。
   /// 与协议层历史重建的占位符统一。
@@ -555,9 +557,10 @@ class ChatService {
             } catch (e) {
               result = 'Error: $e';
             }
-            // 工具结果截断：超长结果保留前缀（入库/进链/持久化前）
-            if (result.length > maxToolResultChars) {
-              result = '${result.substring(0, maxToolResultChars)}\n... [已截断]';
+            // 存储级截断：50KB 上限（opencode MAX_BYTES）。
+            // 不强行截断小结果——完整结果保留给 UI 与历史重建。
+            if (result.length > maxToolResultBytes) {
+              result = '${result.substring(0, maxToolResultBytes)}\n... [已截断]';
             }
             // 执行期间被取消：跳过 complete 事件（controller 已关闭，
             // 且避免把"恰在取消时完成"的工具误标为正常结果）

@@ -359,14 +359,28 @@ class ChatStreamManager {
     state.lastTextUpdate = DateTime.now();
     state.lastReasoningUpdate = DateTime.now();
 
-    // ── 上下文管理：发请求前自动 prune 旧工具结果 ──
-    // 软删除（标记 compactedAt + 占位文本），释放 UI 渲染与持久化体积。
-    // 纯自动触发，用户无感知；不足阈值（20K token 估算）时不执行。
-    // 可在设置页"上下文管理"关闭（opencode compaction.prune 语义）。
+    // ── 上下文管理：请求前检查工具输出累计是否达到 prune 阈值 ──
+    // 对齐 opencode（PRUNE_PROTECT=40K / PRUNE_MINIMUM=20K）：
+    // 从新到旧累计工具输出 token，超过保护窗后开始收集，
+    // 可 prune 量超 20K 才执行；执行 = 软删除标记（compactedAt，
+    // 数据保留），此后每次请求渲染占位符释放上下文。
+    // 阈值基于"工具输出累计"而非模型 context——1M 模型在 100k+
+    // 上下文时工具输出也早已超阈值，与 opencode 行为一致。
+    // 可在设置页"上下文管理"关闭（opencode compaction.prune）。
     final ctxSettings = _ref?.read(contextManagementSettingsProvider) ??
         const ContextManagementSettings();
     if (ctxSettings.pruneEnabled) {
-      final pruned = ContextManager.pruneToolResults(state.history);
+      // 压缩边界（对齐 opencode summary break）：有摘要时扫描到
+      // 尾部起点即停止（其之前 = 已压缩内容）
+      final tailStartId = _ref
+          ?.read(conversationsProvider)
+          .where((c) => c.id == convId)
+          .firstOrNull
+          ?.compactionTailStartId;
+      final pruned = ContextManager.pruneToolResults(
+        state.history,
+        stopAtMessageId: tailStartId,
+      );
       if (!identical(pruned, state.history)) {
         AppLogService.info(
             'ChatStreamManager', '[CTX-MGR] 工具结果 prune 执行完成, convId=$convId');
@@ -429,11 +443,29 @@ class ChatStreamManager {
     // that the ChatService is guaranteed to be the one we just created.
     // The stream controller will buffer any events produced before the
     // await-for loop subscribes below.
+    //
+    // ── 发送历史过滤（对齐 opencode filterCompacted）──
+    // 对话被压缩过（contextSummary 非空）时，**存储保留全部消息**，
+    // 但发给 API 的只是"摘要 + 尾部"子集（最后 tailUserTurns 轮用户
+    // 消息起）——这就是"上下文显示越来越少、存储还在"的机制。
+    // 摘要由 setContextSummary 注入 system 级内容。
+    final hasSummary = (_ref
+            ?.read(conversationsProvider)
+            .where((c) => c.id == convId)
+            .firstOrNull
+            ?.contextSummary
+            ?.trim()
+            .isNotEmpty ??
+        false);
+    final requestHistory = hasSummary
+        ? state.history.sublist(_findTailStart(state.history))
+        : state.history;
+
     final stream = state.cancelledByUser
         ? const Stream<ChatEvent>.empty()
         : _adapter.sendStreamWithTools(
             text,
-            history: state.history,
+            history: requestHistory,
             reasoning: reasoning,
             reasoningEffort: reasoningEffort,
             reasoningParamValues: reasoningParamValues,
@@ -1101,16 +1133,20 @@ class ChatStreamManager {
       debugPrint('[ChatStreamManager] 压缩请求失败: $e');
       return false;
     }
-    // 压缩请求期间用户取消：不应用压缩结果（摘要持久化、历史裁剪
-    // 都会覆盖用户可见状态）
+    // 压缩请求期间用户取消：不应用压缩结果（摘要持久化
+    // 会覆盖用户可见状态）
     if (state.cancelledByUser) return false;
     if (summary.isEmpty) return false;
 
-    // 6. 持久化摘要 + 裁剪尾部 + 注入摘要（后续请求走 system 级）
-    await ref
-        .read(conversationsProvider.notifier)
-        .updateContextSummary(convId, summary);
-    state.history = tail;
+    // 6. 持久化摘要 + 尾部起点（prune 边界）+ 注入摘要。
+    //    注意：**不裁剪 state.history** —— 对齐 opencode：
+    //    存储完整保留全部消息，发给 API 的只是"摘要 + 尾部"子集
+    //    （由 startStreaming 的 requestHistory 过滤实现）。
+    await ref.read(conversationsProvider.notifier).updateContextSummary(
+          convId,
+          summary,
+          tailStartId: tail.isNotEmpty ? tail.first.id : null,
+        );
     _adapter.getOrCreateService(convId)?.setContextSummary(summary);
     await AppLogService.info(
         'ChatStreamManager',
