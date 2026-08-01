@@ -441,6 +441,8 @@ class AnthropicChatProvider extends BaseChatProvider {
         'AnthropicChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
 
     final acc = AnthropicStreamAccumulator();
+    // 本次请求的 usage（局部收集，per-request 隔离）
+    Map<String, dynamic>? localUsage;
 
     try {
       _lastResponseStatusCode = 200;
@@ -477,7 +479,7 @@ class AnthropicChatProvider extends BaseChatProvider {
             final msg = data['message'] as Map<String, dynamic>?;
             final usage = msg?['usage'];
             if (usage is Map) {
-              _lastUsage ??= {};
+              localUsage ??= {};
               // 输入 = input_tokens + 缓存读取/创建（缓存 token 同样占用上下文）
               var input = usage['input_tokens'] is num
                   ? (usage['input_tokens'] as num).toInt()
@@ -488,28 +490,28 @@ class AnthropicChatProvider extends BaseChatProvider {
               if (usage['cache_creation_input_tokens'] is num) {
                 input += (usage['cache_creation_input_tokens'] as num).toInt();
               }
-              if (input > 0) _lastUsage!['inputTokens'] = input;
+              if (input > 0) localUsage!['inputTokens'] = input;
               final cost = usage['total_cost'] ?? usage['cost'];
               if (cost is num) {
                 // 兼容两端点重复上报 total_cost：取较大值而非累加，避免双计
-                final existing = (_lastUsage!['cost'] as num?)?.toDouble() ?? 0;
+                final existing = (localUsage!['cost'] as num?)?.toDouble() ?? 0;
                 if (cost.toDouble() > existing) {
-                  _lastUsage!['cost'] = cost.toDouble();
+                  localUsage!['cost'] = cost.toDouble();
                 }
               }
             }
           } else if (data['type'] == 'message_delta') {
             final usage = data['usage'];
             if (usage is Map) {
-              _lastUsage ??= {};
+              localUsage ??= {};
               final output = usage['output_tokens'];
-              if (output is num) _lastUsage!['outputTokens'] = output.toInt();
+              if (output is num) localUsage!['outputTokens'] = output.toInt();
               final cost = usage['total_cost'] ?? usage['cost'];
               if (cost is num) {
                 // 与 message_start 的 cost 取较大值（兼容重复上报）
-                final existing = (_lastUsage!['cost'] as num?)?.toDouble() ?? 0;
+                final existing = (localUsage!['cost'] as num?)?.toDouble() ?? 0;
                 if (cost.toDouble() > existing) {
-                  _lastUsage!['cost'] = cost.toDouble();
+                  localUsage!['cost'] = cost.toDouble();
                 }
               }
             }
@@ -555,6 +557,11 @@ class AnthropicChatProvider extends BaseChatProvider {
         _lastResponseHeaders = null;
       }
       rethrow;
+    }
+
+    // 流结束后：产出 usage 计量（per-request 隔离）
+    if (localUsage != null && localUsage!.isNotEmpty) {
+      yield AIStreamEvent('', usage: localUsage);
     }
 
     // 流结束后：产出 thinking 签名（供下一轮链重建续接 extended thinking）

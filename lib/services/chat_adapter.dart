@@ -155,6 +155,33 @@ class ChatAdapter {
     });
   }
 
+  /// 创建一次性 [ChatService]（不缓存、不进入 _activeServices）。
+  ///
+  /// 供 fire-and-forget 内部任务（如标题生成）使用：若通过
+  /// [getOrCreateService] 创建会被 putIfAbsent 缓存，下次流的
+  /// cancelService 不会移除它，导致模型切换被旧配置 service 吞掉
+  /// （"UI 显示模型 B、请求走模型 A"）。用后即弃，随 GC 回收。
+  /// 返回 null 表示 adapter 未配置。
+  ChatService? createTransientService() {
+    if (_cachedProvider == null || _cachedModelConfig == null) return null;
+    final svc = ChatService(
+      provider: _cachedProvider!,
+      modelConfig: _cachedModelConfig!,
+      providerConfig: _cachedProviderConfig,
+      endpointType: _cachedEndpointType,
+    );
+    if (_cachedAssistantPrompt != null) {
+      svc.setAssistantPrompt(_cachedAssistantPrompt);
+    }
+    if (_cachedAssistantSettings != null) {
+      svc.setAssistantSettings(_cachedAssistantSettings);
+    }
+    if (_cachedAssistantCustomParams != null) {
+      svc.setAssistantCustomParams(_cachedAssistantCustomParams);
+    }
+    return svc;
+  }
+
   /// Cancels and disposes the [ChatService] for [convId].
   void cancelService(String convId) {
     final svc = _activeServices.remove(convId);

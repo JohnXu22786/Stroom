@@ -109,13 +109,13 @@ class ChatService {
   /// 多对话共享，直接读 provider.lastUsage 会被并发对话覆盖。
   Map<String, dynamic>? _accumulatedUsage;
 
-  /// 合并一次请求的 usage 到累计。
+  /// 合并一次请求的 usage 到累计（事件驱动：来自 AIStreamEvent.usage，
+  /// per-request 隔离，不读共享 provider 槽）。
   ///
   /// [recordInput] 为 false 时只累计 cost，不累计 input/output tokens
   /// （压缩请求：其输入 ≈ 压缩前头部大小，不应作为"当前上下文大小"）。
-  void _accumulateUsage({bool recordInput = true}) {
-    final usage = _provider?.lastUsage;
-    if (usage == null) return;
+  void _accumulateFromMap(Map<String, dynamic> usage,
+      {bool recordInput = true}) {
     final acc = _accumulatedUsage ??= <String, dynamic>{};
     if (recordInput) {
       final input = usage['inputTokens'] as int?;
@@ -304,13 +304,15 @@ class ChatService {
           (event) {
             if (event.isReasoning) {
               _reasoningBuffer += event.text;
+            } else if (event.usage != null) {
+              // usage 计量事件（provider 流末尾产出）
+              _accumulateFromMap(event.usage!, recordInput: true);
             } else if (!_controller!.isClosed) {
               _controller!.add(event.text);
             }
           },
           onDone: () {
             _streamSubscription = null;
-            _accumulateUsage();
             if (_controller != null && !_controller!.isClosed) {
               _controller!.close();
             }
@@ -459,6 +461,10 @@ class ChatService {
                   event.thinkingSignature!.isNotEmpty) {
                 _thinkingSignature = event.thinkingSignature!;
               }
+              // usage 计量事件（provider 流末尾产出，per-request 隔离）
+              if (event.usage != null) {
+                _accumulateFromMap(event.usage!, recordInput: true);
+              }
               if (event.isReasoning) {
                 _reasoningBuffer += event.text;
                 // Emit reasoning text as ReasoningEvent so the UI
@@ -475,18 +481,12 @@ class ChatService {
             },
             onDone: () {
               _streamSubscription = null;
-              // 本轮请求的 usage 并入累计（provider 实例共享，
-              // 立即读取避免被并发对话覆盖）
-              _accumulateUsage();
               if (!completer.isCompleted) completer.complete();
             },
             onError: (Object error) {
               _streamSubscription = null;
               debugPrint('ChatService stream error: $error');
               _lastResponseData = _provider?.lastResponseData;
-              // 错误轮也可能已产生计费 usage，一并累计
-              // （避免错误后 stale lastInputTokens 触发重复压缩）
-              _accumulateUsage();
               if (!controller.isClosed) {
                 controller.addError(error);
               }
@@ -667,16 +667,13 @@ class ChatService {
         cancelToken: token,
       )) {
         if (event.isReasoning || event.isToolCallEvent) continue;
+        // usage 计量事件（provider 流末尾产出，per-request 隔离）
+        if (event.usage != null && accumulateUsage) {
+          _accumulateFromMap(event.usage!, recordInput: recordInputTokens);
+        }
         if (event.text.isNotEmpty) chunks.add(event.text);
       }
-      if (accumulateUsage) {
-        _accumulateUsage(recordInput: recordInputTokens);
-      }
     } catch (e) {
-      // 错误轮也可能已产生计费 usage，一并累计
-      if (accumulateUsage) {
-        _accumulateUsage(recordInput: recordInputTokens);
-      }
       debugPrint('ChatService sendPrompt stream error: $e');
       rethrow;
     } finally {

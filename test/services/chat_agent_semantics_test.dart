@@ -37,7 +37,7 @@ class _UsageQueueProvider extends _RecordingProvider {
   _UsageQueueProvider(super.rounds);
 
   @override
-  Map<String, dynamic>? get lastUsage {
+  Map<String, dynamic>? nextUsage() {
     final queue = usageQueue;
     if (queue == null || _usageIndex >= queue.length) return usage;
     final v = queue[_usageIndex];
@@ -197,7 +197,15 @@ class _RecordingProvider extends BaseChatProvider {
     } else {
       yield AIStreamEvent('默认回答');
     }
+    // 模拟 provider 在流末尾产出 usage 计量事件（事件驱动）
+    final u = nextUsage();
+    if (u != null) {
+      yield AIStreamEvent('', usage: u);
+    }
   }
+
+  /// 返回本次调用的 usage 计量（子类可覆盖为按序队列）。
+  Map<String, dynamic>? nextUsage() => usage;
 
   @override
   Future<String> chat(
@@ -1119,6 +1127,8 @@ void main() {
           .where((c) => c.id == 'conv-usage4')
           .first;
       expect(conv.totalCost, closeTo(0.0002, 1e-9));
+      // 标题请求也不污染 lastInputTokens（只累计主请求的 100）
+      expect(conv.lastInputTokens, 100);
       container.dispose();
     });
 

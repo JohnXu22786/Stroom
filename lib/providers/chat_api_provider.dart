@@ -95,6 +95,17 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     return result.isEmpty ? null : result;
   }
 
+  /// 检查流式 chunk 是否携带 API 错误（choices 空 + error 字段）。
+  /// 有错误时抛出（对齐 Anthropic 行为，防止截断回复被当作成功）。
+  @visibleForTesting
+  static void throwIfApiError(Map<String, dynamic> data) {
+    final apiError = data['error'];
+    if (apiError is Map) {
+      final msg = apiError['message'] ?? apiError.toString();
+      throw Exception('API 流式错误: $msg');
+    }
+  }
+
   // TODO: 可从 CustomParam 中提取模型列表，若某 param 的 type 或 key 为 'model'，
   // 使用其 defaultValue?.split(',') 作为模型列表。目前暂无可信数据源，留空。
   @override
@@ -379,6 +390,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
 
     final Map<int, Map<String, dynamic>> toolCallAccumulators = {};
+    // 本次请求的 usage（局部收集，per-request 隔离——
+    // 共享 provider 实例的 _lastUsage 槽会被并发对话覆盖）
+    Map<String, dynamic>? localUsage;
 
     try {
       // Mark as successfully connected once we start receiving events
@@ -413,15 +427,14 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
           // 流中的 API 错误 chunk（choices 空 + error 字段）必须上抛，
           // 否则会被当成正常截断回复（对齐 Anthropic 行为）
-          final apiError = data['error'];
-          if (apiError is Map) {
-            final msg = apiError['message'] ?? apiError.toString();
-            throw Exception('API 流式错误: $msg');
-          }
+          throwIfApiError(data);
 
           // 收集实际 token 计量（OpenAI 流式在末尾 chunk 携带 usage）
           final usage = normalizeUsage(data['usage']);
-          if (usage != null) _lastUsage = usage;
+          if (usage != null) {
+            localUsage = usage;
+            _lastUsage = usage;
+          }
 
           // Parse the stream event using the static helper method
           final parsedEvents = parseStreamEvent(data);
@@ -505,6 +518,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         _lastResponseHeaders = null;
       }
       rethrow;
+    }
+
+    // After stream ends, yield the usage metering for this request
+    // (per-request isolation via event, not the shared _lastUsage slot)
+    if (localUsage != null) {
+      yield AIStreamEvent('', usage: localUsage);
     }
 
     // After stream ends, yield tool calls if any were accumulated

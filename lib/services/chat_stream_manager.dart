@@ -1154,7 +1154,7 @@ class ChatStreamManager {
       );
       if (titlePrompt == null) return;
 
-      final svc = _adapter.getOrCreateService(convId);
+      final svc = _adapter.createTransientService();
       if (svc == null) return;
 
       String title;
