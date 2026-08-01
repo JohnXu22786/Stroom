@@ -78,7 +78,11 @@ abstract class BaseChatProvider {
   /// 最近一次请求的实际 token 计量（来自 API 返回的 usage 字段）。
   ///
   /// 标准化形状：`{'inputTokens': int, 'outputTokens': int}`。
-  /// 用于上下文显示（不估算）与花费计算。未返回 usage 时为空。
+  /// 流式与非流式都会填充——作为**诊断快照**（与 [lastResponseData]
+  /// 同语义：共享 provider 实例下并发请求可能互相覆盖，仅用于调试）。
+  ///
+  /// ⚠️ 生产计量请使用 [AIStreamEvent.usage]（事件驱动、per-request
+  /// 隔离），不要依赖本槽。
   Map<String, dynamic>? get lastUsage => null;
 
   /// Dio default headers, exposed for testing.

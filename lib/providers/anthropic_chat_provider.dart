@@ -559,13 +559,16 @@ class AnthropicChatProvider extends BaseChatProvider {
       }
       // 错误轮也可能已产生计费 usage：先产出计量事件再上抛
       if (localUsage != null && localUsage!.isNotEmpty) {
+        _lastUsage = localUsage;
         yield AIStreamEvent('', usage: localUsage);
       }
       rethrow;
     }
 
-    // 流结束后：产出 usage 计量（per-request 隔离）
+    // 流结束后：产出 usage 计量（per-request 隔离），
+    // 同时填充诊断槽（与 lastResponseData 同语义）
     if (localUsage != null && localUsage!.isNotEmpty) {
+      _lastUsage = localUsage;
       yield AIStreamEvent('', usage: localUsage);
     }
 

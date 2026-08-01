@@ -519,6 +519,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       // 错误轮也可能已产生计费 usage：先产出计量事件再上抛，
       // 让 ChatService 在 onError 之前累计到成本
       if (localUsage != null) {
+        _lastUsage = localUsage;
         yield AIStreamEvent('', usage: localUsage);
       }
       rethrow;
@@ -527,6 +528,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     // After stream ends, yield the usage metering for this request
     // (per-request isolation via event, not the shared _lastUsage slot)
     if (localUsage != null) {
+      // 同时填充诊断槽（与 lastResponseData 同语义）
+      _lastUsage = localUsage;
       yield AIStreamEvent('', usage: localUsage);
     }
 

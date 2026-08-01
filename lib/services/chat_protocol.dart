@@ -5,6 +5,7 @@ import '../models/chat_message.dart';
 import '../models/tool_call.dart';
 import 'attachment_storage.dart';
 import 'chat_service_shared.dart' show audioFormatFromMimeType, imageExtension;
+import 'context_manager.dart' show kCompactedToolResultPlaceholder;
 
 // ============================================================================
 // ChatProtocol — 聊天协议抽象层
@@ -223,6 +224,29 @@ Future<Uint8List?> readRawAttachmentBytes(Attachment att) async {
 }
 
 // ============================================================================
+// 中立工具调用 / 结果辅助（历史重建用）
+// ============================================================================
+
+/// 中断/未完成工具结果的占位文本（历史重建时保证配对完整性）。
+const String kInterruptedToolResultPlaceholder = '[工具执行被中断]';
+
+/// 解析历史中单个工具结果的重建文本。
+///
+/// - 已压缩（compactedAt）：占位符（prune 语义，体积最小）
+/// - 完成且有结果：原文
+/// - 未完成/失败/结果缺失：中断占位（OpenAI/Anthropic 都要求
+///   每个工具调用有配对结果，否则下一轮请求报错）
+String rebuildToolResultText(ToolCallData tc) {
+  if (tc.compactedAt != null) {
+    return kCompactedToolResultPlaceholder;
+  }
+  if (tc.status == ToolCallStatus.completed && tc.result != null) {
+    return tc.result!;
+  }
+  return kInterruptedToolResultPlaceholder;
+}
+
+// ============================================================================
 // 抽象协议
 // ============================================================================
 
@@ -322,8 +346,18 @@ class OpenAIProtocol implements ChatProtocol {
     }
 
     for (final msg in history) {
-      if (msg.attachments.isEmpty) {
+      final toolCalls = msg.toolCalls;
+      final hasToolCalls = toolCalls != null && toolCalls.isNotEmpty;
+
+      if (msg.attachments.isEmpty && !hasToolCalls) {
         result.add({'role': msg.role, 'content': msg.content});
+        continue;
+      }
+
+      // 组装内容（文本 + 附件 parts；无附件时保持字符串形式）
+      Object content;
+      if (msg.attachments.isEmpty) {
+        content = msg.content;
       } else {
         final parts = <Map<String, dynamic>>[];
         if (msg.content.isNotEmpty) {
@@ -453,7 +487,44 @@ class OpenAIProtocol implements ChatProtocol {
             }
           }
         }
-        result.add({'role': msg.role, 'content': parts});
+        content = parts;
+      }
+
+      if (!hasToolCalls) {
+        result.add({'role': msg.role, 'content': content});
+        continue;
+      }
+
+      // ── 工具链重建（历史跨轮次保留工具调用与结果）──
+      // assistant 消息携带 tool_calls，紧跟 N 条 tool 结果消息
+      // （OpenAI 规格：tool 消息必须紧跟在对应 assistant 之后）。
+      // 结果缺失/未完成/已压缩时用占位文本保证配对完整性。
+      final assistantMsg = <String, dynamic>{
+        'role': 'assistant',
+        'content': content,
+        'tool_calls': [
+          for (final tc in toolCalls)
+            {
+              'id': tc.id,
+              'type': 'function',
+              'function': {
+                'name': tc.name,
+                'arguments': jsonEncode(tc.arguments),
+              },
+            },
+        ],
+      };
+      // DeepSeek 兼容：重建时保留推理内容
+      if (msg.reasoningContent != null && msg.reasoningContent!.isNotEmpty) {
+        assistantMsg['reasoning_content'] = msg.reasoningContent;
+      }
+      result.add(assistantMsg);
+      for (final tc in toolCalls) {
+        result.add({
+          'role': 'tool',
+          'tool_call_id': tc.id,
+          'content': rebuildToolResultText(tc),
+        });
       }
     }
     return ProtocolRequest(messages: result);
@@ -541,8 +612,18 @@ class AnthropicProtocol implements ChatProtocol {
     }
 
     for (final msg in history) {
-      if (msg.attachments.isEmpty) {
+      final toolCalls = msg.toolCalls;
+      final hasToolCalls = toolCalls != null && toolCalls.isNotEmpty;
+
+      if (msg.attachments.isEmpty && !hasToolCalls) {
         result.add({'role': msg.role, 'content': msg.content});
+        continue;
+      }
+
+      // 组装内容块（文本 + 附件；无附件时保持字符串形式）
+      Object content;
+      if (msg.attachments.isEmpty) {
+        content = msg.content;
       } else {
         final parts = <Map<String, dynamic>>[];
         if (msg.content.isNotEmpty) {
@@ -636,8 +717,45 @@ class AnthropicProtocol implements ChatProtocol {
             }
           }
         }
-        result.add({'role': msg.role, 'content': parts});
+        content = parts;
       }
+
+      if (!hasToolCalls) {
+        result.add({'role': msg.role, 'content': content});
+        continue;
+      }
+
+      // ── 工具链重建（历史跨轮次保留工具调用与结果）──
+      // assistant 消息携带 tool_use 块，紧跟一条 user 消息
+      // 含全部 tool_result 块（官方配对要求）。
+      final assistantBlocks = <Map<String, dynamic>>[];
+      if (content is String) {
+        if (content.isNotEmpty) {
+          assistantBlocks.add({'type': 'text', 'text': content});
+        }
+      } else {
+        assistantBlocks.addAll((content as List).cast<Map<String, dynamic>>());
+      }
+      for (final tc in toolCalls) {
+        assistantBlocks.add({
+          'type': 'tool_use',
+          'id': tc.id,
+          'name': tc.name,
+          'input': tc.arguments,
+        });
+      }
+      result.add({'role': 'assistant', 'content': assistantBlocks});
+      result.add({
+        'role': 'user',
+        'content': [
+          for (final tc in toolCalls)
+            {
+              'type': 'tool_result',
+              'tool_use_id': tc.id,
+              'content': rebuildToolResultText(tc),
+            },
+        ],
+      });
     }
     return ProtocolRequest(messages: result, system: system);
   }

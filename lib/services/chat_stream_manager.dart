@@ -14,6 +14,8 @@ import '../providers/system_assistant_provider.dart';
 import '../providers/assistant_provider.dart';
 import 'app_log_service.dart';
 import 'chat_adapter.dart';
+import 'chat_protocol.dart'
+    show kInterruptedToolResultPlaceholder, rebuildToolResultText;
 import 'chat_service.dart' show ChatService;
 import 'context_manager.dart';
 
@@ -1060,8 +1062,24 @@ class ChatStreamManager {
     for (final m in head) {
       final role = m.role == 'user' ? '用户' : '助手';
       final content = m.content.trim();
-      if (content.isEmpty) continue;
-      sb.writeln('$role: $content');
+      if (content.isNotEmpty) {
+        sb.writeln('$role: $content');
+      }
+      // 工具事实进摘要：工具调用与结果（截断至 200 字符）是
+      // agent 工作的关键证据，压缩后模型需要保留
+      final toolCalls = m.toolCalls;
+      if (toolCalls != null) {
+        for (final tc in toolCalls) {
+          if (tc.status == ToolCallStatus.running ||
+              tc.status == ToolCallStatus.pending) {
+            continue;
+          }
+          final result = rebuildToolResultText(tc);
+          final trimmed =
+              result.length > 200 ? '${result.substring(0, 200)}…' : result;
+          sb.writeln('$role 调用了工具 ${tc.name}: $trimmed');
+        }
+      }
     }
     sb.writeln();
     sb.writeln('请将以上对话历史压缩为锚定摘要，严格按模板输出。');

@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/services/chat_protocol.dart';
+import 'package:stroom/services/context_manager.dart'
+    show kCompactedToolResultPlaceholder;
 
 // ============================================================================
 // ChatProtocol 协议层测试
@@ -320,6 +322,193 @@ void main() {
 
     test('都未设置时默认 openai（旧数据迁移路径）', () {
       expect(effectiveEndpointType(null, null), 'openai');
+    });
+  });
+
+  group('历史工具链重建（跨轮次保留工具调用与结果）', () {
+    ChatMessage assistantWithTools(List<ToolCallData> tools,
+        {String content = '查了一下'}) {
+      return ChatMessage(
+        role: 'assistant',
+        content: content,
+        toolCalls: tools,
+      );
+    }
+
+    test('OpenAI：assistant(tool_calls) 紧跟 tool 结果消息', () async {
+      final req = await OpenAIProtocol().buildRequest(
+        history: [
+          ChatMessage(role: 'user', content: '查天气'),
+          assistantWithTools([
+            const ToolCallData(
+              id: 'call_1',
+              name: 'get_weather',
+              arguments: {'city': 'HZ'},
+              status: ToolCallStatus.completed,
+              result: '24°C',
+            ),
+            const ToolCallData(
+              id: 'call_2',
+              name: 'get_time',
+              arguments: {'city': 'HZ'},
+              status: ToolCallStatus.completed,
+              result: '12:00',
+            ),
+          ]),
+          ChatMessage(role: 'user', content: '谢谢'),
+        ],
+      );
+
+      expect(req.messages, hasLength(5));
+      final assistant = req.messages[1];
+      expect(assistant['role'], 'assistant');
+      expect(assistant['content'], '查了一下');
+      final tcs = (assistant['tool_calls'] as List).cast<Map>();
+      expect(tcs, hasLength(2));
+      expect(tcs[0]['id'], 'call_1');
+      expect((tcs[0]['function'] as Map)['name'], 'get_weather');
+      expect((tcs[0]['function'] as Map)['arguments'], '{"city":"HZ"}');
+      // tool 消息紧跟 assistant
+      expect(req.messages[2], {
+        'role': 'tool',
+        'tool_call_id': 'call_1',
+        'content': '24°C',
+      });
+      expect(req.messages[3], {
+        'role': 'tool',
+        'tool_call_id': 'call_2',
+        'content': '12:00',
+      });
+      expect(req.messages[4]['role'], 'user');
+    });
+
+    test('Anthropic：assistant(tool_use 块) + user(tool_result 块) 配对', () async {
+      final req = await AnthropicProtocol().buildRequest(
+        history: [
+          assistantWithTools([
+            const ToolCallData(
+              id: 'toolu_1',
+              name: 'get_weather',
+              arguments: {'city': 'HZ'},
+              status: ToolCallStatus.completed,
+              result: '24°C',
+            ),
+          ]),
+        ],
+      );
+
+      expect(req.messages, hasLength(2));
+      final assistant = req.messages[0];
+      expect(assistant['role'], 'assistant');
+      final blocks = (assistant['content'] as List).cast<Map>();
+      expect(blocks, hasLength(2)); // text + tool_use
+      expect(blocks[0]['type'], 'text');
+      expect(blocks[1], {
+        'type': 'tool_use',
+        'id': 'toolu_1',
+        'name': 'get_weather',
+        'input': {'city': 'HZ'},
+      });
+      // tool_result 在独立 user 消息
+      final resultMsg = req.messages[1];
+      expect(resultMsg['role'], 'user');
+      final resultBlocks = (resultMsg['content'] as List).cast<Map>();
+      expect(resultBlocks, hasLength(1));
+      expect(resultBlocks[0], {
+        'type': 'tool_result',
+        'tool_use_id': 'toolu_1',
+        'content': '24°C',
+      });
+    });
+
+    test('未完成/结果缺失的工具用中断占位（配对完整性）', () async {
+      final req = await OpenAIProtocol().buildRequest(
+        history: [
+          assistantWithTools([
+            const ToolCallData(
+              id: 'call_x',
+              name: 'slow_tool',
+              arguments: {},
+              status: ToolCallStatus.running,
+            ),
+          ]),
+        ],
+      );
+      expect(req.messages[1]['content'], kInterruptedToolResultPlaceholder);
+    });
+
+    test('已压缩的工具结果用占位符（prune 语义，体积最小）', () async {
+      final req = await AnthropicProtocol().buildRequest(
+        history: [
+          assistantWithTools([
+            ToolCallData(
+              id: 'toolu_c',
+              name: 'web_search',
+              arguments: const {},
+              status: ToolCallStatus.completed,
+              result: kCompactedToolResultPlaceholder,
+              compactedAt: DateTime(2026),
+            ),
+          ]),
+        ],
+      );
+      final blocks =
+          ((req.messages[1]['content'] as List).first as Map)['content'];
+      expect(blocks, kCompactedToolResultPlaceholder);
+    });
+
+    test('附件与工具链并存（content parts + tool_calls）', () async {
+      final att = Attachment(
+        fileName: 'p.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'h',
+        storagePath: '/nonexistent',
+        fileSize: 100,
+      )..base64Data = 'cGhvdG8=';
+      final req = await OpenAIProtocol().buildRequest(
+        history: [
+          ChatMessage(
+            role: 'assistant',
+            content: '看图',
+            attachments: [att],
+            toolCalls: [
+              const ToolCallData(
+                id: 'call_1',
+                name: 't',
+                arguments: {},
+                status: ToolCallStatus.completed,
+                result: 'ok',
+              ),
+            ],
+          ),
+        ],
+      );
+      final assistant = req.messages[0];
+      final parts = (assistant['content'] as List).cast<Map>();
+      expect(parts, hasLength(2)); // text + image
+      expect(assistant['tool_calls'], hasLength(1));
+      expect(req.messages[1]['role'], 'tool');
+    });
+
+    test('OpenAI 重建时保留 reasoning_content（DeepSeek 兼容）', () async {
+      final req = await OpenAIProtocol().buildRequest(
+        history: [
+          assistantWithTools(
+            [
+              const ToolCallData(
+                id: 'call_1',
+                name: 't',
+                arguments: {},
+                status: ToolCallStatus.completed,
+                result: 'ok',
+              ),
+            ],
+            content: '回答',
+          ).copyWith(reasoningContent: '思考过程'),
+        ],
+      );
+      expect(req.messages[0]['reasoning_content'], '思考过程');
     });
   });
 

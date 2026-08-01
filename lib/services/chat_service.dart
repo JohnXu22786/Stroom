@@ -50,7 +50,9 @@ class ChatService {
   static const int maxToolResultChars = 2000;
 
   /// 中断工具结果的占位文本（用户取消时对未完成工具补发）。
-  static const String kToolInterruptedPlaceholder = '[工具执行被中断]';
+  /// 与协议层历史重建的占位符统一。
+  static const String kToolInterruptedPlaceholder =
+      kInterruptedToolResultPlaceholder;
 
   /// 达到工具调用上限时，追加到请求的提示消息（opencode MAX_STEPS_PROMPT
   /// 改编）：要求模型禁用工具、仅文本总结。
