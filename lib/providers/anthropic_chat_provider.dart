@@ -420,6 +420,7 @@ class AnthropicChatProvider extends BaseChatProvider {
         maxTokens: maxTokens,
         temperature: temperature,
         stream: true,
+        system: system,
         tools: tools,
         extraParams: extraParams);
 
@@ -555,6 +556,10 @@ class AnthropicChatProvider extends BaseChatProvider {
         _lastResponseStatusCode = null;
         _lastResponseData = null;
         _lastResponseHeaders = null;
+      }
+      // 错误轮也可能已产生计费 usage：先产出计量事件再上抛
+      if (localUsage != null && localUsage!.isNotEmpty) {
+        yield AIStreamEvent('', usage: localUsage);
       }
       rethrow;
     }

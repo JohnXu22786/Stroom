@@ -433,7 +433,6 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           final usage = normalizeUsage(data['usage']);
           if (usage != null) {
             localUsage = usage;
-            _lastUsage = usage;
           }
 
           // Parse the stream event using the static helper method
@@ -516,6 +515,11 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         _lastResponseStatusCode = null;
         _lastResponseData = null;
         _lastResponseHeaders = null;
+      }
+      // 错误轮也可能已产生计费 usage：先产出计量事件再上抛，
+      // 让 ChatService 在 onError 之前累计到成本
+      if (localUsage != null) {
+        yield AIStreamEvent('', usage: localUsage);
       }
       rethrow;
     }

@@ -47,6 +47,14 @@ class ContextManagementSettings {
         compactionThreshold: compactionThreshold ?? this.compactionThreshold,
       );
 
+  /// 清除自定义压缩触发值（回到"用模型上下文"）。
+  ContextManagementSettings clearCompactionThreshold() =>
+      ContextManagementSettings(
+        pruneEnabled: pruneEnabled,
+        customCompactionThresholdEnabled: customCompactionThresholdEnabled,
+        compactionThreshold: null,
+      );
+
   /// 有效的压缩触发线（token 数）。
   /// 自定义启用且有值时用之；否则返回模型上下文（null 表示无上下文配置）。
   int? effectiveCompactionThreshold(int? modelContext) {
@@ -122,7 +130,9 @@ class ContextManagementSettingsNotifier
 
   Future<void> setCompactionThreshold(int? threshold) {
     _userModified = true;
-    state = state.copyWith(compactionThreshold: threshold);
+    state = threshold == null
+        ? state.clearCompactionThreshold()
+        : state.copyWith(compactionThreshold: threshold);
     return _persist();
   }
 }

@@ -260,6 +260,13 @@ abstract class ChatProtocol {
   /// 构建工具结果消息，紧跟在助手消息之后。
   List<Map<String, dynamic>> buildToolResultMessages(
       List<ToolCallResult> results);
+
+  /// 返回"禁用工具"的请求体参数（tool_choice: none 的协议差异）。
+  ///
+  /// 与 tools 一起发送：收尾轮仍需携带工具定义（Anthropic 要求
+  /// 历史含 tool_use/tool_result 块时必须定义 tools），
+  /// 用 tool_choice: none 显式禁止调用。
+  Map<String, dynamic> toolChoiceNoneJson();
 }
 
 /// 根据端点类型创建协议实例。
@@ -500,6 +507,9 @@ class OpenAIProtocol implements ChatProtocol {
         },
     ];
   }
+
+  @override
+  Map<String, dynamic> toolChoiceNoneJson() => {'tool_choice': 'none'};
 }
 
 // ============================================================================
@@ -705,4 +715,9 @@ class AnthropicProtocol implements ChatProtocol {
       },
     ];
   }
+
+  @override
+  Map<String, dynamic> toolChoiceNoneJson() => {
+        'tool_choice': {'type': 'none'},
+      };
 }

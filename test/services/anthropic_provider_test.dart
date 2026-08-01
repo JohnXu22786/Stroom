@@ -21,6 +21,16 @@ void main() {
       apiKey: 'test-key',
     );
 
+    test('chatStream 也把 system 传给请求体（流式是唯一使用路径）', () {
+      // chatStream 内部调用 _buildBody(stream: true, system: system)；
+      // 通过 buildBody 验证等效路径（system 在流式下同样进入 body）
+      final body = provider.buildBody([
+        {'role': 'user', 'content': 'hi'},
+      ], model: 'claude-3-5-sonnet', system: '你是助手', stream: true);
+      expect(body['system'], '你是助手');
+      expect(body['stream'], isTrue);
+    });
+
     test('max_tokens 必填：未传时兜底 4096', () {
       final body = provider.buildBody([
         {'role': 'user', 'content': 'hi'},

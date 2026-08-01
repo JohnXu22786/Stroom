@@ -426,12 +426,15 @@ class ChatService {
 
           final completer = Completer<void>();
           final toolCallRefs = <Map<String, dynamic>>[];
-
           // ── Max-steps 语义（opencode MAX_STEPS_PROMPT）──
-          // 收尾轮：不传工具定义（模型无法调用工具）+ 前置文本收尾提示，
-          // 要求模型总结已做/未做/下一步。不注入 tool_choice：
-          // tools 缺失时部分严格端点会拒绝 tool_choice 字段。
+          // 收尾轮：tools 定义保留（Anthropic 要求历史含 tool_use/
+          // tool_result 块时必须定义 tools，否则 400）+ tool_choice none
+          // 显式禁止调用 + 前置文本收尾提示，要求模型总结已做/未做/下一步。
           final isLastStep = maxRounds != null && loopProtection > maxRounds;
+          final roundExtraParams = <String, dynamic>{...extraParams};
+          if (isLastStep) {
+            roundExtraParams.addAll(_protocol.toolChoiceNoneJson());
+          }
           var roundMessages = messages;
           if (isLastStep) {
             roundMessages = [
@@ -448,9 +451,9 @@ class ChatService {
             reasoningEffort: reasoningEffort,
             maxTokens: _effectiveMaxTokens, // null when toggle is OFF
             temperature: _effectiveTemperature, // null when toggle is OFF
-            tools: isLastStep || toolDefs.isEmpty ? null : toolDefs,
+            tools: toolDefs.isEmpty ? null : toolDefs,
             system: req.system,
-            extraParams: extraParams,
+            extraParams: roundExtraParams,
             cancelToken: _cancelToken,
           )
               .listen(

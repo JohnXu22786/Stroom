@@ -70,6 +70,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       if (_topP != 1.0) return true;
       if (_frequencyPenalty != 0.0) return true;
       if (_presencePenalty != 0.0) return true;
+      if (_overrideEndpointType) return true;
       return false;
     }
     // Editing: compare against original model
