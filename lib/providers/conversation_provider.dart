@@ -753,7 +753,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// 更新对话的实际 token 计量与累计花费。
   ///
   /// [inputTokens]/[outputTokens] 来自 API 返回的 usage（非估算）；
-  /// [costIncrement] 为本次请求按模型价格计算的美元花费（累加到 totalCost）。
+  /// [costIncrement] 为 API 返回的本次请求花费（如 OpenRouter
+  /// usage.total_cost），累加到 [Conversation.totalCost]。
   Future<void> updateUsage({
     required String conversationId,
     int? inputTokens,

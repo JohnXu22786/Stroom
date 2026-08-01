@@ -332,16 +332,25 @@ class AnthropicChatProvider extends BaseChatProvider {
           : <String, dynamic>{'raw': '$response.data'};
       _lastResponseStatusCode = response.statusCode;
       _lastResponseHeaders = response.headers.map;
-
       // 收集实际 token 计量（非流式响应体 usage 字段）
       final usage =
           response.data is Map ? (response.data as Map)['usage'] : null;
       if (usage is Map) {
         _lastUsage = {};
-        final input = usage['input_tokens'];
-        if (input is num) _lastUsage!['inputTokens'] = input.toInt();
+        var input = usage['input_tokens'] is num
+            ? (usage['input_tokens'] as num).toInt()
+            : 0;
+        if (usage['cache_read_input_tokens'] is num) {
+          input += (usage['cache_read_input_tokens'] as num).toInt();
+        }
+        if (usage['cache_creation_input_tokens'] is num) {
+          input += (usage['cache_creation_input_tokens'] as num).toInt();
+        }
+        if (input > 0) _lastUsage!['inputTokens'] = input;
         final output = usage['output_tokens'];
         if (output is num) _lastUsage!['outputTokens'] = output.toInt();
+        final cost = usage['total_cost'] ?? usage['cost'];
+        if (cost is num) _lastUsage!['cost'] = cost.toDouble();
       }
 
       final contentBlocks = response.data['content'] as List?;
@@ -459,7 +468,8 @@ class AnthropicChatProvider extends BaseChatProvider {
           _lastResponseData = data;
 
           // 收集实际 token 计量：
-          // - message_start 的 usage.input_tokens（含 cache_read）
+          // - message_start 的 usage.input_tokens（+ cache_read/cache_creation
+          //   计入上下文占用）
           // - message_delta 的 usage.output_tokens
           // - API 返回的 cost（OpenRouter anthropic 兼容端点可能带 total_cost）
           if (data['type'] == 'message_start') {
@@ -467,10 +477,23 @@ class AnthropicChatProvider extends BaseChatProvider {
             final usage = msg?['usage'];
             if (usage is Map) {
               _lastUsage ??= {};
-              final input = usage['input_tokens'];
-              if (input is num) _lastUsage!['inputTokens'] = input.toInt();
+              // 输入 = input_tokens + 缓存读取/创建（缓存 token 同样占用上下文）
+              var input = usage['input_tokens'] is num
+                  ? (usage['input_tokens'] as num).toInt()
+                  : 0;
+              if (usage['cache_read_input_tokens'] is num) {
+                input += (usage['cache_read_input_tokens'] as num).toInt();
+              }
+              if (usage['cache_creation_input_tokens'] is num) {
+                input += (usage['cache_creation_input_tokens'] as num).toInt();
+              }
+              if (input > 0) _lastUsage!['inputTokens'] = input;
               final cost = usage['total_cost'] ?? usage['cost'];
-              if (cost is num) _lastUsage!['cost'] = cost.toDouble();
+              if (cost is num) {
+                _lastUsage!['cost'] =
+                    (_lastUsage!['cost'] as num?)?.toDouble() ??
+                        0 + cost.toDouble();
+              }
             }
           } else if (data['type'] == 'message_delta') {
             final usage = data['usage'];
@@ -479,7 +502,12 @@ class AnthropicChatProvider extends BaseChatProvider {
               final output = usage['output_tokens'];
               if (output is num) _lastUsage!['outputTokens'] = output.toInt();
               final cost = usage['total_cost'] ?? usage['cost'];
-              if (cost is num) _lastUsage!['cost'] = cost.toDouble();
+              if (cost is num) {
+                // 与 message_start 的 cost 累加而非覆盖
+                _lastUsage!['cost'] =
+                    (_lastUsage!['cost'] as num?)?.toDouble() ??
+                        0 + cost.toDouble();
+              }
             }
           }
 
@@ -488,10 +516,11 @@ class AnthropicChatProvider extends BaseChatProvider {
             yield e;
           }
         } catch (e) {
-          // 仅网络/协议层异常（DioException）向上抛；
-          // 单条数据解析失败（非 JSON、格式异常）跳过该行继续，
-          // 避免代理式多余行导致整个流中断。
-          if (e is DioException) rethrow;
+          // 网络/协议层异常（DioException）与 API 错误事件
+          // （processAnthropicStreamData 对 error 类型抛出的 Exception）
+          // 必须上抛，否则真实 API 错误会被当成正常截断回复。
+          // 仅 JSON 解析失败（FormatException，如代理式多余行）跳过。
+          if (e is! FormatException) rethrow;
           debugPrint('AnthropicChatProvider: failed to parse SSE chunk: $e');
         }
       }

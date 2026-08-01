@@ -94,6 +94,34 @@ class ChatService {
   /// 由 provider 在流结束时产出，用于下一轮链重建时续接 thinking 块。
   String _thinkingSignature = '';
   Map<String, dynamic>? _lastRequestBody;
+
+  /// 本服务实例的累计 usage（本轮主请求所有轮 + 内部任务请求）。
+  ///
+  /// 每次 chatStream 完成后把 provider 返回的 usage 合并进来
+  /// （inputTokens/outputTokens 加和、cost 加和）。读取方（manager）
+  /// 通过本 getter 拿到的就是该对话自身的累计值——provider 实例被
+  /// 多对话共享，直接读 provider.lastUsage 会被并发对话覆盖。
+  Map<String, dynamic>? _accumulatedUsage;
+
+  /// 合并一次请求的 usage 到累计。
+  void _accumulateUsage() {
+    final usage = _provider?.lastUsage;
+    if (usage == null) return;
+    final acc = _accumulatedUsage ??= <String, dynamic>{};
+    final input = usage['inputTokens'] as int?;
+    if (input != null) {
+      acc['inputTokens'] = (acc['inputTokens'] as int? ?? 0) + input;
+    }
+    final output = usage['outputTokens'] as int?;
+    if (output != null) {
+      acc['outputTokens'] = (acc['outputTokens'] as int? ?? 0) + output;
+    }
+    final cost = usage['cost'] as double?;
+    if (cost != null) {
+      acc['cost'] = (acc['cost'] as double? ?? 0) + cost;
+    }
+  }
+
   Map<String, dynamic>? _lastResponseData;
   Map<String, String>? _lastRequestHeaders;
   Map<String, List<String>>? _lastResponseHeaders;
@@ -146,9 +174,11 @@ class ChatService {
   Map<String, List<String>>? get lastResponseHeaders =>
       _lastResponseHeaders ?? _provider?.lastResponseHeaders;
 
-  /// 最近一次请求的实际 token 计量（来自 API usage，标准化为
-  /// {inputTokens, outputTokens}）。用于上下文显示与花费计算。
-  Map<String, dynamic>? get lastUsage => _provider?.lastUsage;
+  /// 最近一次请求的实际 token 计量（标准化为 {inputTokens, outputTokens}）。
+  /// 返回本服务实例的累计值（含多轮工具循环与内部任务请求），
+  /// 读取方据此更新对话的上下文显示与花费——provider 实例共享，
+  /// 直接读 provider 会被并发对话覆盖。
+  Map<String, dynamic>? get lastUsage => _accumulatedUsage;
 
   /// Returns the effective temperature considering assistant overrides.
   /// Returns null when no temperature toggle is enabled (model or assistant).
@@ -269,6 +299,7 @@ class ChatService {
           },
           onDone: () {
             _streamSubscription = null;
+            _accumulateUsage();
             if (_controller != null && !_controller!.isClosed) {
               _controller!.close();
             }
@@ -319,6 +350,7 @@ class ChatService {
     _contentBuffer = '';
     _lastReasoningLength = 0;
     _thinkingSignature = '';
+    _accumulatedUsage = null;
 
     final controller = StreamController<ChatEvent>(
       onCancel: () {
@@ -429,6 +461,9 @@ class ChatService {
             },
             onDone: () {
               _streamSubscription = null;
+              // 本轮请求的 usage 并入累计（provider 实例共享，
+              // 立即读取避免被并发对话覆盖）
+              _accumulateUsage();
               if (!completer.isCompleted) completer.complete();
             },
             onError: (Object error) {
@@ -579,7 +614,10 @@ class ChatService {
   /// [contextSummary] 可选注入压缩摘要。
   ///
   /// 内部任务请求需要轻量（maxTokens 通常较小、无工具），
-  /// 与主对话请求相互独立。
+  /// 与主对话请求相互独立。使用**局部** CancelToken，不触碰
+  /// [_cancelToken] 字段，避免与并发的主请求流互相干扰
+  /// （fire-and-forget 标题请求与下一次发送之间无共享状态）。
+  /// 完成的 usage 并入本服务实例的累计（成本计入对话）。
   Future<String> sendPrompt({
     required String systemPrompt,
     required List<ChatMessage> history,
@@ -591,7 +629,7 @@ class ChatService {
       assistantPrompt: systemPrompt,
       contextSummary: contextSummary,
     );
-    _cancelToken = CancelToken();
+    final token = CancelToken();
     final chunks = <String>[];
     try {
       await for (final event in _provider!.chatStream(
@@ -599,13 +637,15 @@ class ChatService {
         model: _modelConfig!.modelId,
         maxTokens: maxTokens,
         system: req.system,
-        cancelToken: _cancelToken,
+        cancelToken: token,
       )) {
         if (event.isReasoning || event.isToolCallEvent) continue;
         if (event.text.isNotEmpty) chunks.add(event.text);
       }
-    } finally {
-      _cancelToken = null;
+      _accumulateUsage();
+    } catch (e) {
+      debugPrint('ChatService sendPrompt stream error: $e');
+      rethrow;
     }
     return chunks.join('').trim();
   }

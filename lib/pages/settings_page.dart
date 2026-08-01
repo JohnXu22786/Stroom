@@ -393,7 +393,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     isDense: true,
                   ),
                   keyboardType: TextInputType.number,
-                  onFieldSubmitted: (v) {
+                  // 输入即保存（数字解析失败/为空时清除自定义值，
+                  // 回到"用模型上下文"）
+                  onChanged: (v) {
                     final parsed = int.tryParse(v.trim());
                     notifier.setCompactionThreshold(
                         parsed != null && parsed > 0 ? parsed : null);

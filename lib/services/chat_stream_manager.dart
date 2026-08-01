@@ -414,6 +414,11 @@ class ChatStreamManager {
         convId: convId,
         tools: tools,
       );
+      // 压缩期间用户取消：不发起主请求（空流走正常清理路径，
+      // 结果标记为 cancelled）
+      if (state.cancelledByUser) {
+        debugPrint('[ChatStreamManager] 压缩期间取消, convId=$convId');
+      }
     } catch (e, s) {
       debugPrint('[ChatStreamManager] 上下文管理失败: $e\n$s');
     }
@@ -422,15 +427,17 @@ class ChatStreamManager {
     // that the ChatService is guaranteed to be the one we just created.
     // The stream controller will buffer any events produced before the
     // await-for loop subscribes below.
-    final stream = _adapter.sendStreamWithTools(
-      text,
-      history: state.history,
-      reasoning: reasoning,
-      reasoningEffort: reasoningEffort,
-      reasoningParamValues: reasoningParamValues,
-      tools: tools,
-      convId: convId,
-    );
+    final stream = state.cancelledByUser
+        ? const Stream<ChatEvent>.empty()
+        : _adapter.sendStreamWithTools(
+            text,
+            history: state.history,
+            reasoning: reasoning,
+            reasoningEffort: reasoningEffort,
+            reasoningParamValues: reasoningParamValues,
+            tools: tools,
+            convId: convId,
+          );
 
     // Now safe to yield to event loop — all state is established and the
     // provider stream is already created.
@@ -669,7 +676,10 @@ class ChatStreamManager {
     }
 
     try {
-      if (state.fullReply.isNotEmpty) {
+      // 纯工具轮取消时 fullReply 为空但 accumulatedToolCalls 非空：
+      // 仍要持久化 assistant 消息，否则中断标记（[工具执行被中断]）
+      // 从 UI 与存储中丢失。
+      if (state.fullReply.isNotEmpty || state.accumulatedToolCalls.isNotEmpty) {
         final isError = state.fullReply.startsWith('错误:');
         final msg = ChatMessage(
           role: 'assistant',
@@ -995,7 +1005,10 @@ class ChatStreamManager {
     if (threshold == null) return false;
 
     // 基准：优先使用上次请求的实际输入计量（API usage，非估算）；
-    // 无实际计量时（首次请求）退化为估算。
+    // 无实际计量时（首次请求）退化为估算。取两者较大值：
+    // - actual 可能落后于本轮增长（新消息/附件/工具结果）
+    // - estimated 含本轮全部内容
+    // 取 max 宁可多压一次，也不让请求超过触发线。
     final conv = ref
         .read(conversationsProvider)
         .where((c) => c.id == convId)
@@ -1006,9 +1019,11 @@ class ChatStreamManager {
       assistantPrompt: _adapter.assistantPrompt,
       tools: tools,
     );
-    final currentTokens = actualInput ?? estimated;
+    final currentTokens = actualInput == null
+        ? estimated
+        : (actualInput > estimated ? actualInput : estimated);
     debugPrint('[CTX-MGR] convId=$convId current=$currentTokens'
-        ' (actual=$actualInput) threshold=$threshold');
+        ' (actual=$actualInput estimated=$estimated) threshold=$threshold');
     if (currentTokens < threshold) return false;
 
     // 2. 解析压缩助手（默认内置；用户可替换）

@@ -69,9 +69,14 @@ class ContextManagementSettingsNotifier
   ContextManagementSettingsNotifier()
       : super(const ContextManagementSettings());
 
+  /// 用户是否已修改过设置（set 方法被调用过）。
+  /// 为 true 时 [_load] 不再覆盖（避免异步加载覆盖用户快速修改）。
+  bool _userModified = false;
+
   Future<void> _load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (_userModified) return;
       final threshold = prefs.getInt(_kCompactionThresholdKey);
       state = ContextManagementSettings(
         pruneEnabled: prefs.getBool(_kPruneEnabledKey) ?? true,
@@ -101,18 +106,23 @@ class ContextManagementSettingsNotifier
     }
   }
 
-  void setPruneEnabled(bool enabled) {
+  /// 设置方法返回 Future（内部等待持久化完成），便于测试与串行化；
+  /// UI 调用处可不 await（返回值被忽略）。
+  Future<void> setPruneEnabled(bool enabled) {
+    _userModified = true;
     state = state.copyWith(pruneEnabled: enabled);
-    _persist();
+    return _persist();
   }
 
-  void setCustomCompactionThresholdEnabled(bool enabled) {
+  Future<void> setCustomCompactionThresholdEnabled(bool enabled) {
+    _userModified = true;
     state = state.copyWith(customCompactionThresholdEnabled: enabled);
-    _persist();
+    return _persist();
   }
 
-  void setCompactionThreshold(int? threshold) {
+  Future<void> setCompactionThreshold(int? threshold) {
+    _userModified = true;
     state = state.copyWith(compactionThreshold: threshold);
-    _persist();
+    return _persist();
   }
 }

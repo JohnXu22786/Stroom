@@ -16,6 +16,7 @@ import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/chat_manager_provider.dart';
 import 'package:stroom/providers/context_management_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
+import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/system_assistant_provider.dart';
 import 'package:stroom/services/chat_adapter.dart';
@@ -478,8 +479,8 @@ void main() {
         [AIStreamEvent('## Objective\n- 旧对话摘要')],
         [AIStreamEvent('最终回答')],
       ]);
-      // context 20000 → threshold = max(20000-20000, 4096 floor) = 4096；
-      // 历史 3 条大消息 × 7000 字符 ≈ 5250 tokens > 4096 → 触发
+      // context 5000：触发线 = 模型 context（无自定义值）；
+      // 历史 3 条大消息 ≈ 5250 tokens > 5000 → 触发
       manager.adapter.forceService(ChatService(
         provider: provider,
         modelConfig: _createModelConfig(context: 5000),
@@ -875,7 +876,7 @@ void main() {
       container.dispose();
     });
 
-    test('多次请求 cost 累加', () async {
+    test('多次请求 cost 累加（含 fire-and-forget 标题请求）', () async {
       final container = _makeContainer(
         conversations: [Conversation(id: 'conv-usage4', title: '')],
       );
@@ -906,11 +907,13 @@ void main() {
         ],
       );
 
+      // 2 次主请求 + 1 次标题请求（fire-and-forget），全部计入
+      await _waitFor(() => provider.captures.length >= 3);
       final conv = container
           .read(conversationsProvider)
           .where((c) => c.id == 'conv-usage4')
           .first;
-      expect(conv.totalCost, closeTo(0.0002, 1e-9));
+      expect(conv.totalCost, closeTo(0.0003, 1e-9));
       container.dispose();
     });
 
@@ -1219,6 +1222,247 @@ void main() {
       expect(formatCost(0.00036), '0.0004');
       expect(formatCost(0.0123), '0.01');
       expect(formatCost(1.234), '1.23');
+    });
+  });
+
+  group('normalizeUsage（OpenAI 兼容）', () {
+    test('OpenAI 标准字段 prompt_tokens/completion_tokens', () {
+      final usage = OpenAICompatibleChatProvider.normalizeUsage({
+        'prompt_tokens': 10,
+        'completion_tokens': 5,
+        'total_tokens': 15,
+      });
+      expect(usage, {'inputTokens': 10, 'outputTokens': 5});
+    });
+
+    test('OpenRouter 风格 input_tokens/output_tokens + total_cost', () {
+      final usage = OpenAICompatibleChatProvider.normalizeUsage({
+        'input_tokens': 100,
+        'output_tokens': 50,
+        'total_cost': 0.00012,
+      });
+      expect(usage!['inputTokens'], 100);
+      expect(usage['outputTokens'], 50);
+      expect(usage['cost'], closeTo(0.00012, 1e-9));
+    });
+
+    test('usage.cost 兼容 + 非 Map 返回 null', () {
+      expect(OpenAICompatibleChatProvider.normalizeUsage(null), isNull);
+      expect(OpenAICompatibleChatProvider.normalizeUsage('x'), isNull);
+      final usage = OpenAICompatibleChatProvider.normalizeUsage(
+          {'cost': 0.5, 'prompt_tokens': 1});
+      expect(usage!['cost'], 0.5);
+    });
+
+    test('空 usage 返回 null', () {
+      expect(OpenAICompatibleChatProvider.normalizeUsage({}), isNull);
+    });
+  });
+
+  group('Conversation usage 序列化', () {
+    test('lastInputTokens/lastOutputTokens/totalCost 往返', () {
+      final conv = Conversation(
+        id: 'c-usage',
+        title: 't',
+        lastInputTokens: 1234,
+        lastOutputTokens: 56,
+        totalCost: 0.00456,
+      );
+      final restored = Conversation.fromMap(conv.toMap());
+      expect(restored.lastInputTokens, 1234);
+      expect(restored.lastOutputTokens, 56);
+      expect(restored.totalCost, closeTo(0.00456, 1e-9));
+    });
+
+    test('旧数据缺省（totalCost 0、tokens null）', () {
+      final restored = Conversation.fromMap({
+        'id': 'c1',
+        'title': 't',
+        'createdAt': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().toIso8601String(),
+        'messages': <dynamic>[],
+      });
+      expect(restored.lastInputTokens, isNull);
+      expect(restored.totalCost, 0);
+    });
+  });
+
+  group('上下文管理设置持久化', () {
+    test('SharedPreferences 往返 + 默认值', () async {
+      SharedPreferences.setMockInitialValues({});
+      final container = ProviderContainer();
+      // 默认：prune 开、自定义阈值关
+      final settings = container.read(contextManagementSettingsProvider);
+      // 等异步 _load 完成（避免其覆盖后续修改——产品代码已有
+      // _userModified 保护，但测试先等加载完成更稳）
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(settings.pruneEnabled, isTrue);
+      expect(settings.customCompactionThresholdEnabled, isFalse);
+      expect(settings.compactionThreshold, isNull);
+
+      // 修改并持久化（await 确保写入完成后再读回）
+      final notifier =
+          container.read(contextManagementSettingsProvider.notifier);
+      await notifier.setPruneEnabled(false);
+      await notifier.setCustomCompactionThresholdEnabled(true);
+      await notifier.setCompactionThreshold(48000);
+
+      // prefs 直接验证写入
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('context_prune_enabled'), isFalse);
+
+      // 新容器读回：先 read 触发工厂（_load 异步开始），
+      // 等加载完成后第二次 read 才拿到持久化值
+      final container2 = ProviderContainer();
+      container2.read(contextManagementSettingsProvider);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      final reloaded = container2.read(contextManagementSettingsProvider);
+      expect(reloaded.pruneEnabled, isFalse);
+      expect(reloaded.customCompactionThresholdEnabled, isTrue);
+      expect(reloaded.compactionThreshold, 48000);
+      container.dispose();
+      container2.dispose();
+    });
+
+    test('effectiveCompactionThreshold：自定义优先，否则模型 context', () {
+      const settings = ContextManagementSettings(
+        customCompactionThresholdEnabled: true,
+        compactionThreshold: 48000,
+      );
+      expect(settings.effectiveCompactionThreshold(100000), 48000);
+
+      const defaultSettings = ContextManagementSettings();
+      expect(defaultSettings.effectiveCompactionThreshold(100000), 100000);
+      expect(defaultSettings.effectiveCompactionThreshold(null), isNull);
+    });
+  });
+
+  group('模型无 context 配置时不压缩', () {
+    test('threshold null → 不触发压缩（无 modelContext）', () async {
+      final container = _makeContainer(
+        conversations: [Conversation(id: 'conv-nocontext', title: '')],
+      );
+      final manager = container.read(chatStreamManagerProvider);
+      final provider = _RecordingProvider([
+        [AIStreamEvent('回答')],
+      ]);
+      // modelConfig 无 context（typeConfig 空）
+      manager.adapter.forceService(ChatService(
+        provider: provider,
+        modelConfig: ModelConfig(name: 'm', modelId: 'test-model'),
+      ));
+
+      await manager.startStreaming(
+        text: 'hi',
+        convId: 'conv-nocontext',
+        history: [
+          ChatMessage(role: 'assistant', content: 'x' * 10000),
+          ChatMessage(role: 'user', content: 'q1'),
+          ChatMessage(role: 'user', content: 'q2'),
+        ],
+      );
+
+      final conv = container
+          .read(conversationsProvider)
+          .where((c) => c.id == 'conv-nocontext')
+          .first;
+      expect(conv.contextSummary, isNull);
+      container.dispose();
+    });
+  });
+
+  group('工具循环多轮 usage 累计', () {
+    test('工具循环每轮 usage 都计入累计（不止最后一轮）', () async {
+      final container = _makeContainer(
+        conversations: [Conversation(id: 'conv-multi', title: '')],
+      );
+      final manager = container.read(chatStreamManagerProvider);
+      // 两轮工具 + 一轮文本
+      final provider = _RecordingProvider([
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'call_1',
+              'type': 'function',
+              'function': {
+                'name': 'loop_tool',
+                'arguments': '{"i": 1}',
+              },
+            },
+          ]),
+        ],
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'call_2',
+              'type': 'function',
+              'function': {
+                'name': 'loop_tool',
+                'arguments': '{"i": 2}',
+              },
+            },
+          ]),
+        ],
+        [AIStreamEvent('完成')],
+      ])
+        ..usage = {'inputTokens': 100, 'outputTokens': 10, 'cost': 0.0001};
+      manager.adapter.forceService(ChatService(
+        provider: provider,
+        modelConfig: _createModelConfig(context: 1000000),
+      ));
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'loop_tool',
+          description: 'loop',
+          parameters: {'type': 'object'},
+        ),
+        (args) => 'ok',
+      );
+
+      await manager.startStreaming(
+        text: 'go',
+        convId: 'conv-multi',
+        history: [ChatMessage(role: 'user', content: 'go')],
+        tools: ChatService.getRegisteredToolDefinitions(),
+      );
+
+      // 3 次请求（2 工具轮 + 1 收尾/文本轮）usage 全部累计
+      await _waitFor(() => provider.captures.length >= 4); // + 标题
+      final conv = container
+          .read(conversationsProvider)
+          .where((c) => c.id == 'conv-multi')
+          .first;
+      expect(conv.lastInputTokens, 300); // 3 × 100
+      expect(conv.totalCost, closeTo(0.0003, 1e-9)); // 3 × 0.0001
+      container.dispose();
+    });
+  });
+
+  group('usage 未返回时保留旧计量', () {
+    test('后续请求无 usage 不清空 lastInputTokens', () async {
+      final container = _makeContainer(
+        conversations: [
+          Conversation(id: 'conv-stale', title: '', lastInputTokens: 500),
+        ],
+      );
+      final manager = container.read(chatStreamManagerProvider);
+      final provider = _RecordingProvider([
+        [AIStreamEvent('回答')],
+      ]); // 无 usage
+      manager.adapter.forceService(_makeService(provider));
+
+      await manager.startStreaming(
+        text: 'hi',
+        convId: 'conv-stale',
+        history: [ChatMessage(role: 'user', content: 'hi')],
+      );
+
+      final conv = container
+          .read(conversationsProvider)
+          .where((c) => c.id == 'conv-stale')
+          .first;
+      expect(conv.lastInputTokens, 500);
+      container.dispose();
     });
   });
 }
