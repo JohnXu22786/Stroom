@@ -146,6 +146,10 @@ class ChatService {
   Map<String, List<String>>? get lastResponseHeaders =>
       _lastResponseHeaders ?? _provider?.lastResponseHeaders;
 
+  /// 最近一次请求的实际 token 计量（来自 API usage，标准化为
+  /// {inputTokens, outputTokens}）。用于上下文显示与花费计算。
+  Map<String, dynamic>? get lastUsage => _provider?.lastUsage;
+
   /// Returns the effective temperature considering assistant overrides.
   /// Returns null when no temperature toggle is enabled (model or assistant).
   double? get _effectiveTemperature {

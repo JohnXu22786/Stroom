@@ -2647,6 +2647,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 ),
               ),
 
+              // ── 上下文统计行（标题栏下方悬挂，opencode sidebar 风格）──
+              // context = 最近一次请求的实际输入 token（API usage，非估算）；
+              // 使用比例 = context / 模型上下文窗口；花费 = 累计美元。
+              if (activeId != null) _buildContextStatusLine(activeId),
+
               // ── Search bar ──
               if (_isSearching)
                 Container(
@@ -3547,6 +3552,56 @@ class _ChatPageState extends ConsumerState<ChatPage>
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  /// 上下文统计行：显示实际 context（API usage）、使用比例、累计花费。
+  ///
+  /// 与 opencode sidebar 一致的三项：
+  /// - context：最近一次请求的实际输入 token 数（来自 API usage，不估算）
+  /// - 使用比例：context / 模型上下文窗口（模型页"上下文长度"）
+  /// - 花费：按模型价格累计的美元
+  Widget _buildContextStatusLine(String convId) {
+    final conv = ref
+        .watch(conversationsProvider)
+        .where((c) => c.id == convId)
+        .firstOrNull;
+    final modelContext =
+        (_adapter.modelConfig?.typeConfig['context'] as num?)?.toInt();
+    final inputTokens = conv?.lastInputTokens;
+    final cost = conv?.totalCost ?? 0;
+    final cs = Theme.of(context).colorScheme;
+
+    final parts = <String>[];
+    if (inputTokens != null) {
+      parts.add('ctx ${formatTokenCount(inputTokens)}');
+      if (modelContext != null && modelContext > 0) {
+        final pct = (inputTokens / modelContext * 100);
+        parts.add('${pct.toStringAsFixed(pct >= 10 ? 0 : 1)}%');
+      }
+    }
+    parts.add('\$${formatCost(cost)}');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLowest.withValues(alpha: 0.6),
+        border: Border(
+          bottom: BorderSide(
+            color: cs.outlineVariant.withValues(alpha: 0.5),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Text(
+        parts.join(' · '),
+        style: TextStyle(
+          fontSize: 11,
+          fontFamily: 'monospace',
+          color: cs.onSurfaceVariant,
         ),
       ),
     );

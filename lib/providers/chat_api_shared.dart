@@ -75,6 +75,12 @@ abstract class BaseChatProvider {
   String? get lastRequestUrl => null;
   int? get lastResponseStatusCode => null;
 
+  /// 最近一次请求的实际 token 计量（来自 API 返回的 usage 字段）。
+  ///
+  /// 标准化形状：`{'inputTokens': int, 'outputTokens': int}`。
+  /// 用于上下文显示（不估算）与花费计算。未返回 usage 时为空。
+  Map<String, dynamic>? get lastUsage => null;
+
   /// Dio default headers, exposed for testing.
   Map<String, dynamic> get defaultHeaders => {};
 

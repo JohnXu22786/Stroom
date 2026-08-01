@@ -354,8 +354,8 @@ class DataMigrationService {
 
         final models = oldModels.map((m) {
           final typeConfig = <String, dynamic>{};
-          final maxTokens = m['maxTokens'] ?? m['context'];
-          if (maxTokens != null) typeConfig['context'] = maxTokens;
+          // NOTE: context 是 per-model 配置，由模型设置页显式填写，
+          // 不在 provider 迁移时注入（context 与 provider 无关）。
           final temperature = m['temperature'];
           if (temperature != null) typeConfig['temperature'] = temperature;
 

@@ -155,6 +155,7 @@ class AnthropicChatProvider extends BaseChatProvider {
   Map<String, List<String>>? _lastResponseHeaders;
   String? _lastRequestUrl;
   int? _lastResponseStatusCode;
+  Map<String, dynamic>? _lastUsage;
 
   AnthropicChatProvider({
     required String baseUrl,
@@ -195,6 +196,11 @@ class AnthropicChatProvider extends BaseChatProvider {
 
   @override
   Map<String, List<String>>? get lastResponseHeaders => _lastResponseHeaders;
+
+  /// 最近一次请求的实际 token 计量（Anthropic usage 字段）。
+  /// 标准化为 {inputTokens, outputTokens}。
+  @override
+  Map<String, dynamic>? get lastUsage => _lastUsage;
 
   // TODO: 可从 CustomParam 中提取模型列表，目前暂无可信数据源，留空。
   @override
@@ -327,6 +333,17 @@ class AnthropicChatProvider extends BaseChatProvider {
       _lastResponseStatusCode = response.statusCode;
       _lastResponseHeaders = response.headers.map;
 
+      // 收集实际 token 计量（非流式响应体 usage 字段）
+      final usage =
+          response.data is Map ? (response.data as Map)['usage'] : null;
+      if (usage is Map) {
+        _lastUsage = {};
+        final input = usage['input_tokens'];
+        if (input is num) _lastUsage!['inputTokens'] = input.toInt();
+        final output = usage['output_tokens'];
+        if (output is num) _lastUsage!['outputTokens'] = output.toInt();
+      }
+
       final contentBlocks = response.data['content'] as List?;
       if (contentBlocks == null || contentBlocks.isEmpty) {
         throw Exception('API 返回了空的 content 列表');
@@ -408,6 +425,7 @@ class AnthropicChatProvider extends BaseChatProvider {
     _lastResponseStatusCode = null;
     _lastResponseData = null;
     _lastResponseHeaders = null;
+    _lastUsage = null;
 
     debugPrint(
         'AnthropicChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
@@ -439,6 +457,31 @@ class AnthropicChatProvider extends BaseChatProvider {
         try {
           final data = jsonDecode(dataStr) as Map<String, dynamic>;
           _lastResponseData = data;
+
+          // 收集实际 token 计量：
+          // - message_start 的 usage.input_tokens（含 cache_read）
+          // - message_delta 的 usage.output_tokens
+          // - API 返回的 cost（OpenRouter anthropic 兼容端点可能带 total_cost）
+          if (data['type'] == 'message_start') {
+            final msg = data['message'] as Map<String, dynamic>?;
+            final usage = msg?['usage'];
+            if (usage is Map) {
+              _lastUsage ??= {};
+              final input = usage['input_tokens'];
+              if (input is num) _lastUsage!['inputTokens'] = input.toInt();
+              final cost = usage['total_cost'] ?? usage['cost'];
+              if (cost is num) _lastUsage!['cost'] = cost.toDouble();
+            }
+          } else if (data['type'] == 'message_delta') {
+            final usage = data['usage'];
+            if (usage is Map) {
+              _lastUsage ??= {};
+              final output = usage['output_tokens'];
+              if (output is num) _lastUsage!['outputTokens'] = output.toInt();
+              final cost = usage['total_cost'] ?? usage['cost'];
+              if (cost is num) _lastUsage!['cost'] = cost.toDouble();
+            }
+          }
 
           final events = processAnthropicStreamData(data, acc);
           for (final e in events) {

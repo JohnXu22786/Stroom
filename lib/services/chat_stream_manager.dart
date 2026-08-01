@@ -8,6 +8,7 @@ import '../models/message_block.dart';
 import '../models/tool_call.dart';
 import '../pages/chat/chat_types.dart';
 import '../providers/chat_stream_provider.dart';
+import '../providers/context_management_provider.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/system_assistant_provider.dart';
 import '../providers/assistant_provider.dart';
@@ -174,18 +175,8 @@ class ChatStreamManager {
   static const Duration _persistInterval = Duration(seconds: 5);
 
   // ── 上下文管理常量 ──
-  /// 上下文保留区（输出空间 + 工具执行余量），估算超限时触发压缩。
-  static const int _contextReservedTokens = 20000;
-
-  /// 压缩触发的估算下限：小上下文模型（context ≤ 保留区）也不应在
-  /// 每次发送时都触发压缩——输入低于此值不压缩。
-  static const int _minCompactionThreshold = 4096;
-
   /// 压缩请求的最大输出 token 数。
   static const int _compactionMaxTokens = 4096;
-
-  /// 默认上下文窗口（模型未配置 context 时的兜底）。
-  static const int _defaultContextWindow = 32000;
 
   ChatStreamManager([this._ref]);
 
@@ -369,12 +360,17 @@ class ChatStreamManager {
     // ── 上下文管理：发请求前自动 prune 旧工具结果 ──
     // 软删除（标记 compactedAt + 占位文本），释放 UI 渲染与持久化体积。
     // 纯自动触发，用户无感知；不足阈值（20K token 估算）时不执行。
-    final pruned = ContextManager.pruneToolResults(state.history);
-    if (!identical(pruned, state.history)) {
-      AppLogService.info(
-          'ChatStreamManager', '[CTX-MGR] 工具结果 prune 执行完成, convId=$convId');
+    // 可在设置页"上下文管理"关闭（opencode compaction.prune 语义）。
+    final ctxSettings = _ref?.read(contextManagementSettingsProvider) ??
+        const ContextManagementSettings();
+    if (ctxSettings.pruneEnabled) {
+      final pruned = ContextManager.pruneToolResults(state.history);
+      if (!identical(pruned, state.history)) {
+        AppLogService.info(
+            'ChatStreamManager', '[CTX-MGR] 工具结果 prune 执行完成, convId=$convId');
+      }
+      state.history = pruned;
     }
-    state.history = pruned;
 
     final aiMsgId =
         streamingMsgId ?? 'a${DateTime.now().microsecondsSinceEpoch}';
@@ -612,6 +608,28 @@ class ChatStreamManager {
           rawResponseCapture = {'error': streamError.toString()};
         }
       } catch (_) {}
+      // ── 实际 token 计量与花费（来自 API usage，非估算） ──
+      // 更新对话的 lastInputTokens/lastOutputTokens 与累计花费。
+      // 花费纯粹采用 API 返回的 cost（如 OpenRouter usage.total_cost），
+      // 不自统计（缓存/推理 token 计价要素太多，自统计不准）。
+      try {
+        final usage = _snappedChatService?.lastUsage;
+        if (usage != null) {
+          final inputTokens = usage['inputTokens'] as int?;
+          final outputTokens = usage['outputTokens'] as int?;
+          final cost = usage['cost'] as double? ?? 0;
+          if (inputTokens != null || outputTokens != null || cost > 0) {
+            await _ref?.read(conversationsProvider.notifier).updateUsage(
+                  conversationId: convId,
+                  inputTokens: inputTokens,
+                  outputTokens: outputTokens,
+                  costIncrement: cost,
+                );
+          }
+        }
+      } catch (e) {
+        debugPrint('[ChatStreamManager] usage 计量更新失败: $e');
+      }
 
       // Do NOT overwrite state.reasoningSections or state.reasoningBuffer
       // from _adapter.reasoningContent. The manager already correctly
@@ -968,25 +986,30 @@ class ChatStreamManager {
     final ref = _ref;
     if (ref == null) return false;
 
-    // 1. 估算输入 token
+    // 1. 触发线 = 自定义压缩触发值（若启用）?? 模型设置的上下文窗口。
+    //    context 是 per-model 配置（模型页"上下文长度"），与 provider 无关。
     final modelConfig = _adapter.modelConfig;
-    final contextLimit =
-        (modelConfig?.typeConfig['context'] as num?)?.toInt() ??
-            _defaultContextWindow;
-    // 阈值 = context - 保留区；小上下文模型下限 _minCompactionThreshold，
-    // 避免"每次发送都压缩"（reviewer: 负数阈值问题）。
-    final rawThreshold = contextLimit - _contextReservedTokens;
-    final threshold = rawThreshold < _minCompactionThreshold
-        ? _minCompactionThreshold
-        : rawThreshold;
+    final modelContext = (modelConfig?.typeConfig['context'] as num?)?.toInt();
+    final ctxSettings = ref.read(contextManagementSettingsProvider);
+    final threshold = ctxSettings.effectiveCompactionThreshold(modelContext);
+    if (threshold == null) return false;
+
+    // 基准：优先使用上次请求的实际输入计量（API usage，非估算）；
+    // 无实际计量时（首次请求）退化为估算。
+    final conv = ref
+        .read(conversationsProvider)
+        .where((c) => c.id == convId)
+        .firstOrNull;
+    final actualInput = conv?.lastInputTokens;
     final estimated = ContextManager.estimateHistoryTokens(
       state.history,
       assistantPrompt: _adapter.assistantPrompt,
       tools: tools,
     );
-    debugPrint(
-        '[CTX-MGR] convId=$convId estimated=$estimated threshold=$threshold');
-    if (estimated <= threshold) return false;
+    final currentTokens = actualInput ?? estimated;
+    debugPrint('[CTX-MGR] convId=$convId current=$currentTokens'
+        ' (actual=$actualInput) threshold=$threshold');
+    if (currentTokens < threshold) return false;
 
     // 2. 解析压缩助手（默认内置；用户可替换）
     final settings = ref.read(systemAssistantSettingsProvider);
@@ -1008,10 +1031,6 @@ class ChatStreamManager {
     if (head.isEmpty) return false;
 
     // 4. 组装压缩请求：前次摘要（如有）+ 头部转写 + 模板指令
-    final conv = ref
-        .read(conversationsProvider)
-        .where((c) => c.id == convId)
-        .firstOrNull;
     final previousSummary = conv?.contextSummary;
 
     final sb = StringBuffer();

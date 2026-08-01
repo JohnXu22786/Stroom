@@ -327,3 +327,25 @@ List<MessageBlock> legacyToBlocks({
 /// Shared state provider tracking which tool names are enabled by the user.
 /// Applies to both built-in and MCP tools uniformly.
 final enabledToolNamesProvider = StateProvider<Set<String>>((ref) => {});
+
+// ============================================================================
+// 上下文统计显示格式化（opencode sidebar 风格）
+// ============================================================================
+
+/// 格式化 token 数为可读文本（1.2K / 12.3K / 1.2M）。
+String formatTokenCount(int tokens) {
+  if (tokens < 1000) return '$tokens';
+  if (tokens < 1000000) {
+    final k = tokens / 1000;
+    return '${k.toStringAsFixed(k >= 100 ? 0 : 1)}K';
+  }
+  final m = tokens / 1000000;
+  return '${m.toStringAsFixed(m >= 10 ? 1 : 2)}M';
+}
+
+/// 格式化花费（美元）：<0.01 显示 4 位小数，否则 2 位。
+String formatCost(double cost) {
+  if (cost <= 0) return '0.00';
+  if (cost < 0.01) return cost.toStringAsFixed(4);
+  return cost.toStringAsFixed(2);
+}

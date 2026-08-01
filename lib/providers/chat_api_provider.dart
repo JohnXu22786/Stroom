@@ -27,6 +27,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   Map<String, List<String>>? _lastResponseHeaders;
   String? _lastRequestUrl;
   int? _lastResponseStatusCode;
+  Map<String, dynamic>? _lastUsage;
 
   OpenAICompatibleChatProvider({
     required String baseUrl,
@@ -66,6 +67,33 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
   @override
   Map<String, List<String>>? get lastResponseHeaders => _lastResponseHeaders;
+
+  /// 最近一次请求的实际 token 计量（来自 API usage 字段）。
+  /// 标准化为 {inputTokens, outputTokens}。
+  @override
+  Map<String, dynamic>? get lastUsage => _lastUsage;
+
+  /// 从 usage map 提取并标准化 token 计量。
+  ///
+  /// 兼容 OpenAI 标准（prompt_tokens/completion_tokens）与
+  /// 新版/OpenRouter 风格（input_tokens/output_tokens）。
+  ///
+  /// 计费（cost）纯粹采用 API 返回的值（如 OpenRouter 的 usage.total_cost），
+  /// 不自作主张按价格统计（缓存/推理 token 等计价要素太多，自统计不准）。
+  @visibleForTesting
+  static Map<String, dynamic>? normalizeUsage(dynamic usage) {
+    if (usage is! Map) return null;
+    final input = usage['prompt_tokens'] ?? usage['input_tokens'];
+    final output = usage['completion_tokens'] ?? usage['output_tokens'];
+    // API 返回的计费（美元）；OpenRouter 为 usage.total_cost，
+    // 部分兼容端点用 usage.cost
+    final cost = usage['total_cost'] ?? usage['cost'];
+    final result = <String, dynamic>{};
+    if (input is num) result['inputTokens'] = input.toInt();
+    if (output is num) result['outputTokens'] = output.toInt();
+    if (cost is num) result['cost'] = cost.toDouble();
+    return result.isEmpty ? null : result;
+  }
 
   // TODO: 可从 CustomParam 中提取模型列表，若某 param 的 type 或 key 为 'model'，
   // 使用其 defaultValue?.split(',') 作为模型列表。目前暂无可信数据源，留空。
@@ -255,6 +283,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       _lastResponseStatusCode = null;
       _lastResponseData = null;
       _lastResponseHeaders = null;
+      _lastUsage = null;
       final response = await _dio.post(
         _baseUrl,
         cancelToken: cancelToken,
@@ -266,6 +295,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           : <String, dynamic>{'raw': '$response.data'};
       _lastResponseStatusCode = response.statusCode;
       _lastResponseHeaders = response.headers.map;
+      _lastUsage = normalizeUsage(
+          response.data is Map ? (response.data as Map)['usage'] : null);
 
       final choices = response.data['choices'] as List?;
       if (choices == null || choices.isEmpty) {
@@ -342,6 +373,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     _lastResponseStatusCode = null;
     _lastResponseData = null;
     _lastResponseHeaders = null;
+    _lastUsage = null;
 
     debugPrint(
         'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
@@ -378,6 +410,10 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         try {
           final data = jsonDecode(dataStr) as Map<String, dynamic>;
           _lastResponseData = data;
+
+          // 收集实际 token 计量（OpenAI 流式在末尾 chunk 携带 usage）
+          final usage = normalizeUsage(data['usage']);
+          if (usage != null) _lastUsage = usage;
 
           // Parse the stream event using the static helper method
           final parsedEvents = parseStreamEvent(data);

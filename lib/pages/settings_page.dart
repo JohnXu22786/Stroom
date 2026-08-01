@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/assistant.dart';
 import '../models/built_in_assistants.dart';
 import '../providers/assistant_provider.dart';
+import '../providers/context_management_provider.dart';
 import '../providers/system_assistant_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/provider_config.dart';
@@ -50,6 +51,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           const SizedBox(height: 24),
           _buildSectionHeader('系统助手'),
           _buildSystemAssistantSettings(),
+          const SizedBox(height: 24),
+          _buildSectionHeader('上下文管理'),
+          _buildContextManagementSettings(),
           const SizedBox(height: 24),
           _buildSectionHeader('数据备份'),
           _buildBackupSection(),
@@ -341,6 +345,66 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ),
     );
     if (selected != null) onSelect(selected);
+  }
+
+  // ================================================================
+  // 上下文管理（prune / 压缩触发）
+  // ================================================================
+
+  Widget _buildContextManagementSettings() {
+    final settings = ref.watch(contextManagementSettingsProvider);
+    final notifier = ref.read(contextManagementSettingsProvider.notifier);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('工具结果自动清理 (Prune)'),
+              subtitle: const Text(
+                '旧工具结果超过阈值时自动压缩为占位符，'
+                '释放存储与上下文（opencode 语义）',
+              ),
+              value: settings.pruneEnabled,
+              onChanged: notifier.setPruneEnabled,
+            ),
+            const Divider(height: 1),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('自定义压缩触发值'),
+              subtitle: const Text(
+                '关闭时：到达模型设置的上下文窗口即压缩；'
+                '开启后：可设置更小的触发值',
+              ),
+              value: settings.customCompactionThresholdEnabled,
+              onChanged: notifier.setCustomCompactionThresholdEnabled,
+            ),
+            if (settings.customCompactionThresholdEnabled) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: TextFormField(
+                  initialValue: settings.compactionThreshold?.toString() ?? '',
+                  decoration: const InputDecoration(
+                    labelText: '压缩触发值 (token)',
+                    hintText: '如 48000（小于模型上下文时提前压缩）',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  keyboardType: TextInputType.number,
+                  onFieldSubmitted: (v) {
+                    final parsed = int.tryParse(v.trim());
+                    notifier.setCompactionThreshold(
+                        parsed != null && parsed > 0 ? parsed : null);
+                  },
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   // ================================================================
