@@ -16,7 +16,6 @@ import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/chat_manager_provider.dart';
 import 'package:stroom/providers/context_management_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
-import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/system_assistant_provider.dart';
 import 'package:stroom/services/chat_adapter.dart';
@@ -29,6 +28,49 @@ import 'package:stroom/services/context_manager.dart'
 // ============================================================================
 // Agent 语义测试：max-steps / 中断标记 / 上下文压缩 / 自动标题
 // ============================================================================
+
+/// 第一次 chatStream 调用延迟 [delay] 后再产出（模拟慢压缩请求），
+/// 后续调用正常。记录调用次数与 captures。
+class _DelayedFirstProvider extends _RecordingProvider {
+  final Duration delay;
+
+  _DelayedFirstProvider(super.rounds, {required this.delay});
+
+  @override
+  Stream<AIStreamEvent> chatStream(
+    List<Map<String, dynamic>> messages, {
+    String? model,
+    int? maxTokens,
+    double? temperature,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    List<Map<String, dynamic>>? tools,
+    Map<String, dynamic>? extraParams,
+    CancelToken? cancelToken,
+    String? system,
+  }) async* {
+    final index = callCount;
+    if (index == 0) {
+      await Future<void>.delayed(delay);
+      if (cancelToken?.isCancelled ?? false) {
+        throw DioException(
+          requestOptions: RequestOptions(path: ''),
+          type: DioExceptionType.cancel,
+        );
+      }
+    }
+    yield* super.chatStream(messages,
+        model: model,
+        maxTokens: maxTokens,
+        temperature: temperature,
+        reasoning: reasoning,
+        reasoningEffort: reasoningEffort,
+        tools: tools,
+        extraParams: extraParams,
+        cancelToken: cancelToken,
+        system: system);
+  }
+}
 
 /// 第一次 chatStream 调用抛异常（模拟压缩请求失败），后续正常。
 class _ThrowingFirstCallProvider extends BaseChatProvider {
@@ -426,9 +468,110 @@ void main() {
       expect(toolCalls[0].result, ChatService.kToolInterruptedPlaceholder);
       manager.dispose();
     });
+
+    test('纯工具轮取消：中断标记持久化到对话消息（非仅 result）', () async {
+      final container = _makeContainer(
+        conversations: [Conversation(id: 'conv-pt', title: '')],
+      );
+      final manager = container.read(chatStreamManagerProvider);
+      final provider = _RecordingProvider([
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'call_slow',
+              'type': 'function',
+              'function': {
+                'name': 'slow_tool',
+                'arguments': '{}',
+              },
+            },
+          ]),
+        ],
+        [AIStreamEvent('answer')],
+      ]);
+      manager.adapter.forceService(_makeService(provider));
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'slow_tool',
+          description: 'slow',
+          parameters: {'type': 'object'},
+        ),
+        (args) async {
+          await Future.delayed(const Duration(milliseconds: 200));
+          return 'slow result';
+        },
+      );
+
+      final resultFuture = manager.startStreaming(
+        text: 'go',
+        convId: 'conv-pt',
+        history: [ChatMessage(role: 'user', content: 'go')],
+        tools: ChatService.getRegisteredToolDefinitions(),
+      );
+
+      await Future.delayed(const Duration(milliseconds: 50));
+      manager.cancel('conv-pt');
+      final result = await resultFuture;
+      expect(result.cancelled, isTrue);
+
+      // 持久化的 assistant 消息（纯工具轮，无文本）含中断标记
+      await _waitFor(() =>
+          container.read(conversationsProvider).first.messages.length >= 2);
+      final conv = container
+          .read(conversationsProvider)
+          .where((c) => c.id == 'conv-pt')
+          .first;
+      final assistantMsg = conv.messages.last;
+      expect(assistantMsg.role, 'assistant');
+      expect(assistantMsg.toolCalls, isNotNull);
+      expect(assistantMsg.toolCalls!.single.status, ToolCallStatus.completed);
+      expect(
+        assistantMsg.toolCalls!.single.result,
+        ChatService.kToolInterruptedPlaceholder,
+      );
+      container.dispose();
+    });
   });
 
   group('上下文压缩（compaction）', () {
+    test('压缩期间取消：主请求不发起，结果标记 cancelled', () async {
+      final container = _makeContainer(
+        conversations: [Conversation(id: 'conv-cc', title: '')],
+      );
+      final manager = container.read(chatStreamManagerProvider);
+      // 第一次调用（压缩请求）延迟 300ms，给取消留出窗口
+      final provider = _DelayedFirstProvider([
+        [AIStreamEvent('## Objective\n- 摘要')],
+        [AIStreamEvent('回答')],
+      ], delay: const Duration(milliseconds: 300));
+      manager.adapter.forceService(ChatService(
+        provider: provider,
+        modelConfig: _createModelConfig(context: 5000),
+      ));
+
+      final big = 'x' * 7000;
+      final resultFuture = manager.startStreaming(
+        text: 'q3',
+        convId: 'conv-cc',
+        history: [
+          ChatMessage(role: 'assistant', content: 'old a1 $big'),
+          ChatMessage(role: 'user', content: 'old q1 $big'),
+          ChatMessage(role: 'assistant', content: 'old a2 $big'),
+          ChatMessage(role: 'user', content: 'q2'),
+        ],
+      );
+
+      // 压缩请求进行中取消
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      manager.cancel('conv-cc');
+      final result = await resultFuture;
+
+      expect(result.cancelled, isTrue);
+      // 压缩请求被取消（未产出）、主请求未发起：无任何完成的调用
+      expect(provider.captures, isEmpty);
+      container.dispose();
+    });
+
     test('压缩请求失败时静默容错，主请求照发', () async {
       final container = _makeContainer(
         conversations: [Conversation(id: 'conv-fail', title: '')],
@@ -907,13 +1050,14 @@ void main() {
         ],
       );
 
-      // 2 次主请求 + 1 次标题请求（fire-and-forget），全部计入
+      // 2 次主请求计入；fire-and-forget 标题请求不计入累计
+      // （accumulateUsage: false，避免并发读取共享 usage 槽）
       await _waitFor(() => provider.captures.length >= 3);
       final conv = container
           .read(conversationsProvider)
           .where((c) => c.id == 'conv-usage4')
           .first;
-      expect(conv.totalCost, closeTo(0.0003, 1e-9));
+      expect(conv.totalCost, closeTo(0.0002, 1e-9));
       container.dispose();
     });
 
@@ -1036,7 +1180,7 @@ void main() {
       container.dispose();
     });
 
-    test('自定义更小触发值生效（小于模型 context 时提前压缩）', () async {
+    test('未达自定义触发值时按自定义阈值判断（30000 < 40000 不压缩）', () async {
       final container = _makeContainer(
         conversations: [
           Conversation(id: 'conv-custom', title: '', lastInputTokens: 30000),

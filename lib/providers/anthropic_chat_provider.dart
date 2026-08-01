@@ -321,6 +321,7 @@ class AnthropicChatProvider extends BaseChatProvider {
       _lastResponseStatusCode = null;
       _lastResponseData = null;
       _lastResponseHeaders = null;
+      _lastUsage = null;
       final response = await _dio.post(
         _baseUrl,
         cancelToken: cancelToken,
@@ -491,8 +492,8 @@ class AnthropicChatProvider extends BaseChatProvider {
               final cost = usage['total_cost'] ?? usage['cost'];
               if (cost is num) {
                 _lastUsage!['cost'] =
-                    (_lastUsage!['cost'] as num?)?.toDouble() ??
-                        0 + cost.toDouble();
+                    ((_lastUsage!['cost'] as num?)?.toDouble() ?? 0) +
+                        cost.toDouble();
               }
             }
           } else if (data['type'] == 'message_delta') {
@@ -505,8 +506,8 @@ class AnthropicChatProvider extends BaseChatProvider {
               if (cost is num) {
                 // 与 message_start 的 cost 累加而非覆盖
                 _lastUsage!['cost'] =
-                    (_lastUsage!['cost'] as num?)?.toDouble() ??
-                        0 + cost.toDouble();
+                    ((_lastUsage!['cost'] as num?)?.toDouble() ?? 0) +
+                        cost.toDouble();
               }
             }
           }
@@ -519,8 +520,9 @@ class AnthropicChatProvider extends BaseChatProvider {
           // 网络/协议层异常（DioException）与 API 错误事件
           // （processAnthropicStreamData 对 error 类型抛出的 Exception）
           // 必须上抛，否则真实 API 错误会被当成正常截断回复。
-          // 仅 JSON 解析失败（FormatException，如代理式多余行）跳过。
-          if (e is! FormatException) rethrow;
+          // 仅解析/形状错误（FormatException 与 TypeError——
+          // 如代理式多余行 data: [] / data: "keepalive"）跳过继续。
+          if (e is! FormatException && e is! TypeError) rethrow;
           debugPrint('AnthropicChatProvider: failed to parse SSE chunk: $e');
         }
       }

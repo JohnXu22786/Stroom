@@ -649,10 +649,11 @@ class ChatStreamManager {
     // ── Post-stream processing ──
     ChatMessage? assistantMessage;
     final wasCancelled = state.cancelledByUser;
+    final hadStreamError = streamError is Exception;
 
-    // 中断工具标记：用户取消时，把仍未完成的工具结果标记为中断占位，
+    // 中断工具标记：取消或流错误时，把仍未完成的工具结果标记为中断占位，
     // 避免 UI 与持久化中工具永远停留在 running 状态。
-    if (wasCancelled) {
+    if (wasCancelled || hadStreamError) {
       for (var i = 0; i < state.toolCalls.length; i++) {
         final tc = state.toolCalls[i];
         if (tc.status == ToolCallStatus.running ||
@@ -696,7 +697,7 @@ class ChatStreamManager {
           reasoningSections: state.reasoningSections.isNotEmpty
               ? List<String>.from(state.reasoningSections)
               : null,
-          textSections: state.textChunks.isNotEmpty
+          textSections: state.textChunks.any((c) => c.isNotEmpty)
               ? List<String>.from(state.textChunks)
               : null,
           toolCallRoundStarts: state.toolCallRoundStarts.isNotEmpty
@@ -1157,6 +1158,9 @@ class ChatStreamManager {
           // 标题任务只需首条用户消息文本，剥离附件避免重新读取大文件
           history: [firstUser.copyWith(attachments: [])],
           maxTokens: 200,
+          // fire-and-forget 可能与下一次主请求并发读取共享 usage 槽：
+          // 不计入累计（标题 token 极少，且避免张冠李戴/双计）
+          accumulateUsage: false,
         );
       } catch (e) {
         debugPrint('[ChatStreamManager] 标题生成请求失败: $e');

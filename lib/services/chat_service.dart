@@ -72,6 +72,10 @@ class ChatService {
   final ChatProtocol _protocol;
   bool _isCancelledByUser = false;
   CancelToken? _cancelToken;
+
+  /// 内部任务（标题/压缩）进行中的 CancelToken。
+  /// 独立于 [_cancelToken]（主请求），[cancel] 时一并中止。
+  CancelToken? _internalTaskToken;
   StreamSubscription<AIStreamEvent>? _streamSubscription;
   StreamController<String>? _controller;
 
@@ -350,7 +354,10 @@ class ChatService {
     _contentBuffer = '';
     _lastReasoningLength = 0;
     _thinkingSignature = '';
-    _accumulatedUsage = null;
+    // 注意：不重置 _accumulatedUsage —— 一次"用户发送"内的内部任务
+    // （压缩请求先于主请求执行）与主请求多轮共用同一个累计器；
+    // service 生命周期 = 一次发送（manager 每次流结束 cancelService），
+    // 重置在这里会清掉压缩请求已累计的 usage。
 
     final controller = StreamController<ChatEvent>(
       onCancel: () {
@@ -470,6 +477,9 @@ class ChatService {
               _streamSubscription = null;
               debugPrint('ChatService stream error: $error');
               _lastResponseData = _provider?.lastResponseData;
+              // 错误轮也可能已产生计费 usage，一并累计
+              // （避免错误后 stale lastInputTokens 触发重复压缩）
+              _accumulateUsage();
               if (!controller.isClosed) {
                 controller.addError(error);
               }
@@ -614,15 +624,20 @@ class ChatService {
   /// [contextSummary] 可选注入压缩摘要。
   ///
   /// 内部任务请求需要轻量（maxTokens 通常较小、无工具），
-  /// 与主对话请求相互独立。使用**局部** CancelToken，不触碰
-  /// [_cancelToken] 字段，避免与并发的主请求流互相干扰
-  /// （fire-and-forget 标题请求与下一次发送之间无共享状态）。
-  /// 完成的 usage 并入本服务实例的累计（成本计入对话）。
+  /// 与主对话请求相互独立。使用**局部** CancelToken（不触碰
+  /// [_cancelToken] 字段，避免与并发的主请求流互相干扰），
+  /// 同时注册到 [_internalTaskToken] 供 [cancel] 中止。
+  ///
+  /// [accumulateUsage]：为 true 时把本次请求的 usage 并入服务实例的
+  /// 累计（压缩请求——顺序执行无竞态）；为 false 时不累计且不读取
+  /// provider 的共享 usage 槽（标题请求——fire-and-forget 可能与
+  /// 下一次主请求并发，读取会张冠李戴/双计）。
   Future<String> sendPrompt({
     required String systemPrompt,
     required List<ChatMessage> history,
     int? maxTokens,
     String? contextSummary,
+    bool accumulateUsage = true,
   }) async {
     final req = await _protocol.buildRequest(
       history: history,
@@ -630,6 +645,7 @@ class ChatService {
       contextSummary: contextSummary,
     );
     final token = CancelToken();
+    _internalTaskToken = token;
     final chunks = <String>[];
     try {
       await for (final event in _provider!.chatStream(
@@ -642,10 +658,14 @@ class ChatService {
         if (event.isReasoning || event.isToolCallEvent) continue;
         if (event.text.isNotEmpty) chunks.add(event.text);
       }
-      _accumulateUsage();
+      if (accumulateUsage) {
+        _accumulateUsage();
+      }
     } catch (e) {
       debugPrint('ChatService sendPrompt stream error: $e');
       rethrow;
+    } finally {
+      _internalTaskToken = null;
     }
     return chunks.join('').trim();
   }
@@ -655,6 +675,9 @@ class ChatService {
     _isCancelledByUser = true;
     _cancelToken?.cancel();
     _cancelToken = null;
+    // 中止进行中的内部任务（压缩/标题请求）
+    _internalTaskToken?.cancel();
+    _internalTaskToken = null;
     _streamSubscription?.cancel();
     _streamSubscription = null;
     if (_controller != null && !_controller!.isClosed) {
