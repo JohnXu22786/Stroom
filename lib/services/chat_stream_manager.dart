@@ -14,8 +14,7 @@ import '../providers/system_assistant_provider.dart';
 import '../providers/assistant_provider.dart';
 import 'app_log_service.dart';
 import 'chat_adapter.dart';
-import 'chat_protocol.dart'
-    show kInterruptedToolResultPlaceholder, rebuildToolResultText;
+import 'chat_protocol.dart' show rebuildToolResultText;
 import 'chat_service.dart' show ChatService;
 import 'context_manager.dart';
 
@@ -415,21 +414,55 @@ class ChatStreamManager {
     // capture it here for raw data (lastRequestBody etc.) in finally.
     final _snappedChatService = _adapter.getOrCreateService(convId);
 
-    // ── 上下文管理：摘要注入 + 超限自动压缩 ──
+    // ── 上下文管理：摘要注入 + 发送量过滤 + 超限自动压缩 ──
     // 1. 每次请求都注入对话已有的压缩摘要（如有）
-    // 2. 估算输入 token，超限时用压缩助手把头部历史压缩为锚定摘要，
-    //    尾部原文保留并重放（opencode select 语义）
+    // 2. 发送历史 = 有摘要时从"压缩时记录的尾部起点"起（固定快照，
+    //    对齐 opencode tail_start_id），无摘要时全量——这就是
+    //    "上下文显示越来越少、存储还在"的机制
+    // 3. 压缩触发基于**发送量**（非存储总量），超限时把
+    //    [快照之后 .. 新尾部起点] 压缩为锚定摘要
+    final conv = _ref
+        ?.read(conversationsProvider)
+        .where((c) => c.id == convId)
+        .firstOrNull;
+    _snappedChatService?.setContextSummary(conv?.contextSummary);
+
+    // 发送历史过滤（对齐 opencode filterCompacted）：
+    // 有摘要时从 compactionTailStartId（固定快照）起发送，
+    // 快照之前 = 已压缩内容，存储保留但不发送。
+    // 快照消息不在历史中（被删）时安全回退为全量。
+    final tailStartId = conv?.compactionTailStartId;
+    final hasSummary = conv?.contextSummary?.trim().isNotEmpty ?? false;
+    List<ChatMessage> requestHistory;
+    if (hasSummary && tailStartId != null) {
+      final idx = state.history.indexWhere((m) => m.id == tailStartId);
+      requestHistory = idx >= 0 ? state.history.sublist(idx) : state.history;
+    } else {
+      requestHistory = state.history;
+    }
+
     try {
-      final conv = _ref
-          ?.read(conversationsProvider)
-          .where((c) => c.id == convId)
-          .firstOrNull;
-      _snappedChatService?.setContextSummary(conv?.contextSummary);
-      await _compactIfNeeded(
+      final compacted = await _compactIfNeeded(
         state: state,
         convId: convId,
         tools: tools,
+        requestHistory: requestHistory,
       );
+      // 压缩成功：tail 快照已更新，重新计算发送历史
+      // （从新尾部起点起，头部被摘要替代）
+      if (compacted) {
+        final newConv = _ref
+            ?.read(conversationsProvider)
+            .where((c) => c.id == convId)
+            .firstOrNull;
+        final newTailStartId = newConv?.compactionTailStartId;
+        if (newTailStartId != null) {
+          final idx = state.history.indexWhere((m) => m.id == newTailStartId);
+          if (idx >= 0) {
+            requestHistory = state.history.sublist(idx);
+          }
+        }
+      }
       // 压缩期间用户取消：不发起主请求（空流走正常清理路径，
       // 结果标记为 cancelled）
       if (state.cancelledByUser) {
@@ -444,23 +477,7 @@ class ChatStreamManager {
     // The stream controller will buffer any events produced before the
     // await-for loop subscribes below.
     //
-    // ── 发送历史过滤（对齐 opencode filterCompacted）──
-    // 对话被压缩过（contextSummary 非空）时，**存储保留全部消息**，
-    // 但发给 API 的只是"摘要 + 尾部"子集（最后 tailUserTurns 轮用户
-    // 消息起）——这就是"上下文显示越来越少、存储还在"的机制。
-    // 摘要由 setContextSummary 注入 system 级内容。
-    final hasSummary = (_ref
-            ?.read(conversationsProvider)
-            .where((c) => c.id == convId)
-            .firstOrNull
-            ?.contextSummary
-            ?.trim()
-            .isNotEmpty ??
-        false);
-    final requestHistory = hasSummary
-        ? state.history.sublist(_findTailStart(state.history))
-        : state.history;
-
+    // requestHistory 已在上方上下文管理块计算（有摘要时 = 尾部快照起）。
     final stream = state.cancelledByUser
         ? const Stream<ChatEvent>.empty()
         : _adapter.sendStreamWithTools(
@@ -1014,11 +1031,17 @@ class ChatStreamManager {
 
   // ── 上下文压缩（compaction） ────────────────────────────────────
 
-  /// 上下文管理：估算输入超限时，用压缩助手把头部历史压缩为锚定摘要。
+  /// 上下文管理：发送量超限时，用压缩助手把新增头部历史压缩为锚定摘要。
+  ///
+  /// [requestHistory] 为本次实际发送的消息子集（有摘要时 = 尾部快照起，
+  /// 对齐 opencode filterCompacted），触发判断与估算都基于它——
+  /// 压缩后发送量回到小值，不会每次发送都重复压缩。
   ///
   /// 成功后：
   /// - 摘要持久化到 [Conversation.contextSummary]（含前次摘要合并）
-  /// - [state.history] 裁剪为尾部原文（头部被摘要替换）
+  /// - [Conversation.compactionTailStartId] 更新为新尾部起点
+  ///   （固定快照，后续请求从该消息起发送）
+  /// - [state.history] **不裁剪**（存储完整保留，对齐 opencode）
   /// - 当前 ChatService 注入摘要（后续请求走 system 级摘要）
   ///
   /// 任何失败（未配置、请求失败、结果为空、头部为空）都静默返回 false
@@ -1027,6 +1050,7 @@ class ChatStreamManager {
     required _ConversationStreamState state,
     required String convId,
     required List<ToolDefinition> tools,
+    required List<ChatMessage> requestHistory,
   }) async {
     final ref = _ref;
     if (ref == null) return false;
@@ -1044,13 +1068,15 @@ class ChatStreamManager {
     // - actual 可能落后于本轮增长（新消息/附件/工具结果）
     // - estimated 含本轮全部内容
     // 取 max 宁可多压一次，也不让请求超过触发线。
+    // 估算基于**发送量**（requestHistory，非存储总量）——压缩后
+    // 存储保留全部消息，但发送量回到小值，不会每次都触发压缩。
     final conv = ref
         .read(conversationsProvider)
         .where((c) => c.id == convId)
         .firstOrNull;
     final actualInput = conv?.lastInputTokens;
     final estimated = ContextManager.estimateHistoryTokens(
-      state.history,
+      requestHistory,
       assistantPrompt: _adapter.assistantPrompt,
       tools: tools,
     );
@@ -1070,10 +1096,19 @@ class ChatStreamManager {
     );
     if (compactionPrompt == null) return false;
 
-    // 3. 划分头部（可压缩）与尾部（保留原文）
+    // 3. 划分头部（可压缩）与尾部（保留原文）。
+    //    head 起点：有摘要时从 compactionTailStartId 之后开始
+    //    （快照之前 = 已压缩内容，不再转写；对齐 opencode hidden）。
     final tailStart = _findTailStart(state.history);
+    var headStart = 0;
+    final tailStartId = conv?.compactionTailStartId;
+    if (tailStartId != null) {
+      final idx = state.history.indexWhere((m) => m.id == tailStartId);
+      if (idx >= 0) headStart = idx;
+    }
+    if (headStart >= tailStart) return false; // 无新增可压缩内容
     final head = state.history
-        .sublist(0, tailStart)
+        .sublist(headStart, tailStart)
         // 压缩转写剥离附件（媒体不进摘要请求）
         .map((m) => m.attachments.isEmpty ? m : m.copyWith(attachments: []))
         .toList();

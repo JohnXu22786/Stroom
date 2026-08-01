@@ -3,7 +3,7 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/services/chat_protocol.dart';
 import 'package:stroom/services/context_manager.dart'
-    show kCompactedToolResultPlaceholder;
+    show kCompactedToolResultPlaceholder, kInterruptedToolResultPlaceholder;
 
 // ============================================================================
 // ChatProtocol 协议层测试

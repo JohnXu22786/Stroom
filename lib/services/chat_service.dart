@@ -12,6 +12,7 @@ import '../models/tool_call.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 import 'chat_protocol.dart';
+import 'context_manager.dart' show kInterruptedToolResultPlaceholder;
 import 'chat_service_shared.dart' show setNestedParam;
 import 'mcp_client.dart';
 import 'app_log_service.dart';

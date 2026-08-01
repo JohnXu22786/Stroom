@@ -23,6 +23,9 @@ import '../utils/token_estimator.dart';
 /// 工具结果被压缩后的占位文本（与协议层一致，渲染时替换）。
 const String kCompactedToolResultPlaceholder = '[旧工具结果已清除]';
 
+/// 中断/未完成工具结果的占位文本（协议层历史重建引用）。
+const String kInterruptedToolResultPlaceholder = '[工具执行被中断]';
+
 /// prune 保护的工具（对齐 opencode PRUNE_PROTECTED_TOOLS = ["skill"]）。
 ///
 /// 状态性工具的结果即使过期也不 prune：todo 列表是 agent 的
@@ -110,10 +113,9 @@ class ContextManager {
 
   /// 估算历史（含 system 提示词）的 token 数，供压缩触发判断。
   ///
-  /// 只估算**实际会发送到 API 的内容**（消息文本 + 附件文件名 +
-  /// 工具定义）。工具调用/结果不进入请求体（buildRequest 只发
-  /// content/attachments），因此不计入——否则估算偏大，
-  /// max(actual, estimated) 会在真实上下文远低于触发线时误触发压缩。
+  /// 估算**实际会发送到 API 的内容**：消息文本 + 附件文件名 +
+  /// 工具定义 + 工具链重建（tool_calls 参数与渲染后的结果——
+  /// 2K 截断 / compacted 占位 / 中断占位，与协议层渲染一致）。
   static int estimateHistoryTokens(
     List<ChatMessage> history, {
     String? assistantPrompt,
@@ -129,6 +131,15 @@ class ContextManager {
         // 附件只估算文件名（内容以 base64 或文本形式随消息发送）
         total += estimateTokens(att.fileName) + 8;
       }
+      // 工具链重建进入请求体：按发送渲染估算
+      final toolCalls = msg.toolCalls;
+      if (toolCalls != null) {
+        for (final tc in toolCalls) {
+          total += estimateTokens(tc.name);
+          total += estimateJsonTokens(tc.arguments);
+          total += estimateTokens(_renderToolResult(tc));
+        }
+      }
     }
     for (final def in tools) {
       total += estimateJsonTokens(def.toJson());
@@ -140,6 +151,25 @@ class ContextManager {
 // ============================================================================
 // 内部实现
 // ============================================================================
+
+/// 发送给模型时工具结果的渲染截断（与协议层 kToolOutputMaxChars 一致；
+/// 本地常量避免循环 import）。
+const int _kToolOutputRenderMaxChars = 2000;
+
+/// 工具结果发送渲染（对齐协议层 rebuildToolResultText）：
+/// compacted → 占位；completed → 2K 截断；其余 → 中断占位。
+String _renderToolResult(ToolCallData tc) {
+  if (tc.compactedAt != null) {
+    return kCompactedToolResultPlaceholder;
+  }
+  if (tc.status == ToolCallStatus.completed && tc.result != null) {
+    final r = tc.result!;
+    return r.length > _kToolOutputRenderMaxChars
+        ? r.substring(0, _kToolOutputRenderMaxChars)
+        : r;
+  }
+  return kInterruptedToolResultPlaceholder;
+}
 
 /// 一个可压缩的工具结果条目。
 class _PruneTarget {

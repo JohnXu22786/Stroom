@@ -810,6 +810,68 @@ void main() {
       expect(conv.contextSummary, isNull);
       container.dispose();
     });
+
+    test('压缩后不再重复压缩（触发基于发送量，非存储总量）', () async {
+      final container = _makeContainer(
+        conversations: [Conversation(id: 'conv-once', title: '')],
+      );
+      final manager = container.read(chatStreamManagerProvider);
+      // 第 1 次调用 = 压缩请求（摘要）；后续 = 主请求
+      final provider = _RecordingProvider([
+        [AIStreamEvent('## Objective\n- 摘要')],
+        [AIStreamEvent('回答1')],
+        [AIStreamEvent('回答2')],
+      ]);
+      manager.adapter.forceService(ChatService(
+        provider: provider,
+        modelConfig: _createModelConfig(context: 5000),
+      ));
+
+      final big = 'x' * 7000;
+      final history = [
+        ChatMessage(role: 'assistant', content: 'old a1 $big'),
+        ChatMessage(role: 'user', content: 'old q1 $big'),
+        ChatMessage(role: 'assistant', content: 'old a2 $big'),
+        ChatMessage(role: 'user', content: 'q2'),
+        ChatMessage(role: 'assistant', content: 'a3'),
+        ChatMessage(role: 'user', content: 'q3'),
+      ];
+
+      // 第一次发送：触发压缩（存储完整、发送 = 摘要 + tail）
+      await manager.startStreaming(
+        text: 'q3',
+        convId: 'conv-once',
+        history: List.from(history),
+      );
+      // 第二次发送：发送量 = 摘要 + 快照起的 tail（小）→ 不再压缩
+      await manager.startStreaming(
+        text: '再问',
+        convId: 'conv-once',
+        history: [
+          ...history,
+          ChatMessage(role: 'assistant', content: '回答1'),
+          ChatMessage(role: 'user', content: '再问'),
+        ],
+      );
+
+      await _waitFor(() => provider.captures.length >= 4); // 主请求 + 标题
+      // 压缩助手 prompt 只应出现 1 次（首次发送）：
+      // 第二次发送基于发送量（摘要 + 快照 tail）不再触发压缩
+      final compactionCalls = provider.captures
+          .where((c) => ((c['messages'] as List).first as Map)['content']
+              .toString()
+              .contains('锚定上下文摘要助手'))
+          .length;
+      expect(compactionCalls, 1, reason: '压缩只发生一次——第二次发送不重复压缩');
+      // 主请求（含摘要 system）至少 2 次
+      final mainSysCalls = provider.captures
+          .where((c) => ((c['messages'] as List).first as Map)['content']
+              .toString()
+              .contains('Objective'))
+          .length;
+      expect(mainSysCalls, greaterThanOrEqualTo(2));
+      container.dispose();
+    });
   });
 
   group('自动标题', () {

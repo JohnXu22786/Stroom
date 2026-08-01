@@ -5,7 +5,8 @@ import '../models/chat_message.dart';
 import '../models/tool_call.dart';
 import 'attachment_storage.dart';
 import 'chat_service_shared.dart' show audioFormatFromMimeType, imageExtension;
-import 'context_manager.dart' show kCompactedToolResultPlaceholder;
+import 'context_manager.dart'
+    show kCompactedToolResultPlaceholder, kInterruptedToolResultPlaceholder;
 
 // ============================================================================
 // ChatProtocol — 聊天协议抽象层
@@ -226,9 +227,6 @@ Future<Uint8List?> readRawAttachmentBytes(Attachment att) async {
 // ============================================================================
 // 中立工具调用 / 结果辅助（历史重建用）
 // ============================================================================
-
-/// 中断/未完成工具结果的占位文本（历史重建时保证配对完整性）。
-const String kInterruptedToolResultPlaceholder = '[工具执行被中断]';
 
 /// 发送给模型的工具结果渲染截断（对齐 opencode TOOL_OUTPUT_MAX_CHARS）。
 ///
