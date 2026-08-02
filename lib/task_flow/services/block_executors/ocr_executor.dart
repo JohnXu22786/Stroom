@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -24,6 +25,7 @@ Future<String> _callOcrApi({
   required String modelId,
 }) async {
   final dio = Dio();
+  final cancelToken = CancelToken();
   try {
     final dataUri =
         'data:image/$imageFormat;base64,${base64Encode(imageBytes)}';
@@ -45,19 +47,27 @@ Future<String> _callOcrApi({
       ],
     };
     // A stalled server must not hang the flow forever — the executor's
-    // catch routes the timeout through failSubTask like every other block.
+    // catch routes the timeout through failSubTask like every other block,
+    // and the token cancels the request so no socket lingers.
     final response = await dio
         .post(
-          host,
-          data: body,
-          options: Options(
-            headers: {
-              'Authorization': 'Bearer $apiKey',
-              'Content-Type': 'application/json',
-            },
-          ),
-        )
-        .timeout(const Duration(minutes: 10));
+      host,
+      data: body,
+      options: Options(
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        },
+      ),
+      cancelToken: cancelToken,
+    )
+        .timeout(
+      const Duration(minutes: 10),
+      onTimeout: () {
+        cancelToken.cancel();
+        throw TimeoutException('请求超时');
+      },
+    );
     if (response.data is Map) {
       final choices = response.data['choices'] as List<dynamic>?;
       if (choices != null && choices.isNotEmpty) {

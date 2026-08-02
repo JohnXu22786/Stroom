@@ -1,4 +1,7 @@
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
+
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
@@ -9,6 +12,15 @@ import '../../utils/file_manifest.dart';
 import '../models/catcatch_task.dart';
 import '../models/media_resource.dart';
 import 'executor_utils.dart';
+
+/// Reads the file and computes its MD5 off the UI isolate — hashing a
+/// multi-GB video on the main isolate would freeze the GUI.
+Future<(Uint8List, String)> _readAndHashInIsolate(String filePath) {
+  return Isolate.run(() {
+    final bytes = File(filePath).readAsBytesSync();
+    return (bytes, md5.convert(bytes).toString());
+  });
+}
 
 Future<String> executeSave({
   required CatCatchTask task,
@@ -61,8 +73,7 @@ Future<void> registerCompletedVideo(String filePath, CatCatchTask task) async {
   final file = File(filePath);
   if (!await file.exists()) return;
 
-  final fileBytes = await file.readAsBytes();
-  final hash = md5.convert(fileBytes).toString();
+  final (fileBytes, hash) = await _readAndHashInIsolate(filePath);
 
   // Build record name from the file path (uniqueExecutorPath already handles
   // file-system dedup).  Still check the manifest for name+folder collisions
@@ -113,8 +124,7 @@ Future<void> registerCompletedAudio(String filePath, CatCatchTask task) async {
   final file = File(filePath);
   if (!await file.exists()) return;
 
-  final fileBytes = await file.readAsBytes();
-  final hash = md5.convert(fileBytes).toString();
+  final (fileBytes, hash) = await _readAndHashInIsolate(filePath);
 
   String recordName = p.basenameWithoutExtension(filePath);
   final audioFolder = task.metadata['audioFolder'] ?? '';
