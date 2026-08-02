@@ -90,6 +90,9 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       if (task.customParams != null) {
         params.addAll(task.customParams!);
       }
+      // 'saveFolder' is an internal key (flow blocks use it to pick the
+      // output folder) — strip it so it never reaches the TTS API body.
+      params.remove('saveFolder');
       // customParams values are String-typed (flow blocks stringify
       // numbers); the API contract for speed is numeric, so coerce it
       // back instead of sending "speed": "1.0" as a JSON string, which
