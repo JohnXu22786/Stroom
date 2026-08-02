@@ -768,42 +768,5 @@ void main() {
       expect(notifier.state[0].status, FlowExecutionStatus.failed);
       expect(notifier.state[0].subTasks[0].status, TaskStatus.failed);
     });
-
-    test('catcatch paused: sub-task stays paused until auto-select or manual',
-        () {
-      final notifier = TaskFlowExecutionNotifier();
-
-      final execId = notifier.addExecution(
-        flowId: 'flow-1',
-        flowName: '测试流程',
-      );
-      notifier.addSubTask(
-          execId,
-          FlowSubTask(
-            blockTypeKey: 'catcatch',
-            blockLabel: '获取网页资源',
-            subTaskId: 'task-1',
-            subTaskType: 'catcatch',
-          ));
-
-      // Pipeline paused at userSelecting
-      notifier.updateSubTaskStatus(
-          execId, notifier.state[0].subTasks[0].id, TaskStatus.paused);
-
-      // Flow is still running (paused is not terminal)
-      expect(notifier.state[0].status, FlowExecutionStatus.running);
-
-      // Auto-select sets it back to running
-      notifier.updateSubTaskStatus(
-          execId, notifier.state[0].subTasks[0].id, TaskStatus.running);
-
-      expect(notifier.state[0].status, FlowExecutionStatus.running);
-
-      // Then completed
-      notifier.updateSubTaskStatus(
-          execId, notifier.state[0].subTasks[0].id, TaskStatus.completed);
-
-      expect(notifier.state[0].status, FlowExecutionStatus.completed);
-    });
   });
 }

@@ -24,6 +24,13 @@ Map<String, dynamic> _buildAsrFormParams(Map<String, dynamic> tc) {
   if (tc['enableResponseFormat'] == true && tc.containsKey('responseFormat')) {
     params['response_format'] = tc['responseFormat'] as String;
   }
+  // Mirrors asr_service.dart effectiveLanguage (typeConfig-gated part).
+  if (tc['enableLanguage'] == true && tc.containsKey('language')) {
+    final lang = tc['language'] as String?;
+    if (lang != null && lang.isNotEmpty) {
+      params['language'] = lang;
+    }
+  }
   if (tc['enableTemperature'] == true && tc.containsKey('temperature')) {
     params['temperature'] = (tc['temperature'] as num).toDouble();
   }

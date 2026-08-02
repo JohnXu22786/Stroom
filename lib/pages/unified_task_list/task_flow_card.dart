@@ -270,7 +270,11 @@ class _ExpandedContent extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除任务流记录'),
-        content: Text('确定删除此任务流记录？'),
+        content: Text(
+          execution != null && execution.subTasks.isNotEmpty
+              ? '确定删除此任务流记录？其子任务记录也会一并删除。'
+              : '确定删除此任务流记录？',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -278,6 +282,7 @@ class _ExpandedContent extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () {
+              _removeSubTaskTasks(ref, execution);
               ref
                   .read(taskFlowExecutionsProvider.notifier)
                   .removeExecution(execId);
@@ -288,6 +293,25 @@ class _ExpandedContent extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Remove the execution's real sub-task tasks from their providers so
+  /// they don't resurface as orphaned standalone cards after the flow
+  /// record is deleted (matches the AppBar 清除 actions, which remove
+  /// execution and sub-tasks together).
+  void _removeSubTaskTasks(WidgetRef ref, TaskFlowExecution? execution) {
+    if (execution == null) return;
+    for (final st in execution.subTasks) {
+      if (st.subTaskId.startsWith('pending_')) continue;
+      switch (st.subTaskType) {
+        case 'catcatch':
+          ref.read(catcatchTasksProvider.notifier).removeTask(st.subTaskId);
+        case 'synthesis':
+          ref.read(taskListProvider.notifier).removeTask(st.subTaskId);
+        default: // 'background' (including legacy 'chat' records)
+          ref.read(backgroundTasksProvider.notifier).removeTask(st.subTaskId);
+      }
+    }
   }
 
   Widget _buildSubTaskCard(
