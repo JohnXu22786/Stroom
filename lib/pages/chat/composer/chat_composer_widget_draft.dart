@@ -11,6 +11,10 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   void _saveDraftImmediately(ChatComposerWidget w) {
     final convId = w.conversationId;
     if (convId == null) return;
+    // 编辑模式不写草稿（与 _onTextChanged 的跳过一致）：否则应用
+    // 进入后台/被销毁时，正在编辑的消息文本会被当作新消息草稿
+    // 持久化，重进对话后草稿区出现陈旧的编辑文本。
+    if (w.editingMessageId != null) return;
     // If the text hasn't changed since last save, skip
     if (w == widget && _lastSavedDraft == _textController.text) return;
     final textToSave = _textController.text;
@@ -70,6 +74,16 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
 
   void _handleSubmitted(String text) {
     if (text.trim().isEmpty && _pendingAttachments.isEmpty) return;
+
+    // 流式守卫（与 Enter 键路径一致）：流式期间发送按钮被替换为停止
+    // 按钮，但全屏编辑器的发送路径没有按钮级保护——chat_page 的
+    // _onMessageSend 对流式中的对话静默 return，不清空这里会导致
+    // 用户输入被静默丢弃。守卫：流式中不发送、保留输入。
+    final streamingConvs = ref.read(streamingConversationsProvider);
+    if (widget.conversationId != null &&
+        streamingConvs.contains(widget.conversationId)) {
+      return;
+    }
 
     if (widget.editingMessageId != null) {
       // Edit mode: call onEditSend with the message id, edited text,

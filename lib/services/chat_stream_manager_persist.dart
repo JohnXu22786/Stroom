@@ -19,15 +19,20 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
     }
     try {
       final partialHistory = List<ChatMessage>.from(s.history);
-      if (s.fullReply.isNotEmpty) {
+      // 纯推理轮（fullReply 空但推理非空）也持久化：崩溃重进后
+      // 已流出的思考过程不丢失。
+      if (s.fullReply.isNotEmpty ||
+          s.reasoningSections.any((c) => c.isNotEmpty)) {
         final exists = partialHistory.any((m) => m.id == s.streamingMsgId);
         if (!exists) {
+          // reasoningContent 用全量累计（sections 拼接），与 finalize
+          // 的消息构造保持一致（reasoningBuffer 只含最后一轮）。
+          final fullReasoning = s.reasoningSections.join('\n');
           partialHistory.add(ChatMessage(
             role: 'assistant',
             content: s.fullReply,
             id: s.streamingMsgId ?? '',
-            reasoningContent:
-                s.reasoningBuffer.isNotEmpty ? s.reasoningBuffer : null,
+            reasoningContent: fullReasoning.isNotEmpty ? fullReasoning : null,
             toolCalls: s.accumulatedToolCalls.isNotEmpty
                 ? List<ToolCallData>.from(s.accumulatedToolCalls)
                 : null,

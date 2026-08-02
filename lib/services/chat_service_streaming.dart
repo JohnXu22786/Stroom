@@ -181,13 +181,20 @@ extension ChatServiceStreamingExt on ChatService {
         final maxRounds = _assistantSettings?.enableMaxToolCalls == true
             ? _assistantSettings!.maxToolCalls
             : null;
+        // 持久化损坏/旧数据可能给出非正数 maxToolCalls：totalRounds <= 0
+        // 会让 while 恒假——不发任何请求、空流无错误、消息不落库，
+        // 用户完全无反馈。非正数按未配置处理（回退安全上限）。
+        final effectiveMaxRounds =
+            (maxRounds != null && maxRounds >= 1) ? maxRounds : null;
         // 对齐 opencode steps 语义：maxRounds 轮内工具可用；
         // 若模型在最后一轮仍请求工具（超限），追加一轮"收尾轮"
         // （tools 禁用 + 文本收尾提示词），让模型总结而不是硬跑。
         // 未配置 maxRounds 时（无限模式）仍有安全上限护栏
         // （kMaxToolRoundsFallback），防止模型无限 ping-pong 工具。
-        final totalRounds = maxRounds == null ? null : maxRounds + 1;
-        final maxLoopRounds = maxRounds ?? ChatService.kMaxToolRoundsFallback;
+        final totalRounds =
+            effectiveMaxRounds == null ? null : effectiveMaxRounds + 1;
+        final maxLoopRounds =
+            effectiveMaxRounds ?? ChatService.kMaxToolRoundsFallback;
 
         while (!_isCancelledByUser &&
             (totalRounds == null || loopProtection < totalRounds)) {
@@ -209,6 +216,9 @@ extension ChatServiceStreamingExt on ChatService {
           _cancelToken = CancelToken();
 
           final completer = Completer<void>();
+          // 登记当前轮 completer：cancel() 时完成它使循环退出
+          // （真实 provider 取消订阅后 onDone/onError 不送达）。
+          _roundCompleter = completer;
           final toolCallRefs = <Map<String, dynamic>>[];
           // 本轮流错误标记：onError 后立即停止轮处理，不再执行
           // 本轮的剩余工具或发起下一轮请求（错误已上抛给 manager，
@@ -218,7 +228,8 @@ extension ChatServiceStreamingExt on ChatService {
           // 收尾轮：tools 定义保留（Anthropic 要求历史含 tool_use/
           // tool_result 块时必须定义 tools，否则 400）+ tool_choice none
           // 显式禁止调用 + 前置文本收尾提示，要求模型总结已做/未做/下一步。
-          final isLastStep = maxRounds != null && loopProtection > maxRounds;
+          final isLastStep =
+              effectiveMaxRounds != null && loopProtection > effectiveMaxRounds;
           final roundExtraParams = <String, dynamic>{...extraParams};
           if (isLastStep) {
             roundExtraParams.addAll(_protocol.toolChoiceNoneJson());
@@ -294,6 +305,7 @@ extension ChatServiceStreamingExt on ChatService {
           );
 
           await completer.future;
+          _roundCompleter = null;
           if (_isCancelledByUser) break;
           // 本轮流错误：工具结果已不可信，终止整个循环
           // （manager 已通过 addError 收到错误并走错误路径）。
@@ -421,6 +433,11 @@ extension ChatServiceStreamingExt on ChatService {
     _internalTaskTokens.clear();
     _streamSubscription?.cancel();
     _streamSubscription = null;
+    // 完成当前工具轮次的等待：真实 provider 在订阅取消后不会送达
+    // onDone/onError，不完成则 sendStreamWithTools 的工具循环永久挂起
+    // （详见 _roundCompleter 字段注释）。
+    _roundCompleter?.complete();
+    _roundCompleter = null;
     if (_controller != null && !_controller!.isClosed) {
       _controller!.close();
     }

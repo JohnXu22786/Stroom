@@ -95,6 +95,15 @@ class ChatService {
   /// (in ChatPage) receives a done event and can clean up the streaming
   /// placeholder message — otherwise the spinner animation never disappears.
   StreamController<ChatEvent>? _chatEventController;
+
+  /// 当前工具轮次的等待 completer（sendStreamWithTools 内部）。
+  ///
+  /// [cancel()] 会同步取消订阅与 cancelToken；真实 provider（Dio 驱动的
+  /// async* 流）在订阅取消后 onDone/onError **不会**送达，`await
+  /// completer.future` 将永久挂起。cancel 时必须完成它，循环才能走到
+  /// `if (_isCancelledByUser) break` 正常退出（否则每次"停止"都泄漏
+  /// 一个持 MB 级闭包的挂起微任务）。
+  Completer<void>? _roundCompleter;
   String _reasoningBuffer = '';
 
   /// Accumulated visible content from the current streaming round,

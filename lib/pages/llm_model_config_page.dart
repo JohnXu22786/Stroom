@@ -82,8 +82,12 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // Editing: compare against original model
     if (_nameController.text != m.name) return true;
     if (_modelIdController.text != m.modelId) return true;
-    if (_contextController.text !=
-        ((m.typeConfig['context'] as num?)?.toInt().toString() ?? '')) {
+    // context 回退逻辑与 initState 一致（旧模型只有 maxTokens 没有
+    // context 时，init 已把 maxTokens 填进输入框——这里只比较
+    // context 会把"未修改"误判为"已修改"，每次返回都弹放弃确认）。
+    final originalContext = (m.typeConfig['context'] as num?)?.toInt() ??
+        (m.typeConfig['maxTokens'] as num?)?.toInt();
+    if (_contextController.text != (originalContext?.toString() ?? '')) {
       return true;
     }
     // LLM params

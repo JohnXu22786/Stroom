@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show debugPrint;
+
 import '../models/chat_message.dart';
 import '../models/tool_call.dart';
 import 'anthropic_protocol.dart';
@@ -118,14 +120,21 @@ Future<AttachmentReadOutcome> readAttachmentBase64(Attachment att) async {
   if (att.fileSize > maxAttachmentBytes) {
     return const AttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
   }
-  final bytes = await AttachmentStorage.readFile(att.storagePath);
-  if (bytes == null || bytes.isEmpty) {
+  try {
+    final bytes = await AttachmentStorage.readFile(att.storagePath);
+    if (bytes == null || bytes.isEmpty) {
+      return const AttachmentReadOutcome(AttachmentReadStatus.unreadable, null);
+    }
+    final b64 = base64Encode(bytes);
+    // 缓存 base64 供后续复用
+    att.base64Data = b64;
+    return AttachmentReadOutcome(AttachmentReadStatus.ok, b64);
+  } catch (e) {
+    // 瞬时 IO 异常（权限、磁盘满等）：降级为 unreadable 占位，
+    // 与 readTextAttachmentContent 行为一致——不能让整次发送失败。
+    debugPrint('[ChatProtocol] 附件读取失败: ${att.fileName}: $e');
     return const AttachmentReadOutcome(AttachmentReadStatus.unreadable, null);
   }
-  final b64 = base64Encode(bytes);
-  // 缓存 base64 供后续复用
-  att.base64Data = b64;
-  return AttachmentReadOutcome(AttachmentReadStatus.ok, b64);
 }
 
 /// 文本类附件的扩展名列表（可从文件中读取 UTF-8 文本）。
@@ -228,7 +237,14 @@ Future<Uint8List?> readRawAttachmentBytes(Attachment att) async {
       // 缓存损坏，回退到磁盘读取
     }
   }
-  return AttachmentStorage.readFile(att.storagePath);
+  try {
+    return await AttachmentStorage.readFile(att.storagePath);
+  } catch (e) {
+    // 瞬时 IO 异常（权限、磁盘满等）：返回 null 走占位降级，
+    // 不让整次发送失败。
+    debugPrint('[ChatProtocol] 附件原始字节读取失败: ${att.fileName}: $e');
+    return null;
+  }
 }
 
 // ============================================================================

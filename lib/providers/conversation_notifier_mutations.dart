@@ -27,6 +27,10 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     state = [conv, ...state];
     _ref.read(activeConversationIdProvider.notifier).state = conv.id;
     _persistActiveId();
+    // 立即持久化新对话（_persistNow 而非防抖 _persist）：空对话在
+    // 未发消息前被杀进程即永久丢失；防抖还会在测试/快速连续创建时
+    // 留下 pending timer。
+    _persistNow();
     return conv.id;
   }
 

@@ -99,8 +99,18 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       }
     }
 
-    // Validate maxTokens
+    // Validate maxTokens：开关开启但未填写 = 无效死配置（与模型页
+    // 校验一致——开关显示开启但请求侧永不发送，用户被误导）
     final maxTokensStr = _maxTokensController.text.trim();
+    if (_enableMaxTokens && maxTokensStr.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('已启用最大输出 Token 数但未填写数值'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return false;
+    }
     if (maxTokensStr.isNotEmpty) {
       final maxTokens = int.tryParse(maxTokensStr);
       if (maxTokens == null || maxTokens <= 0) {

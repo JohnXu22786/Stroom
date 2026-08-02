@@ -293,7 +293,13 @@ class DataMigrationService {
       var migrated = 0;
       var skipped = 0;
       for (final c in list) {
-        final messages = (c['messages'] as List<dynamic>?) ?? [];
+        // 非 Map 对话条目属于损坏数据：跳过（结构性错误才会 rethrow）
+        if (c is! Map) {
+          skipped++;
+          continue;
+        }
+        final messagesRaw = c['messages'];
+        final messages = messagesRaw is List ? messagesRaw : <dynamic>[];
         for (final m in messages) {
           // 非 Map 消息属于损坏数据：跳过而不是当作结构性错误
           // （结构性错误会 rethrow 导致版本号永不提升、每次启动
@@ -303,7 +309,8 @@ class DataMigrationService {
             continue;
           }
           if (m['role'] != 'assistant') continue;
-          if (m['blocks'] != null && (m['blocks'] as List).isNotEmpty) continue;
+          final blocksRaw = m['blocks'];
+          if (blocksRaw is List && blocksRaw.isNotEmpty) continue;
           try {
             final blocks = legacyToBlocks(
               reasoningSections:

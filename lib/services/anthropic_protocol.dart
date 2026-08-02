@@ -5,8 +5,17 @@ import '../models/tool_call.dart';
 import 'chat_protocol.dart';
 
 // ============================================================================
-// Anthropic 协议（官方 Messages API 兼容格式）
+// Anthropic 兼容协议的 Messages API 实现
 // ============================================================================
+
+/// Anthropic document 块官方仅支持 application/pdf：其他二进制类型
+/// （docx/xlsx/zip 等）走 document 块会被 API 以 400 拒绝整条请求，
+/// 因此只对 PDF 使用 document 块，其余降级为占位文本。
+bool _isPdfAttachment(Attachment att) {
+  if (att.mimeType.toLowerCase() == 'application/pdf') return true;
+  final name = att.fileName.toLowerCase();
+  return name.endsWith('.pdf');
+}
 
 class AnthropicProtocol implements ChatProtocol {
   const AnthropicProtocol();
@@ -81,7 +90,10 @@ class AnthropicProtocol implements ChatProtocol {
                   'data': outcome.base64,
                 },
               });
-            } else {
+            } else if (_isPdfAttachment(att)) {
+              // Anthropic document 块官方仅支持 application/pdf：
+              // 其他二进制类型（docx/xlsx/zip 等）走 document 块会被
+              // API 以 400 拒绝整条请求，降级为占位文本。
               parts.add({
                 'type': 'document',
                 'source': {
@@ -90,6 +102,11 @@ class AnthropicProtocol implements ChatProtocol {
                   'data': outcome.base64,
                 },
                 'title': att.fileName,
+              });
+            } else {
+              parts.add({
+                'type': 'text',
+                'text': '[文件类型在 Anthropic 格式下不支持，已跳过: ${att.fileName}]',
               });
             }
           } else if (att.fileType == 'audio' || att.fileType == 'video') {
@@ -116,10 +133,11 @@ class AnthropicProtocol implements ChatProtocol {
                 });
               }
             } else {
-              // 非文本且非 image/file 分类的（如 application/octet-stream）：
-              // 尝试按 document 发送；失败则占位。
+              // 非文本且非 image/audio/video 分类的（如 application/octet-stream）：
+              // 仅 PDF 可走 document 块（官方白名单），其余降级占位。
               final outcome = await readAttachmentBase64(att);
-              if (outcome.status == AttachmentReadStatus.ok) {
+              if (outcome.status == AttachmentReadStatus.ok &&
+                  _isPdfAttachment(att)) {
                 parts.add({
                   'type': 'document',
                   'source': {
@@ -132,7 +150,7 @@ class AnthropicProtocol implements ChatProtocol {
               } else {
                 parts.add({
                   'type': 'text',
-                  'text': '[${att.fileName} - 无法读取文件内容]',
+                  'text': '[${att.fileName} - 无法读取或类型不支持，已跳过]',
                 });
               }
             }

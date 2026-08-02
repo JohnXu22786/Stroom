@@ -42,7 +42,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
           rawResponseCapture['headers'] = respHeaders;
         }
         if (respData != null) rawResponseCapture['data'] = respData;
-      } else if (streamError is Exception) {
+      } else if (streamError is Object) {
         rawResponseCapture = {'error': streamError.toString()};
       }
     } catch (_) {}
@@ -50,6 +50,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     // 更新对话的 lastInputTokens/lastOutputTokens 与累计花费。
     // 花费纯粹采用 API 返回的 cost（如 OpenRouter usage.total_cost），
     // 不自统计（缓存/推理 token 计价要素太多，自统计不准）。
+    final wasCancelled = state.cancelledByUser;
     try {
       final usage = snappedChatService?.lastUsage;
       if (usage != null) {
@@ -59,8 +60,11 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         if (inputTokens != null || outputTokens != null || cost > 0) {
           await _ref?.read(conversationsProvider.notifier).updateUsage(
                 conversationId: convId,
-                inputTokens: inputTokens,
-                outputTokens: outputTokens,
+                // 用户取消的流：usage 可能不完整（流被截断），写
+                // input/output 会让 lastInputTokens 虚低（压缩触发
+                // 判断失真）；cost 是已发生的事实，保留累计。
+                inputTokens: wasCancelled ? null : inputTokens,
+                outputTokens: wasCancelled ? null : outputTokens,
                 costIncrement: cost,
               );
         }
@@ -78,49 +82,63 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
 
     // ── Post-stream processing ──
     ChatMessage? assistantMessage;
-    final wasCancelled = state.cancelledByUser;
     final hadStreamError = streamError is Exception || streamError is Error;
 
     // 中断工具标记：取消或流错误时，把仍未完成的工具结果标记为中断占位，
     // 避免 UI 与持久化中工具永远停留在 running 状态。
-    if (wasCancelled || hadStreamError) {
-      for (var i = 0; i < state.toolCalls.length; i++) {
-        final tc = state.toolCalls[i];
-        if (tc.status == ToolCallStatus.running ||
-            tc.status == ToolCallStatus.pending) {
-          state.toolCalls[i] = tc.copyWith(
-            status: ToolCallStatus.completed,
-            result: ChatService.kToolInterruptedPlaceholder,
-          );
+    // 必须保证不抛异常：此段在 try 外，一旦抛出 completer 永不完成
+    // （页面 await 永久挂起、service 残留、下一条消息被去重丢弃）。
+    try {
+      if (wasCancelled || hadStreamError) {
+        for (var i = 0; i < state.toolCalls.length; i++) {
+          final tc = state.toolCalls[i];
+          if (tc.status == ToolCallStatus.running ||
+              tc.status == ToolCallStatus.pending) {
+            state.toolCalls[i] = tc.copyWith(
+              status: ToolCallStatus.completed,
+              result: ChatService.kToolInterruptedPlaceholder,
+            );
+          }
+        }
+        for (var i = 0; i < state.accumulatedToolCalls.length; i++) {
+          final tc = state.accumulatedToolCalls[i];
+          if (tc.status == ToolCallStatus.running ||
+              tc.status == ToolCallStatus.pending) {
+            state.accumulatedToolCalls[i] = tc.copyWith(
+              status: ToolCallStatus.completed,
+              result: ChatService.kToolInterruptedPlaceholder,
+            );
+          }
         }
       }
-      for (var i = 0; i < state.accumulatedToolCalls.length; i++) {
-        final tc = state.accumulatedToolCalls[i];
-        if (tc.status == ToolCallStatus.running ||
-            tc.status == ToolCallStatus.pending) {
-          state.accumulatedToolCalls[i] = tc.copyWith(
-            status: ToolCallStatus.completed,
-            result: ChatService.kToolInterruptedPlaceholder,
-          );
-        }
-      }
+    } catch (e) {
+      debugPrint('[ChatStreamManager] 中断工具标记失败: $e');
     }
 
     try {
       // 纯工具轮取消时 fullReply 为空但 accumulatedToolCalls 非空：
       // 仍要持久化 assistant 消息，否则中断标记（[工具执行被中断]）
-      // 从 UI 与存储中丢失。
-      if (state.fullReply.isNotEmpty || state.accumulatedToolCalls.isNotEmpty) {
+      // 从 UI 与存储中丢失。同理，纯推理轮取消（fullReply 与工具
+      // 均空但 reasoningSections 非空）：已流出的推理内容也要落库，
+      // 否则用户看到的思考过程在崩溃/重进后消失。
+      final hasContent = state.fullReply.isNotEmpty ||
+          state.accumulatedToolCalls.isNotEmpty ||
+          state.reasoningSections.any((s) => s.isNotEmpty);
+      if (hasContent) {
         // 用显式错误标志而非文本前缀判断：模型正常回复以"错误:"开头
         // 时不应被误标为错误消息。
         final isError = hadStreamError;
+        // reasoningContent 用全量累计（sections 拼接）：ReasoningSectionEndEvent
+        // 会重置 reasoningBuffer，后者只含最后一轮——OpenAI 协议历史重建
+        // 回放 reasoning_content 时，中间轮推理会丢失（深度推理模型
+        // 上下文质量下降）。sections 是权威存储，二者不同源。
+        final fullReasoning = state.reasoningSections.join('\n');
         final msg = ChatMessage(
           role: 'assistant',
           content: state.fullReply,
           id: state.streamingMsgId ?? '',
           isError: isError,
-          reasoningContent:
-              state.reasoningBuffer.isNotEmpty ? state.reasoningBuffer : null,
+          reasoningContent: fullReasoning.isNotEmpty ? fullReasoning : null,
           rawRequest: rawRequestCapture,
           rawResponse: rawResponseCapture,
           toolCalls: state.accumulatedToolCalls.isNotEmpty

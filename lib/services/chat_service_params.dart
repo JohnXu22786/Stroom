@@ -46,8 +46,9 @@ extension _ChatServiceParamsExt on ChatService {
     final typeConfig = _modelConfig?.typeConfig;
     final enableTemperature =
         typeConfig?['enableTemperature'] as bool? ?? false;
-    if (enableTemperature && typeConfig?.containsKey('temperature') == true) {
-      return (typeConfig!['temperature'] as num).toDouble();
+    if (enableTemperature) {
+      final temperature = typeConfig?['temperature'];
+      if (temperature is num) return temperature.toDouble();
     }
     // Neither toggle is on — return null so it's NOT sent in the request
     return null;
@@ -92,24 +93,29 @@ extension _ChatServiceParamsExt on ChatService {
     final result = <String, dynamic>{};
 
     // 1. Provider-level params first (defaults)
+    // 配置值可能为 null（UI 保存路径的残留/损坏数据）：as num 强转
+    // 会抛 TypeError 让整次请求失败，统一判空跳过。
     if (_providerConfig != null) {
       final pc = _providerConfig!.typeConfig;
       // Top P
-      if (pc.containsKey('topP')) {
-        result['top_p'] = (pc['topP'] as num).toDouble();
+      final topP = pc['topP'];
+      if (topP is num) {
+        result['top_p'] = topP.toDouble();
       }
       // Frequency penalty
-      if (pc.containsKey('frequencyPenalty')) {
-        result['frequency_penalty'] =
-            (pc['frequencyPenalty'] as num).toDouble();
+      final frequencyPenalty = pc['frequencyPenalty'];
+      if (frequencyPenalty is num) {
+        result['frequency_penalty'] = frequencyPenalty.toDouble();
       }
       // Presence penalty
-      if (pc.containsKey('presencePenalty')) {
-        result['presence_penalty'] = (pc['presencePenalty'] as num).toDouble();
+      final presencePenalty = pc['presencePenalty'];
+      if (presencePenalty is num) {
+        result['presence_penalty'] = presencePenalty.toDouble();
       }
       // Seed
-      if (pc.containsKey('seed')) {
-        result['seed'] = (pc['seed'] as num).toInt();
+      final seed = pc['seed'];
+      if (seed is num) {
+        result['seed'] = seed.toInt();
       }
 
       // Provider-level custom params
@@ -172,22 +178,27 @@ extension _ChatServiceParamsExt on ChatService {
     }
 
     // 2. Model-level params (override provider params on name collision)
+    // 同 provider 层：null/非 num 值判空跳过，避免 TypeError 整请求失败。
     final tc = _modelConfig!.typeConfig;
     // Top P
-    if (tc.containsKey('topP')) {
-      result['top_p'] = (tc['topP'] as num).toDouble();
+    final mTopP = tc['topP'];
+    if (mTopP is num) {
+      result['top_p'] = mTopP.toDouble();
     }
     // Frequency penalty
-    if (tc.containsKey('frequencyPenalty')) {
-      result['frequency_penalty'] = (tc['frequencyPenalty'] as num).toDouble();
+    final mFrequencyPenalty = tc['frequencyPenalty'];
+    if (mFrequencyPenalty is num) {
+      result['frequency_penalty'] = mFrequencyPenalty.toDouble();
     }
     // Presence penalty
-    if (tc.containsKey('presencePenalty')) {
-      result['presence_penalty'] = (tc['presencePenalty'] as num).toDouble();
+    final mPresencePenalty = tc['presencePenalty'];
+    if (mPresencePenalty is num) {
+      result['presence_penalty'] = mPresencePenalty.toDouble();
     }
     // Seed
-    if (tc.containsKey('seed')) {
-      result['seed'] = (tc['seed'] as num).toInt();
+    final mSeed = tc['seed'];
+    if (mSeed is num) {
+      result['seed'] = mSeed.toInt();
     }
 
     // Model-level custom params

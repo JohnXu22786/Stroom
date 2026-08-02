@@ -84,6 +84,9 @@ Stream<String> sseStream(
     }
   });
 
+  // 取消轮询 Timer（声明提前：loadEnd 正常完成路径也需要清理它）
+  Timer? cancelCheckTimer;
+
   final loadEndSub = xhr.onLoadEnd.listen((_) {
     // Capture response headers from the first response
     if (onResponseHeaders != null && xhr.status != 0) {
@@ -135,6 +138,9 @@ Stream<String> sseStream(
     if (!controller.isClosed) controller.close();
     progressSub.cancel();
     errorSub.cancel();
+    // 正常完成路径显式清理（同 sseStream）：不依赖 onCancel 时序。
+    cancelCheckTimer?.cancel();
+    readyStateSub.cancel();
     xhr.abort();
   });
 
@@ -154,7 +160,6 @@ Stream<String> sseStream(
   });
 
   // Poll cancel token periodically
-  Timer? cancelCheckTimer;
   if (cancelToken != null) {
     cancelCheckTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       if (cancelToken.isCancelled && !controller.isClosed) {
@@ -254,6 +259,9 @@ Stream<SseFrame> sseEventStream(
     }
   });
 
+  // 取消轮询 Timer（声明提前：loadEnd 正常完成路径也需要清理它）
+  Timer? cancelCheckTimer;
+
   final loadEndSub = xhr.onLoadEnd.listen((_) {
     // Capture response headers from the first response
     if (onResponseHeaders != null && xhr.status != 0) {
@@ -295,6 +303,10 @@ Stream<SseFrame> sseEventStream(
     if (!controller.isClosed) controller.close();
     progressSub.cancel();
     errorSub.cancel();
+    // 正常完成路径显式清理（不依赖 onCancel 时序）：500ms 轮询
+    // Timer 与 readyStateSub 每次请求都会泄漏，会话期内无限累积。
+    cancelCheckTimer?.cancel();
+    readyStateSub.cancel();
     xhr.abort();
   });
 
@@ -314,7 +326,6 @@ Stream<SseFrame> sseEventStream(
   });
 
   // Poll cancel token periodically
-  Timer? cancelCheckTimer;
   if (cancelToken != null) {
     cancelCheckTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       if (cancelToken.isCancelled && !controller.isClosed) {
@@ -380,6 +391,9 @@ Stream<String> sseConnect(
     }
   });
 
+  // 取消轮询 Timer（声明提前：loadEnd 正常完成路径也需要清理它）
+  Timer? cancelCheckTimer;
+
   final loadEndSub = xhr.onLoadEnd.listen((_) {
     if (onResponseHeaders != null && xhr.status != 0) {
       final headerMap = <String, List<String>>{};
@@ -401,12 +415,14 @@ Stream<String> sseConnect(
     if (remainingText.isNotEmpty) {
       final allLines = remainingText.split('\n');
       for (var i = processedLines; i < allLines.length; i++) {
-        controller.add(allLines[i]);
+        if (!controller.isClosed) controller.add(allLines[i]);
       }
     }
     if (!controller.isClosed) controller.close();
     progressSub.cancel();
     errorSub.cancel();
+    // 正常完成路径显式清理轮询 Timer（同 sseStream/sseEventStream）
+    cancelCheckTimer?.cancel();
     xhr.abort();
   });
 
@@ -471,7 +487,9 @@ Future<String> ssePost(
   cancelToken?.whenCancel.then((_) {
     if (!controller.isCompleted) {
       xhr.abort();
-      controller.complete('');
+      // 取消 = 失败：与 IO 端（Dio 抛 DioException）语义一致，
+      // 避免调用方把取消当作成功响应（complete('') 会返回空串）。
+      controller.completeError(Exception('请求已取消'));
     }
   });
 

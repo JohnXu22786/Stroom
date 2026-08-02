@@ -109,13 +109,12 @@ extension _ChatPageEditingExt on _ChatPageState {
             _finalizedMessages.remove(r.id);
             _isReasoningCompletedForMsg.remove(r.id);
             _messageKeys.remove(r.id);
-            // Delete orphaned attachment files so repeated edits don't
-            // accumulate garbage on disk. Same logic as _deleteMessage.
-            for (final att in r.attachments) {
-              try {
-                await AttachmentStorage.deleteFile(att.storagePath);
-              } catch (_) {}
-            }
+            // NOTE: 这里**不删除**附件文件——编辑态下 composer 直接
+            // 复用原消息的同一批 Attachment 对象（storagePath 相同），
+            // 删除文件会让新消息的附件读取失败（_onMessageSend 随后
+            // 把同一 storagePath 挂到新消息）。与 _deleteMessage 不同，
+            // 编辑路径没有 isReferencedElsewhere 保护。真正的孤儿文件
+            // 清理在 _deleteMessage（带引用检查）中完成。
           }
           // Safety: keep pagination index within bounds
           _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);

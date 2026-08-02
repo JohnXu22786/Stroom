@@ -38,11 +38,26 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 }
               }
             }
-            if (mounted) state = conversations;
+            if (mounted) {
+              // 竞态防护：_load 的 await 窗口内用户可能已创建对话
+              // （createConversation 只改内存态，磁盘无记录）——
+              // 磁盘加载结果与内存合并：磁盘对话为准，内存中磁盘
+              // 没有的新对话保留，避免新对话被静默覆盖丢失。
+              final inMemory = state;
+              if (inMemory.isNotEmpty) {
+                final diskIds = conversations.map((c) => c.id).toSet();
+                final extra =
+                    inMemory.where((c) => !diskIds.contains(c.id)).toList();
+                state = [...conversations, ...extra];
+              } else {
+                state = conversations;
+              }
+            }
             await AppLogService.info(
                 'ConversationsNotifier', '加载了 ${conversations.length} 个对话');
           } else {
-            if (mounted) state = [];
+            // 磁盘数据无效：内存已有对话（用户刚创建）时保留内存
+            if (mounted && state.isEmpty) state = [];
             await AppLogService.info('ConversationsNotifier', '对话数据格式无效');
           }
         } catch (e) {
@@ -51,10 +66,12 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           // Back up the corrupt file so the user can manually recover it
           // and we don't silently overwrite it on the next save.
           await _backupCorruptConversationsFile(prefs, json);
-          if (mounted) state = [];
+          // 磁盘损坏：内存已有对话（用户刚创建）时保留内存
+          if (mounted && state.isEmpty) state = [];
         }
       } else {
-        if (mounted) state = [];
+        // 无已保存数据：内存已有对话时保留内存
+        if (mounted && state.isEmpty) state = [];
         await AppLogService.info('ConversationsNotifier', '没有已保存的对话');
       }
 

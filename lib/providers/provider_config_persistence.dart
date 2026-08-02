@@ -5,6 +5,9 @@ part of 'provider_config.dart';
 // inline code.
 // ignore_for_file: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
 
+/// 损坏备份上限（对齐 conversations 的 _maxCorruptBackups）。
+const int _maxCorruptProviderBackups = 3;
+
 extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
   /// 迁移旧版 chat_configs（被重构删除的 ChatProviderConfigItem 格式）到 provider_entries
   Future<void> _migrateOldChatConfigs(SharedPreferences prefs) async {
@@ -428,6 +431,30 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         final val = envRaw[key].toString();
         if (val.isEmpty) envRaw[key] = apiKey;
       }
+    }
+  }
+
+  /// 损坏的 provider_entries 原始数据备份（对齐 conversations 的
+  /// _backupCorruptConversationsFile 模式）：结构性损坏或全部条目损坏
+  /// 时把原始 JSON 存到独立 key，最多保留 [_maxCorruptProviderBackups] 份，
+  /// 避免回退默认后后续 _persist 把含 API key 的原始配置永久覆盖。
+  Future<void> _backupCorruptProviderEntries(
+      SharedPreferences prefs, String corruptJson) async {
+    try {
+      final backupKey =
+          'provider_entries_corrupt_${DateTime.now().millisecondsSinceEpoch}';
+      await prefs.setString(backupKey, corruptJson);
+      // 只保留最近的 N 份
+      final keys = prefs.getKeys().toList()
+        ..sort()
+        ..retainWhere((k) => k.startsWith('provider_entries_corrupt_'));
+      while (keys.length > _maxCorruptProviderBackups) {
+        await prefs.remove(keys.removeAt(0));
+      }
+      debugPrint(
+          '[ProviderEntriesNotifier] 已备份损坏的 provider_entries 到 $backupKey');
+    } catch (e) {
+      debugPrint('Failed to back up corrupt provider entries: $e');
     }
   }
 

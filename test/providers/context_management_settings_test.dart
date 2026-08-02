@@ -73,5 +73,15 @@ void main() {
       );
       expect(settings.effectiveCompactionThreshold(128000), 128000);
     });
+
+    test('custom threshold above model context is clamped to the window', () {
+      const settings = ContextManagementSettings(
+        customCompactionThresholdEnabled: true,
+        compactionThreshold: 100000,
+      );
+      // 自定义值超过模型窗口：钳制到窗口，否则压缩永不触发、
+      // 请求先超窗失败。
+      expect(settings.effectiveCompactionThreshold(32000), 32000);
+    });
   });
 }

@@ -244,7 +244,8 @@ List<_PruneTarget>? _collectMessageToolResults(ChatMessage msg) {
 /// 重建消息：把 [prunedIds] 命中的工具结果**标记**为已压缩。
 ///
 /// 对齐 opencode prune 语义：**只软删除（标记 compactedAt），
-/// 不物理删除 result 数据**——UI/存储中完整结果仍可查看，
+/// 不物理删除 result 数据**——UI/存储中完整结果仍可查看（占位符
+/// 由协议层 rebuildToolResultText 在发送/渲染时应用），
 /// 仅发送给模型时（历史重建）渲染为占位符释放上下文。
 ChatMessage _compactMessage(ChatMessage msg, Set<String> prunedIds) {
   List<ToolCallData>? newToolCalls;

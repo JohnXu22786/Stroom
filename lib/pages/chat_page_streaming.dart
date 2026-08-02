@@ -458,11 +458,36 @@ extension _ChatPageStreamingExt on _ChatPageState {
   }
 
   void _stopStreaming() {
+    final stoppedMsgId = _streamingMsgId;
+    final convId = ref.read(activeConversationIdProvider);
     _isStreamingActive = false;
     _streamingMsgId = null;
     try {
-      final convId = ref.read(activeConversationIdProvider);
       ref.read(chatStreamManagerProvider).cancel(convId);
+      // 立即用已收到的部分回复替换流式占位符（恢复旧行为）：
+      // 置空 _streamingMsgId 后，post-stream 的 pageOwnedStream 门控
+      // 为 false，占位符的更新/移除分支不会执行——不在这里处理，
+      // spinner 会永久残留（取消且无内容时尤其明显）。
+      if (stoppedMsgId != null && convId != null && _controller != null) {
+        final partial =
+            ref.read(chatStreamManagerProvider).fullReplyFor(convId);
+        if (partial.isNotEmpty) {
+          _controller?.updateMessage(
+            Message.textStream(id: stoppedMsgId, authorId: _aiUser.id, streamId: stoppedMsgId),
+            Message.text(
+              id: stoppedMsgId,
+              authorId: _aiUser.id,
+              text: partial,
+            ),
+          );
+        } else {
+          _controller?.removeMessage(
+              Message.textStream(id: stoppedMsgId, authorId: _aiUser.id, streamId: stoppedMsgId));
+          _chatSegments.remove(stoppedMsgId);
+          _reasoningContents.remove(stoppedMsgId);
+          _isReasoningCompletedForMsg.remove(stoppedMsgId);
+        }
+      }
       // Immediately remove this conversation from the streaming set so
       // the send/stop button reflects the stopped state without waiting
       // for the manager's async cleanup loop to finish.

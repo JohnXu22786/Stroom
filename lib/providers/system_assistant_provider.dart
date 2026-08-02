@@ -60,9 +60,15 @@ class SystemAssistantSettingsNotifier
     extends StateNotifier<SystemAssistantSettings> {
   SystemAssistantSettingsNotifier() : super(const SystemAssistantSettings());
 
+  /// 用户已修改过设置：异步 [_load] 不得覆盖（对齐
+  /// ContextManagementSettingsNotifier 的 _userModified 守卫——
+  /// 否则启动瞬间快速选择助手会被旧 prefs 值覆盖）。
+  bool _userModified = false;
+
   Future<void> _load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (_userModified) return;
       final titleId =
           prefs.getString(_kTitleAssistantIdKey) ?? kBuiltInTitleAssistantId;
       final compactionId = prefs.getString(_kCompactionAssistantIdKey) ??
@@ -88,11 +94,13 @@ class SystemAssistantSettingsNotifier
   }
 
   void setTitleAssistant(String assistantId) {
+    _userModified = true;
     state = state.copyWith(titleAssistantId: assistantId);
     _persist();
   }
 
   void setCompactionAssistant(String assistantId) {
+    _userModified = true;
     state = state.copyWith(compactionAssistantId: assistantId);
     _persist();
   }

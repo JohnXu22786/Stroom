@@ -156,19 +156,23 @@ extension _ChatPagePersistenceExt on _ChatPageState {
     // during the async gap between the guard above and the synchronous
     // _streams insertion inside manager.startStreaming.
     if (convId != null && _pendingSendConvIds.contains(convId)) return;
-    if (convId != null) _pendingSendConvIds.add(convId);
     try {
       await AppLogService.info(
           'ChatPage',
-          '用户发送消息, convId=$convId, text长度=${text.length}, '
+          '发送消息, convId=$convId, text长度=${text.length}, '
               'attachments=${attachments.length}');
       if (convId == null) {
         await AppLogService.info('ChatPage', '无活跃对话，创建新对话');
         ref.read(conversationsProvider.notifier).createConversation();
         convId = ref.read(activeConversationIdProvider);
-        await AppLogService.info('ChatPage', '新对话已创建: $convId');
+        await AppLogService.info('ChatPage', '新对话创建完成: $convId');
       }
       if (convId == null) return;
+      // 登记在 convId 解析**之后**（含新建对话路径）：否则无活跃对话
+      // 时两次极速回车都不会被 pending 拦截，第二条消息已入库却在
+      // _startStreaming 的流式守卫处被静默丢弃（孤儿消息）。
+      if (_pendingSendConvIds.contains(convId)) return;
+      _pendingSendConvIds.add(convId);
 
       await _ensureHistoryLoaded(convId);
       if (!mounted || ref.read(activeConversationIdProvider) != convId) return;

@@ -57,8 +57,13 @@ class ContextManagementSettings {
 
   /// 有效的压缩触发线（token 数）。
   /// 自定义启用且有值时用之；否则返回模型上下文（null 表示无上下文配置）。
+  /// 自定义值超过模型窗口时钳制到窗口——否则压缩永不触发，
+  /// 请求先超窗失败（配置误导性 + API 报错）。
   int? effectiveCompactionThreshold(int? modelContext) {
     if (customCompactionThresholdEnabled && compactionThreshold != null) {
+      if (modelContext != null && compactionThreshold! > modelContext) {
+        return modelContext;
+      }
       return compactionThreshold;
     }
     return modelContext;
@@ -135,9 +140,17 @@ class ContextManagementSettingsNotifier
     // 回退到模型 context 窗口。
     final effective =
         (threshold != null && threshold < 1000) ? null : threshold;
-    state = effective == null
-        ? state.clearCompactionThreshold()
-        : state.copyWith(compactionThreshold: effective);
+    if (effective == null) {
+      // 清值时同时关闭"自定义阈值"开关：否则出现"已启用但无值"的
+      // 中间态（UI 显示已启用而实际回落模型上下文）。
+      state = ContextManagementSettings(
+        pruneEnabled: state.pruneEnabled,
+        customCompactionThresholdEnabled: false,
+        compactionThreshold: null,
+      );
+    } else {
+      state = state.copyWith(compactionThreshold: effective);
+    }
     return _persist();
   }
 }

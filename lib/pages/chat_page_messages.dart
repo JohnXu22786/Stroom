@@ -356,11 +356,23 @@ extension _ChatPageMessagesExt on _ChatPageState {
       _streamingMsgId = null;
       _messageKeys.clear();
       _expandedErrors.clear();
-      _searchTextController.clear();
-      _isSearching = false;
-      _searchQuery = '';
-      _searchMatches.clear();
-      _currentMatchIndex = 0;
+      // 保留搜索状态（用户正在搜索时后台流完成触发的重载不应
+      // 静默关闭搜索）：保留 query 并按新历史重跑匹配；仅当
+      // 未在搜索时才清空。
+      if (_isSearching) {
+        final searchQuery = _searchQuery;
+        _searchMatches.clear();
+        _currentMatchIndex = 0;
+        if (searchQuery.isNotEmpty) {
+          _performSearch(searchQuery);
+        }
+      } else {
+        _searchTextController.clear();
+        _isSearching = false;
+        _searchQuery = '';
+        _searchMatches.clear();
+        _currentMatchIndex = 0;
+      }
       _editingMessageId = null;
       _editingMessageText = null;
       _editingMessageAttachments = null;
@@ -382,6 +394,17 @@ extension _ChatPageMessagesExt on _ChatPageState {
         _chatSegments.addAll(savedChatSegments!);
         _finalizedMessages.addAll(savedFinalizedMessages!);
         _reasoningContents.addAll(savedReasoningContents!);
+        // 从 manager 恢复**最新**推理内容：切换前保存的快照可能过时
+        // （切走期间流继续推进），而 provider 推送发生在监听重注册
+        // 之前、监听器不会触发——否则推理按钮内容为空/状态错误
+        // （按钮显示"思考中"、面板为空），直到流结束重载才恢复。
+        final liveReasoning =
+            ref.read(streamingReasoningSectionsProvider(activeId));
+        if (liveReasoning.isNotEmpty) {
+          _reasoningContents[savedStreamingMsgId] =
+              List<String>.from(liveReasoning);
+          _isReasoningCompletedForMsg[savedStreamingMsgId] = true;
+        }
 
         // Re-insert the streaming placeholder into the new controller.
         // We skipped it during the load loop above (it may not be in DB

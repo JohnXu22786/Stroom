@@ -236,6 +236,9 @@ class AnthropicChatProvider extends BaseChatProvider {
         if (output is num) _lastUsage!['outputTokens'] = output.toInt();
         final cost = usage['total_cost'] ?? usage['cost'];
         if (cost is num) _lastUsage!['cost'] = cost.toDouble();
+        // 无任何可用计量（端点只回空 usage）时置 null，
+        // 与流式路径语义一致（空 map 会让诊断槽出现假值）
+        if (_lastUsage!.isEmpty) _lastUsage = null;
       }
 
       final contentBlocks = response.data['content'] as List?;
@@ -440,8 +443,11 @@ class AnthropicChatProvider extends BaseChatProvider {
         _lastResponseStatusCode = null;
         // 若 _lastResponseData 已是 API 错误帧（error 事件在抛出前
         // 写入，见上方 `_lastResponseData = data`），保留它用于诊断，
-        // 否则清空陈旧的成功流数据。
-        if (_lastResponseData?['error'] == null) {
+        // 否则清空陈旧的成功流数据。错误帧判断用 type 字段（网关
+        // 变体可能缺 error 字段，如 {"type":"error"}）。
+        final isErrorFrame = _lastResponseData?['error'] != null ||
+            _lastResponseData?['type'] == 'error';
+        if (!isErrorFrame) {
           _lastResponseData = null;
         }
         _lastResponseHeaders = null;
@@ -462,8 +468,15 @@ class AnthropicChatProvider extends BaseChatProvider {
     }
 
     // 流结束后：产出 thinking 签名（供下一轮链重建续接 extended thinking）
-    if (acc.thinkingSignatures.isNotEmpty) {
-      yield AIStreamEvent('', thinkingSignature: acc.thinkingSignatures.last);
+    // 防御规则（避免下一轮 400）：
+    // - 只允许**单一完整** thinking 块产出签名：多块时链重建把整轮
+    //   文本拼成一个 thinking 块，签名却是最后一块的——签名与文本
+    //   不匹配，Anthropic 会拒绝续接请求；
+    // - 中断流（块开始后 signature_delta 未到齐 → 空签名槽）同样不产出，
+    //   宁可下一轮不带 thinking（模型退化）也不要发送无效签名。
+    if (acc.thinkingSignatures.length == 1 &&
+        acc.thinkingSignatures.first.isNotEmpty) {
+      yield AIStreamEvent('', thinkingSignature: acc.thinkingSignatures.first);
     }
 
     // 流结束后：仅在 stop_reason 为 tool_use 时产出工具调用

@@ -30,10 +30,14 @@ class DataMigrationOldConfigs {
 
         final models = oldModels.map((m) {
           final typeConfig = <String, dynamic>{};
-          // NOTE: context 是 per-model 配置，由模型设置页显式填写，
-          // 不在 provider 迁移时注入（context 与 provider 无关）。
           final temperature = m['temperature'];
           if (temperature != null) typeConfig['temperature'] = temperature;
+          // 恢复 v0→v1 的 per-model context 迁移（origin/main 原有，
+          // 重构时被误删）：旧数据把 context/maxTokens 挂在 model 上。
+          // 不迁移则老用户的压缩功能读取 typeConfig['context'] 为 null
+          // → effectiveCompactionThreshold 返回 null → 自动压缩静默失效。
+          final context = m['maxTokens'] ?? m['context'];
+          if (context != null) typeConfig['context'] = context;
 
           return <String, dynamic>{
             'name': m['modelId'] as String? ?? '',

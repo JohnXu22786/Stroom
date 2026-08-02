@@ -384,10 +384,14 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           // 否则会被当成正常截断回复（对齐 Anthropic 行为）
           throwIfApiError(data);
 
-          // 收集实际 token 计量（OpenAI 流式在末尾 chunk 携带 usage）
+          // 收集实际 token 计量（OpenAI 规范：usage 只在末 chunk；
+          // 但部分兼容端点会在中间 chunk 上报部分 usage）——
+          // 逐 chunk 覆盖会丢失前段计量，改为合并保留已有键，
+          // 末 chunk 的完整 usage 自然覆盖同名键。
           final usage = normalizeUsage(data['usage']);
           if (usage != null) {
-            localUsage = usage;
+            localUsage ??= {};
+            localUsage!.addAll(usage);
           }
 
           // Parse the stream event using the static helper method

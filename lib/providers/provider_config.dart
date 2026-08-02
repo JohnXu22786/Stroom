@@ -42,11 +42,38 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
 
       // 第3步：正常加载 provider_entries
       final json = prefs.getString('provider_entries');
-      if (json != null) {
-        // 兜底：安全过滤非 Map 条目，避免 `.cast<Map>()` 的类型转换闪退
-        final rawList = jsonDecode(json) as List;
-        final list = rawList.whereType<Map<String, dynamic>>().toList();
-        final entries = list.map((m) => ProviderEntry.fromMap(m)).toList();
+      if (json != null && json.isNotEmpty) {
+        final List<dynamic> rawList;
+        try {
+          rawList = jsonDecode(json) as List;
+        } catch (e) {
+          // 结构性损坏（非法 JSON）：备份原始数据再回退默认预置，
+          // 否则后续任意 CRUD 的 _persist 会用默认值覆盖写坏，
+          // 含 API key 的原始配置不可恢复地丢失。
+          debugPrint('Failed to decode provider_entries: $e');
+          await _backupCorruptProviderEntries(prefs, json);
+          state = _defaultEntries();
+          return;
+        }
+
+        // 逐条容错解析：单条损坏（类型错误等）跳过、保留其余——
+        // 对齐 conversations 的防御风格。整表回退会导致含 API key
+        // 的配置静默丢失且被后续 _persist 覆盖。
+        final entries = <ProviderEntry>[];
+        for (final raw in rawList) {
+          if (raw is! Map) continue;
+          try {
+            entries.add(ProviderEntry.fromMap(Map<String, dynamic>.from(raw)));
+          } catch (e) {
+            debugPrint('Skipping corrupt provider entry: $e');
+          }
+        }
+        if (entries.isEmpty) {
+          // 全部条目损坏：备份并回退默认（保留原始数据供恢复）
+          await _backupCorruptProviderEntries(prefs, json);
+          state = _defaultEntries();
+          return;
+        }
 
         // 第4步：确保 OCR 条目存在（已有用户升级时自动迁移）
         final hasOcr = entries.any((e) => e.type == 'ocr');
@@ -92,6 +119,32 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           await _migrateBuiltinMcpConfigs(prefs, entries);
         }
 
+        // 第8步：确保 TTS 与 LLM 条目存在。v0 旧用户（有旧
+        // chat_configs）迁移后条目集为 [migrated_llm, builtin_ocr,
+        // builtin_asr, builtin_mcp]，缺少 TTS 供应商——TTS 配置 UI
+        // 按 name == 'TTS供应商' 查找会直接不可用（需手动重建），
+        // 与全新安装行为不一致。
+        final hasTts = entries.any((e) => e.type == 'tts');
+        if (!hasTts) {
+          entries.add(
+            ProviderEntry(id: 'builtin_tts', type: 'tts', name: 'TTS供应商'),
+          );
+          await prefs.setString(
+            'provider_entries',
+            jsonEncode(entries.map((e) => e.toMap()).toList()),
+          );
+        }
+        final hasLlm = entries.any((e) => e.type == 'llm');
+        if (!hasLlm) {
+          entries.add(
+            ProviderEntry(id: 'builtin_llm', type: 'llm', name: 'LLM供应商'),
+          );
+          await prefs.setString(
+            'provider_entries',
+            jsonEncode(entries.map((e) => e.toMap()).toList()),
+          );
+        }
+
         state = ProviderEntriesState(entries: entries);
         return;
       }
@@ -100,7 +153,12 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     }
 
     // 默认预置
-    state = ProviderEntriesState(
+    state = _defaultEntries();
+  }
+
+  /// 默认预置条目（全新安装 / 全部损坏回退）。
+  ProviderEntriesState _defaultEntries() {
+    return ProviderEntriesState(
       entries: [
         ProviderEntry(id: 'builtin_tts', type: 'tts', name: 'TTS供应商'),
         ProviderEntry(id: 'builtin_llm', type: 'llm', name: 'LLM供应商'),
