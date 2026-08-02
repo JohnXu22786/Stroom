@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -5,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import '../../../models/tts_models.dart';
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider_shared.dart';
@@ -47,6 +50,43 @@ Map<String, dynamic> _buildAsrFormParams(Map<String, dynamic> tc) {
   return params;
 }
 
+/// Parses a custom param value by type, mirroring asr_service.dart
+/// `_parseParamValue`.
+dynamic _parseCustomParamValue(String value, String type) {
+  switch (type) {
+    case 'number':
+      return num.tryParse(value) ?? value;
+    case 'boolean':
+      if (value.toLowerCase() == 'true') return true;
+      if (value.toLowerCase() == 'false') return false;
+      return value;
+    case 'json':
+      try {
+        return jsonDecode(value);
+      } catch (_) {
+        return value;
+      }
+    case 'string':
+    default:
+      return value;
+  }
+}
+
+/// Builds the model's custom param fields, mirroring asr_service.dart
+/// `_buildSharedParams` (skip empty names/values, parse by type).
+Map<String, dynamic> _customParamFields(List<CustomParam> customParams) {
+  final fields = <String, dynamic>{};
+  for (final param in customParams) {
+    final name = param.paramName.trim();
+    if (name.isEmpty) continue;
+    final value = param.defaultValue.trim();
+    if (value.isEmpty) continue;
+    final parsed = _parseCustomParamValue(value, param.type);
+    fields[name] = parsed is String ? parsed : parsed.toString();
+  }
+  return fields;
+}
+
 Future<String> _callAsrApi({
   required Uint8List audioBytes,
   required String audioFormat,
@@ -54,8 +94,10 @@ Future<String> _callAsrApi({
   required String apiKey,
   required String modelId,
   Map<String, dynamic> typeConfig = const {},
+  List<CustomParam> customParams = const [],
 }) async {
   final dio = Dio();
+  final cancelToken = CancelToken();
   try {
     final mimeStr = audioFormat == 'wav' ? 'audio/wav' : 'audio/$audioFormat';
     final formData = FormData.fromMap({
@@ -67,16 +109,25 @@ Future<String> _callAsrApi({
       'model': modelId,
       'response_format': 'json',
       ..._buildAsrFormParams(typeConfig),
+      ..._customParamFields(customParams),
     });
     // A stalled server must not hang the flow forever — the executor's
-    // catch routes the timeout through failSubTask like every other block.
+    // catch routes the timeout through failSubTask like every other block,
+    // and the token cancels the request so no socket lingers.
     final response = await dio
         .post(
-          host,
-          data: formData,
-          options: Options(headers: {'Authorization': 'Bearer $apiKey'}),
-        )
-        .timeout(const Duration(minutes: 10));
+      host,
+      data: formData,
+      options: Options(headers: {'Authorization': 'Bearer $apiKey'}),
+      cancelToken: cancelToken,
+    )
+        .timeout(
+      const Duration(minutes: 10),
+      onTimeout: () {
+        cancelToken.cancel();
+        throw TimeoutException('请求超时');
+      },
+    );
     if (response.data is Map) return (response.data['text'] as String?) ?? '';
     return response.data.toString();
   } finally {
@@ -209,6 +260,7 @@ Future<String> executeAsrBlock({
       apiKey: config.key,
       modelId: model.modelId,
       typeConfig: model.typeConfig,
+      customParams: config.customParams,
     );
     bgNotifier.updateStep(taskId, 0, completed: true);
     bgNotifier.setResult(taskId, result);

@@ -120,7 +120,7 @@ final Set<String> _audioExtensions = {
 /// - Video files → [VideoPlayerPage]
 /// - Audio files → [AudioPlayerPage]
 /// - Other files → OS default application
-void openFile(String filePath, BuildContext context) {
+Future<void> openFile(String filePath, BuildContext context) async {
   try {
     final file = File(filePath);
     if (!file.existsSync()) {
@@ -131,7 +131,7 @@ void openFile(String filePath, BuildContext context) {
     final ext = p.extension(filePath).replaceAll('.', '').toLowerCase();
 
     if (_textExtensions.contains(ext)) {
-      _openTextFile(filePath, context);
+      await _openTextFile(filePath, context);
     } else if (_videoExtensions.contains(ext)) {
       _openVideoFile(filePath, context);
     } else if (_audioExtensions.contains(ext)) {
@@ -144,10 +144,12 @@ void openFile(String filePath, BuildContext context) {
   }
 }
 
-void _openTextFile(String filePath, BuildContext context) {
+Future<void> _openTextFile(String filePath, BuildContext context) async {
   try {
     final file = File(filePath);
-    final bytes = file.readAsBytesSync();
+    // Async read — a multi-MB transcript must not block the UI thread.
+    final bytes = await file.readAsBytes();
+    if (!context.mounted) return;
     final content = utf8.decode(bytes);
     final name = p.basenameWithoutExtension(filePath);
     final hash = _computeSimpleHash(bytes);
