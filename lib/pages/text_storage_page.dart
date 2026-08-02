@@ -14,6 +14,7 @@ import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../widgets/file_manager_view.dart';
+import '../widgets/file_manager_utils.dart';
 import 'files_page_shared.dart';
 import 'mermaid_chart_page.dart';
 import 'text_preview_edit_page.dart';
@@ -61,22 +62,6 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     'env',
   };
 
-  String _sanitizeName(String rawName) {
-    var clean = rawName.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_');
-    final extIdx = clean.lastIndexOf('.');
-    if (extIdx > 100) {
-      clean = '${clean.substring(0, 100)}.${clean.substring(extIdx + 1)}';
-    } else if (clean.length > 110) {
-      if (extIdx == -1) {
-        clean = clean.substring(0, 110);
-      } else {
-        final ext = clean.substring(extIdx);
-        clean = '${clean.substring(0, 110 - ext.length)}$ext';
-      }
-    }
-    return clean;
-  }
-
   String _uniqueTextName(
     String baseName,
     List<TextRecord> records,
@@ -100,6 +85,10 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
   Future<void> _importTextFile() async {
     if (_isImporting) return;
     _isImporting = true;
+    // 记录加载对话框是否弹出：异常发生在弹窗之前（如文件选择器/系统
+    // 相册抛错）或成功弹出之后（如 loadRecords 抛错）时，catch 中的
+    // pop 会误弹下层路由（应用根路由），因此必须带条件执行
+    var dialogShown = false;
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -116,15 +105,22 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (_) => const Center(
-          child: Card(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: CircularProgressIndicator(),
+        // PopScope(canPop: false)：barrierDismissible 只能拦截点击遮罩，
+        // 系统返回键仍会关掉对话框 —— 若不拦截，加载完成后
+        // Navigator.pop() 可能误弹下层路由（应用根路由）
+        builder: (_) => const PopScope(
+          canPop: false,
+          child: Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              ),
             ),
           ),
         ),
       );
+      dialogShown = true;
 
       final records = ref.read(textRecordsProvider);
       final usedInBatch = <String>{};
@@ -135,7 +131,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
         final content = utf8.decode(bytes);
         final hash = computeTextHash(bytes);
-        final rawName = _sanitizeName(file.name);
+        final rawName = sanitizeFileName(file.name);
         final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
         final format = ext.isNotEmpty ? ext : 'txt';
         if (!_supportedFormats.contains(format)) {
@@ -170,11 +166,15 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         count++;
       }
 
-      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        dialogShown = false;
+      }
 
       await ref.read(textRecordsProvider.notifier).loadRecords();
       await ref.read(textFolderListProvider.notifier).loadFolders();
-      if (mounted) {
+      // 没有任何文件被导入（如全部跳过）时不显示成功提示
+      if (mounted && count > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('已导入 $count 个文本文件'),
@@ -183,10 +183,12 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         );
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && dialogShown) {
         try {
           Navigator.of(context, rootNavigator: true).pop();
         } catch (_) {}
+      }
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('导入失败: $e'),
@@ -307,7 +309,9 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     }
   }
 
-  Future<void> _exportFiles(List<String> ids, String targetDirectory) async {
+  /// 批量导出文件。返回用户最终使用的导出目录
+  /// （用户取消目录选择或导出失败时返回 null；Web 端返回 ''）。
+  Future<String?> _exportFiles(List<String> ids, String targetDirectory) async {
     try {
       String? outputDir;
       if (kIsWeb) {
@@ -316,11 +320,11 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
         if (outputDir == null) {
           outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
-          if (outputDir == null) return;
+          if (outputDir == null) return null;
         }
       }
 
-      if (!mounted) return;
+      if (!mounted) return null;
 
       final records = ref.read(textRecordsProvider);
       var exportedCount = 0;
@@ -334,13 +338,15 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
         if (kIsWeb) {
           final data = Uint8List.fromList(utf8.encode(content));
-          await FilePicker.saveFile(
+          // Web 端逐文件保存：用户取消保存时不计数
+          final saved = await FilePicker.saveFile(
             dialogTitle: '导出文本',
             fileName: exportName,
             type: FileType.custom,
             allowedExtensions: [file.format],
             bytes: data,
           );
+          if (saved == null) continue;
         } else {
           final outputPath = p.join(outputDir, exportName);
           await File(outputPath).writeAsString(content);
@@ -348,6 +354,9 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         exportedCount++;
       }
 
+      // Web 端全部保存被取消时返回 null（与原生端取消目录选择一致，
+      // 保持选择模式不退出），且不显示「已导出 0 个文件」提示
+      if (kIsWeb && exportedCount == 0) return null;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -356,6 +365,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           ),
         );
       }
+      return kIsWeb ? '' : outputDir;
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -365,16 +375,19 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           ),
         );
       }
+      return null;
     }
   }
 
-  Future<void> _exportFolders(
+  /// 批量导出文件夹（保留完整文件夹层级，含子文件夹内容）。
+  /// 返回用户最终使用的导出目录（用户取消或失败时返回 null；Web 端返回 ''）。
+  Future<String?> _exportFolders(
     List<String> names,
     String targetDirectory,
   ) async {
     try {
       if (kIsWeb) {
-        if (!mounted) return;
+        if (!mounted) return null;
         final action = await showDialog<String>(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -397,28 +410,38 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           ),
         );
 
-        if (action != 'exportFiles' || !mounted) return;
+        if (action != 'exportFiles' || !mounted) return null;
 
         final records = ref.read(textRecordsProvider);
         var exportedCount = 0;
         for (final folderName in names) {
-          final folderFiles =
-              records.where((r) => r.folder == folderName).toList();
+          final folderFiles = records
+              .where(
+                (r) =>
+                    r.folder == folderName ||
+                    r.folder.startsWith('$folderName/'),
+              )
+              .toList();
           for (final file in folderFiles) {
             final content = await TextManifest.readText(file.storagePath);
             if (content == null || content.isEmpty) continue;
             final exportName = '${file.name}.${file.format}';
             final data = Uint8List.fromList(utf8.encode(content));
-            await FilePicker.saveFile(
+            // 用户取消保存时不计数
+            final saved = await FilePicker.saveFile(
               dialogTitle: '导出文本',
               fileName: exportName,
               type: FileType.custom,
               allowedExtensions: [file.format],
               bytes: data,
             );
+            if (saved == null) continue;
             exportedCount++;
           }
         }
+        // 全部保存被取消时返回 null（保持选择模式不退出），
+        // 且不显示「已导出 0 个文件」提示
+        if (exportedCount == 0) return null;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -427,34 +450,37 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
             ),
           );
         }
-        return;
+        return '';
       }
 
       String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
       if (outputDir == null) {
         outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
-        if (outputDir == null) return;
+        if (outputDir == null) return null;
       }
 
-      if (!mounted) return;
+      if (!mounted) return null;
 
       final records = ref.read(textRecordsProvider);
       var exportedCount = 0;
 
       for (final folderName in names) {
-        final folderFiles =
-            records.where((r) => r.folder == folderName).toList();
-        if (folderFiles.isEmpty) continue;
-
-        final folderOutputDir = p.join(outputDir, folderName);
-        await Directory(folderOutputDir).create(recursive: true);
+        // 包含所有后代文件夹中的文件，完整保留层级
+        final folderFiles = records
+            .where(
+              (r) =>
+                  r.folder == folderName || r.folder.startsWith('$folderName/'),
+            )
+            .toList();
 
         for (final file in folderFiles) {
           final content = await TextManifest.readText(file.storagePath);
           if (content == null || content.isEmpty) continue;
 
           final exportName = '${file.name}.${file.format}';
-          final outputPath = p.join(folderOutputDir, exportName);
+          final fileDir = p.join(outputDir, file.folder);
+          await Directory(fileDir).create(recursive: true);
+          final outputPath = p.join(fileDir, exportName);
           await File(outputPath).writeAsString(content);
           exportedCount++;
         }
@@ -468,6 +494,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           ),
         );
       }
+      return outputDir;
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -477,11 +504,12 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           ),
         );
       }
+      return null;
     }
   }
 
-  Future<void> _exportFolder(String folderName) async {
-    await _exportFolders([folderName], '');
+  Future<String?> _exportFolder(String folderName) async {
+    return _exportFolders([folderName], '');
   }
 
   // ====================================================================
@@ -638,15 +666,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         ref.read(filesPageCurrentFolderProvider.notifier).state = f;
       },
       extraPopupMenuItems: (file) => [
-        const PopupMenuItem(
-          value: 'preview',
-          child: ListTile(
-            leading: Icon(Icons.visibility, size: 20),
-            title: Text('预览'),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
+        // 默认菜单已包含「预览」，这里只补充页面特有的导出项
         const PopupMenuItem(
           value: 'export',
           child: ListTile(
@@ -717,14 +737,10 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         await ref.read(textFolderListProvider.notifier).loadFolders();
       },
       onExportFile: _exportFile,
-      onExportFiles: (ids, targetDir) async {
-        await _exportFiles(ids, targetDir);
-      },
-      onExportFolders: (names, targetDir) async {
-        await _exportFolders(names, targetDir);
-      },
+      onExportFiles: _exportFiles,
+      onExportFolders: _exportFolders,
       onExportFolder: (name) async {
-        await _exportFolder(name);
+        return _exportFolder(name);
       },
       onRenameFolder: (oldName, newName) async {
         await ref
