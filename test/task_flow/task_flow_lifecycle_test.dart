@@ -1,43 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
 import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
 
 void main() {
-  // ===========================================================================
-  // Convert CatCatch status helper (mirrors _convertCatCatchStatus from card)
-  // ===========================================================================
-  TaskStatus _convertCatCatchStatus(catcatch.TaskStatus status) {
-    switch (status) {
-      case catcatch.TaskStatus.waiting:
-        return TaskStatus.waiting;
-      case catcatch.TaskStatus.running:
-        return TaskStatus.running;
-      case catcatch.TaskStatus.completed:
-        return TaskStatus.completed;
-      case catcatch.TaskStatus.failed:
-        return TaskStatus.failed;
-      case catcatch.TaskStatus.paused:
-        return TaskStatus.paused;
-    }
-  }
-
-  /// Priority: waiting(0) < running(1) < paused(2) < completed(3) / failed(3).
-  int _statusPriority(TaskStatus status) {
-    switch (status) {
-      case TaskStatus.waiting:
-        return 0;
-      case TaskStatus.running:
-        return 1;
-      case TaskStatus.paused:
-        return 2;
-      case TaskStatus.completed:
-      case TaskStatus.failed:
-        return 3;
-    }
-  }
-
   group('TaskFlow sub-task lifecycle with placeholders', () {
     late TaskFlowExecutionNotifier notifier;
 
@@ -400,95 +366,6 @@ void main() {
 
       // Even with waiting, should still be running (not completed)
       expect(notifier.state[0].status, FlowExecutionStatus.running);
-    });
-  });
-
-  // ===========================================================================
-  // Status priority sync (mirrors card's _syncSubTaskStatuses logic)
-  // ===========================================================================
-  group('status priority prevents regression', () {
-    test('running (1) does NOT overwrite completed (3)', () {
-      expect(
-          _statusPriority(TaskStatus.running) >
-              _statusPriority(TaskStatus.completed),
-          false);
-    });
-
-    test('completed (3) DOES overwrite running (1)', () {
-      expect(
-          _statusPriority(TaskStatus.completed) >
-              _statusPriority(TaskStatus.running),
-          true);
-    });
-
-    test('completed (3) DOES overwrite waiting (0)', () {
-      expect(
-          _statusPriority(TaskStatus.completed) >
-              _statusPriority(TaskStatus.waiting),
-          true);
-    });
-
-    test('running (1) DOES overwrite waiting (0)', () {
-      expect(
-          _statusPriority(TaskStatus.running) >
-              _statusPriority(TaskStatus.waiting),
-          true);
-    });
-
-    test('failed (3) has same priority as completed (3)', () {
-      expect(_statusPriority(TaskStatus.failed),
-          _statusPriority(TaskStatus.completed));
-    });
-
-    test(
-        'paused (2) has higher priority than running (1) but lower than completed (3)',
-        () {
-      expect(
-          _statusPriority(TaskStatus.paused) >
-              _statusPriority(TaskStatus.running),
-          true);
-      expect(
-          _statusPriority(TaskStatus.paused) <
-              _statusPriority(TaskStatus.completed),
-          true);
-    });
-
-    test(
-        'waiting (0) does NOT overwrite running (1) — prevents card sync from reverting execution status',
-        () {
-      // This is the critical guard: if the card syncs while the real task is still
-      // "waiting" but the execution block already set "running", the card must NOT
-      // overwrite "running" with "waiting".
-      expect(
-          _statusPriority(TaskStatus.waiting) >
-              _statusPriority(TaskStatus.running),
-          false);
-    });
-  });
-
-  // ===========================================================================
-  // CatCatch TaskStatus conversion (mirrors _convertCatCatchStatus)
-  // ===========================================================================
-  group('_convertCatCatchStatus', () {
-    test('catcatch.running → TaskStatus.running', () {
-      expect(_convertCatCatchStatus(catcatch.TaskStatus.running),
-          TaskStatus.running);
-    });
-    test('catcatch.completed → TaskStatus.completed', () {
-      expect(_convertCatCatchStatus(catcatch.TaskStatus.completed),
-          TaskStatus.completed);
-    });
-    test('catcatch.failed → TaskStatus.failed', () {
-      expect(_convertCatCatchStatus(catcatch.TaskStatus.failed),
-          TaskStatus.failed);
-    });
-    test('catcatch.paused → TaskStatus.paused', () {
-      expect(_convertCatCatchStatus(catcatch.TaskStatus.paused),
-          TaskStatus.paused);
-    });
-    test('catcatch.waiting → TaskStatus.waiting', () {
-      expect(_convertCatCatchStatus(catcatch.TaskStatus.waiting),
-          TaskStatus.waiting);
     });
   });
 

@@ -6,7 +6,14 @@ extension _HomePageHomeContentExt on _HomePageState {
     final cs = Theme.of(context).colorScheme;
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
-    final bgTasks = ref.watch(backgroundTasksProvider);
+    // Project to (id, status) so the home page ONLY rebuilds when a
+    // background task's id/status actually changes — not on every
+    // intermediate step update (e.g. updateStep from running → running
+    // on a different step index).  This keeps the GUI responsive during
+    // CPU-bound extraction pipelines.
+    final bgTasks = ref.watch(backgroundTasksProvider.select((tasks) => [
+          for (final t in tasks) (id: t.id, status: t.status.name),
+        ]));
     final flowExecutions = ref.watch(taskFlowExecutionsProvider);
 
     // Flow sub-tasks are rendered inside their flow card in the unified
@@ -39,7 +46,7 @@ extension _HomePageHomeContentExt on _HomePageState {
     }
 
     for (final t in bgTasks) {
-      countTaskIfStandalone(t.id, t.status.name);
+      countTaskIfStandalone(t.id, t.status);
     }
     for (final t in catcatchTasks) {
       countTaskIfStandalone(t.id, t.status.name);
