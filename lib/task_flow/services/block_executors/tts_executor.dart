@@ -113,6 +113,20 @@ Future<String> executeTtsBlock({
           blockTitle: def.label,
         );
       }
+      if (task.status == TaskStatus.paused) {
+        // A paused synthesis task will not progress — fail fast instead
+        // of polling until maxWait and reporting a bogus 合成超时.
+        execNotifier.updateSubTaskStatus(
+          execId,
+          flowSubTask.id,
+          TaskStatus.paused,
+        );
+        throw BlockExecutionException(
+          '任务已暂停',
+          blockType: def.typeKey.name,
+          blockTitle: def.label,
+        );
+      }
       if (DateTime.now().difference(startTime) > maxWait) {
         execNotifier.updateSubTaskStatus(
           execId,

@@ -253,6 +253,19 @@ class _ExpandedContent extends ConsumerWidget {
   }
 
   void _confirmDelete(BuildContext context, WidgetRef ref, String execId) {
+    final execution = ref
+        .read(taskFlowExecutionsProvider)
+        .where((e) => e.id == execId)
+        .firstOrNull;
+    // Deleting a running execution would orphan the engine: it keeps
+    // executing and its newly created sub-tasks resurface as standalone
+    // cards with no record. Refuse until the flow terminates.
+    if (execution != null && execution.status == FlowExecutionStatus.running) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('任务流正在运行，无法删除')),
+      );
+      return;
+    }
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(

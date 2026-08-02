@@ -269,7 +269,7 @@ void main() {
     test('scenario: CatCatch task completes later → auto-complete', () {
       // Widget disposed during CatCatch execution. completeExecution was
       // NOT called (because _startFlow exited early). CatCatch completes
-      // later in background. _syncSubTaskStatuses updates sub-task.
+      // later in background and a sub-task status update arrives —
       // auto-complete fires.
       final execId = notifier.addExecution(flowId: 'f1', flowName: '任务');
       notifier.addSubTask(
@@ -294,10 +294,13 @@ void main() {
     });
 
     test(
-        'scenario: flow recovers from failed to completed when tasks are retried',
-        () {
-      // When failExecution was called but the CatCatch task is later retried
-      // and succeeds, the flow should recover to "completed" status.
+        'scenario: a sub-task status update after failExecution recovers '
+        'the flow from failed to completed', () {
+      // Guards the updateSubTaskStatus recompute path: a late sub-task
+      // update arriving after failExecution (e.g. a retried task that
+      // completes) must re-open the execution instead of leaving it failed.
+      // Note: this only covers the notifier — re-linking a retried real
+      // task to the flow is not wired in the app yet.
       final execId = notifier.addExecution(flowId: 'f1', flowName: '任务');
       notifier.addSubTask(
           execId,
@@ -313,8 +316,7 @@ void main() {
       expect(notifier.state[0].status, FlowExecutionStatus.failed);
       expect(notifier.state[0].error, '下载失败');
 
-      // User retried the CatCatch task, it succeeded.
-      // _syncSubTaskStatuses updates the sub-task to completed.
+      // A later sub-task update marks the sub-task completed.
       final stId = notifier.state[0].subTasks[0].id;
       notifier.updateSubTaskStatus(execId, stId, TaskStatus.completed);
 
