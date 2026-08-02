@@ -6,14 +6,6 @@ extension _HomePageHomeContentExt on _HomePageState {
     final cs = Theme.of(context).colorScheme;
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
-    // Project to (id, status) so the home page ONLY rebuilds when a
-    // background task's id/status actually changes — not on every
-    // intermediate step update (e.g. updateStep from running → running
-    // on a different step index).  This keeps the GUI responsive during
-    // CPU-bound extraction pipelines.
-    final bgTasks = ref.watch(backgroundTasksProvider.select((tasks) => [
-          for (final t in tasks) (id: t.id, status: t.status.name),
-        ]));
     final flowExecutions = ref.watch(taskFlowExecutionsProvider);
 
     // Flow sub-tasks are rendered inside their flow card in the unified
@@ -23,10 +15,34 @@ extension _HomePageHomeContentExt on _HomePageState {
         for (final st in e.subTasks) st.subTaskId,
     };
 
+    // Count background tasks inside the selector and return a
+    // value-comparable record so the home page ONLY rebuilds when a count
+    // changes — not on every intermediate step update (e.g. updateStep
+    // running → running on a different step index), which would jank the
+    // GUI during CPU-bound extraction pipelines. (A projected list would
+    // compare by identity and always fire.)
+    final bgCounts = ref.watch(backgroundTasksProvider.select((tasks) {
+      int p = 0, c = 0, f = 0;
+      for (final t in tasks) {
+        if (flowSubTaskIds.contains(t.id)) continue;
+        switch (t.status) {
+          case TaskStatus.running:
+          case TaskStatus.paused:
+          case TaskStatus.waiting:
+            p++;
+          case TaskStatus.completed:
+            c++;
+          case TaskStatus.failed:
+            f++;
+        }
+      }
+      return (inProgress: p, completed: c, failed: f);
+    }));
+
     // --- Compute status counts for the status card ---
-    int inProgressCount = 0;
-    int completedCount = 0;
-    int failedCount = 0;
+    int inProgressCount = bgCounts.inProgress;
+    int completedCount = bgCounts.completed;
+    int failedCount = bgCounts.failed;
 
     void countStatusName(String statusName) {
       if (statusName == 'running' ||
@@ -45,9 +61,6 @@ extension _HomePageHomeContentExt on _HomePageState {
       countStatusName(statusName);
     }
 
-    for (final t in bgTasks) {
-      countTaskIfStandalone(t.id, t.status);
-    }
     for (final t in catcatchTasks) {
       countTaskIfStandalone(t.id, t.status.name);
     }

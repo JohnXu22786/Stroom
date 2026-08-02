@@ -110,6 +110,7 @@ class TaskFlowExecution {
     bool clearCompletedAt = false,
     List<FlowSubTask>? subTasks,
     String? error,
+    bool clearError = false,
   }) =>
       TaskFlowExecution(
         id: id,
@@ -120,7 +121,7 @@ class TaskFlowExecution {
         completedAt:
             clearCompletedAt ? null : (completedAt ?? this.completedAt),
         subTasks: subTasks ?? this.subTasks,
-        error: error ?? this.error,
+        error: clearError ? null : (error ?? this.error),
       );
 
   /// Get the task status of this execution for the unified task list.

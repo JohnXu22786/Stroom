@@ -165,6 +165,32 @@ void main() {
         expect(notifier.state[0].completedAt, isNull);
       });
 
+      test('clears error text when a failed execution returns to running', () {
+        final execId = notifier.addExecution(
+          flowId: 'flow-1',
+          flowName: '测试流程',
+        );
+        notifier.addSubTask(
+            execId,
+            FlowSubTask(
+              blockTypeKey: 'catcatch',
+              blockLabel: '获取网页资源',
+              subTaskId: 'real-task-1',
+              subTaskType: 'catcatch',
+            ));
+        final stId = notifier.state[0].subTasks[0].id;
+
+        notifier.failExecution(execId, error: '步骤 1 失败');
+        expect(notifier.state[0].error, '步骤 1 失败');
+
+        // Re-opened by a later sub-task update — the stale error text must
+        // not linger on a running (or eventually completed) execution.
+        notifier.updateSubTaskStatus(execId, stId, TaskStatus.running);
+
+        expect(notifier.state[0].status, FlowExecutionStatus.running);
+        expect(notifier.state[0].error, isNull);
+      });
+
       test('does NOT auto-complete when sub-task is still running', () {
         final execId = notifier.addExecution(
           flowId: 'flow-1',
