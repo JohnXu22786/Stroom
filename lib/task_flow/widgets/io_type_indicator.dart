@@ -9,11 +9,7 @@ class IOTypeIndicator extends StatelessWidget {
   final IOType type;
   final bool isInput;
 
-  const IOTypeIndicator({
-    super.key,
-    required this.type,
-    this.isInput = true,
-  });
+  const IOTypeIndicator({super.key, required this.type, this.isInput = true});
 
   @override
   Widget build(BuildContext context) {

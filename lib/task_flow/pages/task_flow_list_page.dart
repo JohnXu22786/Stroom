@@ -20,10 +20,7 @@ class TaskFlowListPage extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('任务流'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('任务流'), centerTitle: true),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _createNewFlow(context, ref),
         child: const Icon(Icons.add),
@@ -102,10 +99,8 @@ class TaskFlowListPage extends ConsumerWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => TaskFlowBuilderPage(
-                flowId: flow.id,
-                startInRunMode: true,
-              ),
+              builder: (_) =>
+                  TaskFlowBuilderPage(flowId: flow.id, startInRunMode: true),
             ),
           );
         },
@@ -175,8 +170,11 @@ class TaskFlowListPage extends ConsumerWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.layers,
-                            size: 14, color: cs.onSurfaceVariant),
+                        Icon(
+                          Icons.layers,
+                          size: 14,
+                          color: cs.onSurfaceVariant,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           '${flow.blocks.length} 个功能块',
@@ -219,7 +217,10 @@ class TaskFlowListPage extends ConsumerWidget {
   }
 
   void _showContextMenu(
-      BuildContext context, WidgetRef ref, TaskFlowDefinition flow) {
+    BuildContext context,
+    WidgetRef ref,
+    TaskFlowDefinition flow,
+  ) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -234,10 +235,9 @@ class TaskFlowListPage extends ConsumerWidget {
               width: 32,
               height: 4,
               decoration: BoxDecoration(
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurfaceVariant
-                    .withValues(alpha: 0.4),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -261,14 +261,17 @@ class TaskFlowListPage extends ConsumerWidget {
               onTap: () {
                 Navigator.pop(ctx);
                 ref.read(taskFlowListProvider.notifier).duplicateFlow(flow.id);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('已复制')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('已复制')));
               },
             ),
             ListTile(
-              leading:
-                  const Icon(Icons.delete_outline, size: 22, color: Colors.red),
+              leading: const Icon(
+                Icons.delete_outline,
+                size: 22,
+                color: Colors.red,
+              ),
               title: const Text('删除', style: TextStyle(color: Colors.red)),
               onTap: () {
                 Navigator.pop(ctx);
@@ -289,8 +292,10 @@ class TaskFlowListPage extends ConsumerWidget {
                               .read(taskFlowListProvider.notifier)
                               .removeFlow(flow.id);
                         },
-                        child: const Text('删除',
-                            style: TextStyle(color: Colors.red)),
+                        child: const Text(
+                          '删除',
+                          style: TextStyle(color: Colors.red),
+                        ),
                       ),
                     ],
                   ),
@@ -306,9 +311,7 @@ class TaskFlowListPage extends ConsumerWidget {
   void _createNewFlow(BuildContext context, WidgetRef ref) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const TaskFlowBuilderPage(),
-      ),
+      MaterialPageRoute(builder: (_) => const TaskFlowBuilderPage()),
     );
   }
 }

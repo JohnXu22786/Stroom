@@ -38,18 +38,22 @@ Future<String> _callOcrApi({
           'content': [
             {
               'type': 'image_url',
-              'image_url': {'url': dataUri, 'detail': 'high'}
-            }
-          ]
-        }
-      ]
+              'image_url': {'url': dataUri, 'detail': 'high'},
+            },
+          ],
+        },
+      ],
     };
-    final response = await dio.post(host,
-        data: body,
-        options: Options(headers: {
+    final response = await dio.post(
+      host,
+      data: body,
+      options: Options(
+        headers: {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/json',
-        }));
+        },
+      ),
+    );
     if (response.data is Map) {
       final choices = response.data['choices'] as List<dynamic>?;
       if (choices != null && choices.isNotEmpty) {
@@ -81,32 +85,62 @@ Future<String> executeOcrBlock({
   execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
   execNotifier.updateSubTaskStatus(execId, flowSubTask.id, TaskStatus.running);
   bgNotifier.addTask(
-      type: BackgroundTaskType.ocr, title: title, taskId: taskId);
+    type: BackgroundTaskType.ocr,
+    title: title,
+    taskId: taskId,
+  );
 
   Uint8List imageBytes;
   String imageFormat;
   try {
     final file = File(input);
     if (!await file.exists()) {
-      failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
-          '输入文件不存在: $input');
-      throw BlockExecutionException('输入文件不存在',
-          blockType: def.typeKey.name, blockTitle: def.label);
+      failSubTask(
+        bgNotifier,
+        taskId,
+        execNotifier,
+        execId,
+        flowSubTask.id,
+        '输入文件不存在: $input',
+      );
+      throw BlockExecutionException(
+        '输入文件不存在',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
     }
     imageBytes = await file.readAsBytes();
     imageFormat = p.extension(input).replaceFirst('.', '').toLowerCase();
     if (imageBytes.isEmpty) {
       failSubTask(
-          bgNotifier, taskId, execNotifier, execId, flowSubTask.id, '输入文件为空');
-      throw BlockExecutionException('输入文件为空',
-          blockType: def.typeKey.name, blockTitle: def.label);
+        bgNotifier,
+        taskId,
+        execNotifier,
+        execId,
+        flowSubTask.id,
+        '输入文件为空',
+      );
+      throw BlockExecutionException(
+        '输入文件为空',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
     }
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
     failSubTask(
-        bgNotifier, taskId, execNotifier, execId, flowSubTask.id, '读取文件失败: $e');
-    throw BlockExecutionException('读取文件失败',
-        blockType: def.typeKey.name, blockTitle: def.label);
+      bgNotifier,
+      taskId,
+      execNotifier,
+      execId,
+      flowSubTask.id,
+      '读取文件失败: $e',
+    );
+    throw BlockExecutionException(
+      '读取文件失败',
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
   }
 
   final configs = providerEntries.entries
@@ -115,18 +149,36 @@ Future<String> executeOcrBlock({
       .toList();
   if (configs.isEmpty) {
     failSubTask(
-        bgNotifier, taskId, execNotifier, execId, flowSubTask.id, '未配置OCR模型');
-    throw BlockExecutionException('未配置OCR模型',
-        blockType: def.typeKey.name, blockTitle: def.label);
+      bgNotifier,
+      taskId,
+      execNotifier,
+      execId,
+      flowSubTask.id,
+      '未配置OCR模型',
+    );
+    throw BlockExecutionException(
+      '未配置OCR模型',
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
   }
 
   final config = configs.first;
   final model = config.models.isNotEmpty ? config.models.first : null;
   if (model == null) {
     failSubTask(
-        bgNotifier, taskId, execNotifier, execId, flowSubTask.id, 'OCR模型配置为空');
-    throw BlockExecutionException('模型配置为空',
-        blockType: def.typeKey.name, blockTitle: def.label);
+      bgNotifier,
+      taskId,
+      execNotifier,
+      execId,
+      flowSubTask.id,
+      'OCR模型配置为空',
+    );
+    throw BlockExecutionException(
+      '模型配置为空',
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
   }
 
   try {
@@ -141,17 +193,32 @@ Future<String> executeOcrBlock({
     bgNotifier.updateStep(taskId, 0, completed: true);
     bgNotifier.setResult(taskId, result);
 
-    final textPath =
-        await saveTextForFlow(result, saveFolder: saveFolder, title: title);
+    final textPath = await saveTextForFlow(
+      result,
+      saveFolder: saveFolder,
+      title: title,
+    );
     bgNotifier.completeTask(taskId, downloadedFilePath: textPath);
     execNotifier.updateSubTaskStatus(
-        execId, flowSubTask.id, TaskStatus.completed);
+      execId,
+      flowSubTask.id,
+      TaskStatus.completed,
+    );
     return result;
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
     failSubTask(
-        bgNotifier, taskId, execNotifier, execId, flowSubTask.id, '识别失败: $e');
-    throw BlockExecutionException(e.toString(),
-        blockType: def.typeKey.name, blockTitle: def.label);
+      bgNotifier,
+      taskId,
+      execNotifier,
+      execId,
+      flowSubTask.id,
+      '识别失败: $e',
+    );
+    throw BlockExecutionException(
+      e.toString(),
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
   }
 }

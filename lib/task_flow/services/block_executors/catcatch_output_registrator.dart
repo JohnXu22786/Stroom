@@ -8,30 +8,14 @@ import '../../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../../utils/file_manifest.dart';
 import '../../../utils/video_manifest.dart';
 
-const _videoExts = {
-  'mp4',
-  'webm',
-  'mov',
-  'mkv',
-  'ogv',
-  'avi',
-  'flv',
-  'wmv',
-};
+const _videoExts = {'mp4', 'webm', 'mov', 'mkv', 'ogv', 'avi', 'flv', 'wmv'};
 
-const _audioExts = {
-  'mp3',
-  'wav',
-  'm4a',
-  'aac',
-  'wma',
-  'opus',
-  'flac',
-  'ogg',
-};
+const _audioExts = {'mp3', 'wav', 'm4a', 'aac', 'wma', 'opus', 'flac', 'ogg'};
 
 Future<void> registerFlowCatCatchOutput(
-    String filePath, catcatch.CatCatchTask task) async {
+  String filePath,
+  catcatch.CatCatchTask task,
+) async {
   final ext = p.extension(filePath).toLowerCase().replaceAll('.', '');
   final file = File(filePath);
   if (!await file.exists()) {
@@ -71,10 +55,12 @@ Future<void> registerFlowCatCatchOutput(
         await VideoManifest.writeFile('$contentHash.$ext', fileBytes);
         await VideoManifest.addRecord(record);
         debugPrint(
-            '[TaskFlow] Registered video: $name.$ext (folder: $videoFolder)');
+          '[TaskFlow] Registered video: $name.$ext (folder: $videoFolder)',
+        );
       } else {
         debugPrint(
-            '[TaskFlow] Video hash $contentHash already registered, skipping');
+          '[TaskFlow] Video hash $contentHash already registered, skipping',
+        );
       }
     } catch (e) {
       debugPrint('[TaskFlow] Register video failed: $e');
@@ -110,10 +96,12 @@ Future<void> registerFlowCatCatchOutput(
         await FileManifest.writeFile('$contentHash.$ext', fileBytes);
         await FileManifest.addRecord(record);
         debugPrint(
-            '[TaskFlow] Registered audio: $name.$ext (folder: $audioFolder)');
+          '[TaskFlow] Registered audio: $name.$ext (folder: $audioFolder)',
+        );
       } else {
         debugPrint(
-            '[TaskFlow] Audio hash $contentHash already registered, skipping');
+          '[TaskFlow] Audio hash $contentHash already registered, skipping',
+        );
       }
     } catch (e) {
       debugPrint('[TaskFlow] Register audio failed: $e');

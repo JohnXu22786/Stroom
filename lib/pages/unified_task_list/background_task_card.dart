@@ -482,6 +482,9 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
           ),
         );
         break;
+      case BackgroundTaskType.chat:
+        // Chat block: no standalone page — handled within flow execution.
+        break;
     }
   }
 
@@ -590,6 +593,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         return Icons.multitrack_audio;
       case BackgroundTaskType.audioSeparation:
         return Icons.music_note;
+      case BackgroundTaskType.chat:
+        return Icons.chat_bubble_outline;
     }
   }
 
@@ -601,6 +606,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         return Colors.deepPurple;
       case BackgroundTaskType.audioSeparation:
         return Colors.indigo;
+      case BackgroundTaskType.chat:
+        return Colors.blue;
     }
   }
 }

@@ -5,14 +5,7 @@ import 'io_type.dart';
 // Block type enum
 // ============================================================================
 
-enum BlockType {
-  catcatch,
-  audioSeparation,
-  asr,
-  ocr,
-  tts,
-  custom,
-}
+enum BlockType { catcatch, audioSeparation, asr, ocr, tts, chat, custom }
 
 BlockType parseBlockType(String name) {
   return BlockType.values.firstWhere(
@@ -72,13 +65,13 @@ class BlockParamDefinition {
   });
 
   Map<String, dynamic> toMap() => {
-        'key': key,
-        'label': label,
-        'type': type.name,
-        'required': required,
-        if (defaultValue != null) 'defaultValue': defaultValue,
-        if (hintText != null) 'hintText': hintText,
-      };
+    'key': key,
+    'label': label,
+    'type': type.name,
+    'required': required,
+    if (defaultValue != null) 'defaultValue': defaultValue,
+    if (hintText != null) 'hintText': hintText,
+  };
 
   factory BlockParamDefinition.fromMap(Map<String, dynamic> map) =>
       BlockParamDefinition(
@@ -140,7 +133,10 @@ class BlockTypeDefinition {
     color: Color(0xFF009688),
     params: [
       BlockParamDefinition(
-          key: 'saveFolder', label: '保存文件夹', type: BlockParamType.filePath),
+        key: 'saveFolder',
+        label: '保存文件夹',
+        type: BlockParamType.filePath,
+      ),
     ],
   );
 
@@ -194,9 +190,15 @@ class BlockTypeDefinition {
     color: Color(0xFF9C27B0),
     params: [
       BlockParamDefinition(
-          key: 'videoFolder', label: '视频保存文件夹', type: BlockParamType.filePath),
+        key: 'videoFolder',
+        label: '视频保存文件夹',
+        type: BlockParamType.filePath,
+      ),
       BlockParamDefinition(
-          key: 'audioFolder', label: '音频保存文件夹', type: BlockParamType.filePath),
+        key: 'audioFolder',
+        label: '音频保存文件夹',
+        type: BlockParamType.filePath,
+      ),
       BlockParamDefinition(
         key: 'durationSec',
         label: '预期时长(秒)',
@@ -235,6 +237,28 @@ class BlockTypeDefinition {
     ],
   );
 
+  /// Chat (Assistant Conversation): any → text
+  ///
+  /// Sends the input text to the current assistant model and returns
+  /// the response. Accepts any input type — whatever can be typed into
+  /// the chat page (text, URLs, file references) can be the input.
+  static const chat = BlockTypeDefinition(
+    typeKey: BlockType.chat,
+    label: '助手对话',
+    inputType: IOType.any,
+    outputType: IOType.text,
+    icon: Icons.chat_bubble_outline,
+    color: Color(0xFF2196F3),
+    params: [
+      BlockParamDefinition(
+        key: 'promptPrefix',
+        label: '提示前缀',
+        type: BlockParamType.string,
+        hintText: '在输入前添加的提示语（可选）',
+      ),
+    ],
+  );
+
   /// All registered block types.
   static const List<BlockTypeDefinition> all = [
     ocr,
@@ -242,6 +266,7 @@ class BlockTypeDefinition {
     audioSeparation,
     catcatch,
     tts,
+    chat,
   ];
 
   /// Find a block type by its key.
@@ -282,12 +307,12 @@ class BlockTypeDefinition {
   // ========================================================================
 
   Map<String, dynamic> toMap() => {
-        'typeKey': typeKey.name,
-        'label': label,
-        'inputType': inputType.toJson(),
-        'outputType': outputType.toJson(),
-        'params': params.map((p) => p.toMap()).toList(),
-      };
+    'typeKey': typeKey.name,
+    'label': label,
+    'inputType': inputType.toJson(),
+    'outputType': outputType.toJson(),
+    'params': params.map((p) => p.toMap()).toList(),
+  };
 
   factory BlockTypeDefinition.fromMap(Map<String, dynamic> map) {
     final typeKey = parseBlockType(map['typeKey'] as String);
@@ -301,9 +326,13 @@ class BlockTypeDefinition {
       outputType: IOType.fromJson(map['outputType'] as String? ?? 'any'),
       icon: Icons.extension,
       color: Colors.grey,
-      params: (map['params'] as List?)
-              ?.map((p) => BlockParamDefinition.fromMap(
-                  Map<String, dynamic>.from(p as Map)))
+      params:
+          (map['params'] as List?)
+              ?.map(
+                (p) => BlockParamDefinition.fromMap(
+                  Map<String, dynamic>.from(p as Map),
+                ),
+              )
               .toList() ??
           [],
     );

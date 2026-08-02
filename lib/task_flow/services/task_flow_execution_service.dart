@@ -40,7 +40,9 @@ class TaskFlowExecutionService {
   }
 
   Future<void> _startFlowInternal(String flowId, String inputText) async {
-    final flow = _ref.read(taskFlowListProvider).firstWhere(
+    final flow = _ref
+        .read(taskFlowListProvider)
+        .firstWhere(
           (f) => f.id == flowId,
           orElse: () => TaskFlowDefinition(name: ''),
         );
@@ -90,7 +92,9 @@ class TaskFlowExecutionService {
       try {
         final providerState = _ref.read(providerEntriesProvider);
         AppLogService.info(
-            'TaskFlow', '步骤 ${i + 1}/${flow.blocks.length}: ${def.label}');
+          'TaskFlow',
+          '步骤 ${i + 1}/${flow.blocks.length}: ${def.label}',
+        );
         final result = await _executeBlock(
           def,
           block,
@@ -105,8 +109,10 @@ class TaskFlowExecutionService {
         );
         currentData = result;
       } catch (e) {
-        AppLogService.warning('TaskFlow',
-            '步骤 ${i + 1} 失败: ${flow.blocks[i].getDefinition()?.label ?? "?"} — $e');
+        AppLogService.warning(
+          'TaskFlow',
+          '步骤 ${i + 1} 失败: ${flow.blocks[i].getDefinition()?.label ?? "?"} — $e',
+        );
         final executions = execNotifier.state.where((x) => x.id == execId);
         if (executions.isNotEmpty) {
           execNotifier.failExecution(execId, error: '步骤 ${i + 1} 失败: $e');
@@ -125,6 +131,8 @@ class TaskFlowExecutionService {
         return 'catcatch';
       case BlockType.tts:
         return 'synthesis';
+      case BlockType.chat:
+        return 'chat';
       default:
         return 'background';
     }
@@ -145,57 +153,76 @@ class TaskFlowExecutionService {
     switch (def.typeKey) {
       case BlockType.catcatch:
         return await executeCatCatchBlock(
-            def: def,
-            block: block,
-            input: input,
-            execId: execId,
-            execNotifier: execNotifier,
-            flowSubTask: flowSubTask,
-            catcatchNotifier: catcatchNotifier,
-            videoFolder: block.params['videoFolder'] ?? '',
-            audioFolder: block.params['audioFolder'] ?? '');
+          def: def,
+          block: block,
+          input: input,
+          execId: execId,
+          execNotifier: execNotifier,
+          flowSubTask: flowSubTask,
+          catcatchNotifier: catcatchNotifier,
+          videoFolder: block.params['videoFolder'] ?? '',
+          audioFolder: block.params['audioFolder'] ?? '',
+        );
       case BlockType.audioSeparation:
         return await executeAudioSeparationBlock(
-            def: def,
-            block: block,
-            input: input,
-            execId: execId,
-            execNotifier: execNotifier,
-            flowSubTask: flowSubTask,
-            bgNotifier: bgNotifier);
+          def: def,
+          block: block,
+          input: input,
+          execId: execId,
+          execNotifier: execNotifier,
+          flowSubTask: flowSubTask,
+          bgNotifier: bgNotifier,
+        );
       case BlockType.asr:
         return await executeAsrBlock(
-            block: block,
-            def: def,
-            input: input,
-            execId: execId,
-            execNotifier: execNotifier,
-            flowSubTask: flowSubTask,
-            bgNotifier: bgNotifier,
-            providerEntries: providerEntries);
+          block: block,
+          def: def,
+          input: input,
+          execId: execId,
+          execNotifier: execNotifier,
+          flowSubTask: flowSubTask,
+          bgNotifier: bgNotifier,
+          providerEntries: providerEntries,
+        );
       case BlockType.ocr:
         return await executeOcrBlock(
-            block: block,
-            def: def,
-            input: input,
-            execId: execId,
-            execNotifier: execNotifier,
-            flowSubTask: flowSubTask,
-            bgNotifier: bgNotifier,
-            providerEntries: providerEntries);
+          block: block,
+          def: def,
+          input: input,
+          execId: execId,
+          execNotifier: execNotifier,
+          flowSubTask: flowSubTask,
+          bgNotifier: bgNotifier,
+          providerEntries: providerEntries,
+        );
       case BlockType.tts:
         return await executeTtsBlock(
-            block: block,
-            def: def,
-            input: input,
-            execId: execId,
-            execNotifier: execNotifier,
-            flowSubTask: flowSubTask,
-            taskListNotifier: taskListNotifier,
-            providerEntries: providerEntries);
+          block: block,
+          def: def,
+          input: input,
+          execId: execId,
+          execNotifier: execNotifier,
+          flowSubTask: flowSubTask,
+          taskListNotifier: taskListNotifier,
+          providerEntries: providerEntries,
+        );
+      case BlockType.chat:
+        return await executeChatBlock(
+          block: block,
+          def: def,
+          input: input,
+          execId: execId,
+          execNotifier: execNotifier,
+          flowSubTask: flowSubTask,
+          bgNotifier: bgNotifier,
+          ref: _ref,
+        );
       case BlockType.custom:
         execNotifier.updateSubTaskStatus(
-            execId, flowSubTask.id, TaskStatus.failed);
+          execId,
+          flowSubTask.id,
+          TaskStatus.failed,
+        );
         throw BlockExecutionException('Unsupported block type');
     }
   }

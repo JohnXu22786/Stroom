@@ -10,8 +10,8 @@ import 'persistable_notifier.dart';
 /// Provider for tracking task flow executions (for the unified task list).
 final taskFlowExecutionsProvider =
     StateNotifierProvider<TaskFlowExecutionNotifier, List<TaskFlowExecution>>(
-  (ref) => TaskFlowExecutionNotifier(),
-);
+      (ref) => TaskFlowExecutionNotifier(),
+    );
 
 class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     with PersistableNotifier<List<TaskFlowExecution>> {
@@ -30,7 +30,8 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     for (final item in json) {
       try {
         result.add(
-            TaskFlowExecution.fromMap(Map<String, dynamic>.from(item as Map)));
+          TaskFlowExecution.fromMap(Map<String, dynamic>.from(item as Map)),
+        );
       } catch (e) {
         debugPrint('WARNING: Skipping corrupt TaskFlowExecution: $e');
       }
@@ -74,7 +75,10 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   /// Update a placeholder sub-task's [subTaskId] with the real task ID
   /// after the actual task has been created.
   void updateSubTaskId(
-      String executionId, String subTaskId, String newSubTaskId) {
+    String executionId,
+    String subTaskId,
+    String newSubTaskId,
+  ) {
     state = state.map((e) {
       if (e.id != executionId) return e;
       final updated = e.subTasks.map((st) {
@@ -93,7 +97,10 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   /// succeeds, or to move from "completed" to "failed" if a sub-task
   /// fails after the flow was already marked complete.
   void updateSubTaskStatus(
-      String executionId, String subTaskId, TaskStatus status) {
+    String executionId,
+    String subTaskId,
+    TaskStatus status,
+  ) {
     state = state.map((e) {
       if (e.id != executionId) return e;
       final updated = e.subTasks.map((st) {
@@ -105,12 +112,15 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
       if (updated.isEmpty) return e;
 
       final anyFailed = updated.any((st) => st.status == TaskStatus.failed);
-      final anyRunning = updated.any((st) =>
-          st.status == TaskStatus.running ||
-          st.status == TaskStatus.waiting ||
-          st.status == TaskStatus.paused);
-      final allCompleted =
-          updated.every((st) => st.status == TaskStatus.completed);
+      final anyRunning = updated.any(
+        (st) =>
+            st.status == TaskStatus.running ||
+            st.status == TaskStatus.waiting ||
+            st.status == TaskStatus.paused,
+      );
+      final allCompleted = updated.every(
+        (st) => st.status == TaskStatus.completed,
+      );
 
       if (anyFailed) {
         return e.copyWith(
@@ -144,8 +154,9 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
           completedAt: DateTime.now(),
         );
       }
-      final allCompleted =
-          e.subTasks.every((st) => st.status == TaskStatus.completed);
+      final allCompleted = e.subTasks.every(
+        (st) => st.status == TaskStatus.completed,
+      );
       final anyFailed = e.subTasks.any((st) => st.status == TaskStatus.failed);
       if (allCompleted) {
         return e.copyWith(
