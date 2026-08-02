@@ -1,77 +1,73 @@
 part of 'home_page.dart';
 
+/// Aggregated task counts for the home status card.
+///
+/// Watches all three task providers plus flow executions and computes the
+/// counts in one place: flow sub-tasks are excluded (they render inside
+/// their flow card in the unified list) and each flow execution counts
+/// once by its own status. All state is read fresh inside the provider
+/// body — no closure-capture staleness. The result is a value-comparable
+/// record, so the home page only rebuilds when a count actually changes,
+/// not on every intermediate step update (e.g. updateStep running →
+/// running on a different step index), keeping the GUI responsive during
+/// CPU-bound extraction pipelines.
+final homeStatusCountsProvider =
+    Provider<({int inProgress, int completed, int failed})>((ref) {
+  final bgTasks = ref.watch(backgroundTasksProvider);
+  final catcatchTasks = ref.watch(catcatchTasksProvider);
+  final synthesisTasks = ref.watch(taskListProvider);
+  final flowExecutions = ref.watch(taskFlowExecutionsProvider);
+
+  final flowSubTaskIds = <String>{
+    for (final e in flowExecutions)
+      for (final st in e.subTasks) st.subTaskId,
+  };
+
+  int inProgress = 0, completed = 0, failed = 0;
+
+  void addStatus(String statusName) {
+    if (statusName == 'running' ||
+        statusName == 'paused' ||
+        statusName == 'waiting') {
+      inProgress++;
+    } else if (statusName == 'completed') {
+      completed++;
+    } else if (statusName == 'failed') {
+      failed++;
+    }
+  }
+
+  void addTaskIfStandalone(String id, String statusName) {
+    if (flowSubTaskIds.contains(id)) return;
+    addStatus(statusName);
+  }
+
+  for (final t in bgTasks) {
+    addTaskIfStandalone(t.id, t.status.name);
+  }
+  for (final t in catcatchTasks) {
+    addTaskIfStandalone(t.id, t.status.name);
+  }
+  for (final t in synthesisTasks) {
+    addTaskIfStandalone(t.id, t.status.name);
+  }
+  // Each flow execution is exactly one card in the unified task list —
+  // count it once, matching what the user sees there.
+  for (final e in flowExecutions) {
+    addStatus(e.status.name);
+  }
+
+  return (inProgress: inProgress, completed: completed, failed: failed);
+});
+
 extension _HomePageHomeContentExt on _HomePageState {
   /// 构建模块化首页内容
   Widget _buildHomeContent() {
     final cs = Theme.of(context).colorScheme;
-    final catcatchTasks = ref.watch(catcatchTasksProvider);
-    final synthesisTasks = ref.watch(taskListProvider);
-    final flowExecutions = ref.watch(taskFlowExecutionsProvider);
-
-    // Flow sub-tasks are rendered inside their flow card in the unified
-    // task list — they must not be counted as standalone items here.
-    final flowSubTaskIds = <String>{
-      for (final e in flowExecutions)
-        for (final st in e.subTasks) st.subTaskId,
-    };
-
-    // Count background tasks inside the selector and return a
-    // value-comparable record so the home page ONLY rebuilds when a count
-    // changes — not on every intermediate step update (e.g. updateStep
-    // running → running on a different step index), which would jank the
-    // GUI during CPU-bound extraction pipelines. (A projected list would
-    // compare by identity and always fire.)
-    final bgCounts = ref.watch(backgroundTasksProvider.select((tasks) {
-      int p = 0, c = 0, f = 0;
-      for (final t in tasks) {
-        if (flowSubTaskIds.contains(t.id)) continue;
-        switch (t.status) {
-          case TaskStatus.running:
-          case TaskStatus.paused:
-          case TaskStatus.waiting:
-            p++;
-          case TaskStatus.completed:
-            c++;
-          case TaskStatus.failed:
-            f++;
-        }
-      }
-      return (inProgress: p, completed: c, failed: f);
-    }));
-
-    // --- Compute status counts for the status card ---
-    int inProgressCount = bgCounts.inProgress;
-    int completedCount = bgCounts.completed;
-    int failedCount = bgCounts.failed;
-
-    void countStatusName(String statusName) {
-      if (statusName == 'running' ||
-          statusName == 'paused' ||
-          statusName == 'waiting') {
-        inProgressCount++;
-      } else if (statusName == 'completed') {
-        completedCount++;
-      } else if (statusName == 'failed') {
-        failedCount++;
-      }
-    }
-
-    void countTaskIfStandalone(String id, String statusName) {
-      if (flowSubTaskIds.contains(id)) return;
-      countStatusName(statusName);
-    }
-
-    for (final t in catcatchTasks) {
-      countTaskIfStandalone(t.id, t.status.name);
-    }
-    for (final t in synthesisTasks) {
-      countTaskIfStandalone(t.id, t.status.name);
-    }
-    // Each flow execution is exactly one card in the unified task list —
-    // count it once, matching what the user sees there.
-    for (final e in flowExecutions) {
-      countStatusName(e.status.name);
-    }
+    final counts = ref.watch(homeStatusCountsProvider);
+    final inProgressCount = counts.inProgress;
+    final completedCount = counts.completed;
+    final failedCount = counts.failed;
 
     return SafeArea(
       top: true,
