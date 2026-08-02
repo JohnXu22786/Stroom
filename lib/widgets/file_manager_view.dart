@@ -33,11 +33,18 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
   final Future<void> Function(List<String> names, String targetFolder)
       onMoveFolders;
   final Future<void> Function(String id) onExportFile;
-  final Future<void> Function(List<String> ids, String targetDirectory)?
+
+  /// 批量导出文件/文件夹。返回用户最终使用的导出目录
+  /// （用户取消目录选择或导出失败时返回 null；Web 端返回 ''）。
+  /// 返回非 null 的目录会被传递给后续导出，避免混合选择时弹出两次目录选择。
+  final Future<String?> Function(List<String> ids, String targetDirectory)?
       onExportFiles;
-  final Future<void> Function(List<String> names, String targetDirectory)?
+  final Future<String?> Function(List<String> names, String targetDirectory)?
       onExportFolders;
-  final Future<void> Function(String name)? onExportFolder;
+
+  /// 单个文件夹导出。返回用户最终使用的导出目录
+  /// （用户取消目录选择或导出失败时返回 null；Web 端返回 ''）。
+  final Future<String?> Function(String name)? onExportFolder;
   final Future<void> Function(String oldName, String newName) onRenameFolder;
   final Future<void> Function(String name, String targetParent) onMoveFolder;
   final Future<void> Function(String name, String targetParent) onCopyFolder;
@@ -105,7 +112,6 @@ class _FileManagerViewState<T extends FileRecord>
     extends State<FileManagerView<T>> {
   final _folderNameController = TextEditingController();
   final _renameController = TextEditingController();
-  String? _selectedFileId;
 
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
@@ -116,10 +122,28 @@ class _FileManagerViewState<T extends FileRecord>
   static const int _maxThumbnailCache = 200;
   final LinkedHashMap<String, Widget> _thumbnailCache = LinkedHashMap();
 
+  /// 列表/网格中的「返回上级」哨兵项。
+  /// 用对象而非字符串，避免与名为 "back" 的真实文件夹冲突
+  /// （字符串哨兵会让名为 back 的文件夹被渲染成返回卡片而无法访问）。
+  static const _backMarker = Object();
+
+  /// 缩略图缓存的记录集合指纹（排序后的 id 列表）。
+  /// 记录是不可变的：内容变化总是产生新 id 的新记录，
+  /// 因此 id 集合不变时缓存可安全复用，避免父级每次重建
+  /// （如切换排序/视图模式）时误清缓存导致反复读盘。
+  /// 注意：缩略图生成失败被缓存后不会自动重试，可通过刷新按钮清缓存。
+  String _cacheFingerprint = '';
+
+  String _recordsFingerprint(List<T> records) {
+    final ids = records.map((r) => r.id).toList()..sort();
+    return ids.join('\u0001');
+  }
+
   @override
   void initState() {
     super.initState();
     _showGridView = widget.config.initialGridView;
+    _cacheFingerprint = _recordsFingerprint(widget.sortedRecords);
     // 同步初始文件夹状态到外部 Provider，确保 filesPageCurrentFolderProvider
     // 在新标签页首次创建时正确地反映当前文件夹
     widget.config.onCurrentFolderChanged?.call(_currentFolder);
@@ -128,9 +152,18 @@ class _FileManagerViewState<T extends FileRecord>
   @override
   void didUpdateWidget(covariant FileManagerView<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 数据记录引用变化时清空缩略图缓存
-    if (oldWidget.sortedRecords != widget.sortedRecords) {
+    // 标签页从不活动变为活动时，把当前文件夹同步到外部 Provider。
+    // 否则 HomePage 的返回逻辑可能读到其他标签页留下的过期路径，
+    // 导致系统返回键被消费却没有任何导航（用户被困在文件页）。
+    if (widget.isActiveTab && !oldWidget.isActiveTab) {
+      widget.config.onCurrentFolderChanged?.call(_currentFolder);
+    }
+    // 数据记录引用变化时清空缩略图缓存（按 id 集合指纹判断，
+    // 记录内容不变则不清理）
+    final fingerprint = _recordsFingerprint(widget.sortedRecords);
+    if (fingerprint != _cacheFingerprint) {
       _thumbnailCache.clear();
+      _cacheFingerprint = fingerprint;
     }
     // 检测外部导航到父文件夹的信号（仅活动标签页响应）
     if (widget.isActiveTab &&
@@ -180,6 +213,7 @@ class _FileManagerViewState<T extends FileRecord>
   // ====================================================================
 
   void _exitSelectionMode() {
+    if (!mounted) return;
     setState(() {
       _selectionMode = false;
       _selectedIds.clear();
@@ -234,12 +268,6 @@ class _FileManagerViewState<T extends FileRecord>
   void _selectAll() {
     setState(() {
       _selectedIds.addAll(_allVisibleItemIds());
-    });
-  }
-
-  void _deselectAll() {
-    setState(() {
-      _selectedIds.clear();
     });
   }
 
@@ -402,9 +430,13 @@ class _FileManagerViewState<T extends FileRecord>
             tooltip: '全选',
             onPressed: () {
               final allVisible = _allVisibleItemIds();
-              if (_selectedIds.length >= allVisible.length &&
-                  allVisible.isNotEmpty) {
-                _deselectAll();
+              // 以「当前可见项是否全部选中」为切换依据：
+              // 选择模式支持跨文件夹导航，用总数比较会被其他文件夹
+              // 的旧选择干扰，导致取消全选时误清全部选择
+              final allVisibleSelected = allVisible.isNotEmpty &&
+                  allVisible.every(_selectedIds.contains);
+              if (allVisibleSelected) {
+                setState(() => _selectedIds.removeAll(allVisible));
               } else {
                 _selectAll();
               }
@@ -521,7 +553,7 @@ class _FileManagerViewState<T extends FileRecord>
     }
 
     final allItems = <dynamic>[
-      if (isInFolder) 'back',
+      if (isInFolder) _backMarker,
       for (final f in subFolders) f,
       ...currentFiles,
     ];
@@ -531,7 +563,7 @@ class _FileManagerViewState<T extends FileRecord>
       itemCount: allItems.length,
       itemBuilder: (context, index) {
         final item = allItems[index];
-        if (item is String && item == 'back') {
+        if (identical(item, _backMarker)) {
           return _buildBackItem();
         } else if (item is String) {
           // folder name
@@ -620,7 +652,7 @@ class _FileManagerViewState<T extends FileRecord>
     }
 
     final allItems = <dynamic>[
-      if (isInFolder) 'back',
+      if (isInFolder) _backMarker,
       for (final f in subFolders) f,
       ...currentFiles,
     ];
@@ -636,7 +668,7 @@ class _FileManagerViewState<T extends FileRecord>
       itemCount: allItems.length,
       itemBuilder: (context, index) {
         final item = allItems[index];
-        if (item is String && item == 'back') {
+        if (identical(item, _backMarker)) {
           return _buildGridBackItem();
         } else if (item is String) {
           return _buildGridFolderItem(item, grouped[item]?.length ?? 0);
@@ -750,6 +782,30 @@ class _FileManagerViewState<T extends FileRecord>
                 ),
               ),
             ),
+          // 弹出菜单（与列表视图一致），选择模式下隐藏
+          if (!_selectionMode)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: PopupMenuButton<String>(
+                key: Key('fm_grid_folder_popup_$folderName'),
+                icon: const Icon(Icons.more_vert, size: 18),
+                onSelected: (value) => _onFolderPopupAction(
+                  value,
+                  folderName,
+                ),
+                itemBuilder: (_) => _buildFolderPopupMenu(),
+                padding: EdgeInsets.zero,
+                iconSize: 18,
+                // 网格单元较小（约 114-130dp），收窄点击区域，
+                // 避免 48dp 的默认按钮遮挡单元格内容
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(36, 36),
+                  padding: EdgeInsets.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -773,58 +829,91 @@ class _FileManagerViewState<T extends FileRecord>
           widget.config.onLongPress?.call(file);
         }
       },
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey[300]!),
-        ),
-        child: Column(
-          children: [
-            // Thumbnail area
-            Expanded(
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(7),
-                ),
-                child: hasThumbnailBuilder
-                    ? _putThumbnailCache(
-                        file.id,
-                        () => widget.config.fileThumbnailBuilder!.call(file),
-                      )
-                    : widget.config.fileIconBuilder(file),
-              ),
+      child: Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey[300]!),
             ),
-            // Name + checkbox
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              decoration: const BoxDecoration(
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(7)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${file.name}.${file.format}',
-                      style: const TextStyle(fontSize: 10),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+            child: Column(
+              children: [
+                // Thumbnail area
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(7),
+                    ),
+                    child: hasThumbnailBuilder
+                        ? _putThumbnailCache(
+                            file.id,
+                            () => widget.config.fileThumbnailBuilder!.call(
+                              file,
+                            ),
+                          )
+                        : widget.config.fileIconBuilder(file),
+                  ),
+                ),
+                // Name + checkbox
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
+                  decoration: const BoxDecoration(
+                    borderRadius: BorderRadius.vertical(
+                      bottom: Radius.circular(7),
                     ),
                   ),
-                  if (_selectionMode)
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: Checkbox(
-                        value: isSelected,
-                        onChanged: (_) => _toggleSelection(file.id),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${file.name}.${file.format}',
+                          style: const TextStyle(fontSize: 10),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                ],
+                      if (_selectionMode)
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: Checkbox(
+                            value: isSelected,
+                            onChanged: (_) => _toggleSelection(file.id),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 弹出菜单（与列表视图一致），选择模式下隐藏
+          if (!_selectionMode)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: PopupMenuButton<String>(
+                key: Key('fm_grid_file_popup_${file.id}'),
+                icon: const Icon(Icons.more_vert, size: 18),
+                onSelected: (value) => _onFilePopupAction(value, file),
+                itemBuilder: (_) => _buildFilePopupMenu(file),
+                padding: EdgeInsets.zero,
+                iconSize: 18,
+                // 网格单元较小（约 114-130dp），收窄点击区域，
+                // 避免 48dp 的默认按钮遮挡单元格内容
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(36, 36),
+                  padding: EdgeInsets.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -907,106 +996,11 @@ class _FileManagerViewState<T extends FileRecord>
                   PopupMenuButton<String>(
                     key: Key('fm_folder_popup_$folderName'),
                     icon: const Icon(Icons.more_vert, size: 20),
-                    onSelected: (value) {
-                      switch (value) {
-                        case 'multiSelect':
-                          _toggleFolderSelection(folderName);
-                          if (!_selectionMode) {
-                            setState(() => _selectionMode = true);
-                          }
-                        case 'open':
-                          _setCurrentFolder(folderName);
-                        case 'rename':
-                          _renameFolder(folderName);
-                        case 'move':
-                          _moveFolder(folderName);
-                        case 'copy':
-                          _copyFolder(folderName);
-                        case 'delete':
-                          _deleteFolder(folderName);
-                        case 'export':
-                          _exportFolder(folderName);
-                      }
-                    },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(
-                        value: 'multiSelect',
-                        child: ListTile(
-                          key: Key('fm_folder_menu_multi_select'),
-                          leading: Icon(Icons.checklist, size: 20),
-                          title: Text('多选'),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'open',
-                        child: ListTile(
-                          key: Key('fm_folder_menu_open'),
-                          leading: Icon(Icons.folder_open, size: 20),
-                          title: Text('打开'),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'rename',
-                        child: ListTile(
-                          key: Key('fm_folder_menu_rename'),
-                          leading: Icon(Icons.edit, size: 20),
-                          title: Text('重命名'),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'move',
-                        child: ListTile(
-                          key: Key('fm_folder_menu_move'),
-                          leading: Icon(Icons.drive_file_move, size: 20),
-                          title: Text('移动'),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'copy',
-                        child: ListTile(
-                          key: Key('fm_folder_menu_copy'),
-                          leading: Icon(Icons.copy, size: 20),
-                          title: Text('复制'),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'export',
-                        child: ListTile(
-                          key: Key('fm_folder_menu_export'),
-                          leading: Icon(Icons.file_download_outlined, size: 20),
-                          title: Text('导出'),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: ListTile(
-                          key: Key('fm_folder_menu_delete'),
-                          leading: Icon(
-                            Icons.delete,
-                            size: 20,
-                            color: Colors.red,
-                          ),
-                          title: Text(
-                            '删除',
-                            style: TextStyle(color: Colors.red),
-                          ),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ],
+                    onSelected: (value) => _onFolderPopupAction(
+                      value,
+                      folderName,
+                    ),
+                    itemBuilder: (_) => _buildFolderPopupMenu(),
                   ),
               ],
             ),
@@ -1014,6 +1008,105 @@ class _FileManagerViewState<T extends FileRecord>
         ),
       ),
     );
+  }
+
+  /// 文件夹弹出菜单项（列表与网格视图共用）
+  List<PopupMenuEntry<String>> _buildFolderPopupMenu() {
+    return const [
+      PopupMenuItem(
+        value: 'multiSelect',
+        child: ListTile(
+          key: Key('fm_folder_menu_multi_select'),
+          leading: Icon(Icons.checklist, size: 20),
+          title: Text('多选'),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      PopupMenuItem(
+        value: 'open',
+        child: ListTile(
+          key: Key('fm_folder_menu_open'),
+          leading: Icon(Icons.folder_open, size: 20),
+          title: Text('打开'),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      PopupMenuItem(
+        value: 'rename',
+        child: ListTile(
+          key: Key('fm_folder_menu_rename'),
+          leading: Icon(Icons.edit, size: 20),
+          title: Text('重命名'),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      PopupMenuItem(
+        value: 'move',
+        child: ListTile(
+          key: Key('fm_folder_menu_move'),
+          leading: Icon(Icons.drive_file_move, size: 20),
+          title: Text('移动'),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      PopupMenuItem(
+        value: 'copy',
+        child: ListTile(
+          key: Key('fm_folder_menu_copy'),
+          leading: Icon(Icons.copy, size: 20),
+          title: Text('复制'),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      PopupMenuItem(
+        value: 'export',
+        child: ListTile(
+          key: Key('fm_folder_menu_export'),
+          leading: Icon(Icons.file_download_outlined, size: 20),
+          title: Text('导出'),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      PopupMenuItem(
+        value: 'delete',
+        child: ListTile(
+          key: Key('fm_folder_menu_delete'),
+          leading: Icon(Icons.delete, size: 20, color: Colors.red),
+          title: Text('删除', style: TextStyle(color: Colors.red)),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+    ];
+  }
+
+  /// 文件夹弹出菜单动作（列表与网格视图共用）
+  void _onFolderPopupAction(String value, String folderName) {
+    switch (value) {
+      case 'multiSelect':
+        _toggleFolderSelection(folderName);
+        if (!_selectionMode) {
+          setState(() => _selectionMode = true);
+        }
+      case 'open':
+        _setCurrentFolder(folderName);
+      case 'rename':
+        _renameFolder(folderName);
+      case 'move':
+        _moveFolder(folderName);
+      case 'copy':
+        _copyFolder(folderName);
+      case 'delete':
+        _deleteFolder(folderName);
+      case 'export':
+        _exportFolder(folderName);
+    }
   }
 
   String _folderDetailText(String folderName, int fileCount) {
@@ -1254,7 +1347,7 @@ class _FileManagerViewState<T extends FileRecord>
       case 'preview':
         widget.config.onFileTap(file);
       case 'rename':
-        _renameFile(file.id, file.name);
+        _renameFile(file.id, file.name, file.format);
       case 'move':
         _moveFile(file.id);
       case 'copy':
@@ -1273,9 +1366,12 @@ class _FileManagerViewState<T extends FileRecord>
   // File operations
   // ====================================================================
 
-  Future<void> _renameFile(String fileId, String currentName) async {
+  Future<void> _renameFile(
+    String fileId,
+    String currentName,
+    String format,
+  ) async {
     _renameController.text = currentName;
-    _selectedFileId = fileId;
 
     final result = await showDialog<String>(
       context: context,
@@ -1299,59 +1395,137 @@ class _FileManagerViewState<T extends FileRecord>
           ElevatedButton(
             key: const Key('fm_rename_confirm_btn'),
             onPressed: () {
-              if (_renameController.text.trim().isNotEmpty) {
-                Navigator.pop(ctx, _renameController.text.trim());
-              }
+              // 总是弹出对话框：名称校验在关闭后进行（SnackBar 提示），
+              // 避免按钮无响应让用户困惑（含空名称）
+              Navigator.pop(ctx, _renameController.text.trim());
             },
             child: const Text('重命名'),
           ),
         ],
       ),
     );
+    // 无论成功与否都清理输入，避免残留到下次打开对话框
+    _renameController.clear();
 
-    if (result != null && result.isNotEmpty && _selectedFileId != null) {
-      if (!mounted) return;
-      final newName = result.trim();
-      // Conflict check
-      final conflict = widget.sortedRecords.any(
-        (r) =>
-            r.name == newName &&
-            r.folder == _currentFolder &&
-            r.id != _selectedFileId,
+    if (result == null) return;
+    if (!mounted) return;
+    final rawName = result.trim();
+    // 未修改名称（与预填的基础名完全相同）时视为无操作。
+    // 注意：存储名可能以 .$format 结尾（如导入 report.txt.txt 时
+    // 存储名为 report.txt），此时必须在剥离扩展名之前判断，
+    // 否则「确认未修改」会被误判为真正的重命名
+    if (rawName == currentName) return;
+    var newName = rawName;
+    // 用户输入了带扩展名的名称（如把 report.txt 改成 report.md 时
+    // 显示名会变成 report.md.txt）→ 剥离与当前格式重复的扩展名
+    if (newName.endsWith('.$format')) {
+      newName = newName.substring(0, newName.length - format.length - 1);
+    }
+    // 输入完整显示名（含扩展名）且剥离后与原名相同 → 无操作
+    if (newName == currentName) return;
+
+    // 文件名校验：拒绝空名/超长/路径分隔符与 Windows 非法字符，
+    // 否则非法文件名会在导出时引发路径错误
+    final nameError = widget.manifestBridge.validateFileName(newName);
+    if (nameError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(nameError),
+          duration: const Duration(seconds: 2),
+        ),
       );
-      if (conflict) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('文件 "$newName" 已存在'),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
-        _renameController.clear();
-        _selectedFileId = null;
-        return;
+      return;
+    }
+
+    // Conflict check
+    final conflict = widget.sortedRecords.any(
+      (r) => r.name == newName && r.folder == _currentFolder && r.id != fileId,
+    );
+    if (conflict) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('文件 "$newName" 已存在'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    try {
+      await widget.onRenameFile(fileId, newName);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('重命名失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
-      await widget.onRenameFile(_selectedFileId!, newName);
-      _renameController.clear();
-      _selectedFileId = null;
+      return;
     }
   }
 
   Future<void> _moveFile(String fileId) async {
-    final selectedFolder = await _showFolderPickerDialog(
+    final (selectedFolder, _) = await _showFolderPickerDialog(
       widget.folders,
       title: '选择目标文件夹',
     );
     if (selectedFolder != null) {
       if (!mounted) return;
-      await widget.onMoveFile(fileId, selectedFolder);
+      final source = widget.sortedRecords.where((r) => r.id == fileId);
+      // 目标为文件当前所在文件夹 → 无操作，提示用户
+      if (source.isNotEmpty && source.first.folder == selectedFolder) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('文件已在目标位置'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        if (mounted) setState(() {});
+        return;
+      }
+      // 目标文件夹已存在同名文件 → 拒绝移动，避免产生
+      // 无法通过重命名解决的永久重复记录
+      if (source.isNotEmpty &&
+          widget.sortedRecords.any(
+            (r) =>
+                r.id != fileId &&
+                r.folder == selectedFolder &&
+                r.name == source.first.name,
+          )) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('目标文件夹已存在同名文件，移动已取消'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        if (mounted) setState(() {});
+        return;
+      }
+      try {
+        await widget.onMoveFile(fileId, selectedFolder);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('移动失败: $e'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+        if (mounted) setState(() {});
+        return;
+      }
     }
     if (mounted) setState(() {});
   }
 
   Future<void> _copyFile(String fileId) async {
-    final selectedFolder = await _showFolderPickerDialog(
+    final (selectedFolder, _) = await _showFolderPickerDialog(
       widget.folders,
       title: '选择复制到的目标文件夹',
     );
@@ -1360,7 +1534,20 @@ class _FileManagerViewState<T extends FileRecord>
       return;
     }
     if (!mounted) return;
-    await widget.onCopyFile(fileId, selectedFolder);
+    try {
+      await widget.onCopyFile(fileId, selectedFolder);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('复制失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      if (mounted) setState(() {});
+      return;
+    }
     if (mounted) setState(() {});
   }
 
@@ -1388,7 +1575,19 @@ class _FileManagerViewState<T extends FileRecord>
 
     if (confirmed == true) {
       if (!mounted) return;
-      await widget.onDeleteFile(fileId);
+      try {
+        await widget.onDeleteFile(fileId);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('删除失败: $e'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
       _exitSelectionMode();
     }
   }
@@ -1407,6 +1606,60 @@ class _FileManagerViewState<T extends FileRecord>
     }).toList();
   }
 
+  /// 从批量操作列表中移除“包含在其他已选文件夹内”的文件夹。
+  /// 避免同一子树被重复移动/复制/删除（例如同时选中 a 和 a/b 时
+  /// 只处理 a，a/b 随 a 一并处理）。
+  List<String> _topLevelFolders(List<String> folderNames) {
+    return folderNames
+        .where(
+          (name) => !folderNames.any(
+            (other) => other != name && name.startsWith('$other/'),
+          ),
+        )
+        .toList();
+  }
+
+  /// 校验批量移动/复制后各文件夹的新路径：
+  /// - 目标位置位于源文件夹自身或其子树内（如内嵌面板中新建了同名文件夹）
+  /// - 目标位置（或其下）已存在同名文件夹（会造成静默合并/重复复制）
+  /// - 所选文件夹之间同名冲突（如 a/x 与 b/x 同时移入 t）
+  /// - 原地不动（新路径 == 源路径）
+  /// 命中任一情况时提示用户并返回 false。
+  /// [liveFolders] 是文件夹选择面板会话结束时的实时集合
+  /// （包含面板内新建的文件夹），[widget.folders] 可能已过期。
+  bool _validateFolderTargets(
+    List<String> folderNames,
+    String targetFolder,
+    Set<String> liveFolders,
+  ) {
+    final seen = <String>{};
+    for (final name in folderNames) {
+      final base = widget.manifestBridge.getFolderBaseName(name);
+      final newPath = targetFolder.isEmpty ? base : '$targetFolder/$base';
+      final invalid = newPath == name ||
+          targetFolder == name ||
+          targetFolder.startsWith('$name/') ||
+          liveFolders.any((f) => f == newPath || f.startsWith('$newPath/')) ||
+          !seen.add(newPath);
+      if (invalid) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                newPath == name
+                    ? '文件夹已在目标位置，操作已取消'
+                    : '所选文件夹在目标位置存在同名冲突或位于自身内部，操作已取消',
+              ),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+        return false;
+      }
+    }
+    return true;
+  }
+
   Future<void> _deleteSelected() async {
     if (_selectedIds.isEmpty) return;
     final confirmed = await showDialog<bool>(
@@ -1414,7 +1667,7 @@ class _FileManagerViewState<T extends FileRecord>
       builder: (ctx) => AlertDialog(
         key: const Key('fm_delete_selected_dialog'),
         title: const Text('确认批量删除'),
-        content: Text('确定要删除选中的 ${_selectedIds.length} 个文件吗？此操作不可恢复。'),
+        content: Text('确定要删除选中的 ${_selectedIds.length} 项吗？此操作不可恢复。'),
         actions: [
           TextButton(
             key: const Key('fm_batch_delete_cancel_btn'),
@@ -1441,15 +1694,29 @@ class _FileManagerViewState<T extends FileRecord>
           fileIds.add(id);
         }
       }
+      // 只处理顶层已选文件夹，避免子树被重复删除
+      final topLevelFolders = _topLevelFolders(folderNames);
       final adjustedFileIds = _fileIdsExcludingFolderFiles(
         fileIds,
-        folderNames,
+        topLevelFolders,
       );
-      if (adjustedFileIds.isNotEmpty) {
-        await widget.onDeleteFiles(adjustedFileIds);
-      }
-      for (final name in folderNames) {
-        await widget.onDeleteFolder(name);
+      try {
+        if (adjustedFileIds.isNotEmpty) {
+          await widget.onDeleteFiles(adjustedFileIds);
+        }
+        if (topLevelFolders.isNotEmpty) {
+          await widget.onDeleteFolders(topLevelFolders);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('批量删除失败: $e'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
       }
       _exitSelectionMode();
     }
@@ -1470,22 +1737,42 @@ class _FileManagerViewState<T extends FileRecord>
         fileIds.add(id);
       }
     }
+    // 只导出顶层已选文件夹（其子文件夹内容由递归导出覆盖）
+    final topLevelFolders = _topLevelFolders(folderNames);
+    final adjustedFileIds = _fileIdsExcludingFolderFiles(
+      fileIds,
+      topLevelFolders,
+    );
 
-    final adjustedFileIds = _fileIdsExcludingFolderFiles(fileIds, folderNames);
+    // 第一次导出选择的目录会传递给后续导出，
+    // 避免混合选择（文件+文件夹）时弹出两次目录选择
+    String? chosenDir;
 
     // Export files
     if (adjustedFileIds.isNotEmpty && widget.onExportFiles != null) {
-      await widget.onExportFiles!(adjustedFileIds, '');
+      chosenDir = await widget.onExportFiles!(adjustedFileIds, '');
     }
 
-    // Export folders
-    for (final name in folderNames) {
-      if (widget.onExportFolder != null) {
-        await widget.onExportFolder!(name);
+    // Export folders — prefer the batch callback, fall back to per-folder
+    if (topLevelFolders.isNotEmpty && widget.onExportFolders != null) {
+      final foldersDir = await widget.onExportFolders!(
+        topLevelFolders,
+        chosenDir ?? '',
+      );
+      chosenDir = chosenDir ?? foldersDir;
+    } else {
+      for (final name in topLevelFolders) {
+        if (widget.onExportFolder != null) {
+          final folderDir = await widget.onExportFolder!(name);
+          chosenDir = chosenDir ?? folderDir;
+        }
       }
     }
 
-    _exitSelectionMode();
+    // 仅在确实导出过内容时退出选择模式；取消目录选择时保留选择
+    if (chosenDir != null) {
+      _exitSelectionMode();
+    }
     if (mounted) setState(() {});
   }
 
@@ -1498,51 +1785,6 @@ class _FileManagerViewState<T extends FileRecord>
   Future<void> _moveSelected() async {
     if (_selectedIds.isEmpty) return;
 
-    final selectedFolder = await _showFolderPickerDialog(
-      widget.folders,
-      title: '选择目标文件夹',
-    );
-
-    if (selectedFolder != null) {
-      if (!mounted) return;
-      final fileIds = <String>[];
-      final folderNames = <String>[];
-      for (final id in _selectedIds) {
-        if (widget.folders.contains(id)) {
-          folderNames.add(id);
-        } else {
-          fileIds.add(id);
-        }
-      }
-      final adjustedFileIds = _fileIdsExcludingFolderFiles(
-        fileIds,
-        folderNames,
-      );
-      if (adjustedFileIds.isNotEmpty) {
-        await widget.onMoveFiles(adjustedFileIds, selectedFolder);
-      }
-      await Future.wait(
-        folderNames.map((name) => widget.onMoveFolder(name, selectedFolder)),
-      );
-      _exitSelectionMode();
-    }
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _copySelected() async {
-    if (_selectedIds.isEmpty) return;
-
-    final selectedFolder = await _showFolderPickerDialog(
-      widget.folders,
-      title: '选择目标文件夹',
-    );
-
-    if (selectedFolder == null) {
-      if (mounted) setState(() {});
-      return;
-    }
-
-    if (!mounted) return;
     final fileIds = <String>[];
     final folderNames = <String>[];
     for (final id in _selectedIds) {
@@ -1552,13 +1794,199 @@ class _FileManagerViewState<T extends FileRecord>
         fileIds.add(id);
       }
     }
-    final adjustedFileIds = _fileIdsExcludingFolderFiles(fileIds, folderNames);
-    await Future.wait(
-      adjustedFileIds.map((id) => widget.onCopyFile(id, selectedFolder)),
+    // 只处理顶层已选文件夹，避免子树被重复移动
+    final topLevelFolders = _topLevelFolders(folderNames);
+
+    // 排除已选文件夹及其后代，防止把文件夹移入自身/子文件夹造成循环
+    final excluded = <String>{};
+    for (final name in topLevelFolders) {
+      excluded.add(name);
+      excluded.addAll(
+        widget.manifestBridge.getAllDescendantFolderPaths(
+          name,
+          widget.folders,
+        ),
+      );
+    }
+    final targetFolders =
+        widget.folders.where((f) => !excluded.contains(f)).toSet();
+
+    final (selectedFolder, liveFolders) = await _showFolderPickerDialog(
+      targetFolders,
+      title: '选择目标文件夹',
     );
-    await Future.wait(
-      folderNames.map((name) => widget.onCopyFolder(name, selectedFolder)),
+
+    if (selectedFolder != null) {
+      if (!mounted) return;
+      // 同名冲突或原地不动时取消整批操作
+      if (!_validateFolderTargets(
+        topLevelFolders,
+        selectedFolder,
+        liveFolders,
+      )) {
+        return;
+      }
+      final adjustedFileIds = _fileIdsExcludingFolderFiles(
+        fileIds,
+        topLevelFolders,
+      );
+      // 部分文件已位于目标文件夹 → 无操作，提示用户
+      final alreadyThere = adjustedFileIds.any((id) {
+        final matches = widget.sortedRecords.where((r) => r.id == id);
+        return matches.isNotEmpty && matches.first.folder == selectedFolder;
+      });
+      if (alreadyThere) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('所选文件已在目标位置，移动已取消'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+      // 目标文件夹已存在同名文件、或批内两个被移动文件同名
+      // （选择模式支持跨文件夹选择，不同文件夹允许同名文件）→ 拒绝，
+      // 避免产生无法通过重命名解决的永久重复记录
+      final movedNames = <String>{};
+      final nameConflict = adjustedFileIds.any((id) {
+        final matches = widget.sortedRecords.where((r) => r.id == id);
+        if (matches.isEmpty) return false;
+        final name = matches.first.name;
+        if (!movedNames.add(name)) return true; // 批内同名冲突
+        return widget.sortedRecords.any(
+          (r) => r.id != id && r.folder == selectedFolder && r.name == name,
+        );
+      });
+      if (nameConflict) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('目标文件夹已存在同名文件，移动已取消'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+      // 先移动文件夹再移动文件：文件夹操作被拒绝/失败时
+      // 文件尚未移动，避免出现部分执行
+      try {
+        if (topLevelFolders.isNotEmpty) {
+          await widget.onMoveFolders(topLevelFolders, selectedFolder);
+        }
+        if (adjustedFileIds.isNotEmpty) {
+          await widget.onMoveFiles(adjustedFileIds, selectedFolder);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('批量移动失败: $e'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+      _exitSelectionMode();
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _copySelected() async {
+    if (_selectedIds.isEmpty) return;
+
+    final fileIds = <String>[];
+    final folderNames = <String>[];
+    for (final id in _selectedIds) {
+      if (widget.folders.contains(id)) {
+        folderNames.add(id);
+      } else {
+        fileIds.add(id);
+      }
+    }
+    // 只处理顶层已选文件夹，避免子树被重复复制
+    final topLevelFolders = _topLevelFolders(folderNames);
+
+    // 排除已选文件夹及其后代，防止把文件夹复制到自身/子文件夹中
+    final excluded = <String>{};
+    for (final name in topLevelFolders) {
+      excluded.add(name);
+      excluded.addAll(
+        widget.manifestBridge.getAllDescendantFolderPaths(
+          name,
+          widget.folders,
+        ),
+      );
+    }
+    final targetFolders =
+        widget.folders.where((f) => !excluded.contains(f)).toSet();
+
+    final (selectedFolder, liveFolders) = await _showFolderPickerDialog(
+      targetFolders,
+      title: '选择目标文件夹',
     );
+
+    if (selectedFolder == null) {
+      if (mounted) setState(() {});
+      return;
+    }
+
+    if (!mounted) return;
+    // 同名冲突或原地不动时取消整批操作
+    if (!_validateFolderTargets(
+      topLevelFolders,
+      selectedFolder,
+      liveFolders,
+    )) {
+      return;
+    }
+    final adjustedFileIds = _fileIdsExcludingFolderFiles(
+      fileIds,
+      topLevelFolders,
+    );
+    // 批内两个被复制文件同名（选择模式支持跨文件夹选择，
+    // 不同文件夹允许同名文件）时，各页面的 _副本 去重基于
+    // 快照并发计算，会生成同名副本 → 拒绝整批复制
+    final copiedNames = <String>{};
+    final nameConflict = adjustedFileIds.any((id) {
+      final matches = widget.sortedRecords.where((r) => r.id == id);
+      if (matches.isEmpty) return false;
+      return !copiedNames.add(matches.first.name);
+    });
+    if (nameConflict) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('所选文件中存在同名文件，复制已取消（请逐个复制）'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+    // 先复制文件夹再复制文件。文件夹逐个顺序复制：
+    // 失败时中止，避免文件夹失败后文件仍被复制（已完成的文件夹保留）
+    try {
+      for (final name in topLevelFolders) {
+        await widget.onCopyFolder(name, selectedFolder);
+      }
+      await Future.wait(
+        adjustedFileIds.map((id) => widget.onCopyFile(id, selectedFolder)),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('批量复制失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
     _exitSelectionMode();
     if (mounted) setState(() {});
   }
@@ -1590,19 +2018,20 @@ class _FileManagerViewState<T extends FileRecord>
           ElevatedButton(
             key: const Key('fm_create_folder_confirm_btn'),
             onPressed: () {
-              final name = _folderNameController.text.trim();
-              if (name.isNotEmpty &&
-                  widget.manifestBridge.validateFolderName(name) == null) {
-                Navigator.pop(ctx, name);
-              }
+              // 总是弹出对话框：名称校验在关闭后进行（SnackBar 提示），
+              // 避免按钮无响应让用户困惑（含空名称）
+              Navigator.pop(ctx, _folderNameController.text.trim());
             },
             child: const Text('创建'),
           ),
         ],
       ),
     );
+    // 无论成功与否都清空输入，避免上次的文本残留到下次打开对话框
+    _folderNameController.clear();
 
-    if (result != null && result.isNotEmpty) {
+    if (result != null) {
+      // 空名称（含纯空白）由 validateFolderName 统一提示
       final error = widget.manifestBridge.validateFolderName(result);
       if (error != null) {
         if (mounted) {
@@ -1615,12 +2044,36 @@ class _FileManagerViewState<T extends FileRecord>
         }
         return;
       }
-      _folderNameController.clear();
       // Prepend the current folder path to create subfolder hierarchy
       final fullPath =
           _currentFolder.isEmpty ? result : '$_currentFolder/$result';
-      await widget.onCreateFolder(fullPath);
+      // 重名检查：与内嵌文件夹选择面板行为保持一致
+      if (widget.folders.contains(fullPath)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('文件夹已存在'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+      try {
+        await widget.onCreateFolder(fullPath);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('创建文件夹失败: $e'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
       // If we're at root, navigate into the newly created folder
+      if (!mounted) return;
       if (_currentFolder.isEmpty) {
         _setCurrentFolder(result);
       }
@@ -1636,7 +2089,10 @@ class _FileManagerViewState<T extends FileRecord>
   }
 
   Future<void> _renameFolder(String folderName) async {
-    _renameController.text = folderName;
+    // 预填基础名而不是完整路径，避免用户手动删除路径前缀
+    _renameController.text = widget.manifestBridge.getFolderBaseName(
+      folderName,
+    );
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1660,11 +2116,9 @@ class _FileManagerViewState<T extends FileRecord>
           ElevatedButton(
             key: const Key('fm_rename_folder_confirm_btn'),
             onPressed: () {
-              final name = _renameController.text.trim();
-              if (name.isNotEmpty &&
-                  widget.manifestBridge.validateFolderName(name) == null) {
-                Navigator.pop(ctx, name);
-              }
+              // 总是弹出对话框：名称校验在关闭后进行（SnackBar 提示），
+              // 避免按钮无响应让用户困惑（含空名称）
+              Navigator.pop(ctx, _renameController.text.trim());
             },
             child: const Text('重命名'),
           ),
@@ -1673,7 +2127,13 @@ class _FileManagerViewState<T extends FileRecord>
     );
     _renameController.clear();
 
-    if (result != null && result.isNotEmpty && result != folderName) {
+    // 与预填的基础名比较（或用户直接输入了完整旧路径）：
+    // 未修改名称时视为无操作，否则会把 baseName 当作完整路径传给
+    // provider 触发重命名，而无操作重命名会触发
+    // removeFolder/removeFolderFromCache 导致数据丢失
+    if (result != null &&
+        result != widget.manifestBridge.getFolderBaseName(folderName) &&
+        result != folderName) {
       final error = widget.manifestBridge.validateFolderName(result);
       if (error != null) {
         if (mounted) {
@@ -1686,21 +2146,40 @@ class _FileManagerViewState<T extends FileRecord>
         }
         return;
       }
-      if (!mounted) return;
-      await widget.onRenameFolder(folderName, result);
-      if (_currentFolder == folderName ||
-          _currentFolder.startsWith('$folderName/')) {
-        final parentPath = widget.manifestBridge.getParentFolderPath(
-          folderName,
-        );
-        final newFullPath = parentPath.isEmpty ? result : '$parentPath/$result';
-        if (_currentFolder == folderName) {
-          _setCurrentFolder(newFullPath);
-        } else {
-          final suffix = _currentFolder.substring(folderName.length);
-          _setCurrentFolder('$newFullPath$suffix');
+      // 目标位置（或其下）已存在同名文件夹：拒绝，避免静默合并两个文件夹
+      final parentPath = widget.manifestBridge.getParentFolderPath(
+        folderName,
+      );
+      final newFullPath = parentPath.isEmpty ? result : '$parentPath/$result';
+      if (widget.folders.any(
+        (f) => f == newFullPath || f.startsWith('$newFullPath/'),
+      )) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('目标位置已存在同名文件夹，操作已取消'),
+              duration: Duration(seconds: 3),
+            ),
+          );
         }
+        return;
       }
+      if (!mounted) return;
+      try {
+        await widget.onRenameFolder(folderName, result);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('重命名失败: $e'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+      // 注：弹出菜单只能作用于当前文件夹的直接子文件夹，
+      // 因此无需处理「重命名的文件夹包含当前浏览位置」的情况
     }
   }
 
@@ -1713,7 +2192,7 @@ class _FileManagerViewState<T extends FileRecord>
     final targetFolders =
         widget.folders.where((f) => !excluded.contains(f)).toSet();
 
-    final selectedFolder = await _showFolderPickerDialog(
+    final (selectedFolder, liveFolders) = await _showFolderPickerDialog(
       targetFolders,
       title: '移动文件夹到…',
     );
@@ -1722,8 +2201,55 @@ class _FileManagerViewState<T extends FileRecord>
       return;
     }
 
+    // 目标为当前位置（父目录/根目录）时属于无操作，提示用户
+    if (widget.manifestBridge.getParentFolderPath(folderName) ==
+        selectedFolder) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('文件夹已在目标位置'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+    // 目标位于自身/子树内（如内嵌面板中新建了同名文件夹），
+    // 或目标位置已存在同名文件夹（会静默合并），均拒绝执行
+    final base = widget.manifestBridge.getFolderBaseName(folderName);
+    final prospectivePath =
+        selectedFolder.isEmpty ? base : '$selectedFolder/$base';
+    if (selectedFolder == folderName ||
+        selectedFolder.startsWith('$folderName/') ||
+        liveFolders.any(
+          (f) => f == prospectivePath || f.startsWith('$prospectivePath/'),
+        )) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('目标位置已存在同名文件夹或为文件夹自身，操作已取消'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
     if (!mounted) return;
-    await widget.onMoveFolder(folderName, selectedFolder);
+    try {
+      await widget.onMoveFolder(folderName, selectedFolder);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('移动失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
     if (_currentFolder == folderName) {
       _setCurrentFolder(widget.manifestBridge.getParentFolderPath(folderName));
     }
@@ -1738,7 +2264,7 @@ class _FileManagerViewState<T extends FileRecord>
     final targetFolders =
         widget.folders.where((f) => !excluded.contains(f)).toSet();
 
-    final selectedFolder = await _showFolderPickerDialog(
+    final (selectedFolder, liveFolders) = await _showFolderPickerDialog(
       targetFolders,
       title: '复制文件夹到…',
     );
@@ -1747,8 +2273,54 @@ class _FileManagerViewState<T extends FileRecord>
       return;
     }
 
+    // 目标为当前位置（父目录/根目录）时属于无操作，提示用户
+    if (widget.manifestBridge.getParentFolderPath(folderName) ==
+        selectedFolder) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('文件夹已在目标位置'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+    // 目标位于自身/子树内（如内嵌面板中新建了同名文件夹），
+    // 或目标位置已存在同名文件夹（会造成重复复制），均拒绝执行
+    final base = widget.manifestBridge.getFolderBaseName(folderName);
+    final prospectivePath =
+        selectedFolder.isEmpty ? base : '$selectedFolder/$base';
+    if (selectedFolder == folderName ||
+        selectedFolder.startsWith('$folderName/') ||
+        liveFolders.any(
+          (f) => f == prospectivePath || f.startsWith('$prospectivePath/'),
+        )) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('目标位置已存在同名文件夹或为文件夹自身，操作已取消'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
     if (!mounted) return;
-    await widget.onCopyFolder(folderName, selectedFolder);
+    try {
+      await widget.onCopyFolder(folderName, selectedFolder);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('复制失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
   }
 
   Future<void> _deleteFolder(String folderName) async {
@@ -1791,7 +2363,20 @@ class _FileManagerViewState<T extends FileRecord>
 
     if (confirmed == true) {
       if (!mounted) return;
-      await widget.onDeleteFolder(folderName);
+      try {
+        await widget.onDeleteFolder(folderName);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('删除失败: $e'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
       if (_currentFolder == folderName) {
         _setCurrentFolder(
           widget.manifestBridge.getParentFolderPath(folderName),
@@ -1801,7 +2386,19 @@ class _FileManagerViewState<T extends FileRecord>
   }
 
   Future<void> _refreshFileList() async {
-    await widget.onRefresh();
+    try {
+      await widget.onRefresh();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('刷新失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
     _invalidateThumbnailCache();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1817,17 +2414,21 @@ class _FileManagerViewState<T extends FileRecord>
   // Folder picker dialog (tree navigation + inline create)
   // ====================================================================
 
-  Future<String?> _showFolderPickerDialog(
+  /// 显示内嵌文件夹选择面板。返回 (选中的文件夹路径, 面板会话结束时的
+  /// 实时文件夹集合)。实时集合包含面板内新建的文件夹 —— 调用方需要用
+  /// 它做目标冲突校验，因为 [widget.folders] 是构建时冻结的集合。
+  Future<(String?, Set<String>)> _showFolderPickerDialog(
     Set<String> folders, {
     String title = '选择目标文件夹',
   }) async {
     final nameController = TextEditingController();
     final focusNode = FocusNode();
     var isCreating = false;
+    var isCreatingInProgress = false; // 创建请求进行中，防止重复触发
     var pickerCurrentPath = '';
     var currentFolders = Set<String>.from(folders);
 
-    final result = await showDialog<String>(
+    final result = await showDialog<(String, Set<String>)>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
@@ -1836,6 +2437,69 @@ class _FileManagerViewState<T extends FileRecord>
             pickerCurrentPath,
             currentFolders,
           );
+
+          /// 校验名称并创建文件夹；成功后把新路径加入可导航集合。
+          Future<void> createAndAddFolder() async {
+            if (isCreatingInProgress) return; // 防止回车+按钮等双重触发
+            isCreatingInProgress = true;
+            final name = nameController.text.trim();
+            if (name.isEmpty) {
+              isCreatingInProgress = false;
+              return;
+            }
+            final err = widget.manifestBridge.validateFolderName(name);
+            if (err != null) {
+              isCreatingInProgress = false;
+              if (ctx.mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text(err),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+              return;
+            }
+            final newPath =
+                pickerCurrentPath.isEmpty ? name : '$pickerCurrentPath/$name';
+            if (currentFolders.contains(newPath)) {
+              isCreatingInProgress = false;
+              if (ctx.mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(
+                    content: Text('文件夹已存在'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+              return;
+            }
+            try {
+              await widget.onCreateFolder(newPath);
+            } catch (e) {
+              isCreatingInProgress = false;
+              if (ctx.mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text('创建文件夹失败: $e'),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+              return;
+            }
+            if (ctx.mounted) {
+              setDialogState(() {
+                // Manually add the new path instead of re-reading
+                // widget.folders because widget.folders is the frozen
+                // initial set.
+                currentFolders = {...currentFolders, newPath};
+                isCreating = false;
+                nameController.clear();
+              });
+            }
+            isCreatingInProgress = false;
+          }
 
           return AlertDialog(
             key: const Key('fm_folder_picker_dialog'),
@@ -1913,43 +2577,7 @@ class _FileManagerViewState<T extends FileRecord>
                                         vertical: 10,
                                       ),
                                     ),
-                                    onSubmitted: (value) async {
-                                      final name = value.trim();
-                                      if (name.isEmpty) return;
-                                      final err = widget.manifestBridge
-                                          .validateFolderName(name);
-                                      if (err != null) {
-                                        if (ctx.mounted) {
-                                          ScaffoldMessenger.of(
-                                            ctx,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(err),
-                                              duration: const Duration(
-                                                seconds: 2,
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                        return;
-                                      }
-                                      final newPath = pickerCurrentPath.isEmpty
-                                          ? name
-                                          : '$pickerCurrentPath/$name';
-                                      await widget.onCreateFolder(newPath);
-                                      if (ctx.mounted) {
-                                        setDialogState(() {
-                                          // Manually add the new path instead of re-reading widget.folders
-                                          // because widget.folders is the frozen initial set.
-                                          currentFolders = {
-                                            ...currentFolders,
-                                            newPath,
-                                          };
-                                          isCreating = false;
-                                          nameController.clear();
-                                        });
-                                      }
-                                    },
+                                    onSubmitted: (_) => createAndAddFolder(),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -1962,41 +2590,7 @@ class _FileManagerViewState<T extends FileRecord>
                                     color: Colors.green,
                                   ),
                                   tooltip: '确认创建',
-                                  onPressed: () async {
-                                    final name = nameController.text.trim();
-                                    if (name.isEmpty) return;
-                                    final err = widget.manifestBridge
-                                        .validateFolderName(name);
-                                    if (err != null) {
-                                      if (ctx.mounted) {
-                                        ScaffoldMessenger.of(ctx).showSnackBar(
-                                          SnackBar(
-                                            content: Text(err),
-                                            duration: const Duration(
-                                              seconds: 2,
-                                            ),
-                                          ),
-                                        );
-                                      }
-                                      return;
-                                    }
-                                    final newPath = pickerCurrentPath.isEmpty
-                                        ? name
-                                        : '$pickerCurrentPath/$name';
-                                    await widget.onCreateFolder(newPath);
-                                    if (ctx.mounted) {
-                                      setDialogState(() {
-                                        // Manually add the new path instead of re-reading widget.folders
-                                        // because widget.folders is the frozen initial set.
-                                        currentFolders = {
-                                          ...currentFolders,
-                                          newPath,
-                                        };
-                                        isCreating = false;
-                                        nameController.clear();
-                                      });
-                                    }
-                                  },
+                                  onPressed: createAndAddFolder,
                                 ),
                               ],
                             ),
@@ -2039,7 +2633,16 @@ class _FileManagerViewState<T extends FileRecord>
                       ),
                       TextButton(
                         key: const Key('fm_select_folder_btn'),
-                        onPressed: () => Navigator.pop(ctx, pickerCurrentPath),
+                        // 创建进行中禁用：避免在途创建时弹出旧选择
+                        onPressed: isCreatingInProgress
+                            ? null
+                            : () => Navigator.pop(
+                                  ctx,
+                                  (
+                                    pickerCurrentPath,
+                                    Set<String>.from(currentFolders),
+                                  ),
+                                ),
                         child: const Text('选择此文件夹'),
                       ),
                     ],
@@ -2054,6 +2657,7 @@ class _FileManagerViewState<T extends FileRecord>
 
     nameController.dispose();
     focusNode.dispose();
+    if (result == null) return (null, Set<String>.from(folders));
     return result;
   }
 

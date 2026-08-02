@@ -100,28 +100,30 @@ class _FilesPageState extends ConsumerState<FilesPage>
               index: _tabController.index,
               children: tabOrder.map((i) {
                 final isActiveTab = tabOrder[_tabController.index] == i;
+                // 按键包含逻辑标签索引：标签排序后各页面的 State
+                // （如已打开的文件夹）按逻辑标签保留，而不是按位置重建
                 switch (i) {
                   case 0:
                     return TextStoragePage(
-                      key: ValueKey('text_storage_$refreshSignal'),
+                      key: ValueKey('text_storage_${i}_$refreshSignal'),
                       tabIndex: 0,
                       isActiveTab: isActiveTab,
                     );
                   case 1:
                     return TtsPage(
-                      key: ValueKey('tts_$refreshSignal'),
+                      key: ValueKey('tts_${i}_$refreshSignal'),
                       tabIndex: 1,
                       isActiveTab: isActiveTab,
                     );
                   case 2:
                     return GalleryPage(
-                      key: ValueKey('gallery_$refreshSignal'),
+                      key: ValueKey('gallery_${i}_$refreshSignal'),
                       tabIndex: 2,
                       isActiveTab: isActiveTab,
                     );
                   case 3:
                     return VideoGalleryPage(
-                      key: ValueKey('video_gallery_$refreshSignal'),
+                      key: ValueKey('video_gallery_${i}_$refreshSignal'),
                       tabIndex: 3,
                       isActiveTab: isActiveTab,
                     );
@@ -149,25 +151,36 @@ class _FilesPageState extends ConsumerState<FilesPage>
             return AlertDialog(
               key: const Key('files_reorder_dialog'),
               title: const Text('排序标签'),
+              // 内容可滚动：短屏（如横屏手机）上不会溢出
+              scrollable: true,
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ReorderableListView(
-                    shrinkWrap: true,
-                    onReorderItem: (oldIndex, newIndex) {
-                      setDialogState(() {
-                        if (newIndex > oldIndex) newIndex--;
-                        final item = order.removeAt(oldIndex);
-                        order.insert(newIndex, item);
-                      });
-                    },
-                    children: order.map((i) {
-                      return ListTile(
-                        key: Key('files_tab_order_$i'),
-                        leading: const Icon(Icons.drag_handle),
-                        title: Text(_tabLabels[i]),
-                      );
-                    }).toList(),
+                  // 给 ReorderableListView 一个有界尺寸：
+                  // shrinkWrap 视口在 AlertDialog 的 intrinsic 测量下会崩溃
+                  SizedBox(
+                    width: double.maxFinite,
+                    height: 280,
+                    child: ReorderableListView(
+                      onReorderItem: (oldIndex, newIndex) {
+                        // 注意：onReorderItem 的 newIndex 已经是
+                        // 移除 oldIndex 项之后调整过的索引，
+                        // 不能再做 `if (newIndex > oldIndex) newIndex--;`
+                        // （那是旧 onReorder 回调的写法，双重调整会导致
+                        // 向下拖一格无效）
+                        setDialogState(() {
+                          final item = order.removeAt(oldIndex);
+                          order.insert(newIndex, item);
+                        });
+                      },
+                      children: order.map((i) {
+                        return ListTile(
+                          key: Key('files_tab_order_$i'),
+                          leading: const Icon(Icons.drag_handle),
+                          title: Text(_tabLabels[i]),
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ],
               ),
@@ -187,6 +200,9 @@ class _FilesPageState extends ConsumerState<FilesPage>
                     if (newIndex >= 0 && newIndex != _tabController.index) {
                       _tabController.index = newIndex;
                     }
+                    // 重置双击检测状态，避免排序后第一次点按当前标签
+                    // 触发误判的「双击重置到根目录」
+                    _lastTappedLogicalTabIndex = -1;
                     Navigator.pop(ctx);
                   },
                   child: const Text('确定'),
