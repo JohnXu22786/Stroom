@@ -31,6 +31,9 @@ import '../../utils/audio_utils.dart';
 /// Visibility is controlled externally via [visible]. The panel shows when
 /// [visible] is true and hides when false.
 class DraggableFloatingPanel extends StatefulWidget {
+  /// Fixed panel width, used by the parent to clamp the drag offset.
+  static const double panelWidth = 280;
+
   /// The list of detected media URLs to display.
   final List<String> detectedUrls;
 
@@ -48,6 +51,12 @@ class DraggableFloatingPanel extends StatefulWidget {
   /// Whether the panel is visible. Shows when true, hides when false.
   final bool visible;
 
+  /// Bumped by the parent whenever the detected-URL list is reset for a new
+  /// page. The panel drops its current selection when this changes, so a
+  /// selection from the previous page can never capture a URL from the new
+  /// one — even when both pages detect the same number of URLs.
+  final int detectionEpoch;
+
   const DraggableFloatingPanel({
     super.key,
     required this.detectedUrls,
@@ -55,6 +64,7 @@ class DraggableFloatingPanel extends StatefulWidget {
     this.onClose,
     this.onDragUpdate,
     this.visible = true,
+    this.detectionEpoch = 0,
   });
 
   @override
@@ -62,7 +72,8 @@ class DraggableFloatingPanel extends StatefulWidget {
 }
 
 class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
-  static const double _panelWidth = 280;
+  // Single source of truth: the public [DraggableFloatingPanel.panelWidth]
+  // that the parent uses to clamp the drag offset.
   static const double _panelMaxHeight = 320;
   bool _minimized = false;
   int? _selectedIndex;
@@ -70,12 +81,18 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
   @override
   void didUpdateWidget(DraggableFloatingPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Reset selection if URLs changed
-    if (widget.detectedUrls != oldWidget.detectedUrls) {
-      if (_selectedIndex != null &&
-          _selectedIndex! >= widget.detectedUrls.length) {
-        _selectedIndex = null;
-      }
+    // The parent mutates one list instance in place (clear + add on
+    // navigation), so identity AND length comparisons between builds can
+    // never detect the change — always keep the selection within bounds.
+    // The action bar additionally guards its own index access.
+    if (_selectedIndex != null &&
+        _selectedIndex! >= widget.detectedUrls.length) {
+      _selectedIndex = null;
+    }
+    // Drop the selection when the parent starts a new detection epoch
+    // (new page), so a stale selection can never capture the wrong URL.
+    if (widget.detectionEpoch != oldWidget.detectionEpoch) {
+      _selectedIndex = null;
     }
     // Reset state when panel transitions from hidden to visible
     if (widget.visible && !oldWidget.visible) {
@@ -93,6 +110,11 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
   String _extractExtension(String url) {
     try {
       final uri = Uri.parse(url);
+      // blob:/data: URLs have an opaque remainder, not a real path with a
+      // file extension — don't parse a garbage "extension" out of them.
+      if (!uri.hasScheme || uri.scheme != 'http' && uri.scheme != 'https') {
+        return '';
+      }
       final path = uri.path;
       final dot = path.lastIndexOf('.');
       if (dot < 0) return '';
@@ -100,6 +122,13 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
     } catch (_) {
       return '';
     }
+  }
+
+  /// Display label for a media type extension; blob:/unknown URLs get a
+  /// generic label instead of a nonsense "extension".
+  String _typeLabel(String ext) {
+    if (ext.isEmpty) return '媒体资源';
+    return formatDisplayName(ext);
   }
 
   IconData _iconForUrl(String url) {
@@ -129,6 +158,9 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
       case 'wav':
       case 'aac':
       case 'm4a':
+      case 'wma':
+      case 'opus':
+      case 'weba':
         return Colors.orange;
       case 'm3u8':
       case 'm3u':
@@ -150,34 +182,34 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
 
     final colorScheme = Theme.of(context).colorScheme;
 
-    // GestureDetector wraps only the panel content (not the full screen).
-    // onPanUpdate is forwarded to the parent via onDragUpdate so the parent
-    // can update its Positioned offset. This avoids creating a full-screen
-    // compositing layer that would interfere with the WebView's event routing.
-    return GestureDetector(
-      onPanUpdate: widget.onDragUpdate != null
-          ? (details) => widget.onDragUpdate!(details.delta)
-          : null,
-      child: Material(
-        elevation: 8,
-        borderRadius: BorderRadius.circular(12),
-        color: colorScheme.surfaceContainerHigh,
-        surfaceTintColor: colorScheme.primaryContainer,
-        child: Container(
-          width: _panelWidth,
-          constraints: BoxConstraints(maxHeight: _panelMaxHeight),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: colorScheme.primary.withValues(alpha: 0.3),
-              width: 1.5,
-            ),
+    // Only the header acts as the drag handle (the spec's "拖动手柄").
+    // A pan detector over the whole panel would compete with the URL
+    // ListView in the gesture arena: vertical drags over the list would be
+    // ambiguous and horizontal drags would move the panel while scrolling.
+    return Material(
+      elevation: 8,
+      borderRadius: BorderRadius.circular(12),
+      color: colorScheme.surfaceContainerHigh,
+      surfaceTintColor: colorScheme.primaryContainer,
+      child: Container(
+        width: DraggableFloatingPanel.panelWidth,
+        constraints: BoxConstraints(maxHeight: _panelMaxHeight),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: colorScheme.primary.withValues(alpha: 0.3),
+            width: 1.5,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // --- Drag handle / Header ---
-              Container(
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // --- Drag handle / Header ---
+            GestureDetector(
+              onPanUpdate: widget.onDragUpdate != null
+                  ? (details) => widget.onDragUpdate!(details.delta)
+                  : null,
+              child: Container(
                 decoration: BoxDecoration(
                   color: colorScheme.primaryContainer,
                   borderRadius: const BorderRadius.only(
@@ -260,27 +292,27 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                   ],
                 ),
               ),
+            ),
 
-              // --- Content ---
-              if (!_minimized)
-                Flexible(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // URL list
-                      Flexible(
-                        child: widget.detectedUrls.isEmpty
-                            ? _buildEmptyState(colorScheme)
-                            : _buildUrlList(colorScheme),
-                      ),
-                      // Action bar
-                      if (widget.detectedUrls.isNotEmpty)
-                        _buildActionBar(colorScheme),
-                    ],
-                  ),
+            // --- Content ---
+            if (!_minimized)
+              Flexible(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // URL list
+                    Flexible(
+                      child: widget.detectedUrls.isEmpty
+                          ? _buildEmptyState(colorScheme)
+                          : _buildUrlList(colorScheme),
+                    ),
+                    // Action bar
+                    if (widget.detectedUrls.isNotEmpty)
+                      _buildActionBar(colorScheme),
+                  ],
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );
@@ -372,7 +404,7 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        formatDisplayName(_extractExtension(url)),
+                        _typeLabel(_extractExtension(url)),
                         style: TextStyle(
                           fontSize: 9,
                           color: _colorForUrl(url),
@@ -397,6 +429,12 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
   }
 
   Widget _buildActionBar(ColorScheme colorScheme) {
+    // The list may have shrunk since the selection was made (page
+    // navigated, detection reset) — never index out of bounds.
+    final selectedIndex = _selectedIndex;
+    final hasSelection = selectedIndex != null &&
+        selectedIndex < widget.detectedUrls.length;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
@@ -410,8 +448,8 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
         children: [
           Expanded(
             child: Text(
-              _selectedIndex != null
-                  ? '已选: ${formatDisplayName(_extractExtension(widget.detectedUrls[_selectedIndex!]))}'
+              hasSelection
+                  ? '已选: ${_typeLabel(_extractExtension(widget.detectedUrls[selectedIndex]))}'
                   : '选择资源后确认',
               style: TextStyle(
                 fontSize: 10,
@@ -423,10 +461,10 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
           SizedBox(
             height: 28,
             child: FilledButton.icon(
-              onPressed: _selectedIndex != null
+              onPressed: hasSelection
                   ? () {
                       widget.onConfirmCapture(
-                        widget.detectedUrls[_selectedIndex!],
+                        widget.detectedUrls[selectedIndex],
                       );
                     }
                   : null,

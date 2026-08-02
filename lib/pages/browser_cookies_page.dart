@@ -30,7 +30,9 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoadingCookies = true);
+    if (mounted) {
+      setState(() => _isLoadingCookies = true);
+    }
     final retention = await BrowserCookieService.getRetentionMode();
     final cookies = await BrowserCookieService.getCookiesGrouped();
     if (mounted) {
@@ -73,11 +75,13 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
 
     setState(() => _isClearing = true);
     try {
-      await BrowserCookieService.clearAllCookies();
+      final ok = await BrowserCookieService.clearAllCookies();
       await _loadData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已清除所有Cookies')),
+          SnackBar(
+            content: Text(ok ? '已清除所有Cookies' : '清除失败，请重试'),
+          ),
         );
       }
     } finally {
@@ -109,8 +113,15 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
 
     if (confirmed != true || !mounted) return;
 
-    await BrowserCookieService.clearCookiesForDomain(domain);
+    final ok = await BrowserCookieService.clearCookiesForDomain(domain);
     await _loadData();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(ok ? '已清除 $domain 的Cookies' : '清除失败，请重试'),
+        ),
+      );
+    }
   }
 
   @override
@@ -125,6 +136,9 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
       body: RefreshIndicator(
         onRefresh: _loadData,
         child: ListView(
+          // Always scrollable so pull-to-refresh works even when the
+          // content fits the screen.
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           children: [
             _buildRetentionCard(colorScheme),
@@ -337,17 +351,20 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
                           ),
                         ),
                       ),
-                    SizedBox(
-                      width: 32,
-                      height: 32,
-                      child: IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 18),
-                        padding: EdgeInsets.zero,
-                        color: Colors.red.shade300,
-                        tooltip: '删除此Cookie',
-                        onPressed: () => _deleteSingleCookie(domain, cookie),
+                    // Cookies without a name cannot be deleted by the
+                    // platform API — don't offer a dead delete button.
+                    if ((cookie['name'] as String? ?? '').isNotEmpty)
+                      SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          padding: EdgeInsets.zero,
+                          color: Colors.red.shade300,
+                          tooltip: '删除此Cookie',
+                          onPressed: () => _deleteSingleCookie(domain, cookie),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -361,8 +378,19 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
   Future<void> _deleteSingleCookie(
       String domain, Map<String, dynamic> cookie) async {
     final name = cookie['name'] as String? ?? '';
-    await BrowserCookieService.deleteCookie(domain, name);
+    final ok = await BrowserCookieService.deleteCookie(
+      domain,
+      name,
+      path: cookie['path'] as String?,
+    );
     await _loadData();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(ok ? '已删除Cookie' : '删除失败，请重试'),
+        ),
+      );
+    }
   }
 
   /// Masks a cookie value for display, showing only first few chars.
@@ -372,3 +400,4 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
     return '${value.substring(0, 3)}...${value.substring(value.length - 3)}';
   }
 }
+
