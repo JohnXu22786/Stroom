@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../utils/folder_path_utils.dart';
+
 /// 文件夹选择器对话框
 ///
-/// 显示根目录级别的文件夹列表（不含次级子文件夹）。
-/// 单击选中文件夹，双击进入查看子文件夹。
+/// 单击选中文件夹，双击进入查看子文件夹；支持在子文件夹内
+/// 创建新文件夹（创建在完整路径下）。
 /// 支持创建新文件夹后自动刷新列表。
 /// 可选的 [fileNameController] 用于在对话框中输入文件名。
 class FolderPickerDialog extends StatefulWidget {
@@ -144,18 +146,20 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
   }
 
   Future<void> _createFolder() async {
+    if (_isCreating) return; // 防止回车+按钮等重复触发
     final name = _newFolderController.text.trim();
-    if (name.isEmpty) {
-      setState(() => _createError = '文件夹名不能为空');
+    // 与 manifest 保持一致的文件名校验（空名/超长/斜杠），
+    // 避免创建出在 manifest 中无效（被静默忽略）的文件夹路径
+    final validationError = FolderPathUtils.validateFolderName(name);
+    if (validationError != null) {
+      setState(() => _createError = validationError);
       return;
     }
 
-    if (name.contains('/')) {
-      setState(() => _createError = '文件夹名不能包含斜杠 /');
-      return;
-    }
+    // 在子文件夹内创建时使用完整路径，避免文件夹被错误创建到根目录
+    final fullPath = _currentPath.isEmpty ? name : '$_currentPath/$name';
 
-    if (_availableFolders.contains(name)) {
+    if (_availableFolders.contains(fullPath)) {
       setState(() => _createError = '文件夹已存在');
       return;
     }
@@ -166,7 +170,19 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
     });
 
     if (widget.onCreateFolder != null) {
-      final error = await widget.onCreateFolder!(name);
+      String? error;
+      try {
+        error = await widget.onCreateFolder!(fullPath);
+      } catch (e) {
+        // 回调抛异常时也要复位 _isCreating，否则创建按钮会一直禁用
+        if (mounted) {
+          setState(() {
+            _isCreating = false;
+            _createError = '创建文件夹失败: $e';
+          });
+        }
+        return;
+      }
       if (error != null) {
         if (mounted) {
           setState(() {
@@ -180,7 +196,19 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
 
     // 创建成功后刷新文件夹列表
     if (widget.onRefreshFolders != null) {
-      final updatedFolders = await widget.onRefreshFolders!();
+      Set<String> updatedFolders;
+      try {
+        updatedFolders = await widget.onRefreshFolders!();
+      } catch (e) {
+        // 刷新失败也要复位 _isCreating，否则创建按钮会一直禁用
+        if (mounted) {
+          setState(() {
+            _isCreating = false;
+            _createError = '刷新文件夹列表失败: $e';
+          });
+        }
+        return;
+      }
       if (mounted) {
         setState(() {
           _availableFolders = updatedFolders;
@@ -190,10 +218,15 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
 
     if (mounted) {
       setState(() {
-        _selectedFolder = name;
         _isCreating = false;
         _newFolderController.clear();
         _createError = null;
+        // 仅当存在创建回调且创建成功时才把选择更新为新文件夹；
+        // 无回调时（如 ocr/音频分离页）文件夹并未真正创建，
+        // 保持原选择，避免返回一个不存在的路径
+        if (widget.onCreateFolder != null) {
+          _selectedFolder = fullPath;
+        }
       });
     }
   }
@@ -377,7 +410,10 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
           child: const Text('取消'),
         ),
         FilledButton(
-          onPressed: () => Navigator.of(context).pop(_selectedFolder),
+          // 创建进行中禁用：避免在途创建时弹出旧选择
+          onPressed: _isCreating
+              ? null
+              : () => Navigator.of(context).pop(_selectedFolder),
           child: const Text('确定'),
         ),
       ],

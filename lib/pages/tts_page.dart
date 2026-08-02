@@ -15,6 +15,7 @@ import '../utils/sort_config.dart';
 import '../utils/audio_playback.dart';
 import '../utils/audio_utils.dart';
 import '../widgets/file_manager_view.dart';
+import '../widgets/file_manager_utils.dart';
 import 'files_page_shared.dart';
 import 'tts_create_page.dart';
 import 'audio_player_page.dart';
@@ -69,17 +70,6 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
   String _currentFolder = '';
   bool _isImporting = false;
 
-  String _sanitizeName(String rawName) {
-    var clean = rawName.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_');
-    final extIdx = clean.lastIndexOf('.');
-    if (extIdx > 100) {
-      clean = '${clean.substring(0, 100)}.${clean.substring(extIdx + 1)}';
-    } else if (clean.length > 110) {
-      clean = clean.substring(0, 110);
-    }
-    return clean;
-  }
-
   String _uniqueAudioName(
     String baseName,
     List<AudioRecord> records,
@@ -99,6 +89,10 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
   Future<void> _importAudio() async {
     if (_isImporting) return;
     _isImporting = true;
+    // 记录加载对话框是否弹出：异常发生在弹窗之前（如文件选择器/系统
+    // 相册抛错）或成功弹出之后（如 loadRecords 抛错）时，catch 中的
+    // pop 会误弹下层路由（应用根路由），因此必须带条件执行
+    var dialogShown = false;
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.audio,
@@ -111,15 +105,22 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (_) => const Center(
-          child: Card(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: CircularProgressIndicator(),
+        // PopScope(canPop: false)：barrierDismissible 只能拦截点击遮罩，
+        // 系统返回键仍会关掉对话框 —— 若不拦截，加载完成后
+        // Navigator.pop() 可能误弹下层路由（应用根路由）
+        builder: (_) => const PopScope(
+          canPop: false,
+          child: Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              ),
             ),
           ),
         ),
       );
+      dialogShown = true;
 
       final records = ref.read(audioRecordsProvider);
       final usedInBatch = <String>{};
@@ -129,7 +130,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         if (bytes == null || bytes.isEmpty) continue;
 
         final hash = computeAudioHash(bytes);
-        final rawName = _sanitizeName(file.name);
+        final rawName = sanitizeFileName(file.name);
         final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
         final detectedFormat = detectAudioFormat(bytes);
         // 规范化格式：aac → m4a（与 UI 显示保持一致）
@@ -157,11 +158,15 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         count++;
       }
 
-      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        dialogShown = false;
+      }
 
       await ref.read(audioRecordsProvider.notifier).loadRecords();
       await ref.read(folderListProvider.notifier).loadFolders();
-      if (mounted) {
+      // 没有任何文件被导入（如全部跳过）时不显示成功提示
+      if (mounted && count > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('已导入 $count 个音频文件'),
@@ -170,10 +175,12 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         );
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && dialogShown) {
         try {
           Navigator.of(context, rootNavigator: true).pop();
         } catch (_) {}
+      }
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('导入失败: $e'),
@@ -316,28 +323,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
     );
   }
 
-  void _shareAudio(String storagePath) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('分享: $storagePath'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
   Future<void> _refreshFileList() async {
     await ref.read(audioRecordsProvider.notifier).loadRecords();
     await ref.read(folderListProvider.notifier).loadFolders();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('文件列表已刷新'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
+    // 刷新成功的 SnackBar 由 FileManagerView._refreshFileList 统一提示，
+    // 避免与其他标签页行为不一致（重复提示）
   }
 
   // ====================================================================
@@ -380,7 +370,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _exportFiles(List<String> ids, String targetDirectory) async {
+  /// 批量导出文件。返回用户最终使用的导出目录
+  /// （用户取消目录选择或导出失败时返回 null；Web 端返回 ''）。
+  Future<String?> _exportFiles(List<String> ids, String targetDirectory) async {
     try {
       String? outputDir;
       if (kIsWeb) {
@@ -389,11 +381,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
         if (outputDir == null) {
           outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
-          if (outputDir == null) return;
+          if (outputDir == null) return null;
         }
       }
 
-      if (!mounted) return;
+      if (!mounted) return null;
 
       final records = ref.read(audioRecordsProvider);
       var exportedCount = 0;
@@ -418,6 +410,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         if (kIsWeb) {
           final mimeType = getMimeType(exportFormat);
           downloadAudioFile(data, exportName, mimeType);
+          // 注意：Web 端浏览器下载无法感知用户取消，视为已导出
         } else {
           final outputPath = p.join(outputDir, exportName);
           await File(outputPath).writeAsBytes(data);
@@ -433,6 +426,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           ),
         );
       }
+      return outputDir;
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -442,16 +436,19 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           ),
         );
       }
+      return null;
     }
   }
 
-  Future<void> _exportFolders(
+  /// 批量导出文件夹（保留完整文件夹层级，含子文件夹内容）。
+  /// 返回用户最终使用的导出目录（用户取消或失败时返回 null；Web 端返回 ''）。
+  Future<String?> _exportFolders(
     List<String> names,
     String targetDirectory,
   ) async {
     try {
       if (kIsWeb) {
-        if (!mounted) return;
+        if (!mounted) return null;
         final action = await showDialog<String>(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -474,14 +471,19 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           ),
         );
 
-        if (action != 'exportFiles' || !mounted) return;
+        if (action != 'exportFiles' || !mounted) return null;
 
         // Export all files in the folders one by one via download
         final records = ref.read(audioRecordsProvider);
         var exportedCount = 0;
         for (final folderName in names) {
-          final folderFiles =
-              records.where((r) => r.folder == folderName).toList();
+          final folderFiles = records
+              .where(
+                (r) =>
+                    r.folder == folderName ||
+                    r.folder.startsWith('$folderName/'),
+              )
+              .toList();
           for (final file in folderFiles) {
             var data = await FileManifest.readFile(file.storagePath);
             if (data == null || data.isEmpty) continue;
@@ -509,28 +511,28 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
             ),
           );
         }
-        return;
+        return '';
       }
 
       String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
       if (outputDir == null) {
         outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
-        if (outputDir == null) return;
+        if (outputDir == null) return null;
       }
 
-      if (!mounted) return;
+      if (!mounted) return null;
 
       final records = ref.read(audioRecordsProvider);
       var exportedCount = 0;
 
       for (final folderName in names) {
-        final folderFiles =
-            records.where((r) => r.folder == folderName).toList();
-        if (folderFiles.isEmpty) continue;
-
-        // Create folder in output directory (recreate folder hierarchy)
-        final folderOutputDir = p.join(outputDir, folderName);
-        await Directory(folderOutputDir).create(recursive: true);
+        // 包含所有后代文件夹中的文件，完整保留层级
+        final folderFiles = records
+            .where(
+              (r) =>
+                  r.folder == folderName || r.folder.startsWith('$folderName/'),
+            )
+            .toList();
 
         for (final file in folderFiles) {
           var data = await FileManifest.readFile(file.storagePath);
@@ -546,7 +548,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           exportFormat = fixed.$2;
 
           final exportName = '${file.name}.$exportFormat';
-          final outputPath = p.join(folderOutputDir, exportName);
+          final fileDir = p.join(outputDir, file.folder);
+          await Directory(fileDir).create(recursive: true);
+          final outputPath = p.join(fileDir, exportName);
           await File(outputPath).writeAsBytes(data);
           exportedCount++;
         }
@@ -560,6 +564,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           ),
         );
       }
+      return outputDir;
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -569,11 +574,12 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           ),
         );
       }
+      return null;
     }
   }
 
-  Future<void> _exportFolder(String folderName) async {
-    await _exportFolders([folderName], '');
+  Future<String?> _exportFolder(String folderName) async {
+    return _exportFolders([folderName], '');
   }
 
   @override
@@ -700,15 +706,6 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           ),
         ),
         const PopupMenuItem(
-          value: 'share',
-          child: ListTile(
-            leading: Icon(Icons.share, size: 20),
-            title: Text('分享'),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        const PopupMenuItem(
           value: 'export',
           child: ListTile(
             leading: Icon(Icons.file_download, size: 20),
@@ -724,8 +721,6 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
             _playAudio(file);
           case 'regenerate':
             _regenerateFile(file);
-          case 'share':
-            _shareAudio(file.storagePath);
         }
       },
       extraAppBarActions: () => [],
@@ -786,14 +781,10 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         await ref.read(folderListProvider.notifier).loadFolders();
       },
       onExportFile: _exportFile,
-      onExportFiles: (ids, targetDir) async {
-        await _exportFiles(ids, targetDir);
-      },
-      onExportFolders: (names, targetDir) async {
-        await _exportFolders(names, targetDir);
-      },
+      onExportFiles: _exportFiles,
+      onExportFolders: _exportFolders,
       onExportFolder: (name) async {
-        await _exportFolder(name);
+        return _exportFolder(name);
       },
       onRenameFolder: (oldName, newName) async {
         await ref

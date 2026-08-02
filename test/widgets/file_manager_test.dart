@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/files_page_shared.dart';
 import 'package:stroom/utils/file_record.dart';
+import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/manifest_bridge.dart';
 import 'package:stroom/utils/sort_config.dart';
 import 'package:stroom/widgets/file_manager_view.dart';
@@ -1220,6 +1221,927 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(capturedFolder, isNull);
+      },
+    );
+  });
+
+  // ===========================================================================
+  // Batch operations (move / copy / delete) with folders
+  // ===========================================================================
+  group('FileManagerView batch operations', () {
+    /// Bridge whose getAllDescendantFolderPaths returns real descendants.
+    ManifestBridge descendantsBridge() => ManifestBridge(
+          getFolderBaseName: (path) => path.split('/').last,
+          getParentFolderPath: (path) {
+            if (path.isEmpty) return '';
+            final parts = path.split('/');
+            return parts.length > 1
+                ? parts.sublist(0, parts.length - 1).join('/')
+                : '';
+          },
+          getChildFolderPaths: (parent, allPaths) => [],
+          validateFolderName: (_) => null,
+          getAllDescendantFolderPaths: (parentPath, allPaths) {
+            final prefix = parentPath.isEmpty ? '' : '$parentPath/';
+            return allPaths.where((f) => f.startsWith(prefix)).toList();
+          },
+        );
+
+    FileManagerView<_TestFileRecord> buildBatchFM({
+      required List<_TestFileRecord> records,
+      required Set<String> folders,
+      ManifestBridge? manifestBridge,
+      bool isActiveTab = true,
+      void Function(String)? onCurrentFolderChanged,
+      Future<void> Function()? onRefresh,
+      Future<void> Function(List<String>)? onDeleteFiles,
+      Future<void> Function(List<String>)? onDeleteFolders,
+      Future<void> Function(List<String>, String)? onMoveFiles,
+      Future<void> Function(List<String>, String)? onMoveFolders,
+      Future<String?> Function(List<String>, String)? onExportFiles,
+      Future<String?> Function(List<String>, String)? onExportFolders,
+      Future<void> Function(String)? onDeleteFolder,
+      Future<void> Function(String, String)? onMoveFolder,
+      Future<void> Function(String, String)? onRenameFolder,
+      Future<void> Function(String, String)? onRenameFile,
+      Future<void> Function(String)? onCreateFolder,
+      Future<void> Function(String, String)? onMoveFile,
+      Future<void> Function(String, String)? onCopyFile,
+      Future<void> Function(String, String)? onCopyFolder,
+    }) {
+      return FileManagerView<_TestFileRecord>(
+        sortedRecords: records,
+        folders: folders,
+        sortConfig: sortConfig,
+        config: FileManagerConfig<_TestFileRecord>(
+          title: 'Test',
+          fileIconBuilder: (_) =>
+              const Icon(Icons.videocam, key: Key('fallback_icon')),
+          onFileTap: (_) {},
+          onCurrentFolderChanged: onCurrentFolderChanged,
+        ),
+        isActiveTab: isActiveTab,
+        onRefresh: onRefresh ?? () async {},
+        onRenameFile: onRenameFile ?? (_, __) async {},
+        onMoveFile: onMoveFile ?? (_, __) async {},
+        onCopyFile: onCopyFile ?? (_, __) async {},
+        onDeleteFile: (_) async {},
+        onDeleteFiles: onDeleteFiles ?? (_) async {},
+        onDeleteFolders: onDeleteFolders ?? (_) async {},
+        onMoveFiles: onMoveFiles ?? (_, __) async {},
+        onMoveFolders: onMoveFolders ?? (_, __) async {},
+        onExportFile: (_) async {},
+        onExportFiles: onExportFiles,
+        onExportFolders: onExportFolders,
+        onRenameFolder: onRenameFolder ?? (_, __) async {},
+        onMoveFolder: onMoveFolder ?? (_, __) async {},
+        onCopyFolder: onCopyFolder ?? (_, __) async {},
+        onDeleteFolder: onDeleteFolder ?? (_) async {},
+        onCreateFolder: onCreateFolder ?? (_) async {},
+        onToggleSort: (_) {},
+        manifestBridge: manifestBridge ?? descendantsBridge(),
+      );
+    }
+
+    Finder inPicker(Finder matching) => find.descendant(
+          of: find.byKey(const Key('fm_folder_picker_dialog')),
+          matching: matching,
+        );
+
+    testWidgets(
+      'batch move picker excludes the selected folder and its descendants',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(records: [], folders: {'a', 'a/b', 'c'}),
+          ),
+        );
+
+        await tester.longPress(find.byKey(const Key('fm_folder_a')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('fm_selection_move_btn')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('fm_folder_picker_dialog')),
+          findsOneWidget,
+        );
+        // 'c' remains available as a target; the selected folder 'a' is gone.
+        expect(inPicker(find.text('c')), findsOneWidget);
+        expect(inPicker(find.text('a')), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'batch copy picker excludes the selected folder and its descendants',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(records: [], folders: {'a', 'a/b', 'c'}),
+          ),
+        );
+
+        await tester.longPress(find.byKey(const Key('fm_folder_a')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('fm_selection_copy_btn')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const Key('fm_folder_picker_dialog')),
+          findsOneWidget,
+        );
+        expect(inPicker(find.text('c')), findsOneWidget);
+        expect(inPicker(find.text('a')), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'batch move calls onMoveFiles with files and onMoveFolders with folders',
+      (tester) async {
+        final movedFiles = <String>[];
+        final movedFolders = <String>[];
+        String? fileTarget;
+        String? folderTarget;
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [_TestFileRecord(id: 'f1', name: 'one')],
+              folders: {'a', 'a/b', 'c'},
+              onMoveFiles: (ids, t) async {
+                movedFiles.addAll(ids);
+                fileTarget = t;
+              },
+              onMoveFolders: (names, t) async {
+                movedFolders.addAll(names);
+                folderTarget = t;
+              },
+              onMoveFolder: (name, t) async {
+                movedFolders.add('single:$name');
+              },
+            ),
+          ),
+        );
+
+        await tester.longPress(find.byKey(const Key('fm_folder_a')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_file_f1')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('fm_selection_move_btn')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(inPicker(find.text('c')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_select_folder_btn')));
+        await tester.pumpAndSettle();
+
+        expect(movedFiles, ['f1']);
+        expect(movedFolders, ['a']);
+        expect(fileTarget, 'c');
+        expect(folderTarget, 'c');
+      },
+    );
+
+    testWidgets(
+      'batch delete calls onDeleteFiles with files and onDeleteFolders with folders',
+      (tester) async {
+        final deletedFiles = <String>[];
+        final deletedFolders = <String>[];
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [
+                _TestFileRecord(id: 'f1', name: 'one'),
+                _TestFileRecord(id: 'f2', name: 'two', folder: 'a'),
+              ],
+              folders: {'a', 'a/b'},
+              onDeleteFiles: (ids) async => deletedFiles.addAll(ids),
+              onDeleteFolders: (names) async => deletedFolders.addAll(names),
+              onDeleteFolder: (name) async =>
+                  deletedFolders.add('single:$name'),
+            ),
+          ),
+        );
+
+        // Long-press folder 'a' to enter selection mode, then also select f1.
+        await tester.longPress(find.byKey(const Key('fm_folder_a')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_file_f1')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('fm_selection_delete_btn')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_batch_delete_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        // The root-level file f1 goes through the file batch callback; the
+        // selected folder 'a' goes through the folder batch callback.
+        expect(deletedFiles, ['f1']);
+        expect(deletedFolders, ['a']);
+      },
+    );
+
+    testWidgets(
+      'batch export calls onExportFolders with the selected folders',
+      (tester) async {
+        final exportedFolders = <String>[];
+        String? exportTarget;
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [_TestFileRecord(id: 'f1', name: 'one')],
+              folders: {'a', 'c'},
+              onExportFolders: (names, t) async {
+                exportedFolders.addAll(names);
+                exportTarget = t;
+                return 'D:\\out';
+              },
+            ),
+          ),
+        );
+
+        await tester.longPress(find.byKey(const Key('fm_folder_a')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_file_f1')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('fm_selection_export_btn')));
+        await tester.pumpAndSettle();
+
+        expect(exportedFolders, ['a']);
+        expect(exportTarget, '');
+        // 导出成功后退出了选择模式
+        expect(find.byKey(const Key('fm_close_selection_btn')), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'batch export passes the files directory to the folder export',
+      (tester) async {
+        String? folderCallbackTarget;
+        final exportedFolders = <String>[];
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [_TestFileRecord(id: 'f1', name: 'one')],
+              folders: {'a'},
+              onExportFiles: (ids, t) async => 'D:\\picked',
+              onExportFolders: (names, t) async {
+                folderCallbackTarget = t;
+                exportedFolders.addAll(names);
+                return 'D:\\picked2';
+              },
+            ),
+          ),
+        );
+
+        await tester.longPress(find.byKey(const Key('fm_folder_a')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_file_f1')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('fm_selection_export_btn')));
+        await tester.pumpAndSettle();
+
+        // 文件夹导出必须复用文件导出选定的目录，不再弹出第二次目录选择
+        expect(folderCallbackTarget, 'D:\\picked');
+        expect(exportedFolders, ['a']);
+        // 导出成功后退出选择模式
+        expect(find.byKey(const Key('fm_close_selection_btn')), findsNothing);
+      },
+    );
+
+    testWidgets('cancelling batch export keeps the selection mode', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          buildBatchFM(
+            records: [_TestFileRecord(id: 'f1', name: 'one')],
+            folders: {'a'},
+            // 两次导出都被用户取消（返回 null）
+            onExportFiles: (ids, t) async => null,
+            onExportFolders: (names, t) async => null,
+          ),
+        ),
+      );
+
+      await tester.longPress(find.byKey(const Key('fm_folder_a')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('fm_file_f1')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('fm_selection_export_btn')));
+      await tester.pumpAndSettle();
+
+      // 取消后选择模式保留
+      expect(find.byKey(const Key('fm_close_selection_btn')), findsOneWidget);
+    });
+
+    testWidgets(
+      'becoming the active tab syncs the current folder to the shared provider',
+      (tester) async {
+        final folderHistory = <String>[];
+
+        FileManagerView<_TestFileRecord> build(bool active) => buildBatchFM(
+              records: [],
+              folders: {'sub'},
+              isActiveTab: active,
+              onCurrentFolderChanged: (f) => folderHistory.add(f),
+            );
+
+        await tester.pumpWidget(_buildTestApp(build(true)));
+        await tester.pumpAndSettle();
+        // 进入子文件夹
+        await tester.tap(find.text('sub'));
+        await tester.pumpAndSettle();
+        expect(folderHistory.last, 'sub');
+        folderHistory.clear();
+
+        // 切换到其他标签页（变为不活动）
+        await tester.pumpWidget(_buildTestApp(build(false)));
+        await tester.pump();
+
+        // 切回本标签页（变为活动）→ 必须把当前文件夹同步到共享 Provider，
+        // 否则 HomePage 的系统返回逻辑会读到其他标签页留下的过期路径
+        await tester.pumpWidget(_buildTestApp(build(true)));
+        await tester.pump();
+
+        expect(folderHistory, ['sub']);
+      },
+    );
+
+    testWidgets(
+      'a root-level folder named "back" renders as a folder, not the back card',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(records: [], folders: {'back'}),
+          ),
+        );
+
+        // 名为 back 的文件夹必须渲染为文件夹卡片
+        expect(find.byKey(const Key('fm_folder_back')), findsOneWidget);
+        expect(find.byKey(const Key('fm_back_item')), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'moving a file to its current folder is a no-op with feedback',
+      (tester) async {
+        final moved = <String>[];
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [_TestFileRecord(id: 'f1', name: 'one', folder: 'a')],
+              folders: {'a'},
+              onMoveFile: (id, t) async => moved.add('$id->$t'),
+            ),
+          ),
+        );
+
+        // 进入文件夹 a
+        await tester.tap(find.text('a'));
+        await tester.pumpAndSettle();
+        // 文件弹出菜单 → 移动
+        await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('移动'));
+        await tester.pumpAndSettle();
+
+        // 在面板中选中文件夹 a
+        await tester.tap(inPicker(find.text('a')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_select_folder_btn')));
+        await tester.pumpAndSettle();
+
+        expect(moved, isEmpty);
+        expect(find.text('文件已在目标位置'), findsOneWidget);
+      },
+    );
+
+    testWidgets('refresh failure shows an error snackbar', (tester) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          buildBatchFM(
+            records: [],
+            folders: {},
+            onRefresh: () async => throw Exception('disk error'),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('fm_refresh_btn')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('刷新失败'), findsOneWidget);
+    });
+
+    testWidgets('batch copy aborts files when a folder copy fails', (
+      tester,
+    ) async {
+      final copiedFiles = <String>[];
+      await tester.pumpWidget(
+        _buildTestApp(
+          buildBatchFM(
+            records: [_TestFileRecord(id: 'f1', name: 'one')],
+            folders: {'a', 'b', 'c'},
+            onCopyFolder: (name, t) async {
+              if (name == 'b') throw Exception('io');
+            },
+            onCopyFile: (id, t) async => copiedFiles.add(id),
+          ),
+        ),
+      );
+
+      await tester.longPress(find.byKey(const Key('fm_folder_a')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('fm_folder_b')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('fm_file_f1')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('fm_selection_copy_btn')));
+      await tester.pumpAndSettle();
+      await tester.tap(inPicker(find.text('c')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('fm_select_folder_btn')));
+      await tester.pumpAndSettle();
+
+      // 文件夹复制失败后文件复制不得执行
+      expect(copiedFiles, isEmpty);
+      expect(find.textContaining('批量复制失败'), findsOneWidget);
+    });
+
+    testWidgets(
+      'batch move into a target that already has a same-name folder is rejected',
+      (tester) async {
+        final movedFolders = <String>[];
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [],
+              folders: {'a', 'x', 'x/a'},
+              onMoveFolders: (names, t) async => movedFolders.addAll(names),
+            ),
+          ),
+        );
+
+        await tester.longPress(find.byKey(const Key('fm_folder_a')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('fm_selection_move_btn')));
+        await tester.pumpAndSettle();
+
+        // 'x' 下已存在 'x/a'，把 a 移入 x 会合并 → 必须被拒绝
+        await tester.tap(inPicker(find.text('x')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_select_folder_btn')));
+        await tester.pumpAndSettle();
+
+        expect(movedFolders, isEmpty);
+        expect(find.text('所选文件夹在目标位置存在同名冲突或位于自身内部，操作已取消'), findsOneWidget);
+        // 选择模式仍然保留
+        expect(find.byKey(const Key('fm_close_selection_btn')), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'inline picker refuses to create a folder that already exists',
+      (tester) async {
+        final created = <String>[];
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [],
+              folders: {'a', 'c'},
+              onCreateFolder: (name) async => created.add(name),
+            ),
+          ),
+        );
+
+        await tester.longPress(find.byKey(const Key('fm_folder_a')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('fm_selection_move_btn')));
+        await tester.pumpAndSettle();
+
+        // Start inline creation with an existing folder name
+        await tester.tap(find.byKey(const Key('fm_add_folder_btn')));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byType(TextField).last,
+          'c',
+        );
+        await tester.tap(find.byKey(const Key('fm_picker_create_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        // No folder must be created, and a duplicate-name warning is shown.
+        expect(created, isEmpty);
+        expect(find.text('文件夹已存在'), findsOneWidget);
+      },
+    );
+
+    // ===========================================================================
+    // Folder rename / create dialogs
+    // ===========================================================================
+    group('FileManagerView folder rename dialog', () {
+      Future<void> openRenameDialog(
+        WidgetTester tester, {
+        required Set<String> folders,
+        required Future<void> Function(String, String) onRenameFolder,
+      }) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [],
+              folders: folders,
+              onRenameFolder: onRenameFolder,
+              // 使用真实的名称校验，否则空名称/非法名称无法被拦截
+              manifestBridge: ManifestBridge(
+                getFolderBaseName: (path) => path.split('/').last,
+                getParentFolderPath: (path) {
+                  if (path.isEmpty) return '';
+                  final parts = path.split('/');
+                  return parts.length > 1
+                      ? parts.sublist(0, parts.length - 1).join('/')
+                      : '';
+                },
+                getChildFolderPaths: (parent, allPaths) => [],
+                validateFolderName: FolderPathUtils.validateFolderName,
+                getAllDescendantFolderPaths: (parentPath, allPaths) => allPaths
+                    .where((f) => f.startsWith('$parentPath/'))
+                    .toList(),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.byKey(const Key('fm_folder_popup_a')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('重命名'));
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('confirming without editing the name does not rename', (
+        tester,
+      ) async {
+        final renamed = <String>[];
+        await openRenameDialog(
+          tester,
+          folders: {'a'},
+          onRenameFolder: (oldName, newName) async {
+            renamed.add('$oldName->$newName');
+          },
+        );
+
+        // 输入框预填基础名 'a'，直接确认 → 无操作
+        await tester.tap(find.byKey(const Key('fm_rename_folder_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        expect(renamed, isEmpty);
+      });
+
+      testWidgets('renaming onto an existing folder is rejected',
+          (tester) async {
+        final renamed = <String>[];
+        await openRenameDialog(
+          tester,
+          folders: {'a', 'b'},
+          onRenameFolder: (oldName, newName) async {
+            renamed.add('$oldName->$newName');
+          },
+        );
+
+        await tester.enterText(
+          find.byKey(const Key('fm_rename_folder_input')),
+          'b',
+        );
+        await tester.tap(find.byKey(const Key('fm_rename_folder_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        expect(renamed, isEmpty);
+        expect(find.text('目标位置已存在同名文件夹，操作已取消'), findsOneWidget);
+      });
+
+      testWidgets('empty name shows a validation error and does not rename', (
+        tester,
+      ) async {
+        final renamed = <String>[];
+        await openRenameDialog(
+          tester,
+          folders: {'a'},
+          onRenameFolder: (oldName, newName) async {
+            renamed.add('$oldName->$newName');
+          },
+        );
+
+        await tester.enterText(
+          find.byKey(const Key('fm_rename_folder_input')),
+          '',
+        );
+        await tester.tap(find.byKey(const Key('fm_rename_folder_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        expect(renamed, isEmpty);
+        expect(find.text('文件夹名不能为空'), findsOneWidget);
+      });
+
+      testWidgets('valid rename calls onRenameFolder with the base name', (
+        tester,
+      ) async {
+        final renamed = <String>[];
+        await openRenameDialog(
+          tester,
+          folders: {'a'},
+          onRenameFolder: (oldName, newName) async {
+            renamed.add('$oldName->$newName');
+          },
+        );
+
+        await tester.enterText(
+          find.byKey(const Key('fm_rename_folder_input')),
+          'new_name',
+        );
+        await tester.tap(find.byKey(const Key('fm_rename_folder_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        expect(renamed, ['a->new_name']);
+      });
+
+      testWidgets('creating a folder with a duplicate name is rejected', (
+        tester,
+      ) async {
+        final created = <String>[];
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [],
+              folders: {'a'},
+              onCreateFolder: (name) async => created.add(name),
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('fm_create_folder_btn')));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const Key('fm_create_folder_input')),
+          'a',
+        );
+        await tester.tap(find.byKey(const Key('fm_create_folder_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        expect(created, isEmpty);
+        expect(find.text('文件夹已存在'), findsOneWidget);
+      });
+
+      testWidgets('file rename with an empty name shows an error and no-ops', (
+        tester,
+      ) async {
+        final renamed = <String>[];
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [_TestFileRecord(id: 'f1', name: 'one')],
+              folders: {},
+              onRenameFile: (id, newName) async {
+                renamed.add('$id->$newName');
+              },
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('重命名'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byKey(const Key('fm_rename_file_input')),
+          '',
+        );
+        await tester.tap(find.byKey(const Key('fm_rename_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        expect(renamed, isEmpty);
+        expect(find.text('文件名不能为空'), findsOneWidget);
+      });
+
+      testWidgets('file rename rejects illegal characters', (tester) async {
+        final renamed = <String>[];
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [_TestFileRecord(id: 'f1', name: 'one')],
+              folders: {},
+              onRenameFile: (id, newName) async {
+                renamed.add('$id->$newName');
+              },
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('重命名'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byKey(const Key('fm_rename_file_input')),
+          'a/b',
+        );
+        await tester.tap(find.byKey(const Key('fm_rename_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        expect(renamed, isEmpty);
+        expect(find.textContaining('不能包含'), findsOneWidget);
+      });
+
+      testWidgets('file rename calls onRenameFile with the new base name', (
+        tester,
+      ) async {
+        final renamed = <String>[];
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [_TestFileRecord(id: 'f1', name: 'one')],
+              folders: {},
+              onRenameFile: (id, newName) async {
+                renamed.add('$id->$newName');
+              },
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('重命名'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byKey(const Key('fm_rename_file_input')),
+          'renamed',
+        );
+        await tester.tap(find.byKey(const Key('fm_rename_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        expect(renamed, ['f1->renamed']);
+      });
+
+      testWidgets('file rename strips a duplicate extension', (tester) async {
+        final renamed = <String>[];
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [_TestFileRecord(id: 'f1', name: 'one', format: 'txt')],
+              folders: {},
+              onRenameFile: (id, newName) async {
+                renamed.add('$id->$newName');
+              },
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('重命名'));
+        await tester.pumpAndSettle();
+
+        // 输入带 .txt 的名称 → 显示名不应变成 xxx.txt.txt
+        await tester.enterText(
+          find.byKey(const Key('fm_rename_file_input')),
+          'report.txt',
+        );
+        await tester.tap(find.byKey(const Key('fm_rename_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        expect(renamed, ['f1->report']);
+      });
+
+      testWidgets(
+        'file rename confirming unchanged does not rename when the stored name ends with the format',
+        (tester) async {
+          final renamed = <String>[];
+          await tester.pumpWidget(
+            _buildTestApp(
+              buildBatchFM(
+                // 导入 report.txt.txt 时存储名为 report.txt、格式为 txt
+                records: [
+                  _TestFileRecord(id: 'f1', name: 'report.txt', format: 'txt'),
+                ],
+                folders: {},
+                onRenameFile: (id, newName) async {
+                  renamed.add('$id->$newName');
+                },
+              ),
+            ),
+          );
+
+          await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('重命名'));
+          await tester.pumpAndSettle();
+
+          // 直接确认（输入框预填 report.txt，未修改）
+          await tester.tap(find.byKey(const Key('fm_rename_confirm_btn')));
+          await tester.pumpAndSettle();
+
+          expect(renamed, isEmpty,
+              reason: '确认未修改时不得把 report.txt 误判为重命名为 report');
+        },
+      );
+    });
+  });
+
+  // ===========================================================================
+  // Thumbnail cache invalidation
+  // ===========================================================================
+  group('FileManagerView thumbnail cache', () {
+    testWidgets(
+      'identical-data rebuild reuses cached thumbnails; data change rebuilds',
+      (tester) async {
+        var builderCalls = 0;
+        Widget thumbnailBuilder(_TestFileRecord file) {
+          builderCalls++;
+          return Container(
+            key: Key('thumb_${file.id}'),
+            color: Colors.black,
+          );
+        }
+
+        final config = FileManagerConfig<_TestFileRecord>(
+          title: 'Test',
+          showThumbnailToggle: true,
+          initialGridView: true,
+          fileIconBuilder: (_) =>
+              const Icon(Icons.videocam, key: Key('fallback_icon')),
+          fileThumbnailBuilder: thumbnailBuilder,
+          onFileTap: (_) {},
+        );
+
+        FileManagerView<_TestFileRecord> buildView(
+          List<_TestFileRecord> records,
+        ) {
+          return FileManagerView<_TestFileRecord>(
+            sortedRecords: records,
+            folders: {},
+            sortConfig: sortConfig,
+            config: config,
+            onRefresh: () async {},
+            onRenameFile: (_, __) async {},
+            onMoveFile: (_, __) async {},
+            onCopyFile: (_, __) async {},
+            onDeleteFile: (_) async {},
+            onDeleteFiles: (_) async {},
+            onDeleteFolders: (_) async {},
+            onMoveFiles: (_, __) async {},
+            onMoveFolders: (_, __) async {},
+            onExportFile: (_) async {},
+            onRenameFolder: (_, __) async {},
+            onMoveFolder: (_, __) async {},
+            onCopyFolder: (_, __) async {},
+            onDeleteFolder: (_) async {},
+            onCreateFolder: (_) async {},
+            onToggleSort: (_) {},
+            manifestBridge: testManifestBridge,
+          );
+        }
+
+        final records1 = [
+          _TestFileRecord(id: 'f1'),
+          _TestFileRecord(id: 'f2'),
+        ];
+        await tester.pumpWidget(_buildTestApp(buildView(records1)));
+        expect(builderCalls, 2);
+
+        // Rebuild with a NEW list instance holding identical records — the
+        // thumbnails must come from the cache.
+        final records2 = [
+          _TestFileRecord(id: 'f1'),
+          _TestFileRecord(id: 'f2'),
+        ];
+        await tester.pumpWidget(_buildTestApp(buildView(records2)));
+        await tester.pump();
+        expect(
+          builderCalls,
+          2,
+          reason: 'identical data must reuse cached thumbnails',
+        );
+
+        // Adding a new record invalidates the cache and rebuilds all.
+        final records3 = [
+          _TestFileRecord(id: 'f1'),
+          _TestFileRecord(id: 'f2'),
+          _TestFileRecord(id: 'f3'),
+        ];
+        await tester.pumpWidget(_buildTestApp(buildView(records3)));
+        await tester.pump();
+        expect(builderCalls, 5);
       },
     );
   });

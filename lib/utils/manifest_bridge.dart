@@ -7,6 +7,9 @@ class ManifestBridge {
   final String Function(String) getParentFolderPath;
   final List<String> Function(String, Set<String>) getChildFolderPaths;
   final String? Function(String) validateFolderName;
+
+  /// 文件名校验（默认使用共享实现 [FolderPathUtils.validateFileName]）
+  final String? Function(String) validateFileName;
   final List<String> Function(String, Set<String>) getAllDescendantFolderPaths;
 
   const ManifestBridge({
@@ -14,6 +17,7 @@ class ManifestBridge {
     required this.getParentFolderPath,
     required this.getChildFolderPaths,
     required this.validateFolderName,
+    this.validateFileName = FolderPathUtils.validateFileName,
     required this.getAllDescendantFolderPaths,
   });
 
@@ -23,6 +27,7 @@ class ManifestBridge {
         getParentFolderPath: FolderPathUtils.getParentFolderPath,
         getChildFolderPaths: FolderPathUtils.getChildFolderPaths,
         validateFolderName: FolderPathUtils.validateFolderName,
+        validateFileName: FolderPathUtils.validateFileName,
         getAllDescendantFolderPaths:
             FolderPathUtils.getAllDescendantFolderPaths,
       );
