@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -205,7 +206,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            isStreamingProvider.overrideWith((ref) => true),
+            streamingConversationsProvider
+                .overrideWith((ref) => {'test-conv-id'}),
             conversationsProvider.overrideWith(
               (ref) => ConversationsNotifier(ref),
             ),
@@ -242,7 +244,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            isStreamingProvider.overrideWith((ref) => true),
+            streamingConversationsProvider
+                .overrideWith((ref) => {'test-conv-id'}),
             conversationsProvider.overrideWith(
               (ref) => ConversationsNotifier(ref),
             ),
@@ -326,6 +329,46 @@ void main() {
 
         // Old settings section headers should not exist
         expect(find.text('Chat 设置'), findsNothing);
+      },
+    );
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // Per-conversation streaming button isolation
+  // ═══════════════════════════════════════════════════════════
+  group('Per-conversation streaming state', () {
+    testWidgets(
+      'shows send button when a different conversation is streaming',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              // Conversation "other-conv" is streaming, not "test-conv-id"
+              streamingConversationsProvider
+                  .overrideWith((ref) => {'other-conv'}),
+              conversationsProvider.overrideWith(
+                (ref) => ConversationsNotifier(ref),
+              ),
+              activeConversationIdProvider
+                  .overrideWith((ref) => 'test-conv-id'),
+              providerEntriesProvider.overrideWith(
+                (ref) => ProviderEntriesNotifier(),
+              ),
+            ],
+            child: const MaterialApp(home: ChatPage()),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        // The page must render without exceptions; otherwise the
+        // send/stop button assertions below would be meaningless.
+        expect(tester.takeException(), isNull);
+
+        // The current conversation is NOT streaming — should show send button
+        expect(find.byIcon(Icons.send_rounded), findsOneWidget);
+        // Should NOT show stop button
+        expect(find.byIcon(Icons.stop_circle_outlined), findsNothing);
       },
     );
   });

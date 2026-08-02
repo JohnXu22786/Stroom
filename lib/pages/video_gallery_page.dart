@@ -18,6 +18,7 @@ import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../utils/manifest_bridge.dart';
 import '../widgets/file_manager_view.dart';
+import '../widgets/file_manager_utils.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'files_page_shared.dart';
 
@@ -94,23 +95,6 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
   /// Guards against re-entrant imports.
   bool _isImporting = false;
 
-  /// Sanitize a filename: strip path separators, truncate, keep extension.
-  String _sanitizeName(String rawName) {
-    var clean = rawName.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_');
-    final extIdx = clean.lastIndexOf('.');
-    if (extIdx > 100) {
-      clean = '${clean.substring(0, 100)}.${clean.substring(extIdx + 1)}';
-    } else if (clean.length > 110) {
-      if (extIdx == -1) {
-        clean = clean.substring(0, 110);
-      } else {
-        final ext = clean.substring(extIdx);
-        clean = '${clean.substring(0, 110 - ext.length)}$ext';
-      }
-    }
-    return clean;
-  }
-
   /// Generate a unique file-name for the currently-active folder.
   String _uniqueVideoName(
     String baseName,
@@ -151,6 +135,12 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     );
     if (folder == null || !mounted) return;
 
+    // 记录加载对话框是否弹出：异常发生在弹窗之前（如系统相机抛错）
+    // 或成功弹出之后（如 loadRecords 抛错）时，catch 中的 pop 会误弹
+    // 下层路由（应用根路由），因此必须带条件执行
+    var dialogShown = false;
+    var videoSaved = false;
+
     try {
       final picker = ImagePicker();
       final pickedFile = await picker.pickVideo(source: ImageSource.camera);
@@ -161,20 +151,27 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (_) => const Center(
-          child: Card(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: CircularProgressIndicator(),
+        // PopScope(canPop: false)：barrierDismissible 只能拦截点击遮罩，
+        // 系统返回键仍会关掉对话框 —— 若不拦截，加载完成后
+        // Navigator.pop() 可能误弹下层路由（应用根路由）
+        builder: (_) => const PopScope(
+          canPop: false,
+          child: Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              ),
             ),
           ),
         ),
       );
+      dialogShown = true;
 
       final bytes = await pickedFile.readAsBytes();
       if (bytes.isNotEmpty) {
         final hash = computeVideoHash(bytes);
-        final rawName = _sanitizeName(pickedFile.name);
+        final rawName = sanitizeFileName(pickedFile.name);
         final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
         final format = ext.isNotEmpty ? ext : 'mp4';
         final storageFileName = '$hash.$format';
@@ -221,14 +218,19 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
             duration: videoDurationMs,
           ),
         );
+        videoSaved = true;
       }
 
       // Close loading indicator
-      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        dialogShown = false;
+      }
 
       await ref.read(videoRecordsProvider.notifier).loadRecords();
       await ref.read(videoFolderListProvider.notifier).loadFolders();
-      if (mounted) {
+      // 只有真正保存了记录才提示成功（空字节时没有保存任何内容）
+      if (mounted && videoSaved) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('视频已保存'),
@@ -237,10 +239,12 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         );
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && dialogShown) {
         try {
           Navigator.of(context, rootNavigator: true).pop();
         } catch (_) {}
+      }
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('录制失败: $e'),
@@ -254,6 +258,11 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
   Future<void> _importFromGallery() async {
     if (_isImporting) return;
     _isImporting = true;
+    // 记录加载对话框是否弹出：异常发生在弹窗之前（如文件选择器/系统
+    // 相册抛错）或成功弹出之后（如 loadRecords 抛错）时，catch 中的
+    // pop 会误弹下层路由（应用根路由），因此必须带条件执行
+    var dialogShown = false;
+    var videoImported = false;
     try {
       final picker = ImagePicker();
       final pickedFile = await picker.pickVideo(source: ImageSource.gallery);
@@ -267,20 +276,27 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (_) => const Center(
-          child: Card(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: CircularProgressIndicator(),
+        // PopScope(canPop: false)：barrierDismissible 只能拦截点击遮罩，
+        // 系统返回键仍会关掉对话框 —— 若不拦截，加载完成后
+        // Navigator.pop() 可能误弹下层路由（应用根路由）
+        builder: (_) => const PopScope(
+          canPop: false,
+          child: Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              ),
             ),
           ),
         ),
       );
+      dialogShown = true;
 
       final bytes = await pickedFile.readAsBytes();
       if (bytes.isNotEmpty) {
         final hash = computeVideoHash(bytes);
-        final rawName = _sanitizeName(pickedFile.name);
+        final rawName = sanitizeFileName(pickedFile.name);
         final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
         final format = ext.isNotEmpty ? ext : 'mp4';
         final storageFileName = '$hash.$format';
@@ -292,7 +308,10 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           <String>{},
         );
 
-        final videoPath = await VideoManifest.writeFile(storageFileName, bytes);
+        final videoPath = await VideoManifest.writeFile(
+          storageFileName,
+          bytes,
+        );
         // Try to obtain video duration and thumbnail from the file
         int videoDurationMs = 0;
         if (videoPath.isNotEmpty) {
@@ -326,14 +345,19 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
             duration: videoDurationMs,
           ),
         );
+        videoImported = true;
       }
 
       // Close loading indicator
-      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        dialogShown = false;
+      }
 
       await ref.read(videoRecordsProvider.notifier).loadRecords();
       await ref.read(videoFolderListProvider.notifier).loadFolders();
-      if (mounted) {
+      // 只有真正保存了记录才提示成功（空字节时没有保存任何内容）
+      if (mounted && videoImported) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('已导入视频'),
@@ -344,10 +368,12 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       _isImporting = false;
     } catch (e) {
       _isImporting = false;
-      if (mounted) {
+      if (mounted && dialogShown) {
         try {
           Navigator.of(context, rootNavigator: true).pop();
         } catch (_) {}
+      }
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('导入失败: $e'),
@@ -432,7 +458,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     }
   }
 
-  Future<void> _exportFiles(List<String> ids, String targetDirectory) async {
+  /// 批量导出文件。返回用户最终使用的导出目录
+  /// （用户取消目录选择或导出失败时返回 null；Web 端返回 ''）。
+  Future<String?> _exportFiles(List<String> ids, String targetDirectory) async {
     try {
       String? outputDir;
       if (kIsWeb) {
@@ -441,11 +469,11 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
         if (outputDir == null) {
           outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
-          if (outputDir == null) return;
+          if (outputDir == null) return null;
         }
       }
 
-      if (!mounted) return;
+      if (!mounted) return null;
 
       final records = ref.read(videoRecordsProvider);
       var exportedCount = 0;
@@ -456,21 +484,27 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         if (data == null || data.isEmpty) continue;
 
         final exportName = '${file.name}.${file.format}';
-        final outputPath = p.join(outputDir, exportName);
 
         if (kIsWeb) {
-          await FilePicker.saveFile(
+          final saved = await FilePicker.saveFile(
             dialogTitle: '导出视频',
             fileName: exportName,
             type: FileType.custom,
             allowedExtensions: [file.format],
             bytes: data,
           );
+          // 用户取消保存时不计数
+          if (saved == null) continue;
         } else {
+          final outputPath = p.join(outputDir, exportName);
           await File(outputPath).writeAsBytes(data);
         }
         exportedCount++;
       }
+
+      // Web 端全部保存被取消时返回 null（与原生端取消目录选择一致，
+      // 保持选择模式不退出）
+      if (kIsWeb && exportedCount == 0) return null;
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -480,6 +514,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           ),
         );
       }
+      return outputDir;
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -489,16 +524,19 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           ),
         );
       }
+      return null;
     }
   }
 
-  Future<void> _exportFolders(
+  /// 批量导出文件夹（保留完整文件夹层级，含子文件夹内容）。
+  /// 返回用户最终使用的导出目录（用户取消或失败时返回 null；Web 端返回 ''）。
+  Future<String?> _exportFolders(
     List<String> names,
     String targetDirectory,
   ) async {
     try {
       if (kIsWeb) {
-        if (!mounted) return;
+        if (!mounted) return null;
         final action = await showDialog<String>(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -521,27 +559,37 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           ),
         );
 
-        if (action != 'exportFiles' || !mounted) return;
+        if (action != 'exportFiles' || !mounted) return null;
 
         final records = ref.read(videoRecordsProvider);
         var exportedCount = 0;
         for (final folderName in names) {
-          final folderFiles =
-              records.where((r) => r.folder == folderName).toList();
+          final folderFiles = records
+              .where(
+                (r) =>
+                    r.folder == folderName ||
+                    r.folder.startsWith('$folderName/'),
+              )
+              .toList();
           for (final file in folderFiles) {
             final data = await VideoManifest.readFile(file.storagePath);
             if (data == null || data.isEmpty) continue;
             final exportName = '${file.name}.${file.format}';
-            await FilePicker.saveFile(
+            // 用户取消保存时不计数
+            final saved = await FilePicker.saveFile(
               dialogTitle: '导出视频',
               fileName: exportName,
               type: FileType.custom,
               allowedExtensions: [file.format],
               bytes: data,
             );
+            if (saved == null) continue;
             exportedCount++;
           }
         }
+        // 全部保存被取消时返回 null（保持选择模式不退出），
+        // 且不显示「已导出 0 个文件」提示
+        if (exportedCount == 0) return null;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -550,34 +598,37 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
             ),
           );
         }
-        return;
+        return '';
       }
 
       String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
       if (outputDir == null) {
         outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
-        if (outputDir == null) return;
+        if (outputDir == null) return null;
       }
 
-      if (!mounted) return;
+      if (!mounted) return null;
 
       final records = ref.read(videoRecordsProvider);
       var exportedCount = 0;
 
       for (final folderName in names) {
-        final folderFiles =
-            records.where((r) => r.folder == folderName).toList();
-        if (folderFiles.isEmpty) continue;
-
-        final folderOutputDir = p.join(outputDir, folderName);
-        await Directory(folderOutputDir).create(recursive: true);
+        // 包含所有后代文件夹中的文件，完整保留层级
+        final folderFiles = records
+            .where(
+              (r) =>
+                  r.folder == folderName || r.folder.startsWith('$folderName/'),
+            )
+            .toList();
 
         for (final file in folderFiles) {
           final data = await VideoManifest.readFile(file.storagePath);
           if (data == null || data.isEmpty) continue;
 
           final exportName = '${file.name}.${file.format}';
-          final outputPath = p.join(folderOutputDir, exportName);
+          final fileDir = p.join(outputDir, file.folder);
+          await Directory(fileDir).create(recursive: true);
+          final outputPath = p.join(fileDir, exportName);
           await File(outputPath).writeAsBytes(data);
           exportedCount++;
         }
@@ -591,6 +642,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           ),
         );
       }
+      return outputDir;
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -600,11 +652,12 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           ),
         );
       }
+      return null;
     }
   }
 
-  Future<void> _exportFolder(String folderName) async {
-    await _exportFolders([folderName], '');
+  Future<String?> _exportFolder(String folderName) async {
+    return _exportFolders([folderName], '');
   }
 
   // ====================================================================
@@ -892,27 +945,38 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         await ref.read(videoFolderListProvider.notifier).loadFolders();
       },
       onCopyFile: (id, selectedFolder) async {
-        final source = records.firstWhere((r) => r.id == id);
-        String copyName = '${source.name}_副本';
-        int copyIdx = 2;
-        while (records.any(
-          (r) => r.name == copyName && r.folder == selectedFolder,
-        )) {
-          copyName = '${source.name}_副本 ($copyIdx)';
-          copyIdx++;
+        try {
+          final source = records.firstWhere((r) => r.id == id);
+          String copyName = '${source.name}_副本';
+          int copyIdx = 2;
+          while (records.any(
+            (r) => r.name == copyName && r.folder == selectedFolder,
+          )) {
+            copyName = '${source.name}_副本 ($copyIdx)';
+            copyIdx++;
+          }
+          await VideoManifest.addRecord(
+            VideoRecord(
+              name: copyName,
+              hash: source.hash,
+              format: source.format,
+              createdAt: DateTime.now(),
+              size: source.size,
+              folder: selectedFolder,
+            ),
+          );
+          await ref.read(videoRecordsProvider.notifier).loadRecords();
+          await ref.read(videoFolderListProvider.notifier).loadFolders();
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('复制失败: $e'),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
         }
-        await VideoManifest.addRecord(
-          VideoRecord(
-            name: copyName,
-            hash: source.hash,
-            format: source.format,
-            createdAt: DateTime.now(),
-            size: source.size,
-            folder: selectedFolder,
-          ),
-        );
-        await ref.read(videoRecordsProvider.notifier).loadRecords();
-        await ref.read(videoFolderListProvider.notifier).loadFolders();
       },
       onDeleteFile: (id) async {
         await ref.read(videoRecordsProvider.notifier).deleteRecord(id);
@@ -945,14 +1009,10 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         await ref.read(videoFolderListProvider.notifier).loadFolders();
       },
       onExportFile: _exportFile,
-      onExportFiles: (ids, targetDir) async {
-        await _exportFiles(ids, targetDir);
-      },
-      onExportFolders: (names, targetDir) async {
-        await _exportFolders(names, targetDir);
-      },
+      onExportFiles: _exportFiles,
+      onExportFolders: _exportFolders,
       onExportFolder: (name) async {
-        await _exportFolder(name);
+        return _exportFolder(name);
       },
       onRenameFolder: (oldName, newName) async {
         await ref

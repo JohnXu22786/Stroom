@@ -37,7 +37,6 @@ Widget createComposerTestApp() {
       conversationsProvider.overrideWith((ref) => ConversationsNotifier(ref)),
       activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
       providerEntriesProvider.overrideWith((ref) => ProviderEntriesNotifier()),
-      isStreamingProvider.overrideWith((ref) => false),
     ],
     child: const MaterialApp(
       home: Scaffold(

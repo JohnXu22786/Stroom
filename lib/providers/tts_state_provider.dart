@@ -202,6 +202,15 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
     final parentPath = FileManifest.getParentFolderPath(oldName);
     final newPath = parentPath.isEmpty ? newName : '$parentPath/$newName';
 
+    // 无操作重命名（新路径与原路径相同）：直接返回，
+    // 否则 removeFolder 会删除记录所在文件夹路径，造成数据丢失
+    if (newPath == oldName) return;
+
+    // 目标位置（或其下）已存在同名文件夹：拒绝（防御性，UI 层已阻止），
+    // 避免两个文件夹被静默合并
+    final existing = await FileManifest.getAllFolders();
+    if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
+
     final records = await FileManifest.loadRecords();
 
     // 更新 oldName 本身的记录
@@ -222,6 +231,8 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
           await FileManifest.moveRecord(r.id, newDescPath);
         }
       }
+      // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+      await FileManifest.addFolderPath(newDescPath);
     }
 
     await FileManifest.addFolderPath(newPath);
@@ -234,6 +245,14 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
     FileManifest.invalidateCache();
     final baseName = FileManifest.getFolderBaseName(oldName);
     final newPath = targetFolder.isEmpty ? baseName : '$targetFolder/$baseName';
+
+    // 防止无操作移动（目标为当前位置）或移动到自身/子文件夹：
+    // 否则 removeFolder 会删除记录所在文件夹路径，造成数据丢失
+    if (newPath == oldName || newPath.startsWith('$oldName/')) return;
+
+    // 目标位置（或其下）已存在同名文件夹：拒绝，避免静默合并
+    final existing = await FileManifest.getAllFolders();
+    if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
 
     final records = await FileManifest.loadRecords();
 
@@ -255,6 +274,8 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
           await FileManifest.moveRecord(r.id, newDescPath);
         }
       }
+      // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+      await FileManifest.addFolderPath(newDescPath);
     }
 
     // 更新文件夹缓存
@@ -270,6 +291,16 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
   Future<void> copyFolder(String sourceFolder, String targetFolder) async {
     final baseName = FileManifest.getFolderBaseName(sourceFolder);
     final newPath = targetFolder.isEmpty ? baseName : '$targetFolder/$baseName';
+
+    // 防止复制到自身/子文件夹（或原地复制），避免文件夹内出现
+    // 重复记录与自我嵌套
+    if (newPath == sourceFolder || newPath.startsWith('$sourceFolder/')) {
+      return;
+    }
+
+    // 目标位置（或其下）已存在同名文件夹：拒绝，避免重复复制/合并
+    final existing = await FileManifest.getAllFolders();
+    if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
 
     final records = await FileManifest.loadRecords();
 
@@ -307,6 +338,8 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
           ));
         }
       }
+      // 空子文件夹（无记录）也需要保留在缓存中
+      await FileManifest.addFolderPath(newDescPath);
     }
 
     await FileManifest.addFolderPath(newPath);
