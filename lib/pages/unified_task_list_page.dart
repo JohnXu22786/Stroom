@@ -312,9 +312,14 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                           }
                           for (final e in taskFlowExecutions) {
                             // A running execution must not be removed: the
-                            // engine keeps running and its sub-tasks would
-                            // resurface as orphaned standalone cards. It
-                            // will fail on its own once its tasks are gone.
+                            // engine keeps running and its newly created
+                            // sub-tasks would resurface as orphaned
+                            // standalone cards. Its sub-task tasks were
+                            // removed above, so while a catcatch/tts block
+                            // is polling it fails via 任务丢失; a chat/bg
+                            // block instead completes and the execution
+                            // auto-completes — either way the record stays
+                            // linked and no orphaned cards appear.
                             if (e.status == FlowExecutionStatus.running) {
                               continue;
                             }

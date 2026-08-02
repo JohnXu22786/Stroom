@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -22,6 +24,15 @@ const _videoExts = {
 
 const _audioExts = {'mp3', 'wav', 'm4a', 'aac', 'wma', 'opus', 'flac', 'ogg'};
 
+/// Reads the file and computes its MD5 off the UI isolate — hashing a
+/// multi-GB video on the main isolate would freeze the GUI.
+Future<(Uint8List, String)> _readAndHashInIsolate(String filePath) {
+  return Isolate.run(() {
+    final bytes = File(filePath).readAsBytesSync();
+    return (bytes, md5.convert(bytes).toString());
+  });
+}
+
 Future<void> registerFlowCatCatchOutput(
   String filePath,
   catcatch.CatCatchTask task,
@@ -33,8 +44,7 @@ Future<void> registerFlowCatCatchOutput(
     return;
   }
 
-  final fileBytes = await file.readAsBytes();
-  final contentHash = md5.convert(fileBytes).toString();
+  final (fileBytes, contentHash) = await _readAndHashInIsolate(filePath);
 
   if (_videoExts.contains(ext)) {
     try {
