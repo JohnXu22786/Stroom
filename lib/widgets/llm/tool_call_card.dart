@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/tool_call.dart';
+import '../../services/context_manager.dart'
+    show kCompactedToolResultPlaceholder;
 
 class ToolCallCard extends StatelessWidget {
   final ToolCallData data;
@@ -46,6 +48,19 @@ class ToolCallCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
+              if (data.compactedAt != null)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.blueGrey.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '已压缩',
+                    style: TextStyle(fontSize: 10, color: Colors.blueGrey),
+                  ),
+                ),
               if (data.status == ToolCallStatus.running)
                 SizedBox(
                   width: 14,
@@ -79,7 +94,11 @@ class ToolCallCard extends StatelessWidget {
                 border: Border.all(color: borderColor.withValues(alpha: 0.5)),
               ),
               child: Text(
-                data.result!,
+                // 软删除语义：compacted 后渲染占位符（数据仍保留，
+                // 对齐 opencode TUI 的 [Old tool result content cleared]）
+                data.compactedAt != null
+                    ? kCompactedToolResultPlaceholder
+                    : data.result!,
                 style: TextStyle(
                   fontSize: 12,
                   fontFamily: 'monospace',

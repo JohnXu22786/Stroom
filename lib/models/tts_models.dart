@@ -294,6 +294,11 @@ class ModelConfig {
   Map<String, dynamic> typeConfig;
   String? selectedTrimPresetId;
 
+  /// 端点类型覆盖（'openai' | 'anthropic'）。
+  /// null 表示继承所在供应商的端点类型（默认）。
+  /// v3 原位演进：旧数据缺省 null = 继承，无需迁移步骤。
+  String? endpointType;
+
   ModelConfig({
     required this.name,
     required this.modelId,
@@ -311,6 +316,7 @@ class ModelConfig {
     this.supportInstruction = false,
     this.typeConfig = const {},
     this.selectedTrimPresetId,
+    this.endpointType,
   })  : voices = voices ?? [],
         customParams = customParams ?? [],
         reasoningParams = reasoningParams ?? [];
@@ -332,6 +338,7 @@ class ModelConfig {
         'supportInstruction': supportInstruction,
         'typeConfig': typeConfig,
         'selectedTrimPresetId': selectedTrimPresetId,
+        if (endpointType != null) 'endpointType': endpointType,
       };
 
   factory ModelConfig.fromMap(Map<String, dynamic> map) => ModelConfig(
@@ -363,6 +370,7 @@ class ModelConfig {
         supportInstruction: map['supportInstruction'] == true,
         typeConfig: Map<String, dynamic>.from(map['typeConfig'] as Map? ?? {}),
         selectedTrimPresetId: map['selectedTrimPresetId'] as String?,
+        endpointType: map['endpointType'] as String?,
       );
 
   ModelConfig copy() => ModelConfig(
@@ -382,6 +390,7 @@ class ModelConfig {
         supportInstruction: supportInstruction,
         selectedTrimPresetId: selectedTrimPresetId,
         typeConfig: Map<String, dynamic>.from(typeConfig),
+        endpointType: endpointType,
       );
 }
 
@@ -398,6 +407,10 @@ class ProviderConfigItem {
   List<CustomParam> customParams;
   List<ReasoningParam> reasoningParams;
 
+  /// 端点类型（'openai' | 'anthropic'），该供应商下所有对话统一走此协议。
+  /// 旧配置缺省 'openai'（v3 原位演进，无需迁移步骤）。
+  String endpointType;
+
   ProviderConfigItem({
     this.providerName = '',
     this.host = '',
@@ -406,6 +419,7 @@ class ProviderConfigItem {
     this.typeConfig = const {},
     List<CustomParam>? customParams,
     List<ReasoningParam>? reasoningParams,
+    this.endpointType = 'openai',
   })  : models = models ?? [],
         customParams = customParams ?? [],
         reasoningParams = reasoningParams ?? [];
@@ -418,6 +432,7 @@ class ProviderConfigItem {
         'typeConfig': typeConfig,
         'customParams': customParams.map((p) => p.toMap()).toList(),
         'reasoningParams': reasoningParams.map((p) => p.toMap()).toList(),
+        'endpointType': endpointType,
       };
 
   factory ProviderConfigItem.fromMap(Map<String, dynamic> map) =>
@@ -441,6 +456,7 @@ class ProviderConfigItem {
                     ReasoningParam.fromMap(Map<String, dynamic>.from(e as Map)))
                 .toList() ??
             [],
+        endpointType: map['endpointType'] as String? ?? 'openai',
       );
 
   ProviderConfigItem copy() => ProviderConfigItem(
@@ -451,6 +467,7 @@ class ProviderConfigItem {
         typeConfig: Map<String, dynamic>.from(typeConfig),
         customParams: customParams.map((p) => p.copy()).toList(),
         reasoningParams: reasoningParams.map((p) => p.copy()).toList(),
+        endpointType: endpointType,
       );
 }
 

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 
 import '../models/ai_stream_event.dart';
 
@@ -38,7 +37,6 @@ Map<String, String> get openRouterAppHeaders => {
 /// map, or `null` if the data is not a [ResponseBody].
 ///
 /// Extracted as a top-level function for testability.
-@visibleForTesting
 Future<Map<String, dynamic>?> parseStreamErrorBody(DioException e) async {
   if (e.response?.data is ResponseBody) {
     try {
@@ -77,6 +75,16 @@ abstract class BaseChatProvider {
   String? get lastRequestUrl => null;
   int? get lastResponseStatusCode => null;
 
+  /// 最近一次请求的实际 token 计量（来自 API 返回的 usage 字段）。
+  ///
+  /// 标准化形状：`{'inputTokens': int, 'outputTokens': int}`。
+  /// 流式与非流式都会填充——作为**诊断快照**（与 [lastResponseData]
+  /// 同语义：共享 provider 实例下并发请求可能互相覆盖，仅用于调试）。
+  ///
+  /// ⚠️ 生产计量请使用 [AIStreamEvent.usage]（事件驱动、per-request
+  /// 隔离），不要依赖本槽。
+  Map<String, dynamic>? get lastUsage => null;
+
   /// Dio default headers, exposed for testing.
   Map<String, dynamic> get defaultHeaders => {};
 
@@ -89,6 +97,7 @@ abstract class BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   });
 
   Stream<AIStreamEvent> chatStream(
@@ -101,6 +110,7 @@ abstract class BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   });
 
   Map<String, dynamic> get defaultParams;
