@@ -13,7 +13,6 @@ import 'catcatch/providers/catcatch_provider.dart';
 import 'providers/task_provider.dart';
 import 'providers/background_task_provider.dart';
 import 'providers/notification_provider.dart';
-import 'pages/unified_task_list/task_utils.dart';
 import 'pages/unified_task_list/task_session_tracker.dart';
 import 'task_flow/providers/task_flow_provider.dart';
 import 'task_flow/providers/task_flow_execution_provider.dart';

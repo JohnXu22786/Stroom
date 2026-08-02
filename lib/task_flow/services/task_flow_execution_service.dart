@@ -25,6 +25,10 @@ final taskFlowExecutionServiceProvider = Provider<TaskFlowExecutionService>(
 /// ('catcatch' | 'background' | 'synthesis'). The chat block creates a
 /// [BackgroundTask] (id `chat_<subTaskId>`), so it must map to
 /// 'background' — otherwise the flow card never links to the real task.
+///
+/// Note: executions persisted before chat mapped to 'background' still
+/// carry `subTaskType: 'chat'`; the card's default case renders those
+/// with the fallback card (label + status only, no task link).
 String subTaskTypeFor(BlockType? typeKey) {
   switch (typeKey) {
     case BlockType.catcatch:

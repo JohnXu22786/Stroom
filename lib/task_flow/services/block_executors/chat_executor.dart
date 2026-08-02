@@ -75,6 +75,26 @@ Future<String> executeChatBlock({
     }
 
     final reply = result.fullReply;
+
+    // On a stream error the manager folds the formatted error text into
+    // fullReply (cancelled stays false) — an error reply must fail the
+    // block, not flow on as successful output.
+    if (result.assistantMessage?.isError == true) {
+      failSubTask(
+        bgNotifier,
+        taskId,
+        execNotifier,
+        execId,
+        flowSubTask.id,
+        '对话失败: $reply',
+      );
+      throw BlockExecutionException(
+        '对话失败: $reply',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
+
     bgNotifier.updateStep(taskId, 0, completed: true);
     bgNotifier.setResult(taskId, reply);
 

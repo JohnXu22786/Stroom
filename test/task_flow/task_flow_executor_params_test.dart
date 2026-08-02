@@ -173,5 +173,39 @@ void main() {
       expect(bgNotifier.state[0].status, TaskStatus.failed);
       expect(execNotifier.state[0].subTasks[0].status, TaskStatus.failed);
     });
+
+    test(
+        'fails the sub-task when the stream ends with an error reply '
+        '(error text must not become flow output)', () async {
+      final fakeManager = _FakeChatStreamManager(
+        () async => StreamResult(
+          history: const [],
+          assistantMessage: ChatMessage(
+            role: 'assistant',
+            content: '网络连接失败，请重试',
+            isError: true,
+          ),
+          fullReply: '网络连接失败，请重试',
+        ),
+      );
+
+      await expectLater(
+        executeChatBlock(
+          block: TaskFlowBlock(typeKey: BlockType.chat),
+          def: BlockTypeDefinition.chat,
+          input: '输入',
+          execId: execId,
+          execNotifier: execNotifier,
+          flowSubTask: flowSubTask,
+          bgNotifier: bgNotifier,
+          chatManager: fakeManager,
+        ),
+        throwsA(isA<BlockExecutionException>()),
+      );
+
+      expect(bgNotifier.state[0].status, TaskStatus.failed);
+      expect(execNotifier.state[0].subTasks[0].status, TaskStatus.failed);
+      expect(execNotifier.state[0].status, FlowExecutionStatus.failed);
+    });
   });
 }

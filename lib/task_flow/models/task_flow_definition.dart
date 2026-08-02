@@ -86,7 +86,8 @@ class TaskFlowBlock {
           mapEquals(params, other.params);
 
   @override
-  int get hashCode => Object.hash(id, typeKey, Object.hashAll(params.entries));
+  int get hashCode =>
+      Object.hash(id, typeKey, Object.hashAllUnordered(params.entries));
 }
 
 // ============================================================================
