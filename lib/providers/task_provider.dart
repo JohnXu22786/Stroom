@@ -90,6 +90,14 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       if (task.customParams != null) {
         params.addAll(task.customParams!);
       }
+      // customParams values are String-typed (flow blocks stringify
+      // numbers); the API contract for speed is numeric, so coerce it
+      // back instead of sending "speed": "1.0" as a JSON string, which
+      // strict TTS servers reject with 400.
+      final speedParam = task.customParams?['speed'];
+      if (speedParam != null) {
+        params['speed'] = double.tryParse(speedParam) ?? synthConfig.speed;
+      }
       // Parse JSON-type custom param values from string to actual JSON
       // objects/arrays so they are sent as raw JSON, not quoted strings.
       parseJsonCustomParams(params, task.modelConfig);
