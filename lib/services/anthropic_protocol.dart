@@ -94,11 +94,14 @@ class AnthropicProtocol implements ChatProtocol {
               // Anthropic document 块官方仅支持 application/pdf：
               // 其他二进制类型（docx/xlsx/zip 等）走 document 块会被
               // API 以 400 拒绝整条请求，降级为占位文本。
+              // media_type 固定 application/pdf：文件名判定的 PDF
+              // 可能携带错误 mimeType（picker 标为 octet-stream），
+              // 发真实 mimeType 同样会被 400。
               parts.add({
                 'type': 'document',
                 'source': {
                   'type': 'base64',
-                  'media_type': att.mimeType,
+                  'media_type': 'application/pdf',
                   'data': outcome.base64,
                 },
                 'title': att.fileName,
@@ -142,7 +145,8 @@ class AnthropicProtocol implements ChatProtocol {
                   'type': 'document',
                   'source': {
                     'type': 'base64',
-                    'media_type': att.mimeType,
+                    // 同上方：文件名判定为 PDF 时固定 application/pdf
+                    'media_type': 'application/pdf',
                     'data': outcome.base64,
                   },
                   'title': att.fileName,

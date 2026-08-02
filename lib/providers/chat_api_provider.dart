@@ -391,7 +391,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           final usage = normalizeUsage(data['usage']);
           if (usage != null) {
             localUsage ??= {};
-            localUsage!.addAll(usage);
+            localUsage.addAll(usage);
           }
 
           // Parse the stream event using the static helper method

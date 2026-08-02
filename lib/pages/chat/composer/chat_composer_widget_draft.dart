@@ -184,6 +184,16 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
                     final text = editingController.text;
                     editingController.dispose();
                     Navigator.pop(ctx);
+                    // 流式守卫（_handleSubmitted 内）可能提前 return：
+                    // 先把对话框文本回写主输入框，守卫拦截时不丢输入
+                    // （否则用户刚编辑的文本永久丢失，保留的是打开
+                    // 对话框前的旧文本）。程序化赋值不触发 onChanged，
+                    // 需显式调用 _onTextChanged（与关闭按钮路径一致）
+                    // 以调度防抖草稿保存。
+                    if (_textController.text != text) {
+                      _textController.text = text;
+                      _onTextChanged(text);
+                    }
                     _handleSubmitted(text);
                   },
                 ),

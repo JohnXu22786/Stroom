@@ -293,7 +293,8 @@ class Conversation {
       lastUsedModelName: lastUsedModel,
       lastInputTokens: lastInputRaw is num ? lastInputRaw.toInt() : null,
       lastOutputTokens: lastOutputRaw is num ? lastOutputRaw.toInt() : null,
-      totalCost: (map['totalCost'] as num?)?.toDouble() ?? 0,
+      totalCost:
+          (map['totalCost'] is num) ? (map['totalCost'] as num).toDouble() : 0,
     );
   }
 

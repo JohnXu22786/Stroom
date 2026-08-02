@@ -13,8 +13,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Creates a new conversation with an empty title, adds it to the list,
   /// and sets it as the active conversation.
   ///
-  /// 不在此处持久化（避免与后续 updateMessages 的持久化竞争），
-  /// 由 chat_provider 的 listener 负责持久化带消息的状态。
+  /// 立即持久化（_persistNow）：空对话在未发消息前被杀进程即永久丢失；
+  /// _persistCore 的 _loadHasRun 守卫保证启动窗口内不覆写磁盘，
+  /// _load 完成时会把内存新对话合并落盘。
   String createConversation({String? assistantId}) {
     final now = DateTime.now();
     final conv = Conversation(

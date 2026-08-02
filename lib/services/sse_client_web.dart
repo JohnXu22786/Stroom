@@ -118,6 +118,10 @@ Stream<String> sseStream(
       controller.close();
       progressSub.cancel();
       errorSub.cancel();
+      // 错误分支同样清理周期 Timer 与 readyStateSub（controller 已
+      // close 后 Timer 的自取消条件永不成立，4xx/5xx 会泄漏定时器）
+      cancelCheckTimer?.cancel();
+      readyStateSub.cancel();
       xhr.abort();
       return;
     }
@@ -153,6 +157,10 @@ Stream<String> sseStream(
 
   cancelToken?.whenCancel.then((_) {
     if (!controller.isClosed) {
+      // whenCancel 关闭 controller 后，周期 Timer 的自取消条件
+      // （isCancelled && !isClosed）永不成立，必须在此显式取消——
+      // 否则每次用户点停止都泄漏一个 500ms 周期 Timer。
+      cancelCheckTimer?.cancel();
       cleanupSubs();
       xhr.abort();
       controller.close();
@@ -291,6 +299,10 @@ Stream<SseFrame> sseEventStream(
       controller.close();
       progressSub.cancel();
       errorSub.cancel();
+      // 错误分支同样清理周期 Timer 与 readyStateSub（controller 已
+      // close 后 Timer 的自取消条件永不成立，4xx/5xx 会泄漏定时器）
+      cancelCheckTimer?.cancel();
+      readyStateSub.cancel();
       xhr.abort();
       return;
     }
@@ -319,6 +331,10 @@ Stream<SseFrame> sseEventStream(
 
   cancelToken?.whenCancel.then((_) {
     if (!controller.isClosed) {
+      // whenCancel 关闭 controller 后，周期 Timer 的自取消条件
+      // （isCancelled && !isClosed）永不成立，必须在此显式取消——
+      // 否则每次用户点停止都泄漏一个 500ms 周期 Timer。
+      cancelCheckTimer?.cancel();
       cleanupSubs();
       xhr.abort();
       controller.close();
@@ -391,9 +407,6 @@ Stream<String> sseConnect(
     }
   });
 
-  // 取消轮询 Timer（声明提前：loadEnd 正常完成路径也需要清理它）
-  Timer? cancelCheckTimer;
-
   final loadEndSub = xhr.onLoadEnd.listen((_) {
     if (onResponseHeaders != null && xhr.status != 0) {
       final headerMap = <String, List<String>>{};
@@ -421,8 +434,6 @@ Stream<String> sseConnect(
     if (!controller.isClosed) controller.close();
     progressSub.cancel();
     errorSub.cancel();
-    // 正常完成路径显式清理轮询 Timer（同 sseStream/sseEventStream）
-    cancelCheckTimer?.cancel();
     xhr.abort();
   });
 

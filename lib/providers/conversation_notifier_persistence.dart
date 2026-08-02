@@ -18,6 +18,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   // --------------------------------------------------------------------------
 
   Future<void> _load() async {
+    // 启动窗口内用户创建了新对话（合并进内存）时，_load 完成后
+    // 需要把合并结果落盘（见 finally）：否则"下次持久化前退出"
+    // 会丢失新对话。
+    var hadInMemoryMerge = false;
     try {
       final prefs = await SharedPreferences.getInstance();
       final json = prefs.getString('conversations');
@@ -49,6 +53,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 final extra =
                     inMemory.where((c) => !diskIds.contains(c.id)).toList();
                 state = [...conversations, ...extra];
+                hadInMemoryMerge = true;
               } else {
                 state = conversations;
               }
@@ -58,6 +63,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           } else {
             // 磁盘数据无效：内存已有对话（用户刚创建）时保留内存
             if (mounted && state.isEmpty) state = [];
+            // 磁盘不可用但内存有新对话：标记合并，finally 落盘
+            // （否则启动窗口内创建的新对话在下次持久化前退出会丢失）
+            if (mounted && state.isNotEmpty) hadInMemoryMerge = true;
             await AppLogService.info('ConversationsNotifier', '对话数据格式无效');
           }
         } catch (e) {
@@ -68,10 +76,12 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           await _backupCorruptConversationsFile(prefs, json);
           // 磁盘损坏：内存已有对话（用户刚创建）时保留内存
           if (mounted && state.isEmpty) state = [];
+          if (mounted && state.isNotEmpty) hadInMemoryMerge = true;
         }
       } else {
         // 无已保存数据：内存已有对话时保留内存
         if (mounted && state.isEmpty) state = [];
+        if (mounted && state.isNotEmpty) hadInMemoryMerge = true;
         await AppLogService.info('ConversationsNotifier', '没有已保存的对话');
       }
 
@@ -121,6 +131,12 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       // _persist (with empty state) doesn't write an empty list over the
       // previous good save before _load completes.
       _loadHasRun = true;
+      // 启动窗口内用户创建的新对话已合并进内存：立即落盘
+      // （_loadHasRun 已置位，_persistCore 守卫放行），防止
+      // "下次持久化前退出"丢失新对话。
+      if (hadInMemoryMerge && mounted) {
+        unawaited(_persistCore());
+      }
     }
   }
 
@@ -219,7 +235,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       // can do — the previous good save is still on disk.
       return;
     }
-    if (snapshot.isEmpty && !_loadHasRun) return;
+    if (!_loadHasRun) return;
     SharedPreferences? prefs;
     try {
       prefs = await SharedPreferences.getInstance();

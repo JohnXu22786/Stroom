@@ -435,9 +435,13 @@ extension ChatServiceStreamingExt on ChatService {
     _streamSubscription = null;
     // 完成当前工具轮次的等待：真实 provider 在订阅取消后不会送达
     // onDone/onError，不完成则 sendStreamWithTools 的工具循环永久挂起
-    // （详见 _roundCompleter 字段注释）。
-    _roundCompleter?.complete();
+    // （详见 _roundCompleter 字段注释）。带 isCompleted 守卫与
+    // onDone/onError 风格一致。
+    final roundCompleter = _roundCompleter;
     _roundCompleter = null;
+    if (roundCompleter != null && !roundCompleter.isCompleted) {
+      roundCompleter.complete();
+    }
     if (_controller != null && !_controller!.isClosed) {
       _controller!.close();
     }
