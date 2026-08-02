@@ -131,8 +131,8 @@ void main() {
         script.matchesUrl('https://example.com/redirect?to=http://x'),
         isTrue,
       );
-      expect(script.matchesUrl('https://other.com/redirect?to=http://x'),
-          isFalse);
+      expect(
+          script.matchesUrl('https://other.com/redirect?to=http://x'), isFalse);
     });
 
     test('userinfo in the pattern is ignored', () {

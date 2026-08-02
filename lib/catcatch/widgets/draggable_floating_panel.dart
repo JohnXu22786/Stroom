@@ -432,8 +432,8 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
     // The list may have shrunk since the selection was made (page
     // navigated, detection reset) — never index out of bounds.
     final selectedIndex = _selectedIndex;
-    final hasSelection = selectedIndex != null &&
-        selectedIndex < widget.detectedUrls.length;
+    final hasSelection =
+        selectedIndex != null && selectedIndex < widget.detectedUrls.length;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),

@@ -153,8 +153,7 @@ class UserScript {
     final urlPathAndQuery = '${urlUri.path.isEmpty ? '/' : urlUri.path}'
         '${urlUri.hasQuery ? '?${urlUri.query}' : ''}';
     // The path is matched case-sensitively (Chrome semantics).
-    return RegExp(globToRegex(pathPat, host: false))
-        .hasMatch(urlPathAndQuery);
+    return RegExp(globToRegex(pathPat, host: false)).hasMatch(urlPathAndQuery);
   }
 }
 
@@ -311,9 +310,7 @@ class _BrowserPageState extends State<BrowserPage> {
   void _safeEvaluate(String source) {
     final controller = _webViewController;
     if (controller == null) return;
-    controller
-        .evaluateJavascript(source: source)
-        .catchError((Object e) {
+    controller.evaluateJavascript(source: source).catchError((Object e) {
       debugPrint('[BrowserPage] evaluateJavascript error: $e');
     });
   }
@@ -420,8 +417,8 @@ class _BrowserPageState extends State<BrowserPage> {
         ? MediaQuery.sizeOf(context)
         : _panelAreaSize;
     return Offset(
-      _panelOffset.dx.clamp(
-          0.0, max(0.0, size.width - DraggableFloatingPanel.panelWidth)),
+      _panelOffset.dx
+          .clamp(0.0, max(0.0, size.width - DraggableFloatingPanel.panelWidth)),
       _panelOffset.dy.clamp(0.0, max(0.0, size.height - 48)),
     );
   }
@@ -472,79 +469,79 @@ class _BrowserPageState extends State<BrowserPage> {
             children: [
               // --- WebView + Loading ---
               Column(
-            children: [
-              if (_isLoading && _progress < 1.0)
-                LinearProgressIndicator(value: _progress),
-              Expanded(
-                child: InAppWebView(
-                  // The initial page is loaded explicitly in onWebViewCreated
-                  // AFTER persisted cookies are restored, so the first request
-                  // carries them (restore no-ops when retention is disabled).
-                  initialUrlRequest: null,
-                  initialSettings:
-                      _buildSettings(isDesktopMode: _isDesktopMode),
-                  onWebViewCreated: (controller) async {
-                    _webViewController = controller;
+                children: [
+                  if (_isLoading && _progress < 1.0)
+                    LinearProgressIndicator(value: _progress),
+                  Expanded(
+                    child: InAppWebView(
+                      // The initial page is loaded explicitly in onWebViewCreated
+                      // AFTER persisted cookies are restored, so the first request
+                      // carries them (restore no-ops when retention is disabled).
+                      initialUrlRequest: null,
+                      initialSettings:
+                          _buildSettings(isDesktopMode: _isDesktopMode),
+                      onWebViewCreated: (controller) async {
+                        _webViewController = controller;
 
-                    // Register JavaScript handler for CatCatchChannel
-                    controller.addJavaScriptHandler(
-                      handlerName: 'CatCatchChannel',
-                      callback: (args) {
-                        if (args.isNotEmpty && args.first is String) {
-                          _onCatCatchMessage(args.first as String);
+                        // Register JavaScript handler for CatCatchChannel
+                        controller.addJavaScriptHandler(
+                          handlerName: 'CatCatchChannel',
+                          callback: (args) {
+                            if (args.isNotEmpty && args.first is String) {
+                              _onCatCatchMessage(args.first as String);
+                            }
+                          },
+                        );
+
+                        // Restore persisted cookies before the first page load.
+                        // A restore failure must not block the initial
+                        // navigation (restore itself already no-ops when
+                        // retention is disabled).
+                        try {
+                          await _restoreCookies();
+                        } catch (e) {
+                          debugPrint('[BrowserPage] cookie restore failed: $e');
+                        }
+                        if (!mounted) return;
+                        try {
+                          await controller.loadUrl(
+                            urlRequest:
+                                URLRequest(url: WebUri(widget.initialUrl)),
+                          );
+                        } catch (e) {
+                          debugPrint('[BrowserPage] initial load failed: $e');
                         }
                       },
-                    );
-
-                    // Restore persisted cookies before the first page load.
-                    // A restore failure must not block the initial
-                    // navigation (restore itself already no-ops when
-                    // retention is disabled).
-                    try {
-                      await _restoreCookies();
-                    } catch (e) {
-                      debugPrint('[BrowserPage] cookie restore failed: $e');
-                    }
-                    if (!mounted) return;
-                    try {
-                      await controller.loadUrl(
-                        urlRequest:
-                            URLRequest(url: WebUri(widget.initialUrl)),
-                      );
-                    } catch (e) {
-                      debugPrint('[BrowserPage] initial load failed: $e');
-                    }
-                  },
-                  onLoadStart: (controller, url) {
-                    final urlString = url.toString();
-                    setState(() {
-                      _isLoading = true;
-                      _progress = 0;
-                    });
-                    _currentUrl = urlString;
-                    _urlController.text = urlString;
-                    // Reset detection for new page
-                    _resetDetection();
-                    // Inject cat-catch hook as early as possible
-                    _injectCatCatchHook(urlString);
-                  },
-                  onLoadStop: (controller, url) {
-                    setState(() => _isLoading = false);
-                    _currentUrl = url.toString();
-                    // Track the host so cookies can be persisted/displayed
-                    // even on platforms without CookieManager.getAllCookies.
-                    BrowserCookieService.noteVisitedUrl(url.toString());
-                    _injectScripts();
-                    // Re-inject cat-catch hook if somehow missed or if an
-                    // earlier injection was for a previous page
-                    if (!_catCatchHookInjected ||
-                        _catCatchHookInjectedFor != url.toString()) {
-                      _injectCatCatchHook(url.toString());
-                    }
-                    // Persist cookies after page load (if retention enabled)
-                    _persistCookies();
-                    // Also run a DOM scan after page load
-                    _safeEvaluate('''
+                      onLoadStart: (controller, url) {
+                        final urlString = url.toString();
+                        setState(() {
+                          _isLoading = true;
+                          _progress = 0;
+                        });
+                        _currentUrl = urlString;
+                        _urlController.text = urlString;
+                        // Reset detection for new page
+                        _resetDetection();
+                        // Inject cat-catch hook as early as possible
+                        _injectCatCatchHook(urlString);
+                      },
+                      onLoadStop: (controller, url) {
+                        setState(() => _isLoading = false);
+                        _currentUrl = url.toString();
+                        // Track the host so cookies can be persisted/displayed
+                        // even on platforms without CookieManager.getAllCookies.
+                        BrowserCookieService.noteVisitedUrl(url.toString());
+                        _injectScripts();
+                        // Re-inject cat-catch hook if somehow missed or if an
+                        // earlier injection was for a previous page
+                        if (!_catCatchHookInjected ||
+                            _catCatchHookInjectedFor != url.toString()) {
+                          _injectCatCatchHook(url.toString());
+                        }
+                        // Persist cookies after page load (if retention enabled)
+                        _persistCookies();
+                        // Also run a DOM scan after page load
+                        _safeEvaluate('''
 (function() {
   document.querySelectorAll('video, audio').forEach(function(el) {
     var src = el.currentSrc || el.src || '';
@@ -559,62 +556,66 @@ class _BrowserPageState extends State<BrowserPage> {
   });
 })();
 ''');
-                  },
-                  onProgressChanged: (controller, progress) {
-                    setState(() => _progress = progress / 100.0);
-                  },
-                ),
+                      },
+                      onProgressChanged: (controller, progress) {
+                        setState(() => _progress = progress / 100.0);
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
 
-          // --- Draggable Floating Panel ---
-          // Positioned by the parent (BrowserPage) rather than internally
-          // by the panel itself. This avoids the panel creating a full-screen
-          // compositing layer (Stack + IgnorePointer + SizedBox.expand())
-          // that interferes with the WebView's platform-level event routing.
-          // The panel now only renders within its own natural content bounds.
-          if (_catCatchPanelVisible)
-            Positioned(
-              // Clamp on every build (not only while dragging) so the panel
-              // can never be lost off-screen, including after rotation or
-              // window resize.
-              left: _clampedPanelOffset().dx,
-              top: _clampedPanelOffset().dy,
-              child: DraggableFloatingPanel(
-                key: const ValueKey('catcatch_panel'),
-                visible: true,
-                detectionEpoch: _detectionEpoch,
-                detectedUrls: _detectedUrls,
-                onConfirmCapture: _onConfirmCapture,
-                onClose: () {
-                  setState(() {
-                    _catCatchPanelVisible = false;
-                    _detectedUrls.clear();
-                  });
-                },
-                onDragUpdate: (delta) {
-                  // Start from the RENDERED (clamped) offset and clamp again
-                  // with the same bounds used at render time. This keeps the
-                  // stored offset free of overshoot AND avoids a dead zone
-                  // when the window shrinks (rotation/resize) while the
-                  // stored offset is stale beyond the new bounds.
-                  final size = _panelAreaSize == Size.zero
-                      ? MediaQuery.sizeOf(context)
-                      : _panelAreaSize;
-                  final current = _clampedPanelOffset();
-                  setState(() {
-                    _panelOffset = Offset(
-                      (current.dx + delta.dx).clamp(0.0,
-                          max(0.0, size.width - DraggableFloatingPanel.panelWidth)),
-                      (current.dy + delta.dy)
-                          .clamp(0.0, max(0.0, size.height - 48)),
-                    );
-                  });
-                },
-              ),
-            ),
-          ],
+              // --- Draggable Floating Panel ---
+              // Positioned by the parent (BrowserPage) rather than internally
+              // by the panel itself. This avoids the panel creating a full-screen
+              // compositing layer (Stack + IgnorePointer + SizedBox.expand())
+              // that interferes with the WebView's platform-level event routing.
+              // The panel now only renders within its own natural content bounds.
+              if (_catCatchPanelVisible)
+                Positioned(
+                  // Clamp on every build (not only while dragging) so the panel
+                  // can never be lost off-screen, including after rotation or
+                  // window resize.
+                  left: _clampedPanelOffset().dx,
+                  top: _clampedPanelOffset().dy,
+                  child: DraggableFloatingPanel(
+                    key: const ValueKey('catcatch_panel'),
+                    visible: true,
+                    detectionEpoch: _detectionEpoch,
+                    detectedUrls: _detectedUrls,
+                    onConfirmCapture: _onConfirmCapture,
+                    onClose: () {
+                      setState(() {
+                        _catCatchPanelVisible = false;
+                        _detectedUrls.clear();
+                      });
+                    },
+                    onDragUpdate: (delta) {
+                      // Start from the RENDERED (clamped) offset and clamp again
+                      // with the same bounds used at render time. This keeps the
+                      // stored offset free of overshoot AND avoids a dead zone
+                      // when the window shrinks (rotation/resize) while the
+                      // stored offset is stale beyond the new bounds.
+                      final size = _panelAreaSize == Size.zero
+                          ? MediaQuery.sizeOf(context)
+                          : _panelAreaSize;
+                      final current = _clampedPanelOffset();
+                      setState(() {
+                        _panelOffset = Offset(
+                          (current.dx + delta.dx).clamp(
+                              0.0,
+                              max(
+                                  0.0,
+                                  size.width -
+                                      DraggableFloatingPanel.panelWidth)),
+                          (current.dy + delta.dy)
+                              .clamp(0.0, max(0.0, size.height - 48)),
+                        );
+                      });
+                    },
+                  ),
+                ),
+            ],
           );
         },
       ),
@@ -634,73 +635,73 @@ class _BrowserPageState extends State<BrowserPage> {
               icon: const Icon(Icons.refresh),
               onPressed: () => _webViewController?.reload(),
             ),
-              // Desktop / Mobile UA toggle
-              IconButton(
-                icon: Icon(
-                  _isDesktopMode ? Icons.phone_android : Icons.desktop_windows,
-                  size: 20,
-                ),
-                tooltip: _isDesktopMode ? '切换到手机版' : '切换到电脑版',
-                onPressed: () async {
-                  final controller = _webViewController;
-                  if (controller == null) return;
-                  final messenger = ScaffoldMessenger.of(context);
-                  setState(() {
-                    _isDesktopMode = !_isDesktopMode;
-                  });
-                  // Apply all mode-appropriate settings atomically before
-                  // reloading. This ensures useWideViewPort,
-                  // loadWithOverviewMode, and userAgent are all consistent
-                  // with the selected mode when the page starts loading.
-                  try {
-                    await controller.setSettings(
-                      settings: _buildSettings(isDesktopMode: _isDesktopMode),
-                    );
-                    controller.reload();
-                  } catch (e) {
-                    debugPrint('[BrowserPage] UA switch failed: $e');
-                    if (mounted) {
-                      setState(() => _isDesktopMode = !_isDesktopMode);
-                    }
-                    return;
+            // Desktop / Mobile UA toggle
+            IconButton(
+              icon: Icon(
+                _isDesktopMode ? Icons.phone_android : Icons.desktop_windows,
+                size: 20,
+              ),
+              tooltip: _isDesktopMode ? '切换到手机版' : '切换到电脑版',
+              onPressed: () async {
+                final controller = _webViewController;
+                if (controller == null) return;
+                final messenger = ScaffoldMessenger.of(context);
+                setState(() {
+                  _isDesktopMode = !_isDesktopMode;
+                });
+                // Apply all mode-appropriate settings atomically before
+                // reloading. This ensures useWideViewPort,
+                // loadWithOverviewMode, and userAgent are all consistent
+                // with the selected mode when the page starts loading.
+                try {
+                  await controller.setSettings(
+                    settings: _buildSettings(isDesktopMode: _isDesktopMode),
+                  );
+                  controller.reload();
+                } catch (e) {
+                  debugPrint('[BrowserPage] UA switch failed: $e');
+                  if (mounted) {
+                    setState(() => _isDesktopMode = !_isDesktopMode);
                   }
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        _isDesktopMode ? '已切换到电脑版UA' : '已切换到手机版UA',
-                      ),
-                      duration: const Duration(seconds: 1),
+                  return;
+                }
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      _isDesktopMode ? '已切换到电脑版UA' : '已切换到手机版UA',
                     ),
-                  );
-                },
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
+              },
+            ),
+            // Cookie retention toggle
+            IconButton(
+              icon: Icon(
+                Icons.cookie,
+                color: _cookieRetentionEnabled
+                    ? Colors.orange
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
-              // Cookie retention toggle
-              IconButton(
-                icon: Icon(
-                  Icons.cookie,
-                  color: _cookieRetentionEnabled
-                      ? Colors.orange
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-                tooltip: _cookieRetentionEnabled
-                    ? 'Cookies持久化(已开启)'
-                    : 'Cookies持久化(已关闭)',
-                onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  final newValue =
-                      await BrowserCookieService.toggleRetentionMode();
-                  if (!mounted) return;
-                  setState(() => _cookieRetentionEnabled = newValue);
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        newValue ? '已启用Cookies持久化' : '已关闭Cookies持久化',
-                      ),
-                      duration: const Duration(seconds: 1),
+              tooltip: _cookieRetentionEnabled
+                  ? 'Cookies持久化(已开启)'
+                  : 'Cookies持久化(已关闭)',
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                final newValue =
+                    await BrowserCookieService.toggleRetentionMode();
+                if (!mounted) return;
+                setState(() => _cookieRetentionEnabled = newValue);
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      newValue ? '已启用Cookies持久化' : '已关闭Cookies持久化',
                     ),
-                  );
-                },
-              ),
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
+              },
+            ),
             // CatCatch panel show/hide toggle
             IconButton(
               icon: SvgPicture.asset(

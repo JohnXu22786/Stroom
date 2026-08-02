@@ -35,8 +35,8 @@ void main() {
 
     test('strips the port from the recorded host', () async {
       BrowserCookieService.noteVisitedUrl('https://example.com:8080/page');
-      expect(BrowserCookieService.visitedDomainsForTest,
-          contains('example.com'));
+      expect(
+          BrowserCookieService.visitedDomainsForTest, contains('example.com'));
     });
 
     test('deduplicates repeated visits', () async {

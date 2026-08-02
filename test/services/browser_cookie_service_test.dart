@@ -79,7 +79,8 @@ class _FakeCookiePlatform implements CookiePlatform {
   @override
   Future<bool> deleteCookies(
       {required WebUri url, String path = '/', String? domain}) async {
-    deleteCookiesCalls.add({'url': url.toString(), 'path': path, 'domain': domain});
+    deleteCookiesCalls
+        .add({'url': url.toString(), 'path': path, 'domain': domain});
     return true;
   }
 
@@ -340,9 +341,7 @@ void main() {
       expect(ok, isTrue);
 
       final cookies = await BrowserCookieService.getCookiesFromFile();
-      final paths = cookies['example.com']!
-          .map((c) => c['path'])
-          .toList();
+      final paths = cookies['example.com']!.map((c) => c['path']).toList();
       expect(paths, ['/']);
     });
 
@@ -371,8 +370,7 @@ void main() {
       await BrowserCookieService.deleteCookie('example.com', 'session');
 
       final cookies = await BrowserCookieService.getCookiesFromFile();
-      final names =
-          cookies['example.com']!.map((c) => c['name']).toList();
+      final names = cookies['example.com']!.map((c) => c['name']).toList();
       expect(names, ['other']);
     });
 
@@ -430,8 +428,8 @@ void main() {
         },
       ]);
 
-      final ok = await BrowserCookieService.clearCookiesForDomain(
-          '.example.com');
+      final ok =
+          await BrowserCookieService.clearCookiesForDomain('.example.com');
       expect(ok, isTrue);
 
       final cookies = await BrowserCookieService.getCookiesFromFile();
@@ -614,8 +612,7 @@ void main() {
 
       await BrowserCookieService.restoreCookiesFromFile();
 
-      final names =
-          fake.setCookieCalls.map((c) => c['name']).toList();
+      final names = fake.setCookieCalls.map((c) => c['name']).toList();
       expect(
           names, containsAll(['domain_cookie', 'host_cookie', 'empty_value']));
       expect(names, isNot(contains('no_value')));
@@ -623,8 +620,8 @@ void main() {
 
       // Leading-dot domain keeps the Domain attribute; host-only cookies are
       // restored without one.
-      final domainCall = fake.setCookieCalls
-          .firstWhere((c) => c['name'] == 'domain_cookie');
+      final domainCall =
+          fake.setCookieCalls.firstWhere((c) => c['name'] == 'domain_cookie');
       expect(domainCall['domain'], '.example.com');
       expect(domainCall['path'], '/api');
       expect(domainCall['url'], 'https://example.com');
@@ -653,7 +650,8 @@ void main() {
 
       BrowserCookieService.noteVisitedUrl('https://new-site.com/');
       fake.perUrlCookies['https://new-site.com'] = [
-        Cookie(name: 'session', value: 'abc', domain: 'new-site.com', path: '/'),
+        Cookie(
+            name: 'session', value: 'abc', domain: 'new-site.com', path: '/'),
       ];
 
       await BrowserCookieService.persistCookiesToFile();
@@ -665,7 +663,8 @@ void main() {
           reason: 'domains not visited this session must not be dropped');
     });
 
-    test('authoritative snapshot replaces the file (deleted cookies stay deleted)',
+    test(
+        'authoritative snapshot replaces the file (deleted cookies stay deleted)',
         () async {
       // getAllCookies succeeded → the snapshot is complete; file entries
       // for cookies the site deleted or that expired must NOT resurface.
@@ -792,12 +791,14 @@ void main() {
       final combos = fake.deleteCookiesCalls
           .map((c) => '${c['url']}|${c['domain']}')
           .toList();
-      expect(combos, containsAll([
-        'https://example.com|null',
-        'https://example.com|.example.com',
-        'http://example.com|null',
-        'http://example.com|.example.com',
-      ]));
+      expect(
+          combos,
+          containsAll([
+            'https://example.com|null',
+            'https://example.com|.example.com',
+            'http://example.com|null',
+            'http://example.com|.example.com',
+          ]));
     });
   });
 }

@@ -305,8 +305,8 @@ class BrowserCookieService {
       List<Map<String, dynamic>> out) async {
     await Future.wait(_visitedDomains.map((host) async {
       try {
-        final cookies = await cookiePlatform
-            .getCookies(url: WebUri('https://$host'));
+        final cookies =
+            await cookiePlatform.getCookies(url: WebUri('https://$host'));
         for (final cookie in cookies) {
           final map = _cookieToMap(cookie);
           if (map['domain'] == null) map['domain'] = host;
@@ -459,8 +459,8 @@ class BrowserCookieService {
                 expiresDate: m['expiresDate'] as int?,
                 isSecure: m['isSecure'] as bool?,
                 isHttpOnly: m['isHttpOnly'] as bool?,
-                sameSite: HTTPCookieSameSitePolicy.fromNativeValue(
-                    m['sameSite']),
+                sameSite:
+                    HTTPCookieSameSitePolicy.fromNativeValue(m['sameSite']),
               ))
           .toList();
       return (cookies: cookies, complete: false);
@@ -493,8 +493,7 @@ class BrowserCookieService {
   /// Platform (override) data wins so freshly-read cookies replace
   /// stale file entries.
   static List<Map<String, dynamic>> _mergeCookies(
-      List<Map<String, dynamic>> base,
-      List<Map<String, dynamic>> override) {
+      List<Map<String, dynamic>> base, List<Map<String, dynamic>> override) {
     String keyOf(Map<String, dynamic> cookie) {
       final domain = cookie['domain'];
       final name = cookie['name'];
@@ -523,8 +522,7 @@ class BrowserCookieService {
       return;
     }
     final path = await _cookiesFilePath;
-    final tmpPath =
-        '$path.tmp-${DateTime.now().microsecondsSinceEpoch}';
+    final tmpPath = '$path.tmp-${DateTime.now().microsecondsSinceEpoch}';
     await File(tmpPath).writeAsString(jsonEncode(cookies));
     await File(tmpPath).rename(path);
   }
@@ -639,7 +637,8 @@ abstract class CookiePlatform {
   });
 
   /// Deletes all cookies for the URL (optionally constrained by domain).
-  Future<bool> deleteCookies({required WebUri url, String path, String? domain});
+  Future<bool> deleteCookies(
+      {required WebUri url, String path, String? domain});
 
   /// Deletes every cookie in the platform store.
   Future<bool> deleteAllCookies();

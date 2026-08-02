@@ -207,7 +207,8 @@ void main() {
   // ====================================================================
 
   group('Domain cookie deletion', () {
-    testWidgets('delete domain cookies removes the domain card', (tester) async {
+    testWidgets('delete domain cookies removes the domain card',
+        (tester) async {
       await BrowserCookieService.persistCookiesRawForTest([
         {
           'domain': 'example.com',

@@ -400,4 +400,3 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
     return '${value.substring(0, 3)}...${value.substring(value.length - 3)}';
   }
 }
-
