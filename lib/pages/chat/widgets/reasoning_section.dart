@@ -3,19 +3,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:stroom/providers/chat_stream_provider.dart';
+import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
 import '../chat_types.dart';
 
 /// Data model for the reasoning sections to display.
 /// [texts] is a list of reasoning chain texts, one per reasoning round.
 /// [streaming] indicates whether the last section is still being streamed.
+/// [sectionIndices] maps each text to its section index for the panel
+/// dialog. Must have same length as [texts]. Defaults to [0,1,2,...].
 class ReasoningSectionData {
   final List<String> texts;
   final bool streaming;
+  final List<int> sectionIndices;
 
   const ReasoningSectionData({
     required this.texts,
     this.streaming = false,
+    this.sectionIndices = const [],
   });
 
   bool get isEmpty => texts.isEmpty;
@@ -44,25 +49,30 @@ class ReasoningSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (sections.isEmpty) return const SizedBox.shrink();
 
+    final children = <Widget>[];
+    for (int i = 0; i < sections.texts.length; i++) {
+      final sectionIdx = sections.sectionIndices.length == sections.texts.length
+          ? sections.sectionIndices[i]
+          : i;
+      children.add(Padding(
+        padding: EdgeInsets.only(
+          bottom: i < sections.texts.length - 1 ? 4 : 0,
+        ),
+        child: _ReasoningButton(
+          reasoningText: sections.texts[i],
+          isStreaming: sections.streaming && i == sections.texts.length - 1,
+          isMulti: sections.hasMultiple,
+          index: sectionIdx,
+          messageId: messageId,
+        ),
+      ));
+    }
+
     // If multiple sections, show them in a column
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
-      children: [
-        for (int i = 0; i < sections.texts.length; i++)
-          Padding(
-            padding: EdgeInsets.only(
-              bottom: i < sections.texts.length - 1 ? 4 : 0,
-            ),
-            child: _ReasoningButton(
-              reasoningText: sections.texts[i],
-              isStreaming: sections.streaming && i == sections.texts.length - 1,
-              isMulti: sections.hasMultiple,
-              index: i,
-              messageId: messageId,
-            ),
-          ),
-      ],
+      children: children,
     );
   }
 }
@@ -258,7 +268,10 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
     // Watch all sections from provider and extract the one for this dialog.
     // If the section index is within range, use the provider's version
     // (which may have been updated since the dialog opened).
-    final allSections = ref.watch(streamingReasoningSectionsProvider);
+    final convId = ref.watch(activeConversationIdProvider);
+    final allSections = convId != null
+        ? ref.watch(streamingReasoningSectionsProvider(convId))
+        : const <String>[];
     if (widget.sectionIndex < allSections.length) {
       final providerText = allSections[widget.sectionIndex];
       if (providerText.length >= _displayText.length) {
@@ -284,8 +297,11 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog> {
     // 1. A TextEvent has arrived (first token received) while reasoning
     //    content exists, or
     // 2. The stream has ended.
-    final hasFirstToken = ref.watch(streamingHasFirstTokenProvider);
-    final isStreamActive = ref.watch(isStreamingProvider);
+    final hasFirstToken = convId != null
+        ? ref.watch(streamingHasFirstTokenProvider(convId))
+        : false;
+    final isStreamActive =
+        convId != null ? ref.watch(isStreamingProvider(convId)) : false;
     final hasReasoningContent = _displayText.isNotEmpty;
     final isReasoningComplete =
         hasReasoningContent && (hasFirstToken || !isStreamActive);
