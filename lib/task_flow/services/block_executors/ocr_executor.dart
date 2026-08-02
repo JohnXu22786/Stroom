@@ -44,16 +44,20 @@ Future<String> _callOcrApi({
         },
       ],
     };
-    final response = await dio.post(
-      host,
-      data: body,
-      options: Options(
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-          'Content-Type': 'application/json',
-        },
-      ),
-    );
+    // A stalled server must not hang the flow forever — the executor's
+    // catch routes the timeout through failSubTask like every other block.
+    final response = await dio
+        .post(
+          host,
+          data: body,
+          options: Options(
+            headers: {
+              'Authorization': 'Bearer $apiKey',
+              'Content-Type': 'application/json',
+            },
+          ),
+        )
+        .timeout(const Duration(minutes: 10));
     if (response.data is Map) {
       final choices = response.data['choices'] as List<dynamic>?;
       if (choices != null && choices.isNotEmpty) {

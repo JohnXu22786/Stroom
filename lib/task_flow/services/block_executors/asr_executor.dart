@@ -15,6 +15,31 @@ import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
 import 'shared_helpers.dart';
 
+/// Builds the multipart fields from the model's typeConfig, mirroring the
+/// app's own ASR request (asr_service.dart `_buildSharedParams`): only
+/// enabled, user-configured params are sent — never the raw `enable*`
+/// flags or a temperature the user turned off.
+Map<String, dynamic> _buildAsrFormParams(Map<String, dynamic> tc) {
+  final params = <String, dynamic>{};
+  if (tc['enableResponseFormat'] == true && tc.containsKey('responseFormat')) {
+    params['response_format'] = tc['responseFormat'] as String;
+  }
+  if (tc['enableTemperature'] == true && tc.containsKey('temperature')) {
+    params['temperature'] = (tc['temperature'] as num).toDouble();
+  }
+  if (tc['enableTimestampGranularities'] == true &&
+      tc.containsKey('timestampGranularities')) {
+    params['timestamp_granularities'] = tc['timestampGranularities'] as String;
+  }
+  if (tc['enablePrompt'] == true && tc.containsKey('prompt')) {
+    final prompt = tc['prompt'] as String;
+    if (prompt.trim().isNotEmpty) {
+      params['prompt'] = prompt;
+    }
+  }
+  return params;
+}
+
 Future<String> _callAsrApi({
   required Uint8List audioBytes,
   required String audioFormat,
@@ -34,13 +59,17 @@ Future<String> _callAsrApi({
       ),
       'model': modelId,
       'response_format': 'json',
-      ...typeConfig,
+      ..._buildAsrFormParams(typeConfig),
     });
-    final response = await dio.post(
-      host,
-      data: formData,
-      options: Options(headers: {'Authorization': 'Bearer $apiKey'}),
-    );
+    // A stalled server must not hang the flow forever — the executor's
+    // catch routes the timeout through failSubTask like every other block.
+    final response = await dio
+        .post(
+          host,
+          data: formData,
+          options: Options(headers: {'Authorization': 'Bearer $apiKey'}),
+        )
+        .timeout(const Duration(minutes: 10));
     if (response.data is Map) return (response.data['text'] as String?) ?? '';
     return response.data.toString();
   } finally {
