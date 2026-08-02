@@ -341,7 +341,7 @@ class ChatMessage {
           }
         }
       }
-      if (toolCalls!.isEmpty) toolCalls = null;
+      if (toolCalls.isEmpty) toolCalls = null;
     }
 
     // Defensive reasoningSections parsing. When toolCallRoundStarts is
@@ -351,7 +351,10 @@ class ChatMessage {
     List<int>? toolCallRoundStarts;
     final roundStartsRaw = map['toolCallRoundStarts'];
     if (roundStartsRaw is List) {
-      toolCallRoundStarts = roundStartsRaw.whereType<int>().toList();
+      // web 端 JSON 大整数可能以 double 形式反序列化：用 num 兼容
+      // （whereType<int> 会过滤掉 double，导致多工具轮次分组退化）
+      toolCallRoundStarts =
+          roundStartsRaw.whereType<num>().map((e) => e.toInt()).toList();
       if (toolCallRoundStarts.isEmpty) toolCallRoundStarts = null;
     }
     final keepEmptySections = toolCallRoundStarts != null;

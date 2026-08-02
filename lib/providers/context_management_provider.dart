@@ -130,9 +130,14 @@ class ContextManagementSettingsNotifier
 
   Future<void> setCompactionThreshold(int? threshold) {
     _userModified = true;
-    state = threshold == null
+    // 下限防护：过小的阈值（如 1 token）会导致每次发送都触发压缩
+    // （额外 API 成本、摘要反复重写）。低于 1000 token 视为无效，
+    // 回退到模型 context 窗口。
+    final effective =
+        (threshold != null && threshold < 1000) ? null : threshold;
+    state = effective == null
         ? state.clearCompactionThreshold()
-        : state.copyWith(compactionThreshold: threshold);
+        : state.copyWith(compactionThreshold: effective);
     return _persist();
   }
 }

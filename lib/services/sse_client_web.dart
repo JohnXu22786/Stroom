@@ -35,7 +35,17 @@ Stream<String> sseStream(
   xhr.open('POST', url);
   headers.forEach((k, v) => xhr.setRequestHeader(k, v));
   xhr.responseType = 'text';
-  xhr.timeout = 30000; // 30 second timeout
+  // 连接阶段超时保护：30 秒内无任何响应视为失败。
+  xhr.timeout = 30000;
+
+  // 响应开始后（收到响应头）禁用活动超时：Anthropic 长思考期间
+  // 可能数分钟无 SSE delta（思考期端点不推流），活动超时会掐断
+  // 流并丢失已收的思考内容。
+  final readyStateSub = xhr.onReadyStateChange.listen((_) {
+    if (xhr.readyState >= html.HttpRequest.HEADERS_RECEIVED) {
+      xhr.timeout = 0;
+    }
+  });
 
   final progressSub = xhr.onProgress.listen((_) {
     final fullText = xhr.responseText ?? '';
@@ -55,7 +65,9 @@ Stream<String> sseStream(
         }
         // Yield the raw SSE line; the caller (chat_api_provider.dart)
         // strips the prefix, parses JSON, and handles content/reasoning/tool_calls.
-        controller.add(line);
+        // [DONE] 关闭后（订阅取消前的微任务窗口）可能再来 progress 事件：
+        // 已关闭的 controller.add 会抛 StateError。
+        if (!controller.isClosed) controller.add(line);
       }
     }
     processedLines = completeCount;
@@ -89,6 +101,23 @@ Stream<String> sseStream(
       }
       onResponseHeaders(headerMap);
     }
+    // HTTP 错误不能静默当"干净的空流结束"——否则 Web 端 API 错误
+    // （401/404/500）在 UI 上毫无提示。IO 端 Dio 会抛
+    // DioException，两端行为必须一致。
+    // （连接阶段超时 status==0 由 onError 路径上抛，不在此处理）
+    final status = xhr.status;
+    if (status != null && status >= 400) {
+      final statusText = xhr.statusText ?? '';
+      if (!controller.isClosed) {
+        controller.addError(Exception(
+            '网络请求失败 (HTTP $status${statusText.isNotEmpty ? ': $statusText' : ''})'));
+      }
+      controller.close();
+      progressSub.cancel();
+      errorSub.cancel();
+      xhr.abort();
+      return;
+    }
     // Process all remaining lines (don't drop the last complete line)
     final remainingText = xhr.responseText ?? '';
     if (remainingText.isNotEmpty) {
@@ -99,7 +128,7 @@ Stream<String> sseStream(
           final data = line.substring(6).trim();
           if (data == '[DONE]') break;
           // Yield raw SSE line (caller strips prefix, parses JSON)
-          controller.add(line);
+          if (!controller.isClosed) controller.add(line);
         }
       }
     }
@@ -113,6 +142,7 @@ Stream<String> sseStream(
     progressSub.cancel();
     errorSub.cancel();
     loadEndSub.cancel();
+    readyStateSub.cancel();
   }
 
   cancelToken?.whenCancel.then((_) {
@@ -194,7 +224,18 @@ Stream<SseFrame> sseEventStream(
   xhr.open('POST', url);
   headers.forEach((k, v) => xhr.setRequestHeader(k, v));
   xhr.responseType = 'text';
-  xhr.timeout = 30000; // 30 second timeout
+  // 连接阶段超时保护：30 秒内无任何响应视为失败。
+  xhr.timeout = 30000;
+
+  // 响应开始后（收到响应头）禁用活动超时：Anthropic 长思考期间
+  // 可能数分钟无 SSE delta（思考期端点不推流），活动超时会掐断
+  // 流并丢失已收的思考内容。此函数被 Anthropic 端点（sseEventStream）
+  // 使用，与 sseStream 必须对称。
+  final readyStateSub = xhr.onReadyStateChange.listen((_) {
+    if (xhr.readyState >= html.HttpRequest.HEADERS_RECEIVED) {
+      xhr.timeout = 0;
+    }
+  });
 
   final progressSub = xhr.onProgress.listen((_) {
     final fullText = xhr.responseText ?? '';
@@ -230,6 +271,21 @@ Stream<SseFrame> sseEventStream(
       }
       onResponseHeaders(headerMap);
     }
+    // HTTP 错误不能静默结束（同 sseStream）：Web 端 API 错误
+    // 必须上抛，与 IO 端 DioException 行为一致。
+    final status = xhr.status;
+    if (status != null && status >= 400) {
+      final statusText = xhr.statusText ?? '';
+      if (!controller.isClosed) {
+        controller.addError(Exception(
+            '网络请求失败 (HTTP $status${statusText.isNotEmpty ? ': $statusText' : ''})'));
+      }
+      controller.close();
+      progressSub.cancel();
+      errorSub.cancel();
+      xhr.abort();
+      return;
+    }
     // Process all remaining lines (don't drop the last complete line,
     // even when the response has no trailing newline)
     final remainingText = xhr.responseText ?? '';
@@ -246,6 +302,7 @@ Stream<SseFrame> sseEventStream(
     progressSub.cancel();
     errorSub.cancel();
     loadEndSub.cancel();
+    readyStateSub.cancel();
   }
 
   cancelToken?.whenCancel.then((_) {

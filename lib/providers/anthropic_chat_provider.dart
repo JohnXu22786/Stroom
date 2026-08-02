@@ -8,6 +8,8 @@ import '../models/ai_stream_event.dart';
 import '../services/sse_client.dart';
 import 'chat_api_shared.dart';
 
+part 'anthropic_stream_parser.dart';
+
 // ============================================================================
 // Anthropic Messages API 实现（官方格式）
 // ============================================================================
@@ -26,124 +28,6 @@ const String kAnthropicApiVersion = '2023-06-01';
 /// - 工具调用：`stop_reason == "tool_use"` 时在流末尾产出
 ///
 /// 支持 OpenRouter 等 Anthropic 兼容端点（附加 OpenRouter 应用标识头无害）。
-/// Anthropic 流式解析的跨事件状态（工具块 / thinking 签名 / 停止原因）。
-///
-/// 由 chatStream 持有，在多个 SSE 载荷间传递；提取为类便于单测驱动
-/// 完整的事件序列。
-@visibleForTesting
-class AnthropicStreamAccumulator {
-  final Map<int, Map<String, dynamic>> toolCalls = {};
-  final List<String> thinkingSignatures = [];
-  String? stopReason;
-}
-
-/// 处理单个 Anthropic SSE data 载荷（含跨事件状态的累计）。
-///
-/// 返回本载荷直接产生的 [AIStreamEvent] 列表。
-@visibleForTesting
-List<AIStreamEvent> processAnthropicStreamData(
-  Map<String, dynamic> data,
-  AnthropicStreamAccumulator acc,
-) {
-  final events = <AIStreamEvent>[];
-  final type = data['type'] as String?;
-  switch (type) {
-    case 'content_block_start':
-      final block = data['content_block'] as Map<String, dynamic>?;
-      if (block == null) break;
-      final blockType = block['type'];
-      if (blockType == 'tool_use') {
-        acc.toolCalls[data['index'] as int? ?? 0] = {
-          'id': block['id'] as String? ?? '',
-          'name': block['name'] as String? ?? '',
-          'input': '',
-        };
-      } else if (blockType == 'thinking') {
-        // thinking 块开始：新签名槽位
-        acc.thinkingSignatures.add('');
-      }
-
-    case 'content_block_delta':
-      final delta = data['delta'] as Map<String, dynamic>?;
-      if (delta == null) break;
-      switch (delta['type']) {
-        case 'text_delta':
-          final text = delta['text'] as String?;
-          if (text != null && text.isNotEmpty) {
-            events.add(AIStreamEvent(text));
-          }
-        case 'thinking_delta':
-          final thinking = delta['thinking'] as String?;
-          if (thinking != null && thinking.isNotEmpty) {
-            events.add(AIStreamEvent(thinking, isReasoning: true));
-          }
-        case 'signature_delta':
-          final signature = delta['signature'] as String?;
-          if (signature != null && signature.isNotEmpty) {
-            if (acc.thinkingSignatures.isNotEmpty) {
-              acc.thinkingSignatures[acc.thinkingSignatures.length - 1] +=
-                  signature;
-            } else {
-              acc.thinkingSignatures.add(signature);
-            }
-          }
-        case 'input_json_delta':
-          final partial = delta['partial_json'] as String?;
-          if (partial != null && partial.isNotEmpty) {
-            final index = data['index'] as int? ?? 0;
-            final accEntry = acc.toolCalls[index];
-            if (accEntry != null) {
-              accEntry['input'] =
-                  (accEntry['input'] as String? ?? '') + partial;
-            }
-          }
-      }
-
-    case 'message_delta':
-      final delta = data['delta'] as Map<String, dynamic>?;
-      final reason = delta?['stop_reason'] as String?;
-      if (reason != null) acc.stopReason = reason;
-
-    case 'error':
-      final err = data['error'] as Map<String, dynamic>?;
-      final msg = err?['message'] as String? ?? '未知错误';
-      throw Exception('Anthropic API 错误: $msg');
-
-    case 'message_stop':
-      break;
-  }
-  return events;
-}
-
-/// 根据流结束时的累计状态构建工具调用事件（若适用）。
-///
-/// 仅在 `stop_reason == "tool_use"` 且存在累计工具块时产出
-/// （避免中断时把残缺累计块当作有效工具调用）。提取为静态方法
-/// 便于直接测试 chatStream 末尾的产出逻辑。
-@visibleForTesting
-AIStreamEvent? buildToolCallEvent(AnthropicStreamAccumulator acc) {
-  if (acc.stopReason != 'tool_use' || acc.toolCalls.isEmpty) return null;
-  final toolCalls = acc.toolCalls.entries.map((e) {
-    final inputJson = (e.value['input'] as String? ?? '').trim();
-    Object? input;
-    if (inputJson.isNotEmpty) {
-      try {
-        input = jsonDecode(inputJson);
-      } catch (_) {
-        input = <String, dynamic>{};
-      }
-    } else {
-      input = <String, dynamic>{};
-    }
-    return {
-      'id': e.value['id'] as String? ?? 'toolu_${e.key}',
-      'name': e.value['name'] as String? ?? '',
-      'input': input,
-    };
-  }).toList();
-  return AIStreamEvent('', toolCalls: toolCalls);
-}
-
 class AnthropicChatProvider extends BaseChatProvider {
   final String _apiKey;
   final String _baseUrl;
@@ -491,13 +375,13 @@ class AnthropicChatProvider extends BaseChatProvider {
               if (usage['cache_creation_input_tokens'] is num) {
                 input += (usage['cache_creation_input_tokens'] as num).toInt();
               }
-              if (input > 0) localUsage!['inputTokens'] = input;
+              if (input > 0) localUsage['inputTokens'] = input;
               final cost = usage['total_cost'] ?? usage['cost'];
               if (cost is num) {
                 // 兼容两端点重复上报 total_cost：取较大值而非累加，避免双计
-                final existing = (localUsage!['cost'] as num?)?.toDouble() ?? 0;
+                final existing = (localUsage['cost'] as num?)?.toDouble() ?? 0;
                 if (cost.toDouble() > existing) {
-                  localUsage!['cost'] = cost.toDouble();
+                  localUsage['cost'] = cost.toDouble();
                 }
               }
             }
@@ -506,13 +390,13 @@ class AnthropicChatProvider extends BaseChatProvider {
             if (usage is Map) {
               localUsage ??= {};
               final output = usage['output_tokens'];
-              if (output is num) localUsage!['outputTokens'] = output.toInt();
+              if (output is num) localUsage['outputTokens'] = output.toInt();
               final cost = usage['total_cost'] ?? usage['cost'];
               if (cost is num) {
                 // 与 message_start 的 cost 取较大值（兼容重复上报）
-                final existing = (localUsage!['cost'] as num?)?.toDouble() ?? 0;
+                final existing = (localUsage['cost'] as num?)?.toDouble() ?? 0;
                 if (cost.toDouble() > existing) {
-                  localUsage!['cost'] = cost.toDouble();
+                  localUsage['cost'] = cost.toDouble();
                 }
               }
             }
@@ -554,11 +438,16 @@ class AnthropicChatProvider extends BaseChatProvider {
         _lastResponseHeaders = e.response?.headers.map;
       } else {
         _lastResponseStatusCode = null;
-        _lastResponseData = null;
+        // 若 _lastResponseData 已是 API 错误帧（error 事件在抛出前
+        // 写入，见上方 `_lastResponseData = data`），保留它用于诊断，
+        // 否则清空陈旧的成功流数据。
+        if (_lastResponseData?['error'] == null) {
+          _lastResponseData = null;
+        }
         _lastResponseHeaders = null;
       }
       // 错误轮也可能已产生计费 usage：先产出计量事件再上抛
-      if (localUsage != null && localUsage!.isNotEmpty) {
+      if (localUsage != null && localUsage.isNotEmpty) {
         _lastUsage = localUsage;
         yield AIStreamEvent('', usage: localUsage);
       }
@@ -567,7 +456,7 @@ class AnthropicChatProvider extends BaseChatProvider {
 
     // 流结束后：产出 usage 计量（per-request 隔离），
     // 同时填充诊断槽（与 lastResponseData 同语义）
-    if (localUsage != null && localUsage!.isNotEmpty) {
+    if (localUsage != null && localUsage.isNotEmpty) {
       _lastUsage = localUsage;
       yield AIStreamEvent('', usage: localUsage);
     }

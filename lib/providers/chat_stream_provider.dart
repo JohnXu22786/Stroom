@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/legacy.dart';
-import '../models/message_block.dart';
 import '../models/tool_call.dart';
 
 /// The ID of the message currently being streamed. Survives page disposal
@@ -69,8 +68,3 @@ final streamingToolCallRoundStartsProvider =
 /// changed.
 final streamingConversationsProvider =
     StateProvider<Set<String>>((ref) => <String>{});
-
-final streamingBlocksProvider =
-    StateProvider.family<List<MessageBlock>, String>(
-  (ref, convId) => [],
-);

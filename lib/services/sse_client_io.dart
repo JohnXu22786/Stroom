@@ -19,7 +19,10 @@ Stream<String> sseStream(
   final dio = Dio(BaseOptions(
     headers: headers,
     connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 60),
+    // 无活动超时：Anthropic 长思考期间可能长时间无 SSE delta
+    // （思考期端点不推流），receiveTimeout 会掐断流并丢失已收
+    // 的思考内容。取消由上游 cancelToken 负责。
+    receiveTimeout: Duration.zero,
   ));
 
   try {
@@ -84,7 +87,9 @@ Stream<SseFrame> sseEventStream(
   final dio = Dio(BaseOptions(
     headers: headers,
     connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 60),
+    // 无活动超时（同 sseStream）：长思考流可能长时间无数据，
+    // 取消由上游 cancelToken 负责。
+    receiveTimeout: Duration.zero,
   ));
 
   final response = await dio.post(

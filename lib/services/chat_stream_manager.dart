@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart' show Ref;
-import 'package:flutter_riverpod/legacy.dart' show StateProvider;
+import 'package:flutter_riverpod/legacy.dart'
+    show StateProvider, StateProviderFamily;
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
 import '../models/message_block.dart';
 import '../models/tool_call.dart';
 import '../pages/chat/chat_types.dart';
+import '../pages/chat/utils/format_chat_error.dart' show formatChatErrorMessage;
 import '../providers/chat_stream_provider.dart';
 import '../providers/context_management_provider.dart';
 import '../providers/conversation_provider.dart';
@@ -39,120 +41,13 @@ import 'context_manager.dart';
 // - ChatPage 调用 activateConversation 切换 providers 输出到指定对话
 // ============================================================================
 
-// ============================================================================
-// StreamResult — 流式请求完成后返回的结果
-// ============================================================================
-
-/// The result of a streaming request, returned by [ChatStreamManager.startStreaming].
-///
-/// Contains the final message history (including the assistant's response),
-/// the accumulated reply text, and any tool calls or reasoning content.
-class StreamResult {
-  /// The conversation message history after the assistant message was appended.
-  final List<ChatMessage> history;
-
-  /// The newly created assistant message, or null if no text was received.
-  final ChatMessage? assistantMessage;
-
-  /// The full accumulated reply text from the stream.
-  final String fullReply;
-
-  /// The accumulated reasoning buffer, or empty if no reasoning events.
-  final String reasoningBuffer;
-
-  /// All reasoning sections (for multi-step tool call rounds).
-  final List<String> reasoningSections;
-
-  /// Per-round text chunks that mirror the Agent chain structure,
-  /// allowing assistant speech to be interleaved between reasoning
-  /// and tool call blocks instead of all appearing at the end.
-  final List<String> textSections;
-
-  /// Tool calls accumulated during the stream.
-  final List<ToolCallData> toolCalls;
-
-  /// Indices into [toolCalls] where each new tool-call round begins.
-  /// Used by [buildAgentChainSegments] to group consecutive tool calls
-  /// that belong to the same assistant step (separated by non-empty text).
-  final List<int> toolCallRoundStarts;
-  final List<MessageBlock> blocks;
-
-  /// Whether the stream was cancelled by the user.
-  final bool cancelled;
-
-  const StreamResult({
-    required this.history,
-    this.assistantMessage,
-    this.fullReply = '',
-    this.reasoningBuffer = '',
-    this.reasoningSections = const [],
-    this.textSections = const [],
-    this.toolCalls = const [],
-    this.toolCallRoundStarts = const [],
-    this.blocks = const [],
-    this.cancelled = false,
-  });
-
-  /// Whether the stream completed with an error (not cancelled).
-  bool get isError => fullReply.startsWith('错误:') && !cancelled;
-
-  /// Whether the stream produced any content.
-  bool get hasContent => fullReply.isNotEmpty;
-}
-
-// ============================================================================
-// _ConversationStreamState — per-conversation mutable streaming state
-// ============================================================================
-
-class _ConversationStreamState {
-  final String convId;
-  bool cancelledByUser = false;
-
-  /// Guards against overlapping periodic persist calls from the timer.
-  bool _isPersisting = false;
-  String? streamingMsgId;
-  String fullReply = '';
-  String reasoningBuffer = '';
-  List<String> reasoningSections = [];
-
-  /// Per-round text chunks that mirror reasoning sections: each time a new
-  /// tool call round begins, a new chunk is started so that post-stream
-  /// segment building can interleave assistant speech between reasoning and
-  /// tool call blocks in the correct Agent chain order.
-  List<String> textChunks = [''];
-
-  List<ToolCallData> toolCalls = [];
-  List<ChatMessage> history = [];
-  bool hasReceivedFirstToken = false;
-  bool isComplete = false;
-
-  /// Accumulator for tool calls across streaming rounds (used for history).
-  final List<ToolCallData> accumulatedToolCalls = [];
-
-  /// Indices into [toolCalls] where each new tool-call round begins.
-  /// Used by buildAgentChainSegments to correctly group consecutive
-  /// tool calls that belong to the same assistant "step".
-  ///
-  /// Initialized empty (NOT [0]) — the first ToolCallStartEvent adds
-  /// index 0 when it creates the first new text chunk. Pre-seeding [0]
-  /// would cause a duplicate [0, 0], splitting round 0's tools across
-  /// phantom rounds.
-  List<int> toolCallRoundStarts = [];
-  List<MessageBlock> blocks = [];
-
-  /// Throttle timers
-  DateTime lastTextUpdate = DateTime.now();
-  DateTime lastReasoningUpdate = DateTime.now();
-
-  /// Periodic persistence timer
-  Timer? persistTimer;
-
-  /// Completer used to return the same future for duplicate startStreaming
-  /// calls on the same conversation.
-  Completer<StreamResult>? resultCompleter;
-
-  _ConversationStreamState({required this.convId});
-}
+part 'chat_stream_manager_state.dart';
+part 'chat_stream_manager_events.dart';
+part 'chat_stream_manager_providers.dart';
+part 'chat_stream_manager_persist.dart';
+part 'chat_stream_manager_compaction.dart';
+part 'chat_stream_manager_title.dart';
+part 'chat_stream_manager_finalize.dart';
 
 // ============================================================================
 // ChatStreamManager
@@ -286,13 +181,6 @@ class ChatStreamManager {
   String reasoningBufferFor(String convId) =>
       _streams[convId]?.reasoningBuffer ?? '';
 
-  // ── Provider 更新辅助 ──
-
-  void _setProvider<T>(StateProvider<T> provider, T value) {
-    if (_ref == null) return;
-    _ref!.read(provider.notifier).state = value;
-  }
-
   // ── 公共 API ──
 
   /// Pushes the streaming state of [convId] to its per-conversation
@@ -412,7 +300,7 @@ class ChatStreamManager {
     // Snapshot this conversation's ChatService before any await.
     // The adapter creates a per-conversation service on demand, so
     // capture it here for raw data (lastRequestBody etc.) in finally.
-    final _snappedChatService = _adapter.getOrCreateService(convId);
+    final snappedChatService = _adapter.getOrCreateService(convId);
 
     // ── 上下文管理：摘要注入 + 发送量过滤 + 超限自动压缩 ──
     // 1. 每次请求都注入对话已有的压缩摘要（如有）
@@ -425,7 +313,7 @@ class ChatStreamManager {
         ?.read(conversationsProvider)
         .where((c) => c.id == convId)
         .firstOrNull;
-    _snappedChatService?.setContextSummary(conv?.contextSummary);
+    snappedChatService?.setContextSummary(conv?.contextSummary);
 
     // 发送历史过滤（对齐 opencode filterCompacted）：
     // 有摘要时从 compactionTailStartId（固定快照）起发送，
@@ -494,8 +382,6 @@ class ChatStreamManager {
     // provider stream is already created.
 
     Object? streamError;
-    Map<String, dynamic>? rawRequestCapture;
-    Map<String, dynamic>? rawResponseCapture;
 
     try {
       await AppLogService.info('ChatStreamManager',
@@ -504,107 +390,7 @@ class ChatStreamManager {
       await for (final event in stream) {
         if (state.cancelledByUser) break;
 
-        switch (event) {
-          case TextEvent e:
-            if (!state.hasReceivedFirstToken) {
-              state.hasReceivedFirstToken = true;
-              _pushToProvider(convId, streamingHasFirstTokenProvider, true);
-            }
-            state.fullReply += e.text;
-            state.textChunks[state.textChunks.length - 1] += e.text;
-            // 节流：最长200ms更新一次 provider
-            final now = DateTime.now();
-            if (now.difference(state.lastTextUpdate) >= _textThrottle) {
-              state.lastTextUpdate = now;
-              // Set textSections first (no listener) so that when
-              // fullReply fires its listener and reads streamingTextSectionsProvider
-              // inside _rebuildLiveSegments, it sees the already-updated value.
-              _pushToProvider(convId, streamingTextSectionsProvider,
-                  List<String>.from(state.textChunks));
-              _pushToProvider(
-                  convId, streamingFullReplyProvider, state.fullReply);
-            }
-
-          case ReasoningEvent e:
-            state.reasoningBuffer += e.text;
-            final sections = List<String>.from(state.reasoningSections);
-            if (sections.isNotEmpty) {
-              sections[sections.length - 1] = state.reasoningBuffer;
-            } else {
-              sections.add(state.reasoningBuffer);
-            }
-            state.reasoningSections = sections;
-            // 节流
-            final now = DateTime.now();
-            if (now.difference(state.lastReasoningUpdate) >=
-                _reasoningThrottle) {
-              state.lastReasoningUpdate = now;
-              _pushToProvider(
-                  convId, streamingReasoningProvider, state.reasoningBuffer);
-              _pushToProvider(
-                  convId, streamingReasoningSectionsProvider, sections);
-            }
-
-          case ReasoningSectionEndEvent():
-            final sections = List<String>.from(state.reasoningSections);
-            sections.add('');
-            state.reasoningSections = sections;
-            state.reasoningBuffer = ''; // Reset for new reasoning section
-            _pushToProvider(
-                convId, streamingReasoningSectionsProvider, sections);
-
-          case ToolCallStartEvent e:
-            final toolCallData = ToolCallData(
-              id: e.toolCall.id,
-              name: e.toolCall.name,
-              arguments: Map<String, dynamic>.from(e.toolCall.arguments),
-              status: ToolCallStatus.running,
-            );
-            state.toolCalls.add(toolCallData);
-            state.accumulatedToolCalls.add(toolCallData);
-            // Start a new text chunk at tool call boundary so that
-            // assistant speech is interleaved between tool call rounds
-            // rather than all appearing at the end.
-            if (state.textChunks.last.isNotEmpty ||
-                state.textChunks.length == 1) {
-              state.textChunks.add('');
-              // Record that this tool call starts a new round.
-              // Consecutive tool calls that don't create new text chunks
-              // are grouped together in the same round.
-              state.toolCallRoundStarts.add(state.toolCalls.length - 1);
-            }
-            // Set textSections first (no listener) so that when
-            // toolCalls fires its listener, it reads the updated value.
-            _pushToProvider(convId, streamingTextSectionsProvider,
-                List<String>.from(state.textChunks));
-            _pushToProvider(convId, streamingToolCallsProvider,
-                List<ToolCallData>.from(state.toolCalls));
-            _pushToProvider(convId, streamingToolCallRoundStartsProvider,
-                List<int>.from(state.toolCallRoundStarts));
-
-          case ToolCallCompleteEvent e:
-            for (var i = 0; i < state.toolCalls.length; i++) {
-              if (state.toolCalls[i].id == e.toolCallId) {
-                state.toolCalls[i] = state.toolCalls[i].copyWith(
-                  status: ToolCallStatus.completed,
-                  result: e.result,
-                );
-                break;
-              }
-            }
-            for (var i = 0; i < state.accumulatedToolCalls.length; i++) {
-              if (state.accumulatedToolCalls[i].id == e.toolCallId) {
-                state.accumulatedToolCalls[i] =
-                    state.accumulatedToolCalls[i].copyWith(
-                  status: ToolCallStatus.completed,
-                  result: e.result,
-                );
-                break;
-              }
-            }
-            _pushToProvider(convId, streamingToolCallsProvider,
-                List<ToolCallData>.from(state.toolCalls));
-        }
+        _handleStreamEvent(event, state, convId);
       }
     } catch (e, s) {
       streamError = e;
@@ -615,7 +401,9 @@ class ChatStreamManager {
         } catch (_) {
           // Best effort: logging failure should not prevent cleanup
         }
-        state.fullReply = '错误: ${e.toString()}';
+        // 用友好错误格式化（分类中文提示 + 保留原始异常）：
+        // 未配置供应商/网络失败/超时等给出可操作的提示。
+        state.fullReply = formatChatErrorMessage(e);
         _pushToProvider(convId, streamingTextSectionsProvider,
             List<String>.from(state.textChunks));
         _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);
@@ -634,242 +422,14 @@ class ChatStreamManager {
       _pushToProvider(convId, streamingTextSectionsProvider,
           List<String>.from(state.textChunks));
       _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);
-
-      // Capture request/response raw data from the ChatService instance
-      // that was active when this stream started (snapped above). Using
-      // the snapped reference is critical: adapter.currentChatService may
-      // have been replaced mid-stream by a page re-entry calling configure()
-      // or selectModel(). Reading through the replaced service returns null.
-      try {
-        final reqBody = _snappedChatService?.lastRequestBody;
-        final headers = _snappedChatService?.lastRequestHeaders;
-        final url = _snappedChatService?.lastRequestUrl;
-        if (reqBody != null || headers != null || url != null) {
-          rawRequestCapture = {};
-          if (url != null) rawRequestCapture['url'] = url;
-          if (headers != null) rawRequestCapture['headers'] = headers;
-          if (reqBody != null) rawRequestCapture['body'] = reqBody;
-        }
-        final respData = _snappedChatService?.lastResponseData;
-        final statusCode = _snappedChatService?.lastResponseStatusCode;
-        final respHeaders = _snappedChatService?.lastResponseHeaders;
-        if (respData != null || statusCode != null || respHeaders != null) {
-          rawResponseCapture = {};
-          if (statusCode != null) {
-            rawResponseCapture['statusCode'] = statusCode;
-          }
-          if (respHeaders != null) {
-            rawResponseCapture['headers'] = respHeaders;
-          }
-          if (respData != null) rawResponseCapture['data'] = respData;
-        } else if (streamError is Exception) {
-          rawResponseCapture = {'error': streamError.toString()};
-        }
-      } catch (_) {}
-      // ── 实际 token 计量与花费（来自 API usage，非估算） ──
-      // 更新对话的 lastInputTokens/lastOutputTokens 与累计花费。
-      // 花费纯粹采用 API 返回的 cost（如 OpenRouter usage.total_cost），
-      // 不自统计（缓存/推理 token 计价要素太多，自统计不准）。
-      try {
-        final usage = _snappedChatService?.lastUsage;
-        if (usage != null) {
-          final inputTokens = usage['inputTokens'] as int?;
-          final outputTokens = usage['outputTokens'] as int?;
-          final cost = usage['cost'] as double? ?? 0;
-          if (inputTokens != null || outputTokens != null || cost > 0) {
-            await _ref?.read(conversationsProvider.notifier).updateUsage(
-                  conversationId: convId,
-                  inputTokens: inputTokens,
-                  outputTokens: outputTokens,
-                  costIncrement: cost,
-                );
-          }
-        }
-      } catch (e) {
-        debugPrint('[ChatStreamManager] usage 计量更新失败: $e');
-      }
-
-      // Do NOT overwrite state.reasoningSections or state.reasoningBuffer
-      // from _adapter.reasoningContent. The manager already correctly
-      // accumulates reasoning sections event-by-event (ReasoningEvent +
-      // ReasoningSectionEndEvent), and _adapter.reasoningContent is a
-      // cumulative buffer from the ChatService that is never reset per-round.
-      // Overwriting would merge all reasoning into the last section.
     }
 
-    // ── Post-stream processing ──
-    ChatMessage? assistantMessage;
-    final wasCancelled = state.cancelledByUser;
-    final hadStreamError = streamError is Exception || streamError is Error;
-
-    // 中断工具标记：取消或流错误时，把仍未完成的工具结果标记为中断占位，
-    // 避免 UI 与持久化中工具永远停留在 running 状态。
-    if (wasCancelled || hadStreamError) {
-      for (var i = 0; i < state.toolCalls.length; i++) {
-        final tc = state.toolCalls[i];
-        if (tc.status == ToolCallStatus.running ||
-            tc.status == ToolCallStatus.pending) {
-          state.toolCalls[i] = tc.copyWith(
-            status: ToolCallStatus.completed,
-            result: ChatService.kToolInterruptedPlaceholder,
-          );
-        }
-      }
-      for (var i = 0; i < state.accumulatedToolCalls.length; i++) {
-        final tc = state.accumulatedToolCalls[i];
-        if (tc.status == ToolCallStatus.running ||
-            tc.status == ToolCallStatus.pending) {
-          state.accumulatedToolCalls[i] = tc.copyWith(
-            status: ToolCallStatus.completed,
-            result: ChatService.kToolInterruptedPlaceholder,
-          );
-        }
-      }
-    }
-
-    try {
-      // 纯工具轮取消时 fullReply 为空但 accumulatedToolCalls 非空：
-      // 仍要持久化 assistant 消息，否则中断标记（[工具执行被中断]）
-      // 从 UI 与存储中丢失。
-      if (state.fullReply.isNotEmpty || state.accumulatedToolCalls.isNotEmpty) {
-        final isError = state.fullReply.startsWith('错误:');
-        final msg = ChatMessage(
-          role: 'assistant',
-          content: state.fullReply,
-          id: state.streamingMsgId ?? '',
-          isError: isError,
-          reasoningContent:
-              state.reasoningBuffer.isNotEmpty ? state.reasoningBuffer : null,
-          rawRequest: rawRequestCapture,
-          rawResponse: rawResponseCapture,
-          toolCalls: state.accumulatedToolCalls.isNotEmpty
-              ? List<ToolCallData>.from(state.accumulatedToolCalls)
-              : null,
-          reasoningSections: state.reasoningSections.isNotEmpty
-              ? List<String>.from(state.reasoningSections)
-              : null,
-          textSections: state.textChunks.any((c) => c.isNotEmpty)
-              ? List<String>.from(state.textChunks)
-              : null,
-          toolCallRoundStarts: state.toolCallRoundStarts.isNotEmpty
-              ? List<int>.from(state.toolCallRoundStarts)
-              : null,
-          blocks: legacyToBlocks(
-            reasoningSections: state.reasoningSections,
-            textChunks: state.textChunks,
-            toolCalls: state.accumulatedToolCalls,
-            toolCallRoundStarts: state.toolCallRoundStarts,
-          ),
-        );
-        state.history.add(msg);
-        assistantMessage = msg;
-      }
-    } catch (e, s) {
-      debugPrint('[ChatStreamManager] 后处理错误: $e\n$s');
-    }
-
-    // ── Persist BEFORE cleaning up stream state ──
-    // This guard ensures save always runs, even if the code below throws.
-    // It's the single persistence path for all streaming results.
-    try {
-      if (state.history.isNotEmpty) {
-        await AppLogService.info('ChatStreamManager',
-            '[STREAM-MGR] startStreaming: persisting historyLen=${state.history.length}');
-        await _saveMessages(convId: convId, history: state.history);
-      }
-    } catch (_) {
-      await AppLogService.error(
-          'ChatStreamManager', '[STREAM-MGR] save failed', _);
-    }
-
-    // Build the result and complete the resultCompleter AFTER save.
-    // 注意：标题生成等 LLM 回环任务绝不能阻塞这里 —— 否则页面
-    // _startStreaming 的 await 被拖住（秒级），且此窗口内用户的再次
-    // 发送会命中 _streams 去重而丢失新消息。
-    final result = StreamResult(
-      history: List.from(state.history),
-      assistantMessage: assistantMessage,
-      fullReply: state.fullReply,
-      reasoningBuffer: state.reasoningBuffer,
-      reasoningSections: List.from(state.reasoningSections),
-      textSections: List.from(state.textChunks),
-      toolCalls: List.from(state.accumulatedToolCalls),
-      toolCallRoundStarts: List.from(state.toolCallRoundStarts),
-      blocks: legacyToBlocks(
-        reasoningSections: state.reasoningSections,
-        textChunks: state.textChunks,
-        toolCalls: state.accumulatedToolCalls,
-        toolCallRoundStarts: state.toolCallRoundStarts,
-      ),
-      cancelled: wasCancelled,
+    return _completeStream(
+      state: state,
+      convId: convId,
+      streamError: streamError,
+      snappedChatService: snappedChatService,
     );
-
-    // Complete the result completer so duplicate startStreaming calls
-    // await the same future and get the final result.
-    if (!state.resultCompleter!.isCompleted) {
-      state.resultCompleter!.complete(result);
-    }
-
-    // Clean up this conversation's stream.
-    // Identity guard: if _streams[convId] no longer references THIS state
-    // object, a new stream was already started for the same convId (via the
-    // Stop→re-Send path). In that case, skip removal and provider cleanup
-    // to avoid destroying the new stream's state.
-    if (_streams[convId] == state) {
-      _streams.remove(convId);
-    }
-    state.resultCompleter = null;
-
-    // Only clear per-conversation providers if no new stream replaced
-    // this one. If a new stream is active for the same convId, its own
-    // provider state should be left untouched.
-    final replaced = _streams.containsKey(convId) && _streams[convId] != state;
-    if (!replaced) {
-      _setProvider(isStreamingProvider(convId), false);
-      _setProvider(streamingMsgIdProvider(convId), null);
-      _setProvider(streamingHasFirstTokenProvider(convId), false);
-      _setProvider(streamingReasoningProvider(convId), '');
-    }
-
-    // Remove this conversation from the streaming set ONLY if no new
-    // stream replaced this one. If _streams still contains convId (pointing
-    // to a different state object), keep it in the streaming set.
-    if (!_streams.containsKey(convId)) {
-      final activeSet = <String>{
-        ..._ref?.read(streamingConversationsProvider) ?? const {}
-      };
-      activeSet.remove(convId);
-      _setProvider(streamingConversationsProvider, activeSet);
-      // Dispose the per-conversation ChatService so a subsequent
-      // startStreaming for the same convId creates a fresh service
-      // with the latest config (from forceService / selectModel).
-      _adapter.cancelService(convId);
-
-      // ── 自动标题（fire-and-forget，不阻塞结果返回） ──
-      // 放在 cancelService 之后：getOrCreateService 会创建全新 service，
-      // 不会与已 dispose 的旧 service 冲突。失败静默（保留截断标题）。
-      if (!wasCancelled &&
-          !state.fullReply.startsWith('错误:') &&
-          state.history.isNotEmpty) {
-        // ignore: discarded_futures
-        unawaited(_maybeGenerateTitle(
-          convId: convId,
-          history: List<ChatMessage>.from(state.history),
-        ));
-      }
-    }
-
-    // Do NOT clear segment-related providers here (streamingFullReplyProvider,
-    // streamingTextSectionsProvider, streamingReasoningSectionsProvider,
-    // streamingToolCallsProvider, streamingToolCallRoundStartsProvider).
-    // The chat_page's post-stream code in _startStreaming handles provider
-    // cleanup AFTER updating _history and calling _buildFinalSegments.
-    // Clearing segment providers prematurely triggers _rebuildLiveSegments
-    // with empty data, overwriting the correct segments (including reasoning
-    // with isStreaming=true that should have been replaced by
-    // _buildFinalSegments with isStreaming=false).
-
-    return result;
   }
 
   /// 取消指定对话的流式请求。如果 [convId] 为 null，取消所有。
@@ -901,294 +461,7 @@ class ChatStreamManager {
     _adapter.dispose();
   }
 
-  // ── 私有方法 ──
-
-  /// Pushes the state of the given conversation to its per-conversation
-  /// family provider instances.
-  void _pushStateToProviders(_ConversationStreamState s) {
-    _setProvider(isStreamingProvider(s.convId), true);
-    _setProvider(streamingMsgIdProvider(s.convId), s.streamingMsgId);
-    _setProvider(streamingFullReplyProvider(s.convId), s.fullReply);
-    _setProvider(
-        streamingHasFirstTokenProvider(s.convId), s.hasReceivedFirstToken);
-    _setProvider(streamingReasoningProvider(s.convId), s.reasoningBuffer);
-    _setProvider(streamingReasoningSectionsProvider(s.convId),
-        List<String>.from(s.reasoningSections));
-    _setProvider(streamingToolCallsProvider(s.convId),
-        List<ToolCallData>.from(s.toolCalls));
-    _setProvider(streamingTextSectionsProvider(s.convId),
-        List<String>.from(s.textChunks));
-    _setProvider(streamingToolCallRoundStartsProvider(s.convId),
-        List<int>.from(s.toolCallRoundStarts));
-  }
-
-  /// Clears streaming providers for a specific conversation.
-  ///
-  /// Only clears if [convId] does NOT currently have an active stream.
-  /// If another conversation IS streaming (different convId), this
-  /// conversation's unrelated provider entries are still cleared.
-  void _clearProvidersFor(String convId) {
-    if (_streams.containsKey(convId)) return; // Don't clear if still streaming
-    _setProvider(isStreamingProvider(convId), false);
-    _setProvider(streamingMsgIdProvider(convId), null);
-    _setProvider(streamingFullReplyProvider(convId), '');
-    _setProvider(streamingHasFirstTokenProvider(convId), false);
-    _setProvider(streamingReasoningProvider(convId), '');
-    _setProvider(streamingReasoningSectionsProvider(convId), []);
-    _setProvider(streamingToolCallsProvider(convId), []);
-    _setProvider(streamingTextSectionsProvider(convId), ['']);
-    _setProvider(streamingToolCallRoundStartsProvider(convId), []);
-  }
-
-  /// Pushes a provider update for [convId]'s family instance.
-  /// With family providers, there is no _activeConvId guard — each
-  /// conversation writes to its own independent provider space.
-  void _pushToProvider<T>(
-      String convId, StateProvider<T> Function(String) family, T value) {
-    if (_ref == null) return;
-    _setProvider(family(convId), value);
-  }
-
-  /// Periodic partial persistence for the given conversation's stream.
-  void _doPeriodicPersist(_ConversationStreamState s) {
-    // Guard: if the timer was cancelled (stream ended), the state might
-    // still be referenced from a late-arriving timer callback. The final
-    // save has already run by now; don't overwrite it with partial data.
-    if (s.persistTimer == null) return;
-    if (s.cancelledByUser) return;
-    if (s.fullReply.isEmpty && s.reasoningBuffer.isEmpty) return;
-    if (s._isPersisting) return;
-    s._isPersisting = true;
-    final ref = _ref;
-    if (ref == null) {
-      debugPrint('[ChatStreamManager] 定期持久化失败: _ref is null');
-      s._isPersisting = false;
-      return;
-    }
-    try {
-      final partialHistory = List<ChatMessage>.from(s.history);
-      if (s.fullReply.isNotEmpty) {
-        final exists = partialHistory.any((m) => m.id == s.streamingMsgId);
-        if (!exists) {
-          partialHistory.add(ChatMessage(
-            role: 'assistant',
-            content: s.fullReply,
-            id: s.streamingMsgId ?? '',
-            reasoningContent:
-                s.reasoningBuffer.isNotEmpty ? s.reasoningBuffer : null,
-            toolCalls: s.accumulatedToolCalls.isNotEmpty
-                ? List<ToolCallData>.from(s.accumulatedToolCalls)
-                : null,
-            reasoningSections: s.reasoningSections.isNotEmpty
-                ? List<String>.from(s.reasoningSections)
-                : null,
-            textSections: s.textChunks.any((c) => c.isNotEmpty)
-                ? List<String>.from(s.textChunks)
-                : null,
-            toolCallRoundStarts: s.toolCallRoundStarts.isNotEmpty
-                ? List<int>.from(s.toolCallRoundStarts)
-                : null,
-          ));
-        }
-      }
-      ref.read(conversationsProvider.notifier).updateMessages(
-            s.convId,
-            partialHistory,
-          );
-    } catch (e) {
-      debugPrint('[ChatStreamManager] 定期持久化失败: $e');
-    } finally {
-      s._isPersisting = false;
-    }
-  }
-
-  Future<void> _saveMessages({
-    required String convId,
-    required List<ChatMessage> history,
-  }) async {
-    final ref = _ref;
-    if (ref == null) {
-      await AppLogService.warning(
-          'ChatStreamManager', '保存消息失败: _ref is null, convId=$convId');
-      return;
-    }
-    try {
-      await ref
-          .read(conversationsProvider.notifier)
-          .updateMessages(convId, List<ChatMessage>.from(history));
-      final lastMsg = history.isNotEmpty ? history.last : null;
-      await AppLogService.info(
-          'ChatStreamManager',
-          '保存消息成功, convId=$convId, historyLen=${history.length}, '
-              'hasToolCalls=${lastMsg?.toolCalls?.isNotEmpty ?? false}, '
-              'hasReasoning=${lastMsg?.reasoningSections?.isNotEmpty ?? false}');
-    } catch (e, s) {
-      try {
-        await AppLogService.error('ChatStreamManager', '保存消息失败', e, s);
-      } catch (_) {}
-    }
-  }
-
   // ── 上下文压缩（compaction） ────────────────────────────────────
-
-  /// 上下文管理：发送量超限时，用压缩助手把新增头部历史压缩为锚定摘要。
-  ///
-  /// [requestHistory] 为本次实际发送的消息子集（有摘要时 = 尾部快照起，
-  /// 对齐 opencode filterCompacted），触发判断与估算都基于它——
-  /// 压缩后发送量回到小值，不会每次发送都重复压缩。
-  ///
-  /// 成功后：
-  /// - 摘要持久化到 [Conversation.contextSummary]（含前次摘要合并）
-  /// - [Conversation.compactionTailStartId] 更新为新尾部起点
-  ///   （固定快照，后续请求从该消息起发送）
-  /// - [state.history] **不裁剪**（存储完整保留，对齐 opencode）
-  /// - 当前 ChatService 注入摘要（后续请求走 system 级摘要）
-  ///
-  /// 任何失败（未配置、请求失败、结果为空、头部为空）都静默返回 false
-  /// —— 宁可照发也不阻断用户消息。每轮发送最多执行一次，无循环。
-  Future<bool> _compactIfNeeded({
-    required _ConversationStreamState state,
-    required String convId,
-    required List<ToolDefinition> tools,
-    required List<ChatMessage> requestHistory,
-  }) async {
-    final ref = _ref;
-    if (ref == null) return false;
-
-    // 1. 触发线 = 自定义压缩触发值（若启用）?? 模型设置的上下文窗口。
-    //    context 是 per-model 配置（模型页"上下文长度"），与 provider 无关。
-    final modelConfig = _adapter.modelConfig;
-    final modelContext = (modelConfig?.typeConfig['context'] as num?)?.toInt();
-    final ctxSettings = ref.read(contextManagementSettingsProvider);
-    final threshold = ctxSettings.effectiveCompactionThreshold(modelContext);
-    if (threshold == null) return false;
-
-    // 基准：优先使用上次请求的实际输入计量（API usage，非估算）；
-    // 无实际计量时（首次请求）退化为估算。取两者较大值：
-    // - actual 可能落后于本轮增长（新消息/附件/工具结果）
-    // - estimated 含本轮全部内容
-    // 取 max 宁可多压一次，也不让请求超过触发线。
-    // 估算基于**发送量**（requestHistory，非存储总量）——压缩后
-    // 存储保留全部消息，但发送量回到小值，不会每次都触发压缩。
-    final conv = ref
-        .read(conversationsProvider)
-        .where((c) => c.id == convId)
-        .firstOrNull;
-    final actualInput = conv?.lastInputTokens;
-    final estimated = ContextManager.estimateHistoryTokens(
-      requestHistory,
-      assistantPrompt: _adapter.assistantPrompt,
-      tools: tools,
-    );
-    final currentTokens = actualInput == null
-        ? estimated
-        : (actualInput > estimated ? actualInput : estimated);
-    debugPrint('[CTX-MGR] convId=$convId current=$currentTokens'
-        ' (actual=$actualInput estimated=$estimated) threshold=$threshold');
-    if (currentTokens < threshold) return false;
-
-    // 2. 解析压缩助手（默认内置；用户可替换）
-    final settings = ref.read(systemAssistantSettingsProvider);
-    final userAssistants = ref.read(assistantProvider);
-    final compactionPrompt = resolveSystemAssistantPrompt(
-      assistantId: settings.compactionAssistantId,
-      userAssistants: userAssistants,
-    );
-    if (compactionPrompt == null) return false;
-
-    // 3. 划分头部（可压缩）与尾部（保留原文）。
-    //    head 起点：有摘要时从 compactionTailStartId 之后开始
-    //    （快照之前 = 已压缩内容，不再转写；对齐 opencode hidden）。
-    final tailStart = _findTailStart(state.history);
-    var headStart = 0;
-    final tailStartId = conv?.compactionTailStartId;
-    if (tailStartId != null) {
-      final idx = state.history.indexWhere((m) => m.id == tailStartId);
-      if (idx >= 0) headStart = idx;
-    }
-    if (headStart >= tailStart) return false; // 无新增可压缩内容
-    final head = state.history
-        .sublist(headStart, tailStart)
-        // 压缩转写剥离附件（媒体不进摘要请求）
-        .map((m) => m.attachments.isEmpty ? m : m.copyWith(attachments: []))
-        .toList();
-    final tail = state.history.sublist(tailStart);
-    if (head.isEmpty) return false;
-
-    // 4. 组装压缩请求：前次摘要（如有）+ 头部转写 + 模板指令
-    final previousSummary = conv?.contextSummary;
-
-    final sb = StringBuffer();
-    if (previousSummary != null && previousSummary.isNotEmpty) {
-      sb.writeln('<previous-summary>');
-      sb.writeln(previousSummary.trim());
-      sb.writeln('</previous-summary>');
-      sb.writeln();
-    }
-    sb.writeln('以下是需要压缩的对话历史：');
-    for (final m in head) {
-      final role = m.role == 'user' ? '用户' : '助手';
-      final content = m.content.trim();
-      if (content.isNotEmpty) {
-        sb.writeln('$role: $content');
-      }
-      // 工具事实进摘要：工具调用与结果（截断至 200 字符）是
-      // agent 工作的关键证据，压缩后模型需要保留
-      final toolCalls = m.toolCalls;
-      if (toolCalls != null) {
-        for (final tc in toolCalls) {
-          if (tc.status == ToolCallStatus.running ||
-              tc.status == ToolCallStatus.pending) {
-            continue;
-          }
-          final result = rebuildToolResultText(tc);
-          final trimmed =
-              result.length > 200 ? '${result.substring(0, 200)}…' : result;
-          sb.writeln('$role 调用了工具 ${tc.name}: $trimmed');
-        }
-      }
-    }
-    sb.writeln();
-    sb.writeln('请将以上对话历史压缩为锚定摘要，严格按模板输出。');
-
-    // 5. 执行压缩请求（轻量、无工具、maxTokens 适中）
-    final svc = _adapter.getOrCreateService(convId);
-    if (svc == null) return false;
-    String summary;
-    try {
-      summary = await svc.sendPrompt(
-        systemPrompt: compactionPrompt,
-        history: [ChatMessage(role: 'user', content: sb.toString())],
-        maxTokens: _compactionMaxTokens,
-        // 压缩请求的输入 ≈ 压缩前头部大小：只累计 cost，
-        // 不写入 lastInputTokens（避免下次触发判断膨胀/状态行虚高）
-        recordInputTokens: false,
-      );
-    } catch (e) {
-      debugPrint('[ChatStreamManager] 压缩请求失败: $e');
-      return false;
-    }
-    // 压缩请求期间用户取消：不应用压缩结果（摘要持久化
-    // 会覆盖用户可见状态）
-    if (state.cancelledByUser) return false;
-    if (summary.isEmpty) return false;
-
-    // 6. 持久化摘要 + 尾部起点（prune 边界）+ 注入摘要。
-    //    注意：**不裁剪 state.history** —— 对齐 opencode：
-    //    存储完整保留全部消息，发给 API 的只是"摘要 + 尾部"子集
-    //    （由 startStreaming 的 requestHistory 过滤实现）。
-    await ref.read(conversationsProvider.notifier).updateContextSummary(
-          convId,
-          summary,
-          tailStartId: tail.isNotEmpty ? tail.first.id : null,
-        );
-    _adapter.getOrCreateService(convId)?.setContextSummary(summary);
-    await AppLogService.info(
-        'ChatStreamManager',
-        '[CTX-MGR] 上下文已压缩, convId=$convId, '
-            'head=${head.length} 条消息 → 摘要 ${summary.length} 字符');
-    return true;
-  }
 
   /// 找到尾部起始索引：从末尾数第 [tailUserTurns] 个用户消息。
   /// 尾部 = 从该索引开始的所有消息（保留原文）；
@@ -1205,84 +478,5 @@ class ChatStreamManager {
       }
     }
     return 0;
-  }
-
-  // ── 自动标题（title agent） ──────────────────────────────────────
-
-  /// 用标题助手为对话生成标题。
-  ///
-  /// 仅当对话标题是自动生成的（[Conversation.titleAutoGenerated]，
-  /// 即用户未手动改过）且已有用户消息时执行。失败静默返回，
-  /// 保留截断标题作为兜底。
-  ///
-  /// 由 startStreaming 尾部 fire-and-forget 调用，绝不能被 await 阻塞
-  /// 结果返回（见 startStreaming 中 complete 前的注释）。
-  Future<void> _maybeGenerateTitle({
-    required String convId,
-    required List<ChatMessage> history,
-  }) async {
-    try {
-      final ref = _ref;
-      if (ref == null) return;
-
-      final conv = ref
-          .read(conversationsProvider)
-          .where((c) => c.id == convId)
-          .firstOrNull;
-      if (conv == null || !conv.titleAutoGenerated) return;
-      final firstUser = history.where((m) => m.role == 'user').firstOrNull;
-      // 用最近一条用户消息生成/更新标题（标题随对话演进；
-      // 若用首条消息，标题永远不更新）
-      final lastUser = history.lastWhere(
-        (m) => m.role == 'user' && m.content.trim().isNotEmpty,
-        orElse: () => firstUser ?? history.first,
-      );
-      if (lastUser.content.trim().isEmpty) return;
-
-      // 解析标题助手（默认内置；用户可替换）
-      final settings = ref.read(systemAssistantSettingsProvider);
-      final userAssistants = ref.read(assistantProvider);
-      final titlePrompt = resolveSystemAssistantPrompt(
-        assistantId: settings.titleAssistantId,
-        userAssistants: userAssistants,
-      );
-      if (titlePrompt == null) return;
-
-      final svc = _adapter.createTransientService();
-      if (svc == null) return;
-
-      String title;
-      try {
-        title = await svc.sendPrompt(
-          systemPrompt: titlePrompt,
-          // 标题任务只需最近一条用户消息文本，剥离附件避免重新读取大文件
-          history: [lastUser.copyWith(attachments: [])],
-          maxTokens: 200,
-          // fire-and-forget 可能与下一次主请求并发读取共享 usage 槽：
-          // 不计入累计（标题 token 极少，且避免张冠李戴/双计）
-          accumulateUsage: false,
-        );
-      } catch (e) {
-        debugPrint('[ChatStreamManager] 标题生成请求失败: $e');
-        return;
-      }
-      // 清理：单行、去引号、截断 50 字符
-      var cleaned = title.replaceAll('\n', ' ').trim();
-      cleaned = cleaned.replaceAll(RegExp(r'^["“”「」]+|["“”「」]+$'), '');
-      cleaned = cleaned.trim();
-      if (cleaned.isEmpty) return;
-      if (cleaned.length > 50) cleaned = cleaned.substring(0, 50);
-
-      // 保持 titleAutoGenerated=true：对话演进后可再次自动更新标题
-      // （手动改名走 renameConversation 置 false，不再覆盖）
-      await ref
-          .read(conversationsProvider.notifier)
-          .updateTitle(convId, cleaned);
-      await AppLogService.info(
-          'ChatStreamManager', '[TITLE] 自动标题生成完成: $cleaned');
-    } catch (e) {
-      // fire-and-forget 路径：任何异常都静默，避免 unhandled async error
-      debugPrint('[ChatStreamManager] 自动标题失败: $e');
-    }
   }
 }

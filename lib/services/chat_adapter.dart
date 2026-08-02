@@ -1,35 +1,23 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+
 import '../models/assistant.dart' show AssistantSettings, CustomParameter;
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
 import '../models/mcp.dart';
 import '../models/tool_call.dart';
-import '../models/tts_models.dart' show CustomParam;
+import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 import 'chat_protocol.dart';
 import 'chat_service.dart';
 import 'http_tool_service.dart';
+import 'mcp_client.dart';
 import 'todo_tool_service.dart';
 import 'web_search_service.dart';
-import '../providers/chat_api_provider.dart';
-import 'mcp_client.dart';
 
-/// Internal pairing of an McpServerConfig with its vendor description.
-///
-/// Used by [ChatAdapter.initializeMcpServers] to carry the description
-/// from the provider config's typeConfig alongside the server config,
-/// so that placeholder tool definitions can be created for vendors
-/// whose servers are unreachable.
-class _McpConfigEntry {
-  final McpServerConfig config;
-  final String description;
-
-  const _McpConfigEntry({
-    required this.config,
-    required this.description,
-  });
-}
+part 'chat_adapter_mcp.dart';
+part 'chat_adapter_http_tools.dart';
 
 /// 表示一个可选的模型项
 class AvailableModel {
@@ -208,277 +196,8 @@ class ChatAdapter {
   /// re-initialization when the provider config actually changes.
   int? _lastMcpEntriesHash;
 
-  /// 初始化内置工具（HTTP 工具），与 MCP SSE 服务器初始化独立。
-  ///
-  /// 此方法确保 HTTP 工具（如 brave_web_search、bocha_web_search 等）
-  /// 始终被注册，不受 MCP 服务器连接状态影响。
-  /// 即使 MCP 条目不存在或为空，也会尝试注册已缓存的工具。
-  void initializeBuiltinTools(ProviderEntriesState entriesState) {
-    final mcpEntry =
-        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
-
-    String? braveApiKey, bochaApiKey, queritApiKey, searxngUrl, searxngApiKey;
-
-    if (mcpEntry != null && mcpEntry.configs.isNotEmpty) {
-      for (final config in mcpEntry.configs) {
-        final typeConfig =
-            config.models.isNotEmpty ? config.models[0].typeConfig : null;
-
-        // Collect API keys from HTTP tool configs
-        final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;
-        if (isHttpTool) {
-          debugPrint(
-              'BuiltinTools: collecting API key for "${config.providerName}"');
-          _collectHttpToolApiKey(
-            config.providerName,
-            typeConfig,
-            (key) => braveApiKey ??= key,
-            (key) => bochaApiKey ??= key,
-            (key) => queritApiKey ??= key,
-            (url) => searxngUrl ??= url,
-            (key) => searxngApiKey ??= key,
-          );
-        }
-      }
-    }
-
-    // Always update API keys and register HTTP tools, even if no configs
-    // were found. This ensures previously registered tools remain available
-    // and new API keys take effect.
-    HttpToolService.updateApiKeys(
-      braveApiKey: braveApiKey,
-      bochaApiKey: bochaApiKey,
-      queritApiKey: queritApiKey,
-      searxngUrl: searxngUrl,
-      searxngApiKey: searxngApiKey,
-    );
-
-    // Register HTTP tool handlers in ChatService (idempotent)
-    _registerHttpTools();
-
-    // Set McpClientManager on ChatService for tool routing
-    ChatService.setMcpClientManager(_mcpClientManager);
-  }
-
-  /// 初始化 MCP 客户端（SSE / stdio）并发现工具。
-  ///
-  /// 仅处理非 HTTP 工具的 MCP 服务器配置。HTTP 工具由 [initializeBuiltinTools] 独立处理。
-  /// MCP 服务器连接失败不会影响已注册的内置工具。
-  ///
-  /// 对内置供应商（isVendor=true）的 MCP 服务器，即使连接失败也会创建占位工具定义，
-  /// 确保所有 MCP 供应商的工具都在工具列表中可见，不会区分"纯 Dart HTTP 工具"和
-  /// "SSE MCP 工具"。
-  Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
-    // Skip if config hasn't changed since last init (prevents redundant
-    // network discovery on every page mount after IndexedStack removal).
-    final hash = Object.hashAll(entriesState.entries.map((e) => e.hashCode));
-    if (_lastMcpEntriesHash == hash) return;
-    _lastMcpEntriesHash = hash;
-
-    final mcpEntry =
-        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
-    if (mcpEntry == null || mcpEntry.configs.isEmpty) return;
-
-    // Build MCP server configs (skip HTTP tools — handled by initializeBuiltinTools)
-    // and capture vendor descriptions for placeholder tool creation.
-    final mcpConfigs = <_McpConfigEntry>[];
-
-    for (final config in mcpEntry.configs) {
-      final typeConfig =
-          config.models.isNotEmpty ? config.models[0].typeConfig : null;
-
-      // Skip HTTP tools (pure Dart, not MCP)
-      final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;
-      if (isHttpTool) continue;
-
-      final serverConfig = McpServerConfig.fromProviderConfig(
-        providerName: config.providerName,
-        typeConfig: typeConfig,
-      );
-      if (serverConfig != null) {
-        final description = typeConfig?['description'] as String? ?? '';
-        mcpConfigs.add(_McpConfigEntry(
-          config: serverConfig,
-          description: description,
-        ));
-      }
-    }
-
-    // Create clients and discover tools from MCP servers
-    final allTools = <ToolDefinition>[];
-
-    // First pass: add placeholder tool definitions for vendor MCP providers
-    // so they always appear in the tool list even if servers are unreachable.
-    // This ensures no distinction between "pure Dart" HTTP tools and SSE MCP tools.
-    for (final entry in mcpConfigs) {
-      if (entry.config.isVendor && entry.description.isNotEmpty) {
-        allTools.add(ToolDefinition(
-          name: '${entry.config.name.toLowerCase().replaceAll(' ', '_')}_mcp',
-          description: entry.description,
-          parameters: const {
-            'type': 'object',
-            'properties': {},
-            'required': <String>[],
-          },
-        ));
-      }
-    }
-
-    // Second pass: connect to MCP servers and discover actual tools.
-    // When a server connects successfully, replace its placeholder with
-    // the actual tool definitions returned by the server.
-    // Only remove the placeholder when actual tools are discovered;
-    // otherwise keep the placeholder so the provider remains visible.
-    for (final entry in mcpConfigs) {
-      try {
-        final client = McpClient(config: entry.config);
-        _mcpClientManager.addClient(entry.config.name, client);
-
-        // Try to connect and list tools
-        final tools = await client.listTools();
-        final toolDefs = tools.map((t) => t.toToolDefinition()).toList();
-
-        if (toolDefs.isNotEmpty) {
-          // Actual tools were discovered — remove the placeholder
-          // and use the server-provided definitions instead.
-          if (entry.config.isVendor && entry.description.isNotEmpty) {
-            allTools.removeWhere(
-              (t) =>
-                  t.name ==
-                  '${entry.config.name.toLowerCase().replaceAll(' ', '_')}_mcp',
-            );
-          }
-          allTools.addAll(toolDefs);
-        }
-
-        debugPrint(
-          'MCP[${entry.config.name}]: discovered ${toolDefs.length} tools',
-        );
-      } catch (e) {
-        debugPrint('MCP[${entry.config.name}]: init error: $e');
-      }
-    }
-    _mcpToolDefinitions = allTools;
-  }
-
-  /// Collect API key from an HTTP tool config entry
-  void _collectHttpToolApiKey(
-    String name,
-    Map<String, dynamic>? typeConfig,
-    void Function(String) setBrave,
-    void Function(String) setBocha,
-    void Function(String) setQuerit,
-    void Function(String) setSearxngUrl,
-    void Function(String) setSearxngKey,
-  ) {
-    if (typeConfig == null) return;
-
-    // Try apiKey field first, then headers, then env
-    String? extractKey() {
-      final apiKey = typeConfig['apiKey'] as String?;
-      if (apiKey != null && apiKey.isNotEmpty) return apiKey;
-      final headersRaw = typeConfig['headers'];
-      if (headersRaw is Map) {
-        for (final val in headersRaw.values) {
-          final s = val.toString().trim();
-          if (s.isNotEmpty && s.length > 3) {
-            if (s.startsWith('Bearer ')) return s.substring(7).trim();
-            return s;
-          }
-        }
-      }
-      final envRaw = typeConfig['env'];
-      if (envRaw is Map) {
-        for (final val in envRaw.values) {
-          final s = val.toString();
-          if (s.isNotEmpty) return s;
-        }
-      }
-      return null;
-    }
-
-    switch (name) {
-      case 'Brave Search':
-        setBrave(extractKey() ?? '');
-      case 'Bocha':
-        setBocha(extractKey() ?? '');
-      case 'Querit':
-        setQuerit(extractKey() ?? '');
-      case 'Searxng':
-        final url = typeConfig['url'] as String? ?? 'http://localhost:8080';
-        setSearxngUrl(url);
-        setSearxngKey(extractKey() ?? '');
-    }
-  }
-
   /// Register HTTP tool handlers in ChatService (idempotent — uses static flag)
   static bool _httpToolsRegistered = false;
-  void _registerHttpTools() {
-    if (_httpToolsRegistered) return;
-    _httpToolsRegistered = true;
-
-    for (final def in HttpToolService.toolDefinitions) {
-      // Async handler that delegates to the HTTP tool service
-      Future<String> handler(Map<String, dynamic> args) async {
-        switch (def.name) {
-          case 'brave_web_search':
-            return await HttpToolService.handleBraveSearch(args);
-          case 'bocha_web_search':
-            return await HttpToolService.handleBochaSearch(args);
-          case 'querit_search':
-            return await HttpToolService.handleQueritSearch(args);
-          case 'searxng_search':
-            return await HttpToolService.handleSearxngSearch(args);
-          default:
-            return '错误: 未知的 HTTP 工具 "${def.name}"';
-        }
-      }
-
-      ChatService.registerTool(def, handler);
-    }
-    debugPrint(
-        'Registered ${HttpToolService.toolDefinitions.length} HTTP tools');
-
-    // Register Todo tools (todowrite / todoread)
-    for (final def in TodoToolService.toolDefinitions) {
-      Future<String> handler(Map<String, dynamic> args) async {
-        switch (def.name) {
-          case 'todowrite':
-            return await TodoToolService.handleTodoWrite(args);
-          case 'todoread':
-            return await TodoToolService.handleTodoRead(args);
-          default:
-            return '错误: 未知的 Todo 工具 "${def.name}"';
-        }
-      }
-
-      ChatService.registerTool(def, handler);
-    }
-    debugPrint(
-        'Registered ${TodoToolService.toolDefinitions.length} Todo tools');
-
-    // Register Web Search tool (web_search - Google/Bing/Baidu)
-    for (final def in WebSearchService.toolDefinitions) {
-      Future<String> handler(Map<String, dynamic> args) async {
-        switch (def.name) {
-          case 'web_search':
-            return await WebSearchService.handleWebSearch(args);
-          default:
-            return '错误: 未知的搜索工具 "${def.name}"';
-        }
-      }
-
-      ChatService.registerTool(def, handler);
-    }
-    debugPrint(
-        'Registered ${WebSearchService.toolDefinitions.length} Web Search tools');
-  }
-
-  /// 释放 MCP 资源
-  void disposeMcp() {
-    _mcpClientManager.disposeAll();
-    _mcpToolDefinitions = [];
-  }
 
   /// 从 ProviderEntriesState 解析出所有可选的模型列表
   List<AvailableModel> availableModels(ProviderEntriesState entriesState) {
@@ -639,10 +358,13 @@ class ChatAdapter {
   @visibleForTesting
   void forceService(ChatService service) {
     // Extract config from the service for use as template.
+    // ignore: invalid_use_of_visible_for_testing_member
     _cachedProvider = service.provider;
     _cachedModelConfig = service.modelConfig;
+    // ignore: invalid_use_of_visible_for_testing_member
     _cachedProviderConfig = service.providerConfig;
     // 传播注入服务的端点类型，保证派生 service 的协议一致
+    // ignore: invalid_use_of_visible_for_testing_member
     _cachedEndpointType = service.protocol.name;
     currentConfigIndex = 0;
     currentModelIndex = 0;

@@ -26,6 +26,10 @@ const String kCompactedToolResultPlaceholder = '[旧工具结果已清除]';
 /// 中断/未完成工具结果的占位文本（协议层历史重建引用）。
 const String kInterruptedToolResultPlaceholder = '[工具执行被中断]';
 
+/// 工具结果发送渲染的截断后缀（协议层 truncateToolOutput 共用，
+/// 保证 token 估算与真实发送文本一致）。
+const String kToolOutputTruncatedSuffix = '\n... [已截断]';
+
 /// prune 保护的工具（对齐 opencode PRUNE_PROTECTED_TOOLS = ["skill"]）。
 ///
 /// 状态性工具的结果即使过期也不 prune：todo 列表是 agent 的
@@ -165,7 +169,7 @@ String _renderToolResult(ToolCallData tc) {
   if (tc.status == ToolCallStatus.completed && tc.result != null) {
     final r = tc.result!;
     return r.length > _kToolOutputRenderMaxChars
-        ? r.substring(0, _kToolOutputRenderMaxChars)
+        ? '${r.substring(0, _kToolOutputRenderMaxChars)}$kToolOutputTruncatedSuffix'
         : r;
   }
   return kInterruptedToolResultPlaceholder;

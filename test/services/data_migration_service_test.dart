@@ -345,6 +345,78 @@ void main() {
       }
     });
   });
+
+  group('DataMigrationService - v2→v3 defensive migration', () {
+    test('corrupt tool call entries are skipped, migration still completes',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 2,
+        'conversations': jsonEncode([
+          {
+            'id': 'c1',
+            'title': 't',
+            'messages': [
+              {
+                'role': 'assistant',
+                'content': 'hi',
+                'reasoningSections': ['think'],
+                'toolCalls': ['not-a-map'], // 损坏条目：跳过而非中断
+                'toolCallRoundStarts': [0],
+              },
+              {
+                'role': 'user',
+                'content': 'hello',
+              },
+            ],
+          },
+        ]),
+      });
+      final result = await DataMigrationService.migrateDataFormatIfNeeded();
+      expect(result.needsMigration, isTrue);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt('data_format_version'), 3);
+    });
+
+    test('non-Map message entries are skipped, migration still completes',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 2,
+        'conversations': jsonEncode([
+          {
+            'id': 'c1',
+            'title': 't',
+            'messages': [
+              'garbage-string', // 非 Map 消息：跳过而非结构性错误
+              {
+                'role': 'assistant',
+                'content': 'hi',
+                'reasoningSections': ['think'],
+              },
+            ],
+          },
+        ]),
+      });
+      final result = await DataMigrationService.migrateDataFormatIfNeeded();
+      expect(result.needsMigration, isTrue);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt('data_format_version'), 3);
+    });
+
+    test('structural failure (invalid JSON) does NOT bump the version',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 2,
+        'conversations': 'not-json{{{',
+      });
+      await expectLater(
+        DataMigrationService.migrateDataFormatIfNeeded(),
+        throwsA(anything),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      // 版本不提升 → 下次启动自动重试（而非"假成功"永久跳过）
+      expect(prefs.getInt('data_format_version'), 2);
+    });
+  });
 }
 
 String _pad(int n) => n.toString().padLeft(2, '0');

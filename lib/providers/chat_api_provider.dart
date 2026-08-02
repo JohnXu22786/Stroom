@@ -8,6 +8,8 @@ import 'anthropic_chat_provider.dart';
 import 'chat_api_shared.dart';
 export 'chat_api_shared.dart';
 
+part 'chat_api_provider_ext.dart';
+
 // ============================================================================
 // OpenAI Compatible 实现
 // ============================================================================
@@ -113,32 +115,6 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic> get defaultHeaders => _dio.options.headers;
-
-  /// Build the request body map.
-  ///
-  /// [messages] 已由 ChatService 预处理为 API 格式
-  ///（OpenAI multimodal content array 或 plain string）。
-  ///
-  /// Exposed as [buildBody] for testing.
-  Map<String, dynamic> _buildBody(
-    List<Map<String, dynamic>> messages, {
-    String? model,
-    int? maxTokens,
-    double? temperature,
-    bool stream = false,
-    List<Map<String, dynamic>>? tools,
-    Map<String, dynamic>? extraParams,
-  }) {
-    return {
-      'model': model ?? defaultParams['model'],
-      'messages': messages,
-      if (maxTokens != null) 'max_tokens': maxTokens,
-      if (temperature != null) 'temperature': temperature,
-      'stream': stream,
-      if (tools != null && tools.isNotEmpty) 'tools': tools,
-      if (extraParams != null) ...extraParams,
-    };
-  }
 
   /// Public wrapper around [_buildBody] for direct testing.
   @visibleForTesting
@@ -319,28 +295,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       }
       return content;
     } on DioException catch (e) {
-      _lastResponseStatusCode = e.response?.statusCode;
-      _lastResponseHeaders = e.response?.headers.map;
-      if (e.response?.data is Map) {
-        _lastResponseData = Map<String, dynamic>.from(e.response!.data as Map);
-      } else if (e.response?.data is String) {
-        _lastResponseData = <String, dynamic>{
-          'raw': e.response!.data as String
-        };
-      }
-      final statusCode = e.response?.statusCode ?? 0;
-      String detail;
-      final body = e.response?.data;
-      if (body is Map) {
-        detail = body['error'] is Map
-            ? '${body['error']['message'] ?? body}'
-            : '$body';
-      } else if (body is String) {
-        detail = body;
-      } else {
-        detail = '$body';
-      }
-      throw Exception('API 请求失败 (HTTP $statusCode): $detail');
+      throw _handleChatDioError(e);
     } catch (e) {
       throw Exception('请求失败: $e');
     }
@@ -443,39 +398,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
             yield pe;
           }
 
-          // Tool call deltas (streamed in chunks by index) — handled here
-          // because accumulation requires state across multiple SSE events.
-          final choices = data['choices'] as List?;
-          if (choices != null && choices.isNotEmpty) {
-            final delta = choices[0]['delta'] as Map<String, dynamic>?;
-            if (delta != null) {
-              final toolCallsDelta = delta['tool_calls'] as List?;
-              if (toolCallsDelta != null) {
-                for (final tc in toolCallsDelta) {
-                  // Use null-safe index with fallback to 0.
-                  // Per OpenAI streaming spec, index is always present,
-                  // but be defensive against providers that may omit it.
-                  final index = tc['index'] as int? ?? 0;
-                  toolCallAccumulators.putIfAbsent(index, () => {});
-                  final acc = toolCallAccumulators[index]!;
-
-                  if (tc['id'] != null) acc['id'] = tc['id'];
-                  if (tc['type'] != null) acc['type'] = tc['type'];
-                  if (tc['function'] != null) {
-                    acc.putIfAbsent('function', () => <String, dynamic>{});
-                    final fn = tc['function'] as Map<String, dynamic>;
-                    final accFn = acc['function'] as Map<String, dynamic>;
-                    if (fn['name'] != null) accFn['name'] = fn['name'];
-                    if (fn['arguments'] != null) {
-                      accFn['arguments'] =
-                          (accFn['arguments'] as String? ?? '') +
-                              (fn['arguments'] as String);
-                    }
-                  }
-                }
-              }
-            }
-          }
+          _accumulateToolCallDeltas(data, toolCallAccumulators);
         } catch (e) {
           // API 错误 chunk（Exception）必须上抛；仅解析/形状错误
           // （FormatException/TypeError，如代理式多余行）跳过继续。
@@ -485,37 +408,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         }
       }
     } catch (e) {
-      if (e is DioException) {
-        // Clear stale streaming data from successful SSE events first.
-        _lastResponseData = null;
-
-        if (e.response?.data is Map) {
-          _lastResponseData =
-              Map<String, dynamic>.from(e.response!.data as Map);
-        } else if (e.response?.data is String) {
-          _lastResponseData = <String, dynamic>{
-            'raw': e.response!.data as String
-          };
-        } else {
-          // When ResponseType.stream is used, non-2xx error response data
-          // is a ResponseBody (unread stream). Try to read it to capture
-          // the error response body for diagnostic display.
-          final streamBody = await parseStreamErrorBody(e);
-          if (streamBody != null) {
-            _lastResponseData = streamBody;
-          }
-        }
-        // Preserve status code even when response body is unavailable.
-        _lastResponseStatusCode = e.response?.statusCode;
-        _lastResponseHeaders = e.response?.headers.map;
-      } else {
-        // Non-DioException errors (e.g., SSE stream parse failures):
-        // Reset ALL optimistically-set or stale fields to avoid
-        // reporting stale data from the last successful SSE chunk.
-        _lastResponseStatusCode = null;
-        _lastResponseData = null;
-        _lastResponseHeaders = null;
-      }
+      await _resetForStreamError(e);
       // 错误轮也可能已产生计费 usage：先产出计量事件再上抛，
       // 让 ChatService 在 onError 之前累计到成本
       if (localUsage != null) {
@@ -534,15 +427,9 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     }
 
     // After stream ends, yield tool calls if any were accumulated
-    if (toolCallAccumulators.isNotEmpty) {
-      final toolCalls = toolCallAccumulators.entries
-          .map((e) => {
-                'id': e.value['id'] as String? ?? 'call_${e.key}',
-                'type': e.value['type'] as String? ?? 'function',
-                'function': e.value['function'] as Map<String, dynamic>? ?? {},
-              })
-          .toList();
-      yield AIStreamEvent('', toolCalls: toolCalls);
+    final toolEvent = _buildToolCallEvent(toolCallAccumulators);
+    if (toolEvent != null) {
+      yield toolEvent;
     }
   }
 }

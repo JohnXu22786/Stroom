@@ -528,34 +528,57 @@ class DataMigrationService {
     try {
       final list = jsonDecode(raw) as List<dynamic>;
       var migrated = 0;
+      var skipped = 0;
       for (final c in list) {
         final messages = (c['messages'] as List<dynamic>?) ?? [];
         for (final m in messages) {
+          // 非 Map 消息属于损坏数据：跳过而不是当作结构性错误
+          // （结构性错误会 rethrow 导致版本号永不提升、每次启动
+          // 都重复迁移与备份）。
+          if (m is! Map) {
+            skipped++;
+            continue;
+          }
           if (m['role'] != 'assistant') continue;
           if (m['blocks'] != null && (m['blocks'] as List).isNotEmpty) continue;
-          final blocks = legacyToBlocks(
-            reasoningSections:
-                (m['reasoningSections'] as List<dynamic>?)?.cast<String>() ??
-                    [],
-            textChunks:
-                (m['textSections'] as List<dynamic>?)?.cast<String>() ?? [],
-            toolCalls: ((m['toolCalls'] as List<dynamic>?) ?? [])
-                .map(
-                    (tc) => ToolCallData.fromMap(Map<String, dynamic>.from(tc)))
-                .toList(),
-            toolCallRoundStarts:
-                (m['toolCallRoundStarts'] as List<dynamic>?)?.cast<int>() ?? [],
-          );
-          if (blocks.isNotEmpty) {
-            m['blocks'] = blocks.map((b) => b.toMap()).toList();
-            migrated++;
+          try {
+            final blocks = legacyToBlocks(
+              reasoningSections:
+                  (m['reasoningSections'] as List<dynamic>?)?.cast<String>() ??
+                      [],
+              textChunks:
+                  (m['textSections'] as List<dynamic>?)?.cast<String>() ?? [],
+              toolCalls: ((m['toolCalls'] as List<dynamic>?) ?? [])
+                  .map((tc) =>
+                      ToolCallData.fromMap(Map<String, dynamic>.from(tc)))
+                  .toList(),
+              toolCallRoundStarts:
+                  (m['toolCallRoundStarts'] as List<dynamic>?)?.cast<int>() ??
+                      [],
+            );
+            if (blocks.isNotEmpty) {
+              m['blocks'] = blocks.map((b) => b.toMap()).toList();
+              migrated++;
+            }
+          } catch (e) {
+            // 单条消息数据损坏（如 toolCalls 非 Map）：跳过该条，
+            // 不中断整批迁移（fromMap 层同样防御，缺 blocks 可容忍）。
+            // 仅当结构性错误（jsonDecode 失败等）才整体上抛。
+            skipped++;
+            debugPrint('[DataMigrationService] v2→v3: 跳过损坏消息: $e');
           }
         }
       }
       await prefs.setString('conversations', jsonEncode(list));
-      debugPrint('[DataMigrationService] v2→v3: Migrated $migrated messages');
+      debugPrint('[DataMigrationService] v2→v3: Migrated $migrated messages'
+          '${skipped > 0 ? ', skipped $skipped corrupt entries' : ''}');
     } catch (e) {
+      // 结构性迁移失败（jsonDecode 失败等）必须上抛：否则
+      // checkAndMigrate 会把版本号升到 3，数据永久停留在"假成功"
+      // 状态且永远不会重试。上抛后版本号不提升，下次启动自动重试
+      // （startup 层会捕获并继续启动）。
       debugPrint('[DataMigrationService] v2→v3 migration failed: $e');
+      rethrow;
     }
   }
 }

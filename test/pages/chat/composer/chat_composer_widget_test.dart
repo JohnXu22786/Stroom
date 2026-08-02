@@ -361,7 +361,9 @@ void main() {
         );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 50));
-        tester.takeException();
+        // The page must render without exceptions; otherwise the
+        // send/stop button assertions below would be meaningless.
+        expect(tester.takeException(), isNull);
 
         // The current conversation is NOT streaming — should show send button
         expect(find.byIcon(Icons.send_rounded), findsOneWidget);
