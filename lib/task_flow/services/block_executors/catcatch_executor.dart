@@ -9,6 +9,7 @@ import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
 import 'catcatch_output_registrator.dart';
+import 'shared_helpers.dart';
 
 Future<String> executeCatCatchBlock({
   required BlockTypeDefinition def,
@@ -24,10 +25,7 @@ Future<String> executeCatCatchBlock({
   final taskId = const Uuid().v4();
   execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
   execNotifier.updateSubTaskStatus(execId, flowSubTask.id, TaskStatus.running);
-  final raw = block.params['durationSec'] ?? 0;
-  final durationSec = raw is num
-      ? raw.toInt()
-      : int.tryParse(raw.toString()) ?? 0;
+  final durationSec = asIntParam(block.params, 'durationSec', 0);
   catcatchNotifier.addTask(
     input,
     durationSec,
@@ -43,9 +41,8 @@ Future<String> executeCatCatchBlock({
 
   while (true) {
     await Future.delayed(const Duration(milliseconds: 500));
-    final task = catcatchNotifier.state
-        .where((t) => t.id == taskId)
-        .firstOrNull;
+    final task =
+        catcatchNotifier.state.where((t) => t.id == taskId).firstOrNull;
 
     if (task == null) {
       execNotifier.updateSubTaskStatus(

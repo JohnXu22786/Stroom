@@ -8,6 +8,7 @@ import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_definition.dart';
 import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
+import 'shared_helpers.dart';
 
 Future<String> executeTtsBlock({
   required TaskFlowBlock block,
@@ -42,9 +43,9 @@ Future<String> executeTtsBlock({
   }
 
   final title = input.length > 20 ? input.substring(0, 20) : input;
-  final voice = block.params['voice'] ?? '';
-  final speed = block.params['speed'] ?? '1.0';
-  final saveFolder = block.params['saveFolder'] ?? '';
+  final voice = asStringParam(block.params, 'voice', '');
+  final speed = asStringParam(block.params, 'speed', '1.0');
+  final saveFolder = asStringParam(block.params, 'saveFolder', '');
 
   try {
     final taskId = const Uuid().v4();
@@ -72,9 +73,8 @@ Future<String> executeTtsBlock({
 
     while (true) {
       await Future.delayed(const Duration(milliseconds: 500));
-      final task = taskListNotifier.state
-          .where((t) => t.id == taskId)
-          .firstOrNull;
+      final task =
+          taskListNotifier.state.where((t) => t.id == taskId).firstOrNull;
 
       if (task == null) {
         execNotifier.updateSubTaskStatus(

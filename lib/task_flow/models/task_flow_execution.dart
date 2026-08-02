@@ -30,41 +30,41 @@ class FlowSubTask {
   }) : id = id ?? const Uuid().v4();
 
   FlowSubTask copyWithStatus(TaskStatus newStatus) => FlowSubTask(
-    id: id,
-    blockTypeKey: blockTypeKey,
-    blockLabel: blockLabel,
-    subTaskId: subTaskId,
-    subTaskType: subTaskType,
-    status: newStatus,
-  );
+        id: id,
+        blockTypeKey: blockTypeKey,
+        blockLabel: blockLabel,
+        subTaskId: subTaskId,
+        subTaskType: subTaskType,
+        status: newStatus,
+      );
 
   FlowSubTask copyWith({String? subTaskId}) => FlowSubTask(
-    id: id,
-    blockTypeKey: blockTypeKey,
-    blockLabel: blockLabel,
-    subTaskId: subTaskId ?? this.subTaskId,
-    subTaskType: subTaskType,
-    status: status,
-  );
+        id: id,
+        blockTypeKey: blockTypeKey,
+        blockLabel: blockLabel,
+        subTaskId: subTaskId ?? this.subTaskId,
+        subTaskType: subTaskType,
+        status: status,
+      );
 
   /// Serialize to a map for JSON persistence.
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'blockTypeKey': blockTypeKey,
-    'blockLabel': blockLabel,
-    'subTaskId': subTaskId,
-    'subTaskType': subTaskType,
-    'status': status.name,
-  };
+        'id': id,
+        'blockTypeKey': blockTypeKey,
+        'blockLabel': blockLabel,
+        'subTaskId': subTaskId,
+        'subTaskType': subTaskType,
+        'status': status.name,
+      };
 
   factory FlowSubTask.fromMap(Map<String, dynamic> map) => FlowSubTask(
-    id: map['id'] as String?,
-    blockTypeKey: map['blockTypeKey'] as String? ?? '',
-    blockLabel: map['blockLabel'] as String? ?? '',
-    subTaskId: map['subTaskId'] as String? ?? '',
-    subTaskType: map['subTaskType'] as String? ?? '',
-    status: _parseStatus(map['status'] as String?),
-  );
+        id: map['id'] as String?,
+        blockTypeKey: map['blockTypeKey'] as String? ?? '',
+        blockLabel: map['blockLabel'] as String? ?? '',
+        subTaskId: map['subTaskId'] as String? ?? '',
+        subTaskType: map['subTaskType'] as String? ?? '',
+        status: _parseStatus(map['status'] as String?),
+      );
 
   static TaskStatus _parseStatus(String? name) {
     if (name == null) return TaskStatus.running;
@@ -101,24 +101,27 @@ class TaskFlowExecution {
     this.completedAt,
     this.subTasks = const [],
     this.error,
-  }) : id = id ?? const Uuid().v4(),
-       createdAt = createdAt ?? DateTime.now();
+  })  : id = id ?? const Uuid().v4(),
+        createdAt = createdAt ?? DateTime.now();
 
   TaskFlowExecution copyWith({
     FlowExecutionStatus? status,
     DateTime? completedAt,
+    bool clearCompletedAt = false,
     List<FlowSubTask>? subTasks,
     String? error,
-  }) => TaskFlowExecution(
-    id: id,
-    flowId: flowId,
-    flowName: flowName,
-    status: status ?? this.status,
-    createdAt: createdAt,
-    completedAt: completedAt ?? this.completedAt,
-    subTasks: subTasks ?? this.subTasks,
-    error: error ?? this.error,
-  );
+  }) =>
+      TaskFlowExecution(
+        id: id,
+        flowId: flowId,
+        flowName: flowName,
+        status: status ?? this.status,
+        createdAt: createdAt,
+        completedAt:
+            clearCompletedAt ? null : (completedAt ?? this.completedAt),
+        subTasks: subTasks ?? this.subTasks,
+        error: error ?? this.error,
+      );
 
   /// Get the task status of this execution for the unified task list.
   TaskStatus get taskStatus {
@@ -134,15 +137,15 @@ class TaskFlowExecution {
 
   /// Serialize to a map for JSON persistence.
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'flowId': flowId,
-    'flowName': flowName,
-    'status': status.name,
-    'createdAt': createdAt.toIso8601String(),
-    if (completedAt != null) 'completedAt': completedAt!.toIso8601String(),
-    'subTasks': subTasks.map((s) => s.toMap()).toList(),
-    if (error != null) 'error': error,
-  };
+        'id': id,
+        'flowId': flowId,
+        'flowName': flowName,
+        'status': status.name,
+        'createdAt': createdAt.toIso8601String(),
+        if (completedAt != null) 'completedAt': completedAt!.toIso8601String(),
+        'subTasks': subTasks.map((s) => s.toMap()).toList(),
+        if (error != null) 'error': error,
+      };
 
   factory TaskFlowExecution.fromMap(Map<String, dynamic> map) =>
       TaskFlowExecution(
@@ -156,8 +159,7 @@ class TaskFlowExecution {
         completedAt: map['completedAt'] != null
             ? DateTime.parse(map['completedAt'] as String)
             : null,
-        subTasks:
-            (map['subTasks'] as List<dynamic>?)
+        subTasks: (map['subTasks'] as List<dynamic>?)
                 ?.map(
                   (s) =>
                       FlowSubTask.fromMap(Map<String, dynamic>.from(s as Map)),

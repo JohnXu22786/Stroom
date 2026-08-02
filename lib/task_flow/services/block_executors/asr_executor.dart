@@ -123,8 +123,8 @@ Future<String> executeAsrBlock({
     );
   }
 
-  final modelIndex = int.tryParse(block.params['modelIndex'] ?? '0') ?? 0;
-  final saveFolder = block.params['saveFolder'] ?? '';
+  final modelIndex = asIntParam(block.params, 'modelIndex', 0);
+  final saveFolder = asStringParam(block.params, 'saveFolder', '');
   final configs = providerEntries.entries
       .where((e) => e.type == 'asr')
       .expand((e) => e.configs)

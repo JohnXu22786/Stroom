@@ -18,6 +18,33 @@ void failSubTask(
   execNotifier.updateSubTaskStatus(execId, flowSubTaskId, TaskStatus.failed);
 }
 
+/// Reads an int-typed block param safely.
+///
+/// Block params are `dynamic`: the editor stores `int` for dropdowns,
+/// `num` for number fields, and JSON persistence round-trips numbers as
+/// `num` and strings as `String`. `int.tryParse` on a `num` throws a
+/// runtime `TypeError`, so values must be coerced before parsing.
+int asIntParam(Map<String, dynamic> params, String key, int fallback) {
+  final raw = params[key];
+  if (raw is num) return raw.toInt();
+  return int.tryParse(raw?.toString() ?? '') ?? fallback;
+}
+
+/// Reads a String-typed block param safely.
+///
+/// Number fields store `num`; passing those directly into a
+/// `Map<String, String>` throws a runtime `TypeError`. Values are
+/// stringified (or the fallback returned) instead.
+String asStringParam(
+  Map<String, dynamic> params,
+  String key,
+  String fallback,
+) {
+  final raw = params[key];
+  if (raw == null) return fallback;
+  return raw is String ? raw : raw.toString();
+}
+
 Future<String?> saveTextForFlow(
   String text, {
   String saveFolder = '',
@@ -33,9 +60,13 @@ Future<String?> saveTextForFlow(
   String recordName = baseName;
   final records = await TextManifest.loadRecords();
   int dedupIdx = 2;
-  while (records.any((r) => r.name == recordName && r.folder == saveFolder)) {
+  while (records.any((r) => r.name == recordName && r.folder == saveFolder) &&
+      dedupIdx <= 10000) {
     recordName = '$baseName ($dedupIdx)';
     dedupIdx++;
+  }
+  if (dedupIdx > 10000) {
+    recordName = '$baseName _${DateTime.now().millisecondsSinceEpoch}';
   }
 
   await TextManifest.addRecord(

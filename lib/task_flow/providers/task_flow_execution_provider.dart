@@ -10,8 +10,8 @@ import 'persistable_notifier.dart';
 /// Provider for tracking task flow executions (for the unified task list).
 final taskFlowExecutionsProvider =
     StateNotifierProvider<TaskFlowExecutionNotifier, List<TaskFlowExecution>>(
-      (ref) => TaskFlowExecutionNotifier(),
-    );
+  (ref) => TaskFlowExecutionNotifier(),
+);
 
 class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     with PersistableNotifier<List<TaskFlowExecution>> {
@@ -92,10 +92,10 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   /// Update a sub-task's status.
   ///
   /// Recomputes the execution status from the current sub-task states
-  /// whenever a sub-task changes. This allows the flow to recover from
-  /// "failed" to "completed" if a failed CatCatch task is retried and
-  /// succeeds, or to move from "completed" to "failed" if a sub-task
-  /// fails after the flow was already marked complete.
+  /// whenever a sub-task changes. A terminal state can be re-opened by a
+  /// later sub-task update (e.g. a sub-task that raced with cascade-fail);
+  /// when that happens `completedAt` is cleared so the execution does not
+  /// carry a stale completion time.
   void updateSubTaskStatus(
     String executionId,
     String subTaskId,
@@ -125,10 +125,13 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
       if (anyFailed) {
         return e.copyWith(
           status: FlowExecutionStatus.failed,
-          completedAt: updated.isNotEmpty ? DateTime.now() : null,
+          completedAt: DateTime.now(),
         );
       } else if (anyRunning) {
-        return e.copyWith(status: FlowExecutionStatus.running);
+        return e.copyWith(
+          status: FlowExecutionStatus.running,
+          clearCompletedAt: true,
+        );
       } else if (allCompleted) {
         return e.copyWith(
           status: FlowExecutionStatus.completed,

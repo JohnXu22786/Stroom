@@ -14,8 +14,8 @@ import 'persistable_notifier.dart';
 /// Flows are ordered by [updatedAt] descending (newest first).
 final taskFlowListProvider =
     StateNotifierProvider<TaskFlowNotifier, List<TaskFlowDefinition>>(
-      (ref) => TaskFlowNotifier(),
-    );
+  (ref) => TaskFlowNotifier(),
+);
 
 // ============================================================================
 // Notifier

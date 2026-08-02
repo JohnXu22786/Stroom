@@ -69,9 +69,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       _isRunMode = widget.startInRunMode;
       _enteredFromRunMode = widget.startInRunMode;
 
-      final flow = ref
-          .read(taskFlowListProvider)
-          .firstWhere(
+      final flow = ref.read(taskFlowListProvider).firstWhere(
             (f) => f.id == widget.flowId,
             orElse: () => TaskFlowDefinition(name: ''),
           );

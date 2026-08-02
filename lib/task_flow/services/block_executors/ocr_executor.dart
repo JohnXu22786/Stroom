@@ -79,7 +79,7 @@ Future<String> executeOcrBlock({
 }) async {
   final inputBasename = p.basename(input);
   final title = '文字识别_${p.basenameWithoutExtension(inputBasename)}';
-  final saveFolder = block.params['saveFolder'] ?? '';
+  final saveFolder = asStringParam(block.params, 'saveFolder', '');
 
   final taskId = const Uuid().v4();
   execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);

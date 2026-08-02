@@ -1,9 +1,7 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../../../providers/background_task_provider.dart';
-import '../../../providers/chat_manager_provider.dart';
 import '../../../providers/task_provider_shared.dart';
 import '../../../services/app_log_service.dart';
+import '../../../services/chat_stream_manager.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/task_flow_definition.dart';
 import '../../models/task_flow_execution.dart';
@@ -23,9 +21,10 @@ Future<String> executeChatBlock({
   required TaskFlowExecutionNotifier execNotifier,
   required FlowSubTask flowSubTask,
   required BackgroundTaskNotifier bgNotifier,
-  required Ref ref,
+  required ChatStreamManager chatManager,
+  Duration maxWait = const Duration(minutes: 10),
 }) async {
-  final promptPrefix = (block.params['promptPrefix'] as String?)?.trim() ?? '';
+  final promptPrefix = asStringParam(block.params, 'promptPrefix', '').trim();
   final prompt = promptPrefix.isNotEmpty ? '$promptPrefix\n\n$input' : input;
 
   final taskId = 'chat_${flowSubTask.id}';
@@ -40,25 +39,46 @@ Future<String> executeChatBlock({
   try {
     bgNotifier.updateStep(taskId, 0, running: true);
 
-    final manager = ref.read(chatStreamManagerProvider);
-
     // Generate a unique conversation ID for this block execution.
     // Using the flow sub-task ID ensures each execution has its own
     // conversation context (no cross-contamination with other flows).
     final convId = 'flow_${flowSubTask.id}';
 
-    final result = await manager.startStreaming(
+    final result = await chatManager.startStreaming(
       text: prompt,
       convId: convId,
       history: [], // Fresh conversation – no prior context
       tools: [], // No tool access in flow blocks
-    );
+    ).timeout(maxWait, onTimeout: () {
+      // A stalled model stream must not hang the flow forever —
+      // cancel the stream and surface the failure like any other.
+      chatManager.cancel(convId);
+      return const StreamResult(history: [], cancelled: true);
+    });
+
+    // A cancelled stream (user stop or timeout) only has a partial
+    // reply — treat it as a failure, never a successful step.
+    if (result.cancelled) {
+      failSubTask(
+        bgNotifier,
+        taskId,
+        execNotifier,
+        execId,
+        flowSubTask.id,
+        '对话超时或已取消',
+      );
+      throw BlockExecutionException(
+        '对话超时或已取消',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
 
     final reply = result.fullReply;
     bgNotifier.updateStep(taskId, 0, completed: true);
     bgNotifier.setResult(taskId, reply);
 
-    if (reply.isEmpty && !result.cancelled) {
+    if (reply.isEmpty) {
       failSubTask(
         bgNotifier,
         taskId,

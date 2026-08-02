@@ -72,9 +72,14 @@ Future<void> registerCompletedVideo(String filePath, CatCatchTask task) async {
 
   final records = await VideoManifest.loadRecords();
   int dedupIdx = 2;
-  while (records.any((r) => r.name == recordName && r.folder == videoFolder)) {
+  while (records.any((r) => r.name == recordName && r.folder == videoFolder) &&
+      dedupIdx <= 10000) {
     recordName = '${p.basenameWithoutExtension(filePath)} ($dedupIdx)';
     dedupIdx++;
+  }
+  if (dedupIdx > 10000) {
+    recordName =
+        '${p.basenameWithoutExtension(filePath)}_${DateTime.now().millisecondsSinceEpoch}';
   }
 
   // Only write the physical file once — hash-addressed storage.
@@ -116,9 +121,14 @@ Future<void> registerCompletedAudio(String filePath, CatCatchTask task) async {
 
   final records = await FileManifest.loadRecords();
   int dedupIdx = 2;
-  while (records.any((r) => r.name == recordName && r.folder == audioFolder)) {
+  while (records.any((r) => r.name == recordName && r.folder == audioFolder) &&
+      dedupIdx <= 10000) {
     recordName = '${p.basenameWithoutExtension(filePath)} ($dedupIdx)';
     dedupIdx++;
+  }
+  if (dedupIdx > 10000) {
+    recordName =
+        '${p.basenameWithoutExtension(filePath)}_${DateTime.now().millisecondsSinceEpoch}';
   }
 
   // Only write the physical file once — hash-addressed storage.
@@ -138,6 +148,8 @@ Future<void> registerCompletedAudio(String filePath, CatCatchTask task) async {
     folder: audioFolder,
   );
   await FileManifest.addRecord(record);
+  AppLogService.info(
+      'CatCatch', '音频已保存: $recordName.$ext (${fileBytes.length} bytes)');
   debugPrint(
       '[TaskExecutor] Registered audio to gallery: $recordName.$ext (folder: $audioFolder)');
 }

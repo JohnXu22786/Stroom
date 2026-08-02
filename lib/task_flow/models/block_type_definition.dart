@@ -65,13 +65,13 @@ class BlockParamDefinition {
   });
 
   Map<String, dynamic> toMap() => {
-    'key': key,
-    'label': label,
-    'type': type.name,
-    'required': required,
-    if (defaultValue != null) 'defaultValue': defaultValue,
-    if (hintText != null) 'hintText': hintText,
-  };
+        'key': key,
+        'label': label,
+        'type': type.name,
+        'required': required,
+        if (defaultValue != null) 'defaultValue': defaultValue,
+        if (hintText != null) 'hintText': hintText,
+      };
 
   factory BlockParamDefinition.fromMap(Map<String, dynamic> map) =>
       BlockParamDefinition(
@@ -307,12 +307,12 @@ class BlockTypeDefinition {
   // ========================================================================
 
   Map<String, dynamic> toMap() => {
-    'typeKey': typeKey.name,
-    'label': label,
-    'inputType': inputType.toJson(),
-    'outputType': outputType.toJson(),
-    'params': params.map((p) => p.toMap()).toList(),
-  };
+        'typeKey': typeKey.name,
+        'label': label,
+        'inputType': inputType.toJson(),
+        'outputType': outputType.toJson(),
+        'params': params.map((p) => p.toMap()).toList(),
+      };
 
   factory BlockTypeDefinition.fromMap(Map<String, dynamic> map) {
     final typeKey = parseBlockType(map['typeKey'] as String);
@@ -326,8 +326,7 @@ class BlockTypeDefinition {
       outputType: IOType.fromJson(map['outputType'] as String? ?? 'any'),
       icon: Icons.extension,
       color: Colors.grey,
-      params:
-          (map['params'] as List?)
+      params: (map['params'] as List?)
               ?.map(
                 (p) => BlockParamDefinition.fromMap(
                   Map<String, dynamic>.from(p as Map),
