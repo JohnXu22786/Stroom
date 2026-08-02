@@ -142,6 +142,15 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
     final parentPath = VideoManifest.getParentFolderPath(oldName);
     final newPath = parentPath.isEmpty ? newName : '$parentPath/$newName';
 
+    // 无操作重命名（新路径与原路径相同）：直接返回，
+    // 否则 removeFolderFromCache 会把记录误移到根目录
+    if (newPath == oldName) return;
+
+    // 目标位置（或其下）已存在同名文件夹：拒绝（防御性，UI 层已阻止），
+    // 避免两个文件夹被静默合并
+    final existing = await VideoManifest.getAllFolders();
+    if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
+
     final records = await VideoManifest.loadRecords();
 
     for (final r in records) {
@@ -159,6 +168,8 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
           await VideoManifest.moveRecord(r.id, newDescPath);
         }
       }
+      // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+      await VideoManifest.addFolder(newDescPath);
     }
 
     await VideoManifest.addFolder(newPath);
@@ -172,6 +183,14 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
     VideoManifest.invalidateCache();
     final baseName = VideoManifest.getFolderBaseName(sourceName);
     final newPath = targetParent.isEmpty ? baseName : '$targetParent/$baseName';
+
+    // 防止无操作移动（目标为当前位置）或移动到自身/子文件夹：
+    // 否则 removeFolderFromCache 会把记录误移到根目录，造成数据损坏
+    if (newPath == sourceName || newPath.startsWith('$sourceName/')) return;
+
+    // 目标位置（或其下）已存在同名文件夹：拒绝，避免静默合并
+    final existing = await VideoManifest.getAllFolders();
+    if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
 
     final records = await VideoManifest.loadRecords();
 
@@ -190,6 +209,8 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
           await VideoManifest.moveRecord(r.id, newDescPath);
         }
       }
+      // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+      await VideoManifest.addFolder(newDescPath);
     }
 
     await VideoManifest.removeFolderFromCache(sourceName);
@@ -209,6 +230,14 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
   Future<void> copyFolder(String sourceName, String targetParent) async {
     final baseName = VideoManifest.getFolderBaseName(sourceName);
     final newPath = targetParent.isEmpty ? baseName : '$targetParent/$baseName';
+
+    // 防止复制到自身/子文件夹（或原地复制），避免文件夹内出现
+    // 重复记录与自我嵌套
+    if (newPath == sourceName || newPath.startsWith('$sourceName/')) return;
+
+    // 目标位置（或其下）已存在同名文件夹：拒绝，避免重复复制/合并
+    final existing = await VideoManifest.getAllFolders();
+    if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
 
     final records = await VideoManifest.loadRecords();
 
@@ -243,6 +272,9 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
           ));
         }
       }
+      // Empty subfolders (no records) must stay in the folder cache;
+      // otherwise the old-path cleanup would drop their paths.
+      await VideoManifest.addFolder(newDescPath);
     }
 
     await VideoManifest.addFolder(newPath);

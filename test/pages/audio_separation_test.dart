@@ -1072,7 +1072,16 @@ void main() {
   });
 
   group('HomePage — .select() guard', () {
-    final homeSource = File('lib/pages/home_page.dart').readAsStringSync();
+    // The home page was split into a main file + part files
+    // (home_page_*.dart); the background-tasks watch lives in
+    // home_page_home_content.dart. Scan all of them.
+    final homeSource = Directory('lib/pages')
+        .listSync()
+        .whereType<File>()
+        .where((f) =>
+            RegExp(r'^home_page.*\.dart$').hasMatch(f.uri.pathSegments.last))
+        .map((f) => f.readAsStringSync())
+        .join('\n');
 
     test('backgroundTasksProvider is watched with .select()', () {
       // Verify the home page uses .select() so that intermediate

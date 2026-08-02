@@ -4,10 +4,15 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/tool_call.dart';
+import '../pages/chat/chat_types.dart' show legacyToBlocks;
 import 'app_log_service.dart';
 import 'auto_backup_service.dart';
 import 'backup_location_manager.dart';
 import 'manifest_database.dart';
+
+part 'data_migration_backup.dart';
+part 'data_migration_old_configs.dart';
 
 /// The key used in SharedPreferences to store the data format version.
 const String _kDataFormatVersionKey = 'data_format_version';
@@ -56,7 +61,7 @@ class DataMigrationService {
   /// - v0: 初始版本（无版本号记录）
   /// - v1: 引入 data_format_version; 迁移 old chat_configs → provider_entries
   /// - v2: 移除共享 folders 表, 全部改为每个类型独立的文件夹表
-  static const int currentFormatVersion = 2;
+  static const int currentFormatVersion = 3;
 
   // ================================================================
   // 版本检查
@@ -141,96 +146,17 @@ class DataMigrationService {
   /// - iOS:     <app_group>/Documents/Stroom/AutoBackups/（通过文件 App 可访问）
   /// - 测试环境: Directory.systemTemp/stroom_backup_test/
   ///
-  /// 注意：此方法委托给 [BackupLocationManager.getBackupRootPath]。
-  /// 在 Android 上如果 SAF URI 尚未配置，会返回 null。
-  static Future<String> getExternalBackupRootPath() async {
-    if (kIsWeb) {
-      return '/stroom_backups';
-    }
+  /// 获取外部备份根目录（委托 [DataMigrationBackup]，实现见
+  /// data_migration_backup.dart）。
+  static Future<String> getExternalBackupRootPath() =>
+      DataMigrationBackup.getExternalBackupRootPath();
 
-    // 测试环境：使用临时目录
-    try {
-      if (Platform.environment['FLUTTER_TEST'] == 'true') {
-        return '${Directory.systemTemp.path}/stroom_backup_test';
-      }
-    } catch (e) {
-      debugPrint('[DataMigrationService] Error checking test env: $e');
-    }
+  /// 创建当前数据的完整 ZIP 备份（委托 [DataMigrationBackup]）。
+  static Future<String?> createBackup() => DataMigrationBackup.createBackup();
 
-    // 委托给 BackupLocationManager
-    final path = await BackupLocationManager.getBackupRootPath();
-    if (path != null) {
-      return path;
-    }
-
-    // 兜底：系统临时目录
-    try {
-      return '${Directory.systemTemp.path}/Stroom/AutoBackups';
-    } catch (_) {
-      return '/tmp/Stroom/AutoBackups';
-    }
-  }
-
-  /// 创建当前数据的完整 ZIP 备份。
-  ///
-  /// 使用 [AutoBackupService] 创建包含所有应用数据的完整备份
-  /// 到 Stroom/AutoBackups 目录。备份文件格式为：
-  ///   backup_YYYY-MM-DDTHH-MM-SS.zip
-  ///
-  /// 返回备份文件路径，如果备份失败返回 `null`。
-  static Future<String?> createBackup() async {
-    if (kIsWeb) {
-      debugPrint(
-          '[DataMigrationService] File system backup not supported on web');
-      return null;
-    }
-
-    try {
-      final success = await AutoBackupService.performAutoBackup(
-        isPreMigration: true,
-      );
-      if (!success) return null;
-
-      // 获取最新的备份文件路径
-      final backupRoot = await getExternalBackupRootPath();
-      final backupDir = Directory(backupRoot);
-      if (!await backupDir.exists()) return null;
-
-      final entries = await backupDir.list().toList();
-      final zipFiles = entries
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.zip'))
-          .toList();
-      if (zipFiles.isEmpty) return null;
-
-      // 按修改时间排序，取最新的
-      zipFiles.sort((a, b) {
-        try {
-          return b.statSync().modified.compareTo(a.statSync().modified);
-        } catch (_) {
-          return 0;
-        }
-      });
-
-      debugPrint(
-          '[DataMigrationService] Backup created at ${zipFiles.first.path}');
-      return zipFiles.first.path;
-    } catch (e) {
-      debugPrint('[DataMigrationService] Failed to create backup: $e');
-      return null;
-    }
-  }
-
-  /// 清理旧备份，保留至少 3 个最新的。
-  ///
-  /// 委托给 [AutoBackupService.cleanupOldBackups] 执行。
-  /// 在每次启动时自动调用，确保旧备份不会无限累积。
-  static Future<void> cleanOldBackups() async {
-    if (kIsWeb) return;
-    await AppLogService.info('DataMigrationService', '开始清理旧备份');
-    await AutoBackupService.cleanupOldBackups();
-    await AppLogService.info('DataMigrationService', '旧备份清理完成');
-  }
+  /// 清理旧备份，保留至少 3 个最新的（委托 [DataMigrationBackup]）。
+  static Future<void> cleanOldBackups() =>
+      DataMigrationBackup.cleanOldBackups();
 
   // ================================================================
   // 迁移步骤
@@ -258,6 +184,9 @@ class DataMigrationService {
         break;
       case 1:
         await _migrateV1ToV2();
+        break;
+      case 2:
+        await _migrateV2ToV3();
         break;
       default:
         debugPrint('[DataMigrationService] No migration steps defined '
@@ -326,176 +255,15 @@ class DataMigrationService {
         '[DataMigrationService] v0→v1: Migration completed successfully');
   }
 
-  /// 迁移旧版 chat_configs（被重构删除的格式）到 provider_entries。
-  static Future<void> _migrateOldChatConfigs(SharedPreferences prefs) async {
-    final oldJson = prefs.getString('chat_configs');
-    if (oldJson == null || oldJson.isEmpty) return;
+  /// 迁移旧 chat_configs 到 provider_entries（委托 [DataMigrationOldConfigs]，
+  /// 实现见 data_migration_old_configs.dart）。
+  static Future<void> _migrateOldChatConfigs(SharedPreferences prefs) =>
+      DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
 
-    try {
-      // 兜底：使用 whereType 安全过滤非 Map 条目
-      final oldList = (jsonDecode(oldJson) as List?)
-              ?.whereType<Map<String, dynamic>>()
-              .toList() ??
-          [];
-      if (oldList.isEmpty) return;
+  /// 修复 provider_entries 中 id 为 null 的条目（委托 [DataMigrationOldConfigs]）。
+  static Future<void> _fixNullIdsInProviderEntries(SharedPreferences prefs) =>
+      DataMigrationOldConfigs.fixNullIdsInProviderEntries(prefs);
 
-      final migratedConfigs = <Map<String, dynamic>>[];
-      for (final oldItem in oldList) {
-        // 兜底：安全过滤 models 中的非 Map 条目
-        final oldModels = (oldItem['models'] as List?)
-                ?.whereType<Map<String, dynamic>>()
-                .toList() ??
-            [];
-
-        final models = oldModels.map((m) {
-          final typeConfig = <String, dynamic>{};
-          final maxTokens = m['maxTokens'] ?? m['context'];
-          if (maxTokens != null) typeConfig['context'] = maxTokens;
-          final temperature = m['temperature'];
-          if (temperature != null) typeConfig['temperature'] = temperature;
-
-          return <String, dynamic>{
-            'name': m['modelId'] as String? ?? '',
-            'modelId': m['modelId'] as String? ?? '',
-            'supportStream': m['supportStream'] as bool? ?? true,
-            'typeConfig': typeConfig,
-          };
-        }).toList();
-
-        migratedConfigs.add(<String, dynamic>{
-          'providerName': oldItem['providerName'] as String? ?? '',
-          'host': oldItem['host'] as String? ?? '',
-          'key': oldItem['key'] as String? ?? '',
-          'models': models,
-        });
-      }
-
-      if (migratedConfigs.isEmpty) return;
-
-      // 读取或初始化当前 provider_entries
-      String? existingJson;
-      try {
-        existingJson = prefs.getString('provider_entries');
-      } catch (_) {}
-
-      List<Map<String, dynamic>> existingEntries = [];
-      if (existingJson != null && existingJson.isNotEmpty) {
-        try {
-          // 兜底：使用 whereType 安全过滤非 Map 条目
-          existingEntries = (jsonDecode(existingJson) as List)
-              .whereType<Map<String, dynamic>>()
-              .toList();
-        } catch (_) {
-          // 现有数据损坏，忽略并用空列表重新开始
-        }
-      }
-
-      // 如果已有 llm 类型条目则不覆盖
-      final hasLlmEntry = existingEntries
-          .any((e) => e['type'] == 'llm' && e['id'] != 'builtin_llm');
-      if (!hasLlmEntry) {
-        existingEntries.add({
-          'id': 'migrated_llm',
-          'type': 'llm',
-          'name': 'LLM供应商',
-          'configs': migratedConfigs,
-        });
-
-        await prefs.setString('provider_entries', jsonEncode(existingEntries));
-        debugPrint(
-            '[DataMigrationService] Migrated ${oldList.length} old chat config(s) to provider_entries');
-      }
-
-      // 删除旧数据，防止 provider 级别重复迁移
-      await prefs.remove('chat_configs');
-      await prefs.remove('chat_selected_config_id');
-    } catch (e) {
-      debugPrint(
-          '[DataMigrationService] Failed to migrate old chat configs: $e');
-    }
-  }
-
-  /// 修复 provider_entries 中所有条目的 id 字段不为空。
-  ///
-  /// 旧版数据中某些条目的 id 可能为 null，导致 ProviderEntry.fromMap()
-  /// 在 `map['id'] as String` 处抛出 TypeError，进而引发闪退。
-  static Future<void> _fixNullIdsInProviderEntries(
-      SharedPreferences prefs) async {
-    final json = prefs.getString('provider_entries');
-    if (json == null || json.isEmpty) return;
-
-    try {
-      // 兜底：使用 whereType 安全过滤非 Map 条目
-      final list =
-          (jsonDecode(json) as List).whereType<Map<String, dynamic>>().toList();
-      bool changed = false;
-
-      for (int i = 0; i < list.length; i++) {
-        final entry = list[i];
-        if (entry['id'] == null || (entry['id'] as String?)?.isEmpty == true) {
-          // 为 null id 的条目生成一个唯一 ID
-          final type = entry['type'] as String? ?? 'unknown';
-          entry['id'] = 'migrated_${type}_$i';
-          changed = true;
-          debugPrint(
-              '[DataMigrationService] Fixed null id for provider entry at index $i (type: $type)');
-        }
-
-        // 修复自定义参数中缺少 type 字段的旧格式
-        final configs = entry['configs'] as List?;
-        if (configs != null) {
-          for (final config in configs) {
-            // 兜底：跳过非 Map 的 config 条目
-            if (config is! Map<String, dynamic>) continue;
-            final configMap = config;
-            final models = configMap['models'] as List?;
-            if (models == null) continue;
-            for (final model in models) {
-              // 兜底：跳过非 Map 的 model 条目
-              if (model is! Map<String, dynamic>) continue;
-              final modelMap = model;
-              final customParams = modelMap['customParams'] as List?;
-              if (customParams == null) continue;
-              for (final param in customParams) {
-                // 兜底：跳过非 Map 的 param 条目
-                if (param is! Map<String, dynamic>) continue;
-                final paramMap = param;
-                if (paramMap['type'] == null) {
-                  paramMap['type'] = 'string';
-                  changed = true;
-                }
-              }
-            }
-          }
-        }
-
-        // 确保每条记录都有 type 字段（旧版可能缺失）
-        if (entry['type'] == null ||
-            (entry['type'] as String?)?.isEmpty == true) {
-          entry['type'] = 'tts';
-          changed = true;
-          debugPrint(
-              '[DataMigrationService] Fixed null type for provider entry at index $i');
-        }
-      }
-
-      if (changed) {
-        await prefs.setString('provider_entries', jsonEncode(list));
-        debugPrint(
-            '[DataMigrationService] Fixed null IDs/types in provider_entries');
-      }
-    } catch (e) {
-      debugPrint('[DataMigrationService] Failed to fix provider entries: $e');
-    }
-  }
-
-  /// v1 → v2: 移除共享 folders 表，完全迁移到每个类型独立的文件夹表。
-  ///
-  /// 迁移步骤：
-  /// 1. 检测并迁移旧版共享 folders 表中的数据到 text/audio/image/video_folders
-  /// 2. 删除旧版共享 folders 表（SQLite）或 key（JSON/web）
-  /// 3. 迁移完成后，只保留每种类型独立的文件夹表
-  ///
   /// 此迁移是幂等的：即使重复执行也不会有副作用。
   static Future<void> _migrateV1ToV2() async {
     try {
@@ -510,6 +278,77 @@ class DataMigrationService {
     } catch (e) {
       // 迁移失败不阻塞启动，记录日志后继续
       debugPrint('[DataMigrationService] v1→v2 migration failed: $e');
+    }
+  }
+
+  /// v2→v3: Convert old assistant messages to unified block format.
+  static Future<void> _migrateV2ToV3() async {
+    debugPrint('[DataMigrationService] v2→v3: Starting block migration');
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('conversations');
+    if (raw == null || raw.isEmpty) return;
+
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      var migrated = 0;
+      var skipped = 0;
+      for (final c in list) {
+        // 非 Map 对话条目属于损坏数据：跳过（结构性错误才会 rethrow）
+        if (c is! Map) {
+          skipped++;
+          continue;
+        }
+        final messagesRaw = c['messages'];
+        final messages = messagesRaw is List ? messagesRaw : <dynamic>[];
+        for (final m in messages) {
+          // 非 Map 消息属于损坏数据：跳过而不是当作结构性错误
+          // （结构性错误会 rethrow 导致版本号永不提升、每次启动
+          // 都重复迁移与备份）。
+          if (m is! Map) {
+            skipped++;
+            continue;
+          }
+          if (m['role'] != 'assistant') continue;
+          final blocksRaw = m['blocks'];
+          if (blocksRaw is List && blocksRaw.isNotEmpty) continue;
+          try {
+            final blocks = legacyToBlocks(
+              reasoningSections:
+                  (m['reasoningSections'] as List<dynamic>?)?.cast<String>() ??
+                      [],
+              textChunks:
+                  (m['textSections'] as List<dynamic>?)?.cast<String>() ?? [],
+              toolCalls: ((m['toolCalls'] as List<dynamic>?) ?? [])
+                  .map((tc) =>
+                      ToolCallData.fromMap(Map<String, dynamic>.from(tc)))
+                  .toList(),
+              toolCallRoundStarts:
+                  (m['toolCallRoundStarts'] as List<dynamic>?)?.cast<int>() ??
+                      [],
+            );
+            if (blocks.isNotEmpty) {
+              m['blocks'] = blocks.map((b) => b.toMap()).toList();
+              migrated++;
+            }
+          } catch (e) {
+            // 单条消息数据损坏（如 toolCalls 非 Map）：跳过该条，
+            // 不中断整批迁移（fromMap 层同样防御，缺 blocks 可容忍）。
+            // 仅当结构性错误（jsonDecode 失败等）才整体上抛。
+            skipped++;
+            debugPrint('[DataMigrationService] v2→v3: 跳过损坏消息: $e');
+          }
+        }
+      }
+      await prefs.setString('conversations', jsonEncode(list));
+      debugPrint('[DataMigrationService] v2→v3: Migrated $migrated messages'
+          '${skipped > 0 ? ', skipped $skipped corrupt entries' : ''}');
+    } catch (e) {
+      // 结构性迁移失败（jsonDecode 失败等）必须上抛：否则
+      // checkAndMigrate 会把版本号升到 3，数据永久停留在"假成功"
+      // 状态且永远不会重试。上抛后版本号不提升，下次启动自动重试
+      // （startup 层会捕获并继续启动）。
+      debugPrint('[DataMigrationService] v2→v3 migration failed: $e');
+      rethrow;
     }
   }
 }

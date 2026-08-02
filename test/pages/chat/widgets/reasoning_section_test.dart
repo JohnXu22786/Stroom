@@ -12,7 +12,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            streamingReasoningSectionsProvider.overrideWith(
+            streamingReasoningSectionsProvider('test-conv-id').overrideWith(
               (ref) => ['Test reasoning content'],
             ),
           ],
@@ -43,7 +43,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            streamingReasoningSectionsProvider.overrideWith(
+            streamingReasoningSectionsProvider('test-conv-id').overrideWith(
               (ref) => ['Streaming reasoning...'],
             ),
           ],
@@ -74,7 +74,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            streamingReasoningSectionsProvider.overrideWith(
+            streamingReasoningSectionsProvider('test-conv-id').overrideWith(
               (ref) => ['Partial reasoning text...'],
             ),
           ],
@@ -105,7 +105,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            streamingReasoningSectionsProvider.overrideWith(
+            streamingReasoningSectionsProvider('test-conv-id').overrideWith(
               (ref) => ['第一步推理内容...', '第二步推理内容...'],
             ),
           ],
@@ -137,7 +137,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            streamingReasoningSectionsProvider.overrideWith(
+            streamingReasoningSectionsProvider('test-conv-id').overrideWith(
               (ref) => ['第一轮推理', '第二轮推理'],
             ),
           ],
@@ -166,7 +166,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            streamingReasoningSectionsProvider.overrideWith(
+            streamingReasoningSectionsProvider('test-conv-id').overrideWith(
               (ref) => ['推理内容'],
             ),
           ],
@@ -211,7 +211,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            streamingReasoningSectionsProvider.overrideWith(
+            streamingReasoningSectionsProvider('test-conv-id').overrideWith(
               (ref) => [reasoningText],
             ),
           ],

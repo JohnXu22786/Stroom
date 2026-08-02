@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:uuid/uuid.dart';
 
 import '../utils/data_sanitizer.dart';
+import 'message_block.dart';
 import 'tool_call.dart';
 
 /// 简化的聊天消息模型，仅用于持久化到 SharedPreferences
@@ -132,6 +133,25 @@ class ChatMessage {
   /// and fall back to [reasoningContent] for backward compatibility.
   final List<String>? reasoningSections;
 
+  /// Per-round text chunks that mirror the Agent chain structure.
+  /// Each entry is the assistant's spoken text belonging to one reasoning
+  /// / tool call round, allowing the UI to interleave speech between
+  /// thinking and tool call blocks instead of showing all text at the end.
+  /// When null or empty, fall back to [content] as a single block.
+  final List<String>? textSections;
+
+  /// Indices into [toolCalls] where each new tool-call round begins.
+  /// Round 0 always starts at index 0 (when [toolCalls] is non-empty).
+  /// Each subsequent entry is the index of the first tool call in that
+  /// round (separated from the previous round by non-empty text).
+  ///
+  /// Persisted so that reloaded messages render multi-tool rounds
+  /// correctly via [buildAgentChainSegments]'s round-based algorithm.
+  /// When null (old data), the legacy 1:1 pairing algorithm is used.
+  final List<int>? toolCallRoundStarts;
+
+  final List<MessageBlock>? blocks;
+
   ChatMessage({
     String? id,
     required this.role,
@@ -145,6 +165,9 @@ class ChatMessage {
     this.rawResponse,
     this.toolCalls,
     this.reasoningSections,
+    this.textSections,
+    this.toolCallRoundStarts,
+    this.blocks,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         attachments = attachments ?? [];
@@ -259,6 +282,14 @@ class ChatMessage {
         // Persist reasoning sections if present and non-empty.
         if (reasoningSections != null && reasoningSections!.isNotEmpty)
           'reasoningSections': reasoningSections!.toList(),
+        // Persist per-round text sections if present and non-empty.
+        if (textSections != null && textSections!.isNotEmpty)
+          'textSections': textSections!.toList(),
+        // Persist round boundary indices for multi-tool grouping.
+        if (toolCallRoundStarts != null && toolCallRoundStarts!.isNotEmpty)
+          'toolCallRoundStarts': toolCallRoundStarts!.toList(),
+        if (blocks != null && blocks!.isNotEmpty)
+          'blocks': blocks!.map((b) => b.toMap()).toList(),
       };
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
@@ -310,23 +341,52 @@ class ChatMessage {
           }
         }
       }
-      if (toolCalls!.isEmpty) toolCalls = null;
+      if (toolCalls.isEmpty) toolCalls = null;
     }
 
-    // Defensive reasoningSections parsing: skip non-List entries and filter
-    // out non-string values so corrupt data doesn't skip the entire message.
+    // Defensive reasoningSections parsing. When toolCallRoundStarts is
+    // present (new format), empty entries are preserved so indices align
+    // with round boundaries. When absent (old data), empty entries are
+    // filtered to match the old behavior (backward compatibility).
+    List<int>? toolCallRoundStarts;
+    final roundStartsRaw = map['toolCallRoundStarts'];
+    if (roundStartsRaw is List) {
+      // web 端 JSON 大整数可能以 double 形式反序列化：用 num 兼容
+      // （whereType<int> 会过滤掉 double，导致多工具轮次分组退化）
+      toolCallRoundStarts =
+          roundStartsRaw.whereType<num>().map((e) => e.toInt()).toList();
+      if (toolCallRoundStarts.isEmpty) toolCallRoundStarts = null;
+    }
+    final keepEmptySections = toolCallRoundStarts != null;
+
     List<String>? reasoningSections;
     final sectionsRaw = map['reasoningSections'];
     if (sectionsRaw is List) {
-      reasoningSections =
-          sectionsRaw.whereType<String>().where((s) => s.isNotEmpty).toList();
-      if (reasoningSections!.isEmpty) reasoningSections = null;
+      reasoningSections = sectionsRaw.whereType<String>().toList();
+      if (!keepEmptySections) {
+        reasoningSections =
+            reasoningSections.where((s) => s.isNotEmpty).toList();
+      }
+      if (reasoningSections.isEmpty) reasoningSections = null;
+    }
+
+    // Defensive textSections parsing: same conditional logic as above.
+    List<String>? textSections;
+    final textSectionsRaw = map['textSections'];
+    if (textSectionsRaw is List) {
+      textSections = textSectionsRaw.whereType<String>().toList();
+      if (!keepEmptySections) {
+        textSections = textSections.where((s) => s.isNotEmpty).toList();
+      }
+      if (textSections.isEmpty) textSections = null;
     }
 
     return ChatMessage(
-      id: map['id'] as String?,
+      id: map['id'] is String ? map['id'] as String : null,
       role: roleStr,
-      content: (map['content'] as String?) ?? '',
+      // 防御：content 非 String（损坏数据）时回退空串，
+      // 不抛 TypeError 丢弃整条消息（与其他字段防御风格一致）
+      content: map['content'] is String ? map['content'] as String : '',
       createdAt: createdAt,
       attachments: attachments,
       isStreaming: map['isStreaming'] is bool ? map['isStreaming'] : false,
@@ -338,8 +398,57 @@ class ChatMessage {
       rawResponse: safeCastToMap(map['rawResponse']),
       toolCalls: toolCalls,
       reasoningSections: reasoningSections,
+      textSections: textSections,
+      toolCallRoundStarts: toolCallRoundStarts,
+      blocks: _parseBlocks(map['blocks']),
     );
   }
+
+  static List<MessageBlock>? _parseBlocks(dynamic raw) {
+    if (raw is! List || raw.isEmpty) return null;
+    try {
+      final list = MessageBlock.fromJsonList(raw);
+      return list.isNotEmpty ? list : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 创建消息副本，允许替换任意字段。
+  /// 主要用于上下文管理（prune）时重建带压缩标记的消息。
+  ChatMessage copyWith({
+    String? role,
+    String? content,
+    DateTime? createdAt,
+    List<Attachment>? attachments,
+    bool? isStreaming,
+    bool? isError,
+    String? reasoningContent,
+    Map<String, dynamic>? rawRequest,
+    Map<String, dynamic>? rawResponse,
+    List<ToolCallData>? toolCalls,
+    List<String>? reasoningSections,
+    List<String>? textSections,
+    List<int>? toolCallRoundStarts,
+    List<MessageBlock>? blocks,
+  }) =>
+      ChatMessage(
+        id: id,
+        role: role ?? this.role,
+        content: content ?? this.content,
+        createdAt: createdAt ?? this.createdAt,
+        attachments: attachments ?? this.attachments,
+        isStreaming: isStreaming ?? this.isStreaming,
+        isError: isError ?? this.isError,
+        reasoningContent: reasoningContent ?? this.reasoningContent,
+        rawRequest: rawRequest ?? this.rawRequest,
+        rawResponse: rawResponse ?? this.rawResponse,
+        toolCalls: toolCalls ?? this.toolCalls,
+        reasoningSections: reasoningSections ?? this.reasoningSections,
+        textSections: textSections ?? this.textSections,
+        toolCallRoundStarts: toolCallRoundStarts ?? this.toolCallRoundStarts,
+        blocks: blocks ?? this.blocks,
+      );
 
   @override
   String toString() => 'ChatMessage(id: $id, role: $role)';

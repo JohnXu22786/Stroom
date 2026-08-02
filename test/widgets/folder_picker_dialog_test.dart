@@ -266,6 +266,59 @@ void main() {
       expect(find.text('new_folder'), findsOneWidget);
     });
 
+    testWidgets(
+        'creating a folder inside a subfolder uses the full path and returns it',
+        (tester) async {
+      final createdPaths = <String>[];
+      String? result;
+      await tester.pumpWidget(_buildTestApp(
+        Builder(builder: (context) {
+          return ElevatedButton(
+            onPressed: () async {
+              result = await FolderPickerDialog.show(
+                context,
+                availableFolders: {
+                  'photos',
+                  'photos/vacation',
+                },
+                onCreateFolder: (name) async {
+                  createdPaths.add(name);
+                  return null;
+                },
+                onRefreshFolders: () async {
+                  return {'photos', 'photos/vacation', 'photos/new_folder'};
+                },
+              );
+            },
+            child: const Text('Open'),
+          );
+        }),
+      ));
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      // Double tap on 'photos' to navigate into it
+      await tester.tap(find.text('photos'));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.text('photos'));
+      await tester.pumpAndSettle();
+
+      // Create a new folder while inside 'photos'
+      await tester.enterText(find.byType(TextField), 'new_folder');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+
+      // The folder must be created at the full path, not at the root level
+      expect(createdPaths, ['photos/new_folder']);
+
+      // Confirm — the dialog must return the full path as the selection
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+      expect(result, 'photos/new_folder');
+    });
+
     testWidgets('cancel returns null', (tester) async {
       String? result = 'not_null';
       await tester.pumpWidget(_buildTestApp(

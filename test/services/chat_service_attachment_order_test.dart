@@ -42,6 +42,7 @@ class _MessageCaptureProvider extends BaseChatProvider {
     String reasoningEffort = 'medium',
     CancelToken? cancelToken,
     Map<String, dynamic>? extraParams,
+    String? system,
   }) async {
     capturedMessages = messages;
     return 'test response';
@@ -58,6 +59,7 @@ class _MessageCaptureProvider extends BaseChatProvider {
     List<Map<String, dynamic>>? tools,
     Map<String, dynamic>? extraParams,
     CancelToken? cancelToken,
+    String? system,
   }) async* {
     capturedMessages = messages;
     yield AIStreamEvent('test response');

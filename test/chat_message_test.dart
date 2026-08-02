@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/chat_message.dart';
+import 'package:stroom/models/tool_call.dart';
 
 void main() {
   group('ChatMessage rawRequest/rawResponse', () {
@@ -164,6 +165,112 @@ void main() {
       expect(map['rawRequest'], <String, dynamic>{});
       expect(map.containsKey('rawResponse'), true);
       expect(map['rawResponse'], <String, dynamic>{});
+    });
+  });
+
+  group('ChatMessage toolCallRoundStarts', () {
+    test('toMap includes toolCallRoundStarts when set', () {
+      final msg = ChatMessage(
+        role: 'assistant',
+        content: 'answer',
+        toolCallRoundStarts: [0, 2],
+        toolCalls: [
+          ToolCallData(
+            id: 'a',
+            name: 'A',
+            arguments: {},
+            status: ToolCallStatus.completed,
+          ),
+        ],
+      );
+      final map = msg.toMap();
+      expect(map['toolCallRoundStarts'], [0, 2]);
+    });
+
+    test('toMap omits toolCallRoundStarts when null', () {
+      final msg = ChatMessage(
+        role: 'assistant',
+        content: 'answer',
+      );
+      final map = msg.toMap();
+      expect(map.containsKey('toolCallRoundStarts'), false);
+    });
+
+    test('fromMap restores toolCallRoundStarts', () {
+      final map = <String, dynamic>{
+        'id': 'm1',
+        'role': 'assistant',
+        'content': 'answer',
+        'createdAt': DateTime.now().toIso8601String(),
+        'attachments': <dynamic>[],
+        'toolCallRoundStarts': [0, 3],
+        'toolCalls': [
+          {'id': 'a', 'name': 'A', 'arguments': {}, 'status': 'completed'},
+        ],
+      };
+      final msg = ChatMessage.fromMap(map);
+      expect(msg.toolCallRoundStarts, [0, 3]);
+    });
+
+    test('fromMap returns null toolCallRoundStarts when absent (old data)', () {
+      // Old data without toolCallRoundStarts should deserialize to null
+      // so buildAgentChainSegments falls back to the legacy algorithm.
+      final map = <String, dynamic>{
+        'id': 'm2',
+        'role': 'assistant',
+        'content': 'old answer',
+        'createdAt': DateTime.now().toIso8601String(),
+        'attachments': <dynamic>[],
+      };
+      final msg = ChatMessage.fromMap(map);
+      expect(msg.toolCallRoundStarts, isNull);
+    });
+
+    test('serialization round-trip preserves toolCallRoundStarts', () {
+      final original = ChatMessage(
+        role: 'assistant',
+        content: 'answer',
+        toolCallRoundStarts: [0, 2, 5],
+        toolCalls: [
+          ToolCallData(
+            id: 'a',
+            name: 'A',
+            arguments: {},
+            status: ToolCallStatus.completed,
+          ),
+        ],
+        textSections: ['', 'text2', ''],
+        reasoningSections: ['r1', '', 'r3'],
+      );
+      final restored = ChatMessage.fromMap(original.toMap());
+      expect(restored.toolCallRoundStarts, [0, 2, 5]);
+      // Empty textSections entries are preserved when roundStarts present
+      // (so indices align with round boundaries for _buildWithRounds).
+      expect(restored.textSections, ['', 'text2', '']);
+      expect(restored.reasoningSections, ['r1', '', 'r3']);
+    });
+
+    test(
+        'old data without roundStarts filters empty textSections (backward compat)',
+        () {
+      // Old data: textSections with empty entries on disk, but no
+      // toolCallRoundStarts field. Old behavior filtered empties; the
+      // new code preserves this for old data (only keeps empties when
+      // roundStarts is present).
+      final map = <String, dynamic>{
+        'id': 'm3',
+        'role': 'assistant',
+        'content': 'answer',
+        'createdAt': DateTime.now().toIso8601String(),
+        'attachments': <dynamic>[],
+        'textSections': ['', 'text2', ''],
+        'reasoningSections': ['r1', '', 'r3'],
+      };
+      final msg = ChatMessage.fromMap(map);
+      // No roundStarts → empties filtered (old behavior preserved).
+      expect(msg.toolCallRoundStarts, isNull);
+      expect(msg.textSections, ['text2']);
+      expect(msg.reasoningSections, ['r1', 'r3']);
     });
   });
 }

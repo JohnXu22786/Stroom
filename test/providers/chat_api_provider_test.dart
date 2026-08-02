@@ -258,6 +258,37 @@ void main() {
     });
   });
 
+  group('throwIfApiError (stream error chunk)', () {
+    test('error map 抛出异常', () {
+      expect(
+        () => OpenAICompatibleChatProvider.throwIfApiError({
+          'error': {'message': 'rate limit exceeded'},
+        }),
+        throwsA(isA<Exception>().having(
+            (e) => e.toString(), 'msg', contains('rate limit exceeded'))),
+      );
+    });
+
+    test('无 error 字段不抛', () {
+      expect(
+        () => OpenAICompatibleChatProvider.throwIfApiError({
+          'choices': [
+            {
+              'delta': {'content': 'ok'}
+            }
+          ],
+        }),
+        returnsNormally,
+      );
+      expect(
+        () => OpenAICompatibleChatProvider.throwIfApiError({
+          'error': 'not-a-map',
+        }),
+        returnsNormally,
+      );
+    });
+  });
+
   group('Tool call accumulation format (simulated stream)', () {
     // These tests validate that the accumulated tool call format
     // follows both DeepSeek and OpenRouter specs.

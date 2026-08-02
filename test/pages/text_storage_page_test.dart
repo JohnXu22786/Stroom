@@ -92,6 +92,35 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('file popup menu shows 预览 exactly once', (tester) async {
+      final bytes = Uint8List.fromList(utf8.encode('Hello'));
+      await TextManifest.addRecord(
+        TextRecord(
+          id: 'txt_dup_preview_test',
+          name: 'test_text',
+          hash: computeTextHash(bytes),
+          format: 'txt',
+          createdAt: DateTime.now(),
+          size: bytes.length,
+          folder: '',
+          textLength: 5,
+        ),
+      );
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Open the file popup menu
+      await tester.tap(
+        find.byKey(const Key('fm_file_popup_txt_dup_preview_test')),
+      );
+      await tester.pumpAndSettle();
+
+      // The default menu already includes 预览; the page config must not
+      // add a duplicate entry.
+      expect(find.text('预览'), findsOneWidget);
+    });
+
     testWidgets('file icon renders txt extension correctly', (tester) async {
       const content = 'Hello World';
       final bytes = Uint8List.fromList(utf8.encode(content));

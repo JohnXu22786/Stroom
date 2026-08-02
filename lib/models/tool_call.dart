@@ -7,17 +7,24 @@ class ToolCallData {
   final ToolCallStatus status;
   final String? result;
 
+  /// 工具结果被 prune 的时间戳（软删除标记，opencode compacted 语义）。
+  /// 非 null 时 [result] 已被替换为占位文本，UI 显示"已压缩"，
+  /// 序列化体积保持最小。v3 原位演进：旧数据缺省 null。
+  final DateTime? compactedAt;
+
   const ToolCallData({
     required this.id,
     required this.name,
     required this.arguments,
     this.status = ToolCallStatus.pending,
     this.result,
+    this.compactedAt,
   });
 
   ToolCallData copyWith({
     ToolCallStatus? status,
     String? result,
+    DateTime? compactedAt,
   }) =>
       ToolCallData(
         id: id,
@@ -25,6 +32,7 @@ class ToolCallData {
         arguments: arguments,
         status: status ?? this.status,
         result: result ?? this.result,
+        compactedAt: compactedAt ?? this.compactedAt,
       );
 
   Map<String, dynamic> toMap() => {
@@ -33,6 +41,7 @@ class ToolCallData {
         'arguments': arguments,
         'status': status.name,
         if (result != null) 'result': result,
+        if (compactedAt != null) 'compactedAt': compactedAt!.toIso8601String(),
       };
 
   factory ToolCallData.fromMap(Map<String, dynamic> map) {
@@ -56,12 +65,24 @@ class ToolCallData {
       orElse: () => ToolCallStatus.pending,
     );
 
+    // Defensive compactedAt parsing
+    DateTime? compactedAt;
+    final compactedRaw = map['compactedAt'];
+    if (compactedRaw is String) {
+      try {
+        compactedAt = DateTime.parse(compactedRaw);
+      } catch (_) {
+        compactedAt = null;
+      }
+    }
+
     return ToolCallData(
       id: (map['id'] as String?) ?? '',
       name: (map['name'] as String?) ?? '',
       arguments: parsedArgs,
       status: status,
       result: map['result'] as String?,
+      compactedAt: compactedAt,
     );
   }
 }
