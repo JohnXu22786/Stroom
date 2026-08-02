@@ -11,6 +11,7 @@ import '../../../models/tts_models.dart';
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider_shared.dart';
+import '../../../utils/audio_utils.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_definition.dart';
@@ -99,7 +100,10 @@ Future<String> _callAsrApi({
   final dio = Dio();
   final cancelToken = CancelToken();
   try {
-    final mimeStr = audioFormat == 'wav' ? 'audio/wav' : 'audio/$audioFormat';
+    // Same MIME mapping as the app's own ASR page (getMimeType) — e.g.
+    // mp3 → audio/mpeg, m4a → audio/mp4; non-standard types like
+    // audio/mp3 are rejected by strict OpenAI-compatible endpoints.
+    final mimeStr = getMimeType(audioFormat);
     final formData = FormData.fromMap({
       'file': MultipartFile.fromBytes(
         audioBytes,
@@ -260,7 +264,9 @@ Future<String> executeAsrBlock({
       apiKey: config.key,
       modelId: model.modelId,
       typeConfig: model.typeConfig,
-      customParams: config.customParams,
+      // Model-level custom params — the same list the ASR settings page
+      // edits and the standalone ASR page sends.
+      customParams: model.customParams,
     );
     bgNotifier.updateStep(taskId, 0, completed: true);
     bgNotifier.setResult(taskId, result);

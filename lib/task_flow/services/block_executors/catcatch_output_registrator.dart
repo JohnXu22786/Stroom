@@ -1,6 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -24,12 +24,31 @@ const _videoExts = {
 
 const _audioExts = {'mp3', 'wav', 'm4a', 'aac', 'wma', 'opus', 'flac', 'ogg'};
 
-/// Reads the file and computes its MD5 off the UI isolate — hashing a
-/// multi-GB video on the main isolate would freeze the GUI.
-Future<(Uint8List, String)> _readAndHashInIsolate(String filePath) {
+/// Computes the file's MD5 off the UI isolate — hashing a multi-GB video
+/// on the main isolate would freeze the GUI. Streams in chunks so neither
+/// the worker nor the main isolate ever holds the full file in memory.
+Future<String> _computeHashInIsolate(String filePath) {
   return Isolate.run(() {
-    final bytes = File(filePath).readAsBytesSync();
-    return (bytes, md5.convert(bytes).toString());
+    final file = File(filePath);
+    var digest = '';
+    final chunked = md5.startChunkedConversion(
+      ChunkedConversionSink<Digest>.withCallback((chunks) {
+        if (chunks.isNotEmpty) digest = chunks.last.toString();
+      }),
+    );
+    final raf = file.openSync();
+    try {
+      const chunkSize = 8 * 1024 * 1024;
+      while (true) {
+        final chunk = raf.readSync(chunkSize);
+        if (chunk.isEmpty) break;
+        chunked.add(chunk);
+      }
+    } finally {
+      raf.closeSync();
+    }
+    chunked.close();
+    return digest;
   });
 }
 
@@ -44,7 +63,8 @@ Future<void> registerFlowCatCatchOutput(
     return;
   }
 
-  final (fileBytes, contentHash) = await _readAndHashInIsolate(filePath);
+  final contentHash = await _computeHashInIsolate(filePath);
+  final size = await file.length();
 
   if (_videoExts.contains(ext)) {
     try {
@@ -66,13 +86,14 @@ Future<void> registerFlowCatCatchOutput(
         hash: contentHash,
         format: ext,
         createdAt: DateTime.now(),
-        size: fileBytes.length,
+        size: size,
         duration: task.expectedDurationSec * 1000,
         folder: videoFolder,
       );
       final existingVideo = await VideoManifest.getRecordByHash(contentHash);
       if (existingVideo == null) {
-        await VideoManifest.writeFile('$contentHash.$ext', fileBytes);
+        final storageDir = await VideoManifest.videoDir;
+        await file.copy(p.join(storageDir, '$contentHash.$ext'));
         await VideoManifest.addRecord(record);
         debugPrint(
           '[TaskFlow] Registered video: $name.$ext (folder: $videoFolder)',
@@ -107,13 +128,14 @@ Future<void> registerFlowCatCatchOutput(
         hash: contentHash,
         format: ext,
         createdAt: DateTime.now(),
-        size: fileBytes.length,
+        size: size,
         duration: task.expectedDurationSec,
         folder: audioFolder,
       );
       final existingAudio = await FileManifest.getRecordByHash(contentHash);
       if (existingAudio == null) {
-        await FileManifest.writeFile('$contentHash.$ext', fileBytes);
+        final storageDir = await FileManifest.ttsAudioDir;
+        await file.copy(p.join(storageDir, '$contentHash.$ext'));
         await FileManifest.addRecord(record);
         debugPrint(
           '[TaskFlow] Registered audio: $name.$ext (folder: $audioFolder)',
