@@ -418,8 +418,7 @@ class ChatStreamManager {
             List<String>.from(state.textChunks));
         _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);
         state.toolCalls.clear();
-        _pushToProvider(
-            convId, streamingToolCallsProvider, <ToolCallData>[]);
+        _pushToProvider(convId, streamingToolCallsProvider, <ToolCallData>[]);
       }
     } finally {
       // Stop periodic persistence

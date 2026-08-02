@@ -473,7 +473,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
             ref.read(chatStreamManagerProvider).fullReplyFor(convId);
         if (partial.isNotEmpty) {
           _controller?.updateMessage(
-            Message.textStream(id: stoppedMsgId, authorId: _aiUser.id, streamId: stoppedMsgId),
+            Message.textStream(
+                id: stoppedMsgId, authorId: _aiUser.id, streamId: stoppedMsgId),
             Message.text(
               id: stoppedMsgId,
               authorId: _aiUser.id,
@@ -481,8 +482,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
             ),
           );
         } else {
-          _controller?.removeMessage(
-              Message.textStream(id: stoppedMsgId, authorId: _aiUser.id, streamId: stoppedMsgId));
+          _controller?.removeMessage(Message.textStream(
+              id: stoppedMsgId, authorId: _aiUser.id, streamId: stoppedMsgId));
           _chatSegments.remove(stoppedMsgId);
           _reasoningContents.remove(stoppedMsgId);
           _isReasoningCompletedForMsg.remove(stoppedMsgId);
