@@ -90,8 +90,11 @@ class BlockChainEditor extends StatelessWidget {
                         color: cs.tertiary.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(Icons.input,
-                          size: 18, color: Colors.blueGrey),
+                      child: const Icon(
+                        Icons.input,
+                        size: 18,
+                        color: Colors.blueGrey,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -106,7 +109,9 @@ class BlockChainEditor extends StatelessWidget {
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: cs.surfaceContainerLow,
                         borderRadius: BorderRadius.circular(8),
@@ -116,8 +121,11 @@ class BlockChainEditor extends StatelessWidget {
                         child: DropdownButton<IOType>(
                           value: inputType,
                           isDense: true,
-                          icon: Icon(Icons.arrow_drop_down,
-                              size: 18, color: cs.primary),
+                          icon: Icon(
+                            Icons.arrow_drop_down,
+                            size: 18,
+                            color: cs.primary,
+                          ),
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -143,10 +151,7 @@ class BlockChainEditor extends StatelessWidget {
                 Row(
                   children: [
                     Flexible(
-                      child: IOTypeIndicator(
-                        type: inputType,
-                        isInput: false,
-                      ),
+                      child: IOTypeIndicator(type: inputType, isInput: false),
                     ),
                   ],
                 ),
@@ -184,9 +189,7 @@ class BlockChainEditor extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
         decoration: BoxDecoration(
           color: cs.surface,
-          border: Border(
-            top: BorderSide(color: cs.outlineVariant, width: 0.5),
-          ),
+          border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
         ),
         child: SizedBox(
           width: double.infinity,
@@ -247,20 +250,16 @@ class BlockChainEditor extends StatelessWidget {
               const SizedBox(height: 20),
               Text(
                 '选择功能块',
-                style: Theme.of(scrollCtx)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(
+                  scrollCtx,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               Text(
                 blocks.isEmpty
                     ? '当前初始输入类型: ${inputType.label}'
                     : '上一个功能块输出: ${blocks.last.getDefinition()?.outputType.label ?? inputType.label}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.onSurfaceVariant,
-                ),
+                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
               const SizedBox(height: 12),
               if (availableTypes.isEmpty)
@@ -268,8 +267,10 @@ class BlockChainEditor extends StatelessWidget {
                   child: Center(
                     child: Text(
                       '没有与当前类型兼容的功能块',
-                      style:
-                          TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 )
@@ -278,10 +279,12 @@ class BlockChainEditor extends StatelessWidget {
                   child: ListView(
                     controller: scrollController,
                     children: availableTypes
-                        .map((type) => Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: _buildBlockTypeOption(type, cs, ctx),
-                            ))
+                        .map(
+                          (type) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _buildBlockTypeOption(type, cs, ctx),
+                          ),
+                        )
                         .toList(),
                   ),
                 ),
@@ -293,7 +296,10 @@ class BlockChainEditor extends StatelessWidget {
   }
 
   Widget _buildBlockTypeOption(
-      BlockTypeDefinition type, ColorScheme cs, BuildContext ctx) {
+    BlockTypeDefinition type,
+    ColorScheme cs,
+    BuildContext ctx,
+  ) {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(

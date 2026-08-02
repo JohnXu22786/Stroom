@@ -46,8 +46,10 @@ mixin PersistableNotifier<T> on StateNotifier<T> {
         final truncated = contents.length > 100
             ? '${contents.substring(0, 100)}...'
             : contents;
-        debugPrint('WARNING: Corrupt persistence file $persistenceFileName — '
-            'keeping previous state. Content was: $truncated');
+        debugPrint(
+          'WARNING: Corrupt persistence file $persistenceFileName — '
+          'keeping previous state. Content was: $truncated',
+        );
       }
     } catch (e) {
       debugPrint('Failed to restore $persistenceFileName: $e');

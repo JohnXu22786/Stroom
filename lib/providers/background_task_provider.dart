@@ -19,7 +19,8 @@ import 'task_provider.dart';
 enum BackgroundTaskType {
   ocr,
   asr,
-  audioSeparation;
+  audioSeparation,
+  chat;
 
   String get label {
     switch (this) {
@@ -29,6 +30,8 @@ enum BackgroundTaskType {
         return '音频转写';
       case BackgroundTaskType.audioSeparation:
         return '音频分离';
+      case BackgroundTaskType.chat:
+        return '助手对话';
     }
   }
 
@@ -44,6 +47,9 @@ enum BackgroundTaskType {
       case BackgroundTaskType.audioSeparation:
         // Audio Separation: local processing only, no API
         return ['分离音频', '保存到文件'];
+      case BackgroundTaskType.chat:
+        // Chat/Assistant: API call
+        return ['发送请求', '等待回复', '接收结果'];
     }
   }
 }

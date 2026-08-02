@@ -28,10 +28,10 @@ class TaskFlowBlock {
     String? id,
     required this.typeKey,
     Map<String, dynamic>? params,
-  })  : id = id ?? const Uuid().v4(),
-        params = params != null
-            ? Map<String, dynamic>.from(params)
-            : _defaultParamsFor(typeKey);
+  }) : id = id ?? const Uuid().v4(),
+       params = params != null
+           ? Map<String, dynamic>.from(params)
+           : _defaultParamsFor(typeKey);
 
   /// Get the default params for a given type key.
   static Map<String, dynamic> _defaultParamsFor(BlockType typeKey) {
@@ -64,18 +64,18 @@ class TaskFlowBlock {
   // ========================================================================
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'typeKey': typeKey.name,
-        'params': params,
-      };
+    'id': id,
+    'typeKey': typeKey.name,
+    'params': params,
+  };
 
   factory TaskFlowBlock.fromMap(Map<String, dynamic> map) => TaskFlowBlock(
-        id: map['id'] as String?,
-        typeKey: parseBlockType(map['typeKey'] as String),
-        params: map['params'] != null
-            ? Map<String, dynamic>.from(map['params'] as Map)
-            : null,
-      );
+    id: map['id'] as String?,
+    typeKey: parseBlockType(map['typeKey'] as String),
+    params: map['params'] != null
+        ? Map<String, dynamic>.from(map['params'] as Map)
+        : null,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -98,10 +98,7 @@ class FlowValidationResult {
   final bool isValid;
   final List<String> errors;
 
-  const FlowValidationResult({
-    required this.isValid,
-    this.errors = const [],
-  });
+  const FlowValidationResult({required this.isValid, this.errors = const []});
 }
 
 // ============================================================================
@@ -136,16 +133,14 @@ class TaskFlowDefinition {
     List<TaskFlowBlock>? blocks,
     DateTime? createdAt,
     DateTime? updatedAt,
-  })  : id = id ?? const Uuid().v4(),
-        blocks = blocks != null ? List<TaskFlowBlock>.from(blocks) : const [],
-        createdAt = createdAt ?? DateTime.now(),
-        updatedAt = updatedAt ?? DateTime.now();
+  }) : id = id ?? const Uuid().v4(),
+       blocks = blocks != null ? List<TaskFlowBlock>.from(blocks) : const [],
+       createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
 
   /// Add a block at the end of the flow.
-  TaskFlowDefinition addBlock(TaskFlowBlock block) => copyWith(
-        blocks: [...blocks, block],
-        updatedAt: DateTime.now(),
-      );
+  TaskFlowDefinition addBlock(TaskFlowBlock block) =>
+      copyWith(blocks: [...blocks, block], updatedAt: DateTime.now());
 
   /// Insert a block at [index].
   TaskFlowDefinition insertBlock(int index, TaskFlowBlock block) {
@@ -185,7 +180,9 @@ class TaskFlowDefinition {
 
   /// Update a block's parameters by its id.
   TaskFlowDefinition updateBlockParams(
-      String blockId, Map<String, dynamic> newParams) {
+    String blockId,
+    Map<String, dynamic> newParams,
+  ) {
     final index = blocks.indexWhere((b) => b.id == blockId);
     if (index == -1) return this;
     final updatedBlocks = [...blocks];
@@ -235,24 +232,23 @@ class TaskFlowDefinition {
       }
     }
 
-    return FlowValidationResult(
-      isValid: errors.isEmpty,
-      errors: errors,
-    );
+    return FlowValidationResult(isValid: errors.isEmpty, errors: errors);
   }
 
   /// Create a copy of this flow with a new ID (for duplication).
   TaskFlowDefinition copyWithNewId() => TaskFlowDefinition(
-        name: name,
-        description: description,
-        inputType: inputType,
-        blocks: blocks
-            .map((b) => TaskFlowBlock(
-                  typeKey: b.typeKey,
-                  params: Map<String, dynamic>.from(b.params),
-                ))
-            .toList(),
-      );
+    name: name,
+    description: description,
+    inputType: inputType,
+    blocks: blocks
+        .map(
+          (b) => TaskFlowBlock(
+            typeKey: b.typeKey,
+            params: Map<String, dynamic>.from(b.params),
+          ),
+        )
+        .toList(),
+  );
 
   /// Create a modified copy.
   TaskFlowDefinition copyWith({
@@ -261,30 +257,29 @@ class TaskFlowDefinition {
     IOType? inputType,
     List<TaskFlowBlock>? blocks,
     DateTime? updatedAt,
-  }) =>
-      TaskFlowDefinition(
-        id: id,
-        name: name ?? this.name,
-        description: description ?? this.description,
-        inputType: inputType ?? this.inputType,
-        blocks: blocks != null ? List<TaskFlowBlock>.from(blocks) : this.blocks,
-        createdAt: createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-      );
+  }) => TaskFlowDefinition(
+    id: id,
+    name: name ?? this.name,
+    description: description ?? this.description,
+    inputType: inputType ?? this.inputType,
+    blocks: blocks != null ? List<TaskFlowBlock>.from(blocks) : this.blocks,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
 
   // ========================================================================
   // Serialization
   // ========================================================================
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'name': name,
-        'description': description,
-        'inputType': inputType.toJson(),
-        'blocks': blocks.map((b) => b.toMap()).toList(),
-        'createdAt': createdAt.toIso8601String(),
-        'updatedAt': updatedAt.toIso8601String(),
-      };
+    'id': id,
+    'name': name,
+    'description': description,
+    'inputType': inputType.toJson(),
+    'blocks': blocks.map((b) => b.toMap()).toList(),
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
 
   factory TaskFlowDefinition.fromMap(Map<String, dynamic> map) =>
       TaskFlowDefinition(
@@ -294,9 +289,13 @@ class TaskFlowDefinition {
         inputType: map['inputType'] != null
             ? IOType.fromJson(map['inputType'] as String)
             : IOType.text,
-        blocks: (map['blocks'] as List?)
-                ?.map((b) =>
-                    TaskFlowBlock.fromMap(Map<String, dynamic>.from(b as Map)))
+        blocks:
+            (map['blocks'] as List?)
+                ?.map(
+                  (b) => TaskFlowBlock.fromMap(
+                    Map<String, dynamic>.from(b as Map),
+                  ),
+                )
                 .toList() ??
             [],
         createdAt: map['createdAt'] != null

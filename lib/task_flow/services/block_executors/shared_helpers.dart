@@ -18,8 +18,11 @@ void failSubTask(
   execNotifier.updateSubTaskStatus(execId, flowSubTaskId, TaskStatus.failed);
 }
 
-Future<String?> saveTextForFlow(String text,
-    {String saveFolder = '', String? title}) async {
+Future<String?> saveTextForFlow(
+  String text, {
+  String saveFolder = '',
+  String? title,
+}) async {
   if (text.isEmpty) return null;
   final bytes = Uint8List.fromList(utf8.encode(text));
   final hash = computeTextHash(bytes);
@@ -35,14 +38,16 @@ Future<String?> saveTextForFlow(String text,
     dedupIdx++;
   }
 
-  await TextManifest.addRecord(TextRecord(
-    name: recordName,
-    hash: hash,
-    format: 'txt',
-    createdAt: DateTime.now(),
-    size: bytes.length,
-    folder: saveFolder,
-    textLength: text.length,
-  ));
+  await TextManifest.addRecord(
+    TextRecord(
+      name: recordName,
+      hash: hash,
+      format: 'txt',
+      createdAt: DateTime.now(),
+      size: bytes.length,
+      folder: saveFolder,
+      textLength: text.length,
+    ),
+  );
   return filePath;
 }

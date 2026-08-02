@@ -69,7 +69,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       _isRunMode = widget.startInRunMode;
       _enteredFromRunMode = widget.startInRunMode;
 
-      final flow = ref.read(taskFlowListProvider).firstWhere(
+      final flow = ref
+          .read(taskFlowListProvider)
+          .firstWhere(
             (f) => f.id == widget.flowId,
             orElse: () => TaskFlowDefinition(name: ''),
           );
@@ -288,10 +290,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
   Future<void> _editBlock(int index) async {
     if (index < 0 || index >= _blocks.length) return;
-    final updated = await showBlockEditorDialog(
-      context,
-      block: _blocks[index],
-    );
+    final updated = await showBlockEditorDialog(context, block: _blocks[index]);
     if (updated != null && mounted) {
       setState(() {
         final newBlocks = [..._blocks];
@@ -304,9 +303,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   void _saveFlow() {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入任务流名称')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请输入任务流名称')));
       return;
     }
 
@@ -320,9 +319,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         inputType: _inputType,
         blocks: _blocks,
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('任务流已更新')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('任务流已更新')));
     } else {
       _editingFlowId = notifier.addFlow(
         name: name,
@@ -331,20 +330,22 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         blocks: _blocks,
       );
       _isEditing = true;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('任务流已创建')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('任务流已创建')));
     }
 
     _initialName = _nameController.text.trim();
     _initialDesc = _descController.text.trim();
     _initialInputType = _inputType;
     _initialBlocks = _blocks
-        .map((b) => TaskFlowBlock(
-              id: b.id,
-              typeKey: b.typeKey,
-              params: Map<String, dynamic>.from(b.params),
-            ))
+        .map(
+          (b) => TaskFlowBlock(
+            id: b.id,
+            typeKey: b.typeKey,
+            params: Map<String, dynamic>.from(b.params),
+          ),
+        )
         .toList();
 
     if (_enteredFromRunMode) {
@@ -433,19 +434,26 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Icon(Icons.account_tree, size: 20, color: cs.primary),
-            const SizedBox(width: 8),
-            Text(flowName,
+          Row(
+            children: [
+              Icon(Icons.account_tree, size: 20, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(
+                flowName,
                 style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: cs.onSurface)),
-          ]),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurface,
+                ),
+              ),
+            ],
+          ),
           if (_descController.text.trim().isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(_descController.text.trim(),
-                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+            Text(
+              _descController.text.trim(),
+              style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+            ),
           ],
         ],
       ),
@@ -464,15 +472,20 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [
-              Icon(Icons.input, size: 18, color: cs.primary),
-              const SizedBox(width: 8),
-              Text('输入（${_inputType.label}）',
+            Row(
+              children: [
+                Icon(Icons.input, size: 18, color: cs.primary),
+                const SizedBox(width: 8),
+                Text(
+                  '输入（${_inputType.label}）',
                   style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface)),
-            ]),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 8),
             if (_inputType == IOType.url)
               TextField(
@@ -480,7 +493,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 decoration: InputDecoration(
                   hintText: '输入网页链接',
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   prefixIcon: const Icon(Icons.link, size: 18),
                   filled: true,
                   fillColor: cs.surface,
@@ -494,7 +508,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 decoration: InputDecoration(
                   hintText: '输入文本',
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   prefixIcon: const Icon(Icons.text_fields, size: 18),
                   filled: true,
                   fillColor: cs.surface,
@@ -508,7 +523,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 decoration: InputDecoration(
                   hintText: '输入 ${_inputType.label} 路径或标识',
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   filled: true,
                   fillColor: cs.surface,
                 ),
@@ -561,8 +577,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                         color: cs.tertiary.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(Icons.input,
-                          size: 18, color: Colors.blueGrey),
+                      child: const Icon(
+                        Icons.input,
+                        size: 18,
+                        color: Colors.blueGrey,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -629,33 +648,45 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('输入: ${def?.inputType.label ?? '-'}',
-                  style: TextStyle(fontSize: 14, color: cs.onSurface)),
+              Text(
+                '输入: ${def?.inputType.label ?? '-'}',
+                style: TextStyle(fontSize: 14, color: cs.onSurface),
+              ),
               const SizedBox(height: 4),
-              Text('输出: ${def?.outputType.label ?? '-'}',
-                  style: TextStyle(fontSize: 14, color: cs.onSurface)),
+              Text(
+                '输出: ${def?.outputType.label ?? '-'}',
+                style: TextStyle(fontSize: 14, color: cs.onSurface),
+              ),
               if (block.params.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                const Text('参数:',
-                    style:
-                        TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                const Text(
+                  '参数:',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 4),
-                ...block.params.entries.map((e) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('${e.key}: ',
-                              style:
-                                  TextStyle(fontSize: 13, color: cs.primary)),
-                          Expanded(
-                            child: Text('${e.value}',
-                                style: TextStyle(
-                                    fontSize: 13, color: cs.onSurfaceVariant)),
+                ...block.params.entries.map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${e.key}: ',
+                          style: TextStyle(fontSize: 13, color: cs.primary),
+                        ),
+                        Expanded(
+                          child: Text(
+                            '${e.value}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: cs.onSurfaceVariant,
+                            ),
                           ),
-                        ],
-                      ),
-                    )),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ],
           ),
@@ -685,18 +716,18 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
     if (flow == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('任务流不存在')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('任务流不存在')));
       }
       return;
     }
 
     if (flow.blocks.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('任务流未包含任何功能块')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('任务流未包含任何功能块')));
       }
       return;
     }
@@ -705,9 +736,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
     if (service.isRunning) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已有任务流正在执行')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已有任务流正在执行')));
       }
       return;
     }
@@ -718,10 +749,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('任务流已启动'),
-          duration: Duration(seconds: 2),
-        ),
+        const SnackBar(content: Text('任务流已启动'), duration: Duration(seconds: 2)),
       );
       Navigator.of(context).pop();
     }

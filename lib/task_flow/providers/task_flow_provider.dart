@@ -14,7 +14,8 @@ import 'persistable_notifier.dart';
 /// Flows are ordered by [updatedAt] descending (newest first).
 final taskFlowListProvider =
     StateNotifierProvider<TaskFlowNotifier, List<TaskFlowDefinition>>(
-        (ref) => TaskFlowNotifier());
+      (ref) => TaskFlowNotifier(),
+    );
 
 // ============================================================================
 // Notifier
@@ -37,7 +38,8 @@ class TaskFlowNotifier extends StateNotifier<List<TaskFlowDefinition>>
     for (final item in json) {
       try {
         result.add(
-            TaskFlowDefinition.fromMap(Map<String, dynamic>.from(item as Map)));
+          TaskFlowDefinition.fromMap(Map<String, dynamic>.from(item as Map)),
+        );
       } catch (e) {
         debugPrint('WARNING: Skipping corrupt TaskFlowDefinition: $e');
       }

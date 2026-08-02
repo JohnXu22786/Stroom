@@ -20,7 +20,9 @@ import 'shared_helpers.dart';
 /// Reads a video file and extracts its audio track — all in a background
 /// isolate so the GUI stays responsive even for 100+ MB files.
 Future<Uint8List> _readAndExtractInIsolate(
-    String filePath, String videoFormat) {
+  String filePath,
+  String videoFormat,
+) {
   return Isolate.run(() {
     final bytes = File(filePath).readAsBytesSync();
     return extractAudioSync(videoBytes: bytes, videoFormat: videoFormat);
@@ -36,7 +38,7 @@ Future<(String, String)> _computeAudioMetaInIsolate(Uint8List audioBytes) {
     final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
     return (
       hash,
-      format
+      format,
     ); // positional record — avoids destructuring issues in CI
   });
 }
@@ -62,17 +64,29 @@ Future<String> executeAudioSeparationBlock({
   execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
   execNotifier.updateSubTaskStatus(execId, flowSubTask.id, TaskStatus.running);
   bgNotifier.addTask(
-      type: BackgroundTaskType.audioSeparation, title: title, taskId: taskId);
+    type: BackgroundTaskType.audioSeparation,
+    title: title,
+    taskId: taskId,
+  );
   await _yieldFrame();
 
   Uint8List audioBytes;
   try {
     final file = File(input);
     if (!await file.exists()) {
-      failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
-          '输入文件不存在: $input');
-      throw BlockExecutionException('输入文件不存在',
-          blockType: def.typeKey.name, blockTitle: def.label);
+      failSubTask(
+        bgNotifier,
+        taskId,
+        execNotifier,
+        execId,
+        flowSubTask.id,
+        '输入文件不存在: $input',
+      );
+      throw BlockExecutionException(
+        '输入文件不存在',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
     }
 
     await _yieldFrame();
@@ -86,17 +100,35 @@ Future<String> executeAudioSeparationBlock({
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
     failSubTask(
-        bgNotifier, taskId, execNotifier, execId, flowSubTask.id, '音频提取失败: $e');
-    throw BlockExecutionException('音频提取失败',
-        blockType: def.typeKey.name, blockTitle: def.label);
+      bgNotifier,
+      taskId,
+      execNotifier,
+      execId,
+      flowSubTask.id,
+      '音频提取失败: $e',
+    );
+    throw BlockExecutionException(
+      '音频提取失败',
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
   }
 
   try {
     if (audioBytes.isEmpty) {
-      failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
-          '提取的音频数据为空');
-      throw BlockExecutionException('提取的音频数据为空',
-          blockType: def.typeKey.name, blockTitle: def.label);
+      failSubTask(
+        bgNotifier,
+        taskId,
+        execNotifier,
+        execId,
+        flowSubTask.id,
+        '提取的音频数据为空',
+      );
+      throw BlockExecutionException(
+        '提取的音频数据为空',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
     }
 
     await _yieldFrame();
@@ -116,8 +148,9 @@ Future<String> executeAudioSeparationBlock({
     {
       final existingRecords = await FileManifest.loadRecords();
       int dedupIdx = 2;
-      while (existingRecords
-          .any((r) => r.name == recordName && r.folder == saveFolder)) {
+      while (existingRecords.any(
+        (r) => r.name == recordName && r.folder == saveFolder,
+      )) {
         recordName = '$title ($dedupIdx)';
         dedupIdx++;
       }
@@ -135,10 +168,19 @@ Future<String> executeAudioSeparationBlock({
     final filePath = await FileManifest.readFilePath('$hash.$format');
 
     if (filePath == null) {
-      failSubTask(bgNotifier, taskId, execNotifier, execId, flowSubTask.id,
-          '无法保存提取的音频文件');
-      throw BlockExecutionException('无法保存提取的音频文件',
-          blockType: def.typeKey.name, blockTitle: def.label);
+      failSubTask(
+        bgNotifier,
+        taskId,
+        execNotifier,
+        execId,
+        flowSubTask.id,
+        '无法保存提取的音频文件',
+      );
+      throw BlockExecutionException(
+        '无法保存提取的音频文件',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
     }
 
     await _yieldFrame();
@@ -147,13 +189,25 @@ Future<String> executeAudioSeparationBlock({
     await _yieldFrame();
     bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
     execNotifier.updateSubTaskStatus(
-        execId, flowSubTask.id, TaskStatus.completed);
+      execId,
+      flowSubTask.id,
+      TaskStatus.completed,
+    );
     return filePath;
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
     failSubTask(
-        bgNotifier, taskId, execNotifier, execId, flowSubTask.id, '音频提取失败: $e');
-    throw BlockExecutionException(e.toString(),
-        blockType: def.typeKey.name, blockTitle: def.label);
+      bgNotifier,
+      taskId,
+      execNotifier,
+      execId,
+      flowSubTask.id,
+      '音频提取失败: $e',
+    );
+    throw BlockExecutionException(
+      e.toString(),
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
   }
 }

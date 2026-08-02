@@ -115,10 +115,7 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
                 ),
                 child: Text(
                   '输入: ${def.inputType.label}  →  输出: ${def.outputType.label}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: cs.onSurfaceVariant,
-                  ),
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                 ),
               ),
               const SizedBox(height: 16),
@@ -190,11 +187,15 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
   }
 
   Widget _buildInputField(
-      BlockParamDefinition param, dynamic value, ColorScheme cs) {
+    BlockParamDefinition param,
+    dynamic value,
+    ColorScheme cs,
+  ) {
     switch (param.type) {
       case BlockParamType.string:
       case BlockParamType.secret:
-        final controller = _controllers[param.key] ??
+        final controller =
+            _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');
         // Ensure new controllers are tracked
         if (_controllers[param.key] == null) {
@@ -204,9 +205,7 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
           controller: controller,
           decoration: InputDecoration(
             isDense: true,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 10,
               vertical: 8,
@@ -218,16 +217,15 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
         );
 
       case BlockParamType.modelSelector:
-        final currentIndex =
-            value is int ? value : (int.tryParse('$value') ?? 0);
+        final currentIndex = value is int
+            ? value
+            : (int.tryParse('$value') ?? 0);
         return DropdownButtonFormField<int>(
           value: currentIndex.clamp(0, 9),
           isDense: true,
           decoration: InputDecoration(
             isDense: true,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 10,
               vertical: 8,
@@ -235,10 +233,7 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
           ),
           style: TextStyle(fontSize: 13, color: cs.onSurface),
           items: List.generate(10, (i) {
-            return DropdownMenuItem<int>(
-              value: i,
-              child: Text('模型 $i'),
-            );
+            return DropdownMenuItem<int>(value: i, child: Text('模型 $i'));
           }),
           onChanged: (v) {
             if (v != null) {
@@ -248,7 +243,8 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
         );
 
       case BlockParamType.number:
-        final controller = _controllers[param.key] ??
+        final controller =
+            _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');
         if (_controllers[param.key] == null) {
           _controllers[param.key] = controller;
@@ -256,9 +252,7 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
         return TextField(
           decoration: InputDecoration(
             isDense: true,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 10,
               vertical: 8,
@@ -281,10 +275,7 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
           contentPadding: EdgeInsets.zero,
           title: Text(
             value == true ? '是' : '否',
-            style: TextStyle(
-              fontSize: 13,
-              color: cs.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
           ),
         );
 

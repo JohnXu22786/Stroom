@@ -69,10 +69,7 @@ class FlowBlockCard extends StatelessWidget {
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: def.color.withValues(alpha: 0.4),
-              width: 1,
-            ),
+            side: BorderSide(color: def.color.withValues(alpha: 0.4), width: 1),
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
@@ -120,12 +117,17 @@ class FlowBlockCard extends StatelessWidget {
                       // Settings button (hidden in readOnly)
                       if (!readOnly)
                         IconButton(
-                          icon:
-                              Icon(Icons.settings, size: 16, color: cs.primary),
+                          icon: Icon(
+                            Icons.settings,
+                            size: 16,
+                            color: cs.primary,
+                          ),
                           onPressed: onSettings ?? onTap,
                           padding: EdgeInsets.zero,
-                          constraints:
-                              const BoxConstraints(minWidth: 28, minHeight: 28),
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
+                          ),
                           tooltip: '设置参数',
                         ),
                       // Delete button (only for last block, hidden in readOnly)
@@ -134,8 +136,10 @@ class FlowBlockCard extends StatelessWidget {
                           icon: Icon(Icons.close, size: 16, color: cs.error),
                           onPressed: onDelete,
                           padding: EdgeInsets.zero,
-                          constraints:
-                              const BoxConstraints(minWidth: 28, minHeight: 28),
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
+                          ),
                           tooltip: '删除',
                         ),
                     ],
@@ -152,8 +156,11 @@ class FlowBlockCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Icon(Icons.arrow_forward,
-                          size: 12, color: cs.onSurfaceVariant),
+                      Icon(
+                        Icons.arrow_forward,
+                        size: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
                       const SizedBox(width: 6),
                       Flexible(
                         child: IOTypeIndicator(
@@ -248,8 +255,10 @@ class FlowBlockCard extends StatelessWidget {
                     ),
                     Text(
                       '该功能块类型未注册',
-                      style:
-                          TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
