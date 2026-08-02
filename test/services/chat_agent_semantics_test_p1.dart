@@ -68,7 +68,9 @@ void chatAgentSemanticsGroup1() {
         'none',
       );
       final lastMsg = (provider.captures[2]['messages'] as List).last as Map;
-      expect(lastMsg['role'], 'assistant');
+      // 收尾提示以 user 角色注入（对齐 opencode MAX_STEPS_PROMPT）：
+      // assistant 角色注入的"要求"部分模型可能不当作指令执行
+      expect(lastMsg['role'], 'user');
       expect(lastMsg['content'], ChatService.maxStepsPrompt);
 
       // 2 轮工具调用 + 收尾文本；无旧的终止 hack 文本

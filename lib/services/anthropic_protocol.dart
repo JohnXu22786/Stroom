@@ -60,7 +60,11 @@ class AnthropicProtocol implements ChatProtocol {
           parts.add({'type': 'text', 'text': msg.content});
         }
         for (final att in msg.attachments) {
-          if (att.fileType == 'image' || att.fileType == 'file') {
+          // 'file' 是旧数据的遗留分类（composer 现只产出
+          // image/audio/video/document）：按 document 处理保持兼容。
+          if (att.fileType == 'image' ||
+              att.fileType == 'file' ||
+              att.fileType == 'document') {
             // ── 图片 / 文档（PDF 等）: 官方 image/document 块 ──
             final outcome = await readAttachmentBase64(att);
             switch (outcome.status) {

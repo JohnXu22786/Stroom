@@ -425,6 +425,98 @@ void main() {
   });
 
   // ─────────────────────────────────────────────────────────────────────
+  // 上下文管理设置（压缩触发值字段交互）
+  // ─────────────────────────────────────────────────────────────────────
+
+  group('SettingsPage - context management compaction threshold', () {
+    testWidgets('invalid input reverts on blur, valid input persists',
+        (tester) async {
+      tester.view.physicalSize = const Size(1080, 6000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      SharedPreferences.setMockInitialValues({});
+
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
+
+      // 滚动到"自定义压缩触发值"开关并开启
+      final toggleFinder = find.text('自定义压缩触发值').first;
+      await tester.scrollUntilVisible(toggleFinder, 300,
+          scrollable: find.byType(Scrollable).first);
+      await tester.tap(toggleFinder);
+      await tester.pumpAndSettle();
+
+      // 输入框出现：输入非法文本
+      final fieldFinder = find.byType(TextFormField);
+      expect(fieldFinder, findsOneWidget);
+      await tester.enterText(fieldFinder, 'abc');
+      await tester.pump();
+
+      // 失焦（提交）→ 非法输入回退为空（provider 保持 null）
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      expect(
+        tester.widget<TextFormField>(fieldFinder).controller?.text ?? '',
+        isEmpty,
+      );
+
+      // 输入有效值 48000 → 提交 → provider 持久化
+      await tester.enterText(fieldFinder, '48000');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt('context_compaction_threshold'), 48000);
+      expect(prefs.getBool('context_compaction_threshold_enabled'), isTrue);
+    });
+
+    testWidgets(
+        'clearing the field falls back to model context and closes '
+        'the custom toggle', (tester) async {
+      tester.view.physicalSize = const Size(1080, 6000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      SharedPreferences.setMockInitialValues({
+        'context_compaction_threshold_enabled': true,
+        'context_compaction_threshold': 48000,
+      });
+
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
+
+      final toggleFinder = find.text('自定义压缩触发值').first;
+      await tester.scrollUntilVisible(toggleFinder, 300,
+          scrollable: find.byType(Scrollable).first);
+      final tile = find.widgetWithText(SwitchListTile, '自定义压缩触发值');
+      final switchWidget = tester.widget<Switch>(
+        find.descendant(of: tile, matching: find.byType(Switch)),
+      );
+      expect(switchWidget.value, isTrue);
+
+      final fieldFinder = find.byType(TextFormField);
+      // 清空输入 → 提交 → 阈值清除且开关关闭
+      await tester.enterText(fieldFinder, '');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt('context_compaction_threshold'), isNull);
+      expect(
+        prefs.getBool('context_compaction_threshold_enabled'),
+        isFalse,
+      );
+      // 字段随开关关闭而消失
+      expect(find.byType(TextFormField), findsNothing);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
   // From notification_settings_page_test.dart
   // ─────────────────────────────────────────────────────────────────────
 

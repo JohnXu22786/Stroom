@@ -356,6 +356,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
       _streamingMsgId = null;
       _messageKeys.clear();
       _expandedErrors.clear();
+      // 压缩摘要 banner 的展开态是页面级标志：切对话时重置
+      // （否则旧对话的展开状态跨对话残留）
+      _showCompactionSummary = false;
       // 保留搜索状态（用户正在搜索时后台流完成触发的重载不应
       // 静默关闭搜索）：保留 query 并按新历史重跑匹配；仅当
       // 未在搜索时才清空。

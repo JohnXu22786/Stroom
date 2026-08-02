@@ -162,6 +162,8 @@ class AnthropicChatProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic> get defaultParams => {
+        // 仅作模型 ID 缺省兜底；当前默认模型建议改为
+        // claude-sonnet-4-* 系列（claude-3-5-sonnet 已下线）。
         'model': 'claude-3-5-sonnet',
         'max_tokens': 4096,
         'temperature': 1.0,

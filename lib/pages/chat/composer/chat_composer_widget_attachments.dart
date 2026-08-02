@@ -345,13 +345,19 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       // Clean up old temp file if it was also a temp edit
       if (oldAtt.storagePath.startsWith('temp_edited/')) {
         _deleteTempFile(oldAtt.storagePath);
-      } else {
-        // Delete the old non-temp storage file (original attachment copy)
+      } else if (widget.editingMessageId == null) {
+        // 普通模式：新选附件编辑后，旧永久文件不再被任何消息引用
+        // （仅存在于 _pendingAttachments），清理孤儿文件。
         try {
           await AttachmentStorage.deleteFile(oldAtt.storagePath);
         } catch (_) {
           // Non-fatal cleanup
         }
+      } else {
+        // 编辑模式：附件可能引用原消息的永久文件，**不删除**——
+        // 删除会让原消息附件悬空（取消编辑后气泡加载失败）。
+        // 孤儿文件由 _deleteMessage 的 isReferencedElsewhere 检查
+        // 在真正删除消息时清理。
       }
 
       // Update attachment with new temp-stored properties

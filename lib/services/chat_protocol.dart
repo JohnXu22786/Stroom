@@ -11,7 +11,8 @@ import 'context_manager.dart'
     show
         kCompactedToolResultPlaceholder,
         kInterruptedToolResultPlaceholder,
-        kToolOutputTruncatedSuffix;
+        kToolOutputTruncatedSuffix,
+        truncateUtf8;
 import 'openai_protocol.dart';
 
 export 'anthropic_protocol.dart' show AnthropicProtocol;
@@ -110,11 +111,16 @@ const int maxAttachmentBytes = 10 * 1024 * 1024;
 /// 读取失败返回 [AttachmentReadStatus.unreadable]。
 Future<AttachmentReadOutcome> readAttachmentBase64(Attachment att) async {
   if (att.base64Data != null && att.base64Data!.isNotEmpty) {
-    // 已缓存：检查大小（即使缓存也可能超限）
-    if (att.fileSize > maxAttachmentBytes) {
-      return const AttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
+    // 已缓存：校验可解码性（损坏缓存原样发给 API 会 400）与大小
+    try {
+      base64Decode(att.base64Data!);
+      if (att.fileSize > maxAttachmentBytes) {
+        return const AttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
+      }
+      return AttachmentReadOutcome(AttachmentReadStatus.ok, att.base64Data);
+    } catch (_) {
+      // 缓存损坏：回退磁盘读取（下方继续）
     }
-    return AttachmentReadOutcome(AttachmentReadStatus.ok, att.base64Data);
   }
   // 未缓存：先按大小检查避免加载超大文件
   if (att.fileSize > maxAttachmentBytes) {
@@ -202,7 +208,7 @@ const List<String> textAttachmentExtensions = [
   'dockerfile',
 ];
 
-/// 读取文本类附件的内容，超长（>4000 字符）截断。
+/// 读取文本类附件的内容，超长（>4000 字节）截断（UTF-8 边界安全）。
 /// 失败返回 null。
 Future<String?> readTextAttachmentContent(
   String fileName,
@@ -212,8 +218,8 @@ Future<String?> readTextAttachmentContent(
     final bytes = await AttachmentStorage.readFile(storagePath);
     if (bytes == null || bytes.isEmpty) return null;
     final textContent = utf8.decode(bytes);
-    if (textContent.length > 4000) {
-      return '${textContent.substring(0, 4000)}\n... [truncated]';
+    if (utf8.encode(textContent).length > 4000) {
+      return '${truncateUtf8(textContent, 4000)}\n... [truncated]';
     }
     return textContent;
   } catch (_) {
@@ -258,11 +264,15 @@ Future<Uint8List?> readRawAttachmentBytes(Attachment att) async {
 const int kToolOutputMaxChars = 2000;
 
 /// 渲染截断工具结果（发送给模型用）。
+/// truncateUtf8 实现位于 context_manager（估算侧与发送侧共用，
+/// 见其注释——token 估算与真实发送文本必须一致）。
 String truncateToolOutput(String text) {
-  if (text.length <= kToolOutputMaxChars) return text;
+  // 按 UTF-8 字节截断（kToolOutputMaxChars 语义为字节上限，
+  // 对齐 opencode TOOL_OUTPUT_MAX_CHARS），并回退到字符边界。
+  if (utf8.encode(text).length <= kToolOutputMaxChars) return text;
   // 与 context_manager 的估算渲染共用同一后缀（kToolOutputTruncatedSuffix），
   // 保证 token 估算与真实发送文本一致。
-  return '${text.substring(0, kToolOutputMaxChars)}$kToolOutputTruncatedSuffix';
+  return '${truncateUtf8(text, kToolOutputMaxChars)}$kToolOutputTruncatedSuffix';
 }
 
 /// 解析历史中单个工具结果的重建文本。

@@ -43,10 +43,8 @@ class SystemAssistantSettings {
             compactionAssistantId ?? this.compactionAssistantId,
       );
 
-  Map<String, String> toMap() => {
-        _kTitleAssistantIdKey: titleAssistantId,
-        _kCompactionAssistantIdKey: compactionAssistantId,
-      };
+  // 无 toMap：持久化走独立 prefs key（_kTitleAssistantIdKey 等），
+  // 序列化整个对象无调用方。
 }
 
 final systemAssistantSettingsProvider = StateNotifierProvider<

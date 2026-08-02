@@ -384,8 +384,13 @@ class ChatStreamManager {
     Object? streamError;
 
     try {
-      await AppLogService.info('ChatStreamManager',
-          '[STREAM-MGR] startStreaming: begin, convId=$convId, historyLen=${history.length}');
+      try {
+        await AppLogService.info('ChatStreamManager',
+            '[STREAM-MGR] startStreaming: begin, convId=$convId, historyLen=${history.length}');
+      } catch (_) {
+        // 日志失败不能误判为流错误（否则主请求已发出但响应
+        // 永不被消费，回复丢失）
+      }
 
       await for (final event in stream) {
         if (state.cancelledByUser) break;

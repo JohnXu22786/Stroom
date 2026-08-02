@@ -164,11 +164,6 @@ void chatStreamManagerGroup4() {
   // ═══════════════════════════════════════════════════════════════
 
   group('Cross-conversation provider isolation', () {
-    /// Creates a [ChatStreamManager] connected to Riverpod via the provider.
-    ChatStreamManager _makeManagerWithRef(ProviderContainer container) {
-      return container.read(chatStreamManagerProvider);
-    }
-
     test(
       'BUG-REPRO Issue B: _activeConvId preserved when other stream is running',
       () async {

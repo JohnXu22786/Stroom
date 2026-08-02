@@ -19,10 +19,11 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
     }
     try {
       final partialHistory = List<ChatMessage>.from(s.history);
-      // 纯推理轮（fullReply 空但推理非空）也持久化：崩溃重进后
-      // 已流出的思考过程不丢失。
+      // 纯工具轮（无文本/推理但已有工具结果）也参与周期持久化：
+      // 工具执行中崩溃时部分工具卡片不丢失（中断标记由 finalize 补）。
       if (s.fullReply.isNotEmpty ||
-          s.reasoningSections.any((c) => c.isNotEmpty)) {
+          s.reasoningSections.any((c) => c.isNotEmpty) ||
+          s.accumulatedToolCalls.isNotEmpty) {
         final exists = partialHistory.any((m) => m.id == s.streamingMsgId);
         if (!exists) {
           // reasoningContent 用全量累计（sections 拼接），与 finalize

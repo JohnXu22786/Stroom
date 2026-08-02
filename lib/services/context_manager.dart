@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../models/chat_message.dart';
 import '../models/message_block.dart';
 import '../models/tool_call.dart';
@@ -156,20 +158,37 @@ class ContextManager {
 // 内部实现
 // ============================================================================
 
+/// 按 UTF-8 字节数截断字符串，并回退到完整字符边界
+/// （不会劈开多字节字符/代理对）。
+///
+/// 估算侧（此处）与发送侧（协议层 truncateToolOutput）共用同一实现，
+/// 保证 token 估算与真实发送文本一致（CJK 内容按字符截断会高估约 3 倍，
+/// 直接影响压缩触发阈值）。
+String truncateUtf8(String text, int maxBytes) {
+  final bytes = utf8.encode(text);
+  if (bytes.length <= maxBytes) return text;
+  var end = maxBytes;
+  // 回退到 UTF-8 字符边界：continuation byte 为 0b10xxxxxx
+  while (end > 0 && (bytes[end] & 0xC0) == 0x80) {
+    end--;
+  }
+  return utf8.decode(bytes.sublist(0, end));
+}
+
 /// 发送给模型时工具结果的渲染截断（与协议层 kToolOutputMaxChars 一致；
 /// 本地常量避免循环 import）。
 const int _kToolOutputRenderMaxChars = 2000;
 
 /// 工具结果发送渲染（对齐协议层 rebuildToolResultText）：
-/// compacted → 占位；completed → 2K 截断；其余 → 中断占位。
+/// compacted → 占位；completed → 2K 字节截断；其余 → 中断占位。
 String _renderToolResult(ToolCallData tc) {
   if (tc.compactedAt != null) {
     return kCompactedToolResultPlaceholder;
   }
   if (tc.status == ToolCallStatus.completed && tc.result != null) {
     final r = tc.result!;
-    return r.length > _kToolOutputRenderMaxChars
-        ? '${r.substring(0, _kToolOutputRenderMaxChars)}$kToolOutputTruncatedSuffix'
+    return utf8.encode(r).length > _kToolOutputRenderMaxChars
+        ? '${truncateUtf8(r, _kToolOutputRenderMaxChars)}$kToolOutputTruncatedSuffix'
         : r;
   }
   return kInterruptedToolResultPlaceholder;

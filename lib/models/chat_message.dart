@@ -382,9 +382,11 @@ class ChatMessage {
     }
 
     return ChatMessage(
-      id: map['id'] as String?,
+      id: map['id'] is String ? map['id'] as String : null,
       role: roleStr,
-      content: (map['content'] as String?) ?? '',
+      // 防御：content 非 String（损坏数据）时回退空串，
+      // 不抛 TypeError 丢弃整条消息（与其他字段防御风格一致）
+      content: map['content'] is String ? map['content'] as String : '',
       createdAt: createdAt,
       attachments: attachments,
       isStreaming: map['isStreaming'] is bool ? map['isStreaming'] : false,

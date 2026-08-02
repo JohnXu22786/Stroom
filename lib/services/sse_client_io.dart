@@ -49,7 +49,7 @@ Stream<String> sseStream(
       }
     }
     AppLogService.info('SseClient', 'SSE 流结束: $url');
-  } on DioException catch (_) {
+  } on DioException {
     // Rethrow the original DioException so that upstream code
     // (chat_api_provider.dart) can capture response data and status code.
     rethrow;

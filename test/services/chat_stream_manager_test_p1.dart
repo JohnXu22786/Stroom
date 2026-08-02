@@ -185,9 +185,9 @@ void chatStreamManagerGroup1() {
 
       final completerA = Completer<void>();
 
-      // Use sequential testing: Start convA while it blocks, cancel it,
-      // then verify convB streams normally afterward. (True concurrency
-      // is limited by the single ChatAdapter.)
+      // 顺序测试：convA 阻塞时取消，再验证 convB 正常流式。
+      // （并发能力由每对话独立 ChatService 支持——见 p4 的
+      // Cross-conversation provider isolation 测试）
       final providerA2 = _MockProvider(
         [
           [AIStreamEvent('Slow A response')]

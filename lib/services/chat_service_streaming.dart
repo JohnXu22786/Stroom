@@ -236,9 +236,11 @@ extension ChatServiceStreamingExt on ChatService {
           }
           var roundMessages = messages;
           if (isLastStep) {
+            // 收尾提示以 user 角色注入（对齐 opencode MAX_STEPS_PROMPT）：
+            // assistant 角色注入的"要求"部分模型可能不当作指令执行。
             roundMessages = [
               ...messages,
-              {'role': 'assistant', 'content': ChatService.maxStepsPrompt},
+              {'role': 'user', 'content': ChatService.maxStepsPrompt},
             ];
           }
 
@@ -364,11 +366,12 @@ extension ChatServiceStreamingExt on ChatService {
             } catch (e) {
               result = 'Error: $e';
             }
-            // 存储级截断：50KB 上限（opencode MAX_BYTES）。
+            // 存储级截断：50KB 上限（opencode MAX_BYTES，按 **UTF-8 字节**
+            // 计——CJK 等多字节内容按字符计会实际超限约 3 倍）。
             // 不强行截断小结果——完整结果保留给 UI 与历史重建。
-            if (result.length > ChatService.maxToolResultBytes) {
+            if (utf8.encode(result).length > ChatService.maxToolResultBytes) {
               result =
-                  '${result.substring(0, ChatService.maxToolResultBytes)}$kToolOutputTruncatedSuffix';
+                  '${truncateUtf8(result, ChatService.maxToolResultBytes)}$kToolOutputTruncatedSuffix';
             }
             // 执行期间被取消：跳过 complete 事件（controller 已关闭，
             // 且避免把"恰在取消时完成"的工具误标为正常结果）
