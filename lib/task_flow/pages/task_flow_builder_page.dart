@@ -144,12 +144,26 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   }
 
   /// Returns to run mode if entered from there, otherwise pops.
+  ///
+  /// On discard the local edits must be dropped — otherwise run mode would
+  /// render the edited chain while [_startFlow] executes the persisted flow.
   void _goBackFromEdit() {
     if (_enteredFromRunMode) {
-      setState(() => _isRunMode = true);
+      setState(() {
+        _isRunMode = true;
+        _resetToInitial();
+      });
     } else {
       Navigator.of(context).pop();
     }
+  }
+
+  /// Restore the local state from the last saved snapshots.
+  void _resetToInitial() {
+    _blocks = List<TaskFlowBlock>.from(_initialBlocks);
+    _nameController.text = _initialName;
+    _descController.text = _initialDesc;
+    _inputType = _initialInputType;
   }
 
   // =========================================================================

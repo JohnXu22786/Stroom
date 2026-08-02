@@ -130,9 +130,12 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
           completedAt: DateTime.now(),
         );
       } else if (anyRunning) {
+        // Re-opened execution: drop the stale completion time and error
+        // text from the previous failed/completed state.
         return e.copyWith(
           status: FlowExecutionStatus.running,
           clearCompletedAt: true,
+          clearError: true,
         );
       } else if (allCompleted) {
         return e.copyWith(
