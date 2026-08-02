@@ -149,7 +149,7 @@ class FileManifest {
     toMap: (r) => r.toMap(),
     onExtraDelete: (r) async {
       // Also delete the .txt sidecar file (same prefix convention)
-      if (kIsWeb) {
+      if (kIsWeb || WebFileStore.isTestMode) {
         await WebFileStore.delete('tts_audio/${r.textStoragePath}');
       } else {
         final appDocDir = await getApplicationDocumentsDirectory();

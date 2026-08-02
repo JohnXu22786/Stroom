@@ -469,8 +469,10 @@ class ManifestDatabase {
     try {
       final json = jsonEncode(_webData);
       await WebFileStore.write(_webStoreKey, utf8Encode(json));
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('ManifestDatabase._saveWebData error: $e');
+      await AppLogService.error(
+          'ManifestDatabase', '_saveWebData failed', e, st);
     }
   }
 
@@ -722,19 +724,14 @@ class ManifestDatabase {
 
   /// 获取所有视频记录
   static Future<List<Map<String, dynamic>>> getAllVideoRecords() async {
-    await AppLogService.info('ManifestDatabase', 'getAllVideoRecords called');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
-        await AppLogService.info('ManifestDatabase',
-            'getAllVideoRecords completed [count=${list.length}]');
         return list.cast<Map<String, dynamic>>();
       }
       final db = await database;
       final rows = await db.query(ManifestTables.videoRecords);
-      await AppLogService.info('ManifestDatabase',
-          'getAllVideoRecords completed [count=${rows.length}]');
       return rows.map(dbRowToRecord).toList();
     } catch (e, stackTrace) {
       await AppLogService.error(
@@ -745,15 +742,12 @@ class ManifestDatabase {
 
   /// 插入一条视频记录
   static Future<void> insertVideoRecord(Map<String, dynamic> record) async {
-    await AppLogService.info('ManifestDatabase', 'insertVideoRecord called');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
         list.add(record);
         await _saveWebData();
-        await AppLogService.info(
-            'ManifestDatabase', 'insertVideoRecord completed');
         return;
       }
       final db = await database;
@@ -762,8 +756,6 @@ class ManifestDatabase {
         recordToDbRow(record),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      await AppLogService.info(
-          'ManifestDatabase', 'insertVideoRecord completed');
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'insertVideoRecord failed', e, stackTrace);
@@ -774,8 +766,6 @@ class ManifestDatabase {
   /// 更新一条视频记录
   static Future<void> updateVideoRecord(
       String id, Map<String, dynamic> updates) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'updateVideoRecord called [id=$id]');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
@@ -785,8 +775,6 @@ class ManifestDatabase {
           (list[index] as Map<String, dynamic>).addAll(updates);
           await _saveWebData();
         }
-        await AppLogService.info(
-            'ManifestDatabase', 'updateVideoRecord completed [id=$id]');
         return;
       }
       final db = await database;
@@ -796,8 +784,6 @@ class ManifestDatabase {
         where: 'id = ?',
         whereArgs: [id],
       );
-      await AppLogService.info(
-          'ManifestDatabase', 'updateVideoRecord completed [id=$id]');
     } catch (e, stackTrace) {
       await AppLogService.error('ManifestDatabase',
           'updateVideoRecord failed [id=$id]', e, stackTrace);
@@ -807,16 +793,12 @@ class ManifestDatabase {
 
   /// 删除一条视频记录
   static Future<void> deleteVideoRecord(String id) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'deleteVideoRecord called [id=$id]');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
         list.removeWhere((r) => (r as Map)['id'] == id);
         await _saveWebData();
-        await AppLogService.info(
-            'ManifestDatabase', 'deleteVideoRecord completed [id=$id]');
         return;
       }
       final db = await database;
@@ -825,8 +807,6 @@ class ManifestDatabase {
         where: 'id = ?',
         whereArgs: [id],
       );
-      await AppLogService.info(
-          'ManifestDatabase', 'deleteVideoRecord completed [id=$id]');
     } catch (e, stackTrace) {
       await AppLogService.error('ManifestDatabase',
           'deleteVideoRecord failed [id=$id]', e, stackTrace);
@@ -836,8 +816,6 @@ class ManifestDatabase {
 
   /// 批量删除视频记录
   static Future<void> deleteVideoRecords(List<String> ids) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'deleteVideoRecords called [count=${ids.length}]');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
@@ -845,8 +823,6 @@ class ManifestDatabase {
         final idSet = ids.toSet();
         list.removeWhere((r) => idSet.contains((r as Map)['id']));
         await _saveWebData();
-        await AppLogService.info('ManifestDatabase',
-            'deleteVideoRecords completed [count=${ids.length}]');
         return;
       }
       final db = await database;
@@ -856,8 +832,6 @@ class ManifestDatabase {
         where: 'id IN ($placeholders)',
         whereArgs: ids,
       );
-      await AppLogService.info('ManifestDatabase',
-          'deleteVideoRecords completed [count=${ids.length}]');
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'deleteVideoRecords failed', e, stackTrace);
@@ -867,8 +841,6 @@ class ManifestDatabase {
 
   /// 获取单条音频记录
   static Future<Map<String, dynamic>?> getAudioRecord(String id) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'getAudioRecord called [id=$id]');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
@@ -876,13 +848,9 @@ class ManifestDatabase {
         for (final r in list) {
           final map = r as Map<String, dynamic>;
           if (map['id'] == id) {
-            await AppLogService.info('ManifestDatabase',
-                'getAudioRecord completed [id=$id, found=true]');
             return map;
           }
         }
-        await AppLogService.info('ManifestDatabase',
-            'getAudioRecord completed [id=$id, found=false]');
         return null;
       }
       final db = await database;
@@ -893,12 +861,8 @@ class ManifestDatabase {
         limit: 1,
       );
       if (rows.isEmpty) {
-        await AppLogService.info('ManifestDatabase',
-            'getAudioRecord completed [id=$id, found=false]');
         return null;
       }
-      await AppLogService.info(
-          'ManifestDatabase', 'getAudioRecord completed [id=$id, found=true]');
       return dbRowToRecord(rows.first);
     } catch (e, stackTrace) {
       await AppLogService.error(
@@ -913,19 +877,14 @@ class ManifestDatabase {
 
   /// 获取所有文本记录
   static Future<List<Map<String, dynamic>>> getAllTextRecords() async {
-    await AppLogService.info('ManifestDatabase', 'getAllTextRecords called');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
-        await AppLogService.info('ManifestDatabase',
-            'getAllTextRecords completed [count=${list.length}]');
         return list.cast<Map<String, dynamic>>();
       }
       final db = await database;
       final rows = await db.query(ManifestTables.textRecords);
-      await AppLogService.info('ManifestDatabase',
-          'getAllTextRecords completed [count=${rows.length}]');
       return rows.map(dbRowToRecord).toList();
     } catch (e, stackTrace) {
       await AppLogService.error(
@@ -936,15 +895,12 @@ class ManifestDatabase {
 
   /// 插入一条文本记录
   static Future<void> insertTextRecord(Map<String, dynamic> record) async {
-    await AppLogService.info('ManifestDatabase', 'insertTextRecord called');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
         list.add(record);
         await _saveWebData();
-        await AppLogService.info(
-            'ManifestDatabase', 'insertTextRecord completed');
         return;
       }
       final db = await database;
@@ -953,8 +909,6 @@ class ManifestDatabase {
         recordToDbRow(record),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      await AppLogService.info(
-          'ManifestDatabase', 'insertTextRecord completed');
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'insertTextRecord failed', e, stackTrace);
@@ -965,8 +919,6 @@ class ManifestDatabase {
   /// 更新一条文本记录
   static Future<void> updateTextRecord(
       String id, Map<String, dynamic> updates) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'updateTextRecord called [id=$id]');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
@@ -976,8 +928,6 @@ class ManifestDatabase {
           (list[index] as Map<String, dynamic>).addAll(updates);
           await _saveWebData();
         }
-        await AppLogService.info(
-            'ManifestDatabase', 'updateTextRecord completed [id=$id]');
         return;
       }
       final db = await database;
@@ -987,8 +937,6 @@ class ManifestDatabase {
         where: 'id = ?',
         whereArgs: [id],
       );
-      await AppLogService.info(
-          'ManifestDatabase', 'updateTextRecord completed [id=$id]');
     } catch (e, stackTrace) {
       await AppLogService.error('ManifestDatabase',
           'updateTextRecord failed [id=$id]', e, stackTrace);
@@ -998,16 +946,12 @@ class ManifestDatabase {
 
   /// 删除一条文本记录
   static Future<void> deleteTextRecord(String id) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'deleteTextRecord called [id=$id]');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
         list.removeWhere((r) => (r as Map)['id'] == id);
         await _saveWebData();
-        await AppLogService.info(
-            'ManifestDatabase', 'deleteTextRecord completed [id=$id]');
         return;
       }
       final db = await database;
@@ -1016,8 +960,6 @@ class ManifestDatabase {
         where: 'id = ?',
         whereArgs: [id],
       );
-      await AppLogService.info(
-          'ManifestDatabase', 'deleteTextRecord completed [id=$id]');
     } catch (e, stackTrace) {
       await AppLogService.error('ManifestDatabase',
           'deleteTextRecord failed [id=$id]', e, stackTrace);
@@ -1027,8 +969,6 @@ class ManifestDatabase {
 
   /// 批量删除文本记录
   static Future<void> deleteTextRecords(List<String> ids) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'deleteTextRecords called [count=${ids.length}]');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
@@ -1036,8 +976,6 @@ class ManifestDatabase {
         final idSet = ids.toSet();
         list.removeWhere((r) => idSet.contains((r as Map)['id']));
         await _saveWebData();
-        await AppLogService.info('ManifestDatabase',
-            'deleteTextRecords completed [count=${ids.length}]');
         return;
       }
       final db = await database;
@@ -1047,8 +985,6 @@ class ManifestDatabase {
         where: 'id IN ($placeholders)',
         whereArgs: ids,
       );
-      await AppLogService.info('ManifestDatabase',
-          'deleteTextRecords completed [count=${ids.length}]');
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'deleteTextRecords failed', e, stackTrace);
@@ -1065,16 +1001,12 @@ class ManifestDatabase {
   /// [recordTable] 指定记录表名，用于选择对应的文件夹表。
   /// 为 null 时返回所有四种类型的文件夹合并结果。
   static Future<List<String>> getAllFolders({String? recordTable}) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'getAllFolders called [recordTable=$recordTable]');
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
         if (recordTable != null) {
           final folderTable = ManifestTables.folderTableFor(recordTable);
           final list = data[folderTable] as List<dynamic>? ?? [];
-          await AppLogService.info('ManifestDatabase',
-              'getAllFolders completed [count=${list.length}]');
           return list.cast<String>();
         }
         // 无 recordTable 时合并所有四种类型的文件夹
@@ -1083,16 +1015,12 @@ class ManifestDatabase {
           final list = data[ft] as List<dynamic>? ?? [];
           all.addAll(list.cast<String>());
         }
-        await AppLogService.info('ManifestDatabase',
-            'getAllFolders completed [count=${all.length}]');
         return all.toList();
       }
       final db = await database;
       if (recordTable != null) {
         final folderTable = ManifestTables.folderTableFor(recordTable);
         final rows = await db.query(folderTable);
-        await AppLogService.info('ManifestDatabase',
-            'getAllFolders completed [count=${rows.length}]');
         return rows.map((r) => r['path'] as String).toList();
       }
       // 无 recordTable 时合并所有四种类型的文件夹
@@ -1101,8 +1029,6 @@ class ManifestDatabase {
         final rows = await db.query(ft);
         all.addAll(rows.map((r) => r['path'] as String));
       }
-      await AppLogService.info(
-          'ManifestDatabase', 'getAllFolders completed [count=${all.length}]');
       return all.toList();
     } catch (e, stackTrace) {
       await AppLogService.error(
@@ -1115,8 +1041,6 @@ class ManifestDatabase {
   ///
   /// [recordTable] 必须指定，v2+ 格式不再使用共享 folders 表。
   static Future<void> insertFolder(String path, {String? recordTable}) async {
-    await AppLogService.info('ManifestDatabase',
-        'insertFolder called [path=$path, recordTable=$recordTable]');
     try {
       if (recordTable == null) {
         throw ArgumentError('recordTable is required in v2+ format');
@@ -1129,8 +1053,6 @@ class ManifestDatabase {
           list.add(path);
           await _saveWebData();
         }
-        await AppLogService.info(
-            'ManifestDatabase', 'insertFolder completed [path=$path]');
         return;
       }
       final db = await database;
@@ -1139,8 +1061,6 @@ class ManifestDatabase {
         {'path': path},
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
-      await AppLogService.info(
-          'ManifestDatabase', 'insertFolder completed [path=$path]');
     } catch (e, stackTrace) {
       await AppLogService.error('ManifestDatabase',
           'insertFolder failed [path=$path]', e, stackTrace);
@@ -1152,8 +1072,6 @@ class ManifestDatabase {
   ///
   /// [recordTable] 必须指定，v2+ 格式不再使用共享 folders 表。
   static Future<void> deleteFolder(String path, {String? recordTable}) async {
-    await AppLogService.info('ManifestDatabase',
-        'deleteFolder called [path=$path, recordTable=$recordTable]');
     try {
       if (recordTable == null) {
         throw ArgumentError('recordTable is required in v2+ format');
@@ -1164,8 +1082,6 @@ class ManifestDatabase {
         final list = data[folderTable] as List<dynamic>? ?? [];
         list.remove(path);
         await _saveWebData();
-        await AppLogService.info(
-            'ManifestDatabase', 'deleteFolder completed [path=$path]');
         return;
       }
       final db = await database;
@@ -1174,8 +1090,6 @@ class ManifestDatabase {
         where: 'path = ?',
         whereArgs: [path],
       );
-      await AppLogService.info(
-          'ManifestDatabase', 'deleteFolder completed [path=$path]');
     } catch (e, stackTrace) {
       await AppLogService.error('ManifestDatabase',
           'deleteFolder failed [path=$path]', e, stackTrace);
@@ -1187,8 +1101,6 @@ class ManifestDatabase {
   ///
   /// [recordTable] 必须指定，v2+ 格式不再使用共享 folders 表。
   static Future<bool> folderExists(String path, {String? recordTable}) async {
-    await AppLogService.info('ManifestDatabase',
-        'folderExists called [path=$path, recordTable=$recordTable]');
     try {
       if (recordTable == null) {
         throw ArgumentError('recordTable is required in v2+ format');
@@ -1198,8 +1110,6 @@ class ManifestDatabase {
         final data = await _loadWebData();
         final list = data[folderTable] as List<dynamic>? ?? [];
         final exists = list.contains(path);
-        await AppLogService.info('ManifestDatabase',
-            'folderExists completed [path=$path, exists=$exists]');
         return exists;
       }
       final db = await database;
@@ -1208,8 +1118,6 @@ class ManifestDatabase {
         [path],
       ));
       final exists = (count ?? 0) > 0;
-      await AppLogService.info('ManifestDatabase',
-          'folderExists completed [path=$path, exists=$exists]');
       return exists;
     } catch (e, stackTrace) {
       await AppLogService.error('ManifestDatabase',
@@ -1227,8 +1135,6 @@ class ManifestDatabase {
   /// [tableName] 为记录表名，如 'image_records', 'audio_records' 等。
   /// 不会影响其他记录类型或文件夹数据。
   static Future<void> clearRecords(String tableName) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'clearRecords called [table=$tableName]');
     try {
       final validTables = {
         ManifestTables.imageRecords,
@@ -1247,8 +1153,6 @@ class ManifestDatabase {
         final db = await database;
         await db.delete(tableName);
       }
-      await AppLogService.info(
-          'ManifestDatabase', 'clearRecords completed [table=$tableName]');
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'clearRecords failed', e, stackTrace);
@@ -1261,8 +1165,6 @@ class ManifestDatabase {
   /// [recordTable] 指定记录表名，用于选择对应的文件夹表。
   /// 为 null 时抛出 ArgumentError。
   static Future<void> clearFolders({String? recordTable}) async {
-    await AppLogService.info(
-        'ManifestDatabase', 'clearFolders called [recordTable=$recordTable]');
     try {
       if (recordTable == null) {
         throw ArgumentError('recordTable is required');
@@ -1276,8 +1178,6 @@ class ManifestDatabase {
         final db = await database;
         await db.delete(folderTable);
       }
-      await AppLogService.info('ManifestDatabase',
-          'clearFolders completed [recordTable=$recordTable]');
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'clearFolders failed', e, stackTrace);
@@ -1290,7 +1190,6 @@ class ManifestDatabase {
   /// 在 Native 模式下删除 SQLite 数据库文件；
   /// 在 Web / 测试模式下清除 WebFileStore 中的数据。
   static Future<void> clearAllData() async {
-    await AppLogService.info('ManifestDatabase', 'clearAllData called');
     try {
       if (_useJsonStore) {
         _webData = null;
@@ -1305,7 +1204,6 @@ class ManifestDatabase {
           await dbFile.delete();
         }
       }
-      await AppLogService.info('ManifestDatabase', 'clearAllData completed');
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'clearAllData failed', e, stackTrace);
@@ -1315,14 +1213,12 @@ class ManifestDatabase {
 
   /// 关闭数据库连接（Native 端）
   static Future<void> close() async {
-    await AppLogService.info('ManifestDatabase', 'close called');
     try {
       if (_database != null) {
         await _database!.close();
         _database = null;
       }
       _webData = null;
-      await AppLogService.info('ManifestDatabase', 'close completed');
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'close failed', e, stackTrace);
