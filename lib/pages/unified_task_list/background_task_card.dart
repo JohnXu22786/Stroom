@@ -410,11 +410,14 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
 
   Widget _buildActionButtons(
       BackgroundTask task, ColorScheme cs, WidgetRef ref) {
+    // Chat tasks have no standalone page (they run inside a flow) — the
+    // 立即开始/重试 buttons would be dead taps, so hide them.
+    final hasRetryPage = task.type != BackgroundTaskType.chat;
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         // "立即开始" button for waiting tasks
-        if (task.status == TaskStatus.waiting)
+        if (hasRetryPage && task.status == TaskStatus.waiting)
           _actionButton(
             icon: Icons.play_arrow,
             label: '立即开始',
@@ -431,7 +434,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             onPressed: () => openFile(task.downloadedFilePath!, context),
           ),
         // Retry button for failed tasks
-        if (task.status == TaskStatus.failed)
+        if (hasRetryPage && task.status == TaskStatus.failed)
           _actionButton(
             icon: Icons.refresh,
             label: '重试',

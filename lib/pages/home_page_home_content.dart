@@ -6,34 +6,22 @@ extension _HomePageHomeContentExt on _HomePageState {
     final cs = Theme.of(context).colorScheme;
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
-    // Use .select() so the home page ONLY rebuilds when a background
-    // task transitions between running/completed/failed — not on every
-    // intermediate step update (e.g. updateStep from running → running
-    // on a different step index).  This keeps the GUI responsive during
-    // CPU-bound extraction pipelines.
-    final bgStatusCounts = ref.watch(backgroundTasksProvider.select((tasks) {
-      int p = 0, c = 0, f = 0;
-      for (final t in tasks) {
-        switch (t.status) {
-          case TaskStatus.running:
-          case TaskStatus.paused:
-          case TaskStatus.waiting:
-            p++;
-          case TaskStatus.completed:
-            c++;
-          case TaskStatus.failed:
-            f++;
-        }
-      }
-      return (inProgress: p, completed: c, failed: f);
-    }));
+    final bgTasks = ref.watch(backgroundTasksProvider);
+    final flowExecutions = ref.watch(taskFlowExecutionsProvider);
+
+    // Flow sub-tasks are rendered inside their flow card in the unified
+    // task list — they must not be counted as standalone items here.
+    final flowSubTaskIds = <String>{
+      for (final e in flowExecutions)
+        for (final st in e.subTasks) st.subTaskId,
+    };
 
     // --- Compute status counts for the status card ---
-    int inProgressCount = bgStatusCounts.inProgress;
-    int completedCount = bgStatusCounts.completed;
-    int failedCount = bgStatusCounts.failed;
+    int inProgressCount = 0;
+    int completedCount = 0;
+    int failedCount = 0;
 
-    void countCatchStatusName(String statusName) {
+    void countStatusName(String statusName) {
       if (statusName == 'running' ||
           statusName == 'paused' ||
           statusName == 'waiting') {
@@ -45,53 +33,25 @@ extension _HomePageHomeContentExt on _HomePageState {
       }
     }
 
-    for (final t in catcatchTasks) {
-      countCatchStatusName(t.status.name);
-    }
-    for (final t in synthesisTasks) {
-      countCatchStatusName(t.status.name);
+    void countTaskIfStandalone(String id, String statusName) {
+      if (flowSubTaskIds.contains(id)) return;
+      countStatusName(statusName);
     }
 
-    // Subtract flow sub-tasks to avoid double-counting (they already appear
-    // in bgStatusCounts but are counted individually via catcatch/synthesis).
-    final flowExecutions = ref.watch(taskFlowExecutionsProvider);
-    final flowSubTaskIds = <String>{
-      for (final e in flowExecutions)
-        for (final st in e.subTasks) st.subTaskId,
-    };
-    // Use bgStatusCounts as base — counts from backgroundTasksProvider only.
-    // We can't filter individual tasks from bgStatusCounts (it's aggregated),
-    // so we count flow sub-tasks directly from catcatch/synthesis lists.
-    inProgressCount -= catcatchTasks
-        .where((t) => flowSubTaskIds.contains(t.id))
-        .where((t) =>
-            t.status.name == 'running' ||
-            t.status.name == 'paused' ||
-            t.status.name == 'waiting')
-        .length;
-    inProgressCount -= synthesisTasks
-        .where((t) => flowSubTaskIds.contains(t.id))
-        .where((t) =>
-            t.status.name == 'running' ||
-            t.status.name == 'paused' ||
-            t.status.name == 'waiting')
-        .length;
-    completedCount -= catcatchTasks
-        .where((t) => flowSubTaskIds.contains(t.id))
-        .where((t) => t.status.name == 'completed')
-        .length;
-    completedCount -= synthesisTasks
-        .where((t) => flowSubTaskIds.contains(t.id))
-        .where((t) => t.status.name == 'completed')
-        .length;
-    failedCount -= catcatchTasks
-        .where((t) => flowSubTaskIds.contains(t.id))
-        .where((t) => t.status.name == 'failed')
-        .length;
-    failedCount -= synthesisTasks
-        .where((t) => flowSubTaskIds.contains(t.id))
-        .where((t) => t.status.name == 'failed')
-        .length;
+    for (final t in bgTasks) {
+      countTaskIfStandalone(t.id, t.status.name);
+    }
+    for (final t in catcatchTasks) {
+      countTaskIfStandalone(t.id, t.status.name);
+    }
+    for (final t in synthesisTasks) {
+      countTaskIfStandalone(t.id, t.status.name);
+    }
+    // Each flow execution is exactly one card in the unified task list —
+    // count it once, matching what the user sees there.
+    for (final e in flowExecutions) {
+      countStatusName(e.status.name);
+    }
 
     return SafeArea(
       top: true,

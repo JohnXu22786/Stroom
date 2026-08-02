@@ -214,10 +214,11 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
           style: const TextStyle(fontSize: 13),
           onChanged: (v) => _params[param.key] = v,
         );
-
       case BlockParamType.modelSelector:
+        // Persisted JSON round-trips numbers as `num` — `int.tryParse('2.0')`
+        // would fail and silently reset the selection to 0.
         final currentIndex =
-            value is int ? value : (int.tryParse('$value') ?? 0);
+            value is num ? value.toInt() : (int.tryParse('$value') ?? 0);
         return DropdownButtonFormField<int>(
           value: currentIndex.clamp(0, 9),
           isDense: true,
