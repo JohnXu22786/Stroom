@@ -8,6 +8,8 @@ import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('homeStatusCountsProvider', () {
     test('excludes flow sub-tasks and counts each flow execution once', () {
       final container = ProviderContainer();
@@ -43,7 +45,6 @@ void main() {
       expect(counts.completed, 0);
       expect(counts.failed, 0);
     });
-
     test('completed flow sub-tasks are excluded, failed executions count', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);

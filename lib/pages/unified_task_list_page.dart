@@ -5,6 +5,7 @@ import '../catcatch/models/catcatch_task.dart' as catcatch;
 import '../catcatch/providers/catcatch_provider.dart';
 import '../providers/task_provider.dart';
 import '../providers/background_task_provider.dart';
+import '../task_flow/models/task_flow_execution.dart';
 import '../task_flow/providers/task_flow_execution_provider.dart';
 import 'unified_task_list/catcatch_task_card.dart';
 import 'unified_task_list/synthesis_task_card.dart';
@@ -310,6 +311,13 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                                 .removeTask(t.id);
                           }
                           for (final e in taskFlowExecutions) {
+                            // A running execution must not be removed: the
+                            // engine keeps running and its sub-tasks would
+                            // resurface as orphaned standalone cards. It
+                            // will fail on its own once its tasks are gone.
+                            if (e.status == FlowExecutionStatus.running) {
+                              continue;
+                            }
                             ref
                                 .read(taskFlowExecutionsProvider.notifier)
                                 .removeExecution(e.id);
