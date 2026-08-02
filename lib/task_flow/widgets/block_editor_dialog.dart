@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/provider_config.dart';
 import '../../utils/file_manifest.dart';
 import '../../utils/video_manifest.dart';
 import '../../widgets/folder_picker_dialog.dart';
@@ -22,16 +24,16 @@ Future<TaskFlowBlock?> showBlockEditorDialog(
   );
 }
 
-class _BlockEditorDialog extends StatefulWidget {
+class _BlockEditorDialog extends ConsumerStatefulWidget {
   final TaskFlowBlock block;
 
   const _BlockEditorDialog({required this.block});
 
   @override
-  State<_BlockEditorDialog> createState() => _BlockEditorDialogState();
+  ConsumerState<_BlockEditorDialog> createState() => _BlockEditorDialogState();
 }
 
-class _BlockEditorDialogState extends State<_BlockEditorDialog> {
+class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
   late Map<String, dynamic> _params;
   late final BlockTypeDefinition? _definition;
   late final Map<String, TextEditingController> _controllers = {};
@@ -219,8 +221,28 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
         // would fail and silently reset the selection to 0.
         final currentIndex =
             value is num ? value.toInt() : (int.tryParse('$value') ?? 0);
+        // Populate from the actually-configured ASR models — the executor
+        // indexes the same flattened list, so a selected index is always
+        // valid and the labels are recognizable instead of generic slots.
+        final asrConfigs = ref
+            .read(providerEntriesProvider)
+            .entries
+            .where((e) => e.type == 'asr')
+            .expand((e) => e.configs)
+            .toList();
+        if (asrConfigs.isEmpty) {
+          return const ListTile(
+            dense: true,
+            title: Text(
+              '未配置ASR模型',
+              style: TextStyle(fontSize: 13),
+            ),
+          );
+        }
+        final clampedIndex =
+            currentIndex.clamp(0, math.max(0, asrConfigs.length - 1)).toInt();
         return DropdownButtonFormField<int>(
-          value: currentIndex.clamp(0, 9),
+          value: clampedIndex,
           isDense: true,
           decoration: InputDecoration(
             isDense: true,
@@ -231,8 +253,11 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
             ),
           ),
           style: TextStyle(fontSize: 13, color: cs.onSurface),
-          items: List.generate(10, (i) {
-            return DropdownMenuItem<int>(value: i, child: Text('模型 $i'));
+          items: List.generate(asrConfigs.length, (i) {
+            final providerName = asrConfigs[i].providerName.isNotEmpty
+                ? asrConfigs[i].providerName
+                : '模型 $i';
+            return DropdownMenuItem<int>(value: i, child: Text(providerName));
           }),
           onChanged: (v) {
             if (v != null) {
@@ -240,7 +265,6 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
             }
           },
         );
-
       case BlockParamType.number:
         final controller = _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');
