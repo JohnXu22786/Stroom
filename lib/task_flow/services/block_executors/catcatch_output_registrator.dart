@@ -8,7 +8,17 @@ import '../../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../../utils/file_manifest.dart';
 import '../../../utils/video_manifest.dart';
 
-const _videoExts = {'mp4', 'webm', 'mov', 'mkv', 'ogv', 'avi', 'flv', 'wmv'};
+const _videoExts = {
+  'mp4',
+  'webm',
+  'ogg',
+  'mov',
+  'mkv',
+  'ogv',
+  'avi',
+  'flv',
+  'wmv'
+};
 
 const _audioExts = {'mp3', 'wav', 'm4a', 'aac', 'wma', 'opus', 'flac', 'ogg'};
 

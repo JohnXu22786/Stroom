@@ -27,14 +27,18 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
   @override
   void initState() {
     super.initState();
-    _expanded = widget.task.status == TaskStatus.running;
+    // Failed tasks used to show their error box in the header unconditionally;
+    // expand by default so the error stays visible in the collapsible design.
+    _expanded = widget.task.status == TaskStatus.running ||
+        widget.task.status == TaskStatus.failed;
   }
 
   @override
   void didUpdateWidget(covariant SynthesisTaskCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.task.status == TaskStatus.running &&
-        oldWidget.task.status != TaskStatus.running) {
+    if (widget.task.status != oldWidget.task.status &&
+        (widget.task.status == TaskStatus.running ||
+            widget.task.status == TaskStatus.failed)) {
       setState(() => _expanded = true);
     }
   }

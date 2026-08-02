@@ -140,7 +140,7 @@ Future<String> executeAudioSeparationBlock({
     final format = meta.$2;
     await FileManifest.writeFile('$hash.$format', audioBytes);
 
-    final saveFolder = (block.params['saveFolder'] as String?) ?? '';
+    final saveFolder = asStringParam(block.params, 'saveFolder', '');
 
     // Deduplicate the record name — same video extracted twice should
     // produce "音频分离_video" then "音频分离_video (2)", etc.
@@ -149,10 +149,14 @@ Future<String> executeAudioSeparationBlock({
       final existingRecords = await FileManifest.loadRecords();
       int dedupIdx = 2;
       while (existingRecords.any(
-        (r) => r.name == recordName && r.folder == saveFolder,
-      )) {
+            (r) => r.name == recordName && r.folder == saveFolder,
+          ) &&
+          dedupIdx <= 10000) {
         recordName = '$title ($dedupIdx)';
         dedupIdx++;
+      }
+      if (dedupIdx > 10000) {
+        recordName = '$title _${DateTime.now().millisecondsSinceEpoch}';
       }
     }
 
@@ -202,7 +206,7 @@ Future<String> executeAudioSeparationBlock({
       execNotifier,
       execId,
       flowSubTask.id,
-      '音频提取失败: $e',
+      '音频处理失败: $e',
     );
     throw BlockExecutionException(
       e.toString(),

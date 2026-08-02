@@ -194,8 +194,7 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
     switch (param.type) {
       case BlockParamType.string:
       case BlockParamType.secret:
-        final controller =
-            _controllers[param.key] ??
+        final controller = _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');
         // Ensure new controllers are tracked
         if (_controllers[param.key] == null) {
@@ -217,9 +216,8 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
         );
 
       case BlockParamType.modelSelector:
-        final currentIndex = value is int
-            ? value
-            : (int.tryParse('$value') ?? 0);
+        final currentIndex =
+            value is int ? value : (int.tryParse('$value') ?? 0);
         return DropdownButtonFormField<int>(
           value: currentIndex.clamp(0, 9),
           isDense: true,
@@ -243,8 +241,7 @@ class _BlockEditorDialogState extends State<_BlockEditorDialog> {
         );
 
       case BlockParamType.number:
-        final controller =
-            _controllers[param.key] ??
+        final controller = _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');
         if (_controllers[param.key] == null) {
           _controllers[param.key] = controller;

@@ -137,6 +137,34 @@ void main() {
         expect(notifier.state[0].completedAt, isNotNull);
       });
 
+      test('clears completedAt when a re-opened execution returns to running',
+          () {
+        final execId = notifier.addExecution(
+          flowId: 'flow-1',
+          flowName: '测试流程',
+        );
+        notifier.addSubTask(
+            execId,
+            FlowSubTask(
+              blockTypeKey: 'catcatch',
+              blockLabel: '获取网页资源',
+              subTaskId: 'real-task-1',
+              subTaskType: 'catcatch',
+            ));
+        final stId = notifier.state[0].subTasks[0].id;
+
+        notifier.updateSubTaskStatus(execId, stId, TaskStatus.failed);
+        expect(notifier.state[0].status, FlowExecutionStatus.failed);
+        expect(notifier.state[0].completedAt, isNotNull);
+
+        // A later sub-task update re-opens the execution — the stale
+        // completion time must not linger on a running execution.
+        notifier.updateSubTaskStatus(execId, stId, TaskStatus.running);
+
+        expect(notifier.state[0].status, FlowExecutionStatus.running);
+        expect(notifier.state[0].completedAt, isNull);
+      });
+
       test('does NOT auto-complete when sub-task is still running', () {
         final execId = notifier.addExecution(
           flowId: 'flow-1',

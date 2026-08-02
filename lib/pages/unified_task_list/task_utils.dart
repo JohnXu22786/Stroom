@@ -52,8 +52,8 @@ String formatRelativeTime(DateTime dt) {
   final now = DateTime.now();
   final diff = now.difference(dt);
   if (diff.inMinutes < 1) return '刚刚';
-  if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前';
-  if (diff.inHours < 24) return '${diff.inHours} 小时前';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
+  if (diff.inHours < 24) return '${diff.inHours}小时前';
   return '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
 }
 

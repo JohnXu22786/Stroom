@@ -24,12 +24,10 @@ class BlockChainEditor extends StatelessWidget {
     required this.onDeleteBlock,
   });
 
-  static const List<IOType> _inputTypeOptions = [
-    IOType.text,
-    IOType.audio,
-    IOType.image,
-    IOType.video,
-  ];
+  /// All types are offered so restored flows with a `url`/`file`/`any`
+  /// input type keep a valid `DropdownButton` value (a value not present
+  /// in `items` triggers an assertion in debug builds).
+  static const List<IOType> _inputTypeOptions = IOType.values;
 
   @override
   Widget build(BuildContext context) {

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../providers/background_task_provider.dart';
+import '../../providers/chat_manager_provider.dart';
 import '../../providers/provider_config.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/task_provider_shared.dart';
@@ -17,6 +18,23 @@ import 'block_executors/block_executors.dart';
 final taskFlowExecutionServiceProvider = Provider<TaskFlowExecutionService>(
   (ref) => TaskFlowExecutionService._(ref),
 );
+
+/// Maps a block type to the unified-task-list sub-task card type.
+///
+/// Must match the switch in `TaskFlowCard._buildSubTaskCard`
+/// ('catcatch' | 'background' | 'synthesis'). The chat block creates a
+/// [BackgroundTask] (id `chat_<subTaskId>`), so it must map to
+/// 'background' — otherwise the flow card never links to the real task.
+String subTaskTypeFor(BlockType? typeKey) {
+  switch (typeKey) {
+    case BlockType.catcatch:
+      return 'catcatch';
+    case BlockType.tts:
+      return 'synthesis';
+    default:
+      return 'background';
+  }
+}
 
 class TaskFlowExecutionService {
   final Ref _ref;
@@ -40,9 +58,7 @@ class TaskFlowExecutionService {
   }
 
   Future<void> _startFlowInternal(String flowId, String inputText) async {
-    final flow = _ref
-        .read(taskFlowListProvider)
-        .firstWhere(
+    final flow = _ref.read(taskFlowListProvider).firstWhere(
           (f) => f.id == flowId,
           orElse: () => TaskFlowDefinition(name: ''),
         );
@@ -69,7 +85,7 @@ class TaskFlowExecutionService {
         blockTypeKey: def?.typeKey.name ?? block.typeKey.name,
         blockLabel: def?.label ?? block.typeKey.name,
         subTaskId: 'pending_${block.typeKey.name}_$i',
-        subTaskType: _subTaskType(def?.typeKey),
+        subTaskType: subTaskTypeFor(def?.typeKey),
         status: TaskStatus.waiting,
       );
       execNotifier.addSubTask(execId, subTask);
@@ -123,19 +139,6 @@ class TaskFlowExecutionService {
 
     execNotifier.completeExecution(execId);
     AppLogService.info('TaskFlow', '完成: ${flow.name} ($execId)');
-  }
-
-  String _subTaskType(BlockType? typeKey) {
-    switch (typeKey) {
-      case BlockType.catcatch:
-        return 'catcatch';
-      case BlockType.tts:
-        return 'synthesis';
-      case BlockType.chat:
-        return 'chat';
-      default:
-        return 'background';
-    }
   }
 
   Future<String> _executeBlock(
@@ -215,7 +218,7 @@ class TaskFlowExecutionService {
           execNotifier: execNotifier,
           flowSubTask: flowSubTask,
           bgNotifier: bgNotifier,
-          ref: _ref,
+          chatManager: _ref.read(chatStreamManagerProvider),
         );
       case BlockType.custom:
         execNotifier.updateSubTaskStatus(
