@@ -70,6 +70,7 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
       if (e.id != executionId) return e;
       return e.copyWith(subTasks: [...e.subTasks, subTask]);
     }).toList();
+    _debouncedPersist();
   }
 
   /// Update a placeholder sub-task's [subTaskId] with the real task ID
@@ -87,6 +88,7 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
       }).toList();
       return e.copyWith(subTasks: updated);
     }).toList();
+    _debouncedPersist();
   }
 
   /// Update a sub-task's status.
@@ -140,6 +142,10 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
       }
       return e;
     }).toList();
+    // Persist sub-task progress so a killed app restores the real sub-task
+    // list and statuses instead of an empty "0 个步骤" record. Debounced —
+    // this fires on status transitions only, never on the 500 ms polls.
+    _debouncedPersist();
   }
 
   /// Mark execution as completed.
