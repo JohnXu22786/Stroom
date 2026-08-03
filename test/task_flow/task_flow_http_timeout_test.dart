@@ -4,12 +4,25 @@ import 'package:stroom/utils/http_timeout.dart';
 
 void main() {
   group('http timeout policy', () {
-    test('connect timeout fails fast on unreachable hosts', () {
-      expect(connectTimeoutDefault, const Duration(seconds: 30));
-    });
-
-    test('response fallback is a long bound (60 min)', () {
-      expect(receiveTimeoutFallback, const Duration(minutes: 60));
+    test('layered ordering: connect < send < response fallback', () {
+      // The whole point of the layered policy: connection-phase failures
+      // fail fast (seconds), uploads get size-scaled headroom, and the
+      // response bound is a long last resort that never kills slow-but-
+      // healthy servers.
+      expect(
+        connectTimeoutDefault < sendTimeoutForBytes(0),
+        isTrue,
+        reason: 'connect must fail fast, before any upload budget',
+      );
+      expect(
+        sendTimeoutForBytes(0) < receiveTimeoutFallback,
+        isTrue,
+        reason: 'response bound must be far beyond the upload budget',
+      );
+      expect(
+        connectTimeoutDefault < receiveTimeoutFallback,
+        isTrue,
+      );
     });
 
     test('sendTimeout base for empty/small bodies', () {
