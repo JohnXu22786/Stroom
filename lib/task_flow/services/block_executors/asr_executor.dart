@@ -182,6 +182,15 @@ Future<String> executeAsrBlock({
     }
     audioBytes = await file.readAsBytes();
     audioFormat = p.extension(input).replaceFirst('.', '').toLowerCase();
+    // Prefer the content-based format over the file extension — a file
+    // with an unknown extension (or a .mp3-suffixed file that is actually
+    // WAV) would otherwise be mislabeled in the multipart MIME and get
+    // rejected by strict endpoints. Falls back to the extension when the
+    // content is not a known audio format (detectAudioFormat → 'pcm').
+    final detected = normalizeAudioFormat(detectAudioFormat(audioBytes));
+    if (detected != 'pcm') {
+      audioFormat = detected;
+    }
     if (audioBytes.isEmpty) {
       failSubTask(
         bgNotifier,
