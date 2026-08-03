@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../catcatch/providers/catcatch_provider.dart';
+import '../../providers/chat_manager_provider.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../task_flow/models/task_flow_execution.dart';
+import '../../task_flow/services/task_flow_execution_service.dart';
 
 // =============================================================================
 // 工具函数
@@ -194,6 +196,11 @@ Widget stepIcon(catcatch.StepStatus step) {
 /// Remove the real tasks behind a flow execution's sub-tasks from their
 /// providers, so they don't resurface as orphaned standalone cards when
 /// the execution record is removed (card delete and AppBar 清除 actions).
+///
+/// This genuinely cancels the underlying work where possible: catcatch and
+/// TTS `removeTask` cancel their engine/HTTP tokens; chat streams are
+/// cancelled by conversation id; the in-flight ASR/OCR request of the
+/// currently executing block is cancelled via the execution service.
 void removeFlowSubTaskTasks(WidgetRef ref, TaskFlowExecution execution) {
   for (final st in execution.subTasks) {
     if (st.subTaskId.startsWith('pending_')) continue;
@@ -203,9 +210,17 @@ void removeFlowSubTaskTasks(WidgetRef ref, TaskFlowExecution execution) {
       case 'synthesis':
         ref.read(taskListProvider.notifier).removeTask(st.subTaskId);
       default: // 'background' (including legacy 'chat' records)
+        if (st.subTaskId.startsWith('chat_')) {
+          // Cancel the live chat stream (convId is derived from the
+          // FlowSubTask id, matching chat_executor).
+          ref.read(chatStreamManagerProvider).cancel('flow_${st.id}');
+        }
         ref.read(backgroundTasksProvider.notifier).removeTask(st.subTaskId);
     }
   }
+  // Abort the in-flight ASR/OCR request of the currently executing block
+  // so the flow's run lock frees promptly (idempotent when idle).
+  ref.read(taskFlowExecutionServiceProvider).cancelActiveRequest();
 }
 
 class UnifiedTaskItem {

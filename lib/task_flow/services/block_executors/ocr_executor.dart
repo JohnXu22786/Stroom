@@ -23,13 +23,18 @@ Future<String> _callOcrApi({
   required String host,
   required String apiKey,
   required String modelId,
+  CancelToken? cancelToken,
 }) async {
   // Layered timeouts: fast-fail on connect/upload issues, no artificial
   // kill for slow-but-healthy servers (only a 60-min silent-server bound).
+  // The upload budget is sized from the encoded JSON body (base64 inflates
+  // the image ~33%), not the raw image bytes.
   final dio = Dio(
     BaseOptions(
       connectTimeout: connectTimeoutDefault,
-      sendTimeout: sendTimeoutForBytes(imageBytes.length),
+      sendTimeout: sendTimeoutForBytes(
+        _encodedBodyLength(imageBytes, imageFormat),
+      ),
       receiveTimeout: receiveTimeoutFallback,
     ),
   );
@@ -62,6 +67,7 @@ Future<String> _callOcrApi({
           'Content-Type': 'application/json',
         },
       ),
+      cancelToken: cancelToken,
     );
     if (response.data is Map) {
       final choices = response.data['choices'] as List<dynamic>?;
@@ -76,6 +82,14 @@ Future<String> _callOcrApi({
   }
 }
 
+/// Approximate length of the JSON request body: the base64 data-URI is the
+/// dominant term (~1.33x the raw image bytes) plus a fixed envelope.
+int _encodedBodyLength(Uint8List imageBytes, String imageFormat) {
+  final b64 = base64Encode(imageBytes).length;
+  final dataUri = 'data:image/$imageFormat;base64,'.length + b64;
+  return dataUri + 512; // JSON envelope overhead (model, messages, etc.)
+}
+
 Future<String> executeOcrBlock({
   required TaskFlowBlock block,
   required BlockTypeDefinition def,
@@ -85,6 +99,7 @@ Future<String> executeOcrBlock({
   required FlowSubTask flowSubTask,
   required BackgroundTaskNotifier bgNotifier,
   required ProviderEntriesState providerEntries,
+  CancelToken? cancelToken,
 }) async {
   final inputBasename = p.basename(input);
   final title = '文字识别_${p.basenameWithoutExtension(inputBasename)}';
@@ -198,7 +213,17 @@ Future<String> executeOcrBlock({
       host: config.host,
       apiKey: config.key,
       modelId: model.modelId,
+      cancelToken: cancelToken,
     );
+    // The flow may have been deleted while the request was in flight —
+    // don't save an orphaned text record.
+    if (!execNotifier.state.any((e) => e.id == execId)) {
+      throw BlockExecutionException(
+        '任务流已删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     bgNotifier.updateStep(taskId, 0, completed: true);
     bgNotifier.setResult(taskId, result);
 

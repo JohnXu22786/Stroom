@@ -114,6 +114,16 @@ Future<String> executeChatBlock({
       );
     }
 
+    // The flow may have been deleted while the stream was running —
+    // don't save an orphaned text record.
+    if (!execNotifier.state.any((e) => e.id == execId)) {
+      throw BlockExecutionException(
+        '任务流已删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
+
     // Save text via the shared helper (with folder dedup).
     final textPath = await saveTextForFlow(
       reply,

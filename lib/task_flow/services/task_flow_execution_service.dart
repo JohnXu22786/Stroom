@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../catcatch/providers/catcatch_provider.dart';
@@ -44,20 +47,37 @@ class TaskFlowExecutionService {
   final Ref _ref;
   bool _isRunning = false;
 
+  /// Cancel token for the currently executing block's HTTP request
+  /// (ASR/OCR). Deleting the flow cancels it so the request dies promptly
+  /// instead of running for up to the 60-min response bound.
+  CancelToken? _activeRequestCancelToken;
+
   /// Whether a flow is currently running.  Callers can check this
   /// before calling [startFlow] to provide user feedback.
   bool get isRunning => _isRunning;
 
   TaskFlowExecutionService._(this._ref);
 
+  /// Cancels the HTTP request of the currently executing block (ASR/OCR).
+  /// Idempotent — safe to call even when nothing is running.
+  void cancelActiveRequest() {
+    final token = _activeRequestCancelToken;
+    _activeRequestCancelToken = null;
+    if (token != null && !token.isCancelled) {
+      token.cancel();
+    }
+  }
+
   Future<bool> startFlow(String flowId, String inputText) async {
     if (_isRunning) return false;
     _isRunning = true;
+    _activeRequestCancelToken = null;
     try {
       await _startFlowInternal(flowId, inputText);
       return true;
     } finally {
       _isRunning = false;
+      _activeRequestCancelToken = null;
     }
   }
 
@@ -101,6 +121,13 @@ class TaskFlowExecutionService {
     for (int i = 0; i < flow.blocks.length; i++) {
       // Let the UI render before starting each block
       await Future.delayed(Duration.zero);
+      // The execution may have been deleted while the previous block ran
+      // (flow card delete / 清除所有) — abort promptly so no further tasks
+      // are created and the global run lock frees up.
+      if (!execNotifier.state.any((e) => e.id == execId)) {
+        AppLogService.info('TaskFlow', '任务流已删除，中止执行 ($execId)');
+        return;
+      }
       final block = flow.blocks[i];
       final def = block.getDefinition();
 
@@ -157,6 +184,39 @@ class TaskFlowExecutionService {
     required TaskListNotifier taskListNotifier,
     required ProviderEntriesState providerEntries,
   }) async {
+    // A fresh cancel token per block, exposed via cancelActiveRequest()
+    // so deleting the flow aborts the in-flight ASR/OCR request promptly.
+    _activeRequestCancelToken = CancelToken();
+    try {
+      return await _executeBlockInner(
+        def,
+        block,
+        input,
+        execId,
+        execNotifier,
+        flowSubTask: flowSubTask,
+        catcatchNotifier: catcatchNotifier,
+        bgNotifier: bgNotifier,
+        taskListNotifier: taskListNotifier,
+        providerEntries: providerEntries,
+      );
+    } finally {
+      _activeRequestCancelToken = null;
+    }
+  }
+
+  Future<String> _executeBlockInner(
+    BlockTypeDefinition def,
+    TaskFlowBlock block,
+    String input,
+    String execId,
+    TaskFlowExecutionNotifier execNotifier, {
+    required FlowSubTask flowSubTask,
+    required CatCatchNotifier catcatchNotifier,
+    required BackgroundTaskNotifier bgNotifier,
+    required TaskListNotifier taskListNotifier,
+    required ProviderEntriesState providerEntries,
+  }) async {
     switch (def.typeKey) {
       case BlockType.catcatch:
         return await executeCatCatchBlock(
@@ -190,6 +250,7 @@ class TaskFlowExecutionService {
           flowSubTask: flowSubTask,
           bgNotifier: bgNotifier,
           providerEntries: providerEntries,
+          cancelToken: _activeRequestCancelToken,
         );
       case BlockType.ocr:
         return await executeOcrBlock(
@@ -201,6 +262,7 @@ class TaskFlowExecutionService {
           flowSubTask: flowSubTask,
           bgNotifier: bgNotifier,
           providerEntries: providerEntries,
+          cancelToken: _activeRequestCancelToken,
         );
       case BlockType.tts:
         return await executeTtsBlock(
