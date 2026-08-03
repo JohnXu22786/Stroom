@@ -7,6 +7,7 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../services/background_service.dart';
+import '../services/ios_continued_task_service.dart';
 import 'platform_tutorial_page.dart';
 
 /// A page that detects current system environment, checks background optimization
@@ -297,6 +298,7 @@ class _BackgroundOptimizationPageState extends State<BackgroundOptimizationPage>
             _buildSectionHeader('保活策略', theme),
             const SizedBox(height: 8),
             _buildStrategyTogglesCard(theme),
+            _buildIosBackgroundNoteCard(theme),
             _buildDesktopKeepAliveCard(theme),
             const SizedBox(height: 24),
           ],
@@ -669,6 +671,67 @@ class _BackgroundOptimizationPageState extends State<BackgroundOptimizationPage>
             ),
             const Divider(height: 1, indent: 16, endIndent: 16),
             ...tiles,
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── iOS Background Note Card ───────────────────────────────────────────
+
+  /// iOS 后台任务提示卡：
+  /// - iOS 26+ 支持常驻后台（BGContinuedProcessingTask），正向说明；
+  /// - 低于 iOS 26 给出「定期返回 App + 勿在切换器划掉」的提示。
+  Widget _buildIosBackgroundNoteCard(ThemeData theme) {
+    if (defaultTargetPlatform != TargetPlatform.iOS) {
+      return const SizedBox.shrink();
+    }
+    final supported = IosContinuedTaskService.instance.isSupported;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  supported ? Icons.check_circle_outline : Icons.info_outline,
+                  size: 20,
+                  color: supported ? Colors.green : theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'iOS 后台任务提示',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              supported
+                  ? '当前系统（iOS 26 及以上）支持任务常驻后台：'
+                      '任务运行期间切换 App 或锁屏，任务通常会继续执行'
+                      '（系统资源紧张时可能终止），'
+                      '并可在锁屏界面查看进度。'
+                  : '当前系统（低于 iOS 26）不支持任务常驻后台。'
+                      '任务运行时请每隔几分钟返回一次 App'
+                      '（建议 5–10 分钟，具体由系统决定），'
+                      '刷新后台执行时间，防止任务被系统挂起。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '注意：所有 iOS 版本都请勿在 App 切换器中划掉 Stroom——'
+              '划掉会立即终止所有运行中的任务。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
           ],
         ),
       ),

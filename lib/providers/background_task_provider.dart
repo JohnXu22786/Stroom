@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
+import '../services/ios_continued_task_service.dart';
 import 'task_provider.dart';
 
 // ============================================================================
@@ -250,6 +251,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   BackgroundTaskNotifier() : super([]);
 
+  @override
+  void dispose() {
+    _iosSyncTimer?.cancel();
+    _iosSyncTimer = null;
+    super.dispose();
+  }
+
   /// Add a new background task and return its ID.
   /// Initializes default step chain based on task type.
   /// [retryData] stores the original input parameters (images, audio, model, etc.)
@@ -276,6 +284,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     );
     state = [task, ...state];
     _persistTasks();
+    _syncIosContinuedTask();
     return id;
   }
 
@@ -291,6 +300,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       );
     }).toList();
     _persistTasks();
+    _syncIosContinuedTask();
   }
 
   /// Mark a task as completed and keep it in the list (visible to user).
@@ -330,6 +340,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       return t.copyWith(steps: steps);
     }).toList();
     _persistTasks();
+    _syncIosContinuedTask();
   }
 
   /// Set raw request/response diagnostic data for error viewing.
@@ -378,12 +389,14 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       return t.copyWith(steps: steps);
     }).toList();
     _persistTasks();
+    _syncIosContinuedTask();
   }
 
   /// Remove a task from the list.
   void removeTask(String taskId) {
     state = state.where((t) => t.id != taskId).toList();
     _persistTasks();
+    _syncIosContinuedTask();
   }
 
   /// Update the retry data for a task (used to set retry data after
@@ -429,6 +442,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         oldTask != null) {
       _sendTaskNotification(oldTask!, status, error);
     }
+    _syncIosContinuedTask();
   }
 
   void _sendTaskNotification(
@@ -451,7 +465,66 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       debugPrint('[BackgroundTaskNotifier] Failed to send notification: $e');
     }
   }
+  // ==========================================================================
+  // iOS 26+ 常驻后台任务同步（BGContinuedProcessingTask）
+  // ==========================================================================
 
+  /// 周期同步间隔：单个步骤可能耗时数分钟（上传/转写），期间步骤
+  /// 进度不动，系统会认为任务停滞（可能提示用户或优先终止）。
+  /// 周期重报进度可避免该问题。
+  static const _iosSyncInterval = Duration(seconds: 30);
+
+  /// 周期性重报进度的定时器（仅在存在运行中任务时激活）。
+  Timer? _iosSyncTimer;
+
+  /// 最近一次上报的进度百分比：多任务并行时新增任务会稀释占比，
+  /// 用单调递增值避免系统进度条回退。
+  int _iosLastPercent = 0;
+
+  /// 将当前任务运行状态同步给 iOS 常驻后台桥接。
+  ///
+  /// - 有任务运行：维持常驻任务（原生侧已激活时自动跳过重复提交），
+  ///   并上报进度（已完成步骤占比，单调不降）。
+  /// - 没有任务运行：通知系统常驻任务完成。
+  ///
+  /// 自愈说明：任务被系统终止后，原生侧引用清空，下一次同步会自动
+  /// 重新提交建立保护；但系统只接受前台状态下的提交，因此若 App
+  /// 仍在后台，自愈会推迟到 App 回到前台后的下一次同步（周期定时器
+  /// 或状态变更触发）。
+  void _syncIosContinuedTask() {
+    if (!IosContinuedTaskService.instance.isSupported) return;
+    final running = state.where((t) => t.status == TaskStatus.running).toList();
+    if (running.isEmpty) {
+      _iosSyncTimer?.cancel();
+      _iosSyncTimer = null;
+      _iosLastPercent = 0;
+      unawaited(IosContinuedTaskService.instance.complete());
+      return;
+    }
+    // 存在运行中任务：启动周期重报定时器（幂等）。
+    _iosSyncTimer ??= Timer.periodic(
+      _iosSyncInterval,
+      (_) => _syncIosContinuedTask(),
+    );
+    unawaited(IosContinuedTaskService.instance.submit());
+    final totalSteps = running.fold<int>(0, (sum, t) => sum + t.steps.length);
+    final doneSteps = running.fold<int>(
+      0,
+      (sum, t) =>
+          sum +
+          t.steps
+              .where((s) =>
+                  s.status == BgStepStatus.completed ||
+                  s.status == BgStepStatus.skipped)
+              .length,
+    );
+    final rawPercent = totalSteps == 0
+        ? 0
+        : ((doneSteps * 100) / totalSteps).round().clamp(0, 99);
+    final percent = rawPercent > _iosLastPercent ? rawPercent : _iosLastPercent;
+    _iosLastPercent = percent;
+    unawaited(IosContinuedTaskService.instance.updateProgress(percent));
+  }
   // ============================================================================
   // Persistence
   // ============================================================================
@@ -592,6 +665,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     // 将"运行中 → 已中断"的状态回写到磁盘，
     // 使持久化文件与内存状态保持一致（否则下次启动会重复标记）。
     _persistTasks();
+    // 恢复后没有运行中的任务（进程已重启），结束 iOS 常驻任务保护。
+    _syncIosContinuedTask();
     debugPrint(
       '[BackgroundTaskNotifier] Restored ${tasks.length} tasks from persistence',
     );

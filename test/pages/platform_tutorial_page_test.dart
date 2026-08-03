@@ -204,6 +204,9 @@ void main() {
 
       // Honest limitation step
       expect(find.text('理解 iOS 的后台运行限制'), findsOneWidget);
+      // Resident-background + old-iOS return-period tips step
+      expect(find.text('任务运行时的后台注意事项'), findsOneWidget);
+      expect(find.textContaining('请勿在 App 切换器中划掉'), findsOneWidget);
     });
   });
 }

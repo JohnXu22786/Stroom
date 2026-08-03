@@ -200,7 +200,7 @@ class PlatformTutorialPage extends StatelessWidget {
           ),
           _TutorialStep(
             title: '理解 iOS 的后台运行限制',
-            description: 'iOS 不允许应用像 Android 那样常驻后台运行。'
+            description: 'iOS 26 以下系统不允许应用像 Android 那样常驻后台运行。'
                 '系统仅在特定时机（如后台 App 刷新、定位、播放音频）给应用少量执行时间，'
                 '长时间任务会被系统挂起。建议：'
                 '\n• 需要长时间运行的任务保持 Stroom 在前台；'
@@ -208,9 +208,22 @@ class PlatformTutorialPage extends StatelessWidget {
                 '\n• 重要任务配合「任务完成通知」及时获知结果。',
           ),
           _TutorialStep(
+            title: '任务运行时的后台注意事项',
+            description: 'iOS 26 及以上系统支持任务常驻后台：'
+                '任务运行期间切换 App 或锁屏，任务通常会继续执行'
+                '（系统资源紧张时可能终止），'
+                '锁屏界面会显示任务进度。'
+                '\n\niOS 26 以下系统不支持常驻后台：'
+                '任务运行时请每隔几分钟返回一次 App（建议 5–10 分钟，'
+                '具体由系统决定），刷新后台执行时间，防止任务被挂起。'
+                '\n\n所有版本都请勿在 App 切换器中划掉 Stroom——'
+                '划掉会立即终止所有运行中的任务。',
+          ),
+          _TutorialStep(
             title: '保持 App 在后台',
-            description: '在 iOS 上，App 在后台的运行时间有限。建议在需要长时间运行任务时，'
-                '保持 Stroom 在前台或定期切换回来以延长后台时间。',
+            description: '在 iOS 26 以下系统上，App 在后台的运行时间有限。'
+                '建议在需要长时间运行任务时，保持 Stroom 在前台或定期切换回来'
+                '以延长后台时间。',
           ),
         ];
       case 'Windows':

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/background_optimization_page.dart';
+import 'package:stroom/services/ios_continued_task_service.dart';
 
 /// Builds the test app wrapping BackgroundOptimizationPage.
 Widget _buildTestApp() {
@@ -117,7 +118,7 @@ MockBackgroundServicePlatform registerMockPlatform() {
 
 void main() {
   tearDown(() {
-    // 清理跨测试泄漏的 mock 通道处理器。
+    // 清理跨测试泄漏的 mock 通道处理器与平台覆盖。
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(
@@ -126,6 +127,7 @@ void main() {
         const MethodChannel('window_manager'), null);
     messenger.setMockMethodCallHandler(
         const MethodChannel('flutter.baseflow.com/permissions/methods'), null);
+    IosContinuedTaskService.debugForceSupported = false;
   });
   group('BackgroundOptimizationPage - rendering', () {
     testWidgets('renders page title', (tester) async {
@@ -667,6 +669,8 @@ void main() {
         // Mobile strategy toggles must not appear on desktop
         expect(find.text('AlarmManager 看门狗'), findsNothing);
         expect(find.text('冷启动自动恢复'), findsNothing);
+        // iOS-only background note card must not appear on desktop
+        expect(find.text('iOS 后台任务提示'), findsNothing);
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
@@ -739,6 +743,60 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('后台服务运行中'), findsOneWidget);
+    });
+  });
+
+  group('BackgroundOptimizationPage - iOS background note card', () {
+    testWidgets('iOS shows the background note card with old-iOS tips',
+        (tester) async {
+      registerMockPlatform();
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        // 卡片与「低于 iOS 26」提示（测试机非 iOS 26，isSupported=false）。
+        expect(find.text('iOS 后台任务提示'), findsOneWidget);
+        expect(find.textContaining('低于 iOS 26'), findsOneWidget);
+        expect(find.textContaining('每隔几分钟返回一次'), findsOneWidget);
+        // 通用警示：勿在 App 切换器中划掉。
+        expect(find.textContaining('请勿在 App 切换器中划掉'), findsOneWidget);
+        // 桌面端卡片不显示。
+        expect(find.text('关闭窗口时最小化'), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('iOS 26 shows the resident-background supported message',
+        (tester) async {
+      registerMockPlatform();
+      IosContinuedTaskService.debugForceSupported = true;
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        expect(find.text('iOS 后台任务提示'), findsOneWidget);
+        expect(find.textContaining('支持任务常驻后台'), findsOneWidget);
+        expect(find.textContaining('低于 iOS 26'), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     });
   });
 }
