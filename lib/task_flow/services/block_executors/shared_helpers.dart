@@ -49,12 +49,19 @@ Future<String?> saveTextForFlow(
   String text, {
   String saveFolder = '',
   String? title,
+
+  /// Optional guard checked right before the gallery record is committed.
+  /// Flow executors pass a check that the execution still exists, so a
+  /// flow deleted mid-save does not leave an orphaned text record.
+  bool Function()? shouldCommit,
 }) async {
   if (text.isEmpty) return null;
   final bytes = Uint8List.fromList(utf8.encode(text));
   final hash = computeTextHash(bytes);
   final storageFileName = '$hash.txt';
   final filePath = await TextManifest.writeText(storageFileName, text);
+
+  if (shouldCommit != null && !shouldCommit()) return null;
 
   String baseName = title ?? 'FLOW_${DateTime.now().millisecondsSinceEpoch}';
   String recordName = baseName;

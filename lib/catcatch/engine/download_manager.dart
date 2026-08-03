@@ -211,6 +211,10 @@ class DownloadManager {
     Map<String, String>? headers,
     int concurrency = 3,
     void Function(int completed, int total, int progress)? onProgress,
+
+    /// Byte-granularity progress: total bytes received across all
+    /// segments so far (monotonic — used by stall detection).
+    void Function(int totalBytes)? onBytes,
     CancelToken? cancelToken,
     String taskId = '',
   }) async {
@@ -263,6 +267,9 @@ class DownloadManager {
     // 并行下载
     final semaphore = Semaphore(concurrency);
     final futures = <Future<void>>[];
+    // Total bytes across all segments (monotonic; no awaits inside the
+    // accumulation, so the single-threaded event loop keeps it atomic).
+    var totalBytes = 0;
 
     for (int i = completedCount; i < total; i++) {
       futures.add(downloadSingleSegment(
@@ -283,6 +290,10 @@ class DownloadManager {
           if (taskId.isNotEmpty) {
             saveSegmentProgress(taskId, {'completed': completedCount});
           }
+        },
+        onBytesDelta: (delta) {
+          totalBytes += delta;
+          onBytes?.call(totalBytes);
         },
       ));
     }

@@ -231,6 +231,9 @@ Future<String> executeOcrBlock({
       result,
       saveFolder: saveFolder,
       title: title,
+      // Guard against a flow deleted mid-save (narrow race after the
+      // existence check above).
+      shouldCommit: () => execNotifier.state.any((e) => e.id == execId),
     );
     bgNotifier.completeTask(taskId, downloadedFilePath: textPath);
     execNotifier.updateSubTaskStatus(

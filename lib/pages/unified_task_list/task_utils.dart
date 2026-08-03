@@ -219,8 +219,13 @@ void removeFlowSubTaskTasks(WidgetRef ref, TaskFlowExecution execution) {
     }
   }
   // Abort the in-flight ASR/OCR request of the currently executing block
-  // so the flow's run lock frees promptly (idempotent when idle).
-  ref.read(taskFlowExecutionServiceProvider).cancelActiveRequest();
+  // so the flow's run lock frees promptly (idempotent when idle). Only
+  // when deleting the RUNNING execution — the service's cancel token is
+  // global and belongs to whatever flow is currently executing, so
+  // deleting a completed/failed flow must not kill another flow's request.
+  if (execution.status == FlowExecutionStatus.running) {
+    ref.read(taskFlowExecutionServiceProvider).cancelActiveRequest();
+  }
 }
 
 class UnifiedTaskItem {

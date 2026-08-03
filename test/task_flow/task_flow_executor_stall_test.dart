@@ -155,6 +155,7 @@ void main() {
         'healthy task alive even when percent progress stays 0', () async {
       final notifier = _MockCatCatchNotifier();
       var reads = 0;
+      var removeRead = -1;
       late String capturedTaskId;
       when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId')))
           .thenAnswer((inv) {
@@ -177,7 +178,10 @@ void main() {
               id: capturedTaskId, downloadedBytes: 5 * 1024 * 1024),
         ];
       });
-      when(() => notifier.removeTask(any())).thenReturn(null);
+      when(() => notifier.removeTask(any())).thenAnswer((_) {
+        removeRead = reads;
+        return null;
+      });
 
       await expectLater(
         executeCatCatchBlock(
@@ -199,9 +203,16 @@ void main() {
         ),
       );
 
-      // The stall fires only AFTER byte progress stops — while bytes were
-      // increasing (reads 2-5), no cancellation happened.
-      verify(() => notifier.removeTask(any())).called(1);
+      // The cancellation must only happen AFTER byte progress stopped:
+      // reads 2-5 kept increasing the byte signal (healthy), read 6 sees
+      // the first unchanged value, read 7 exceeds the stall window and
+      // cancels. This asserts downloadedBytes actually participates in
+      // the stall signature.
+      expect(removeRead, greaterThanOrEqualTo(6),
+          reason: 'removeTask must fire only after byte progress stalled, '
+              'proving the byte signal keeps healthy downloads alive');
+      expect(removeRead, 7,
+          reason: 'the second unchanged read must trigger the stall');
     });
   });
 }

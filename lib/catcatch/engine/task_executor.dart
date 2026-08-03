@@ -625,6 +625,13 @@ class TaskExecutor {
               onUpdate(task.copyWith(
                   steps: steps, progress: calcExecutorProgress(steps)));
             },
+            onBytes: (totalBytes) {
+              // Byte-granularity signal — percent progress only moves at
+              // segment boundaries, so a slow segment would otherwise
+              // look stalled to the flow's stall detection.
+              onUpdate(
+                  task.copyWith(steps: steps, downloadedBytes: totalBytes));
+            },
             cancelToken: cancelToken,
             taskId: task.id,
           );
