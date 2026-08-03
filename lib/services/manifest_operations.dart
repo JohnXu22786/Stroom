@@ -136,8 +136,10 @@ class ManifestOperations<T extends FileRecord> {
   /// Exposed for callers that need the directory itself (e.g. copying a
   /// large already-downloaded file into hash-addressed storage without
   /// buffering it in memory — [writeFile] would need the full bytes).
+  /// Matches the ancestors' guard: in web/test-mode file stores (which
+  /// have no real directory) this returns '' like every other API here.
   Future<String> get storageDirPath async {
-    if (kIsWeb) return '';
+    if (_useWebFileStore) return '';
     return _storageDir;
   }
 
