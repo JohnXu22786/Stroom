@@ -141,11 +141,18 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
   Future<void> renameFolder(String oldName, String newName) async {
     ImageManifest.invalidateCache();
     final parentPath = ImageManifest.getParentFolderPath(oldName);
-    final newPath = parentPath.isEmpty ? newName : '$parentPath/$newName';
+    final newNameTrimmed = newName.trim();
+    final newPath =
+        parentPath.isEmpty ? newNameTrimmed : '$parentPath/$newNameTrimmed';
 
-    // 无操作重命名（新路径与原路径相同）：直接返回，
-    // 否则 removeFolderFromCache 会把记录误移到根目录
-    if (newPath == oldName) return;
+    // 空源 / 非法名 / 无操作重命名（新路径与原路径相同）或自嵌套重命名：
+    // 直接返回，否则 removeFolderFromCache 会把记录误移到根目录
+    if (oldName.isEmpty ||
+        ImageManifest.validateFolderName(newNameTrimmed) != null ||
+        newPath == oldName ||
+        newPath.startsWith('$oldName/')) {
+      return;
+    }
 
     // 目标位置（或其下）已存在同名文件夹：拒绝（防御性，UI 层已阻止），
     // 避免两个文件夹被静默合并
@@ -188,11 +195,21 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
   Future<void> moveFolder(String sourceName, String targetParent) async {
     ImageManifest.invalidateCache();
     final baseName = ImageManifest.getFolderBaseName(sourceName);
-    final newPath = targetParent.isEmpty ? baseName : '$targetParent/$baseName';
+    // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
+    final targetParentClean =
+        targetParent.trim().replaceAll(RegExp(r'/+$'), '');
+    final newPath =
+        targetParentClean.isEmpty ? baseName : '$targetParentClean/$baseName';
 
-    // 防止无操作移动（目标为当前位置）或移动到自身/子文件夹：
-    // 否则 removeFolderFromCache 会把记录误移到根目录，造成数据损坏
-    if (newPath == sourceName || newPath.startsWith('$sourceName/')) return;
+    // 防止空源 / 纯空白目标 / 无操作移动（目标为当前位置）或移动到
+    // 自身/子文件夹：否则 removeFolderFromCache 会把记录误移到根目录，
+    // 造成数据损坏
+    if (sourceName.isEmpty ||
+        (targetParent.isNotEmpty && targetParentClean.isEmpty) ||
+        newPath == sourceName ||
+        newPath.startsWith('$sourceName/')) {
+      return;
+    }
 
     // 目标位置（或其下）已存在同名文件夹：拒绝，避免静默合并
     final existing = await ImageManifest.getAllFolders();
@@ -229,8 +246,15 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
 
     // 添加新文件夹缓存
     await ImageManifest.addFolder(newPath);
-    if (targetParent.isNotEmpty) {
-      await ImageManifest.addFolder(targetParent);
+    if (targetParentClean.isNotEmpty) {
+      await ImageManifest.addFolder(targetParentClean);
+      // 空文件夹移动/复制不经过 moveRecord/addRecord，
+      // 祖先目录不会被自动跟踪，需逐级补齐
+      var ancestor = ImageManifest.getParentFolderPath(targetParentClean);
+      while (ancestor.isNotEmpty) {
+        await ImageManifest.addFolder(ancestor);
+        ancestor = ImageManifest.getParentFolderPath(ancestor);
+      }
     }
 
     await loadRecords();
@@ -239,11 +263,20 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
   /// 复制文件夹（保持层级结构，整体复制到目标文件夹）
   Future<void> copyFolder(String sourceName, String targetParent) async {
     final baseName = ImageManifest.getFolderBaseName(sourceName);
-    final newPath = targetParent.isEmpty ? baseName : '$targetParent/$baseName';
+    // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
+    final targetParentClean =
+        targetParent.trim().replaceAll(RegExp(r'/+$'), '');
+    final newPath =
+        targetParentClean.isEmpty ? baseName : '$targetParentClean/$baseName';
 
-    // 防止复制到自身/子文件夹（或原地复制），避免文件夹内出现
-    // 重复记录与自我嵌套
-    if (newPath == sourceName || newPath.startsWith('$sourceName/')) return;
+    // 防止空源 / 纯空白目标 / 复制到自身/子文件夹（或原地复制），
+    // 避免文件夹内出现重复记录与自我嵌套
+    if (sourceName.isEmpty ||
+        (targetParent.isNotEmpty && targetParentClean.isEmpty) ||
+        newPath == sourceName ||
+        newPath.startsWith('$sourceName/')) {
+      return;
+    }
 
     // 目标位置（或其下）已存在同名文件夹：拒绝，避免重复复制/合并
     final existing = await ImageManifest.getAllFolders();
@@ -288,8 +321,15 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
 
     // 确保新路径在文件夹缓存中
     await ImageManifest.addFolder(newPath);
-    if (targetParent.isNotEmpty) {
-      await ImageManifest.addFolder(targetParent);
+    if (targetParentClean.isNotEmpty) {
+      await ImageManifest.addFolder(targetParentClean);
+      // 空文件夹移动/复制不经过 moveRecord/addRecord，
+      // 祖先目录不会被自动跟踪，需逐级补齐
+      var ancestor = ImageManifest.getParentFolderPath(targetParentClean);
+      while (ancestor.isNotEmpty) {
+        await ImageManifest.addFolder(ancestor);
+        ancestor = ImageManifest.getParentFolderPath(ancestor);
+      }
     }
 
     await loadRecords();
