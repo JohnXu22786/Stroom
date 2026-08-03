@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/background_optimization_page.dart';
-import 'package:stroom/services/background_service.dart';
 
 /// Builds the test app wrapping BackgroundOptimizationPage.
 Widget _buildTestApp() {
@@ -94,12 +94,39 @@ MockBackgroundServicePlatform registerMockPlatform() {
     const MethodChannel('com.johntsui.stroom/keepalive'),
     (MethodCall methodCall) async => true,
   );
+  // Mock the notification permission channel: without a handler the
+  // status check future never completes in widget tests, forcing the
+  // production 8s timeout to elapse in fake time for every start flow.
+  // statusByValue(1) == PermissionStatus.granted.
+  // Permission.notification has index 17 in permission_handler.
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+    const MethodChannel('flutter.baseflow.com/permissions/methods'),
+    (MethodCall call) async {
+      if (call.method == 'checkPermissionStatus') return 1;
+      if (call.method == 'requestPermissions') {
+        return <int, int>{17: 1}; // notification permission -> granted
+      }
+      return true;
+    },
+  );
   final mock = MockBackgroundServicePlatform();
   FlutterBackgroundServicePlatform.instance = mock;
   return mock;
 }
 
 void main() {
+  tearDown(() {
+    // 清理跨测试泄漏的 mock 通道处理器。
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'), null);
+    messenger.setMockMethodCallHandler(
+        const MethodChannel('window_manager'), null);
+    messenger.setMockMethodCallHandler(
+        const MethodChannel('flutter.baseflow.com/permissions/methods'), null);
+  });
   group('BackgroundOptimizationPage - rendering', () {
     testWidgets('renders page title', (tester) async {
       registerMockPlatform();
@@ -509,6 +536,211 @@ void main() {
 
       // Should show not running status
       expect(find.text('后台服务未启动'), findsOneWidget);
+    });
+  });
+
+  group('BackgroundOptimizationPage - keep-alive strategy toggles', () {
+    testWidgets('Android shows all three strategy toggles', (tester) async {
+      registerMockPlatform();
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('AlarmManager 看门狗'), findsOneWidget);
+      expect(find.text('冷启动自动恢复'), findsOneWidget);
+      expect(find.text('电池优化提醒'), findsOneWidget);
+      // Desktop-only card must NOT be shown on Android
+      expect(find.text('关闭窗口时最小化'), findsNothing);
+    });
+
+    testWidgets(
+        'toggling watchdog off persists the pref and disables the alarm',
+        (tester) async {
+      registerMockPlatform();
+      // Record keep-alive channel calls.
+      final keepAliveCalls = <String>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall call) async {
+          keepAliveCalls.add(call.method);
+          return true;
+        },
+      );
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Tap the watchdog switch (SwitchListTile) to turn it off.
+      await tester.tap(find.byType(SwitchListTile).first);
+      await tester.pumpAndSettle();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('background_service_watchdog'), isFalse);
+      expect(keepAliveCalls, contains('stopKeepAlive'));
+    });
+
+    testWidgets('disabling battery reminder hides the battery card',
+        (tester) async {
+      registerMockPlatform();
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Battery card is initially visible (Android + reminder enabled).
+      expect(find.text('已忽略电池优化'), findsOneWidget);
+
+      // The battery reminder toggle is the last SwitchListTile.
+      await tester.tap(find.byType(SwitchListTile).last);
+      await tester.pumpAndSettle();
+
+      // Battery card disappears after the reminder is disabled.
+      expect(find.text('已忽略电池优化'), findsNothing);
+    });
+
+    testWidgets('iOS shows only the cold-start toggle', (tester) async {
+      registerMockPlatform();
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        expect(find.text('冷启动自动恢复'), findsOneWidget);
+        // Android-only toggles must not appear on iOS
+        expect(find.text('AlarmManager 看门狗'), findsNothing);
+        expect(find.text('电池优化提醒'), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('desktop shows close-minimize card instead of mobile toggles',
+        (tester) async {
+      registerMockPlatform();
+      // Mock the window_manager channel so setPreventClose etc. work.
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('window_manager'),
+        (MethodCall call) async => true,
+      );
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        // Desktop keep-alive card with minimize-on-close toggle + quit button
+        expect(find.text('关闭窗口时最小化'), findsOneWidget);
+        expect(find.text('完全退出应用'), findsOneWidget);
+        // Mobile strategy toggles must not appear on desktop
+        expect(find.text('AlarmManager 看门狗'), findsNothing);
+        expect(find.text('冷启动自动恢复'), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets(
+        'toggling desktop close-minimize off persists the pref and releases the close interception',
+        (tester) async {
+      registerMockPlatform();
+      // Record window_manager channel calls (method + arguments).
+      final windowCalls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('window_manager'),
+        (MethodCall call) async {
+          windowCalls.add(call);
+          return true;
+        },
+      );
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        // The desktop card has exactly one SwitchListTile.
+        await tester.tap(find.byType(SwitchListTile).first);
+        await tester.pumpAndSettle();
+
+        // The preference is persisted...
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getBool('desktop_close_minimize'), isFalse);
+        // ...and the native close interception is released (argument
+        // must be false), so the window closes normally instead of
+        // minimizing.
+        final preventCloseCalls = windowCalls
+            .where((c) => c.method == 'setPreventClose')
+            .toList();
+        expect(preventCloseCalls, isNotEmpty);
+        expect(preventCloseCalls.last.arguments,
+            {'isPreventClose': false});
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('re-checks service status when app resumes from background',
+        (tester) async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+      expect(find.text('后台服务未启动'), findsOneWidget);
+
+      // The service was started elsewhere while the app was in background.
+      mock.setServiceRunning(true);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      expect(find.text('后台服务运行中'), findsOneWidget);
     });
   });
 }

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:dynamic_color/dynamic_color.dart';
+import 'package:window_manager/window_manager.dart';
 import 'dart:async';
 import 'dart:io' show exit, Platform;
 
@@ -18,6 +19,7 @@ import 'providers/update_provider.dart';
 import 'providers/notification_provider.dart';
 import 'services/app_log_service.dart';
 import 'services/auto_backup_service.dart';
+import 'services/background_service.dart';
 import 'services/notification_service.dart';
 import 'startup/backup_startup_check.dart';
 import 'widgets/update_dialog.dart';
@@ -43,10 +45,18 @@ class _ApplicationState extends ConsumerState<Application>
 
   bool _postStartupTasksStarted = false;
 
+  /// 桌面端窗口关闭事件监听器。
+  _DesktopWindowCloseListener? _windowCloseListener;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // 桌面端：关闭窗口时默认最小化到任务栏，应用与后台任务继续运行。
+    if (isDesktopPlatform()) {
+      _initDesktopWindowBehavior();
+    }
 
     // 在进入主界面后执行启动后流程（非 Web 端）：
     // 1. 检查更新（必须弹窗而非静默）
@@ -63,6 +73,63 @@ class _ApplicationState extends ConsumerState<Application>
         ref.read(inAppNotificationProvider.notifier).state = payload;
       }
     };
+  }
+
+  /// 初始化桌面端窗口行为：拦截关闭事件，按用户设置最小化或退出。
+  ///
+  /// 顺序说明：先注册关闭监听器，再启用拦截。即使 setPreventClose
+  /// 失败，监听器也已就位——页面上的「关闭窗口时最小化」开关后续
+  /// 启用拦截时，关闭事件仍有处理器，不会出现窗口无法关闭的僵局。
+  Future<void> _initDesktopWindowBehavior() async {
+    try {
+      _windowCloseListener = _DesktopWindowCloseListener(_handleWindowClose);
+      windowManager.addListener(_windowCloseListener!);
+      // 先拦截（默认按最小化处理），再读取用户设置覆盖。
+      // 若读取失败，保留"关闭即最小化"的默认行为，应用不会意外退出。
+      await windowManager.setPreventClose(true);
+      final closeMinimizes = await isDesktopCloseMinimizeEnabled();
+      debugPrint(
+          '[Application] 桌面端窗口关闭行为已启用（最小化=$closeMinimizes）');
+    } catch (e) {
+      // 窗口管理器不可用（如部分 Linux 桌面环境）时降级为默认关闭行为。
+      // 监听器已注册，后续页面重新启用拦截时仍能正确处理关闭事件。
+      debugPrint('[Application] 桌面端窗口行为初始化失败: $e');
+    }
+  }
+
+  /// 用户点击窗口关闭按钮时的处理。
+  ///
+  /// 每次都读取最新的用户设置（而不是启动时缓存的标志）：
+  /// 用户在「后台运行优化」页面切换开关后，无需重启应用即生效。
+  Future<void> _handleWindowClose() async {
+    var minimize = true;
+    try {
+      minimize = await isDesktopCloseMinimizeEnabled();
+    } catch (e) {
+      debugPrint('[Application] 读取关闭行为设置失败，默认最小化: $e');
+    }
+
+    try {
+      if (minimize) {
+        await windowManager.minimize();
+        debugPrint('[Application] 窗口已最小化（关闭时最小化）');
+      } else {
+        await windowManager.destroy();
+        debugPrint('[Application] 窗口已关闭（关闭时退出）');
+      }
+    } catch (e) {
+      debugPrint('[Application] 处理窗口关闭失败: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (_windowCloseListener != null) {
+      windowManager.removeListener(_windowCloseListener!);
+      _windowCloseListener = null;
+    }
+    super.dispose();
   }
 
   /// 执行启动后流程：
@@ -241,12 +308,6 @@ class _ApplicationState extends ConsumerState<Application>
     }
   }
 
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
   Future<void> _checkForUpdatesOnStartup() async {
     final notifier = ref.read(updateProvider.notifier);
 
@@ -387,5 +448,22 @@ class _InAppBannerOverlay extends ConsumerWidget {
         },
       ),
     );
+  }
+}
+
+// ============================================================================
+// Desktop Window Close Listener
+// ============================================================================
+
+/// 桌面端窗口关闭事件转发：把 window_manager 的 onWindowClose 回调
+/// 转发给 Application 层的处理函数（最小化或退出）。
+class _DesktopWindowCloseListener with WindowListener {
+  final VoidCallback onClose;
+
+  _DesktopWindowCloseListener(this.onClose);
+
+  @override
+  void onWindowClose() {
+    onClose();
   }
 }

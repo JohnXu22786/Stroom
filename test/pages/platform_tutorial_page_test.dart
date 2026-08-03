@@ -157,5 +157,53 @@ void main() {
       // Should show at least one step title (e.g. first Android step)
       expect(find.text('关闭电池优化'), findsOneWidget);
     });
+
+    testWidgets('Android tutorial covers ROM-specific keep-alive settings',
+        (tester) async {
+      tester.view.physicalSize = const Size(1080, 8000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      const config = PlatformTutorialConfig(
+        platformName: 'Android',
+        icon: Icons.android,
+        color: Colors.green,
+      );
+
+      await tester.pumpWidget(_buildTestApp(config));
+      await tester.pump();
+
+      // Android 13+ notification permission step
+      expect(find.text('允许通知权限（Android 13+）'), findsOneWidget);
+      // Chinese ROM (MIUI/EMUI/ColorOS/OriginOS) autostart step
+      expect(find.text('国产系统自启动与后台管理'), findsOneWidget);
+      // Lock-screen cleanup step
+      expect(find.text('关闭锁屏清理与省电模式'), findsOneWidget);
+    });
+
+    testWidgets('iOS tutorial explains platform background limits',
+        (tester) async {
+      tester.view.physicalSize = const Size(1080, 8000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      const config = PlatformTutorialConfig(
+        platformName: 'iOS',
+        icon: Icons.phone_iphone,
+        color: Colors.grey,
+      );
+
+      await tester.pumpWidget(_buildTestApp(config));
+      await tester.pump();
+
+      // Honest limitation step
+      expect(find.text('理解 iOS 的后台运行限制'), findsOneWidget);
+    });
   });
 }

@@ -1,10 +1,61 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/task_provider.dart';
 
+/// Returns the on-disk tasks.json inside [dirPath] (per-test isolated dir).
+File _tasksFileIn(String dirPath) =>
+    File(p.join(dirPath, 'background', 'tasks.json'));
+
+/// Waits (up to ~3s) until [check] returns true.
+Future<void> _waitFor(Future<bool> Function() check) async {
+  for (var i = 0; i < 150; i++) {
+    if (await check()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  fail('Timed out waiting for condition');
+}
+
+/// Reads the file content, or null when the file does not exist yet
+/// or is momentarily locked by a concurrent write/delete.
+Future<String?> _readFileIfExists(File file) async {
+  try {
+    if (!await file.exists()) return null;
+    return await file.readAsString();
+  } catch (_) {
+    return null; // 读与写/删竞争时视为"尚未就绪"
+  }
+}
+
 void main() {
+  // 初始化绑定，使 path_provider 在测试环境中走 MissingPluginException
+  // 回退路径，持久化测试才能真正落盘。
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('BackgroundTaskNotifier', () {
+    // 每个测试使用独立的持久化目录：真实测试环境的所有测试共享
+    // 同一个 AppStorage 临时目录，异步写入链可能跨测试交错
+    // （上一个测试的写入在本测试写入之后才落盘），
+    // 独立目录彻底消除跨测试污染。
+    late Directory testDir;
+
+    setUp(() async {
+      testDir = await Directory.systemTemp.createTemp('bg_task_test_');
+      BackgroundTaskNotifier.debugStorageDirectoryOverride = testDir.path;
+    });
+
+    tearDown(() async {
+      BackgroundTaskNotifier.debugStorageDirectoryOverride = null;
+      try {
+        await testDir.delete(recursive: true);
+      } catch (_) {
+        // Windows 上文件句柄可能尚未释放，忽略清理失败。
+      }
+    });
     test('addTask creates a running task with correct type', () {
       final notifier = BackgroundTaskNotifier();
 
@@ -582,7 +633,7 @@ void main() {
 
     test('startTask on paused task does nothing', () {
       final notifier = BackgroundTaskNotifier();
-      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
       // Add a paused task directly
       notifier.state = [
         notifier.state[0],
@@ -794,6 +845,111 @@ void main() {
       // Task execution should still work after retryData is set
       notifier.completeTask(id);
       expect(notifier.state[0].status, TaskStatus.completed);
+    });
+
+    // ==================================================================
+    // Persistence tests (real file under the per-test isolated directory)
+    // ==================================================================
+
+    test('tasks persist to disk and restore across notifier instances',
+        () async {
+      final file = _tasksFileIn(testDir.path);
+
+      final n1 = BackgroundTaskNotifier();
+      final id = n1.addTask(type: BackgroundTaskType.ocr, title: '持久化任务');
+      n1.completeTask(id, downloadedFilePath: 'C:\\result.txt');
+
+      // 等待本测试的数据真正落盘（按内容判断：写入是异步的）。
+      await _waitFor(() async {
+        final content = await _readFileIfExists(file);
+        return (content?.contains(id) ?? false) &&
+            (content?.contains('"status":"completed"') ?? false);
+      });
+
+      final n2 = BackgroundTaskNotifier();
+      await n2.restoreFromPersistence();
+
+      expect(n2.state.length, 1);
+      expect(n2.state[0].id, id);
+      expect(n2.state[0].status, TaskStatus.completed);
+      expect(n2.state[0].downloadedFilePath, 'C:\\result.txt');
+    });
+
+    test('corrupt persisted entries are skipped, valid entries survive',
+        () async {
+      final file = _tasksFileIn(testDir.path);
+      await file.parent.create(recursive: true);
+      await file.writeAsString(jsonEncode([
+        {
+          'id': 'good-id',
+          'type': 'ocr',
+          'title': '有效任务',
+          'status': 'completed',
+          'createdAt': DateTime.now().toIso8601String(),
+        },
+        'garbage entry', // non-map entry
+        {
+          'id': 'bad-id',
+          'type': 'unknown-type', // unknown enum value
+          'title': '坏任务',
+          'status': 'running',
+          'createdAt': 'not-a-date',
+        },
+      ]));
+
+      final notifier = BackgroundTaskNotifier();
+      await notifier.restoreFromPersistence();
+
+      // Only the valid entry survives; corrupt entries must not crash
+      // the whole restore.
+      expect(notifier.state.length, 1);
+      expect(notifier.state[0].id, 'good-id');
+      expect(notifier.state[0].status, TaskStatus.completed);
+    });
+
+    test('restoreFromPersistence marks running tasks as failed and persists',
+        () async {
+      final file = _tasksFileIn(testDir.path);
+
+      final n1 = BackgroundTaskNotifier();
+      final id = n1.addTask(type: BackgroundTaskType.asr, title: '中断任务');
+      // 等待本测试的任务落盘。
+      await _waitFor(() async {
+        final content = await _readFileIfExists(file);
+        return content?.contains(id) ?? false;
+      });
+
+      final n2 = BackgroundTaskNotifier();
+      await n2.restoreFromPersistence();
+
+      expect(n2.state.length, 1);
+      expect(n2.state[0].id, id);
+      expect(n2.state[0].status, TaskStatus.failed);
+      expect(n2.state[0].error, '应用重启，已中断');
+
+      // The corrected state must be written back to disk so the next
+      // startup doesn't re-mark the same task again.
+      await _waitFor(() async {
+        final content = await _readFileIfExists(file);
+        return content?.contains('"status":"failed"') ?? false;
+      });
+    });
+
+    test('rapid consecutive mutations end with the final state on disk',
+        () async {
+      final file = _tasksFileIn(testDir.path);
+
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '快速变更');
+      notifier.completeTask(id);
+      notifier.removeTask(id);
+
+      // Even with several immediate mutations, the serialized write chain
+      // must leave the latest state on disk (no stale-snapshot overwrite).
+      await _waitFor(() async {
+        final content = await _readFileIfExists(file);
+        return content == '[]';
+      });
     });
   });
 }
