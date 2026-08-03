@@ -20,15 +20,4 @@ class ManifestBridge {
     this.validateFileName = FolderPathUtils.validateFileName,
     required this.getAllDescendantFolderPaths,
   });
-
-  /// Bridge that uses the shared [FolderPathUtils] implementations.
-  factory ManifestBridge.defaultBridge() => const ManifestBridge(
-        getFolderBaseName: FolderPathUtils.getFolderBaseName,
-        getParentFolderPath: FolderPathUtils.getParentFolderPath,
-        getChildFolderPaths: FolderPathUtils.getChildFolderPaths,
-        validateFolderName: FolderPathUtils.validateFolderName,
-        validateFileName: FolderPathUtils.validateFileName,
-        getAllDescendantFolderPaths:
-            FolderPathUtils.getAllDescendantFolderPaths,
-      );
 }

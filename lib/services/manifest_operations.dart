@@ -182,7 +182,7 @@ class ManifestOperations<T extends FileRecord> {
       final dotIndex = name.lastIndexOf('.');
       if (dotIndex == -1) return;
       debugPrint('ManifestOperations($manifestKey) deleting file [$name]');
-      if (kIsWeb) {
+      if (_useWebFileStore) {
         await WebFileStore.delete(_webKey(name));
       } else {
         final dir = await _storageDir;
@@ -198,7 +198,7 @@ class ManifestOperations<T extends FileRecord> {
       final thumbName = '${hashOf(record)}_thumb$thumbnailExtension';
       debugPrint(
           'ManifestOperations($manifestKey) deleting thumbnail [$thumbName]');
-      if (kIsWeb) {
+      if (_useWebFileStore) {
         await WebFileStore.delete(_webKey(thumbName));
       } else {
         final dir = await _storageDir;
@@ -258,7 +258,7 @@ class ManifestOperations<T extends FileRecord> {
           // Guard against names without extension
           final dotIndex = name.lastIndexOf('.');
           if (dotIndex == -1) continue;
-          if (kIsWeb) {
+          if (_useWebFileStore) {
             await WebFileStore.delete(_webKey(name));
           } else {
             final dir = await _storageDir;
@@ -272,7 +272,7 @@ class ManifestOperations<T extends FileRecord> {
         hashCount[h] = (hashCount[h] ?? 1) - 1;
         if (hashCount[h]! <= 0) {
           final thumbName = '${hashOf(r)}_thumb$thumbnailExtension';
-          if (kIsWeb) {
+          if (_useWebFileStore) {
             await WebFileStore.delete(_webKey(thumbName));
           } else {
             final dir = await _storageDir;
@@ -336,20 +336,6 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<T?> getRecord(String id) async {
-    try {
-      await loadRecords();
-      return _cache!.firstWhere((r) => r.id == id);
-    } on StateError {
-      return null;
-    } catch (e, st) {
-      debugPrint('ManifestOperations($manifestKey).getRecord error: $e');
-      await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'getRecord failed', e, st);
-      return null;
-    }
-  }
-
   // ---- File I/O ---------------------------------------------------------
 
   /// 是否应使用 WebFileStore（包括纯内存测试模式）
@@ -393,21 +379,6 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<bool> fileExists(String fileName) async {
-    try {
-      if (_useWebFileStore) {
-        return WebFileStore.exists(_webKey(fileName));
-      }
-      final dir = await _storageDir;
-      return await File(p.join(dir, fileName)).exists();
-    } catch (e, st) {
-      debugPrint('ManifestOperations($manifestKey).fileExists error: $e');
-      await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'fileExists failed', e, st);
-      return false;
-    }
-  }
-
   Future<bool> deleteFile(String fileName) async {
     try {
       if (_useWebFileStore) {
@@ -427,12 +398,6 @@ class ManifestOperations<T extends FileRecord> {
           'ManifestOperations($manifestKey)', 'deleteFile failed', e, st);
       return false;
     }
-  }
-
-  /// Get the storage directory path (Native only).
-  Future<String> get storageDirPath async {
-    if (_useWebFileStore) return '';
-    return _storageDir;
   }
 
   /// Get a file's absolute path on disk (Native only).
@@ -457,17 +422,6 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   // ---- Folder management ------------------------------------------------
-
-  Future<List<String>> loadFolders() async {
-    try {
-      await loadRecords();
-      return List.unmodifiable(_folderCache.toList());
-    } catch (e, st) {
-      await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'loadFolders failed', e, st);
-      rethrow;
-    }
-  }
 
   Future<void> addFolder(String folderName) async {
     try {
@@ -505,6 +459,8 @@ class ManifestOperations<T extends FileRecord> {
   Future<void> removeFolder(String folderName) async {
     try {
       await loadRecords();
+      // 空字符串表示根目录，绝不能把全部记录连带文件删除
+      if (folderName.isEmpty) return;
 
       final allPaths = <String>{..._folderCache};
       for (final r in _cache ?? []) {
@@ -558,7 +514,7 @@ class ManifestOperations<T extends FileRecord> {
           // Guard against names without extension
           final dotIndex = name.lastIndexOf('.');
           if (dotIndex == -1) continue;
-          if (kIsWeb) {
+          if (_useWebFileStore) {
             await WebFileStore.delete(_webKey(name));
           } else {
             final dir = await _storageDir;
@@ -572,7 +528,7 @@ class ManifestOperations<T extends FileRecord> {
         hashCount[h] = (hashCount[h] ?? 1) - 1;
         if (hashCount[h]! <= 0) {
           final thumbName = '${hashOf(r)}_thumb$thumbnailExtension';
-          if (kIsWeb) {
+          if (_useWebFileStore) {
             await WebFileStore.delete(_webKey(thumbName));
           } else {
             final dir = await _storageDir;

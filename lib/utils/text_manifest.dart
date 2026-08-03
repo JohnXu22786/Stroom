@@ -149,10 +149,7 @@ class TextManifest {
       _ops.writeFile(fileName, data);
   static Future<Uint8List?> readFile(String fileName) =>
       _ops.readFile(fileName);
-  static Future<bool> fileExists(String fileName) => _ops.fileExists(fileName);
   static Future<bool> deleteFile(String fileName) => _ops.deleteFile(fileName);
-  static Future<String?> readFilePath(String fileName) =>
-      _ops.readFilePath(fileName);
 
   /// 写入文本内容到文件
   static Future<String> writeText(String fileName, String text) async {

@@ -155,11 +155,6 @@ class VideoManifest {
   /// Derived from the configured [thumbnailExtension] in [_ops].
   static String get _thumbExtension => _ops.thumbnailExtension;
 
-  static Future<bool> hasThumbnail(String hash) async {
-    final thumbPath = '${hash}_thumb$_thumbExtension';
-    return (await readFile(thumbPath)) != null;
-  }
-
   static Future<Uint8List?> readThumbnail(String hash) async {
     final thumbPath = '${hash}_thumb$_thumbExtension';
     return readFile(thumbPath);
@@ -195,9 +190,6 @@ class VideoManifest {
     final allPaths = await _ops.getAllFolders();
     return FolderPathUtils.getAllDescendantFolderPaths(parentPath, allPaths);
   }
-
-  /// Storage directory path for videos.
-  static Future<String> get videoDir => _ops.storageDirPath;
 
   /// Find a record by its hash.
   static Future<VideoRecord?> getRecordByHash(String hash) async {
