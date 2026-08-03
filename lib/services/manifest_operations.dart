@@ -336,20 +336,6 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<T?> getRecord(String id) async {
-    try {
-      await loadRecords();
-      return _cache!.firstWhere((r) => r.id == id);
-    } on StateError {
-      return null;
-    } catch (e, st) {
-      debugPrint('ManifestOperations($manifestKey).getRecord error: $e');
-      await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'getRecord failed', e, st);
-      return null;
-    }
-  }
-
   // ---- File I/O ---------------------------------------------------------
 
   /// 是否应使用 WebFileStore（包括纯内存测试模式）
@@ -390,21 +376,6 @@ class ManifestOperations<T extends FileRecord> {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'readFile failed', e, st);
       return null;
-    }
-  }
-
-  Future<bool> fileExists(String fileName) async {
-    try {
-      if (_useWebFileStore) {
-        return WebFileStore.exists(_webKey(fileName));
-      }
-      final dir = await _storageDir;
-      return await File(p.join(dir, fileName)).exists();
-    } catch (e, st) {
-      debugPrint('ManifestOperations($manifestKey).fileExists error: $e');
-      await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'fileExists failed', e, st);
-      return false;
     }
   }
 
@@ -457,17 +428,6 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   // ---- Folder management ------------------------------------------------
-
-  Future<List<String>> loadFolders() async {
-    try {
-      await loadRecords();
-      return List.unmodifiable(_folderCache.toList());
-    } catch (e, st) {
-      await AppLogService.error(
-          'ManifestOperations($manifestKey)', 'loadFolders failed', e, st);
-      rethrow;
-    }
-  }
 
   Future<void> addFolder(String folderName) async {
     try {

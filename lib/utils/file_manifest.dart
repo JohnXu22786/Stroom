@@ -171,7 +171,6 @@ class FileManifest {
       _ops.renameRecord(id, newName);
   static Future<void> moveRecord(String id, String targetFolder) =>
       _ops.moveRecord(id, targetFolder);
-  static Future<AudioRecord?> getRecord(String id) => _ops.getRecord(id);
 
   static Future<AudioRecord?> getRecordByHash(String hash) async {
     final records = await _ops.loadRecords();
@@ -188,12 +187,9 @@ class FileManifest {
       _ops.readFile(fileName);
   static Future<String?> readFilePath(String fileName) =>
       _ops.readFilePath(fileName);
-  static Future<bool> fileExists(String fileName) => _ops.fileExists(fileName);
   static Future<bool> deleteFile(String fileName) => _ops.deleteFile(fileName);
-  static Future<String> get ttsAudioDir => _ops.storageDirPath;
 
   // Folder management
-  static Future<List<String>> loadFolders() => _ops.loadFolders();
   static Future<void> addFolder(String name) => _ops.addFolder(name);
   static Future<void> addFolderPath(String pathName) =>
       _ops.addFolderPath(pathName);

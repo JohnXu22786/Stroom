@@ -349,23 +349,6 @@ class ManifestDatabase {
     await prefs.setBool('migrated_video_records', true);
   }
 
-  /// v1→v2 migration: migrate legacy shared folders to per-type tables,
-  /// then remove the shared folders table entirely.
-  ///
-  /// After this migration, only per-type folder tables remain.
-  ///
-  /// Call this before [database] or [_loadWebData] is first accessed,
-  /// so the migration runs before the new code (which does not read
-  /// from the legacy table) takes effect.
-  static Future<bool> hasLegacyFolders() async {
-    if (_useJsonStore) {
-      await _loadWebData();
-      return _webData!.containsKey(ManifestTables.folders);
-    }
-    // SQLite: check if the table exists (it won't be in _database yet)
-    return false; // onUpgrade already handles it for SQLite
-  }
-
   /// Migrate legacy shared folders from `folders` table to all 4 per-type
   /// tables, then drop the legacy table. Idempotent — safe to call multiple
   /// times.
@@ -839,38 +822,6 @@ class ManifestDatabase {
     }
   }
 
-  /// 获取单条音频记录
-  static Future<Map<String, dynamic>?> getAudioRecord(String id) async {
-    try {
-      if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
-        for (final r in list) {
-          final map = r as Map<String, dynamic>;
-          if (map['id'] == id) {
-            return map;
-          }
-        }
-        return null;
-      }
-      final db = await database;
-      final rows = await db.query(
-        ManifestTables.audioRecords,
-        where: 'id = ?',
-        whereArgs: [id],
-        limit: 1,
-      );
-      if (rows.isEmpty) {
-        return null;
-      }
-      return dbRowToRecord(rows.first);
-    } catch (e, stackTrace) {
-      await AppLogService.error(
-          'ManifestDatabase', 'getAudioRecord failed [id=$id]', e, stackTrace);
-      rethrow;
-    }
-  }
-
   // ==================================================================
   // Text record operations
   // ==================================================================
@@ -1097,35 +1048,6 @@ class ManifestDatabase {
     }
   }
 
-  /// 检查文件夹路径是否存在
-  ///
-  /// [recordTable] 必须指定，v2+ 格式不再使用共享 folders 表。
-  static Future<bool> folderExists(String path, {String? recordTable}) async {
-    try {
-      if (recordTable == null) {
-        throw ArgumentError('recordTable is required in v2+ format');
-      }
-      final folderTable = ManifestTables.folderTableFor(recordTable);
-      if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[folderTable] as List<dynamic>? ?? [];
-        final exists = list.contains(path);
-        return exists;
-      }
-      final db = await database;
-      final count = Sqflite.firstIntValue(await db.rawQuery(
-        'SELECT COUNT(*) FROM $folderTable WHERE path = ?',
-        [path],
-      ));
-      final exists = (count ?? 0) > 0;
-      return exists;
-    } catch (e, stackTrace) {
-      await AppLogService.error('ManifestDatabase',
-          'folderExists failed [path=$path]', e, stackTrace);
-      rethrow;
-    }
-  }
-
   // ==================================================================
   // 工具方法
   // ==================================================================
@@ -1207,21 +1129,6 @@ class ManifestDatabase {
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'clearAllData failed', e, stackTrace);
-      rethrow;
-    }
-  }
-
-  /// 关闭数据库连接（Native 端）
-  static Future<void> close() async {
-    try {
-      if (_database != null) {
-        await _database!.close();
-        _database = null;
-      }
-      _webData = null;
-    } catch (e, stackTrace) {
-      await AppLogService.error(
-          'ManifestDatabase', 'close failed', e, stackTrace);
       rethrow;
     }
   }
