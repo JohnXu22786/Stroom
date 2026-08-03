@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:stroom/pages/unified_task_list/task_utils.dart';
-import 'package:stroom/providers/task_provider_shared.dart';
 import 'package:stroom/task_flow/models/task_flow_execution.dart';
 
 TaskFlowExecution _execution({

@@ -12,25 +12,24 @@ void main() {
     expect(find.textContaining('已运行'), findsNothing);
   });
 
-  testWidgets('RunningElapsedLabel shows elapsed time and ticks',
+  testWidgets('RunningElapsedLabel ticks with an injected clock',
       (tester) async {
-    final start =
-        DateTime.now().subtract(const Duration(minutes: 2, seconds: 5));
+    final start = DateTime(2026, 1, 1, 12, 0, 0);
+    var now = DateTime(2026, 1, 1, 12, 2, 5); // 2:05 elapsed
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: RunningElapsedLabel(startedAt: start),
+          body: RunningElapsedLabel(startedAt: start, now: () => now),
         ),
       ),
     );
-    expect(find.textContaining('已运行 02:05'), findsOneWidget);
+    expect(find.text('已运行 02:05'), findsOneWidget);
 
-    // The 1s tick timer stays active while startedAt is set; the test
-    // framework's fake clock does not advance DateTime.now(), so the
-    // label text itself cannot change here — this just verifies the
-    // periodic timer does not leak (no pending-timer failure on teardown).
+    // Advance the injected clock by 10 seconds and let the 1s tick timer
+    // fire — the label must re-render with the new elapsed time.
+    now = DateTime(2026, 1, 1, 12, 2, 15);
     await tester.pump(const Duration(seconds: 10));
-    expect(find.textContaining('已运行'), findsOneWidget);
+    expect(find.text('已运行 02:15'), findsOneWidget);
   });
 
   testWidgets('RunningElapsedLabel stops ticking when startedAt becomes null',

@@ -9,7 +9,10 @@ class RunningElapsedLabel extends StatefulWidget {
   final DateTime? startedAt;
   final TextStyle? style;
 
-  const RunningElapsedLabel({super.key, this.startedAt, this.style});
+  /// Injectable clock (tests): defaults to [DateTime.now].
+  final DateTime Function()? now;
+
+  const RunningElapsedLabel({super.key, this.startedAt, this.style, this.now});
 
   @override
   State<RunningElapsedLabel> createState() => _RunningElapsedLabelState();
@@ -48,8 +51,8 @@ class _RunningElapsedLabelState extends State<RunningElapsedLabel> {
     super.dispose();
   }
 
-  static String format(DateTime start) {
-    final d = DateTime.now().difference(start);
+  static String format(DateTime start, DateTime now) {
+    final d = now.difference(start);
     final h = d.inHours;
     final m = d.inMinutes % 60;
     final s = d.inSeconds % 60;
@@ -63,6 +66,7 @@ class _RunningElapsedLabelState extends State<RunningElapsedLabel> {
   Widget build(BuildContext context) {
     final start = widget.startedAt;
     if (start == null) return const SizedBox.shrink();
-    return Text('已运行 ${format(start)}', style: widget.style);
+    final now = (widget.now ?? DateTime.now)();
+    return Text('已运行 ${format(start, now)}', style: widget.style);
   }
 }
