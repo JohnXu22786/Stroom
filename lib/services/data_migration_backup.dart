@@ -16,10 +16,10 @@ class DataMigrationBackup {
       return '/stroom_backups';
     }
 
-    // 测试环境：使用临时目录
+    // 测试环境：每个测试 isolate 独立的临时目录（见 BackupLocationManager.testBackupRoot）
     try {
       if (Platform.environment['FLUTTER_TEST'] == 'true') {
-        return '${Directory.systemTemp.path}/stroom_backup_test';
+        return BackupLocationManager.testBackupRoot;
       }
     } catch (e) {
       debugPrint('[DataMigrationService] Error checking test env: $e');

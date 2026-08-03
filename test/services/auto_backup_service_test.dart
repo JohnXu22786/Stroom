@@ -23,6 +23,16 @@ void main() {
     }
   });
 
+  tearDownAll(() async {
+    // Remove the per-isolate test backup root so parallel runs do not
+    // accumulate directories in systemTemp.
+    final root = await DataMigrationService.getExternalBackupRootPath();
+    final dir = Directory(root);
+    if (await dir.exists()) {
+      await dir.delete(recursive: true);
+    }
+  });
+
   // ==================================================================
   // cleanupOldBackups — new retention policy (max 5)
   // ==================================================================

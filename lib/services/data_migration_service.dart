@@ -143,8 +143,8 @@ class DataMigrationService {
   /// - Linux:   ~/Documents/Stroom/AutoBackups/
   /// - Android: 通过 SAF 选择 Documents 目录（优先），
   ///   用户选择后调用 takePersistableUriPermission 固化权限。
-  /// - iOS:     <app_group>/Documents/Stroom/AutoBackups/（通过文件 App 可访问）
-  /// - 测试环境: Directory.systemTemp/stroom_backup_test/
+  /// - iOS:     `<app_group>`/Documents/Stroom/AutoBackups/（通过文件 App 可访问）
+  /// - 测试环境: `Directory.systemTemp/stroom_backup_test_<随机后缀>/`（每个测试 isolate 独立）
   ///
   /// 获取外部备份根目录（委托 [DataMigrationBackup]，实现见
   /// data_migration_backup.dart）。
