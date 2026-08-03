@@ -5,6 +5,7 @@ import '../../providers/task_provider.dart';
 import '../tts_create_page.dart';
 import 'task_utils.dart';
 import 'file_opener.dart';
+import '../../widgets/running_elapsed_label.dart';
 
 // =============================================================================
 // 合成任务卡片
@@ -106,6 +107,18 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                                 color: Colors.grey[500],
                               ),
                             ),
+                            if (widget.task.status == TaskStatus.running) ...[
+                              const SizedBox(width: 8),
+                              // Live elapsed time — lets the user see a
+                              // slow-but-working synthesis is still alive.
+                              RunningElapsedLabel(
+                                startedAt: widget.task.createdAt,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ],

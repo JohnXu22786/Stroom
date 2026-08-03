@@ -283,6 +283,32 @@ class BlockTypeDefinition {
     return all.where((b) => outputType.isCompatibleWith(b.inputType)).toList();
   }
 
+  /// Get block types that can REPLACE a block at a chain position without
+  /// breaking the chain.
+  ///
+  /// A candidate is valid when it accepts what the previous step produces
+  /// ([prevOutput] — the flow's initial input type for the first block)
+  /// and what it produces is accepted by the next block's input
+  /// ([nextInput]; null for the last block). This subsumes same-I/O swaps
+  /// (identical input/output pairs are trivially valid).
+  ///
+  /// [exclude] removes the current block type from the list — replacing a
+  /// block with its own type would just reset its parameters.
+  static List<BlockTypeDefinition> getReplacementCandidates({
+    required IOType prevOutput,
+    IOType? nextInput,
+    BlockType? exclude,
+  }) {
+    return all.where((b) {
+      if (b.typeKey == exclude) return false;
+      if (!prevOutput.isCompatibleWith(b.inputType)) return false;
+      if (nextInput != null && !b.outputType.isCompatibleWith(nextInput)) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
   /// Get the default parameter values for this block type.
   Map<String, dynamic> get defaultParams {
     final map = <String, dynamic>{};

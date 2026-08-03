@@ -9,6 +9,7 @@ import '../ocr_page.dart';
 import '../audio_separation_page.dart';
 import 'task_utils.dart';
 import 'file_opener.dart';
+import '../../widgets/running_elapsed_label.dart';
 
 // =============================================================================
 // 后台任务卡片（OCR / ASR / 音频分离）
@@ -128,6 +129,18 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                                 color: Colors.grey[500],
                               ),
                             ),
+                            if (widget.task.status == TaskStatus.running) ...[
+                              const SizedBox(width: 8),
+                              // Live elapsed time — lets the user see a
+                              // slow-but-working task is still alive.
+                              RunningElapsedLabel(
+                                startedAt: widget.task.createdAt,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ],

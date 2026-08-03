@@ -13,6 +13,7 @@ class BlockChainEditor extends StatelessWidget {
   final void Function(BlockType typeKey) onAddBlock;
   final void Function(int index) onEditBlock;
   final void Function(int index) onDeleteBlock;
+  final void Function(int index, BlockType typeKey) onReplaceBlock;
 
   const BlockChainEditor({
     super.key,
@@ -22,6 +23,7 @@ class BlockChainEditor extends StatelessWidget {
     required this.onAddBlock,
     required this.onEditBlock,
     required this.onDeleteBlock,
+    required this.onReplaceBlock,
   });
 
   /// All types are offered so restored flows with a `url`/`file`/`any`
@@ -48,6 +50,7 @@ class BlockChainEditor extends StatelessWidget {
                   isFirst: index == 0,
                   onTap: () => onEditBlock(index),
                   onSettings: () => onEditBlock(index),
+                  onReplace: () => _showReplaceBlockSheet(context, index),
                   onDelete: isLast ? () => onDeleteBlock(index) : null,
                 );
               }),
@@ -280,7 +283,99 @@ class BlockChainEditor extends StatelessWidget {
                         .map(
                           (type) => Padding(
                             padding: const EdgeInsets.only(bottom: 8),
-                            child: _buildBlockTypeOption(type, cs, ctx),
+                            child: _buildBlockTypeOption(type, cs, ctx, null),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Shows the replace-block sheet for the block at [index].
+  ///
+  /// Only chain-compatible candidates are offered (same or compatible
+  /// input/output types) — arbitrary reordering would break the chain.
+  void _showReplaceBlockSheet(BuildContext context, int index) {
+    final cs = Theme.of(context).colorScheme;
+    final block = blocks[index];
+    final prevOutput = index == 0
+        ? inputType
+        : (blocks[index - 1].getDefinition()?.outputType ?? IOType.any);
+    final nextInput = index == blocks.length - 1
+        ? null
+        : (blocks[index + 1].getDefinition()?.inputType ?? IOType.any);
+    final candidates = BlockTypeDefinition.getReplacementCandidates(
+      prevOutput: prevOutput,
+      nextInput: nextInput,
+      exclude: block.typeKey,
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.45,
+        minChildSize: 0.3,
+        maxChildSize: 0.7,
+        expand: false,
+        builder: (scrollCtx, scrollController) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 32,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                '替换功能块',
+                style: Theme.of(
+                  scrollCtx,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '只能替换为输入输出兼容的功能块（同类输入输出）',
+                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 12),
+              if (candidates.isEmpty)
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      '没有与当前类型兼容的功能块',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Expanded(
+                  child: ListView(
+                    controller: scrollController,
+                    children: candidates
+                        .map(
+                          (type) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _buildBlockTypeOption(type, cs, ctx, index),
                           ),
                         )
                         .toList(),
@@ -297,6 +392,7 @@ class BlockChainEditor extends StatelessWidget {
     BlockTypeDefinition type,
     ColorScheme cs,
     BuildContext ctx,
+    int? replaceIndex,
   ) {
     return Card(
       elevation: 0,
@@ -308,7 +404,11 @@ class BlockChainEditor extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: () {
           Navigator.pop(ctx);
-          onAddBlock(type.typeKey);
+          if (replaceIndex != null) {
+            onReplaceBlock(replaceIndex, type.typeKey);
+          } else {
+            onAddBlock(type.typeKey);
+          }
         },
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -347,7 +447,13 @@ class BlockChainEditor extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(Icons.add_circle_outline, size: 20, color: cs.primary),
+              Icon(
+                replaceIndex != null
+                    ? Icons.swap_horiz
+                    : Icons.add_circle_outline,
+                size: 20,
+                color: cs.primary,
+              ),
             ],
           ),
         ),

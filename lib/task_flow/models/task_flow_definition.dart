@@ -94,17 +94,6 @@ class TaskFlowBlock {
 // Validation result for a flow
 // ============================================================================
 
-/// The result of validating a [TaskFlowDefinition].
-///
-/// [isValid] is true when there are no errors.
-/// [errors] contains human-readable error messages in Chinese.
-class FlowValidationResult {
-  final bool isValid;
-  final List<String> errors;
-
-  const FlowValidationResult({required this.isValid, this.errors = const []});
-}
-
 // ============================================================================
 // TaskFlowDefinition — the complete flow model
 // ============================================================================
@@ -153,35 +142,6 @@ class TaskFlowDefinition {
     return copyWith(blocks: newBlocks, updatedAt: DateTime.now());
   }
 
-  /// Remove a block by its index in the list.
-  TaskFlowDefinition removeBlock(int index) {
-    if (index < 0 || index >= blocks.length) return this;
-    final newBlocks = [...blocks]..removeAt(index);
-    return copyWith(blocks: newBlocks, updatedAt: DateTime.now());
-  }
-
-  /// Remove a block by its id.
-  TaskFlowDefinition removeBlockById(String blockId) {
-    final index = blocks.indexWhere((b) => b.id == blockId);
-    if (index == -1) return this;
-    return removeBlock(index);
-  }
-
-  /// Move a block from [oldIndex] to [newIndex].
-  TaskFlowDefinition moveBlock({required int oldIndex, required int newIndex}) {
-    if (oldIndex < 0 ||
-        oldIndex >= blocks.length ||
-        newIndex < 0 ||
-        newIndex >= blocks.length) {
-      return this;
-    }
-    final newBlocks = [...blocks];
-    final block = newBlocks.removeAt(oldIndex);
-    newIndex = newIndex.clamp(0, newBlocks.length);
-    newBlocks.insert(newIndex, block);
-    return copyWith(blocks: newBlocks, updatedAt: DateTime.now());
-  }
-
   /// Update a block's parameters by its id.
   TaskFlowDefinition updateBlockParams(
     String blockId,
@@ -192,51 +152,6 @@ class TaskFlowDefinition {
     final updatedBlocks = [...blocks];
     updatedBlocks[index] = blocks[index].copyWithParams(newParams);
     return copyWith(blocks: updatedBlocks, updatedAt: DateTime.now());
-  }
-
-  /// Validate the flow's block connections.
-  FlowValidationResult validate() {
-    final errors = <String>[];
-
-    if (blocks.isEmpty) {
-      errors.add('流程至少需要一个功能块');
-      return FlowValidationResult(isValid: false, errors: errors);
-    }
-
-    // First pass: check all blocks have known types
-    for (int i = 0; i < blocks.length; i++) {
-      if (blocks[i].getDefinition() == null) {
-        errors.add('第 ${i + 1} 个功能块类型未注册: "${blocks[i].typeKey.name}"');
-      }
-    }
-    if (errors.isNotEmpty) {
-      return FlowValidationResult(isValid: false, errors: errors);
-    }
-
-    // Check initial input type vs first block input type
-    final firstBlockDef = blocks.first.getDefinition()!;
-    if (!inputType.isCompatibleWith(firstBlockDef.inputType)) {
-      errors.add(
-        '初始输入类型为「${inputType.label}」，但第一个功能块「${firstBlockDef.label}」需要输入「${firstBlockDef.inputType.label}」，类型不匹配',
-      );
-    }
-
-    // Check consecutive block I/O compatibility
-    for (int i = 0; i < blocks.length - 1; i++) {
-      final current = blocks[i];
-      final next = blocks[i + 1];
-      final currentDef = current.getDefinition()!;
-      final nextDef = next.getDefinition()!;
-
-      if (!currentDef.outputType.isCompatibleWith(nextDef.inputType)) {
-        errors.add(
-          '第 ${i + 1} 个功能块「${currentDef.label}」输出类型为「${currentDef.outputType.label}」，'
-          '但第 ${i + 2} 个功能块「${nextDef.label}」需要输入「${nextDef.inputType.label}」，类型不匹配',
-        );
-      }
-    }
-
-    return FlowValidationResult(isValid: errors.isEmpty, errors: errors);
   }
 
   /// Create a copy of this flow with a new ID (for duplication).

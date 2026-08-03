@@ -257,23 +257,21 @@ class _ExpandedContent extends ConsumerWidget {
         .read(taskFlowExecutionsProvider)
         .where((e) => e.id == execId)
         .firstOrNull;
-    // Deleting a running execution would orphan the engine: it keeps
-    // executing and its newly created sub-tasks resurface as standalone
-    // cards with no record. Refuse until the flow terminates.
-    if (execution != null && execution.status == FlowExecutionStatus.running) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('任务流正在运行，无法删除')),
-      );
-      return;
-    }
+    final isRunning =
+        execution != null && execution.status == FlowExecutionStatus.running;
+    // Deleting a running flow cancels its sub-task tasks first — since the
+    // executors' removeTask paths genuinely cancel the engine/HTTP work,
+    // no orphaned background work is left behind.
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除任务流记录'),
         content: Text(
-          execution != null && execution.subTasks.isNotEmpty
-              ? '确定删除此任务流记录？其子任务记录也会一并删除。'
-              : '确定删除此任务流记录？',
+          isRunning
+              ? '任务流正在运行，删除将取消其中正在运行的任务。确定删除？'
+              : execution != null && execution.subTasks.isNotEmpty
+                  ? '确定删除此任务流记录？其子任务记录也会一并删除。'
+                  : '确定删除此任务流记录？',
         ),
         actions: [
           TextButton(

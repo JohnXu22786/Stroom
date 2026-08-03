@@ -185,85 +185,6 @@ void main() {
       expect(updated.blocks.length, 3);
     });
 
-    test('validate checks I/O type compatibility between blocks', () {
-      // CatCatch (text→video) → AudioSeparation (video→audio) → ASR (audio→text)
-      // This is a valid chain, with input type = text (for CatCatch)
-      final flow = TaskFlowDefinition(
-        name: '测试',
-        inputType: IOType.text,
-      );
-      final validFlow = flow
-          .addBlock(TaskFlowBlock(typeKey: BlockType.catcatch))
-          .addBlock(TaskFlowBlock(typeKey: BlockType.audioSeparation))
-          .addBlock(TaskFlowBlock(typeKey: BlockType.asr));
-
-      final result = validFlow.validate();
-      expect(result.isValid, isTrue);
-      expect(result.errors, isEmpty);
-    });
-
-    test('validate detects incompatible connections', () {
-      // Initial input is text, first block is ASR (needs audio) → incompatibility
-      // ASR (audio→text) → AudioSeparation (video→audio) → also incompatible
-      final flow = TaskFlowDefinition(
-        name: '测试',
-        inputType: IOType.text,
-      );
-      final invalidFlow = flow
-          .addBlock(TaskFlowBlock(typeKey: BlockType.asr))
-          .addBlock(TaskFlowBlock(typeKey: BlockType.audioSeparation));
-
-      final result = invalidFlow.validate();
-      expect(result.isValid, isFalse);
-      expect(result.errors, isNotEmpty);
-    });
-
-    test('validate detects empty flow', () {
-      final flow = TaskFlowDefinition(name: '空流程');
-      final result = flow.validate();
-      expect(result.isValid, isFalse);
-      expect(result.errors.any((e) => e.contains('至少')), isTrue);
-    });
-
-    test('validate detects single-block flow as valid', () {
-      // ASR needs audio input, so set inputType accordingly
-      final flow = TaskFlowDefinition(name: '单块', inputType: IOType.audio)
-          .addBlock(TaskFlowBlock(typeKey: BlockType.asr));
-      // A single block with matching input type is valid
-      final result = flow.validate();
-      expect(result.isValid, isTrue);
-    });
-
-    test('validate catches initial input vs first block mismatch', () {
-      // Input type is text but first block (ASR) needs audio
-      final flow = TaskFlowDefinition(name: '测试', inputType: IOType.text)
-          .addBlock(TaskFlowBlock(typeKey: BlockType.asr));
-      final result = flow.validate();
-      expect(result.isValid, isFalse);
-      expect(result.errors.any((e) => e.contains('初始输入')), isTrue);
-    });
-
-    test('removeBlock works by index', () {
-      final flow = TaskFlowDefinition(name: '测试')
-          .addBlock(TaskFlowBlock(typeKey: BlockType.catcatch))
-          .addBlock(TaskFlowBlock(typeKey: BlockType.asr));
-      expect(flow.blocks.length, 2);
-
-      final updated = flow.removeBlock(0);
-      expect(updated.blocks.length, 1);
-      expect(updated.blocks[0].typeKey, BlockType.asr);
-    });
-
-    test('moveBlock reorders blocks correctly', () {
-      final flow = TaskFlowDefinition(name: '测试')
-          .addBlock(TaskFlowBlock(typeKey: BlockType.catcatch))
-          .addBlock(TaskFlowBlock(typeKey: BlockType.asr));
-
-      final updated = flow.moveBlock(oldIndex: 1, newIndex: 0);
-      expect(updated.blocks[0].typeKey, BlockType.asr);
-      expect(updated.blocks[1].typeKey, BlockType.catcatch);
-    });
-
     test('serialization round-trips with blocks and params', () {
       final original = TaskFlowDefinition(name: '完整流程', inputType: IOType.text)
           .addBlock(TaskFlowBlock(
@@ -287,12 +208,65 @@ void main() {
     });
 
     test('copyWithNewId creates a new flow with different id', () {
-      final original = TaskFlowDefinition(name: '原流程')
+      final original = TaskFlowDefinition(name: '复制测试')
           .addBlock(TaskFlowBlock(typeKey: BlockType.asr));
       final copy = original.copyWithNewId();
       expect(copy.id, isNot(original.id));
       expect(copy.name, original.name);
       expect(copy.blocks.length, original.blocks.length);
+    });
+  });
+
+  group('getReplacementCandidates', () {
+    Set<BlockType> keys(List<BlockTypeDefinition> defs) =>
+        defs.map((d) => d.typeKey).toSet();
+
+    test('text input, no next block: offers text/any-input blocks only', () {
+      final result = BlockTypeDefinition.getReplacementCandidates(
+        prevOutput: IOType.text,
+      );
+      expect(result, isNotEmpty);
+      expect(result.every((b) => IOType.text.isCompatibleWith(b.inputType)),
+          isTrue);
+    });
+
+    test('subsumes same-I/O swaps: audio→text chain position', () {
+      // Replace a block whose previous output is audio and whose next
+      // block needs text — ASR (audio→text) and chat (any→text) qualify.
+      final result = BlockTypeDefinition.getReplacementCandidates(
+        prevOutput: IOType.audio,
+        nextInput: IOType.text,
+      );
+      expect(keys(result), containsAll({BlockType.asr, BlockType.chat}));
+      expect(result.any((b) => b.typeKey == BlockType.ocr), isFalse);
+      expect(
+          result.any((b) => b.typeKey == BlockType.audioSeparation), isFalse);
+    });
+
+    test('last block has no next-input constraint', () {
+      final result = BlockTypeDefinition.getReplacementCandidates(
+        prevOutput: IOType.image,
+      );
+      expect(keys(result), containsAll({BlockType.ocr, BlockType.chat}));
+    });
+
+    test('next block constraint filters by output compatibility', () {
+      // Previous output is video; next block needs audio. AudioSeparation
+      // (video→audio) qualifies; chat (any→text) does not (text is not
+      // compatible with the next block's audio input).
+      final result = BlockTypeDefinition.getReplacementCandidates(
+        prevOutput: IOType.video,
+        nextInput: IOType.audio,
+      );
+      expect(keys(result), {BlockType.audioSeparation});
+    });
+
+    test('excludes the current block type', () {
+      final result = BlockTypeDefinition.getReplacementCandidates(
+        prevOutput: IOType.text,
+        exclude: BlockType.chat,
+      );
+      expect(result.any((b) => b.typeKey == BlockType.chat), isFalse);
     });
   });
 }
