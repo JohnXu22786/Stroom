@@ -79,6 +79,8 @@ dev_dependencies:
     sdk: flutter
   build_runner: ^2.15.0
   flutter_lints: ^6.0.0
+  # Mocking for unit tests (pure Dart, no code generation).
+  mocktail: ^1.0.4
   # Used by tests to disable visibility_detector's debounce timer
   # (transitive via flutter_chat_ui, but must be declared to import it).
   visibility_detector: ^0.4.0+2

@@ -9,6 +9,7 @@ import '../catcatch_page.dart';
 import 'task_utils.dart';
 import 'file_opener.dart';
 import 'media_preview_sheet.dart';
+import '../../widgets/running_elapsed_label.dart';
 
 // =============================================================================
 // CatCatch 任务卡片
@@ -153,6 +154,18 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                             context,
                           ).textTheme.bodySmall?.copyWith(color: statusColor),
                         ),
+                        if (task.status == catcatch.TaskStatus.running) ...[
+                          const SizedBox(height: 2),
+                          // Live elapsed time — lets the user see a
+                          // long download/conversion is still alive.
+                          RunningElapsedLabel(
+                            startedAt: task.createdAt,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: Colors.grey),
+                          ),
+                        ],
                       ],
                     ),
                   ),

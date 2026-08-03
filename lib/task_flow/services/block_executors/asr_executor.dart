@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -12,6 +11,7 @@ import '../../../providers/background_task_provider.dart';
 import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider_shared.dart';
 import '../../../utils/audio_utils.dart';
+import '../../../utils/http_timeout.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_definition.dart';
@@ -97,8 +97,15 @@ Future<String> _callAsrApi({
   Map<String, dynamic> typeConfig = const {},
   List<CustomParam> customParams = const [],
 }) async {
-  final dio = Dio();
-  final cancelToken = CancelToken();
+  // Layered timeouts: fast-fail on connect/upload issues, no artificial
+  // kill for slow-but-healthy servers (only a 60-min silent-server bound).
+  final dio = Dio(
+    BaseOptions(
+      connectTimeout: connectTimeoutDefault,
+      sendTimeout: sendTimeoutForBytes(audioBytes.length),
+      receiveTimeout: receiveTimeoutFallback,
+    ),
+  );
   try {
     // Same MIME mapping as the app's own ASR page (getMimeType) — e.g.
     // mp3 → audio/mpeg, m4a → audio/mp4; non-standard types like
@@ -115,22 +122,10 @@ Future<String> _callAsrApi({
       ..._buildAsrFormParams(typeConfig),
       ..._customParamFields(customParams),
     });
-    // A stalled server must not hang the flow forever — the executor's
-    // catch routes the timeout through failSubTask like every other block,
-    // and the token cancels the request so no socket lingers.
-    final response = await dio
-        .post(
+    final response = await dio.post(
       host,
       data: formData,
       options: Options(headers: {'Authorization': 'Bearer $apiKey'}),
-      cancelToken: cancelToken,
-    )
-        .timeout(
-      const Duration(minutes: 10),
-      onTimeout: () {
-        cancelToken.cancel();
-        throw TimeoutException('请求超时');
-      },
     );
     if (response.data is Map) return (response.data['text'] as String?) ?? '';
     return response.data.toString();

@@ -5,11 +5,13 @@ import 'io_type_indicator.dart';
 /// A card representing a single block in the task flow builder.
 ///
 /// Shows the block's icon, label, input/output types, and a brief
-/// summary of its configured parameters. Supports drag-to-reorder,
-/// tap to edit params, and delete.
+/// summary of its configured parameters. Tap opens the parameter editor;
+/// [onReplace] swaps the block for another type with compatible I/O
+/// (reordering is constrained by input/output type compatibility, so
+/// blocks are replaced rather than dragged).
 ///
-/// When [readOnly] is true, the settings and delete buttons are hidden,
-/// and the tap hint changes to "点击查看参数" (read-only view).
+/// When [readOnly] is true, the settings, replace and delete buttons are
+/// hidden, and the tap hint changes to "点击查看参数" (read-only view).
 class FlowBlockCard extends StatelessWidget {
   final TaskFlowBlock block;
   final int index;
@@ -18,6 +20,7 @@ class FlowBlockCard extends StatelessWidget {
   final bool readOnly;
   final VoidCallback? onTap;
   final VoidCallback? onSettings;
+  final VoidCallback? onReplace;
   final VoidCallback? onDelete;
 
   const FlowBlockCard({
@@ -29,6 +32,7 @@ class FlowBlockCard extends StatelessWidget {
     this.readOnly = false,
     this.onTap,
     this.onSettings,
+    this.onReplace,
     this.onDelete,
   });
 
@@ -129,6 +133,22 @@ class FlowBlockCard extends StatelessWidget {
                             minHeight: 28,
                           ),
                           tooltip: '设置参数',
+                        ),
+                      // Replace button (hidden in readOnly)
+                      if (!readOnly)
+                        IconButton(
+                          icon: Icon(
+                            Icons.swap_horiz,
+                            size: 16,
+                            color: cs.primary,
+                          ),
+                          onPressed: onReplace,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
+                          ),
+                          tooltip: '替换功能块',
                         ),
                       // Delete button (only for last block, hidden in readOnly)
                       if (onDelete != null && !readOnly)

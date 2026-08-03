@@ -68,9 +68,6 @@ Future<String> executeTtsBlock({
       taskId: taskId,
     );
 
-    final startTime = DateTime.now();
-    const maxWait = Duration(minutes: 5);
-
     while (true) {
       await Future.delayed(const Duration(milliseconds: 500));
       final task =
@@ -115,7 +112,7 @@ Future<String> executeTtsBlock({
       }
       if (task.status == TaskStatus.paused) {
         // A paused synthesis task will not progress — fail fast instead
-        // of polling until maxWait and reporting a bogus 合成超时.
+        // of polling forever.
         execNotifier.updateSubTaskStatus(
           execId,
           flowSubTask.id,
@@ -127,18 +124,11 @@ Future<String> executeTtsBlock({
           blockTitle: def.label,
         );
       }
-      if (DateTime.now().difference(startTime) > maxWait) {
-        execNotifier.updateSubTaskStatus(
-          execId,
-          flowSubTask.id,
-          TaskStatus.failed,
-        );
-        throw BlockExecutionException(
-          '合成超时',
-          blockType: def.typeKey.name,
-          blockTitle: def.label,
-        );
-      }
+      // No wall-clock timeout here: a slow-but-healthy synthesis (long
+      // utterance, throttled server) must not be killed. A truly hung
+      // server fails via the request-layer 60-min fallback
+      // (tts_provider receiveTimeout) → task becomes failed → loop exits.
+      // The 500ms tick keeps the widget's progress UI warm.
     }
   } catch (e) {
     if (e is BlockExecutionException) rethrow;

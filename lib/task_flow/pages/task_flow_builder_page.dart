@@ -223,6 +223,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   onAddBlock: _addBlock,
                   onEditBlock: _editBlock,
                   onDeleteBlock: _removeBlock,
+                  onReplaceBlock: _replaceBlock,
                 ),
               ),
             ],
@@ -297,6 +298,18 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     if (index < 0 || index >= _blocks.length) return;
     setState(() {
       _blocks = [..._blocks]..removeAt(index);
+    });
+  }
+
+  /// Replace the block at [index] with a new block of [typeKey] (default
+  /// parameters). Position and neighbors are kept — the replace sheet only
+  /// offers chain-compatible types, so the chain stays valid.
+  void _replaceBlock(int index, BlockType typeKey) {
+    if (index < 0 || index >= _blocks.length) return;
+    setState(() {
+      final newBlocks = [..._blocks];
+      newBlocks[index] = TaskFlowBlock(typeKey: typeKey);
+      _blocks = newBlocks;
     });
   }
 

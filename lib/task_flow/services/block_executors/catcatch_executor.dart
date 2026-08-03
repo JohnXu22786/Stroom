@@ -22,6 +22,7 @@ Future<String> executeCatCatchBlock({
   required CatCatchNotifier catcatchNotifier,
   String videoFolder = '',
   String audioFolder = '',
+  Duration stallTimeout = const Duration(minutes: 10),
 }) async {
   final taskId = const Uuid().v4();
   execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
@@ -35,8 +36,14 @@ Future<String> executeCatCatchBlock({
     audioFolder: audioFolder,
   );
 
-  final startTime = DateTime.now();
-  const maxWait = Duration(minutes: 10);
+  // Stall detection instead of a wall-clock deadline: a large download or
+  // long conversion updates step progress continuously, so a healthy task
+  // is never killed — only a task with NO progress change for
+  // [stallTimeout] is abandoned (and its engine work cancelled).
+  var lastProgressSignature = _progressSignatureOf(
+    catcatchNotifier.state.where((t) => t.id == taskId).firstOrNull,
+  );
+  var lastProgressAt = DateTime.now();
   bool autoSelected = false;
   bool autoConfirmed = false;
 
@@ -53,6 +60,27 @@ Future<String> executeCatCatchBlock({
       );
       throw BlockExecutionException(
         '任务丢失',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
+
+    final signature = _progressSignatureOf(task);
+    if (signature != lastProgressSignature) {
+      lastProgressSignature = signature;
+      lastProgressAt = DateTime.now();
+    } else if (DateTime.now().difference(lastProgressAt) > stallTimeout) {
+      // No progress for the stall window — cancel the engine work and
+      // fail the block. removeTask cancels the pipeline's CancelToken and
+      // cleans up partial files.
+      catcatchNotifier.removeTask(taskId);
+      execNotifier.updateSubTaskStatus(
+        execId,
+        flowSubTask.id,
+        TaskStatus.failed,
+      );
+      throw BlockExecutionException(
+        '下载无进展，已取消',
         blockType: def.typeKey.name,
         blockTitle: def.label,
       );
@@ -122,6 +150,8 @@ Future<String> executeCatCatchBlock({
               TaskStatus.running,
             );
           } catch (e) {
+            // The flow gives up on a live task — cancel its engine work.
+            catcatchNotifier.removeTask(taskId);
             execNotifier.updateSubTaskStatus(
               execId,
               flowSubTask.id,
@@ -147,6 +177,8 @@ Future<String> executeCatCatchBlock({
           TaskStatus.running,
         );
       } catch (e) {
+        // The flow gives up on a live task — cancel its engine work.
+        catcatchNotifier.removeTask(taskId);
         execNotifier.updateSubTaskStatus(
           execId,
           flowSubTask.id,
@@ -159,18 +191,18 @@ Future<String> executeCatCatchBlock({
         );
       }
     }
-
-    if (DateTime.now().difference(startTime) > maxWait) {
-      execNotifier.updateSubTaskStatus(
-        execId,
-        flowSubTask.id,
-        TaskStatus.failed,
-      );
-      throw BlockExecutionException(
-        '下载超时',
-        blockType: def.typeKey.name,
-        blockTitle: def.label,
-      );
-    }
   }
+}
+
+/// Compact signature of everything that constitutes "visible progress" for
+/// a CatCatch task: status, per-step completion flags + progress, the
+/// selected media, and the pending-confirm flag.
+String _progressSignatureOf(catcatch.CatCatchTask? task) {
+  if (task == null) return '';
+  final steps = task.steps
+      .map((s) =>
+          '${s.type.name}:${s.completed}:${s.skipped}:${s.failed}:${s.progress}')
+      .join('|');
+  return '${task.status.name}|${task.selectedMedia?.url}|'
+      '${task.metadata['pendingConfirm']}|$steps';
 }

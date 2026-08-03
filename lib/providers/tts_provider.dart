@@ -5,6 +5,7 @@ import 'provider_config.dart';
 import 'chat_api_provider.dart';
 
 import '../utils/audio_utils.dart';
+import '../utils/http_timeout.dart';
 
 /// 合成异常 — 携带原始请求体和原始响应体
 class SynthesisException implements Exception {
@@ -94,8 +95,13 @@ class CustomTTSProvider extends BaseTTSProvider {
             if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
             ...openRouterAppHeaders,
           },
+          // Layered timeouts: fast-fail on connect/upload issues; the
+          // response bound is deliberately long (60 min) — a slow-but-
+          // healthy TTS server computing a long utterance must not be
+          // dropped (the old 30s receive timeout killed them).
           connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 30),
+          sendTimeout: const Duration(minutes: 2),
+          receiveTimeout: receiveTimeoutFallback,
         ));
 
   @override
