@@ -54,7 +54,17 @@ class CatCatchPage extends ConsumerStatefulWidget {
   final String? initialUrl;
   final int? initialDurationSec;
 
-  const CatCatchPage({super.key, this.initialUrl, this.initialDurationSec});
+  /// Builder for the built-in browser page pushed from the app bar.
+  /// Overridable in tests to exercise the capture hand-off without a
+  /// platform WebView.
+  final WidgetBuilder? browserPageBuilder;
+
+  const CatCatchPage({
+    super.key,
+    this.initialUrl,
+    this.initialDurationSec,
+    this.browserPageBuilder,
+  });
 
   @override
   ConsumerState<CatCatchPage> createState() => _CatCatchPageState();
@@ -108,6 +118,58 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     setState(() {
       _tasks.removeAt(index);
     });
+  }
+
+  // ====================================================================
+  // 内置浏览器捕获回传
+  // ====================================================================
+
+  /// 打开内置浏览器并等待捕获结果。
+  ///
+  /// 用户在内置浏览器中确认捕获时，BrowserPage 会以选中的 URL 作为
+  /// pop 结果返回（见 BrowserPage._onConfirmCapture 的契约注释）；
+  /// 普通返回时结果为 null，不产生任何任务卡片。
+  Future<void> _openBrowser() async {
+    final captured = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: widget.browserPageBuilder ??
+            (_) => const BrowserPage(initialUrl: 'https://www.google.com'),
+      ),
+    );
+    handleBrowserCapture(captured);
+  }
+
+  /// 将浏览器捕获到的 URL 预填到新的任务卡片。
+  /// [captured] 为 null/空（普通返回）时不做任何事；无法解析的 URL
+  /// 提示无效而不预填。
+  void handleBrowserCapture(String? captured) {
+    if (!mounted || captured == null || captured.isEmpty) return;
+    final trimmed = captured.trim();
+    if (!_isValidUrl(trimmed)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('捕获的URL无效'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    _addTaskEntry(initialUrl: trimmed);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('已从浏览器捕获: ${_shortName(trimmed)}'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// URL 的最后一段路径；空（如尾部带斜杠）时回退为 URL 本身。
+  static String _shortName(String url) {
+    final last = url.split('/').last;
+    return last.isEmpty ? url : last;
   }
 
   void _triggerRebuild() {
@@ -233,13 +295,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
           IconButton(
             icon: const Icon(Icons.language, size: 20),
             tooltip: '内置浏览器',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    const BrowserPage(initialUrl: 'https://www.google.com'),
-              ),
-            ),
+            onPressed: _openBrowser,
           ),
         ],
       ),

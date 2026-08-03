@@ -30,6 +30,33 @@ class BackupLocationManager {
 
   static const String _androidSafUriKey = 'backup_saf_uri';
 
+  static String? _testBackupRoot;
+  static String? _testLogRoot;
+
+  /// 测试环境下的备份根目录，每个测试 isolate（测试文件）独立。
+  ///
+  /// 并行运行的测试文件共享 systemTemp，若都使用同一个固定子目录，
+  /// 各文件 setUp 中的 `delete(recursive: true)` 会互相删除对方正在
+  /// 使用的备份文件，导致偶发失败。路径在同一 isolate 内缓存，
+  /// 保证单个测试文件内多次解析结果一致。
+  static String get testBackupRoot {
+    final cached = _testBackupRoot;
+    if (cached != null) return cached;
+    final dir = Directory.systemTemp.createTempSync('stroom_backup_test_');
+    _testBackupRoot = dir.path;
+    return dir.path;
+  }
+
+  /// 测试环境下的日志根目录，规则与 [testBackupRoot] 相同（每个测试
+  /// isolate 独立，避免并行测试文件互相删除日志目录）。
+  static String get testLogRoot {
+    final cached = _testLogRoot;
+    if (cached != null) return cached;
+    final dir = Directory.systemTemp.createTempSync('stroom_log_test_');
+    _testLogRoot = dir.path;
+    return dir.path;
+  }
+
   /// Android SAF 专用 MethodChannel。
   static const MethodChannel _safChannel =
       MethodChannel('com.johntsui.stroom/saf');
@@ -56,7 +83,7 @@ class BackupLocationManager {
     // 测试环境
     try {
       if (Platform.environment['FLUTTER_TEST'] == 'true') {
-        return '${Directory.systemTemp.path}/stroom_backup_test';
+        return testBackupRoot;
       }
     } catch (e) {
       debugPrint('[BackupLocationManager] 检查测试环境失败: $e');
@@ -196,7 +223,7 @@ class BackupLocationManager {
     // 测试环境
     try {
       if (Platform.environment['FLUTTER_TEST'] == 'true') {
-        return '${Directory.systemTemp.path}/stroom_log_test';
+        return testLogRoot;
       }
     } catch (e) {
       debugPrint('[BackupLocationManager] 检查测试环境失败: $e');

@@ -17,6 +17,20 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  tearDownAll(() async {
+    // Remove the per-isolate test roots (backup + logs) so parallel runs
+    // do not accumulate directories in systemTemp.
+    for (final root in [
+      BackupLocationManager.testBackupRoot,
+      BackupLocationManager.testLogRoot
+    ]) {
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+    }
+  });
+
   // ==================================================================
   // getDisplayPath — 用户友好路径
   // ==================================================================
@@ -276,11 +290,11 @@ void main() {
       // 模拟保存 SAF URI
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('backup_saf_uri', _fakeUri(1));
-      expect(await prefs.getString('backup_saf_uri'), isNotNull);
+      expect(prefs.getString('backup_saf_uri'), isNotNull);
 
       await BackupLocationManager.clearStorageAccess();
 
-      expect(await prefs.getString('backup_saf_uri'), isNull);
+      expect(prefs.getString('backup_saf_uri'), isNull);
     });
   });
 
