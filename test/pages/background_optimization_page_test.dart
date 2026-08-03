@@ -708,12 +708,10 @@ void main() {
         // ...and the native close interception is released (argument
         // must be false), so the window closes normally instead of
         // minimizing.
-        final preventCloseCalls = windowCalls
-            .where((c) => c.method == 'setPreventClose')
-            .toList();
+        final preventCloseCalls =
+            windowCalls.where((c) => c.method == 'setPreventClose').toList();
         expect(preventCloseCalls, isNotEmpty);
-        expect(preventCloseCalls.last.arguments,
-            {'isPreventClose': false});
+        expect(preventCloseCalls.last.arguments, {'isPreventClose': false});
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }

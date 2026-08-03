@@ -76,8 +76,7 @@ void main() {
         reason: '通知 ID 不能为负数（部分 ROM 对负 ID 处理异常）');
   });
 
-  test('notifications are not sent when the user has disabled them',
-      () async {
+  test('notifications are not sent when the user has disabled them', () async {
     SharedPreferences.setMockInitialValues({
       'notifications_enabled': false,
     });
@@ -92,7 +91,6 @@ void main() {
       success: true,
     );
 
-    expect(shownIds, isEmpty,
-        reason: '关闭通知设置后不应发送任何系统通知');
+    expect(shownIds, isEmpty, reason: '关闭通知设置后不应发送任何系统通知');
   });
 }

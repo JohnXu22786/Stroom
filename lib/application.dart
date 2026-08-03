@@ -88,8 +88,7 @@ class _ApplicationState extends ConsumerState<Application>
       // 若读取失败，保留"关闭即最小化"的默认行为，应用不会意外退出。
       await windowManager.setPreventClose(true);
       final closeMinimizes = await isDesktopCloseMinimizeEnabled();
-      debugPrint(
-          '[Application] 桌面端窗口关闭行为已启用（最小化=$closeMinimizes）');
+      debugPrint('[Application] 桌面端窗口关闭行为已启用（最小化=$closeMinimizes）');
     } catch (e) {
       // 窗口管理器不可用（如部分 Linux 桌面环境）时降级为默认关闭行为。
       // 监听器已注册，后续页面重新启用拦截时仍能正确处理关闭事件。
