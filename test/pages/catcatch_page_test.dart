@@ -380,4 +380,122 @@ void main() {
       expect(find.text('请输入视频时长'), findsNothing);
     });
   });
+
+  // ====================================================================
+  // 内置浏览器捕获回传
+  // ====================================================================
+
+  group('CatCatchPage - browser capture hand-off', () {
+    // A stand-in for BrowserPage (which needs a platform WebView and cannot
+    // run in widget tests): pops with [popResult] like the real page.
+    Widget fakeBrowser({required String? popResult}) {
+      return Scaffold(
+        body: Builder(
+          builder: (buttonContext) => TextButton(
+            onPressed: () => Navigator.pop(buttonContext, popResult),
+            child: const Text('fake browser'),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('captured URL pre-fills a new task card', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: CatCatchPage(
+              browserPageBuilder: (_) =>
+                  fakeBrowser(popResult: 'https://cdn.example.com/video.mp4'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Open the built-in browser (fake stand-in).
+      await tester.tap(find.byIcon(Icons.language));
+      await tester.pumpAndSettle();
+      expect(find.text('fake browser'), findsOneWidget);
+
+      // Confirm a capture in the browser — it pops with the selected URL.
+      await tester.tap(find.text('fake browser'));
+      await tester.pumpAndSettle();
+
+      // Back on the page: a new task card is pre-filled with the URL and a
+      // confirmation snackbar is shown.
+      expect(find.text('https://cdn.example.com/video.mp4'), findsOneWidget);
+      expect(find.textContaining('已从浏览器捕获'), findsOneWidget);
+    });
+
+    testWidgets('regular browser back adds no task card', (tester) async {
+      // Plain back navigation pops with null — the hand-off must no-op.
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: CatCatchPage(
+              browserPageBuilder: (_) => fakeBrowser(popResult: null),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.language));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('fake browser'));
+      await tester.pumpAndSettle();
+
+      // Still the empty state: no task card, no snackbar.
+      expect(find.text('暂无下载任务'), findsOneWidget);
+      expect(find.byType(TextFormField), findsNothing);
+      expect(find.textContaining('已从浏览器捕获'), findsNothing);
+    });
+
+    testWidgets('empty capture result adds no task card', (tester) async {
+      // Regression: an empty (but non-null) result must also no-op.
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: CatCatchPage(
+              browserPageBuilder: (_) => fakeBrowser(popResult: ''),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.language));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('fake browser'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('暂无下载任务'), findsOneWidget);
+      expect(find.textContaining('已从浏览器捕获'), findsNothing);
+    });
+
+    testWidgets('invalid captured URL shows error and adds no card',
+        (tester) async {
+      // Regression: a capture that is not a valid URL must not pre-fill a
+      // card whose start button could never be enabled.
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: CatCatchPage(
+              browserPageBuilder: (_) => fakeBrowser(popResult: 'not-a-url'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.language));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('fake browser'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('捕获的URL无效'), findsOneWidget);
+      expect(find.byType(TextFormField), findsNothing);
+    });
+  });
 }

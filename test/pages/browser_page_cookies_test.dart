@@ -3,8 +3,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/browser_cookie_service.dart';
 
 // Note: Full BrowserPage widget tests require platform-native InAppWebView
-// which cannot run in unit test mode. These tests verify the cookie retention
-// behavior at the service layer instead.
+// which cannot run in unit test mode. These tests verify the cookie lifecycle
+// that BrowserPage drives through BrowserCookieService:
+//   1. visited-domain tracking (feeds per-domain persistence on platforms
+//      without CookieManager.getAllCookies),
+//   2. the restore-on-create path,
+//   3. the dispose path (persist when retention is enabled, clear when not).
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -19,105 +23,115 @@ void main() {
   });
 
   // ====================================================================
-  // Cookie retention service behavior
+  // Visited-domain tracking (called from BrowserPage.onLoadStop)
   // ====================================================================
 
-  group('BrowserPage cookie retention service', () {
-    test('retention mode defaults to false', () async {
-      expect(await BrowserCookieService.getRetentionMode(), isFalse);
+  group('noteVisitedUrl (BrowserPage.onLoadStop)', () {
+    test('records the host of an https URL', () async {
+      BrowserCookieService.noteVisitedUrl('https://m.example.com/a/b?c=1');
+      expect(BrowserCookieService.visitedDomainsForTest,
+          contains('m.example.com'));
     });
 
-    test('toggling retention mode on then off works', () async {
-      await BrowserCookieService.toggleRetentionMode();
-      expect(await BrowserCookieService.getRetentionMode(), isTrue);
-
-      await BrowserCookieService.toggleRetentionMode();
-      expect(await BrowserCookieService.getRetentionMode(), isFalse);
-    });
-
-    test('persists retention state across set/get cycles', () async {
-      await BrowserCookieService.setRetentionMode(true);
-      expect(await BrowserCookieService.getRetentionMode(), isTrue);
-    });
-
-    test('toggling twice returns to original state', () async {
-      final initialState = await BrowserCookieService.getRetentionMode();
-
-      await BrowserCookieService.toggleRetentionMode();
-      await BrowserCookieService.toggleRetentionMode();
-
+    test('strips the port from the recorded host', () async {
+      BrowserCookieService.noteVisitedUrl('https://example.com:8080/page');
       expect(
-          await BrowserCookieService.getRetentionMode(), equals(initialState));
+          BrowserCookieService.visitedDomainsForTest, contains('example.com'));
+    });
+
+    test('deduplicates repeated visits', () async {
+      BrowserCookieService.noteVisitedUrl('https://example.com/1');
+      BrowserCookieService.noteVisitedUrl('https://example.com/2');
+      expect(BrowserCookieService.visitedDomainsForTest.length, 1);
+    });
+
+    test('ignores URLs without a host (about:, data:, invalid)', () async {
+      BrowserCookieService.noteVisitedUrl('about:blank');
+      BrowserCookieService.noteVisitedUrl('data:text/plain,hello');
+      BrowserCookieService.noteVisitedUrl('not a url');
+      expect(BrowserCookieService.visitedDomainsForTest, isEmpty);
+    });
+
+    test('caps the tracked host set to avoid unbounded growth', () async {
+      for (var i = 0; i < BrowserCookieService.maxVisitedDomains + 10; i++) {
+        BrowserCookieService.noteVisitedUrl('https://site$i.example.com/');
+      }
+      expect(
+        BrowserCookieService.visitedDomainsForTest.length,
+        BrowserCookieService.maxVisitedDomains,
+      );
+    });
+
+    test('revisiting a tracked host refreshes its recency', () async {
+      // Fill the set to capacity.
+      for (var i = 0; i < BrowserCookieService.maxVisitedDomains; i++) {
+        BrowserCookieService.noteVisitedUrl('https://site$i.example.com/');
+      }
+      // Revisit the OLDEST host — it must move to the most-recent position.
+      BrowserCookieService.noteVisitedUrl('https://site0.example.com/');
+      // Insert a brand-new host at capacity — the oldest host (site1) is
+      // evicted, and the revisited site0 survives.
+      BrowserCookieService.noteVisitedUrl('https://brand-new.example.com/');
+
+      final tracked = BrowserCookieService.visitedDomainsForTest;
+      expect(tracked.contains('site0.example.com'), isTrue,
+          reason: 'a revisited host must not be evicted by the next insert');
+      expect(tracked.contains('site1.example.com'), isFalse,
+          reason: 'the oldest never-revisited host is the one evicted');
+      expect(tracked.length, BrowserCookieService.maxVisitedDomains);
     });
   });
 
   // ====================================================================
-  // Cookie persistence integration
+  // Restore-on-create path (BrowserPage.onWebViewCreated)
   // ====================================================================
 
-  group('Cookie persistence integration', () {
-    test('persistCookiesToFile with retention enabled stores cookies',
+  group('restoreCookiesFromFile (on WebView create)', () {
+    test('leaves the persisted store intact so it can be restored later',
         () async {
       await BrowserCookieService.setRetentionMode(true);
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'example.com', 'name': 'session', 'value': 'abc'},
+      ]);
 
-      final testCookies = [
-        {
-          'domain': 'example.com',
-          'name': 'session',
-          'value': 'abc',
-          'path': '/',
-        },
-      ];
-
-      await BrowserCookieService.persistCookiesRawForTest(testCookies);
-      final cookies = await BrowserCookieService.getCookiesFromFile();
-      expect(cookies, isNotEmpty);
-      expect(cookies['example.com']?.first['name'], equals('session'));
+      await BrowserCookieService.restoreCookiesFromFile();
+      expect(await BrowserCookieService.getCookiesFromFile(), isNotEmpty);
     });
+  });
 
-    test('clearPersistedCookies called when retention disabled', () async {
-      // When retention is disabled and browser closes, cookies should be cleared
+  // ====================================================================
+  // Dispose path (BrowserPage.dispose)
+  // ====================================================================
+
+  group('dispose-time cookie handling', () {
+    test('retention disabled → clearAllCookies wipes the persisted store',
+        () async {
       await BrowserCookieService.setRetentionMode(false);
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'example.com', 'name': 'session', 'value': 'abc'},
+      ]);
 
-      final testCookies = [
-        {
-          'domain': 'example.com',
-          'name': 'session',
-          'value': 'abc',
-          'path': '/',
-        },
-      ];
-
-      await BrowserCookieService.persistCookiesRawForTest(testCookies);
-      await BrowserCookieService.clearPersistedCookies();
-
-      final cookies = await BrowserCookieService.getCookiesFromFile();
-      expect(cookies, isEmpty);
+      final ok = await BrowserCookieService.clearAllCookies();
+      expect(ok, isTrue);
+      expect(await BrowserCookieService.getCookiesFromFile(), isEmpty);
     });
 
-    test('getCookiesGrouped returns combined data from file', () async {
-      final testCookies = [
-        {
-          'domain': 'store.example.com',
-          'name': 'token',
-          'value': 'xyz',
-          'path': '/',
-        },
-      ];
-
-      await BrowserCookieService.persistCookiesRawForTest(testCookies);
-      final grouped = await BrowserCookieService.getCookiesGrouped();
-
-      expect(grouped.containsKey('store.example.com'), isTrue);
-      expect(grouped['store.example.com']!.first['name'], equals('token'));
-    });
-
-    test('persistCookiesToFile with empty cookies is safe', () async {
+    test('retention enabled → persisted cookies survive', () async {
       await BrowserCookieService.setRetentionMode(true);
-      // Should not throw when there are no cookies
-      await BrowserCookieService.persistCookiesRawForTest([]);
-      final cookies = await BrowserCookieService.getCookiesFromFile();
-      expect(cookies, isEmpty);
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'example.com', 'name': 'session', 'value': 'abc'},
+      ]);
+
+      // The persist path (persistCookiesToFile) is a no-op in test mode
+      // (no platform cookie store); the stored data must not be clobbered.
+      await BrowserCookieService.persistCookiesToFile();
+      expect(await BrowserCookieService.getCookiesFromFile(), isNotEmpty);
+    });
+
+    test('toggle driven by the AppBar button persists across reads', () async {
+      final newValue = await BrowserCookieService.toggleRetentionMode();
+      expect(newValue, isTrue);
+      expect(await BrowserCookieService.getRetentionMode(), isTrue);
     });
   });
 }
