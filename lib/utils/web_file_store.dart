@@ -63,6 +63,13 @@ class WebFileStore {
           }
         },
       );
+    } catch (e) {
+      // Open failed — fail the waiters instead of leaving them hanging.
+      for (final c in _pendingOpens) {
+        c.completeError(e);
+      }
+      _pendingOpens.clear();
+      rethrow;
     } finally {
       _openCount--;
     }
