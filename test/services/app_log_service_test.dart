@@ -18,6 +18,15 @@ void main() {
     AppLogService.enableFileLogging();
   });
 
+  tearDownAll(() async {
+    // Remove the per-isolate test log root so parallel runs do not
+    // accumulate directories in systemTemp.
+    final logDir = await AppLogService.getLogDir();
+    if (await logDir.exists()) {
+      await logDir.delete(recursive: true);
+    }
+  });
+
   // ==================================================================
   // In-memory buffer — logs are buffered before being flushed to disk
   // ==================================================================

@@ -350,7 +350,7 @@ class AppLogService {
   /// - macOS:   ~/Documents/Stroom/Logs
   /// - Linux:   ~/Documents/Stroom/Logs
   /// - Android: 通过 SAF 选择 Documents 目录下的 Stroom/Logs
-  /// - iOS:     <app_documents>/Stroom/Logs
+  /// - iOS:     `<app_documents>`/Stroom/Logs
   ///
   /// 注意：父目录 Stroom/ 与自动备份目录 (Stroom/AutoBackups) 保持一致，
   /// 方便用户在同一处查看所有 Stroom 数据。
@@ -358,10 +358,10 @@ class AppLogService {
   /// Android 上优先使用 SAF 路径（与备份相同），如果 SAF 未配置则
   /// 回退到应用外部存储目录，确保日志不在应用私有数据目录内。
   static Future<String> _getLogsRootPath() async {
-    // 测试环境
+    // 测试环境：每个测试 isolate 独立目录（与备份根目录同规则）
     try {
       if (Platform.environment['FLUTTER_TEST'] == 'true') {
-        return '${Directory.systemTemp.path}/stroom_log_test';
+        return BackupLocationManager.testLogRoot;
       }
     } catch (_) {}
 

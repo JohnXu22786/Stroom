@@ -16,6 +16,16 @@ void main() {
     AppStorage.resetCache();
   });
 
+  tearDownAll(() async {
+    // Remove the per-isolate test backup root so parallel runs do not
+    // accumulate directories in systemTemp.
+    final root = await DataMigrationService.getExternalBackupRootPath();
+    final dir = Directory(root);
+    if (await dir.exists()) {
+      await dir.delete(recursive: true);
+    }
+  });
+
   group('DataMigrationService - accessible backup path', () {
     test('getExternalBackupRootPath returns non-null on all platforms',
         () async {
@@ -44,6 +54,24 @@ void main() {
         isTrue,
         reason: 'Backup root should reference backup directory name',
       );
+    });
+
+    test('backup root is stable within the test isolate', () async {
+      // Regression: parallel test files share systemTemp and must each use
+      // their own per-isolate root (BackupLocationManager.testBackupRoot);
+      // within one isolate (one test file) the path must not change between
+      // calls, otherwise setUp/cleanup in the backup tests would break.
+      final root1 = await DataMigrationService.getExternalBackupRootPath();
+      final root2 = await DataMigrationService.getExternalBackupRootPath();
+      expect(root1, root2,
+          reason: 'Repeated resolution must return the same test root');
+      expect(root1.contains('stroom_backup_test'), isTrue,
+          reason: 'Test root must stay under the stroom_backup_test prefix');
+      // Discriminator: the pre-fix shared-root implementation resolved to
+      // exactly this fixed path — unique per-isolate roots must differ.
+      expect(root1,
+          isNot(equals('${Directory.systemTemp.path}/stroom_backup_test')),
+          reason: 'Test root must be unique per isolate, not the shared path');
     });
 
     test('getExternalBackupRootPath returns non-empty path', () async {

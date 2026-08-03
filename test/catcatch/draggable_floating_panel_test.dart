@@ -307,5 +307,196 @@ void main() {
       // Content should be visible again
       expect(find.textContaining('video.mp4'), findsOneWidget);
     });
+
+    testWidgets('long URL list scrolls and the last item becomes reachable',
+        (tester) async {
+      // Regression: the URL list must scroll internally (the panel is
+      // capped at 320px) instead of being clipped or overflowing.
+      final manyUrls = List.generate(
+        20,
+        (i) => 'https://cdn.example.com/video$i.mp4',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DraggableFloatingPanel(
+              detectedUrls: manyUrls,
+              onConfirmCapture: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      // Count badge reflects the full list
+      expect(find.text('20'), findsOneWidget);
+      // First items visible, last item not built yet (lazy ListView)
+      expect(find.textContaining('video0.mp4'), findsOneWidget);
+      expect(find.textContaining('video19.mp4'), findsNothing);
+
+      // Scroll the list until the last item becomes visible
+      await tester.scrollUntilVisible(
+        find.textContaining('video19.mp4'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+
+      expect(find.textContaining('video19.mp4'), findsOneWidget);
+    });
+
+    testWidgets('stale selection is cleared when the URL list shrinks',
+        (tester) async {
+      // Regression: BrowserPage mutates one list instance in place (clear +
+      // add on navigation) while the panel previously compared list identity
+      // in didUpdateWidget — so a selection made before a navigation
+      // survived the list reset and crashed the action bar with a RangeError.
+      // This test mutates the SAME list instance in place so the identity
+      // check can never fire; the out-of-bounds guard prevents the crash.
+      String? capturedUrl;
+
+      // One shared list, mutated in place — exactly how BrowserPage feeds
+      // the panel across navigations.
+      final urls = <String>[
+        'https://cdn.example.com/video1.mp4',
+        'https://cdn.example.com/video2.mp4',
+        'https://cdn.example.com/video3.mp4',
+      ];
+
+      Future<void> pump() {
+        return tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: DraggableFloatingPanel(
+                detectedUrls: urls,
+                onConfirmCapture: (url) => capturedUrl = url,
+              ),
+            ),
+          ),
+        );
+      }
+
+      await pump();
+
+      // Select the last item
+      await tester.tap(find.textContaining('video3.mp4'));
+      await tester.pumpAndSettle();
+
+      // Navigation: same list instance is cleared and refilled with one URL.
+      urls.clear();
+      urls.add('https://cdn.example.com/video4.mp4');
+      await pump();
+      await tester.pumpAndSettle();
+
+      // No crash; the confirm button is disabled again.
+      final button = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, '确认捕获'),
+      );
+      expect(button.onPressed, isNull);
+
+      // Nothing can be captured with a stale selection.
+      expect(capturedUrl, isNull);
+    });
+
+    testWidgets('selection is dropped when the detection epoch changes',
+        (tester) async {
+      // Regression: a new page can detect the SAME number of URLs as the
+      // previous one — a selection kept by index would highlight and
+      // capture the wrong URL. The parent bumps detectionEpoch on every
+      // navigation; the panel must clear the selection then.
+      String? capturedUrl;
+
+      Future<void> pump({required int epoch, required List<String> urls}) {
+        return tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: DraggableFloatingPanel(
+                detectionEpoch: epoch,
+                detectedUrls: urls,
+                onConfirmCapture: (url) => capturedUrl = url,
+              ),
+            ),
+          ),
+        );
+      }
+
+      await pump(
+        epoch: 0,
+        urls: const [
+          'https://cdn.example.com/video1.mp4',
+          'https://cdn.example.com/video2.mp4',
+        ],
+      );
+
+      // Select the second URL.
+      await tester.tap(find.textContaining('video2.mp4'));
+      await tester.pumpAndSettle();
+
+      // New page with the same number of URLs, epoch bumped.
+      await pump(
+        epoch: 1,
+        urls: const [
+          'https://cdn.example.com/audio1.mp3',
+          'https://cdn.example.com/audio2.mp3',
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      // The selection must be gone — confirming would otherwise capture
+      // audio2.mp3 under the old selection.
+      final button = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, '确认捕获'),
+      );
+      expect(button.onPressed, isNull);
+      expect(capturedUrl, isNull);
+
+      // Selecting the first new URL captures it correctly.
+      await tester.tap(find.textContaining('audio1.mp3'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确认捕获'));
+      await tester.pumpAndSettle();
+      expect(capturedUrl, 'https://cdn.example.com/audio1.mp3');
+    });
+
+    testWidgets('hidden→shown transition resets minimized and selection',
+        (tester) async {
+      // Regression: when the panel is hidden and shown again, it must come
+      // back expanded with a cleared selection (its default state).
+      Future<void> pumpWith(bool visible) {
+        return tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: DraggableFloatingPanel(
+                visible: visible,
+                detectedUrls: const ['https://cdn.example.com/video.mp4'],
+                onConfirmCapture: (_) {},
+              ),
+            ),
+          ),
+        );
+      }
+
+      await pumpWith(true);
+      await tester.pumpAndSettle();
+
+      // Select the URL and minimize the panel
+      await tester.tap(find.textContaining('video.mp4'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.expand_more));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('video.mp4'), findsNothing);
+
+      // Hide then show again
+      await pumpWith(false);
+      await tester.pumpAndSettle();
+      await pumpWith(true);
+      await tester.pumpAndSettle();
+
+      // Panel is expanded again and the selection was cleared.
+      expect(find.textContaining('video.mp4'), findsOneWidget);
+      final button = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, '确认捕获'),
+      );
+      expect(button.onPressed, isNull);
+    });
   });
 }

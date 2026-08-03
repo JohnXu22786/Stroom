@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 // Full browser page tests require platform-native WebView which cannot
 // run in unit test mode. Integration tests with flutter_driver or
 // integration_test are needed for the full InAppWebView page rendering.
+// Panel-behavior tests (rendering, selection, minimize, drag) live in
+// test/catcatch/draggable_floating_panel_test.dart.
 
 import 'package:stroom/catcatch/engine/js_hook_script.dart';
 import 'package:stroom/catcatch/widgets/draggable_floating_panel.dart';
@@ -52,109 +54,13 @@ class _TapTestHelper {
 
 void main() {
   group('BrowserPage sniffing architecture', () {
-    test('JsHookScript is available as constant string', () {
+    test('hook script references the CatCatchChannel contract', () {
+      // Regression: BrowserPage registers a JavaScript handler named
+      // 'CatCatchChannel' and the hook must post to exactly that channel
+      // through flutter_inappwebview's callHandler.
       expect(JsHookScript.script, isNotEmpty);
-    });
-
-    testWidgets('DraggableFloatingPanel can be composed in a Stack layout',
-        (tester) async {
-      // Regression: The panel must render its content when placed in a Stack
-      // above other content, which is the production layout in BrowserPage.
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Stack(
-              children: [
-                Container(
-                  color: Colors.white,
-                  width: 400,
-                  height: 800,
-                ),
-                DraggableFloatingPanel(
-                  detectedUrls: ['https://cdn.example.com/video.mp4'],
-                  onConfirmCapture: (_) {},
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-
-      expect(find.textContaining('video.mp4'), findsOneWidget);
-    });
-
-    test('JavaScriptChannel receives messages from JS hook', () {
       expect(JsHookScript.script, contains('CatCatchChannel'));
-      expect(
-        JsHookScript.script,
-        contains('flutter_inappwebview'),
-      );
-    });
-
-    testWidgets(
-        'DraggableFloatingPanel with many URLs shows scrollable content',
-        (tester) async {
-      final manyUrls = List.generate(
-        20,
-        (i) => 'https://cdn.example.com/video$i.mp4',
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: DraggableFloatingPanel(
-              detectedUrls: manyUrls,
-              onConfirmCapture: (_) {},
-            ),
-          ),
-        ),
-      );
-
-      expect(find.textContaining('video0.mp4'), findsOneWidget);
-      expect(find.textContaining('video1.mp4'), findsOneWidget);
-      expect(find.text('20'), findsOneWidget);
-    });
-
-    testWidgets('DraggableFloatingPanel close button fires onClose callback',
-        (tester) async {
-      bool onCloseCalled = false;
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: DraggableFloatingPanel(
-              detectedUrls: const ['https://cdn.example.com/video.mp4'],
-              onConfirmCapture: (_) {},
-              onClose: () {
-                onCloseCalled = true;
-              },
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.byIcon(Icons.close));
-      await tester.pumpAndSettle();
-
-      expect(onCloseCalled, isTrue);
-      expect(find.byIcon(Icons.close), findsOneWidget);
-
-      // When parent sets visible: false, the panel hides entirely
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: DraggableFloatingPanel(
-              detectedUrls: const ['https://cdn.example.com/video.mp4'],
-              onConfirmCapture: (_) {},
-              onClose: () {},
-              visible: false,
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.byIcon(Icons.close), findsNothing);
+      expect(JsHookScript.script, contains('flutter_inappwebview'));
     });
   });
 
@@ -221,27 +127,6 @@ void main() {
 
       // All taps should reach the background since the panel is hidden
       expect(helper.backgroundTapCount, greaterThan(0));
-    });
-
-    testWidgets('DraggableFloatingPanel empty state is shown for no URLs',
-        (tester) async {
-      // Regression: When there are no detected URLs, the panel should show
-      // a meaningful empty state rather than a broken or empty container.
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: DraggableFloatingPanel(
-              detectedUrls: const [],
-              onConfirmCapture: (_) {},
-            ),
-          ),
-        ),
-      );
-
-      // Should show the empty state text
-      expect(find.textContaining('暂无检测到媒体资源'), findsOneWidget);
-      // No URL list items should be rendered
-      expect(find.byIcon(Icons.videocam), findsNothing);
     });
   });
 }
