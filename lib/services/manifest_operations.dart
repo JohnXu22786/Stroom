@@ -400,12 +400,6 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  /// Get the storage directory path (Native only).
-  Future<String> get storageDirPath async {
-    if (_useWebFileStore) return '';
-    return _storageDir;
-  }
-
   /// Get a file's absolute path on disk (Native only).
   Future<String?> readFilePath(String fileName) async {
     try {
