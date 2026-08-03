@@ -649,7 +649,9 @@ class TaskExecutor {
             markExecutorStep(steps, 5,
                 running: true, progress: progress.clamp(0, 100));
             onUpdate(task.copyWith(
-                steps: steps, progress: calcExecutorProgress(steps)));
+                steps: steps,
+                progress: calcExecutorProgress(steps),
+                downloadedBytes: received));
           },
           cancelToken: cancelToken,
           taskId: task.id,

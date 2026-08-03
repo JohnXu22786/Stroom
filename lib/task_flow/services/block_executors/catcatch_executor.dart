@@ -195,14 +195,16 @@ Future<String> executeCatCatchBlock({
 }
 
 /// Compact signature of everything that constitutes "visible progress" for
-/// a CatCatch task: status, per-step completion flags + progress, the
-/// selected media, and the pending-confirm flag.
+/// a CatCatch task: status, per-step completion flags + progress, received
+/// bytes (byte-granularity — percent progress stays 0 for chunked
+/// downloads without Content-Length), the selected media, and the
+/// pending-confirm flag.
 String _progressSignatureOf(catcatch.CatCatchTask? task) {
   if (task == null) return '';
   final steps = task.steps
       .map((s) =>
           '${s.type.name}:${s.completed}:${s.skipped}:${s.failed}:${s.progress}')
       .join('|');
-  return '${task.status.name}|${task.selectedMedia?.url}|'
-      '${task.metadata['pendingConfirm']}|$steps';
+  return '${task.status.name}|${task.downloadedBytes}|'
+      '${task.selectedMedia?.url}|${task.metadata['pendingConfirm']}|$steps';
 }

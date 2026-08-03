@@ -17,6 +17,7 @@ catcatch.CatCatchTask _task(
   catcatch.TaskStatus status, {
   required String id,
   int progress = 0,
+  int downloadedBytes = 0,
   String? downloadedPath,
 }) {
   return catcatch.CatCatchTask(
@@ -27,6 +28,7 @@ catcatch.CatCatchTask _task(
     expectedDurationSec: 0,
     createdAt: DateTime(2026, 1, 1),
     progress: progress,
+    downloadedBytes: downloadedBytes,
     steps: [
       catcatch.StepStatus(
         type: catcatch.StepType.fetching,
@@ -146,6 +148,60 @@ void main() {
       expect(result, 'C:\\out\\video.mp4');
       expect(execNotifier.state[0].subTasks[0].status, TaskStatus.completed);
       verifyNever(() => notifier.removeTask(any()));
+    });
+
+    test(
+        'byte progress (chunked download, no Content-Length) keeps a '
+        'healthy task alive even when percent progress stays 0', () async {
+      final notifier = _MockCatCatchNotifier();
+      var reads = 0;
+      late String capturedTaskId;
+      when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId')))
+          .thenAnswer((inv) {
+        capturedTaskId = inv.namedArguments[#taskId] as String;
+        return capturedTaskId;
+      });
+      when(() => notifier.state).thenAnswer((_) {
+        reads++;
+        // Chunked download: percent progress stays 0, but bytes stream in
+        // for the first several reads (healthy) — then byte progress stops
+        // (simulating a download that finally stalls).
+        if (reads <= 5) {
+          return [
+            _task(catcatch.TaskStatus.running,
+                id: capturedTaskId, downloadedBytes: (reads - 1) * 1024 * 1024),
+          ];
+        }
+        return [
+          _task(catcatch.TaskStatus.running,
+              id: capturedTaskId, downloadedBytes: 5 * 1024 * 1024),
+        ];
+      });
+      when(() => notifier.removeTask(any())).thenReturn(null);
+
+      await expectLater(
+        executeCatCatchBlock(
+          def: BlockTypeDefinition.catcatch,
+          block: TaskFlowBlock(typeKey: BlockType.catcatch),
+          input: 'https://example.com/video',
+          execId: execId,
+          execNotifier: execNotifier,
+          flowSubTask: flowSubTask,
+          catcatchNotifier: notifier,
+          stallTimeout: const Duration(milliseconds: 100),
+        ),
+        throwsA(
+          isA<BlockExecutionException>().having(
+            (e) => e.message,
+            'message',
+            contains('下载无进展'),
+          ),
+        ),
+      );
+
+      // The stall fires only AFTER byte progress stops — while bytes were
+      // increasing (reads 2-5), no cancellation happened.
+      verify(() => notifier.removeTask(any())).called(1);
     });
   });
 }

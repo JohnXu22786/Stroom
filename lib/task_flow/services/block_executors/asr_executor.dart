@@ -96,6 +96,7 @@ Future<String> _callAsrApi({
   required String modelId,
   Map<String, dynamic> typeConfig = const {},
   List<CustomParam> customParams = const [],
+  CancelToken? cancelToken,
 }) async {
   // Layered timeouts: fast-fail on connect/upload issues, no artificial
   // kill for slow-but-healthy servers (only a 60-min silent-server bound).
@@ -126,6 +127,7 @@ Future<String> _callAsrApi({
       host,
       data: formData,
       options: Options(headers: {'Authorization': 'Bearer $apiKey'}),
+      cancelToken: cancelToken,
     );
     if (response.data is Map) return (response.data['text'] as String?) ?? '';
     return response.data.toString();
@@ -143,6 +145,7 @@ Future<String> executeAsrBlock({
   required FlowSubTask flowSubTask,
   required BackgroundTaskNotifier bgNotifier,
   required ProviderEntriesState providerEntries,
+  CancelToken? cancelToken,
 }) async {
   final inputBasename = p.basename(input);
   final title = '语音识别_${p.basenameWithoutExtension(inputBasename)}';
@@ -271,7 +274,17 @@ Future<String> executeAsrBlock({
       // Model-level custom params — the same list the ASR settings page
       // edits and the standalone ASR page sends.
       customParams: model.customParams,
+      cancelToken: cancelToken,
     );
+    // The flow may have been deleted while the request was in flight —
+    // don't save an orphaned text record.
+    if (!execNotifier.state.any((e) => e.id == execId)) {
+      throw BlockExecutionException(
+        '任务流已删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     bgNotifier.updateStep(taskId, 0, completed: true);
     bgNotifier.setResult(taskId, result);
 
