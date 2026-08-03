@@ -367,10 +367,14 @@ class _BrowserPageState extends State<BrowserPage> {
   void _onConfirmCapture(String selectedUrl) {
     debugPrint('[BrowserPage] User confirmed capture: $selectedUrl');
 
+    // Short display name; falls back to the URL for trailing-slash URLs.
+    final shortName = selectedUrl.split('/').last;
+    final displayName = shortName.isEmpty ? selectedUrl : shortName;
+
     // Show a snackbar with options
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('已捕获: ${selectedUrl.split('/').last}'),
+        content: Text('已捕获: $displayName'),
         duration: const Duration(seconds: 3),
         action: SnackBarAction(
           label: '下载',
