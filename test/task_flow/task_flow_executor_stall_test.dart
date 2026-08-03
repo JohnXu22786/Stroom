@@ -205,14 +205,15 @@ void main() {
 
       // The cancellation must only happen AFTER byte progress stopped:
       // reads 2-5 kept increasing the byte signal (healthy), read 6 sees
-      // the first unchanged value, read 7 exceeds the stall window and
-      // cancels. This asserts downloadedBytes actually participates in
-      // the stall signature.
+      // 5 MB (a change vs read 5's 4 MB — the bytes-branch boundary),
+      // read 7 is the first truly unchanged read and exceeds the stall
+      // window, so it cancels. This asserts downloadedBytes actually
+      // participates in the stall signature.
       expect(removeRead, greaterThanOrEqualTo(6),
           reason: 'removeTask must fire only after byte progress stalled, '
               'proving the byte signal keeps healthy downloads alive');
       expect(removeRead, 7,
-          reason: 'the second unchanged read must trigger the stall');
+          reason: 'the first unchanged read must trigger the stall');
     });
   });
 }

@@ -264,12 +264,22 @@ class DownloadManager {
       }
     }
 
+    // Seed the byte counter from restored parts so the published total
+    // never regresses across retries with restored segment progress.
+    var totalBytes = 0;
+    for (int i = 0; i < completedCount && i < total; i++) {
+      final partFile = File(p.join(tempDirPath, 'part_$i'));
+      if (await partFile.exists()) {
+        totalBytes += await partFile.length();
+      }
+    }
+
     // 并行下载
     final semaphore = Semaphore(concurrency);
     final futures = <Future<void>>[];
     // Total bytes across all segments (monotonic; no awaits inside the
     // accumulation, so the single-threaded event loop keeps it atomic).
-    var totalBytes = 0;
+    // Seeded above from restored parts.
 
     for (int i = completedCount; i < total; i++) {
       futures.add(downloadSingleSegment(
@@ -309,7 +319,13 @@ class DownloadManager {
     // 合并
     onProgress?.call(total, total, 95);
     final validParts = partFiles.whereType<String>().toList();
-    await mergeFiles(validParts, outputPath);
+    // Byte signal during the merge too — a multi-GB merge on slow storage
+    // can exceed the flow's stall window if the signature stays frozen.
+    var mergeBytes = 0;
+    await mergeFiles(validParts, outputPath, onBytes: (delta) {
+      mergeBytes += delta;
+      onBytes?.call(totalBytes + mergeBytes);
+    });
 
     // 清理临时目录
     try {
@@ -336,10 +352,12 @@ class DownloadManager {
   ///
   /// [inputPaths] 输入文件路径列表（按顺序）
   /// [outputPath] 输出文件路径
+  /// [onBytes] 每写入一个 chunk 后回调该 chunk 的字节数（用于停滞检测）
   static Future<void> mergeFiles(
     List<String> inputPaths,
-    String outputPath,
-  ) async {
+    String outputPath, {
+    void Function(int delta)? onBytes,
+  }) async {
     final outputFile = File(outputPath);
     if (await outputFile.exists()) {
       await outputFile.delete();
@@ -355,6 +373,7 @@ class DownloadManager {
         }
         await for (final chunk in inputFile.openRead()) {
           await raf.writeFrom(chunk);
+          onBytes?.call(chunk.length);
         }
       }
     } finally {

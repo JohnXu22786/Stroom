@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -193,6 +194,15 @@ Widget stepIcon(catcatch.StepStatus step) {
 // UnifiedTaskItem 数据模型
 // =============================================================================
 
+/// Whether deleting [execution] should cancel the execution service's
+/// active request. The service's cancel token belongs to the currently
+/// executing flow (there is only one at a time), so only deleting the
+/// RUNNING execution may cancel it — deleting a completed/failed flow
+/// must not kill another flow's in-flight request.
+@visibleForTesting
+bool shouldCancelActiveRequest(TaskFlowExecution execution) =>
+    execution.status == FlowExecutionStatus.running;
+
 /// Remove the real tasks behind a flow execution's sub-tasks from their
 /// providers, so they don't resurface as orphaned standalone cards when
 /// the execution record is removed (card delete and AppBar 清除 actions).
@@ -202,30 +212,50 @@ Widget stepIcon(catcatch.StepStatus step) {
 /// cancelled by conversation id; the in-flight ASR/OCR request of the
 /// currently executing block is cancelled via the execution service.
 void removeFlowSubTaskTasks(WidgetRef ref, TaskFlowExecution execution) {
+  removeFlowSubTaskTasksCore(
+    execution,
+    removeCatCatch: (id) =>
+        ref.read(catcatchTasksProvider.notifier).removeTask(id),
+    removeSynthesis: (id) => ref.read(taskListProvider.notifier).removeTask(id),
+    removeBackground: (id) =>
+        ref.read(backgroundTasksProvider.notifier).removeTask(id),
+    cancelChat: (convId) => ref.read(chatStreamManagerProvider).cancel(convId),
+    cancelActiveRequest: shouldCancelActiveRequest(execution)
+        ? () => ref.read(taskFlowExecutionServiceProvider).cancelActiveRequest()
+        : null,
+  );
+}
+
+/// Testable core of [removeFlowSubTaskTasks] — all provider access is
+/// injected as callbacks.
+@visibleForTesting
+void removeFlowSubTaskTasksCore(
+  TaskFlowExecution execution, {
+  required void Function(String id) removeCatCatch,
+  required void Function(String id) removeSynthesis,
+  required void Function(String id) removeBackground,
+  required void Function(String convId) cancelChat,
+  void Function()? cancelActiveRequest,
+}) {
   for (final st in execution.subTasks) {
     if (st.subTaskId.startsWith('pending_')) continue;
     switch (st.subTaskType) {
       case 'catcatch':
-        ref.read(catcatchTasksProvider.notifier).removeTask(st.subTaskId);
+        removeCatCatch(st.subTaskId);
       case 'synthesis':
-        ref.read(taskListProvider.notifier).removeTask(st.subTaskId);
+        removeSynthesis(st.subTaskId);
       default: // 'background' (including legacy 'chat' records)
         if (st.subTaskId.startsWith('chat_')) {
           // Cancel the live chat stream (convId is derived from the
           // FlowSubTask id, matching chat_executor).
-          ref.read(chatStreamManagerProvider).cancel('flow_${st.id}');
+          cancelChat('flow_${st.id}');
         }
-        ref.read(backgroundTasksProvider.notifier).removeTask(st.subTaskId);
+        removeBackground(st.subTaskId);
     }
   }
   // Abort the in-flight ASR/OCR request of the currently executing block
-  // so the flow's run lock frees promptly (idempotent when idle). Only
-  // when deleting the RUNNING execution — the service's cancel token is
-  // global and belongs to whatever flow is currently executing, so
-  // deleting a completed/failed flow must not kill another flow's request.
-  if (execution.status == FlowExecutionStatus.running) {
-    ref.read(taskFlowExecutionServiceProvider).cancelActiveRequest();
-  }
+  // so the flow's run lock frees promptly (idempotent when idle).
+  cancelActiveRequest?.call();
 }
 
 class UnifiedTaskItem {
