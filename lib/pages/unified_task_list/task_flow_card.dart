@@ -301,17 +301,7 @@ class _ExpandedContent extends ConsumerWidget {
   /// execution and sub-tasks together).
   void _removeSubTaskTasks(WidgetRef ref, TaskFlowExecution? execution) {
     if (execution == null) return;
-    for (final st in execution.subTasks) {
-      if (st.subTaskId.startsWith('pending_')) continue;
-      switch (st.subTaskType) {
-        case 'catcatch':
-          ref.read(catcatchTasksProvider.notifier).removeTask(st.subTaskId);
-        case 'synthesis':
-          ref.read(taskListProvider.notifier).removeTask(st.subTaskId);
-        default: // 'background' (including legacy 'chat' records)
-          ref.read(backgroundTasksProvider.notifier).removeTask(st.subTaskId);
-      }
-    }
+    removeFlowSubTaskTasks(ref, execution);
   }
 
   Widget _buildSubTaskCard(

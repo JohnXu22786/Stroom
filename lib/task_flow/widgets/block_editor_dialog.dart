@@ -44,6 +44,27 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     _params = Map<String, dynamic>.from(widget.block.params);
     _definition = widget.block.getDefinition();
 
+    // Clamp persisted modelSelector values into the CURRENT ASR config
+    // range (configs may have been deleted since the block was saved) — a
+    // stale out-of-range index would otherwise survive untouched through a
+    // confirm and fail at execution time.
+    if (_definition != null) {
+      final asrCount = ref
+          .read(providerEntriesProvider)
+          .entries
+          .where((e) => e.type == 'asr')
+          .expand((e) => e.configs)
+          .length;
+      if (asrCount > 0) {
+        for (final p in _definition!.params) {
+          if (p.type != BlockParamType.modelSelector) continue;
+          final raw = _params[p.key];
+          final idx = raw is num ? raw.toInt() : (int.tryParse('$raw') ?? 0);
+          _params[p.key] = idx.clamp(0, asrCount - 1).toInt();
+        }
+      }
+    }
+
     // Initialize TextEditingControllers for string-type params
     if (_definition != null) {
       for (final p in _definition!.params) {

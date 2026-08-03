@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:uuid/uuid.dart';
 
 import '../../../catcatch/models/catcatch_task.dart' as catcatch;
@@ -64,7 +65,15 @@ Future<String> executeCatCatchBlock({
         TaskStatus.completed,
       );
       if (task.downloadedFilePath != null) {
-        await registerFlowCatCatchOutput(task.downloadedFilePath!, task);
+        // Best-effort gallery registration, mirroring the engine's own
+        // swallow behavior: on web the dart:io/Isolate-based registrator
+        // cannot run, and a registration hiccup must not fail a
+        // successfully completed download.
+        try {
+          await registerFlowCatCatchOutput(task.downloadedFilePath!, task);
+        } catch (e) {
+          debugPrint('[TaskFlow] registerFlowCatCatchOutput failed: $e');
+        }
         return task.downloadedFilePath!;
       }
       throw BlockExecutionException(

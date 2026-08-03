@@ -269,6 +269,10 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                           }
                           for (final e in taskFlowExecutions) {
                             if (e.taskStatus == TaskStatus.failed) {
+                              // Remove the sub-task tasks too, so a
+                              // completed block of a failed flow does not
+                              // resurface as an orphaned standalone card.
+                              removeFlowSubTaskTasks(ref, e);
                               ref
                                   .read(taskFlowExecutionsProvider.notifier)
                                   .removeExecution(e.id);

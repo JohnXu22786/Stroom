@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
+import '../../catcatch/providers/catcatch_provider.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../task_flow/models/task_flow_execution.dart';
@@ -188,6 +190,23 @@ Widget stepIcon(catcatch.StepStatus step) {
 // =============================================================================
 // UnifiedTaskItem 数据模型
 // =============================================================================
+
+/// Remove the real tasks behind a flow execution's sub-tasks from their
+/// providers, so they don't resurface as orphaned standalone cards when
+/// the execution record is removed (card delete and AppBar 清除 actions).
+void removeFlowSubTaskTasks(WidgetRef ref, TaskFlowExecution execution) {
+  for (final st in execution.subTasks) {
+    if (st.subTaskId.startsWith('pending_')) continue;
+    switch (st.subTaskType) {
+      case 'catcatch':
+        ref.read(catcatchTasksProvider.notifier).removeTask(st.subTaskId);
+      case 'synthesis':
+        ref.read(taskListProvider.notifier).removeTask(st.subTaskId);
+      default: // 'background' (including legacy 'chat' records)
+        ref.read(backgroundTasksProvider.notifier).removeTask(st.subTaskId);
+    }
+  }
+}
 
 class UnifiedTaskItem {
   final String id;
