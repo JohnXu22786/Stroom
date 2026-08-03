@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
@@ -16,6 +17,48 @@ import '../../models/task_flow_definition.dart';
 import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
 import 'shared_helpers.dart';
+
+/// Runs [work] while polling whether the flow execution still exists,
+/// throwing '任务流已删除' as soon as it is deleted.
+///
+/// The separation isolates cannot be aborted, but the flow's global run
+/// lock must free promptly when the flow is deleted mid-extraction —
+/// otherwise a new flow cannot start for the whole duration of the
+/// (possibly minutes-long) isolate work.
+Future<T> _awaitWithDeletionCheck<T>(
+  Future<T> work,
+  TaskFlowExecutionNotifier execNotifier,
+  String execId,
+  BlockTypeDefinition def,
+) async {
+  var completed = false;
+  late T result;
+  Object? error;
+  unawaited(
+    work.then(
+      (r) {
+        completed = true;
+        result = r;
+      },
+      onError: (e) {
+        completed = true;
+        error = e;
+      },
+    ),
+  );
+  while (!completed) {
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (!execNotifier.state.any((e) => e.id == execId)) {
+      throw BlockExecutionException(
+        '任务流已删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
+  }
+  if (error != null) throw error!;
+  return result;
+}
 
 /// Reads a video file and extracts its audio track — all in a background
 /// isolate so the GUI stays responsive even for 100+ MB files.
@@ -92,8 +135,15 @@ Future<String> executeAudioSeparationBlock({
     await _yieldFrame();
     bgNotifier.updateStep(taskId, 0, running: true);
 
-    await _yieldFrame();
-    audioBytes = await _readAndExtractInIsolate(input, inputFormat);
+    // The separation isolate cannot be aborted, but the flow's run lock
+    // must free promptly when the flow is deleted mid-extraction — poll
+    // for deletion while the isolate runs.
+    audioBytes = await _awaitWithDeletionCheck(
+      _readAndExtractInIsolate(input, inputFormat),
+      execNotifier,
+      execId,
+      def,
+    );
 
     await _yieldFrame();
     bgNotifier.updateStep(taskId, 0, completed: true);
@@ -135,7 +185,12 @@ Future<String> executeAudioSeparationBlock({
     bgNotifier.updateStep(taskId, 1, running: true);
 
     await _yieldFrame();
-    final meta = await _computeAudioMetaInIsolate(audioBytes);
+    final meta = await _awaitWithDeletionCheck(
+      _computeAudioMetaInIsolate(audioBytes),
+      execNotifier,
+      execId,
+      def,
+    );
     final hash = meta.$1;
     final format = meta.$2;
 
@@ -178,6 +233,15 @@ Future<String> executeAudioSeparationBlock({
       size: audioBytes.length,
       folder: saveFolder,
     );
+    // Re-check right before the commit: the delete may land during the
+    // file write / dedup lookups above.
+    if (!execNotifier.state.any((e) => e.id == execId)) {
+      throw BlockExecutionException(
+        '任务流已删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     await FileManifest.addRecord(record);
     final filePath = await FileManifest.readFilePath('$hash.$format');
 

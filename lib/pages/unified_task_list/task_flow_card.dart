@@ -280,7 +280,14 @@ class _ExpandedContent extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () {
-              _removeSubTaskTasks(ref, execution);
+              // Re-read the execution at confirm time: the dialog may have
+              // been open while later blocks started, so the snapshot from
+              // dialog-open misses their sub-tasks.
+              final current = ref
+                  .read(taskFlowExecutionsProvider)
+                  .where((e) => e.id == execId)
+                  .firstOrNull;
+              _removeSubTaskTasks(ref, current);
               ref
                   .read(taskFlowExecutionsProvider.notifier)
                   .removeExecution(execId);
