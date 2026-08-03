@@ -138,6 +138,16 @@ Future<String> executeAudioSeparationBlock({
     final meta = await _computeAudioMetaInIsolate(audioBytes);
     final hash = meta.$1;
     final format = meta.$2;
+
+    // The flow may have been deleted while the separation isolate ran —
+    // don't write an orphaned audio file + gallery record.
+    if (!execNotifier.state.any((e) => e.id == execId)) {
+      throw BlockExecutionException(
+        '任务流已删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     await FileManifest.writeFile('$hash.$format', audioBytes);
 
     final saveFolder = asStringParam(block.params, 'saveFolder', '');

@@ -129,6 +129,9 @@ Future<String> executeChatBlock({
       reply,
       saveFolder: '',
       title: '助手对话_${flowSubTask.id}',
+      // Guard against a flow deleted mid-save (narrow race after the
+      // existence check above).
+      shouldCommit: () => execNotifier.state.any((e) => e.id == execId),
     );
 
     bgNotifier.completeTask(taskId, downloadedFilePath: textPath);
