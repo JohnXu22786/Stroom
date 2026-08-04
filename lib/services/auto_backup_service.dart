@@ -44,6 +44,14 @@ class AutoBackupService {
   static bool _isRunning = false;
   static bool _cancelRequested = false;
 
+  /// 正在执行的备份 Future（防并发重入）。
+  ///
+  /// 与 [_isRunning] 的区别：并发调用方不是直接返回失败，而是等待
+  /// 同一个在途备份完成并共享其结果。这避免了「启动时自动备份」与
+  /// 「迁移前备份」并发时，一方被静默跳过 —— 例如迁移前备份被跳过
+  /// 会导致 checkAndMigrate 在没有安全快照的情况下迁移数据。
+  static Future<bool>? _inFlight;
+
   /// 最近一次备份失败的错误信息（用于调用方判断错误类型）。
   static String? lastError;
 
@@ -80,12 +88,29 @@ class AutoBackupService {
   }) async {
     if (kIsWeb) return false;
 
-    // 先设置运行标志，防止并发执行
-    if (_isRunning) {
-      debugPrint('[AutoBackupService] 备份已在运行中，跳过');
-      await AppLogService.warning('AutoBackupService', '备份已在运行中，跳过');
-      return false;
+    // 并发保护：已有备份在途时，等待同一个备份完成并返回相同结果，
+    // 而不是直接返回失败（避免「迁移前备份」被并发跳过导致迁移时
+    // 没有安全快照，或启动备份被误报为失败）。
+    final inFlight = _inFlight;
+    if (inFlight != null) {
+      debugPrint('[AutoBackupService] 备份已在运行中，等待其完成');
+      await AppLogService.warning('AutoBackupService', '备份已在运行中，等待其完成');
+      return inFlight;
     }
+
+    final future = _performAutoBackupInternal(isPreMigration: isPreMigration);
+    _inFlight = future;
+    try {
+      return await future;
+    } finally {
+      _inFlight = null;
+    }
+  }
+
+  /// 备份的实际实现（由 [performAutoBackup] 保证单实例执行）。
+  static Future<bool> _performAutoBackupInternal({
+    required bool isPreMigration,
+  }) async {
     _isRunning = true;
 
     // ================================================================

@@ -370,6 +370,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     DateTime? cutoffDate;
     Version? currentVersion;
     for (final release in releases) {
+      // 防御：列表元素可能是非 Map（异常响应数据），跳过而非崩溃。
+      if (release is! Map) continue;
       final tagName = release['tag_name'] as String? ?? '';
       final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
       if (versionStr == currentVersionStr) {
@@ -389,6 +391,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     if (cutoffDate == null) {
       final parsedCurrent = Version.parse(currentVersionStr);
       for (final release in releases) {
+        if (release is! Map) continue;
         final tagName = release['tag_name'] as String? ?? '';
         final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
         final parsed = Version.parse(versionStr);
@@ -414,6 +417,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     final List<AvailableUpdate> availableList = [];
 
     for (final release in releases) {
+      // 防御：列表元素可能是非 Map（异常响应数据），跳过而非崩溃。
+      if (release is! Map) continue;
       final tagName = release['tag_name'] as String? ?? '';
       final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
       final parsed = Version.parse(versionStr);

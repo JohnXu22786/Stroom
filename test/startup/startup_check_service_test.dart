@@ -160,6 +160,66 @@ void main() {
       );
     });
 
+    test('non-list configs/models fields are reported, not crashes',
+        () async {
+      // 损坏数据：configs 为 Map、models 为 String。
+      // 旧代码 `entry['configs'] as List?` 强转抛 TypeError 中断整个验证。
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          'provider_entries',
+          jsonEncode([
+            {
+              'id': 'p1',
+              'type': 'llm',
+              'name': 'P1',
+              'configs': {'not': 'a list'},
+            },
+            {
+              'id': 'p2',
+              'type': 'llm',
+              'name': 'P2',
+              'configs': [
+                {
+                  'providerName': 'C1',
+                  'host': '',
+                  'key': '',
+                  'models': 'not-a-list',
+                },
+              ],
+            },
+            {
+              'id': 'p3',
+              'type': 'llm',
+              'name': 'P3',
+              'configs': [],
+            },
+          ]));
+      await prefs.setInt('data_format_version', 1);
+
+      final issues = await StartupCheckService.validateDataFormats();
+
+      // 不崩溃：两个损坏字段都被上报，且合法条目没有被漏检。
+      expect(issues, isA<List<StartupIssue>>());
+      expect(
+        issues.any((i) =>
+            i.message.contains('configs') &&
+            i.message.contains('不是合法列表')),
+        isTrue,
+        reason: 'configs 非 List 应被上报为问题',
+      );
+      expect(
+        issues.any((i) =>
+            i.message.contains('models') && i.message.contains('不是合法列表')),
+        isTrue,
+        reason: 'models 非 List 应被上报为问题',
+      );
+      // 合法条目 p3 不应产生错误
+      expect(
+        issues.where((i) => i.severity == StartupIssueSeverity.error),
+        isNotEmpty,
+      );
+    });
+
     test('validates conversation data structure', () async {
       final prefs = await SharedPreferences.getInstance();
       // Valid conversations

@@ -105,9 +105,10 @@ class KeepAliveReceiver : BroadcastReceiver() {
             val pendingIntent = createPendingIntent(context, PendingIntent.FLAG_UPDATE_CURRENT)
             val triggerAt = SystemClock.elapsedRealtime() + intervalMs
 
-            // 在调度之前先持久化「闹钟已激活」标记：无论走主路径还是
-            // 降级路径，设备重启后 BOOT_COMPLETED 都能恢复调度。
-            markActive(context, true)
+            // 先调度、成功后再持久化「闹钟已激活」标记：
+            // 若所有调度分支都失败（如权限竞态、系统异常），active 标记
+            // 保持旧值/清除，避免设备重启后重新武装一个不存在的闹钟。
+            var scheduled = false
 
             // Prefer exact alarms: on Android 12+ an exact alarm is an
             // exemption that permits starting a foreground service from the
@@ -121,31 +122,39 @@ class KeepAliveReceiver : BroadcastReceiver() {
                         triggerAt,
                         pendingIntent
                     )
+                    scheduled = true
                     Log.i(TAG, "Keep-alive exact alarm scheduled (interval=${intervalMs / 60000}min)")
-                    return
                 } catch (e: SecurityException) {
                     // canScheduleExactAlarms raced or permission revoked — fall through.
                     Log.w(TAG, "Exact alarm denied, falling back to inexact", e)
                 }
             }
-            // setAndAllowWhileIdle requires no permission; the system may
-            // defer the delivery a little to batch wake-ups.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    triggerAt,
-                    pendingIntent
-                )
-                Log.i(TAG, "Keep-alive inexact alarm scheduled (interval=${intervalMs / 60000}min)")
-            } else {
-                alarmManager.setInexactRepeating(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    triggerAt,
-                    KEEP_ALIVE_INTERVAL_MS,
-                    pendingIntent
-                )
-                Log.i(TAG, "Keep-alive repeating alarm scheduled (interval=${KEEP_ALIVE_INTERVAL_MS / 60000}min)")
+            if (!scheduled) {
+                // setAndAllowWhileIdle requires no permission; the system may
+                // defer the delivery a little to batch wake-ups.
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        alarmManager.setAndAllowWhileIdle(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerAt,
+                            pendingIntent
+                        )
+                        Log.i(TAG, "Keep-alive inexact alarm scheduled (interval=${intervalMs / 60000}min)")
+                    } else {
+                        alarmManager.setInexactRepeating(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerAt,
+                            KEEP_ALIVE_INTERVAL_MS,
+                            pendingIntent
+                        )
+                        Log.i(TAG, "Keep-alive repeating alarm scheduled (interval=${KEEP_ALIVE_INTERVAL_MS / 60000}min)")
+                    }
+                    scheduled = true
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to schedule keep-alive alarm", e)
+                }
             }
+            markActive(context, scheduled)
         }
 
         /**
@@ -216,7 +225,10 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 // 豁免场景。
                 Log.i(TAG, "${intent.action} — checking if keep-alive should be re-scheduled")
                 val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-                if (prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false)) {
+                // 同时要求服务仍处于启用状态：用户已停止服务时（例如
+                // 停止流程中途进程被杀，active 标记残留）绝不重新武装。
+                val serviceEnabled = prefs.getBoolean(KEY_SERVICE_ENABLED, false)
+                if (prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) && serviceEnabled) {
                     scheduleAlarm(context)
                 }
             }

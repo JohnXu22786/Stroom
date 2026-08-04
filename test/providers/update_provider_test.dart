@@ -447,6 +447,35 @@ void main() {
       expect(notifier.state.updateAvailable, false);
     });
 
+    test('skips non-Map elements inside a valid list without crashing',
+        () async {
+      // 200 响应是数组，但混入了非 Map 元素：旧代码
+      // `release['tag_name']` 抛 TypeError；现在应跳过并正常处理合法项。
+      SharedPreferences.setMockInitialValues({});
+      final dio = Dio(BaseOptions());
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(Response(
+            requestOptions: options,
+            statusCode: 200,
+            data: [
+              'garbage-string',
+              42,
+              jsonDecode(_githubRelease('v0.2.14')),
+            ],
+          ));
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate(silent: false);
+
+      expect(notifier.state.isChecking, false);
+      expect(notifier.state.error, isNull);
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.latestVersion, '0.2.14');
+    });
+
     test('recovers from error on subsequent check', () async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createFailingDio();

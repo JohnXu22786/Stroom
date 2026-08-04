@@ -512,8 +512,10 @@ void main() {
       await tester.tap(find.text('启动服务'));
       await tester.pumpAndSettle();
 
-      // UI should still be intact with error status
-      expect(find.text('无法检测后台服务状态'), findsOneWidget);
+      // startBackgroundService 内部捕获异常并返回 false，
+      // 页面应显示真实的失败状态（而非静默忽略）。
+      expect(find.text('启动服务失败'), findsOneWidget);
+      // UI should still be intact
       expect(find.text('启动服务'), findsOneWidget);
     });
   });
@@ -695,7 +697,7 @@ void main() {
     });
   });
 
-  group('BackgroundOptimizationPage - keep-alive strategy toggles', () {
+  group('BackgroundOptimizationPage - keep-alive strategy toggles (watchdog)', () {
     testWidgets('turning the watchdog off disarms the native alarm',
         (tester) async {
       final mock = registerMockPlatform();
@@ -902,8 +904,18 @@ void main() {
           return true;
         },
       );
+      // 托盘通道同样 mock，并先完成托盘注册 —— 页面只会在托盘就绪后
+      // 才重新武装关闭拦截（托盘不可用时不武装，保证窗口仍可关闭）。
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('tray_manager'),
+        (MethodCall call) async => true,
+      );
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       try {
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        expect(DesktopAppService.instance.isTrayReady, isTrue);
+
         tester.view.physicalSize = const Size(1080, 5000);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(() {
@@ -934,6 +946,50 @@ void main() {
           isTrue,
           reason: 'setPreventClose(false) 会释放拦截，导致退出确认失效',
         );
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.instance.resetForTesting();
+      }
+    });
+
+    testWidgets(
+        'does not re-arm close interception when the tray is unavailable',
+        (tester) async {
+      // 托盘注册失败（未 mock tray 通道）→ DesktopAppService 已回滚为
+      // 「关闭即退出」。页面此时绝不能只恢复 setPreventClose 而不恢复
+      // 事件监听 —— 否则窗口将无法关闭。
+      registerMockPlatform();
+      final windowCalls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('window_manager'),
+        (MethodCall call) async {
+          windowCalls.add(call);
+          return true;
+        },
+      );
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        expect(DesktopAppService.instance.isTrayReady, isFalse);
+
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byType(SwitchListTile).first);
+        await tester.pumpAndSettle();
+
+        // 页面加载与切换开关都不应武装关闭拦截。
+        final preventCloseCalls =
+            windowCalls.where((c) => c.method == 'setPreventClose').toList();
+        expect(preventCloseCalls, isEmpty,
+            reason: '托盘不可用时重新武装拦截会制造无法关闭的窗口');
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }

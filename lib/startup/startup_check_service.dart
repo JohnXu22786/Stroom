@@ -240,14 +240,33 @@ class StartupCheckService {
       // reasoningParams 中是否包含非 Map 条目（这些会导致 ProviderEntry
       // 解析时 `as Map` 闪退）。
       // ================================================================
+      // 注意：configs/models 字段本身也可能是损坏的（int/map/string），
+      // 不能用 `as List?` 强转 —— 非 List 类型一律按「字段无效」上报。
+      final rawConfigs = entry['configs'];
+      if (rawConfigs != null && rawConfigs is! List) {
+        issues.add(StartupIssue(
+          message: 'provider_entries[$i].configs: 字段不是合法列表',
+          severity: StartupIssueSeverity.error,
+          dataKey: 'provider_entries',
+        ));
+      }
       _validateNestedListSync(entry, 'configs', i, issues);
-      final configs = entry['configs'] as List?;
+      final configs = rawConfigs is List ? rawConfigs : null;
       if (configs != null) {
         for (int ci = 0; ci < configs.length; ci++) {
           if (configs[ci] is! Map<String, dynamic>) continue;
           final config = configs[ci] as Map<String, dynamic>;
+          final rawModels = config['models'];
+          if (rawModels != null && rawModels is! List) {
+            issues.add(StartupIssue(
+              message: 'provider_entries[$i].configs[$ci].models: '
+                  '字段不是合法列表',
+              severity: StartupIssueSeverity.error,
+              dataKey: 'provider_entries',
+            ));
+          }
           _validateNestedListSync(config, 'models', i, issues);
-          final models = config['models'] as List?;
+          final models = rawModels is List ? rawModels : null;
           if (models != null) {
             for (int mi = 0; mi < models.length; mi++) {
               if (models[mi] is! Map<String, dynamic>) continue;

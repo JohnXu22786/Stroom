@@ -163,7 +163,11 @@ Future<bool> onIosBackground(ServiceInstance service) async {
   return true;
 }
 
-Future<void> startBackgroundService() async {
+/// 启动后台服务。
+///
+/// 返回 `true` 表示服务已启动（或已在运行），`false` 表示启动失败。
+/// 失败原因已记录日志。
+Future<bool> startBackgroundService() async {
   await AppLogService.info('BackgroundService', '启动后台服务');
   try {
     // Android 13+ 上通知权限决定前台服务通知是否可见。
@@ -177,7 +181,7 @@ Future<void> startBackgroundService() async {
         await AppLogService.info('BackgroundService', '后台服务已启动');
       } else {
         await AppLogService.warning('BackgroundService', '后台服务启动返回失败');
-        return;
+        return false;
       }
     }
     // Persist the enabled state so that if the process is killed by the
@@ -186,9 +190,11 @@ Future<void> startBackgroundService() async {
     // Activate the native AlarmManager keep-alive watchdog (only if
     // the user has the watchdog toggle enabled).
     await _enableKeepAlive();
+    return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to start background service: $e');
     await AppLogService.error('BackgroundService', '启动后台服务失败', e);
+    return false;
   }
 }
 
@@ -215,7 +221,10 @@ Future<void> _requestNotificationPermissionIfNeeded() async {
   }
 }
 
-Future<void> stopBackgroundService() async {
+/// 停止后台服务。
+///
+/// 返回 `true` 表示停止流程成功执行（服务已停止或原本未运行）。
+Future<bool> stopBackgroundService() async {
   await AppLogService.info('BackgroundService', '停止后台服务');
   try {
     final service = FlutterBackgroundService();
@@ -223,18 +232,25 @@ Future<void> stopBackgroundService() async {
       service.invoke('stopService');
       await AppLogService.info('BackgroundService', '后台服务已停止');
     }
+    // 先取消 AlarmManager 看门狗，再持久化 enabled=false：
+    // 顺序反了的话，若进程在这两步之间被杀，系统重启后会重新
+    // 调度看门狗去复活一个用户已明确停止的服务。
+    await _disableKeepAlive();
     // Clear the persisted enabled state so the service is not
     // auto-restored on the next cold start.
     await _setServiceEnabledPreference(false);
-    // Deactivate the native AlarmManager keep-alive watchdog.
-    _disableKeepAlive();
+    return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to stop background service: $e');
     await AppLogService.error('BackgroundService', '停止后台服务失败', e);
+    return false;
   }
 }
 
-Future<void> restartBackgroundService() async {
+/// 重新启动后台服务。
+///
+/// 返回 `true` 表示重启成功，`false` 表示启动失败。
+Future<bool> restartBackgroundService() async {
   await AppLogService.info('BackgroundService', '重新启动后台服务');
   try {
     final service = FlutterBackgroundService();
@@ -249,16 +265,18 @@ Future<void> restartBackgroundService() async {
     final started = await service.startService();
     if (!started) {
       await AppLogService.warning('BackgroundService', '重启服务启动返回失败');
-      return;
+      return false;
     }
     // 重启后保持持久化状态与看门狗一致，防止重启过程中
     // 系统杀进程导致状态漂移（例如 enabled 标记丢失）。
     await _setServiceEnabledPreference(true);
     await _enableKeepAlive();
     await AppLogService.info('BackgroundService', '后台服务已重新启动');
+    return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to restart background service: $e');
     await AppLogService.error('BackgroundService', '重新启动后台服务失败', e);
+    return false;
   }
 }
 
@@ -395,17 +413,18 @@ Future<void> _enableKeepAlive() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   if (!await isWatchdogEnabled()) return;
   try {
-    _keepAliveChannel.invokeMethod('startKeepAlive');
+    // await：invokeMethod 的失败是异步抛出的，不 await 会变成
+    // 未处理的异步异常（每次冷启动/恢复前台都会触发）。
+    await _keepAliveChannel.invokeMethod('startKeepAlive');
   } catch (e) {
     debugPrint('[BackgroundService] Failed to enable keep-alive alarm: $e');
   }
 }
 
-/// Deactivates the native AlarmManager keep-alive watchdog.
-void _disableKeepAlive() {
+Future<void> _disableKeepAlive() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
-    _keepAliveChannel.invokeMethod('stopKeepAlive');
+    await _keepAliveChannel.invokeMethod('stopKeepAlive');
   } catch (e) {
     debugPrint('[BackgroundService] Failed to disable keep-alive alarm: $e');
   }
@@ -413,7 +432,7 @@ void _disableKeepAlive() {
 
 /// Public wrapper for disabling the keep-alive watchdog from the UI.
 void disableKeepAlive() {
-  _disableKeepAlive();
+  unawaited(_disableKeepAlive());
 }
 
 /// Checks whether the app is exempt from Android battery optimization.
@@ -440,10 +459,10 @@ Future<bool> isIgnoringBatteryOptimizations() async {
 /// On Android 6+, this shows the system's "Ignore battery optimization"
 /// confirmation dialog. On some Chinese ROMs, this may fall back to
 /// opening the app's settings page.
-void requestIgnoreBatteryOptimizations() {
+Future<void> requestIgnoreBatteryOptimizations() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
-    _keepAliveChannel.invokeMethod('requestIgnoreBatteryOptimizations');
+    await _keepAliveChannel.invokeMethod('requestIgnoreBatteryOptimizations');
   } catch (e) {
     debugPrint(
         '[BackgroundService] Failed to request battery optimization exemption: $e');
@@ -471,10 +490,10 @@ Future<bool> canScheduleExactAlarms() async {
 /// can grant the exact-alarm permission. When granted, the system sends
 /// SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED and the native watchdog
 /// re-arms itself immediately.
-void requestScheduleExactAlarm() {
+Future<void> requestScheduleExactAlarm() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
-    _keepAliveChannel.invokeMethod('requestScheduleExactAlarm');
+    await _keepAliveChannel.invokeMethod('requestScheduleExactAlarm');
   } catch (e) {
     debugPrint(
         '[BackgroundService] Failed to request exact alarm permission: $e');

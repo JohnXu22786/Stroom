@@ -250,7 +250,11 @@ void main() {
       await dir.delete(recursive: true);
     });
 
-    test('second call returns false when backup is running', () async {
+    test('concurrent calls wait for the in-flight backup and share its result',
+        () async {
+      // 回归：启动备份与迁移前备份并发时，后到者必须等待同一个在途
+      // 备份并共享结果 —— 直接返回 false 会让迁移前备份被静默跳过
+      // （迁移时无安全快照），或让启动备份被误报为失败。
       final root = await DataMigrationService.getExternalBackupRootPath();
       final dir = Directory(root);
       if (await dir.exists()) {
@@ -258,7 +262,8 @@ void main() {
       }
       final first = AutoBackupService.performAutoBackup();
       final second = await AutoBackupService.performAutoBackup();
-      expect(second, isFalse);
+      expect(second, isTrue,
+          reason: '并发调用应等待在途备份完成并返回相同结果');
       await first;
       await dir.delete(recursive: true);
     });

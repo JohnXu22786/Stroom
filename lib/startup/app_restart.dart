@@ -59,14 +59,19 @@ Future<void> _restartApp() async {
     debugPrint('[AppRestart] Process.start failed: $e');
   }
 
+  // 仅当新进程确实启动成功后才退出当前进程；
+  // 启动失败时（可执行文件缺失、被杀软拦截等）保持应用运行，
+  // 避免「点了重启结果应用直接消失」。
+  if (!started) {
+    debugPrint('[AppRestart] Could not restart app automatically — '
+        'keeping the current process alive');
+    return;
+  }
+
   // 退出当前进程
   try {
     exit(0);
   } catch (e) {
     debugPrint('[AppRestart] exit failed: $e');
-  }
-
-  if (!started) {
-    debugPrint('[AppRestart] Could not restart app automatically');
   }
 }

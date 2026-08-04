@@ -84,7 +84,15 @@ class BackupStartupCheck {
       bool storageAccessible =
           await BackupLocationManager.isStorageAccessible();
 
+      // Android 必须授权成功才能继续（用户可以选择退出应用）；
+      // 非 Android 平台路径固定，连续失败 2 次后降级继续，
+      // 避免「确定 → 授权失败 → 重试」无限循环（路径不可修复时
+      // 用户既无法退出也无法进入应用）。
+      final bool isAndroid = !kIsWeb && Platform.isAndroid;
+      int accessAttempts = 0;
+
       while (!storageAccessible && context.mounted) {
+        accessAttempts++;
         // 显示引导对话框
         final shouldProceed = await _showStorageAccessDialog(context);
         if (!shouldProceed || !context.mounted) {
@@ -101,6 +109,16 @@ class BackupStartupCheck {
         if (!storageAccessible && context.mounted) {
           // 授权失败，提示用户重试
           await _showAccessFailedDialog(context);
+          if (!isAndroid && accessAttempts >= 2) {
+            debugPrint('[BackupStartupCheck] 非 Android 平台存储仍不可访问，'
+                '降级继续（备份失败将另行提示）');
+            await AppLogService.warning('BackupStartupCheck',
+                '非 Android 平台备份存储不可访问，降级继续');
+            return const BackupStartupResult(
+              storageReady: true,
+              autoBackupPerformed: false,
+            );
+          }
         }
       }
 

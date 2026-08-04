@@ -51,21 +51,23 @@ void main() {
       expect(find.byIcon(Icons.check_circle), findsOneWidget);
     });
 
-    testWidgets('page fades out via AnimatedOpacity when checks complete', (
+    testWidgets('renders without error in done state', (
       tester,
     ) async {
-      // Create a startup page that wraps in AnimatedOpacity via a parent controller
+      // 说明：渐出动画由 StartupApp._startFadeOut 驱动，StartupPage
+      // 本身只负责渲染；此测试验证 done 状态下的页面渲染无异常。
       await tester.pumpWidget(wrapStartupPage(isWorking: false));
       await tester.pump();
 
       // The page should be rendered without errors
       expect(tester.takeException(), isNull);
 
-      // Verify the page still shows content (AnimatedOpacity should be at opacity 1.0)
+      // Verify the page still shows content
       expect(find.text('Stroom'), findsOneWidget);
     });
 
-    testWidgets('fade animation completes without throwing', (tester) async {
+    testWidgets('transitions from working to done state without throwing',
+        (tester) async {
       // Simulate the transition: isWorking goes from true to false
       await tester.pumpWidget(wrapStartupPage(isWorking: true));
       await tester.pump();

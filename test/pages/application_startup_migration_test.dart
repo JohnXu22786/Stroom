@@ -33,7 +33,9 @@ void main() {
 
       // Application no longer shows migration dialog — it now shows
       // HomePage directly. Migration is handled by StartupPage.
-      expect(find.text('数据迁移'), findsNothing);
+      // 断言真实哨兵（对话框组件 + 实际对话框标题），而非从不存在的文案。
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('数据格式升级完成'), findsNothing);
     });
 
     testWidgets('does not show migration dialog when format is current',
@@ -48,7 +50,8 @@ void main() {
       await tester.pump();
 
       // No migration dialog (migration is handled by StartupPage)
-      expect(find.text('数据迁移'), findsNothing);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('数据格式升级完成'), findsNothing);
     });
   });
 }

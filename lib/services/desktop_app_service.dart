@@ -90,6 +90,7 @@ class DesktopAppService extends WindowListener with TrayListener {
     _trayReady = false;
     _quitRequested = false;
     _menu = null;
+    onQuitConfirmation = null;
   }
 
   /// 在 runApp 之前调用，初始化窗口管理器。
@@ -111,25 +112,35 @@ class DesktopAppService extends WindowListener with TrayListener {
   ///
   /// 应在应用首帧之后调用。幂等：重复调用不会重复注册托盘。
   /// 任何失败都会被捕获并记录，不会导致应用崩溃。
+  ///
+  /// 安全顺序：
+  /// 1. 先 setPreventClose(true) 拦截关闭事件；
+  /// 2. 注册托盘（带超时，防止 Linux DBus/appindicator 挂起）；
+  /// 3. 托盘就绪后才注册事件监听 —— 若托盘失败回滚为「关闭即退出」，
+  ///    期间到达的关闭事件只会让窗口保持打开（尚未隐藏），不会出现
+  ///    「窗口已隐藏但无托盘可恢复」的幽灵进程。
   Future<void> setupTrayAndCloseBehavior() async {
     if (!isDesktopPlatform || _quitRequested || _trayReady) return;
+    // 托盘注册超时：插件挂起（如 Linux 缺少 appindicator 服务）时
+    // 走回滚路径，而不是让窗口永远无法关闭。
+    const trayTimeout = Duration(seconds: 10);
     try {
       await initialize();
       if (!_initialized) return; // 初始化失败，保持默认关闭行为
 
       // 1. 先拦截窗口关闭事件。
       await windowManager.setPreventClose(true);
-      windowManager.addListener(this);
-      trayManager.addListener(this);
 
       // 2. 注册托盘图标与菜单。失败则回退为「关闭即退出」，
       //    避免窗口隐藏后应用无法找回。
       try {
-        await trayManager.setIcon(
+        await trayManager
+            .setIcon(
           defaultTargetPlatform == TargetPlatform.windows
               ? _trayIconIco
               : _trayIconPng,
-        );
+        )
+            .timeout(trayTimeout);
         // setToolTip 在 Linux 插件上未实现（会抛 MissingPluginException），
         // 单独捕获，避免拖垮整个托盘注册流程。
         try {
@@ -138,16 +149,21 @@ class DesktopAppService extends WindowListener with TrayListener {
           debugPrint('[DesktopAppService] setToolTip unsupported: $e');
         }
         _menu = _buildMenu();
-        await trayManager.setContextMenu(_menu!);
+        await trayManager.setContextMenu(_menu!).timeout(trayTimeout);
         _trayReady = true;
         debugPrint('[DesktopAppService] Tray icon registered');
       } catch (e) {
         debugPrint('[DesktopAppService] Tray registration failed: $e');
         await AppLogService.error('DesktopAppService', '托盘注册失败', e);
-        windowManager.removeListener(this);
-        trayManager.removeListener(this);
+        // 托盘不可用：撤销拦截，恢复「关闭即退出」。
+        // 此时尚未注册监听，也不会有幽灵窗口。
         await windowManager.setPreventClose(false);
+        return;
       }
+
+      // 3. 托盘就绪后注册事件监听。
+      windowManager.addListener(this);
+      trayManager.addListener(this);
     } catch (e) {
       debugPrint('[DesktopAppService] Tray setup failed: $e');
       await AppLogService.error('DesktopAppService', '托盘设置失败', e);
@@ -244,7 +260,9 @@ class DesktopAppService extends WindowListener with TrayListener {
     if (key == _menuShowKey) {
       unawaited(_showWindow());
     } else if (key == _menuQuitKey) {
-      unawaited(quitApplication());
+      // 与「关闭即退出」/「完全退出应用」共用确认逻辑：
+      // 有任务运行时先弹窗确认，避免静默中断任务。
+      unawaited(quitWithConfirmation());
     }
   }
 

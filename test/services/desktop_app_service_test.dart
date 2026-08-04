@@ -295,6 +295,68 @@ void main() {
       expect(exitCodes, [0]);
     });
 
+    test('tray menu quit respects the injected quit confirmation', () async {
+      final mocks = registerChannelMocks();
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        final menu = DesktopAppService.instance.trayMenuForTesting!;
+        final quitItem = menu.getMenuItem('quit')!;
+
+        // User cancels the confirmation → nothing is destroyed, no exit.
+        DesktopAppService.instance.onQuitConfirmation = () async => false;
+        DesktopAppService.instance.onTrayMenuItemClick(quitItem);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(
+          mocks['window_manager']!.calls
+              .where((c) => c.method == 'destroy'),
+          isEmpty,
+        );
+        expect(exitCodes, isEmpty);
+
+        // User confirms → destroys tray + window and exits.
+        DesktopAppService.instance.onQuitConfirmation = () async => true;
+        DesktopAppService.instance.onTrayMenuItemClick(quitItem);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(_calledWith(mocks['tray_manager']!.calls, 'destroy'), isTrue);
+        expect(_calledWith(mocks['window_manager']!.calls, 'destroy'), isTrue);
+        expect(exitCodes, [0]);
+      });
+      DesktopAppService.instance.onQuitConfirmation = null;
+    });
+
+    test('close hides to tray when the minimize pref read fails', () async {
+      // isDesktopCloseMinimizeEnabled 读取失败时必须默认最小化，
+      // 绝不因设置异常而意外退出应用。
+      final mocks = registerChannelMocks();
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        // 不 mock SharedPreferences → 读取抛异常 → 默认最小化。
+        DesktopAppService.instance.onWindowClose();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      });
+      expect(_calledWith(mocks['window_manager']!.calls, 'hide'), isTrue);
+      expect(_calledWith(mocks['window_manager']!.calls, 'destroy'), isFalse);
+    });
+
+    test('quitWithConfirmation falls through when the callback throws',
+        () async {
+      final mocks = registerChannelMocks();
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        // 确认回调抛异常：放行退出，绝不阻塞用户关闭窗口。
+        DesktopAppService.instance.onQuitConfirmation = () async {
+          throw StateError('provider unavailable');
+        };
+        await DesktopAppService.instance.quitWithConfirmation();
+      });
+      expect(_calledWith(mocks['window_manager']!.calls, 'destroy'), isTrue);
+      expect(exitCodes, [0]);
+    });
+
     test('after quit, further tray setup is a no-op', () async {
       final mocks = registerChannelMocks();
       DesktopAppService.exitApp = (_) {};

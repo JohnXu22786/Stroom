@@ -158,13 +158,25 @@ class _BackgroundOptimizationPageState
 
     _isServiceSupported = isBackgroundServiceSupported();
 
-    try {
-      final service = FlutterBackgroundService();
-      _isServiceRunning = await service.isRunning();
-      _optimizationStatus = _isServiceRunning ? '后台服务运行中' : '后台服务未启动';
-    } catch (_) {
+    if (!_isServiceSupported) {
+      // 桌面/Web 没有前台服务：直接给出平台对应的真实状态，
+      // 不要调用仅 Android/iOS 可用的插件（会抛异常显示误导性文案）。
       _isServiceRunning = false;
-      _optimizationStatus = '无法检测后台服务状态';
+      if (isDesktopPlatform()) {
+        _optimizationStatus = '桌面端使用托盘驻留保活';
+      } else {
+        _optimizationStatus = '当前平台不支持后台服务';
+      }
+    } else {
+      try {
+        final service = FlutterBackgroundService();
+        _isServiceRunning = await service.isRunning();
+        _optimizationStatus =
+            _isServiceRunning ? '后台服务运行中' : '后台服务未启动';
+      } catch (_) {
+        _isServiceRunning = false;
+        _optimizationStatus = '无法检测后台服务状态';
+      }
     }
 
     if (mounted) {
@@ -196,7 +208,7 @@ class _BackgroundOptimizationPageState
 
   Future<void> _requestBatteryExemption() async {
     try {
-      requestIgnoreBatteryOptimizations();
+      await requestIgnoreBatteryOptimizations();
       // Re-check after a short delay to let the system dialog complete.
       await Future<void>.delayed(const Duration(seconds: 2));
       await _checkBatteryOptimization();
@@ -225,7 +237,7 @@ class _BackgroundOptimizationPageState
 
   Future<void> _requestExactAlarm() async {
     try {
-      requestScheduleExactAlarm();
+      await requestScheduleExactAlarm();
       // Re-check after a short delay to let the system page close.
       await Future<void>.delayed(const Duration(seconds: 2));
       await _checkExactAlarmStatus();
@@ -239,9 +251,8 @@ class _BackgroundOptimizationPageState
       _isOperating = true;
     });
 
-    try {
-      await startBackgroundService();
-    } catch (_) {
+    final ok = await startBackgroundService();
+    if (!ok) {
       if (mounted) {
         setState(() {
           _optimizationStatus = '启动服务失败';
@@ -264,9 +275,8 @@ class _BackgroundOptimizationPageState
       _isOperating = true;
     });
 
-    try {
-      await stopBackgroundService();
-    } catch (_) {
+    final ok = await stopBackgroundService();
+    if (!ok) {
       if (mounted) {
         setState(() {
           _optimizationStatus = '停止服务失败';
@@ -289,9 +299,8 @@ class _BackgroundOptimizationPageState
       _isOperating = true;
     });
 
-    try {
-      await restartBackgroundService();
-    } catch (_) {
+    final ok = await restartBackgroundService();
+    if (!ok) {
       if (mounted) {
         setState(() {
           _optimizationStatus = '重启服务失败';
@@ -546,6 +555,11 @@ class _BackgroundOptimizationPageState
   // ── Battery Optimization Card ────────────────────────────────────────
 
   Widget _buildBatteryOptimizationCard(ThemeData theme) {
+    // Web 上 defaultTargetPlatform 会报告宿主 OS（手机浏览器 = android），
+    // 必须显式排除 Web，否则会在 Web 页面渲染 Android 专属卡片。
+    if (kIsWeb) {
+      return const SizedBox.shrink();
+    }
     if (defaultTargetPlatform != TargetPlatform.android) {
       return const SizedBox.shrink();
     }
@@ -622,6 +636,8 @@ class _BackgroundOptimizationPageState
 
   /// 当前平台是否展示任何保活策略（移动端策略卡或桌面端保活卡）。
   bool get _hasKeepAliveStrategies {
+    // Web 上 defaultTargetPlatform 会报告宿主 OS，必须显式排除。
+    if (kIsWeb) return false;
     return defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS ||
         isDesktopPlatform();
@@ -632,6 +648,9 @@ class _BackgroundOptimizationPageState
     // - Android：AlarmManager 看门狗 + 冷启动恢复 + 电池优化提醒
     // - iOS：仅冷启动恢复（iOS 无 AlarmManager 看门狗）
     // - 桌面/Web：没有移动端保活策略，显示桌面端保活卡片代替
+    if (kIsWeb) {
+      return const SizedBox.shrink();
+    }
     if (defaultTargetPlatform != TargetPlatform.android &&
         defaultTargetPlatform != TargetPlatform.iOS) {
       return const SizedBox.shrink();
@@ -736,6 +755,10 @@ class _BackgroundOptimizationPageState
   /// - iOS 26+ 支持常驻后台（BGContinuedProcessingTask），正向说明；
   /// - 低于 iOS 26 给出「定期返回 App + 勿在切换器划掉」的提示。
   Widget _buildIosBackgroundNoteCard(ThemeData theme) {
+    // Web 上 defaultTargetPlatform 会报告宿主 OS，必须显式排除。
+    if (kIsWeb) {
+      return const SizedBox.shrink();
+    }
     if (defaultTargetPlatform != TargetPlatform.iOS) {
       return const SizedBox.shrink();
     }
@@ -855,9 +878,17 @@ class _BackgroundOptimizationPageState
   /// 注意：不能根据开关状态调用 setPreventClose(false) 释放拦截——
   /// 拦截一旦释放，原生层会在 Dart 侧确认逻辑运行前直接销毁窗口，
   /// 「关闭即退出」时的任务运行确认就永远不会触发。
-  /// 关闭行为（最小化 vs 确认后退出）统一由 Application 层的
+  /// 关闭行为（最小化 vs 确认后退出）统一由 DesktopAppService 的
   /// onWindowClose 决策（每次读取最新偏好）。
+  ///
+  /// 仅在托盘服务已就绪时重新武装：若托盘注册失败（DesktopAppService
+  /// 已回滚为「关闭即退出」并撤销拦截），这里绝不能只恢复 setPreventClose
+  /// 而不恢复事件监听 —— 否则窗口将无法关闭且没有兜底。
   Future<void> _ensureWindowCloseIntercepted() async {
+    if (!DesktopAppService.instance.isTrayReady) {
+      debugPrint('[BackgroundOptimizationPage] 托盘未就绪，跳过关闭拦截武装');
+      return;
+    }
     try {
       await windowManager.setPreventClose(true);
     } catch (e) {

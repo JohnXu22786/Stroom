@@ -228,18 +228,19 @@ class _ApplicationState extends ConsumerState<Application>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // 如果应用进入后台/暂停状态，且后台备份正在运行，则取消备份
+    // 如果应用真正进入后台或被销毁，且后台备份正在运行，则取消备份。
+    //
+    // 注意：仅在 paused / detached 时取消，不在 inactive 时取消 ——
+    // inactive 在移动端会因通知栏下拉/权限弹窗触发，在桌面端会因
+    // 窗口失焦/最小化触发（关闭到托盘后应用仍在运行），这些场景
+    // 下取消备份会误伤仍在进行的任务。
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
       if (AutoBackupService.isRunning) {
         debugPrint('[Application] 应用进入后台，取消正在运行的自动备份');
         AutoBackupService.cancel();
       }
-      if (state == AppLifecycleState.paused ||
-          state == AppLifecycleState.detached) {
-        return;
-      }
+      return;
     }
 
     if (state != AppLifecycleState.resumed) return;

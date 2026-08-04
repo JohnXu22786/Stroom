@@ -305,6 +305,12 @@ class _StartupAppState extends State<StartupApp>
       // If migration was performed, show a restart prompt
       if (didMigration) {
         await _showRestartDialog();
+        // 无论用户选择「退出应用」「立即重启」，还是对话框被系统关闭
+        // （例如 Android 返回键、Web 无法退出），进程若仍然存活，
+        // 都继续进入主应用 —— 绝不停留在启动页。
+        // 桌面/移动端的退出按钮会直接结束进程，这里不会执行到。
+        if (!mounted) return;
+        _startFadeOut();
       } else {
         _startFadeOut();
       }
@@ -367,34 +373,39 @@ class _StartupAppState extends State<StartupApp>
     await showDialog<void>(
       context: navContext,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.green.shade600, size: 24),
-            const SizedBox(width: 8),
-            const Text('数据格式升级完成'),
+      builder: (dialogContext) => PopScope(
+        // 阻止 Android 系统返回键关闭对话框：迁移后必须重启/退出，
+        // 被返回键关掉会导致用户永远停留在启动页。
+        canPop: false,
+        child: AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green.shade600, size: 24),
+              const SizedBox(width: 8),
+              const Text('数据格式升级完成'),
+            ],
+          ),
+          content: const Text(
+            '数据已迁移到新版格式。'
+            '请重启应用以使用新版本。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _exitApp();
+              },
+              child: const Text('退出应用'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                restartApp();
+              },
+              child: const Text('立即重启'),
+            ),
           ],
         ),
-        content: const Text(
-          '数据已迁移到新版格式。'
-          '请重启应用以使用新版本。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _exitApp();
-            },
-            child: const Text('退出应用'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              restartApp();
-            },
-            child: const Text('立即重启'),
-          ),
-        ],
       ),
     );
   }
@@ -502,65 +513,81 @@ class _AppErrorBoundaryState extends State<_AppErrorBoundary> {
 
   @override
   Widget build(BuildContext context) {
-    if (_hasError) {
-      // 兜底恢复界面，不会闪退
-      return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+    // 主应用（child）始终保留在 Widget 树中：错误恢复界面以覆盖层
+    // 形式显示在其上方。这样「重试」只是隐藏覆盖层，Application 的
+    // State 不会重建 —— 否则启动后任务（更新检查/备份检查）会重复
+    // 执行并可能叠加弹窗。
+    return Stack(
+      textDirection: TextDirection.ltr,
+      children: [
+        _ErrorCatcher(
+          onError: (Object error, StackTrace stack) {
+            debugPrint('[_AppErrorBoundary] Caught build error: $error');
+            debugPrint('[_AppErrorBoundary] Stack: $stack');
+            if (mounted) {
+              setState(() {
+                _hasError = true;
+                _errorMessage = error.toString();
+              });
+            }
+            return _ErrorWidgetPlaceholder();
+          },
+          child: widget.child,
         ),
-        home: Scaffold(
-          body: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 64, color: Colors.orange.shade400),
-                  const SizedBox(height: 16),
-                  Text(
-                    '应用启动异常',
-                    style: Theme.of(context).textTheme.headlineSmall,
+        if (_hasError)
+          Positioned.fill(
+            // 兜底恢复界面，不会闪退
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: ThemeData(
+                useMaterial3: true,
+                colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+              ),
+              home: Builder(
+                builder: (overlayContext) => Scaffold(
+                  body: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.error_outline,
+                              size: 64, color: Colors.orange.shade400),
+                          const SizedBox(height: 16),
+                          Text(
+                            '应用启动异常',
+                            style: Theme.of(overlayContext)
+                                .textTheme
+                                .headlineSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _errorMessage.isNotEmpty
+                                ? _errorMessage
+                                : '启动过程中遇到数据格式问题，已自动修复，请重试。',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(overlayContext)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: Colors.grey.shade600,
+                                ),
+                          ),
+                          const SizedBox(height: 24),
+                          FilledButton.icon(
+                            onPressed: _onRetry,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('重试'),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _errorMessage.isNotEmpty
-                        ? _errorMessage
-                        : '启动过程中遇到数据格式问题，已自动修复，请重试。',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey.shade600,
-                        ),
-                  ),
-                  const SizedBox(height: 24),
-                  FilledButton.icon(
-                    onPressed: _onRetry,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('重试'),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
-      );
-    }
-
-    return _ErrorCatcher(
-      onError: (Object error, StackTrace stack) {
-        debugPrint('[_AppErrorBoundary] Caught build error: $error');
-        debugPrint('[_AppErrorBoundary] Stack: $stack');
-        if (mounted) {
-          setState(() {
-            _hasError = true;
-            _errorMessage = error.toString();
-          });
-        }
-        return _ErrorWidgetPlaceholder();
-      },
-      child: widget.child,
+      ],
     );
   }
 }
