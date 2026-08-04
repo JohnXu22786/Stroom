@@ -100,10 +100,10 @@ void main() {
   });
 
   testWidgets('app can navigate from home to settings', (tester) async {
-    // Force a phone-sized viewport so the bottom NavigationBar is used
-    // (instead of the side NavigationRail that appears on wider
-    // surfaces). Width is 390 px (iPhone-ish), well below the 600 px
-    // breakpoint used by `_isMobile`.
+    // Force a phone-sized portrait viewport so the bottom NavigationBar is
+    // used (instead of the side NavigationRail that appears on wider-than-tall
+    // surfaces). 390x844 is portrait (height > width), which `_isPortrait`
+    // resolves to the bottom bar regardless of absolute size.
     tester.view.physicalSize = const Size(390 * 3, 844 * 3);
     tester.view.devicePixelRatio = 3.0;
     addTearDown(() {
