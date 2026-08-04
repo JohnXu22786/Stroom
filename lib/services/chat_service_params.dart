@@ -11,30 +11,6 @@ class _OmittedSentinel {
 const _OmittedSentinel _kOmittedSentinelInstance = _OmittedSentinel();
 
 extension _ChatServiceParamsExt on ChatService {
-  /// 合并一次请求的 usage 到累计（事件驱动：来自 AIStreamEvent.usage，
-  /// per-request 隔离，不读共享 provider 槽）。
-  ///
-  /// [recordInput] 为 false 时只累计 cost，不累计 input/output tokens
-  /// （压缩请求：其输入 ≈ 压缩前头部大小，不应作为"当前上下文大小"）。
-  void _accumulateFromMap(Map<String, dynamic> usage,
-      {bool recordInput = true}) {
-    final acc = _accumulatedUsage ??= <String, dynamic>{};
-    if (recordInput) {
-      final input = usage['inputTokens'] as int?;
-      if (input != null) {
-        acc['inputTokens'] = (acc['inputTokens'] as int? ?? 0) + input;
-      }
-      final output = usage['outputTokens'] as int?;
-      if (output != null) {
-        acc['outputTokens'] = (acc['outputTokens'] as int? ?? 0) + output;
-      }
-    }
-    final cost = usage['cost'] as double?;
-    if (cost != null) {
-      acc['cost'] = (acc['cost'] as double? ?? 0) + cost;
-    }
-  }
-
   /// Returns the effective temperature considering assistant overrides.
   /// Returns null when no temperature toggle is enabled (model or assistant).
   double? get _effectiveTemperature {

@@ -78,8 +78,9 @@ extension ChatServiceStreamingExt on ChatService {
             if (event.isReasoning) {
               _reasoningBuffer += event.text;
             } else if (event.usage != null) {
-              // usage 计量事件（provider 流末尾产出）
-              _accumulateFromMap(event.usage!, recordInput: true);
+              // usage 计量事件（provider 流末尾产出，per-request 隔离）
+              // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
+              onUsageEvent?.call(event.usage!, recordInput: true);
             } else if (!_controller!.isClosed) {
               _controller!.add(event.text);
             }
@@ -136,10 +137,6 @@ extension ChatServiceStreamingExt on ChatService {
     _contentBuffer = '';
     _lastReasoningLength = 0;
     _thinkingSignature = '';
-    // 注意：不重置 _accumulatedUsage —— 一次"用户发送"内的内部任务
-    // （压缩请求先于主请求执行）与主请求多轮共用同一个累计器；
-    // service 生命周期 = 一次发送（manager 每次流结束 cancelService），
-    // 重置在这里会清掉压缩请求已累计的 usage。
 
     final controller = StreamController<ChatEvent>(
       onCancel: () {
@@ -259,15 +256,19 @@ extension ChatServiceStreamingExt on ChatService {
           )
               .listen(
             (event) {
+              // usage 计量是 API 计费事实（per-request 隔离），必须
+              // 先于取消守卫处理：用户停止后仍要把已计量请求的
+              // cost/tokens 累加到对话（错误轮/流末尾的 usage 事件）。
+              if (event.usage != null) {
+                // usage 计量事件（provider 流末尾产出，per-request 隔离）
+                // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
+                onUsageEvent?.call(event.usage!, recordInput: true);
+              }
               if (_isCancelledByUser) return;
               // Anthropic extended thinking 签名（协议续接用，静默透传）
               if (event.thinkingSignature != null &&
                   event.thinkingSignature!.isNotEmpty) {
                 _thinkingSignature = event.thinkingSignature!;
-              }
-              // usage 计量事件（provider 流末尾产出，per-request 隔离）
-              if (event.usage != null) {
-                _accumulateFromMap(event.usage!, recordInput: true);
               }
               if (event.isReasoning) {
                 _reasoningBuffer += event.text;
