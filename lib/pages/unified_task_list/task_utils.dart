@@ -8,6 +8,7 @@ import '../../providers/task_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../task_flow/models/task_flow_execution.dart';
 import '../../task_flow/services/task_flow_execution_service.dart';
+import '../../task_flow/services/task_flow_scheduler.dart';
 
 // =============================================================================
 // 工具函数
@@ -193,11 +194,10 @@ Widget stepIcon(catcatch.StepStatus step) {
 // UnifiedTaskItem 数据模型
 // =============================================================================
 
-/// Whether deleting [execution] should cancel the execution service's
-/// active request. The service's cancel token belongs to the currently
-/// executing flow (there is only one at a time), so only deleting the
-/// RUNNING execution may cancel it — deleting a completed/failed flow
-/// must not kill another flow's in-flight request.
+/// Whether deleting [execution] should cancel its in-flight request and
+/// scheduler slot. Cancel tokens are keyed per execution now (concurrent
+/// flows), so only deleting the RUNNING execution cancels anything — a
+/// completed/failed flow's deletion must not touch other flows.
 @visibleForTesting
 bool shouldCancelActiveRequest(TaskFlowExecution execution) =>
     execution.status == FlowExecutionStatus.running;
@@ -220,7 +220,14 @@ void removeFlowSubTaskTasks(WidgetRef ref, TaskFlowExecution execution) {
         ref.read(backgroundTasksProvider.notifier).removeTask(id),
     cancelChat: (convId) => ref.read(chatStreamManagerProvider).cancel(convId),
     cancelActiveRequest: shouldCancelActiveRequest(execution)
-        ? () => ref.read(taskFlowExecutionServiceProvider).cancelActiveRequest()
+        ? () {
+            ref
+                .read(taskFlowExecutionServiceProvider)
+                .cancelActiveRequest(execution.id);
+            // Also release/cancel the flow's scheduler slot so a queued
+            // flow does not sit in the wait queue after deletion.
+            ref.read(taskFlowSchedulerProvider).cancel(execution.id);
+          }
         : null,
   );
 }

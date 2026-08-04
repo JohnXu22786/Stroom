@@ -55,6 +55,12 @@ class MediaPickerConfig<T> {
   /// the default icon in the file item tile.
   final Widget Function(T record)? thumbnailBuilder;
 
+  /// Called with the selected record right before the dialog closes in
+  /// single-select mode (awaited before the pop). Lets callers resolve the
+  /// record's storage path or identity (the dialog's own result only
+  /// carries file name + bytes). Not invoked in multi-select mode.
+  final Future<void> Function(T record)? onRecordPicked;
+
   const MediaPickerConfig({
     required this.title,
     required this.emptyIcon,
@@ -68,6 +74,7 @@ class MediaPickerConfig<T> {
     required this.displayName,
     required this.subtitleBuilder,
     this.thumbnailBuilder,
+    this.onRecordPicked,
   });
 }
 
@@ -217,6 +224,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
 
     if (!widget.config.multiSelect) {
       // Single-select: close immediately with the result
+      await widget.config.onRecordPicked?.call(record);
       if (mounted && !_resultDelivered) {
         _resultDelivered = true;
         Navigator.of(context).pop([MapEntry(fileName, data)]);

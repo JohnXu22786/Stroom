@@ -92,6 +92,11 @@ class TaskFlowExecution {
   final List<FlowSubTask> subTasks;
   final String? error;
 
+  /// Transient flag: the flow is alive but its current block is waiting
+  /// for scheduler resources (concurrent flows). Never persisted — a
+  /// restored execution is never queued.
+  final bool queued;
+
   TaskFlowExecution({
     String? id,
     required this.flowId,
@@ -101,6 +106,7 @@ class TaskFlowExecution {
     this.completedAt,
     this.subTasks = const [],
     this.error,
+    this.queued = false,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -111,6 +117,7 @@ class TaskFlowExecution {
     List<FlowSubTask>? subTasks,
     String? error,
     bool clearError = false,
+    bool? queued,
   }) =>
       TaskFlowExecution(
         id: id,
@@ -122,6 +129,7 @@ class TaskFlowExecution {
             clearCompletedAt ? null : (completedAt ?? this.completedAt),
         subTasks: subTasks ?? this.subTasks,
         error: clearError ? null : (error ?? this.error),
+        queued: queued ?? this.queued,
       );
 
   /// Get the task status of this execution for the unified task list.

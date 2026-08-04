@@ -17,9 +17,15 @@ import '../models/task_flow_exception.dart';
 import '../providers/task_flow_execution_provider.dart';
 import '../providers/task_flow_provider.dart';
 import 'block_executors/block_executors.dart';
+import 'task_flow_scheduler.dart';
 
 final taskFlowExecutionServiceProvider = Provider<TaskFlowExecutionService>(
   (ref) => TaskFlowExecutionService._(ref),
+);
+
+/// Resource-aware scheduler shared by all concurrent flow executions.
+final taskFlowSchedulerProvider = Provider<TaskFlowScheduler>(
+  (ref) => TaskFlowScheduler(),
 );
 
 /// Maps a block type to the unified-task-list sub-task card type.
@@ -45,40 +51,27 @@ String subTaskTypeFor(BlockType? typeKey) {
 
 class TaskFlowExecutionService {
   final Ref _ref;
-  bool _isRunning = false;
 
-  /// Cancel token for the currently executing block's HTTP request
-  /// (ASR/OCR). Deleting the flow cancels it so the request dies promptly
+  /// Cancel tokens for the in-flight ASR/OCR request of each executing
+  /// block, keyed by execution id (multiple flows run concurrently now).
+  /// Deleting a flow cancels its own token so the request dies promptly
   /// instead of running for up to the 60-min response bound.
-  CancelToken? _activeRequestCancelToken;
-
-  /// Whether a flow is currently running.  Callers can check this
-  /// before calling [startFlow] to provide user feedback.
-  bool get isRunning => _isRunning;
+  final Map<String, CancelToken> _activeRequestCancelTokens = {};
 
   TaskFlowExecutionService._(this._ref);
 
-  /// Cancels the HTTP request of the currently executing block (ASR/OCR).
-  /// Idempotent — safe to call even when nothing is running.
-  void cancelActiveRequest() {
-    final token = _activeRequestCancelToken;
-    _activeRequestCancelToken = null;
+  /// Cancels the HTTP request of [execId]'s currently executing block
+  /// (ASR/OCR). Idempotent — safe to call even when the flow is idle.
+  void cancelActiveRequest(String execId) {
+    final token = _activeRequestCancelTokens.remove(execId);
     if (token != null && !token.isCancelled) {
       token.cancel();
     }
   }
 
   Future<bool> startFlow(String flowId, String inputText) async {
-    if (_isRunning) return false;
-    _isRunning = true;
-    _activeRequestCancelToken = null;
-    try {
-      await _startFlowInternal(flowId, inputText);
-      return true;
-    } finally {
-      _isRunning = false;
-      _activeRequestCancelToken = null;
-    }
+    await _startFlowInternal(flowId, inputText);
+    return true;
   }
 
   Future<void> _startFlowInternal(String flowId, String inputText) async {
@@ -93,6 +86,7 @@ class TaskFlowExecutionService {
     final catcatchNotifier = _ref.read(catcatchTasksProvider.notifier);
     final bgNotifier = _ref.read(backgroundTasksProvider.notifier);
     final taskListNotifier = _ref.read(taskListProvider.notifier);
+    final scheduler = _ref.read(taskFlowSchedulerProvider);
 
     final execId = execNotifier.addExecution(
       flowId: flow.id,
@@ -123,7 +117,7 @@ class TaskFlowExecutionService {
       await Future.delayed(Duration.zero);
       // The execution may have been deleted while the previous block ran
       // (flow card delete / 清除所有) — abort promptly so no further tasks
-      // are created and the global run lock frees up.
+      // are created.
       if (!execNotifier.state.any((e) => e.id == execId)) {
         AppLogService.info('TaskFlow', '任务流已删除，中止执行 ($execId)');
         return;
@@ -134,6 +128,19 @@ class TaskFlowExecutionService {
       if (def == null) {
         execNotifier.failExecution(execId, error: '未知功能块类型');
         return;
+      }
+
+      // Resource-aware scheduling: wait for budget before starting this
+      // block (concurrent flows). The queued flag surfaces in the UI.
+      final weight = TaskFlowScheduler.weightFor(def.typeKey);
+      execNotifier.setExecutionQueued(execId, true);
+      try {
+        await scheduler.acquire(execId, weight);
+      } on FlowSchedulerCancelledException {
+        // Flow was deleted while queued — nothing more to do.
+        return;
+      } finally {
+        execNotifier.setExecutionQueued(execId, false);
       }
 
       try {
@@ -184,9 +191,11 @@ class TaskFlowExecutionService {
     required TaskListNotifier taskListNotifier,
     required ProviderEntriesState providerEntries,
   }) async {
-    // A fresh cancel token per block, exposed via cancelActiveRequest()
-    // so deleting the flow aborts the in-flight ASR/OCR request promptly.
-    _activeRequestCancelToken = CancelToken();
+    // A fresh per-execution cancel token for this block, exposed via
+    // cancelActiveRequest(execId) so deleting THIS flow aborts its
+    // in-flight ASR/OCR request promptly (other flows are unaffected).
+    _activeRequestCancelTokens[execId] = CancelToken();
+    final scheduler = _ref.read(taskFlowSchedulerProvider);
     try {
       return await _executeBlockInner(
         def,
@@ -201,7 +210,8 @@ class TaskFlowExecutionService {
         providerEntries: providerEntries,
       );
     } finally {
-      _activeRequestCancelToken = null;
+      _activeRequestCancelTokens.remove(execId);
+      scheduler.release(execId);
     }
   }
 
@@ -250,7 +260,7 @@ class TaskFlowExecutionService {
           flowSubTask: flowSubTask,
           bgNotifier: bgNotifier,
           providerEntries: providerEntries,
-          cancelToken: _activeRequestCancelToken,
+          cancelToken: _activeRequestCancelTokens[execId],
         );
       case BlockType.ocr:
         return await executeOcrBlock(
@@ -262,7 +272,7 @@ class TaskFlowExecutionService {
           flowSubTask: flowSubTask,
           bgNotifier: bgNotifier,
           providerEntries: providerEntries,
-          cancelToken: _activeRequestCancelToken,
+          cancelToken: _activeRequestCancelTokens[execId],
         );
       case BlockType.tts:
         return await executeTtsBlock(

@@ -141,6 +141,8 @@ class ImageManifest {
   static Future<Uint8List?> readFile(String fileName) =>
       _ops.readFile(fileName);
   static Future<bool> deleteFile(String fileName) => _ops.deleteFile(fileName);
+  static Future<String?> readFilePath(String fileName) =>
+      _ops.readFilePath(fileName);
 
   // Folder management
   static Future<Set<String>> getAllFolders() => _ops.getAllFolders();

@@ -1,7 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../utils/file_manifest.dart';
+import '../../utils/image_manifest.dart';
+import '../../utils/video_manifest.dart';
+import '../../widgets/app_media_picker_dialog.dart';
 import '../models/block_type_definition.dart';
 import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
@@ -512,6 +518,32 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               ],
             ),
             const SizedBox(height: 8),
+            // Media inputs (image/audio/video) get an in-app picker button
+            // — the flow executor consumes a file path, and these types are
+            // backed by app storage. Text/url/file stay manual.
+            if (_inputType == IOType.image ||
+                _inputType == IOType.audio ||
+                _inputType == IOType.video) ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _pickMediaInput,
+                  icon: Icon(
+                    _inputType == IOType.image
+                        ? Icons.image_outlined
+                        : _inputType == IOType.audio
+                            ? Icons.audiotrack
+                            : Icons.videocam_outlined,
+                    size: 16,
+                  ),
+                  label: const Text('选择应用内媒体'),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             if (_inputType == IOType.url)
               TextField(
                 controller: _inputController,
@@ -730,6 +762,115 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   // Run mode – start execution
   // =========================================================================
 
+  /// Opens the in-app media picker for the current input type and fills
+  /// the resolved storage path into the input field.
+  ///
+  /// Only types backed by app storage (image/audio/video) get a picker —
+  /// text/url/file inputs stay manual (there is no arbitrary file storage).
+  Future<void> _pickMediaInput() async {
+    final ioType = _inputType;
+    switch (ioType) {
+      case IOType.image:
+        await _pickFrom<ImageRecord>(
+          title: '选择应用内图片',
+          emptyIcon: Icons.image_outlined,
+          emptyText: '暂无图片',
+          fileIcon: Icons.image,
+          fileIconColor: Colors.blue,
+          loadRecords: ImageManifest.loadRecords,
+          loadFolders: ImageManifest.getAllFolders,
+          readFile: (r) => ImageManifest.readFile(r.storagePath),
+          resolvePath: (r) => ImageManifest.readFilePath(r.storagePath),
+        );
+      case IOType.audio:
+        await _pickFrom<AudioRecord>(
+          title: '选择应用内音频',
+          emptyIcon: Icons.multitrack_audio_outlined,
+          emptyText: '暂无音频',
+          fileIcon: Icons.audiotrack,
+          fileIconColor: Colors.green,
+          loadRecords: FileManifest.loadRecords,
+          loadFolders: FileManifest.getAllFolders,
+          readFile: (r) => FileManifest.readFile(r.storagePath),
+          resolvePath: (r) => FileManifest.readFilePath(r.storagePath),
+        );
+      case IOType.video:
+        await _pickFrom<VideoRecord>(
+          title: '选择应用内视频',
+          emptyIcon: Icons.videocam_outlined,
+          emptyText: '暂无视频',
+          fileIcon: Icons.videocam,
+          fileIconColor: Colors.orange,
+          loadRecords: VideoManifest.loadRecords,
+          loadFolders: VideoManifest.getAllFolders,
+          readFile: (r) => VideoManifest.readFile(r.storagePath),
+          resolvePath: (r) => VideoManifest.readFilePath(r.storagePath),
+        );
+      default:
+        break; // text/url/file/any — manual input only
+    }
+  }
+
+  Future<void> _pickFrom<T>({
+    required String title,
+    required IconData emptyIcon,
+    required String emptyText,
+    required IconData fileIcon,
+    required Color fileIconColor,
+    required Future<List<T>> Function() loadRecords,
+    required Future<Set<String>> Function() loadFolders,
+    required Future<Uint8List?> Function(T record) readFile,
+    required Future<String?> Function(T record) resolvePath,
+  }) async {
+    String? pickedPath;
+    final result = await showMediaPickerDialog<T>(
+      context,
+      MediaPickerConfig<T>(
+        title: title,
+        emptyIcon: emptyIcon,
+        emptyText: emptyText,
+        fileIcon: fileIcon,
+        fileIconColor: fileIconColor,
+        loadRecords: loadRecords,
+        loadFolders: loadFolders,
+        readFile: readFile,
+        displayName: (record) {
+          final dynamic r = record;
+          return (r.name as String?) ?? '';
+        },
+        subtitleBuilder: (record) {
+          final dynamic r = record;
+          final format = (r.format as String?) ?? '';
+          final size = (r.size as int?) ?? 0;
+          return Text(
+            '$format · ${_formatBytes(size)}',
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          );
+        },
+        onRecordPicked: (record) async {
+          // Resolved before the dialog pops; the path lands in
+          // [pickedPath] for the caller below.
+          pickedPath = await resolvePath(record);
+        },
+      ),
+    );
+
+    if (result == null || pickedPath == null || !mounted) return;
+    if (!File(pickedPath!).existsSync()) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('文件不存在，请重新选择')));
+      return;
+    }
+    _inputController.text = pickedPath!;
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
   Future<void> _startFlow() async {
     final inputText = _inputController.text.trim();
     if (inputText.isEmpty) return;
@@ -759,17 +900,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
     final service = ref.read(taskFlowExecutionServiceProvider);
 
-    if (service.isRunning) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('已有任务流正在执行')));
-      }
-      return;
-    }
-
     // Fire-and-forget: startFlow can take minutes (polling loops).
-    // The unified task list will show real-time progress.
+    // Concurrent flows are allowed — the resource scheduler queues blocks
+    // when the device is busy. The unified task list shows live progress.
     service.startFlow(_editingFlowId!, inputText);
 
     if (mounted) {
