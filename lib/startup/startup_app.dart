@@ -592,9 +592,13 @@ class _ErrorCatcherState extends State<_ErrorCatcher> {
     // Replace the global ErrorWidget.builder so build errors are caught here
     _originalBuilder = ErrorWidget.builder;
     ErrorWidget.builder = (FlutterErrorDetails details) {
-      final result = widget.onError(
-          details.exception, details.stack ?? StackTrace.current);
-      return result;
+      // 注意：ErrorWidget.builder 在 build 阶段被同步调用，此时不能直接
+      // setState（会触发 "setState() or markNeedsBuild() called during
+      // build" 断言）。先把错误状态调度到帧后，再返回占位组件。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.onError(details.exception, details.stack ?? StackTrace.current);
+      });
+      return _ErrorWidgetPlaceholder();
     };
   }
 

@@ -97,6 +97,69 @@ void main() {
       );
     });
 
+    test('non-string id/type/name values are reported as issues, not crashes',
+        () async {
+      // 损坏数据：id 为 int、type 为 Map、name 为 List。
+      // 旧代码 `(entry['id'] as String?)` 强转抛 TypeError 中断整个验证。
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          'provider_entries',
+          jsonEncode([
+            {
+              'id': 123,
+              'type': {'nested': true},
+              'name': ['a', 'b'],
+              'configs': [],
+            },
+            {
+              'id': 'valid',
+              'type': 'llm',
+              'name': 'Valid',
+              'configs': [],
+            },
+          ]));
+      await prefs.setInt('data_format_version', 1);
+
+      final issues = await StartupCheckService.validateDataFormats();
+
+      // 不崩溃：损坏条目被报告，且后续合法条目没有被漏检。
+      expect(issues, isA<List<StartupIssue>>());
+      final idIssues =
+          issues.where((i) => i.message.contains('id') && i.message.contains('缺失'));
+      expect(idIssues, isNotEmpty);
+      expect(
+        issues.any((i) => i.message.contains('type') && i.message.contains('缺失')),
+        isTrue,
+      );
+      expect(
+        issues.any((i) => i.message.contains('name') && i.message.contains('缺失')),
+        isTrue,
+      );
+    });
+
+    test('conversations with non-string id are reported, not crashes',
+        () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          'conversations',
+          jsonEncode([
+            {'id': 42, 'messages': []},
+            {'id': 'conv_valid', 'messages': []},
+          ]));
+      await prefs.setInt('data_format_version', 1);
+
+      final issues = await StartupCheckService.validateDataFormats();
+
+      expect(issues, isA<List<StartupIssue>>());
+      expect(
+        issues.any((i) =>
+            i.dataKey == 'conversations' &&
+            i.message.contains('id') &&
+            i.message.contains('缺失')),
+        isTrue,
+      );
+    });
+
     test('validates conversation data structure', () async {
       final prefs = await SharedPreferences.getInstance();
       // Valid conversations
@@ -152,6 +215,35 @@ void main() {
       expect(
         issues.any((i) => i.message.contains('nonexistent_type')),
         isTrue,
+      );
+    });
+
+    test('non-string type values do not crash or abort the whole check',
+        () async {
+      // 损坏数据：type 为 int/Map 等非字符串。旧代码 `as String?` 强转
+      // 抛 TypeError 导致整个完整性检查中断（其余条目全部漏检）。
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          'provider_entries',
+          jsonEncode([
+            {'id': 'bad_type', 'type': 123, 'name': 'Bad'},
+            {'id': 'bad_type2', 'type': {'nested': true}, 'name': 'Bad2'},
+            {
+              'id': 'valid_unknown',
+              'type': 'unknown_type',
+              'name': 'Unknown',
+            },
+          ]));
+      await prefs.setInt('data_format_version', 1);
+
+      final issues = await StartupCheckService.checkDataIntegrity();
+
+      // 不崩溃，且合法的未知类型条目仍然被检查到。
+      expect(issues, isA<List<StartupIssue>>());
+      expect(
+        issues.any((i) => i.message.contains('unknown_type')),
+        isTrue,
+        reason: '非字符串 type 条目应被跳过而非中断整个检查',
       );
     });
   });

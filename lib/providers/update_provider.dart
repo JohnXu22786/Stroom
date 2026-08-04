@@ -341,6 +341,21 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       return;
     }
 
+    // GitHub 限流（HTTP 403）等场景返回的是 JSON 对象而非数组，
+    // 直接 `as List` 会抛 TypeError 并产生误导性的错误信息。
+    if (response.data is! List) {
+      if (!silent) {
+        state = state.copyWith(
+          isChecking: false,
+          updateAvailable: false,
+          error: '检查更新失败: 服务器返回了无法识别的数据',
+        );
+      } else {
+        state = _resetState();
+      }
+      return;
+    }
+
     final releases = response.data as List<dynamic>;
     final currentVersionStr = appVersion;
 

@@ -420,6 +420,33 @@ void main() {
       expect(notifier.state.updateAvailable, false);
     });
 
+    test('handles 200 response with non-list body without crashing', () async {
+      // GitHub 限流（HTTP 403 带 JSON 对象）等异常数据：旧代码直接
+      // `as List` 抛 TypeError 并显示误导性错误；现在应优雅降级。
+      SharedPreferences.setMockInitialValues({});
+      final dio = Dio(BaseOptions());
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(Response(
+            requestOptions: options,
+            statusCode: 200,
+            data: {
+              'message': 'API rate limit exceeded',
+              'documentation_url': 'https://docs.github.com/rest',
+            },
+          ));
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate(silent: false);
+
+      expect(notifier.state.isChecking, false);
+      expect(notifier.state.error, isNotNull);
+      expect(notifier.state.error, isNot(contains('is not a subtype')));
+      expect(notifier.state.updateAvailable, false);
+    });
+
     test('recovers from error on subsequent check', () async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createFailingDio();

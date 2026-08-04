@@ -102,6 +102,23 @@ void main() {
 
       expect(find.text('1/3'), findsOneWidget);
     });
+
+    testWidgets('long status message does not overflow the layout',
+        (tester) async {
+      // 启动检查发现多个问题时状态文案会非常长（所有问题拼接），
+      // 必须在受限高度内滚动而不是触发 RenderFlex overflow。
+      final longMessage = '启动完成（注意: 发现 3 个数据问题:\n'
+          '  • provider_entries[0]: id 字段缺失或为空\n'
+          '  • provider_entries[1]: type 字段缺失或为空\n'
+          '  • conversations[2]: messages 字段缺失\n'
+          '  • conversations[3]: id 字段缺失）';
+      await tester.pumpWidget(wrapStartupPage(statusMessage: longMessage));
+      await tester.pump();
+
+      expect(find.text(longMessage), findsOneWidget);
+      expect(tester.takeException(), isNull,
+          reason: '长状态文案必须可滚动而非溢出报错');
+    });
   });
 
   group('StartupPage - migration state', () {
