@@ -299,6 +299,109 @@ void main() {
       expect(find.byType(AlertDialog), findsNothing);
     });
 
+    testWidgets(
+        'single-select without readFile: path-only mode resolves via '
+        'onRecordPicked and pops an empty result', (tester) async {
+      final records = [
+        const _TestRecord(id: '1', name: '测试文件', format: 'wav', size: 1024),
+      ];
+      _TestRecord? picked;
+      List<MapEntry<String, Uint8List>>? pickerResult;
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () async {
+                  pickerResult = await showMediaPickerDialog(
+                    context,
+                    MediaPickerConfig<_TestRecord>(
+                      title: '测试选择器',
+                      emptyIcon: Icons.folder_outlined,
+                      emptyText: '暂无文件',
+                      fileIcon: Icons.insert_drive_file,
+                      fileIconColor: Colors.blue,
+                      loadRecords: () async => records,
+                      loadFolders: () async => <String>{},
+                      // No readFile — path-only mode.
+                      displayName: (record) => record.name,
+                      subtitleBuilder: (record) => const Text(''),
+                      onRecordPicked: (record) async {
+                        picked = record;
+                      },
+                    ),
+                  );
+                },
+                child: const Text('Open'),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.text('测试文件'));
+      await tester.pumpAndSettle();
+
+      expect(picked, isNotNull);
+      expect(picked!.id, '1');
+      expect(pickerResult, isNotNull);
+      expect(pickerResult, isEmpty); // path-only: no bytes carried
+      expect(find.byType(AlertDialog), findsNothing);
+    });
+
+    testWidgets(
+        'single-select: a throwing onRecordPicked still pops '
+        'the dialog (no hang, no unhandled error)', (tester) async {
+      final records = [
+        const _TestRecord(id: '1', name: '测试文件', format: 'wav', size: 1024),
+      ];
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () => showMediaPickerDialog(
+                  context,
+                  MediaPickerConfig<_TestRecord>(
+                    title: '测试选择器',
+                    emptyIcon: Icons.folder_outlined,
+                    emptyText: '暂无文件',
+                    fileIcon: Icons.insert_drive_file,
+                    fileIconColor: Colors.blue,
+                    loadRecords: () async => records,
+                    loadFolders: () async => <String>{},
+                    readFile: (record) async => Uint8List.fromList([1, 2, 3]),
+                    displayName: (record) => record.name,
+                    subtitleBuilder: (record) => const Text(''),
+                    onRecordPicked: (record) async {
+                      throw StateError('boom');
+                    },
+                  ),
+                ),
+                child: const Text('Open'),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.text('测试文件'));
+      await tester.pumpAndSettle();
+
+      // The dialog closed despite the throwing callback.
+      expect(find.byType(AlertDialog), findsNothing);
+    });
+
     testWidgets('single-select: dialog closes after item tap', (tester) async {
       final records = [
         const _TestRecord(id: '1', name: '测试文件', format: 'wav', size: 1024),

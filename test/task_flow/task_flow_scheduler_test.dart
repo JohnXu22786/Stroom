@@ -181,22 +181,25 @@ void main() {
 
     test(
         'RSS growth during a long block is attributed at the next '
-        'acquire (cross-block baseline)', () async {
+        'acquire (cross-block baseline, gap > 2x window)', () async {
       var rss = 100 * 1024 * 1024;
+      var fakeNow = DateTime(2026, 1, 1, 12, 0, 0);
       final s = TaskFlowScheduler(
         coreCount: 4,
         rssBytes: () => rss,
+        now: () => fakeNow,
         rssWindow: const Duration(seconds: 30),
         rssGrowthThresholdBytes: 300 * 1024 * 1024,
       );
 
-      // Block A runs for "minutes" (no sampling happens meanwhile).
-      await s.acquire('a', 1);
+      // Block A runs for 5 minutes (no sampling happens meanwhile).
+      await s.acquire('a', 1); // baseline 100MB @ 12:00
       rss = 500 * 1024 * 1024; // A ballooned memory while running
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-      s.release('a'); // samples on release → growth attributed
+      fakeNow = fakeNow.add(const Duration(minutes: 5));
+      s.release('a'); // release @ 12:05 → growth attributed
 
-      // Budget is now contracted even though the samples are sparse.
+      // The gap (5 min) exceeds 2x the window, but a release happened
+      // across it, so the growth must NOT be discarded.
       expect(s.currentBudget, 1);
       expect(s.baseBudget, 2);
     });
