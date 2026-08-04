@@ -7,6 +7,7 @@ import 'package:flutter_background_service_platform_interface/flutter_background
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/background_optimization_page.dart';
 import 'package:stroom/providers/background_task_provider.dart';
+import 'package:stroom/services/desktop_app_service.dart';
 import 'package:stroom/services/ios_continued_task_service.dart';
 
 /// Builds the test app wrapping BackgroundOptimizationPage.
@@ -918,6 +919,125 @@ void main() {
       expect(find.text('macOS'), findsWidgets);
       expect(find.text('Linux'), findsWidgets);
       expect(find.text('Web'), findsOneWidget);
+    });
+  });
+
+  group('BackgroundOptimizationPage - tray resident messaging', () {
+    /// Puts the desktop tray service into the ready state so the page
+    /// renders the tray-resident copy (matching a real desktop session).
+    Future<void> makeTrayReady() async {
+      final messenger = TestDefaultBinaryMessengerBinding.instance
+          .defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        const MethodChannel('window_manager'),
+        (MethodCall call) async => true,
+      );
+      messenger.setMockMethodCallHandler(
+        const MethodChannel('tray_manager'),
+        (MethodCall call) async => true,
+      );
+      await DesktopAppService.instance.setupTray();
+    }
+
+    testWidgets('desktop platforms explain tray-resident close behavior',
+        (tester) async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        await makeTrayReady();
+
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        // The desktop description must mention the tray-resident behavior.
+        expect(find.textContaining('系统托盘'), findsOneWidget);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.instance.resetForTesting();
+      }
+    });
+
+    testWidgets('linux explains restore via the tray menu', (tester) async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      try {
+        await makeTrayReady();
+
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        // On Linux, restore happens via the tray menu, not icon click.
+        expect(find.textContaining('托盘菜单选择「显示主窗口」'), findsOneWidget);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.instance.resetForTesting();
+      }
+    });
+
+    testWidgets('desktop platforms warn honestly when tray is unavailable',
+        (tester) async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        // No tray setup performed — the service is not tray-ready.
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('托盘暂不可用'), findsOneWidget);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('android shows exact-alarm button when permission is missing',
+        (tester) async {
+      registerMockPlatform();
+      // Mock reports exact alarms are NOT permitted (Android 14+ default).
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async =>
+            methodCall.method == 'canScheduleExactAlarms' ? false : true,
+      );
+
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('允许精确闹钟（保活更可靠）'), findsOneWidget);
     });
   });
 }

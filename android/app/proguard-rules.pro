@@ -19,8 +19,9 @@
 -keep class com.alexmercerind.media_kit_libs_android_video.** { *; }
 -keep class com.alexmercerind.mediakitandroidhelper.** { *; }
 
-# 保留 foreground service 类
--keep class com.foregroundservice.** { *; }
+# 保留 flutter_background_service_android 前台服务类
+# （旧类名 com.foregroundservice.** 已随插件 v6.x 移除）
+-keep class id.flutter.flutter_background_service.** { *; }
 
 # 保留 sqflite 原生方法
 -keep class com.tekartik.sqflite.** { *; }

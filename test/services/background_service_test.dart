@@ -15,6 +15,10 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   bool _throwOnStart = false;
   bool _throwOnCheck = false;
 
+  /// The last AndroidConfiguration passed to [configure], captured so tests
+  /// can assert the foreground service type wiring.
+  AndroidConfiguration? lastAndroidConfiguration;
+
   void setServiceRunning(bool running) {
     _isRunning = running;
   }
@@ -40,6 +44,7 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
     required IosConfiguration iosConfiguration,
     required AndroidConfiguration androidConfiguration,
   }) async {
+    lastAndroidConfiguration = androidConfiguration;
     return _configureResult;
   }
 
@@ -73,6 +78,9 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   }
 }
 
+/// Records method calls made on the keep-alive method channel.
+final List<MethodCall> keepAliveCalls = [];
+
 /// Registers a mock background service platform for testing and returns it.
 MockBackgroundServicePlatform registerMockPlatform() {
   final mock = MockBackgroundServicePlatform();
@@ -80,18 +88,32 @@ MockBackgroundServicePlatform registerMockPlatform() {
   return mock;
 }
 
+/// Runs [body] with the Android platform override active.
+Future<void> withAndroidPlatform(Future<void> Function() body) async {
+  debugDefaultTargetPlatformOverride = TargetPlatform.android;
+  try {
+    await body();
+  } finally {
+    debugDefaultTargetPlatformOverride = null;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    keepAliveCalls.clear();
     // Set up a mock MethodChannel handler for the keep-alive channel
     // so that fire-and-forget invokeMethod calls don't create pending
     // platform channel calls that fail the test after completion.
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('com.johntsui.stroom/keepalive'),
-      (MethodCall methodCall) async => true,
+      (MethodCall methodCall) async {
+        keepAliveCalls.add(methodCall);
+        return true;
+      },
     );
   });
 
@@ -321,6 +343,161 @@ void main() {
       // After restart the enabled state must be persisted again so a
       // later process death still triggers cold-start restore.
       expect(prefs.getBool('background_service_enabled'), isTrue);
+    });
+  });
+
+  group('BackgroundService - keep-alive watchdog wiring', () {
+    test('AndroidConfiguration declares the dataSync foreground service type',
+        () async {
+      final mock = registerMockPlatform();
+      await initializeBackgroundService();
+      final config = mock.lastAndroidConfiguration;
+      expect(config, isNotNull);
+      expect(config!.foregroundServiceTypes,
+          contains(AndroidForegroundType.dataSync));
+    });
+
+    test('startBackgroundService arms the AlarmManager watchdog', () async {
+      registerMockPlatform();
+      await withAndroidPlatform(() async {
+        await startBackgroundService();
+      });
+      expect(
+        keepAliveCalls.any((c) => c.method == 'startKeepAlive'),
+        isTrue,
+        reason: 'starting the service must arm the native keep-alive alarm',
+      );
+    });
+
+    test('stopBackgroundService disarms the AlarmManager watchdog', () async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(true);
+      await withAndroidPlatform(() async {
+        await stopBackgroundService();
+      });
+      expect(
+        keepAliveCalls.any((c) => c.method == 'stopKeepAlive'),
+        isTrue,
+        reason: 'stopping the service must cancel the native keep-alive alarm',
+      );
+    });
+
+    test(
+        'cold-start restore re-arms the watchdog alarm after restoring service',
+        () async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+      mock.setStartResult(true);
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+
+      await withAndroidPlatform(() async {
+        await restoreBackgroundServiceOnColdStart();
+      });
+
+      expect(mock._isRunning, isTrue);
+      expect(
+        keepAliveCalls.any((c) => c.method == 'startKeepAlive'),
+        isTrue,
+        reason: 'restoring the service on cold start must also re-arm the '
+            'watchdog alarm (the alarm does not survive force-stop or updates)',
+      );
+    });
+
+    test('cold-start restore skips the watchdog when its toggle is disabled',
+        () async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+      mock.setStartResult(true);
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+      await prefs.setBool('background_service_watchdog', false);
+
+      await withAndroidPlatform(() async {
+        await restoreBackgroundServiceOnColdStart();
+      });
+
+      // Service itself is still restored, but no alarm may be armed.
+      expect(mock._isRunning, isTrue);
+      expect(
+        keepAliveCalls.any((c) => c.method == 'startKeepAlive'),
+        isFalse,
+      );
+    });
+
+    test('startBackgroundService does not arm watchdog when toggle is disabled',
+        () async {
+      registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_watchdog', false);
+
+      await withAndroidPlatform(() async {
+        await startBackgroundService();
+      });
+      expect(
+        keepAliveCalls.any((c) => c.method == 'startKeepAlive'),
+        isFalse,
+      );
+    });
+
+    test('keep-alive channel calls are never made on desktop platforms',
+        () async {
+      registerMockPlatform();
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        await startBackgroundService();
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+      expect(keepAliveCalls, isEmpty);
+    });
+
+    test('rearmKeepAliveOnResume re-arms the watchdog when service enabled',
+        () async {
+      registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+
+      await withAndroidPlatform(() async {
+        await rearmKeepAliveOnResume();
+      });
+
+      expect(
+        keepAliveCalls.any((c) => c.method == 'startKeepAlive'),
+        isTrue,
+        reason: 'returning to the app must re-arm the alarm — the system '
+            'silently deletes exact alarms when the permission is revoked',
+      );
+    });
+
+    test('rearmKeepAliveOnResume does nothing when service is disabled',
+        () async {
+      registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', false);
+
+      await withAndroidPlatform(() async {
+        await rearmKeepAliveOnResume();
+      });
+
+      expect(keepAliveCalls, isEmpty);
+    });
+
+    test('rearmKeepAliveOnResume is a no-op on non-Android platforms',
+        () async {
+      registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        await rearmKeepAliveOnResume();
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+      expect(keepAliveCalls, isEmpty);
     });
   });
 }
