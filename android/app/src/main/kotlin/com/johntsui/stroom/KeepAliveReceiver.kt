@@ -13,16 +13,19 @@ import android.util.Log
  * AlarmManager-based keep-alive watchdog for the foreground service.
  *
  * Android (especially Chinese ROMs) may kill the app process even when a
- * foreground service is active. This receiver schedules a periodic alarm
- * that, when fired, tries to restart the foreground service. If the process
- * is already running with the service active, the alarm is a no-op.
+ * foreground service is active. This receiver schedules a periodic
+ * keep-alive alarm that, when fired, tries to restart the foreground
+ * service. If the process is already running with the service active,
+ * the alarm is a no-op.
  *
  * Lifecycle:
  * 1. [scheduleAlarm] — called from Dart via MethodChannel when the
- *    background service is started. Schedules a repeating alarm.
+ *    background service is started. Schedules the keep-alive alarm.
  * 2. [cancelAlarm] — called when the background service is stopped.
  * 3. On [Intent.ACTION_BOOT_COMPLETED], the alarm is re-scheduled if
  *    it was previously active (persisted via SharedPreferences).
+ * 4. After every alarm fire, [onReceive] re-schedules the next one
+ *    (the modern alarm types used here are one-shot).
  */
 class KeepAliveReceiver : BroadcastReceiver() {
 
@@ -39,8 +42,25 @@ class KeepAliveReceiver : BroadcastReceiver() {
         private const val KEY_KEEP_ALIVE_ACTIVE = "flutter.keep_alive_active"
 
         /**
-         * Schedule the repeating keep-alive alarm.
+         * Schedule the keep-alive alarm.
          * Safe to call multiple times; the existing alarm is replaced.
+         *
+         * Alarm strategy (strongest → fallback):
+         * 1. Android 12+ (S) with exact-alarm permission:
+         *    [AlarmManager.setExactAndAllowWhileIdle] — fires precisely
+         *    even in Doze; one-shot, re-scheduled by [onReceive] after
+         *    every fire. Exact alarms are exempt from the S+
+         *    background-start restriction, so the foreground service
+         *    can be restarted from the alarm even when the app process
+         *    is not running.
+         * 2. Android 6+ (M): [AlarmManager.setAndAllowWhileIdle] — fires
+         *    within ~10 minutes of the target even in Doze. NOTE: inexact
+         *    alarms are NOT exempt from the S+ background-start
+         *    restriction; on Android 12+ the service restart from this
+         *    alarm only works while the user has granted the battery
+         *    optimization exemption (the app requests it via
+         *    requestIgnoreBatteryOptimizations).
+         * 3. Older versions: [AlarmManager.setInexactRepeating].
          */
         fun scheduleAlarm(context: Context) {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -56,30 +76,73 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 context, ALARM_REQUEST_CODE, intent, flags
             )
 
-            // Use setInexactRepeating to let the system batch alarms for
-            // battery efficiency. The interval is 15 minutes but the actual
-            // timing may vary by up to 5 minutes.
-            try {
-                alarmManager.setInexactRepeating(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    SystemClock.elapsedRealtime() + KEEP_ALIVE_INTERVAL_MS,
-                    KEEP_ALIVE_INTERVAL_MS,
-                    pendingIntent
-                )
-                Log.i(TAG, "Keep-alive alarm scheduled (interval=${KEEP_ALIVE_INTERVAL_MS / 60000}min)")
+            val triggerAt = SystemClock.elapsedRealtime() + KEEP_ALIVE_INTERVAL_MS
 
-                // Persist that the alarm is active so BOOT_COMPLETED can re-schedule
-                context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-                    .edit()
-                    .putBoolean(KEY_KEEP_ALIVE_ACTIVE, true)
-                    .apply()
+            // 在调度之前先持久化"闹钟已激活"标记：无论走主路径还是
+            // 降级路径，设备重启后 BOOT_COMPLETED 都能恢复调度。
+            context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_KEEP_ALIVE_ACTIVE, true)
+                .apply()
+
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    alarmManager.canScheduleExactAlarms()
+                ) {
+                    // Exact alarm: fires on time even in deep Doze.
+                    // One-shot — re-scheduled by onReceive after each fire.
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        triggerAt,
+                        pendingIntent
+                    )
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    // Inexact but Doze-tolerant (fires within ~10 min of target).
+                    // One-shot — re-scheduled by onReceive.
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        triggerAt,
+                        pendingIntent
+                    )
+                } else {
+                    // Pre-M: repeating alarm; onReceive also re-schedules.
+                    alarmManager.setInexactRepeating(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        triggerAt,
+                        KEEP_ALIVE_INTERVAL_MS,
+                        pendingIntent
+                    )
+                }
+                Log.i(TAG, "Keep-alive alarm scheduled (interval=${KEEP_ALIVE_INTERVAL_MS / 60000}min)")
             } catch (e: SecurityException) {
-                Log.e(TAG, "Failed to schedule keep-alive alarm: exact alarms permission may be denied", e)
+                // Exact-alarm permission revoked or denied (Android 12+).
+                // Fall back to an alarm that still tolerates Doze:
+                // on Android 6+ use setAndAllowWhileIdle (one-shot), on
+                // older versions use the repeating alarm.
+                Log.w(TAG, "Exact alarm not permitted — falling back", e)
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        alarmManager.setAndAllowWhileIdle(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerAt,
+                            pendingIntent
+                        )
+                    } else {
+                        alarmManager.setInexactRepeating(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerAt,
+                            KEEP_ALIVE_INTERVAL_MS,
+                            pendingIntent
+                        )
+                    }
+                } catch (e2: Exception) {
+                    Log.e(TAG, "Failed to schedule keep-alive alarm", e2)
+                }
             }
         }
 
         /**
-         * Cancel the repeating keep-alive alarm.
+         * Cancel the keep-alive alarm.
          */
         fun cancelAlarm(context: Context) {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -136,7 +199,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
                     Log.d(TAG, "Foreground service start requested")
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to start foreground service via keep-alive", e)
-                    // Don't give up — the alarm will fire again in 15 minutes.
+                    // Don't give up — the alarm will fire again in 5 minutes.
                     // If the service class is not found, cancel the alarm to
                     // stop repeated failures.
                     if (e is ClassNotFoundException) {

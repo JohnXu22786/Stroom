@@ -234,5 +234,93 @@ void main() {
         debugDefaultTargetPlatformOverride = null;
       }
     });
+
+    test(
+        'restoreBackgroundServiceOnColdStart does nothing when cold-start restore toggle is off',
+        () async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+      mock.setStartResult(true);
+
+      // Service was previously enabled...
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+      // ...but the user disabled cold-start auto-restore.
+      await setColdStartRestoreEnabled(false);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        await restoreBackgroundServiceOnColdStart();
+        // Service must NOT be started
+        expect(mock._isRunning, isFalse);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  });
+
+  group('BackgroundService - keep-alive strategy toggles', () {
+    test('watchdog toggle defaults to enabled', () async {
+      expect(await isWatchdogEnabled(), isTrue);
+    });
+
+    test('watchdog toggle persists its value', () async {
+      await setWatchdogEnabled(false);
+      expect(await isWatchdogEnabled(), isFalse);
+      await setWatchdogEnabled(true);
+      expect(await isWatchdogEnabled(), isTrue);
+    });
+
+    test('cold-start restore toggle defaults to enabled and persists',
+        () async {
+      expect(await isColdStartRestoreEnabled(), isTrue);
+      await setColdStartRestoreEnabled(false);
+      expect(await isColdStartRestoreEnabled(), isFalse);
+    });
+
+    test('battery reminder toggle defaults to enabled and persists', () async {
+      expect(await isBatteryReminderEnabled(), isTrue);
+      await setBatteryReminderEnabled(false);
+      expect(await isBatteryReminderEnabled(), isFalse);
+    });
+
+    test('desktop close-minimize toggle defaults to enabled and persists',
+        () async {
+      expect(await isDesktopCloseMinimizeEnabled(), isTrue);
+      await setDesktopCloseMinimizeEnabled(false);
+      expect(await isDesktopCloseMinimizeEnabled(), isFalse);
+    });
+
+    test('isDesktopPlatform reflects the target platform', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        expect(isDesktopPlatform(), isTrue);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        expect(isDesktopPlatform(), isFalse);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    test('restartBackgroundService persists enabled state', () async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(true);
+      mock.setStartResult(true);
+
+      // Simulate a previously persisted "disabled" state.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', false);
+
+      await restartBackgroundService();
+
+      // After restart the enabled state must be persisted again so a
+      // later process death still triggers cold-start restore.
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+    });
   });
 }
