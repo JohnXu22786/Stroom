@@ -229,6 +229,13 @@ class PlatformTutorialPage extends StatelessWidget {
       case 'Windows':
         return [
           _TutorialStep(
+            title: '关闭窗口时最小化',
+            description: '默认情况下，点击窗口关闭按钮不会退出 Stroom，'
+                '而是最小化到任务栏，后台任务继续运行。'
+                '任务运行时请勿直接退出应用；确实需要退出时，'
+                '请使用「后台运行优化」页面的「完全退出应用」按钮。',
+          ),
+          _TutorialStep(
             title: '关闭节电模式',
             description: '进入「设置」→「系统」→「电源和睡眠」→ 关闭「节电模式」。'
                 '或将节电模式设置为仅在电池电量低于指定百分比时自动开启。',
@@ -253,6 +260,13 @@ class PlatformTutorialPage extends StatelessWidget {
       case 'macOS':
         return [
           _TutorialStep(
+            title: '关闭窗口时最小化',
+            description: '默认情况下，点击窗口关闭按钮不会退出 Stroom，'
+                '而是最小化到程序坞，后台任务继续运行。'
+                '任务运行时请勿直接退出应用；确实需要退出时，'
+                '请使用「后台运行优化」页面的「完全退出应用」按钮。',
+          ),
+          _TutorialStep(
             title: '允许通知',
             description: '进入「系统设置」→「通知」→「Stroom」→ 开启「允许通知」。'
                 '建议同时开启「横幅」和「通知中心」。',
@@ -276,6 +290,13 @@ class PlatformTutorialPage extends StatelessWidget {
       case 'Linux':
         return [
           _TutorialStep(
+            title: '关闭窗口时最小化',
+            description: '默认情况下，点击窗口关闭按钮不会退出 Stroom，'
+                '而是最小化到任务栏/程序坞，后台任务继续运行。'
+                '任务运行时请勿直接退出应用；确实需要退出时，'
+                '请使用「后台运行优化」页面的「完全退出应用」按钮。',
+          ),
+          _TutorialStep(
             title: '桌面环境设置',
             description: '根据您使用的桌面环境（GNOME、KDE、XFCE 等），进入「系统设置」→'
                 '「应用」→ 找到 Stroom 并确保没有限制后台活动。',
@@ -295,6 +316,21 @@ class PlatformTutorialPage extends StatelessWidget {
             title: '开启自动启动',
             description: '在 GNOME 中，使用「优化」(Tweaks) 工具 →「开机启动程序」→ 添加 Stroom。'
                 '或在 ~/.config/autostart/ 下创建 stroom.desktop 文件。',
+          ),
+        ];
+      case 'Web':
+        return [
+          _TutorialStep(
+            title: '保持标签页打开',
+            description: 'Web 浏览器环境不支持后台服务运行。'
+                '任务运行时请保持 Stroom 标签页打开，'
+                '关闭标签页或刷新页面会立即中断任务。',
+          ),
+          _TutorialStep(
+            title: '避免浏览器挂起标签页',
+            description: '浏览器会冻结长时间不活跃的后台标签页以节省资源。'
+                '任务运行时请将 Stroom 标签页保持在前台，'
+                '或定期点击页面保持其活跃。',
           ),
         ];
       default:

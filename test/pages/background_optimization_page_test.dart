@@ -6,12 +6,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/background_optimization_page.dart';
+import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/services/ios_continued_task_service.dart';
 
 /// Builds the test app wrapping BackgroundOptimizationPage.
-Widget _buildTestApp() {
-  return const ProviderScope(
-    child: MaterialApp(
+/// Optionally overrides [backgroundTasksProvider] with a pre-seeded notifier
+/// (e.g. to simulate running tasks for the quit-confirmation flow).
+Widget _buildTestApp({BackgroundTaskNotifier? taskNotifier}) {
+  return ProviderScope(
+    overrides: taskNotifier == null
+        ? []
+        : [backgroundTasksProvider.overrideWith((ref) => taskNotifier)],
+    child: const MaterialApp(
       home: BackgroundOptimizationPage(),
     ),
   );
@@ -677,7 +683,7 @@ void main() {
     });
 
     testWidgets(
-        'toggling desktop close-minimize off persists the pref and releases the close interception',
+        'toggling desktop close-minimize off persists the pref but keeps the close interception',
         (tester) async {
       registerMockPlatform();
       // Record window_manager channel calls (method + arguments).
@@ -709,13 +715,19 @@ void main() {
         // The preference is persisted...
         final prefs = await SharedPreferences.getInstance();
         expect(prefs.getBool('desktop_close_minimize'), isFalse);
-        // ...and the native close interception is released (argument
-        // must be false), so the window closes normally instead of
-        // minimizing.
+        // ...but the close interception must NEVER be released:
+        // releasing it would let the native layer destroy the window
+        // before the quit confirmation can run.
         final preventCloseCalls =
             windowCalls.where((c) => c.method == 'setPreventClose').toList();
         expect(preventCloseCalls, isNotEmpty);
-        expect(preventCloseCalls.last.arguments, {'isPreventClose': false});
+        expect(
+          preventCloseCalls.every(
+            (c) => (c.arguments as Map)['isPreventClose'] == true,
+          ),
+          isTrue,
+          reason: 'setPreventClose(false) 会释放拦截，导致退出确认失效',
+        );
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
@@ -743,6 +755,91 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('后台服务运行中'), findsOneWidget);
+    });
+
+    testWidgets('quit button exits directly when no tasks are running',
+        (tester) async {
+      registerMockPlatform();
+      // Record window_manager channel calls.
+      final windowCalls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('window_manager'),
+        (MethodCall call) async {
+          windowCalls.add(call);
+          return true;
+        },
+      );
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        // No tasks in the provider (default empty notifier).
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('完全退出应用'));
+        await tester.pumpAndSettle();
+
+        // Exits immediately without a confirmation dialog.
+        expect(find.text('退出应用？'), findsNothing);
+        expect(windowCalls.where((c) => c.method == 'destroy'), hasLength(1));
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('quit button asks for confirmation when tasks are running',
+        (tester) async {
+      registerMockPlatform();
+      final windowCalls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('window_manager'),
+        (MethodCall call) async {
+          windowCalls.add(call);
+          return true;
+        },
+      );
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        // One running task in the provider.
+        final notifier = BackgroundTaskNotifier();
+        notifier.addTask(type: BackgroundTaskType.ocr, title: '运行中任务');
+        await tester.pumpWidget(_buildTestApp(taskNotifier: notifier));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('完全退出应用'));
+        await tester.pumpAndSettle();
+
+        // Confirmation dialog appears; cancel keeps the app running.
+        expect(find.text('退出应用？'), findsOneWidget);
+        expect(find.textContaining('1 个任务正在运行'), findsOneWidget);
+        await tester.tap(find.text('取消'));
+        await tester.pumpAndSettle();
+        expect(windowCalls.where((c) => c.method == 'destroy'), isEmpty);
+
+        // Confirming quits the app.
+        await tester.tap(find.text('完全退出应用'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('退出'));
+        await tester.pumpAndSettle();
+        expect(windowCalls.where((c) => c.method == 'destroy'), hasLength(1));
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     });
   });
 
@@ -797,6 +894,30 @@ void main() {
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
+    });
+  });
+
+  group('BackgroundOptimizationPage - platform tutorial cards', () {
+    testWidgets('tutorial card list includes a Web entry', (tester) async {
+      registerMockPlatform();
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // 六个平台教程入口都可达（Android 同时出现在平台检测卡，
+      // 因此用 findsWidgets；'Web' 只在教程卡片出现，可精确断言）。
+      expect(find.text('Android'), findsWidgets);
+      expect(find.text('iOS'), findsWidgets);
+      expect(find.text('Windows'), findsWidgets);
+      expect(find.text('macOS'), findsWidgets);
+      expect(find.text('Linux'), findsWidgets);
+      expect(find.text('Web'), findsOneWidget);
     });
   });
 }

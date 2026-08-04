@@ -17,12 +17,15 @@ import 'pages/settings_page.dart';
 import 'providers/theme_provider.dart';
 import 'providers/update_provider.dart';
 import 'providers/notification_provider.dart';
+import 'providers/background_task_provider.dart';
+import 'providers/task_provider.dart' show TaskStatus;
 import 'services/app_log_service.dart';
 import 'services/auto_backup_service.dart';
 import 'services/background_service.dart';
 import 'services/notification_service.dart';
 import 'startup/backup_startup_check.dart';
 import 'widgets/update_dialog.dart';
+import 'widgets/quit_confirmation_dialog.dart';
 
 class Application extends ConsumerStatefulWidget {
   const Application({super.key});
@@ -96,6 +99,10 @@ class _ApplicationState extends ConsumerState<Application>
     }
   }
 
+  /// 关闭即退出模式下，确认对话框打开期间的重复关闭事件保护。
+  /// （拦截永远开启，每次点 X 都会触发 onWindowClose。）
+  bool _quitConfirmInProgress = false;
+
   /// 用户点击窗口关闭按钮时的处理。
   ///
   /// 每次都读取最新的用户设置（而不是启动时缓存的标志）：
@@ -112,10 +119,38 @@ class _ApplicationState extends ConsumerState<Application>
       if (minimize) {
         await windowManager.minimize();
         debugPrint('[Application] 窗口已最小化（关闭时最小化）');
-      } else {
-        await windowManager.destroy();
-        debugPrint('[Application] 窗口已关闭（关闭时退出）');
+        return;
       }
+
+      // 关闭即退出模式：退出会立即中断所有运行中的任务，先确认。
+      if (_quitConfirmInProgress) return;
+      final runningCount = ref
+          .read(backgroundTasksProvider)
+          .where((t) => t.status == TaskStatus.running)
+          .length;
+      if (runningCount > 0) {
+        final navigatorContext = _navigatorKey.currentContext;
+        if (navigatorContext != null && navigatorContext.mounted) {
+          _quitConfirmInProgress = true;
+          var confirmed = false;
+          try {
+            confirmed = await showQuitConfirmationDialog(
+              navigatorContext,
+              runningTaskCount: runningCount,
+            );
+          } catch (e) {
+            // 对话框异常（例如导航器不可用）：降级为直接退出，
+            // 绝不阻塞用户关闭窗口。
+            debugPrint('[Application] 退出确认对话框失败: $e');
+            confirmed = true;
+          } finally {
+            _quitConfirmInProgress = false;
+          }
+          if (!confirmed) return; // 取消：窗口保持打开
+        }
+      }
+      await windowManager.destroy();
+      debugPrint('[Application] 窗口已关闭（关闭时退出）');
     } catch (e) {
       debugPrint('[Application] 处理窗口关闭失败: $e');
     }

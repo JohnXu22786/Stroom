@@ -4,23 +4,28 @@ import 'package:flutter/foundation.dart'
     show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../providers/background_task_provider.dart';
+import '../providers/task_provider.dart' show TaskStatus;
 import '../services/background_service.dart';
 import '../services/ios_continued_task_service.dart';
+import '../widgets/quit_confirmation_dialog.dart';
 import 'platform_tutorial_page.dart';
 
 /// A page that detects current system environment, checks background optimization
 /// status, and provides tutorials organized by OS categories.
-class BackgroundOptimizationPage extends StatefulWidget {
+class BackgroundOptimizationPage extends ConsumerStatefulWidget {
   const BackgroundOptimizationPage({super.key});
 
   @override
-  State<BackgroundOptimizationPage> createState() =>
+  ConsumerState<BackgroundOptimizationPage> createState() =>
       _BackgroundOptimizationPageState();
 }
 
-class _BackgroundOptimizationPageState extends State<BackgroundOptimizationPage>
+class _BackgroundOptimizationPageState
+    extends ConsumerState<BackgroundOptimizationPage>
     with WidgetsBindingObserver {
   // ── Detection results ────────────────────────────────────────────────
   String _platformName = '';
@@ -74,6 +79,11 @@ class _BackgroundOptimizationPageState extends State<BackgroundOptimizationPage>
     final b = await isBatteryReminderEnabled();
     final closeMinimize =
         isDesktopPlatform() ? await isDesktopCloseMinimizeEnabled() : true;
+    if (isDesktopPlatform()) {
+      // 兜底：确保窗口关闭事件被拦截（Application 层初始化
+      // 失败时，本页面负责重新建立拦截，保证退出确认始终生效）。
+      _ensureWindowCloseIntercepted();
+    }
     if (mounted) {
       setState(() {
         _watchdogEnabled = w;
@@ -290,6 +300,7 @@ class _BackgroundOptimizationPageState extends State<BackgroundOptimizationPage>
           const SizedBox(height: 8),
           _buildOptimizationStatusCard(theme),
           const SizedBox(height: 24),
+          _buildWebBackgroundNoteCard(theme),
           _buildBatteryOptimizationCard(theme),
           const SizedBox(height: 24),
           // Web 没有任何保活策略（移动端策略与桌面端策略都不适用），
@@ -774,7 +785,8 @@ class _BackgroundOptimizationPageState extends State<BackgroundOptimizationPage>
               onChanged: (v) {
                 setState(() => _closeMinimizeEnabled = v);
                 setDesktopCloseMinimizeEnabled(v);
-                _applyWindowCloseBehavior(v);
+                // 拦截保持开启（关闭行为由 Application 层决策）。
+                _ensureWindowCloseIntercepted();
               },
             ),
             const Divider(height: 1, indent: 16, endIndent: 16),
@@ -795,11 +807,16 @@ class _BackgroundOptimizationPageState extends State<BackgroundOptimizationPage>
     );
   }
 
-  Future<void> _applyWindowCloseBehavior(bool enabled) async {
+  /// 确保窗口关闭事件永远被拦截（幂等）。
+  ///
+  /// 注意：不能根据开关状态调用 setPreventClose(false) 释放拦截——
+  /// 拦截一旦释放，原生层会在 Dart 侧确认逻辑运行前直接销毁窗口，
+  /// 「关闭即退出」时的任务运行确认就永远不会触发。
+  /// 关闭行为（最小化 vs 确认后退出）统一由 Application 层的
+  /// onWindowClose 决策（每次读取最新偏好）。
+  Future<void> _ensureWindowCloseIntercepted() async {
     try {
-      // 启用：拦截系统关闭事件（由 Application 层在 onWindowClose
-      // 中执行最小化）；禁用：恢复默认的关闭即退出行为。
-      await windowManager.setPreventClose(enabled);
+      await windowManager.setPreventClose(true);
     } catch (e) {
       debugPrint('[BackgroundOptimizationPage] setPreventClose failed: $e');
     }
@@ -807,6 +824,19 @@ class _BackgroundOptimizationPageState extends State<BackgroundOptimizationPage>
 
   Future<void> _quitDesktopApp() async {
     try {
+      // 桌面端退出会立即中断所有运行中的任务：先确认。
+      final runningCount = ref
+          .read(backgroundTasksProvider)
+          .where((t) => t.status == TaskStatus.running)
+          .length;
+      if (runningCount > 0) {
+        if (!mounted) return;
+        final confirmed = await showQuitConfirmationDialog(
+          context,
+          runningTaskCount: runningCount,
+        );
+        if (!confirmed) return;
+      }
       await windowManager.destroy();
     } catch (e) {
       debugPrint('[BackgroundOptimizationPage] destroy window failed: $e');
@@ -868,6 +898,49 @@ class _BackgroundOptimizationPageState extends State<BackgroundOptimizationPage>
     );
   }
 
+  // ── Web Background Note Card ───────────────────────────────────────────
+
+  /// Web 提示卡：浏览器环境无法后台运行，任务会因关标签页/页面挂起
+  /// 而中断，需要明确告知用户。
+  Widget _buildWebBackgroundNoteCard(ThemeData theme) {
+    if (!kIsWeb) return const SizedBox.shrink();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Web 后台任务提示',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '浏览器没有应用常驻后台的机制。关闭标签页、刷新页面，'
+              '或浏览器冻结长时间不活跃的后台标签页，都会立即中断'
+              '运行中的任务。任务运行时请保持 Stroom 标签页打开并处于前台。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── Platform Tutorial Cards ──────────────────────────────────────────
 
   List<Widget> _buildPlatformTutorialCards() {
@@ -896,6 +969,11 @@ class _BackgroundOptimizationPageState extends State<BackgroundOptimizationPage>
         platformName: 'Linux',
         icon: Icons.terminal,
         color: Colors.orange,
+      ),
+      PlatformTutorialConfig(
+        platformName: 'Web',
+        icon: Icons.language,
+        color: Colors.purple,
       ),
     ];
 
