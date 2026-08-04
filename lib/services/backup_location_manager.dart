@@ -400,9 +400,14 @@ class BackupLocationManager {
           try {
             // 注意：pickDirectory 是用户操作的系统选择器 Activity
             // （ACTION_OPEN_DOCUMENT_TREE），用户浏览目录可能耗时
-            // 远超普通通道调用 —— 不能套用 _safChannelTimeout，
-            // 否则超时后用户选择的 URI 会被静默丢弃。
-            final uri = await _safChannel.invokeMethod<String>('pickDirectory');
+            // 远超普通通道调用 —— 不能套用 _safChannelTimeout。
+            // 但也不能完全无界：Activity 被系统回收时 onActivityResult
+            // 可能永远不来（结果保存在静态 holder 中），无界 await 会
+            // 让启动备份流程永久卡死。使用宽松的 5 分钟上限兜底，
+            // 正常用户操作远不会触达。
+            final uri = await _safChannel
+                .invokeMethod<String>('pickDirectory')
+                .timeout(const Duration(minutes: 5));
             if (uri == null || uri.isEmpty) {
               debugPrint('[BackupLocationManager] 用户取消了 SAF 目录选择');
               return false;

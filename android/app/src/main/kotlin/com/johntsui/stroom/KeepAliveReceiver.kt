@@ -82,6 +82,11 @@ class KeepAliveReceiver : BroadcastReceiver() {
         private const val PREF_NAME = "FlutterSharedPreferences"
         private const val KEY_SERVICE_ENABLED = "flutter.background_service_enabled"
         private const val KEY_KEEP_ALIVE_ACTIVE = "flutter.keep_alive_active"
+        // 看门狗开关（Dart 侧 _watchdogEnabledKey）。
+        // 原生侧必须在触发/开机补武装时检查：Dart 侧关闭开关后若进程
+        // 在 channel 调用完成前被杀（或调用超时），闹钟可能残留，
+        // 只在「武装时刻」检查开关会留下一个永久运行的看门狗。
+        private const val KEY_WATCHDOG_ENABLED = "flutter.background_service_watchdog"
 
         // MainActivity 的 rearmKeepAlive 需要读取失败计数。
         const val KEY_KEEP_ALIVE_FAILURES = "flutter.keep_alive_failures"
@@ -241,7 +246,12 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 // 同时要求服务仍处于启用状态：用户已停止服务时（例如
                 // 停止流程中途进程被杀，active 标记残留）绝不重新武装。
                 val serviceEnabled = prefs.getBoolean(KEY_SERVICE_ENABLED, false)
-                if (prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) && serviceEnabled) {
+                // 看门狗开关同样必须检查：用户关闭开关后若取消调用
+                // 未送达（进程被杀/超时），这里兜底取消闹钟。
+                val watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+                if (prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
+                    serviceEnabled && watchdogEnabled
+                ) {
                     // 与 MainActivity.rearmKeepAlive 一致：已处于退避状态
                     // 时沿用 30 分钟间隔，而不是用 5 分钟间隔替换掉
                     // 退避闹钟（否则持久失败设备每次开机/更新都会被
@@ -259,9 +269,13 @@ class KeepAliveReceiver : BroadcastReceiver() {
             ACTION_KEEP_ALIVE -> {
                 val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
                 val serviceEnabled = prefs.getBoolean(KEY_SERVICE_ENABLED, false)
-                if (!serviceEnabled) {
-                    // 用户已明确停止后台服务：取消闹钟，绝不复活服务。
-                    Log.i(TAG, "Keep-alive alarm fired but service disabled — cancelling watchdog")
+                // 看门狗开关同样是禁用条件：关闭开关后若取消调用未送达
+                // （进程被杀/超时），残留闹钟触发时必须在此兜底取消，
+                // 否则看门狗会永久运行且每次触发都自我续期。
+                val watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+                if (!serviceEnabled || !watchdogEnabled) {
+                    // 用户已明确停止后台服务/关闭看门狗：取消闹钟，绝不复活服务。
+                    Log.i(TAG, "Keep-alive alarm fired but service/watchdog disabled — cancelling watchdog")
                     cancelAlarm(context)
                     return
                 }

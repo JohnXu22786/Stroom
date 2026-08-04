@@ -477,6 +477,29 @@ void main() {
           reason: 'resume 是补武装场景，不得使用带计数清零的 startKeepAlive');
     });
 
+    test(
+        'rearmKeepAliveOnResume ignores the cold-start toggle when the '
+        'watchdog is on', () async {
+      // 回归（round-8 撤销 round-7 门控）：冷启动恢复与看门狗是两个
+      // 独立开关 —— 关闭冷启动恢复但看门狗开启时，resume 补武装
+      // 仍然必须生效（精确闹钟被系统撤销时 resume 是唯一自愈时机）。
+      registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+      await prefs.setBool('background_service_cold_start_restore', false);
+      await prefs.setBool('background_service_watchdog', true);
+
+      await withAndroidPlatform(() async {
+        await rearmKeepAliveOnResume();
+      });
+
+      expect(
+        keepAliveCalls.any((c) => c.method == 'rearmKeepAlive'),
+        isTrue,
+        reason: 'resume 补武装只看看门狗开关，与冷启动恢复开关无关',
+      );
+    });
+
     test('rearmKeepAliveOnResume respects the watchdog toggle', () async {
       // 看门狗开关是 resume 补武装的正确门控：关闭看门狗后回到前台
       // 不得重新武装（冷启动恢复开关与看门狗相互独立，不参与门控）。

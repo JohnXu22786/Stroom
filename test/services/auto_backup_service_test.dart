@@ -338,8 +338,43 @@ void main() {
 
       await dir.delete(recursive: true);
     });
-  });
 
+    test(
+        'pre-migration caller sharing a 1-hour-skipped backup forces a '
+        'fresh snapshot', () async {
+      // 回归：普通备份在途时命中「1 小时规则」跳过（未创建快照），
+      // 并发到达的迁移前备份必须强制自己再跑一次 —— 共享跳过结果
+      // 会让迁移在无新快照的情况下进行。
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+
+      // 造一份「1 小时以内」的备份现场（1 小时规则会被命中）。
+      final seed = await AutoBackupService.performAutoBackup();
+      expect(seed, isTrue);
+
+      // 普通备份在途（命中 1 小时规则 → skippedOneHour）。
+      final normal = AutoBackupService.performAutoBackup();
+      await Future<void>.delayed(Duration.zero);
+
+      // 迁移前备份共享该结果：必须强制创建新快照。
+      final preMigration =
+          await AutoBackupService.performAutoBackup(isPreMigration: true);
+      await normal;
+
+      expect(preMigration, isTrue);
+      final zips = (await dir.list().toList())
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.zip'))
+          .toList();
+      expect(zips.length, greaterThanOrEqualTo(2),
+          reason: '共享的 1 小时跳过结果不得抑制迁移前快照');
+
+      await dir.delete(recursive: true);
+    });
+  });
   // ==================================================================
   // Atomic rename (tmp -> zip)
   // ==================================================================

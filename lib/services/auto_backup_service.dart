@@ -107,19 +107,22 @@ class AutoBackupService {
     // 而不是直接返回失败（避免「迁移前备份」被并发跳过导致迁移时
     // 没有安全快照，或启动备份被误报为失败）。
     //
-    // 迁移前备份的例外：共享的备份可能是普通备份（带 1 小时规则），
-    // 其「跳过」结果不构成新快照 —— 此时必须自己再跑一次。
+    // 迁移前备份的例外：仅当共享的备份是普通备份且因「1 小时规则」
+    // 跳过（未创建快照）时，才需要自己再跑一次强制新快照。
+    // 共享结果为失败/取消时直接共享该结果 —— 例如应用进入后台触发
+    // cancel() 后，绝不能无视取消再启动一次完整备份并继续迁移。
     while (true) {
       final inFlight = _inFlight;
       if (inFlight == null) break;
       debugPrint('[AutoBackupService] 备份已在运行中，等待其完成');
       await AppLogService.warning('AutoBackupService', '备份已在运行中，等待其完成');
       final shared = await inFlight;
-      if (!isPreMigration || shared == _BackupOutcome.created) {
+      if (!isPreMigration || shared != _BackupOutcome.skippedOneHour) {
         return _outcomeToBool(shared);
       }
-      // 迁移前备份 + 共享结果未创建快照（1 小时跳过或失败）：
-      // 循环重试，下一轮 _inFlight 已为 null，会真正执行备份。
+      // 迁移前备份 + 共享结果「1 小时规则跳过」：循环重试，
+      // 下一轮 _inFlight 已为 null，会真正执行备份（迁移前备份
+      // 自身无视 1 小时规则）。
     }
 
     final future = _performAutoBackupInternal(isPreMigration: isPreMigration);
