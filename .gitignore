@@ -44,6 +44,8 @@ android/key.properties
 *.keystore
 
 # iOS
+# 构建产物与生成物（源码随 ios/ 提交：Info.plist、AppDelegate.swift、
+# Runner.entitlements 等包含 iOS 26 常驻后台配置，必须纳入版本管理）
 ios/.generated/
 ios/Flutter/Generated.xcconfig
 ios/Flutter/flutter_export_environment.sh
@@ -59,12 +61,7 @@ ios/Runner.xcodeproj/xcuserdata/
 ios/Runner.xcworkspace/
 ios/Runner.xcworkspace/contents.xcworkspacedata
 ios/Runner/Assets.car
-ios/Runner/AppIcon.appiconset/
 ios/Runner/Base.lproj/LaunchScreen.storyboardc
-ios/Runner/Info.plist
-ios/Runner/Runner-Bridging-Header.h
-ios/Runner/Runner.entitlements
-ios/Runner/main.m
 ios/Runner/Runner.app
 
 # macOS
