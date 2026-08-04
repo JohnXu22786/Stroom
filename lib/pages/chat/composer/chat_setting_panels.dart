@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:stroom/models/tool_call.dart';
-import 'package:stroom/providers/provider_config.dart' show ReasoningParam;
+import 'package:stroom/providers/provider_config.dart'
+    show ReasoningParam, findEffortParam;
 import 'setting_panels_shared.dart';
 
 // ═══════════════════════════════════════════════════════════════
@@ -361,12 +362,9 @@ void showReasoningPanel({
   var localEffortEnabled = reasoningEffortEnabled;
   var localSelections = Map<String, String>.from(reasoningParamSelections);
 
-  // Find the effort param (the one marked as isEffortParam=true)
-  final ReasoningParam? effortParam =
-      reasoningParams.cast<ReasoningParam?>().firstWhere(
-            (p) => p?.isEffortParam ?? false,
-            orElse: () => null,
-          );
+  // Find the effort param (the one marked as isEffortParam=true, with a
+  // legacy fallback for models saved before the flag existed)
+  final ReasoningParam? effortParam = findEffortParam(reasoningParams);
 
   final hasParams = reasoningParams.isNotEmpty;
   final hasNonToggleParams = reasoningParams.any((p) => !p.isReasoningToggle);
@@ -596,8 +594,8 @@ void showReasoningPanel({
 /// parameters. Each param is displayed with a switch (enabled/disabled) and
 /// its selectable options, similar to the effort section style.
 ///
-/// This panel only shows params that are not [isReasoningToggle] and not
-/// [isEffortParam].
+/// This panel only shows params that are not [isReasoningToggle] and not the
+/// effort param (see [findEffortParam]).
 void showCustomReasoningParamsPanel({
   required BuildContext context,
   required bool reasoningEnabled,
@@ -605,14 +603,17 @@ void showCustomReasoningParamsPanel({
   required List<ReasoningParam> reasoningParams,
   required void Function(String paramName, String value)
       onReasoningParamChanged,
+  required void Function(ReasoningParam param, bool enabled)
+      onCustomParamToggle,
 }) {
   var localSelections = Map<String, String>.from(reasoningParamSelections);
   var localReasoningEnabled = reasoningEnabled;
 
   // Non-toggle, non-effort params shown with switch + options
+  final effortParam = findEffortParam(reasoningParams);
   final displayParams = reasoningParams
       .where(
-        (p) => !p.isReasoningToggle && !p.isEffortParam,
+        (p) => !p.isReasoningToggle && p != effortParam,
       )
       .toList();
 
@@ -729,6 +730,12 @@ void showCustomReasoningParamsPanel({
                                                 setState(() {
                                                   param.enabled = value;
                                                 });
+                                                // Sync the selected-value map
+                                                // so the chip color and the
+                                                // API request follow the
+                                                // switch state.
+                                                onCustomParamToggle(
+                                                    param, value);
                                               }
                                             : null,
                                       ),

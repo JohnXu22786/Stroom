@@ -268,6 +268,7 @@ extension _ChatServiceParamsExt on ChatService {
     if (reasoning) {
       for (final rp in extraParams) {
         if (!rp.enabled) continue;
+        if (rp.paramName.trim().isEmpty) continue;
         final selectedValue = reasoningParamValues[rp.paramName];
         if (selectedValue != null && selectedValue.isNotEmpty) {
           ChatService._setReasoningParam(

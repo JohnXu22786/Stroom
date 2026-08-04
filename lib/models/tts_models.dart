@@ -182,6 +182,15 @@ class ReasoningParam {
   /// (推理力度). Only one param in a model should have this set to true.
   bool isEffortParam;
 
+  /// Whether the persisted data explicitly contained the `isEffortParam`
+  /// key. Data saved before the flag existed (legacy) has it absent —
+  /// in that era the effort param was identified by position (first
+  /// non-toggle param). Used by [findEffortParam] to distinguish legacy
+  /// data from modern data that deliberately has no effort param.
+  /// Code-constructed params default to true (modern semantics).
+  /// This is a derivation marker and is NOT serialized by [toMap].
+  final bool hasExplicitEffortFlag;
+
   String? onValue;
 
   String? offValue;
@@ -193,6 +202,7 @@ class ReasoningParam {
     this.enabled = true,
     this.isReasoningToggle = false,
     this.isEffortParam = false,
+    this.hasExplicitEffortFlag = true,
     this.onValue,
     this.offValue,
     List<String>? options,
@@ -215,6 +225,7 @@ class ReasoningParam {
       return ReasoningParam(
         paramName: map['paramName'] as String? ?? '',
         options: [],
+        hasExplicitEffortFlag: map.containsKey('isEffortParam'),
       );
     }
     return ReasoningParam(
@@ -222,6 +233,7 @@ class ReasoningParam {
       enabled: map['enabled'] as bool? ?? true,
       isReasoningToggle: map['isReasoningToggle'] as bool? ?? false,
       isEffortParam: map['isEffortParam'] as bool? ?? false,
+      hasExplicitEffortFlag: map.containsKey('isEffortParam'),
       onValue: map['onValue'] as String?,
       offValue: map['offValue'] as String?,
       options:
@@ -235,6 +247,7 @@ class ReasoningParam {
         enabled: enabled,
         isReasoningToggle: isReasoningToggle,
         isEffortParam: isEffortParam,
+        hasExplicitEffortFlag: hasExplicitEffortFlag,
         onValue: onValue,
         offValue: offValue,
         options: List<String>.from(options),
@@ -270,6 +283,61 @@ class ReasoningParam {
     }
     return null;
   }
+}
+
+/// Finds the reasoning effort param (推理力度) in [params].
+///
+/// Resolution order:
+/// 1. The param explicitly marked `isEffortParam == true`.
+/// 2. Legacy data only (no param carries an explicit `isEffortParam` key,
+///    i.e. data saved before the flag existed): the first non-toggle param
+///    with a non-empty name and non-empty options — the pre-flag "effort =
+///    first non-toggle" semantics. Modern data that deliberately has no
+///    effort param is never misclassified (returns null instead).
+ReasoningParam? findEffortParam(List<ReasoningParam> params) {
+  final explicit = params.cast<ReasoningParam?>().firstWhere(
+        (p) => p?.isEffortParam ?? false,
+        orElse: () => null,
+      );
+  if (explicit != null) return explicit;
+  final anyExplicitFlag = params.any((p) => p.hasExplicitEffortFlag);
+  if (anyExplicitFlag) return null;
+  return params.cast<ReasoningParam?>().firstWhere(
+        (p) =>
+            p != null &&
+            !p.isReasoningToggle &&
+            p.paramName.trim().isNotEmpty &&
+            p.options.isNotEmpty,
+        orElse: () => null,
+      );
+}
+
+/// Ensures the effort param of [params] matches the effort toggle state in
+/// [values]:
+/// - toggle ON: writes the first option when none was selected yet;
+/// - toggle OFF: removes any leftover effort value (so the request stops
+///   sending it and the chip shows "推理").
+/// Returns [values] unchanged when nothing needs writing (so callers can
+/// skip the provider update).
+Map<String, String> ensureEffortValue(
+  List<ReasoningParam> params,
+  Map<String, String> values, {
+  required bool effortEnabled,
+}) {
+  final effort = findEffortParam(params);
+  if (effort == null) return values;
+  if (effortEnabled) {
+    if (effort.enabled &&
+        effort.options.isNotEmpty &&
+        (values[effort.paramName]?.isNotEmpty ?? false) != true) {
+      return {...values, effort.paramName: effort.options.first};
+    }
+    return values;
+  }
+  if (values.containsKey(effort.paramName)) {
+    return Map<String, String>.from(values)..remove(effort.paramName);
+  }
+  return values;
 }
 
 // ============================================================================

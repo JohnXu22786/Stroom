@@ -7,7 +7,6 @@ import 'package:stroom/pages/chat/composer/composer_shared.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
-import 'package:stroom/models/tts_models.dart' show CustomParam;
 
 /// Helper that creates a widget with all providers needed to test
 /// the composer widget in isolation, with reasoning state overrides.
@@ -24,7 +23,6 @@ Widget createComposerTestApp({
   Map<String, String> reasoningParamValues = const {},
   Set<String> enabledTools = const {},
   List<ReasoningParam> extraReasoningParams = const [],
-  List<CustomParam> customParams = const [],
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -51,7 +49,6 @@ Widget createComposerTestApp({
           onModelSelected: (idx) {},
           onEnabledToolsChanged: (tools) {},
           enabledTools: enabledTools,
-          customParams: customParams,
           reasoningParams: [
             ReasoningParam(
                 paramName: 'reasoning_effort',
@@ -338,18 +335,23 @@ void main() {
     // ═══════════════════════════════════════════════════════════
 
     testWidgets(
-        'custom params chip uses accent color and shows badge when model custom params exist',
-        (tester) async {
+        'custom params chip uses accent color and shows badge when a custom '
+        'param is enabled with a selected value', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: true,
         reasoningEffortEnabled: true,
         enabledTools: {}, // no tools enabled — custom params are independent
-        customParams: [
-          CustomParam(paramName: 'voice', defaultValue: 'cheerful'),
+        extraReasoningParams: [
+          ReasoningParam(
+            paramName: 'budget_tokens',
+            enabled: true,
+            options: ['5000', '10000'],
+          ),
         ],
         reasoningParamValues: {
           'reasoning_effort': 'medium',
+          'budget_tokens': '5000',
         },
       ));
       await tester.pump();
@@ -366,13 +368,20 @@ void main() {
     });
 
     testWidgets(
-        'custom params chip with no active params shows no badge when tools enabled',
-        (tester) async {
+        'custom params chip shows no badge when no custom param is active '
+        'even with tools enabled', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: true,
         reasoningEffortEnabled: true,
         enabledTools: {'some_tool'},
+        extraReasoningParams: [
+          ReasoningParam(
+            paramName: 'budget_tokens',
+            enabled: true,
+            options: ['5000', '10000'],
+          ),
+        ],
         reasoningParamValues: {
           'reasoning_effort': 'medium',
         },
@@ -386,12 +395,12 @@ void main() {
       );
       expect(customChip, findsOneWidget);
       final chip = tester.widget<SettingsChip>(customChip);
-      // No model custom params configured, so badgeCount should be null
+      // No custom param has a selected value → grey chip, no badge
       expect(chip.badgeCount, isNull);
     });
 
     testWidgets(
-        'custom params chip turns grey when no model custom params are configured',
+        'custom params chip turns grey when no custom params are active',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
@@ -399,7 +408,7 @@ void main() {
         reasoningEffortEnabled: true,
         enabledTools: {
           'some_tool'
-        }, // tools enabled but still grey (no custom params)
+        }, // tools enabled but still grey (no active custom params)
         reasoningParamValues: {
           'reasoning_effort': 'medium',
         },
@@ -413,7 +422,37 @@ void main() {
       );
       expect(customChip, findsOneWidget);
       final chip = tester.widget<SettingsChip>(customChip);
-      // No model custom params configured → grey chip, no badge
+      // No active custom params → grey chip, no badge
+      expect(chip.color, Colors.grey);
+      expect(chip.badgeCount, isNull);
+    });
+
+    testWidgets('custom params chip turns grey when the param is disabled',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(createComposerTestApp(
+        reasoningEnabled: true,
+        reasoningEffortEnabled: true,
+        extraReasoningParams: [
+          ReasoningParam(
+            paramName: 'budget_tokens',
+            enabled: false, // switch off — not active
+            options: ['5000', '10000'],
+          ),
+        ],
+        reasoningParamValues: {
+          'reasoning_effort': 'medium',
+          'budget_tokens': '5000',
+        },
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      final customChip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '自定义参数',
+      );
+      final chip = tester.widget<SettingsChip>(customChip);
       expect(chip.color, Colors.grey);
       expect(chip.badgeCount, isNull);
     });
@@ -468,6 +507,125 @@ void main() {
       // When no param has isEffortParam=true, show "推理"
       expect(find.text('推理'), findsOneWidget);
       expect(find.text('medium'), findsNothing);
+    });
+
+    testWidgets('shows 推理 when effort param is disabled despite a value',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            reasoningEnabledProvider.overrideWith((ref) => true),
+            reasoningEffortEnabledProvider.overrideWith((ref) => true),
+            reasoningParamValuesProvider.overrideWith(
+              (ref) => {'reasoning_effort': 'medium'},
+            ),
+            conversationsProvider.overrideWith((ref) {
+              return ConversationsNotifier(ref);
+            }),
+            activeConversationIdProvider.overrideWith(
+              (ref) => 'test-conv-id',
+            ),
+            providerEntriesProvider.overrideWith((ref) {
+              return ProviderEntriesNotifier();
+            }),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ChatComposerWidget(
+                onSend: (text, attachments) {},
+                onStop: () {},
+                modelNames: ['test-model'],
+                selectedModelIndex: 0,
+                onModelSelected: (idx) {},
+                onEnabledToolsChanged: (tools) {},
+                reasoningParams: [
+                  ReasoningParam(
+                    paramName: 'reasoning_effort',
+                    isEffortParam: true,
+                    enabled: false,
+                    options: ['low', 'medium', 'high'],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // A disabled effort param is never sent, so the chip shows "推理".
+      expect(find.text('推理'), findsOneWidget);
+      expect(find.text('medium'), findsNothing);
+    });
+
+    testWidgets(
+        'shows effort value for legacy models without the isEffortParam flag',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            reasoningEnabledProvider.overrideWith((ref) => true),
+            reasoningEffortEnabledProvider.overrideWith((ref) => true),
+            reasoningParamValuesProvider.overrideWith(
+              (ref) => {'reasoning_effort': 'high'},
+            ),
+            conversationsProvider.overrideWith((ref) {
+              return ConversationsNotifier(ref);
+            }),
+            activeConversationIdProvider.overrideWith(
+              (ref) => 'test-conv-id',
+            ),
+            providerEntriesProvider.overrideWith((ref) {
+              return ProviderEntriesNotifier();
+            }),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ChatComposerWidget(
+                onSend: (text, attachments) {},
+                onStop: () {},
+                modelNames: ['test-model'],
+                selectedModelIndex: 0,
+                onModelSelected: (idx) {},
+                onEnabledToolsChanged: (tools) {},
+                // Legacy data: reasoning params saved before the
+                // isEffortParam flag existed (no key in the map).
+                reasoningParams: [
+                  ReasoningParam.fromMap({
+                    'paramName': 'thinking.type',
+                    'options': <String>[],
+                    'enabled': true,
+                    'isReasoningToggle': true,
+                    'onValue': 'enabled',
+                    'offValue': 'disabled',
+                    'type': 'string',
+                  }),
+                  ReasoningParam.fromMap({
+                    'paramName': 'reasoning_effort',
+                    'options': ['low', 'medium', 'high'],
+                    'enabled': true,
+                    'isReasoningToggle': false,
+                    'type': 'string',
+                  }),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // Pre-flag semantics: the first non-toggle param IS the effort param,
+      // so its selected value shows on the chip.
+      expect(find.text('high'), findsOneWidget);
+      expect(find.text('推理'), findsNothing);
     });
   });
 }
