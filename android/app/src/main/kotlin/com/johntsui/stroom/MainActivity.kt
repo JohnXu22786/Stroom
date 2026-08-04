@@ -217,6 +217,15 @@ class MainActivity : FlutterActivity() {
                     KeepAliveReceiver.resetFailureCount(this)
                     result.success(true)
                 }
+                "rearmKeepAlive" -> {
+                    // 冷启动恢复 / 回到前台补武装：只重新调度闹钟，
+                    // 不清零失败计数 —— 否则持久失败环境（Android 15
+                    // dataSync 上限、无电池豁免等）下每次打开应用都会
+                    // 把退避计数器清零，看门狗永远无法进入退避保护。
+                    Log.i(TAG, "Keep-alive: re-arm requested from Dart")
+                    KeepAliveReceiver.scheduleAlarm(this)
+                    result.success(true)
+                }
                 "stopKeepAlive" -> {
                     Log.i(TAG, "Keep-alive: stop requested from Dart")
                     KeepAliveReceiver.cancelAlarm(this)

@@ -398,11 +398,13 @@ void main() {
 
       expect(mock._isRunning, isTrue);
       expect(
-        keepAliveCalls.any((c) => c.method == 'startKeepAlive'),
+        keepAliveCalls.any((c) => c.method == 'rearmKeepAlive'),
         isTrue,
         reason: 'restoring the service on cold start must also re-arm the '
             'watchdog alarm (the alarm does not survive force-stop or updates)',
       );
+      expect(keepAliveCalls.any((c) => c.method == 'startKeepAlive'), isFalse,
+          reason: '冷启动恢复是补武装场景，不得清零失败计数');
     });
 
     test('cold-start restore skips the watchdog when its toggle is disabled',
@@ -465,11 +467,14 @@ void main() {
       });
 
       expect(
-        keepAliveCalls.any((c) => c.method == 'startKeepAlive'),
+        keepAliveCalls.any((c) => c.method == 'rearmKeepAlive'),
         isTrue,
         reason: 'returning to the app must re-arm the alarm — the system '
             'silently deletes exact alarms when the permission is revoked',
       );
+      // 补武装不得清零失败计数（持久失败环境下看门狗应保持退避）。
+      expect(keepAliveCalls.any((c) => c.method == 'startKeepAlive'), isFalse,
+          reason: 'resume 是补武装场景，不得使用带计数清零的 startKeepAlive');
     });
 
     test('rearmKeepAliveOnResume does nothing when service is disabled',

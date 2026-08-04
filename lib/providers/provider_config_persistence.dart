@@ -45,8 +45,11 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
 
         final models = oldModels.map((m) {
           final typeConfig = <String, dynamic>{};
-          // NOTE: context 是 per-model 配置，由模型设置页显式填写，
-          // 不在 provider 迁移时注入（context 与 provider 无关）。
+          // 与 startup 迁移副本保持一致：迁移 per-model 的
+          // context/maxTokens（旧数据把压缩阈值挂在 model 上，
+          // 不迁移则老用户的自动压缩静默失效）。
+          final context = m['maxTokens'] ?? m['context'];
+          if (context != null) typeConfig['context'] = context;
           final temperature = m['temperature'];
           if (temperature != null) typeConfig['temperature'] = temperature;
 

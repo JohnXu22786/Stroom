@@ -66,12 +66,15 @@ class _BackgroundOptimizationPageState
   }
 
   /// 从后台恢复（例如从系统设置返回）时重新检测服务与电池状态：
-  /// 用户可能在其他应用/系统设置中修改了省电白名单或杀掉了服务。
+  /// 用户可能在其他应用/系统设置中修改了省电白名单、精确闹钟权限
+  /// 或杀掉了服务。（精确闹钟权限只可能在系统设置中变更，且撤销时
+  /// 系统不发任何广播 —— 回到前台是唯一可靠的重新检测时机。）
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     _checkBackgroundService();
     _checkBatteryOptimization();
+    _checkExactAlarmStatus();
   }
 
   Future<void> _loadStrategyToggles() async {
@@ -228,7 +231,10 @@ class _BackgroundOptimizationPageState
     try {
       _canScheduleExactAlarms = await canScheduleExactAlarms();
     } catch (_) {
-      _canScheduleExactAlarms = true;
+      // 无法确定状态时按「未授权」处理（与电池卡片同向）：
+      // 未知状态保守地展示授权入口，而不是隐藏按钮让看门狗
+      // 静默降级为不精确闹钟。
+      _canScheduleExactAlarms = false;
     }
 
     if (mounted) {

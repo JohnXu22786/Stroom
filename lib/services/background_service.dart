@@ -34,6 +34,11 @@ const _desktopCloseMinimizeKey = 'desktop_close_minimize';
 /// watchdog (AlarmManager-based BroadcastReceiver).
 const _keepAliveChannel = MethodChannel('com.johntsui.stroom/keepalive');
 
+/// Timeout for keep-alive channel calls: a stalled platform channel
+/// (busy main thread / ANR window) must never block startup, resume
+/// or page checks forever.
+const _keepAliveChannelTimeout = Duration(seconds: 8);
+
 Future<void> initializeBackgroundService() async {
   await AppLogService.info('BackgroundService', '初始化后台服务');
   // ====================================================================
@@ -321,7 +326,8 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
     }
     // 重新武装 AlarmManager 看门狗：进程被强杀/应用更新后闹钟可能丢失，
     // 冷启动恢复服务时必须同步重新调度，否则看门狗会永久失效。
-    await _enableKeepAlive();
+    // 注意：恢复场景不清零失败计数（见 _rearmKeepAlive 注释）。
+    await _rearmKeepAlive();
   } catch (e) {
     debugPrint('[BackgroundService] Failed to restore background service: $e');
     await AppLogService.error('BackgroundService', '恢复后台服务失败', e);
@@ -415,16 +421,38 @@ Future<void> _enableKeepAlive() async {
   try {
     // await：invokeMethod 的失败是异步抛出的，不 await 会变成
     // 未处理的异步异常（每次冷启动/恢复前台都会触发）。
-    await _keepAliveChannel.invokeMethod('startKeepAlive');
+    // 超时保护：平台通道卡死时不能阻塞启动/恢复流程。
+    await _keepAliveChannel
+        .invokeMethod('startKeepAlive')
+        .timeout(_keepAliveChannelTimeout);
   } catch (e) {
     debugPrint('[BackgroundService] Failed to enable keep-alive alarm: $e');
+  }
+}
+
+/// 重新武装看门狗（冷启动恢复 / 回到前台补武装）。
+///
+/// 与 [_enableKeepAlive] 的区别：只重新调度闹钟，不清零连续失败计数。
+/// 持久失败环境（Android 15 dataSync 上限、无电池豁免等）下，每次
+/// 打开应用都清零计数会让看门狗永远无法进入退避保护。
+Future<void> _rearmKeepAlive() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return;
+  if (!await isWatchdogEnabled()) return;
+  try {
+    await _keepAliveChannel
+        .invokeMethod('rearmKeepAlive')
+        .timeout(_keepAliveChannelTimeout);
+  } catch (e) {
+    debugPrint('[BackgroundService] Failed to re-arm keep-alive alarm: $e');
   }
 }
 
 Future<void> _disableKeepAlive() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
-    await _keepAliveChannel.invokeMethod('stopKeepAlive');
+    await _keepAliveChannel
+        .invokeMethod('stopKeepAlive')
+        .timeout(_keepAliveChannelTimeout);
   } catch (e) {
     debugPrint('[BackgroundService] Failed to disable keep-alive alarm: $e');
   }
@@ -444,7 +472,8 @@ Future<bool> isIgnoringBatteryOptimizations() async {
   if (defaultTargetPlatform != TargetPlatform.android) return true;
   try {
     final result = await _keepAliveChannel
-        .invokeMethod<bool>('isIgnoringBatteryOptimizations');
+        .invokeMethod<bool>('isIgnoringBatteryOptimizations')
+        .timeout(_keepAliveChannelTimeout);
     return result ?? false;
   } catch (e) {
     debugPrint(
@@ -462,7 +491,7 @@ Future<bool> isIgnoringBatteryOptimizations() async {
 Future<void> requestIgnoreBatteryOptimizations() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
-    await _keepAliveChannel.invokeMethod('requestIgnoreBatteryOptimizations');
+    await _keepAliveChannel.invokeMethod('requestIgnoreBatteryOptimizations').timeout(_keepAliveChannelTimeout);
   } catch (e) {
     debugPrint(
         '[BackgroundService] Failed to request battery optimization exemption: $e');
@@ -478,7 +507,7 @@ Future<bool> canScheduleExactAlarms() async {
   if (defaultTargetPlatform != TargetPlatform.android) return true;
   try {
     final result =
-        await _keepAliveChannel.invokeMethod<bool>('canScheduleExactAlarms');
+        await _keepAliveChannel.invokeMethod<bool>('canScheduleExactAlarms').timeout(_keepAliveChannelTimeout);
     return result ?? false;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to check exact alarm status: $e');
@@ -493,7 +522,7 @@ Future<bool> canScheduleExactAlarms() async {
 Future<void> requestScheduleExactAlarm() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
-    await _keepAliveChannel.invokeMethod('requestScheduleExactAlarm');
+    await _keepAliveChannel.invokeMethod('requestScheduleExactAlarm').timeout(_keepAliveChannelTimeout);
   } catch (e) {
     debugPrint(
         '[BackgroundService] Failed to request exact alarm permission: $e');
@@ -511,7 +540,8 @@ Future<void> rearmKeepAliveOnResume() async {
     final prefs = await SharedPreferences.getInstance();
     final serviceEnabled = prefs.getBool(_backgroundServiceEnabledKey) ?? false;
     if (!serviceEnabled) return;
-    await _enableKeepAlive();
+    // 补武装：不清零失败计数（持久失败环境下看门狗应保持退避）。
+    await _rearmKeepAlive();
   } catch (e) {
     debugPrint('[BackgroundService] Failed to re-arm keep-alive on resume: $e');
   }

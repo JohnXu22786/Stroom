@@ -59,6 +59,18 @@ class DataMigrationBackup {
       );
       if (!success) return null;
 
+      // Android SAF 模式下备份通过 SAF 写入用户选择的公共目录，
+      // 备份根路径是虚拟的 'saf://content://...'，本地文件系统上
+      // 不存在，不能用 Directory.exists() 校验 —— 改用 SAF 文件列表
+      // 验证并返回文件名作为非 null 标记。
+      if (await BackupLocationManager.isUsingSafMode()) {
+        final files = await BackupLocationManager.listBackupFiles();
+        if (files.isEmpty) return null;
+        debugPrint(
+            '[DataMigrationService] SAF backup verified: ${files.last}');
+        return files.last; // 文件名（非本地路径，仅作成功标记）
+      }
+
       // 获取最新的备份文件路径
       final backupRoot = await getExternalBackupRootPath();
       final backupDir = Directory(backupRoot);

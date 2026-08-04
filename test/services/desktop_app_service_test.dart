@@ -4,6 +4,7 @@ import 'dart:io' show exit;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/desktop_app_service.dart';
 import 'package:tray_manager/tray_manager.dart' show trayManager;
 import 'package:window_manager/window_manager.dart' show windowManager;
@@ -358,6 +359,41 @@ void main() {
             reason: 'show（恢复窗口）必须发生在确认回调之前，'
                 '否则对话框显示在隐藏窗口上');
         // 用户取消 → 不退出。
+        expect(exitCodes, isEmpty);
+      });
+      DesktopAppService.instance.onQuitConfirmation = null;
+    });
+
+    test('close event racing the minimize-pref read cannot hide the window '
+        'once a quit flow started', () async {
+      // 回归：_handleWindowClose 在 await 读取最小化偏好期间，
+      // 用户可能已发起确认流程 —— 重新检查守卫，不得隐藏窗口。
+      // （quitWithConfirmation 在任何 await 之前同步置位
+      // _confirmInProgress，而偏好读取是异步的，因此该交错可复现。）
+      SharedPreferences.setMockInitialValues({'desktop_close_minimize': true});
+      final mocks = registerChannelMocks();
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+
+        // 先触发关闭事件（进入偏好读取的 await），再立即发起确认流程。
+        DesktopAppService.instance.onWindowClose();
+        final completer = Completer<bool>();
+        DesktopAppService.instance.onQuitConfirmation = () => completer.future;
+        final quitFuture = DesktopAppService.instance.quitWithConfirmation();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        // 偏好读取完成后，_handleWindowClose 必须发现确认已在进行中，
+        // 不能隐藏窗口。
+        expect(
+          mocks['window_manager']!.calls.where((c) => c.method == 'hide'),
+          isEmpty,
+          reason: '确认流程已启动时关闭事件不得隐藏窗口',
+        );
+
+        completer.complete(false);
+        await quitFuture;
         expect(exitCodes, isEmpty);
       });
       DesktopAppService.instance.onQuitConfirmation = null;

@@ -444,6 +444,50 @@ void main() {
       expect(prefs.getInt('data_format_version'),
           DataMigrationService.currentFormatVersion);
     });
+
+    test('quarantine pruning keeps only the 3 newest corrupt backups',
+        () async {
+      // 回归：隔离数据使用带时间戳的 key 且只保留最近 3 份。
+      // 旧固定 key 会被下一次隔离覆盖，丢失前一份损坏证据。
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 0,
+        'provider_entries': '{"not": "an array"}',
+        // 预先存在 5 份旧的隔离数据（13 位 epoch 毫秒时间戳，
+        // 全部早于当前时间 2026-08 ≈ 1.785e12，保证本次新隔离的
+        // 数据（时间戳最大）是「最新」的）
+        'provider_entries_corrupt_1700000000000': '{"old": 1}',
+        'provider_entries_corrupt_1710000000000': '{"old": 2}',
+        'provider_entries_corrupt_1720000000000': '{"old": 3}',
+        'provider_entries_corrupt_1730000000000': '{"old": 4}',
+        'provider_entries_corrupt_1740000000000': '{"old": 5}',
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      final corruptKeys = prefs.getKeys()
+          .where((k) => k.startsWith('provider_entries_corrupt_'))
+          .toList()
+        ..sort();
+      // 旧的 5 份 + 本次新隔离的 1 份 = 6 份，裁剪后只保留 3 份。
+      expect(corruptKeys, hasLength(3),
+          reason: '只保留最近的 3 份隔离备份');
+      // 保留的是时间戳最大的 3 份（含本次新隔离的）。
+      expect(corruptKeys.contains('provider_entries_corrupt_1700000000000'),
+          isFalse, reason: '最旧的 3 份必须被裁剪');
+      expect(corruptKeys.contains('provider_entries_corrupt_1710000000000'),
+          isFalse);
+      expect(corruptKeys.contains('provider_entries_corrupt_1720000000000'),
+          isFalse);
+      expect(corruptKeys.contains('provider_entries_corrupt_1730000000000'),
+          isTrue);
+      expect(corruptKeys.contains('provider_entries_corrupt_1740000000000'),
+          isTrue);
+      expect(corruptKeys.last.startsWith('provider_entries_corrupt_178'),
+          isTrue,
+          reason: '本次新隔离的备份（当前时间戳）必须被保留');
+    });
   });
 
   group('DataMigrationService - v2→v3 defensive migration', () {
