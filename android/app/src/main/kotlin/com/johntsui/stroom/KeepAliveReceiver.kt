@@ -29,11 +29,22 @@ import id.flutter.flutter_background_service.BackgroundService
  * - Fall back to [AlarmManager.setAndAllowWhileIdle] when exact alarms are
  *   not permitted (Android 14+ denies SCHEDULE_EXACT_ALARM by default).
  *   The alarm may be deferred a bit by the system, but still fires in
- *   Doze mode.
+ *   Doze mode. NOTE: inexact alarms are NOT exempt from the Android 12+
+ *   background-start restriction — the restart then depends on the user
+ *   having granted the battery-optimization exemption (requested via
+ *   requestIgnoreBatteryOptimizations).
+ * - Pre-M (API < 23): repeating alarm.
  * - The alarm is a one-shot that re-schedules itself on every fire, so a
  *   single failed firing (e.g. ForegroundServiceStartNotAllowedException
  *   on a device without battery-optimization exemption) never kills the
  *   watchdog permanently.
+ *
+ * Failure backoff: Android 15+ caps dataSync foreground services at 6h per
+ * 24h; once exhausted every start throws. After 3 consecutive failures the
+ * watchdog backs off to a 30-minute interval instead of waking the device
+ * every 5 minutes forever. Any successful start, or an explicit
+ * startKeepAlive from Dart (user start / cold-start restore / app resume),
+ * resets the counter.
  *
  * Lifecycle:
  * 1. [scheduleAlarm] — called from Dart via MethodChannel when the
@@ -41,8 +52,12 @@ import id.flutter.flutter_background_service.BackgroundService
  *    that the watchdog is active.
  * 2. [cancelAlarm] — called when the background service is stopped.
  * 3. On [Intent.ACTION_BOOT_COMPLETED] / [Intent.ACTION_MY_PACKAGE_REPLACED]
- *    the alarm is re-scheduled if it was previously active (persisted via
- *    SharedPreferences).
+ *    / QUICKBOOT_POWERON / SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED the
+ *    alarm is re-scheduled if it was previously active (persisted via
+ *    SharedPreferences). Only the alarm is re-scheduled, never a direct
+ *    foreground-service start — Android 15+ forbids starting a dataSync
+ *    foreground service from BOOT_COMPLETED, while starting from an exact
+ *    alarm is an allowed exemption.
  */
 class KeepAliveReceiver : BroadcastReceiver() {
 
@@ -51,10 +66,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
         private const val ALARM_REQUEST_CODE = 2001
         private const val KEEP_ALIVE_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
 
-        // 连续启动失败后的退避间隔。Android 15+ 的 dataSync 前台服务有
-        // 每 24 小时最多 6 小时的运行上限，超限后启动会持续抛异常；
-        // 连续失败 3 次后把间隔拉长到 30 分钟，避免看门狗每 5 分钟
-        // 唤醒设备却永远失败（冷启动恢复/用户手动启动会重置计数）。
+        // 连续启动失败后的退避间隔（见类注释）。
         private const val MAX_CONSECUTIVE_FAILURES = 3
         private const val FAILURE_BACKOFF_INTERVAL_MS = 30 * 60 * 1000L
 
@@ -93,6 +105,10 @@ class KeepAliveReceiver : BroadcastReceiver() {
             val pendingIntent = createPendingIntent(context, PendingIntent.FLAG_UPDATE_CURRENT)
             val triggerAt = SystemClock.elapsedRealtime() + intervalMs
 
+            // 在调度之前先持久化「闹钟已激活」标记：无论走主路径还是
+            // 降级路径，设备重启后 BOOT_COMPLETED 都能恢复调度。
+            markActive(context, true)
+
             // Prefer exact alarms: on Android 12+ an exact alarm is an
             // exemption that permits starting a foreground service from the
             // background, and it is not deferred by Doze.
@@ -106,7 +122,6 @@ class KeepAliveReceiver : BroadcastReceiver() {
                         pendingIntent
                     )
                     Log.i(TAG, "Keep-alive exact alarm scheduled (interval=${intervalMs / 60000}min)")
-                    markActive(context, true)
                     return
                 } catch (e: SecurityException) {
                     // canScheduleExactAlarms raced or permission revoked — fall through.
@@ -115,13 +130,22 @@ class KeepAliveReceiver : BroadcastReceiver() {
             }
             // setAndAllowWhileIdle requires no permission; the system may
             // defer the delivery a little to batch wake-ups.
-            alarmManager.setAndAllowWhileIdle(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                triggerAt,
-                pendingIntent
-            )
-            Log.i(TAG, "Keep-alive inexact alarm scheduled (interval=${intervalMs / 60000}min)")
-            markActive(context, true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    triggerAt,
+                    pendingIntent
+                )
+                Log.i(TAG, "Keep-alive inexact alarm scheduled (interval=${intervalMs / 60000}min)")
+            } else {
+                alarmManager.setInexactRepeating(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    triggerAt,
+                    KEEP_ALIVE_INTERVAL_MS,
+                    pendingIntent
+                )
+                Log.i(TAG, "Keep-alive repeating alarm scheduled (interval=${KEEP_ALIVE_INTERVAL_MS / 60000}min)")
+            }
         }
 
         /**

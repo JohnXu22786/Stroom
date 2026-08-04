@@ -1,3 +1,5 @@
+import 'dart:io' show exit;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -591,8 +593,9 @@ void main() {
         await tester.pumpWidget(_buildTestApp());
         await tester.pumpAndSettle();
 
-        // The desktop description must mention the tray-resident behavior.
-        expect(find.textContaining('系统托盘'), findsOneWidget);
+        // The desktop description must mention the tray-resident behavior
+        // (also present in the close-minimize toggle's detail text).
+        expect(find.textContaining('系统托盘'), findsWidgets);
       } finally {
         debugDefaultTargetPlatformOverride = null;
         DesktopAppService.instance.resetForTesting();
@@ -986,16 +989,16 @@ void main() {
           tester.view.resetDevicePixelRatio();
         });
 
-        // No quit-confirmation callback injected â€” quit proceeds directly.
+        // No quit-confirmation callback injected — quit proceeds directly.
         await tester.pumpWidget(_buildTestApp());
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('å®Œå…¨é€€å‡ºåº”ç”¨'));
+        await tester.tap(find.text('完全退出应用'));
         await tester.pumpAndSettle();
 
         // Quits immediately without a confirmation dialog,
         // destroying the window and exiting the process.
-        expect(find.text('é€€å‡ºåº”ç”¨ï¼Ÿ'), findsNothing);
+        expect(find.text('退出应用？'), findsNothing);
         expect(windowCalls.where((c) => c.method == 'destroy'), hasLength(1));
         expect(exitCodes, [0]);
       } finally {
@@ -1033,14 +1036,14 @@ void main() {
 
         // User cancels the confirmation -> nothing is destroyed, no exit.
         DesktopAppService.instance.onQuitConfirmation = () async => false;
-        await tester.tap(find.text('å®Œå…¨é€€å‡ºåº”ç”¨'));
+        await tester.tap(find.text('完全退出应用'));
         await tester.pumpAndSettle();
         expect(windowCalls.where((c) => c.method == 'destroy'), isEmpty);
         expect(exitCodes, isEmpty);
 
         // User confirms -> window destroyed and process exits.
         DesktopAppService.instance.onQuitConfirmation = () async => true;
-        await tester.tap(find.text('å®Œå…¨é€€å‡ºåº”ç”¨'));
+        await tester.tap(find.text('完全退出应用'));
         await tester.pumpAndSettle();
         expect(windowCalls.where((c) => c.method == 'destroy'), hasLength(1));
         expect(exitCodes, [0]);
