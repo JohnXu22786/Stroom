@@ -84,6 +84,11 @@ class TaskFlowScheduler {
   int? _lastSampleRss;
   DateTime? _lastSampleAt;
 
+  /// Last time a block finished (release). Distinguishes a long running
+  /// block (release happened between samples → growth is real) from a
+  /// long idle gap (no release → the baseline must re-anchor).
+  DateTime? _lastReleaseAt;
+
   /// Requests resources for [execId]'s next block. Returns immediately
   /// when the budget allows; otherwise waits FIFO until resources free up
   /// or the entry is cancelled via [cancel].
@@ -118,6 +123,7 @@ class TaskFlowScheduler {
   /// Releases [execId]'s resources (idempotent).
   void release(String execId, {int? weight}) {
     if (_active.remove(execId) != null) {
+      _lastReleaseAt = _now();
       _sampleRss();
     }
   }
@@ -142,8 +148,12 @@ class TaskFlowScheduler {
   /// Growth is measured against the earliest sample inside the window; if
   /// the window holds a single sample (long block between acquisitions),
   /// the last sampled RSS serves as the baseline instead, so memory
-  /// growth during a block still counts. After a long idle gap (> 2x the
-  /// window) the baseline re-anchors to the current RSS.
+  /// growth during a block still counts.
+  ///
+  /// After a long gap (> 2x the window) the baseline re-anchors — but
+  /// only when the gap was truly idle: if a block finished between the
+  /// two samples (a release occurred), the growth belongs to that block
+  /// and must not be discarded.
   void _sampleRss() {
     final now = _now();
     final rss = _rssBytes();
@@ -160,9 +170,16 @@ class TaskFlowScheduler {
     // Skip the very first sample (no baseline yet).
     if (prevSampleRss == null) return;
 
-    // Re-anchor after a long idle gap — a stale baseline would
-    // misattribute unrelated memory to the current run.
-    if (prevSampleAt != null && now.difference(prevSampleAt) > rssWindow * 2) {
+    // Re-anchor only after a genuinely idle gap: a release between the
+    // samples means a block ran across the gap — its memory growth is
+    // real and must be attributed.
+    final lastReleaseAt = _lastReleaseAt;
+    final releasedAcrossGap = prevSampleAt != null &&
+        lastReleaseAt != null &&
+        lastReleaseAt.isAfter(prevSampleAt);
+    if (prevSampleAt != null &&
+        now.difference(prevSampleAt) > rssWindow * 2 &&
+        !releasedAcrossGap) {
       return;
     }
 
