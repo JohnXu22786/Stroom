@@ -36,6 +36,7 @@ extension _ChatComposerPanelsExt on ChatComposerWidgetState {
     final reasoningEnabled = ref.read(reasoningEnabledProvider);
     final reasoningEffortEnabled = ref.read(reasoningEffortEnabledProvider);
     final reasoningParamValues = ref.read(reasoningParamValuesProvider);
+    final effortParam = findEffortParam(widget.reasoningParams);
     showReasoningPanel(
       context: context,
       reasoningEnabled: reasoningEnabled,
@@ -50,6 +51,25 @@ extension _ChatComposerPanelsExt on ChatComposerWidgetState {
       },
       onReasoningEffortToggle: (value) {
         ref.read(reasoningEffortEnabledProvider.notifier).state = value;
+        // Keep the effort value in sync with the toggle: enabling writes
+        // the default option (so the chip shows the value and the request
+        // sends it), disabling removes it (so it stops being sent).
+        final current =
+            Map<String, String>.from(ref.read(reasoningParamValuesProvider));
+        if (value) {
+          if (effortParam != null &&
+              effortParam.enabled &&
+              effortParam.options.isNotEmpty &&
+              (current[effortParam.paramName]?.isNotEmpty ?? false) != true) {
+            current[effortParam.paramName] = effortParam.options.first;
+            ref.read(reasoningParamValuesProvider.notifier).state = current;
+          }
+        } else {
+          if (effortParam != null &&
+              current.remove(effortParam.paramName) != null) {
+            ref.read(reasoningParamValuesProvider.notifier).state = current;
+          }
+        }
         // Effort toggle state is auto-persisted via the ref.listen in
         // chat_page.dart's _persistCurrentReasoningSettings mechanism.
       },
@@ -62,11 +82,6 @@ extension _ChatComposerPanelsExt on ChatComposerWidgetState {
         // Sync reasoningEffortProvider when an effort param changes
         // so the effort value is available for API calls (chat_page sends
         // it via ChatAdapter.sendStreamWithTools).
-        final effortParam =
-            widget.reasoningParams.cast<ReasoningParam?>().firstWhere(
-                  (p) => p?.isEffortParam ?? false,
-                  orElse: () => null,
-                );
         if (effortParam != null && paramName == effortParam.paramName) {
           ref.read(reasoningEffortProvider.notifier).state = value;
         }
@@ -94,6 +109,27 @@ extension _ChatComposerPanelsExt on ChatComposerWidgetState {
         SharedPreferences.getInstance().then(
           (prefs) => prefs.setString('reasoning_params', current.toString()),
         );
+      },
+      onCustomParamToggle: (param, enabled) {
+        if (param.paramName.trim().isEmpty) return;
+        final current = Map<String, String>.from(
+          ref.read(reasoningParamValuesProvider),
+        );
+        if (enabled) {
+          // Write the default option so the param is actually sent and the
+          // chip reflects the enabled state (matches the panel's default
+          // highlight of the first option). Write even when a (possibly
+          // stale, pre-fix) value already exists — the provider change is
+          // what triggers the chip rebuild; keep the existing selection.
+          if (param.options.isNotEmpty) {
+            current.putIfAbsent(param.paramName, () => param.options.first);
+            ref.read(reasoningParamValuesProvider.notifier).state = current;
+          }
+        } else {
+          if (current.remove(param.paramName) != null) {
+            ref.read(reasoningParamValuesProvider.notifier).state = current;
+          }
+        }
       },
     );
   }

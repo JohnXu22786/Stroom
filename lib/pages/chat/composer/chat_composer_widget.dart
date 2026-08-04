@@ -11,8 +11,8 @@ import 'package:mime/mime.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
-import 'package:stroom/models/tts_models.dart' show CustomParam;
-import 'package:stroom/providers/provider_config.dart' show ReasoningParam;
+import 'package:stroom/providers/provider_config.dart'
+    show ReasoningParam, findEffortParam;
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/widgets/file_preview.dart';
@@ -45,10 +45,6 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final String initialDraftText;
   final ValueChanged<List<String>>? onModelsReordered;
   final List<ReasoningParam> reasoningParams;
-
-  /// Model-level custom parameters (模型页自定义参数) used for the badge
-  /// count on the "自定义参数" chip. Distinct from reasoning/inference params.
-  final List<CustomParam> customParams;
 
   // ── Edit mode support ──
   /// When non-null, the composer enters edit mode for the given message.
@@ -85,7 +81,6 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.initialDraftText = '',
     this.onModelsReordered,
     this.reasoningParams = const [],
-    this.customParams = const [],
     this.editingMessageId,
     this.editingMessageText,
     this.editingMessageAttachments,

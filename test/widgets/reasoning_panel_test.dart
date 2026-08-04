@@ -297,6 +297,7 @@ void main() {
                       ),
                     ],
                     onReasoningParamChanged: (_, __) {},
+                    onCustomParamToggle: (_, __) {},
                   );
                 },
                 child: const Text('Open'),
@@ -338,6 +339,7 @@ void main() {
                     reasoningParamSelections: {},
                     reasoningParams: [],
                     onReasoningParamChanged: (_, __) {},
+                    onCustomParamToggle: (_, __) {},
                   );
                 },
                 child: const Text('Open'),

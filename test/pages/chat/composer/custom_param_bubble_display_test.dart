@@ -7,31 +7,28 @@ import 'package:stroom/pages/chat/composer/composer_shared.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
-import 'package:stroom/models/tts_models.dart';
 
 /// Helper that creates a widget with all providers needed to test
-/// the composer widget in isolation with custom params.
+/// the composer widget in isolation.
 ///
-/// [customParams] controls the badge count on the '自定义参数' chip:
-///   - Params with non-empty [paramName] are counted as enabled.
-///   - Params with empty [paramName] are excluded from the count.
-///   - When count > 0, a badge (ChipBadge) with the count is shown
-///     and the chip uses the accent color (indigo).
-///   - When count == 0, no badge is shown and the chip is grey.
-///
-/// The custom params badge display is independent of the tool enabled
-/// state: tools off + custom params > 0 -> badge still shows.
+/// The '自定义参数' chip reflects the session state of the model's custom
+/// reasoning params (non-toggle, non-effort): a param counts as ACTIVE
+/// when it has a name, its switch is on (enabled), and a value was
+/// selected for it in [reasoningParamValues]. The chip shows the accent
+/// color and a badge with the active count; otherwise it is grey with no
+/// badge. This is independent of the tool enabled state.
 Widget createComposerTestApp({
   Set<String> enabledTools = const {},
-  List<CustomParam> customParams = const [],
-  List<ReasoningParam> extraReasoningParams = const [],
+  Map<String, String> reasoningParamValues = const {},
+  List<ReasoningParam> reasoningParams = const [],
+  bool reasoningEnabled = true,
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
     overrides: [
-      reasoningEnabledProvider.overrideWith((ref) => false),
-      reasoningEffortEnabledProvider.overrideWith((ref) => false),
-      reasoningParamValuesProvider.overrideWith((ref) => const {}),
+      reasoningEnabledProvider.overrideWith((ref) => reasoningEnabled),
+      reasoningEffortEnabledProvider.overrideWith((ref) => true),
+      reasoningParamValuesProvider.overrideWith((ref) => reasoningParamValues),
       conversationsProvider.overrideWith((ref) {
         return ConversationsNotifier(ref);
       }),
@@ -50,10 +47,13 @@ Widget createComposerTestApp({
           onModelSelected: (idx) {},
           onEnabledToolsChanged: (tools) {},
           enabledTools: enabledTools,
-          customParams: customParams,
           reasoningParams: [
-            ReasoningParam(paramName: 'reasoning_effort', isEffortParam: true),
-            ...extraReasoningParams,
+            ReasoningParam(
+              paramName: 'reasoning_effort',
+              isEffortParam: true,
+              options: ['low', 'medium', 'high'],
+            ),
+            ...reasoningParams,
           ],
         ),
       ),
@@ -61,115 +61,186 @@ Widget createComposerTestApp({
   );
 }
 
+ReasoningParam customParam(
+  String name, {
+  bool enabled = true,
+  List<String> options = const ['a', 'b'],
+}) {
+  return ReasoningParam(
+    paramName: name,
+    enabled: enabled,
+    options: options,
+  );
+}
+
+Future<void> pumpComposer(WidgetTester tester, Widget app) async {
+  await tester.binding.setSurfaceSize(const Size(1200, 2000));
+  await tester.pumpWidget(app);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 50));
+  tester.takeException();
+}
+
 void main() {
-  // ═══════════════════════════════════════════════════════════════
-  // Behavior: Custom params badge counts model-level CustomParams
-  // (not reasoning params), independently of tool enabled state.
-  // ═══════════════════════════════════════════════════════════════
-
-  group('Custom params bubble displays independently of tools', () {
-    Future<void> setupSurface(WidgetTester tester) async {
-      await tester.binding.setSurfaceSize(const Size(1200, 2000));
-    }
-
+  group('Custom params chip reflects active custom params', () {
     testWidgets(
-      'shows badge count when custom params are configured (non-empty name)',
-      (tester) async {
-        await setupSurface(tester);
-        await tester.pumpWidget(createComposerTestApp(
-          customParams: [
-            CustomParam(paramName: 'voice', defaultValue: 'cheerful'),
-            CustomParam(paramName: 'speed', defaultValue: '1.2'),
+        'accent color + badge when a custom param is enabled with a value',
+        (tester) async {
+      await pumpComposer(
+        tester,
+        createComposerTestApp(
+          reasoningParams: [customParam('budget_tokens')],
+          reasoningParamValues: {'budget_tokens': 'a'},
+        ),
+      );
+
+      final chip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '自定义参数',
+      );
+      expect(chip, findsOneWidget);
+      final settingsChip = tester.widget<SettingsChip>(chip);
+      expect(settingsChip.color, const Color(0xFF6366F1));
+      expect(settingsChip.badgeCount, 1);
+    });
+
+    testWidgets('badge counts multiple active custom params', (tester) async {
+      await pumpComposer(
+        tester,
+        createComposerTestApp(
+          reasoningParams: [
+            customParam('budget_tokens'),
+            customParam('thinking.type'),
           ],
-        ));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
-        tester.takeException();
+          reasoningParamValues: {
+            'budget_tokens': 'a',
+            'thinking.type': 'b',
+          },
+        ),
+      );
 
-        // The "自定义参数" chip should have a badge showing count=2
-        expect(find.text('自定义参数'), findsOneWidget);
-        // A ChipBadge with "2" should exist
-        expect(find.text('2'), findsOneWidget);
-      },
-    );
+      final chip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '自定义参数',
+      );
+      final settingsChip = tester.widget<SettingsChip>(chip);
+      expect(settingsChip.color, const Color(0xFF6366F1));
+      expect(settingsChip.badgeCount, 2);
+    });
 
-    testWidgets(
-      'hides badge when no custom params exist',
-      (tester) async {
-        await setupSurface(tester);
-        await tester.pumpWidget(createComposerTestApp());
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
-        tester.takeException();
+    testWidgets('grey + no badge when no custom params are active',
+        (tester) async {
+      await pumpComposer(
+        tester,
+        createComposerTestApp(
+          reasoningParams: [customParam('budget_tokens')],
+          reasoningParamValues: {},
+        ),
+      );
 
-        expect(find.text('自定义参数'), findsOneWidget);
-        // No badge number should be shown
-        expect(find.text('1'), findsNothing);
-        expect(find.text('2'), findsNothing);
-      },
-    );
+      final chip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '自定义参数',
+      );
+      final settingsChip = tester.widget<SettingsChip>(chip);
+      expect(settingsChip.color, Colors.grey);
+      expect(settingsChip.badgeCount, isNull);
+    });
 
-    testWidgets(
-      'badge shows even when tools are disabled — independent of tool state',
-      (tester) async {
-        await setupSurface(tester);
-        await tester.pumpWidget(createComposerTestApp(
-          enabledTools: {}, // no tools enabled
-          customParams: [
-            CustomParam(paramName: 'voice', defaultValue: 'cheerful'),
-            CustomParam(paramName: 'speed', defaultValue: '1.2'),
+    testWidgets('grey + no badge when param is disabled despite a value',
+        (tester) async {
+      await pumpComposer(
+        tester,
+        createComposerTestApp(
+          reasoningParams: [
+            customParam('budget_tokens', enabled: false),
           ],
-        ));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
-        tester.takeException();
+          reasoningParamValues: {'budget_tokens': 'a'},
+        ),
+      );
 
-        // Badge should still show even with no tools enabled
-        expect(find.text('2'), findsOneWidget);
-      },
-    );
+      final chip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '自定义参数',
+      );
+      final settingsChip = tester.widget<SettingsChip>(chip);
+      expect(settingsChip.color, Colors.grey);
+      expect(settingsChip.badgeCount, isNull);
+    });
 
-    testWidgets(
-      'no badge on custom params chip when tools enabled but no custom params',
-      (tester) async {
-        await setupSurface(tester);
-        await tester.pumpWidget(createComposerTestApp(
-          enabledTools: {'web_search'}, // tools enabled
-          customParams: [], // no custom params
-        ));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
-        tester.takeException();
+    testWidgets('effort param value does not count toward the custom badge',
+        (tester) async {
+      await pumpComposer(
+        tester,
+        createComposerTestApp(
+          reasoningParams: [customParam('budget_tokens')],
+          reasoningParamValues: {
+            'reasoning_effort': 'high',
+            'budget_tokens': 'a',
+          },
+        ),
+      );
 
-        // "自定义参数" chip exists but has no badge.
-        // The "1" from the tool badge should be visible on the tools chip,
-        // not on the custom params chip.
-        expect(find.text('自定义参数'), findsOneWidget);
-        // Custom params badge should NOT show "2" (no params configured)
-        expect(find.text('2'), findsNothing);
-        // "1" is the tool badge, which is correct — no conflict with custom params
-      },
-    );
+      final chip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '自定义参数',
+      );
+      final settingsChip = tester.widget<SettingsChip>(chip);
+      expect(settingsChip.badgeCount, 1,
+          reason: 'only the custom param counts, not the effort value');
+    });
 
-    testWidgets(
-      'custom params with empty name are excluded from badge count',
-      (tester) async {
-        await setupSurface(tester);
-        await tester.pumpWidget(createComposerTestApp(
-          customParams: [
-            CustomParam(paramName: '', defaultValue: 'empty_name'),
-            CustomParam(paramName: 'valid', defaultValue: 'ok'),
+    testWidgets('empty-named custom params are excluded', (tester) async {
+      await pumpComposer(
+        tester,
+        createComposerTestApp(
+          reasoningParams: [
+            customParam(''),
+            customParam('budget_tokens'),
           ],
-        ));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
-        tester.takeException();
+          reasoningParamValues: {'budget_tokens': 'a'},
+        ),
+      );
 
-        // Only 1 valid param, so badge should show "1"
-        expect(find.text('1'), findsOneWidget);
-        // Should NOT show "2"
-        expect(find.text('2'), findsNothing);
-      },
-    );
+      final chip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '自定义参数',
+      );
+      final settingsChip = tester.widget<SettingsChip>(chip);
+      expect(settingsChip.badgeCount, 1);
+    });
+
+    testWidgets('chip state is independent of the tool enabled state',
+        (tester) async {
+      await pumpComposer(
+        tester,
+        createComposerTestApp(
+          enabledTools: {'web_search'},
+          reasoningParams: [customParam('budget_tokens')],
+          reasoningParamValues: {'budget_tokens': 'a'},
+        ),
+      );
+
+      final chip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '自定义参数',
+      );
+      final settingsChip = tester.widget<SettingsChip>(chip);
+      expect(settingsChip.color, const Color(0xFF6366F1));
+      expect(settingsChip.badgeCount, 1);
+    });
+
+    testWidgets(
+        'chip is grey when reasoning is off even with active custom params '
+        '(nothing is sent)', (tester) async {
+      await pumpComposer(
+        tester,
+        createComposerTestApp(
+          reasoningEnabled: false,
+          reasoningParams: [customParam('budget_tokens')],
+          reasoningParamValues: {'budget_tokens': 'a'},
+        ),
+      );
+
+      final chip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '自定义参数',
+      );
+      final settingsChip = tester.widget<SettingsChip>(chip);
+      expect(settingsChip.color, Colors.grey);
+      expect(settingsChip.badgeCount, isNull);
+    });
   });
 }

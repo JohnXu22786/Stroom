@@ -40,6 +40,9 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       // 第2步：迁移旧版 CustomParam 缺少 type 字段的问题
       await _migrateOldCustomParams(prefs);
 
+      // 第2.5步：迁移旧版推理参数缺少 isEffortParam 标志的问题
+      await _migrateLegacyEffortParams(prefs);
+
       // 第3步：正常加载 provider_entries
       final json = prefs.getString('provider_entries');
       if (json != null && json.isNotEmpty) {
