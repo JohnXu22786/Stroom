@@ -15,6 +15,7 @@ import 'providers/background_task_provider.dart';
 import 'providers/notification_provider.dart';
 import 'pages/unified_task_list/task_utils.dart';
 import 'services/background_service.dart';
+import 'services/desktop_app_service.dart';
 import 'services/notification_service.dart';
 
 /// 初始化 ProviderScope 的 overrides
@@ -139,6 +140,11 @@ Future<void> main() async {
         WidgetsFlutterBinding.ensureInitialized();
         await AppLogService.info('App', '应用启动: Stroom');
         registerVideoPlayer();
+        // 桌面端：在 runApp 之前初始化窗口管理器，
+        // 以便首帧后启用「关闭窗口 → 最小化到托盘」行为。
+        if (DesktopAppService.isDesktopPlatform) {
+          await DesktopAppService.instance.initialize();
+        }
         if (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS) {
           // 先初始化通知服务（创建通知渠道），再初始化后台服务

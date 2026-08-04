@@ -30,6 +30,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (!window.Create(L"stroom", origin, size)) {
     return EXIT_FAILURE;
   }
+  // 关闭窗口的默认行为由 Dart 侧的 window_manager 插件接管：
+  // 应用初始化完成后会调用 setPreventClose(true)，此时 WM_CLOSE 被插件
+  // 拦截，窗口隐藏到系统托盘继续后台运行（见 lib/services/
+  // desktop_app_service.dart）。这里的 SetQuitOnClose(true) 仅作为
+  // 插件初始化完成前的安全兜底：此时点击关闭会干净地退出进程，
+  // 避免出现「窗口已销毁但进程仍在后台空转」的幽灵进程。
   window.SetQuitOnClose(true);
 
   ::MSG msg;

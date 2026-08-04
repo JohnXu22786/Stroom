@@ -18,6 +18,8 @@ import 'providers/update_provider.dart';
 import 'providers/notification_provider.dart';
 import 'services/app_log_service.dart';
 import 'services/auto_backup_service.dart';
+import 'services/background_service.dart';
+import 'services/desktop_app_service.dart';
 import 'services/notification_service.dart';
 import 'startup/backup_startup_check.dart';
 import 'widgets/update_dialog.dart';
@@ -54,6 +56,13 @@ class _ApplicationState extends ConsumerState<Application>
     if (!kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _runPostStartupTasks();
+      });
+    }
+
+    // 桌面端：首帧后启用「关闭窗口 → 最小化到托盘」行为。
+    if (DesktopAppService.isDesktopPlatform) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(DesktopAppService.instance.setupTrayAndCloseBehavior());
       });
     }
 
@@ -176,6 +185,12 @@ class _ApplicationState extends ConsumerState<Application>
     }
 
     if (state != AppLifecycleState.resumed) return;
+
+    // Android：回到前台时补武装保活看门狗。
+    // 系统撤销「精确闹钟」权限会静默删除所有精确闹钟且不发广播，
+    // 应用回到前台是唯一可靠的补武装时机。
+    unawaited(rearmKeepAliveOnResume());
+
     if (!isPendingRestartInMemory) return;
 
     // Check SharedPreferences flag to confirm it's a real update scenario

@@ -1,0 +1,241 @@
+import 'dart:async';
+import 'dart:io' show exit;
+
+import 'package:flutter/foundation.dart'
+    show
+        TargetPlatform,
+        debugPrint,
+        defaultTargetPlatform,
+        kIsWeb,
+        visibleForTesting;
+import 'package:tray_manager/tray_manager.dart';
+import 'package:window_manager/window_manager.dart';
+
+import 'app_log_service.dart';
+
+// ====================================================================
+// DesktopAppService — 桌面端窗口与系统托盘驻留服务
+// ====================================================================
+//
+// 目标：桌面端（Windows / macOS / Linux）关闭窗口时默认「最小化到托盘」，
+// 应用继续在后台运行，并可从托盘图标恢复窗口或彻底退出。
+//
+// 实现：
+// 1. [initialize] 在 runApp 之前调用（window_manager 要求在 Flutter
+//    UI 启动前完成初始化）。
+// 2. [setupTrayAndCloseBehavior] 在首帧后调用：设置 setPreventClose(true)
+//    使点击关闭按钮时窗口不销毁（window_manager 拦截 WM_CLOSE /
+//    delete-event / windowShouldClose），并注册托盘图标与右键菜单。
+// 3. 关闭窗口 → [onWindowClose] 隐藏窗口；托盘点击 → 显示并聚焦窗口；
+//    托盘菜单「退出」→ 销毁托盘与窗口后退出进程。
+//
+// 安全兜底：如果托盘初始化失败（例如 Linux 缺少 appindicator 依赖），
+// 会撤销 setPreventClose，恢复「关闭即退出」的默认行为，
+// 避免出现窗口关闭后无法找回应用的「幽灵进程」。
+// ====================================================================
+
+/// 桌面端窗口管理 + 系统托盘驻留服务（单例）。
+class DesktopAppService extends WindowListener with TrayListener {
+  DesktopAppService._();
+
+  /// The shared instance.
+  static final DesktopAppService instance = DesktopAppService._();
+
+  /// 可替换的退出函数，测试中替换为记录器避免真的退出进程。
+  @visibleForTesting
+  static void Function(int code) exitApp = exit;
+
+  static const _trayIconIco = 'assets/images/tray_icon.ico';
+  static const _trayIconPng = 'assets/images/tray_icon.png';
+
+  static const _menuShowKey = 'show';
+  static const _menuQuitKey = 'quit';
+
+  bool _initialized = false;
+  bool _trayReady = false;
+  bool _quitRequested = false;
+  Menu? _menu;
+
+  /// 当前是否运行在桌面平台（Windows / macOS / Linux）。
+  static bool get isDesktopPlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.macOS ||
+          defaultTargetPlatform == TargetPlatform.linux);
+
+  /// 测试用：暴露构建好的托盘菜单，便于模拟菜单点击。
+  @visibleForTesting
+  Menu? get trayMenuForTesting => _menu;
+
+  /// 托盘是否已成功注册（用于 UI 展示真实状态）。
+  bool get isTrayReady => _trayReady;
+
+  /// 测试用：重置单例内部状态，避免用例之间相互污染。
+  @visibleForTesting
+  void resetForTesting() {
+    windowManager.removeListener(this);
+    trayManager.removeListener(this);
+    _initialized = false;
+    _trayReady = false;
+    _quitRequested = false;
+    _menu = null;
+  }
+
+  /// 在 runApp 之前调用，初始化窗口管理器。
+  ///
+  /// 非桌面平台为安全的 no-op。
+  Future<void> initialize() async {
+    if (!isDesktopPlatform || _initialized) return;
+    try {
+      await windowManager.ensureInitialized();
+      _initialized = true;
+      debugPrint('[DesktopAppService] Window manager initialized');
+    } catch (e) {
+      debugPrint('[DesktopAppService] Window manager init failed: $e');
+      await AppLogService.error('DesktopAppService', '窗口管理器初始化失败', e);
+    }
+  }
+
+  /// 设置「关闭窗口 → 最小化到托盘」行为并注册托盘图标。
+  ///
+  /// 应在应用首帧之后调用。幂等：重复调用不会重复注册托盘。
+  /// 任何失败都会被捕获并记录，不会导致应用崩溃。
+  Future<void> setupTrayAndCloseBehavior() async {
+    if (!isDesktopPlatform || _quitRequested || _trayReady) return;
+    try {
+      await initialize();
+      if (!_initialized) return; // 初始化失败，保持默认关闭行为
+
+      // 1. 先拦截窗口关闭事件。
+      await windowManager.setPreventClose(true);
+      windowManager.addListener(this);
+      trayManager.addListener(this);
+
+      // 2. 注册托盘图标与菜单。失败则回退为「关闭即退出」，
+      //    避免窗口隐藏后应用无法找回。
+      try {
+        await trayManager.setIcon(
+          defaultTargetPlatform == TargetPlatform.windows
+              ? _trayIconIco
+              : _trayIconPng,
+        );
+        // setToolTip 在 Linux 插件上未实现（会抛 MissingPluginException），
+        // 单独捕获，避免拖垮整个托盘注册流程。
+        try {
+          await trayManager.setToolTip('Stroom 正在后台运行');
+        } catch (e) {
+          debugPrint('[DesktopAppService] setToolTip unsupported: $e');
+        }
+        _menu = _buildMenu();
+        await trayManager.setContextMenu(_menu!);
+        _trayReady = true;
+        debugPrint('[DesktopAppService] Tray icon registered');
+      } catch (e) {
+        debugPrint('[DesktopAppService] Tray registration failed: $e');
+        await AppLogService.error('DesktopAppService', '托盘注册失败', e);
+        windowManager.removeListener(this);
+        trayManager.removeListener(this);
+        await windowManager.setPreventClose(false);
+      }
+    } catch (e) {
+      debugPrint('[DesktopAppService] Tray setup failed: $e');
+      await AppLogService.error('DesktopAppService', '托盘设置失败', e);
+    }
+  }
+
+  Menu _buildMenu() {
+    // 注意：托盘菜单项的点击回调统一走 [onTrayMenuItemClick] 按键路由，
+    // 不要在 MenuItem.onClick 中重复绑定，否则每次点击会执行两次
+    // （tray_manager 会同时触发 item.onClick 和 listener.onTrayMenuItemClick）。
+    return Menu(
+      items: [
+        MenuItem(key: _menuShowKey, label: '显示主窗口'),
+        MenuItem.separator(),
+        MenuItem(key: _menuQuitKey, label: '退出 Stroom'),
+      ],
+    );
+  }
+
+  // ── 窗口事件 ──────────────────────────────────────────────────────
+
+  /// 用户点击窗口关闭按钮：不退出，隐藏到托盘继续后台运行。
+  @override
+  void onWindowClose() {
+    debugPrint('[DesktopAppService] Window close intercepted — hiding to tray');
+    unawaited(_hideWindow());
+  }
+
+  // ── 托盘事件 ──────────────────────────────────────────────────────
+
+  /// 左键点击托盘图标：恢复并聚焦主窗口。
+  @override
+  void onTrayIconMouseDown() {
+    unawaited(_showWindow());
+  }
+
+  /// 右键点击托盘图标：弹出菜单。
+  @override
+  void onTrayIconRightMouseDown() {
+    // Linux 插件未实现 popUpContextMenu（菜单随左键自动弹出），
+    // 异常通过 Future 异步抛出，必须用 catchError 兜住。
+    unawaited(
+      trayManager.popUpContextMenu().catchError((Object e) => debugPrint(
+            '[DesktopAppService] popUpContextMenu unsupported: $e',
+          )),
+    );
+  }
+
+  /// 托盘菜单项点击。
+  @override
+  void onTrayMenuItemClick(MenuItem menuItem) {
+    final key = menuItem.key;
+    if (key == _menuShowKey) {
+      unawaited(_showWindow());
+    } else if (key == _menuQuitKey) {
+      unawaited(quitApplication());
+    }
+  }
+
+  // ── 行为实现 ──────────────────────────────────────────────────────
+
+  Future<void> _hideWindow() async {
+    try {
+      await windowManager.hide();
+    } catch (e) {
+      debugPrint('[DesktopAppService] Failed to hide window: $e');
+    }
+  }
+
+  Future<void> _showWindow() async {
+    if (_quitRequested) return;
+    try {
+      await windowManager.show();
+      await windowManager.focus();
+    } catch (e) {
+      debugPrint('[DesktopAppService] Failed to show window: $e');
+    }
+  }
+
+  /// 从托盘彻底退出：销毁托盘图标与窗口，然后退出进程。
+  ///
+  /// 幂等：重复调用（例如菜单连点）只执行一次。
+  Future<void> quitApplication() async {
+    if (_quitRequested) return;
+    _quitRequested = true;
+    debugPrint('[DesktopAppService] Quitting from tray');
+    try {
+      await trayManager.destroy();
+    } catch (e) {
+      debugPrint('[DesktopAppService] Failed to destroy tray: $e');
+    }
+    try {
+      await windowManager.destroy();
+    } catch (e) {
+      debugPrint('[DesktopAppService] Failed to destroy window: $e');
+    }
+    // macOS 在最后一个窗口关闭后默认不退出，必须显式退出进程；
+    // Windows/Linux 上 windowManager.destroy() 会结束消息循环，
+    // 这里统一显式退出以保证确定性。
+    exitApp(0);
+  }
+}

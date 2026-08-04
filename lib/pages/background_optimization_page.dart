@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
 import '../services/background_service.dart';
+import '../services/desktop_app_service.dart';
 import 'platform_tutorial_page.dart';
 
 /// A page that detects current system environment, checks background optimization
@@ -32,6 +33,8 @@ class _BackgroundOptimizationPageState
   bool _isServiceSupported = false;
   bool _isIgnoringBattery = false;
   bool _isCheckingBattery = true;
+  bool _canScheduleExactAlarms = true;
+  bool _isCheckingExactAlarms = true;
 
   // ── Keep-alive strategy toggles ─────────────────────────────────────
   bool _watchdogEnabled = true;
@@ -44,6 +47,7 @@ class _BackgroundOptimizationPageState
     _detectPlatform();
     _checkBackgroundService();
     _checkBatteryOptimization();
+    _checkExactAlarmStatus();
     _loadStrategyToggles();
   }
 
@@ -165,6 +169,35 @@ class _BackgroundOptimizationPageState
       // Re-check after a short delay to let the system dialog complete.
       await Future<void>.delayed(const Duration(seconds: 2));
       await _checkBatteryOptimization();
+    } catch (_) {}
+  }
+
+  // ── Exact Alarm Status Check ───────────────────────────────────────
+
+  Future<void> _checkExactAlarmStatus() async {
+    setState(() {
+      _isCheckingExactAlarms = true;
+    });
+
+    try {
+      _canScheduleExactAlarms = await canScheduleExactAlarms();
+    } catch (_) {
+      _canScheduleExactAlarms = true;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isCheckingExactAlarms = false;
+      });
+    }
+  }
+
+  Future<void> _requestExactAlarm() async {
+    try {
+      requestScheduleExactAlarm();
+      // Re-check after a short delay to let the system page close.
+      await Future<void>.delayed(const Duration(seconds: 2));
+      await _checkExactAlarmStatus();
     } catch (_) {}
   }
 
@@ -529,6 +562,18 @@ class _BackgroundOptimizationPageState
                 ),
               ),
             ],
+            // Android 12+ 精确闹钟权限（保活看门狗准点触发的关键）
+            if (!_canScheduleExactAlarms && !_isCheckingExactAlarms) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _requestExactAlarm,
+                  icon: const Icon(Icons.alarm_add, size: 18),
+                  label: const Text('允许精确闹钟（保活更可靠）'),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -755,8 +800,25 @@ class _BackgroundOptimizationPageState
     if (defaultTargetPlatform == TargetPlatform.linux ||
         defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.windows) {
-      return '桌面平台后台服务支持有限。'
-          '请保持应用窗口打开以确保任务正常执行。';
+      // 托盘注册失败时展示真实状态，避免误导用户
+      // （窗口隐藏后将无法找回）。
+      if (!DesktopAppService.instance.isTrayReady) {
+        if (defaultTargetPlatform == TargetPlatform.linux) {
+          return '桌面平台托盘暂不可用（Linux 构建需安装 '
+              'libayatana-appindicator3-dev），关闭窗口将直接退出应用。';
+        }
+        return '桌面平台托盘暂不可用，关闭窗口将直接退出应用。';
+      }
+      if (defaultTargetPlatform == TargetPlatform.linux) {
+        // Linux appindicator 左键点击弹出的是菜单而非恢复窗口事件，
+        // 恢复窗口只能通过托盘菜单项完成。
+        return '桌面平台已启用托盘驻留：关闭窗口后应用会隐藏到系统托盘继续运行，'
+            '从托盘菜单选择「显示主窗口」即可恢复窗口。'
+            '如需彻底退出，请从托盘菜单选择「退出 Stroom」。';
+      }
+      return '桌面平台已启用托盘驻留：关闭窗口后应用会最小化到系统托盘继续运行，'
+          '点击托盘图标（或托盘菜单「显示主窗口」）即可恢复窗口。'
+          '如需彻底退出，请从托盘菜单选择「退出 Stroom」。';
     }
     return '后台服务未启动。请点击下方「启动服务」按钮启动后台服务，'
         '或查看平台教程了解如何优化后台运行设置。';

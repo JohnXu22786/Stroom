@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_log_service.dart';
+import 'notification_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 const _serviceName = 'com.johntsui.stroom.background_service';
@@ -62,6 +63,10 @@ Future<void> initializeBackgroundService() async {
         autoStartOnBoot: false,
         autoStart: false,
         isForegroundMode: true,
+        // 前台服务类型与 AndroidManifest 中声明的
+        // android:foregroundServiceType="dataSync" 保持一致，
+        // 否则 Android 14+ 会因类型未声明而拒绝 startForeground。
+        foregroundServiceTypes: [AndroidForegroundType.dataSync],
         notificationChannelId: _serviceName,
         initialNotificationTitle: _serviceTitle,
         initialNotificationContent: _serviceContent,
@@ -143,6 +148,9 @@ Future<void> startBackgroundService() async {
   try {
     final service = FlutterBackgroundService();
     if (!await service.isRunning()) {
+      // Android 13+ 前台服务通知需要 POST_NOTIFICATIONS 运行时权限，
+      // 不授予时通知不显示（服务本身仍可运行）。这里尽力请求一次。
+      await _ensureNotificationPermission();
       final started = await service.startService();
       if (started) {
         await AppLogService.info('BackgroundService', '后台服务已启动');
@@ -160,6 +168,17 @@ Future<void> startBackgroundService() async {
   } catch (e) {
     debugPrint('[BackgroundService] Failed to start background service: $e');
     await AppLogService.error('BackgroundService', '启动后台服务失败', e);
+  }
+}
+
+/// 尽力请求 Android 13+ 的通知权限（best-effort，失败不阻塞启动）。
+Future<void> _ensureNotificationPermission() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return;
+  try {
+    await NotificationService().requestPermission(usageReason: '后台任务通知');
+  } catch (e) {
+    debugPrint(
+        '[BackgroundService] Failed to request notification permission: $e');
   }
 }
 
@@ -241,6 +260,9 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
       await service.startService();
       await AppLogService.info('BackgroundService', '后台服务已恢复');
     }
+    // 重新武装 AlarmManager 看门狗：进程被强杀/应用更新后闹钟可能丢失，
+    // 冷启动恢复服务时必须同步重新调度，否则看门狗会永久失效。
+    await _enableKeepAlive();
   } catch (e) {
     debugPrint('[BackgroundService] Failed to restore background service: $e');
     await AppLogService.error('BackgroundService', '恢复后台服务失败', e);
@@ -382,5 +404,53 @@ void requestIgnoreBatteryOptimizations() {
   } catch (e) {
     debugPrint(
         '[BackgroundService] Failed to request battery optimization exemption: $e');
+  }
+}
+
+/// Returns whether the app is allowed to schedule exact alarms
+/// (Android 12+). Exact alarms let the watchdog fire on time and are a
+/// documented exemption for starting a foreground service from the
+/// background. Returns `true` on non-Android platforms or if the status
+/// cannot be determined.
+Future<bool> canScheduleExactAlarms() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return true;
+  try {
+    final result =
+        await _keepAliveChannel.invokeMethod<bool>('canScheduleExactAlarms');
+    return result ?? false;
+  } catch (e) {
+    debugPrint('[BackgroundService] Failed to check exact alarm status: $e');
+    return false;
+  }
+}
+
+/// Opens the system "Alarms & reminders" special-access page so the user
+/// can grant the exact-alarm permission. When granted, the system sends
+/// SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED and the native watchdog
+/// re-arms itself immediately.
+void requestScheduleExactAlarm() {
+  if (defaultTargetPlatform != TargetPlatform.android) return;
+  try {
+    _keepAliveChannel.invokeMethod('requestScheduleExactAlarm');
+  } catch (e) {
+    debugPrint(
+        '[BackgroundService] Failed to request exact alarm permission: $e');
+  }
+}
+
+/// 应用回到前台时补武装保活看门狗（best-effort 自愈）。
+///
+/// 系统撤销「精确闹钟」权限时不会发送任何广播，且会静默删除所有
+/// 精确闹钟 —— 此时看门狗会无声失效。用户从系统设置回到应用时
+/// 补一次调度即可恢复。
+Future<void> rearmKeepAliveOnResume() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final serviceEnabled = prefs.getBool(_backgroundServiceEnabledKey) ?? false;
+    if (!serviceEnabled) return;
+    await _enableKeepAlive();
+  } catch (e) {
+    debugPrint('[BackgroundService] Failed to re-arm keep-alive on resume: $e');
   }
 }

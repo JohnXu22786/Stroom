@@ -188,6 +188,12 @@ class PlatformTutorialPage extends StatelessWidget {
       case 'Windows':
         return [
           _TutorialStep(
+            title: '关闭窗口 = 最小化到托盘',
+            description: '点击窗口右上角关闭按钮不会退出 Stroom，'
+                '应用会最小化到系统托盘（任务栏右下角）继续后台运行。'
+                '点击托盘图标可恢复窗口；右键托盘图标选择「退出 Stroom」才会彻底退出。',
+          ),
+          _TutorialStep(
             title: '关闭节电模式',
             description: '进入「设置」→「系统」→「电源和睡眠」→ 关闭「节电模式」。'
                 '或将节电模式设置为仅在电池电量低于指定百分比时自动开启。',
@@ -212,6 +218,12 @@ class PlatformTutorialPage extends StatelessWidget {
       case 'macOS':
         return [
           _TutorialStep(
+            title: '关闭窗口 = 最小化到菜单栏',
+            description: '点击窗口左上角红色关闭按钮不会退出 Stroom，'
+                '应用会驻留在菜单栏（屏幕右上角）继续后台运行。'
+                '点击菜单栏图标可恢复窗口；菜单栏菜单选择「退出 Stroom」才会彻底退出。',
+          ),
+          _TutorialStep(
             title: '允许通知',
             description: '进入「系统设置」→「通知」→「Stroom」→ 开启「允许通知」。'
                 '建议同时开启「横幅」和「通知中心」。',
@@ -222,11 +234,6 @@ class PlatformTutorialPage extends StatelessWidget {
                 '低电量模式会限制后台活动。',
           ),
           _TutorialStep(
-            title: '保持 App 激活状态',
-            description: 'macOS 对后台应用的限制较少。如需长时间运行，保持 Stroom 窗口打开即可。'
-                '建议不要强制退出应用，直接关闭窗口即可。',
-          ),
-          _TutorialStep(
             title: '登录时启动（可选）',
             description: '进入「系统设置」→「通用」→「登录项」→ 添加 Stroom，'
                 '这样电脑启动时 Stroom 会自动运行。',
@@ -234,6 +241,13 @@ class PlatformTutorialPage extends StatelessWidget {
         ];
       case 'Linux':
         return [
+          _TutorialStep(
+            title: '关闭窗口 = 最小化到托盘',
+            description: '点击窗口关闭按钮不会退出 Stroom，应用会隐藏到系统托盘'
+                '（需桌面环境支持 StatusNotifierItem，且构建时已安装 '
+                'libayatana-appindicator3-dev）。'
+                '在托盘菜单选择「显示主窗口」可恢复窗口。',
+          ),
           _TutorialStep(
             title: '桌面环境设置',
             description: '根据您使用的桌面环境（GNOME、KDE、XFCE 等），进入「系统设置」→'
