@@ -212,6 +212,9 @@ class MainActivity : FlutterActivity() {
                 "startKeepAlive" -> {
                     Log.i(TAG, "Keep-alive: start requested from Dart")
                     KeepAliveReceiver.scheduleAlarm(this)
+                    // 用户显式启动看门狗：清零连续失败计数，
+                    // 恢复正常的 5 分钟调度间隔。
+                    KeepAliveReceiver.resetFailureCount(this)
                     result.success(true)
                 }
                 "stopKeepAlive" -> {
@@ -224,6 +227,13 @@ class MainActivity : FlutterActivity() {
                 }
                 "requestIgnoreBatteryOptimizations" -> {
                     requestIgnoreBatteryOptimizations()
+                    result.success(true)
+                }
+                "canScheduleExactAlarms" -> {
+                    result.success(canScheduleExactAlarms())
+                }
+                "requestScheduleExactAlarm" -> {
+                    requestScheduleExactAlarm()
                     result.success(true)
                 }
                 else -> {
@@ -876,6 +886,46 @@ class MainActivity : FlutterActivity() {
             powerManager.isIgnoringBatteryOptimizations(packageName)
         } else {
             true // 低版本不需要
+        }
+    }
+
+    /// 是否允许调度精确闹钟（Android 12+，即 API 31+）。
+    ///
+    /// 精确闹钟是保活看门狗「准点触发 + 后台启动前台服务豁免」的前提。
+    /// Android 14+ 默认拒绝，用户可在系统设置中授予。
+    private fun canScheduleExactAlarms(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            alarmManager.canScheduleExactAlarms()
+        } else {
+            true // 低版本始终允许
+        }
+    }
+
+    /// 打开系统「闹钟和提醒」特殊权限页面，引导用户授予精确闹钟权限。
+    ///
+    /// 授予后系统会发送 SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED 广播，
+    /// KeepAliveReceiver 会立即重新调度看门狗。
+    private fun requestScheduleExactAlarm() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+                Log.i(TAG, "Schedule exact alarm permission requested")
+            } catch (e: ActivityNotFoundException) {
+                Log.w(TAG, "ACTION_REQUEST_SCHEDULE_EXACT_ALARM not supported", e)
+                // 回退：打开应用详情页（部分国产 ROM 不支持特殊权限跳转）
+                try {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                } catch (e2: Exception) {
+                    Log.e(TAG, "Failed to open app settings", e2)
+                }
+            }
         }
     }
 

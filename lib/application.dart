@@ -22,6 +22,7 @@ import 'providers/task_provider.dart' show TaskStatus;
 import 'services/app_log_service.dart';
 import 'services/auto_backup_service.dart';
 import 'services/background_service.dart';
+import 'services/desktop_app_service.dart';
 import 'services/notification_service.dart';
 import 'startup/backup_startup_check.dart';
 import 'widgets/update_dialog.dart';
@@ -56,9 +57,13 @@ class _ApplicationState extends ConsumerState<Application>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // 桌面端：关闭窗口时默认最小化到任务栏，应用与后台任务继续运行。
+    // 桌面端：关闭窗口时默认最小化到托盘/任务栏，应用与后台任务继续运行。
     if (isDesktopPlatform()) {
       _initDesktopWindowBehavior();
+      // 首帧后注册系统托盘图标与菜单（托盘点击可恢复窗口）。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(DesktopAppService.instance.setupTray());
+      });
     }
 
     // 在进入主界面后执行启动后流程（非 Web 端）：
@@ -117,8 +122,15 @@ class _ApplicationState extends ConsumerState<Application>
 
     try {
       if (minimize) {
-        await windowManager.minimize();
-        debugPrint('[Application] 窗口已最小化（关闭时最小化）');
+        // 托盘可用时隐藏到系统托盘（真正"后台运行"）；
+        // 托盘不可用时降级为最小化到任务栏（窗口仍可找回）。
+        if (DesktopAppService.instance.isTrayReady) {
+          await DesktopAppService.instance.hideToTray();
+          debugPrint('[Application] 窗口已隐藏到系统托盘（关闭时最小化）');
+        } else {
+          await windowManager.minimize();
+          debugPrint('[Application] 窗口已最小化到任务栏（关闭时最小化）');
+        }
         return;
       }
 
@@ -149,7 +161,9 @@ class _ApplicationState extends ConsumerState<Application>
           if (!confirmed) return; // 取消：窗口保持打开
         }
       }
-      await windowManager.destroy();
+      // 彻底退出：销毁托盘图标与窗口，并显式退出进程
+      // （macOS 在最后一个窗口关闭后默认不退出，必须显式退出）。
+      await DesktopAppService.instance.quitApplication();
       debugPrint('[Application] 窗口已关闭（关闭时退出）');
     } catch (e) {
       debugPrint('[Application] 处理窗口关闭失败: $e');
@@ -277,6 +291,12 @@ class _ApplicationState extends ConsumerState<Application>
     }
 
     if (state != AppLifecycleState.resumed) return;
+
+    // Android：回到前台时补武装保活看门狗。
+    // 系统撤销「精确闹钟」权限会静默删除所有精确闹钟且不发广播，
+    // 应用回到前台是唯一可靠的补武装时机。
+    unawaited(rearmKeepAliveOnResume());
+
     if (!isPendingRestartInMemory) return;
 
     // Check SharedPreferences flag to confirm it's a real update scenario

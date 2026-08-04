@@ -13,7 +13,12 @@
     <!-- Required by flutter_background_service_android for boot receiver -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <!-- Exact keep-alive alarm (Android 12+; falls back to inexact alarms if denied) -->
+    <!--
+        允许调度精确闹钟（Android 12+；被拒绝时看门狗自动降级为
+        setAndAllowWhileIdle）。精确闹钟是「后台启动前台服务」的官方
+        豁免条件之一，也是保活看门狗在 Doze 模式下准点触发的前提。
+        Android 14+ 默认拒绝，用户可在系统设置中授予。
+    -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <!-- Allow user to exempt app from battery optimization (Doze) -->
@@ -90,19 +95,34 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!--
+            flutter_background_service_android 的实际前台服务类。
+            必须声明 foregroundServiceType=dataSync 并与 Dart 侧
+            AndroidConfiguration.foregroundServiceTypes 保持一致，
+            否则 Android 14+ 会因类型未声明拒绝 startForeground。
+            stopWithTask=false：用户从最近任务列表划掉应用后服务继续运行。
+        -->
         <service
-            android:name="com.foregroundservice.ForegroundService"
+            android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false"
-            android:stopWithTask="false" />
+            android:stopWithTask="false"
+            tools:replace="android:exported" />
 
         <!-- Keep-alive watchdog: AlarmManager-based receiver that restarts
-             the foreground service if the process was killed by the OS. -->
+             the foreground service if the process was killed by the OS.
+             MY_PACKAGE_REPLACED：应用更新后系统会清除闹钟，必须重排。 -->
         <receiver
             android:name=".KeepAliveReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <!-- 用户授予精确闹钟权限后重新调度看门狗
+                     （撤销时系统不发送广播且会删除精确闹钟，
+                       由 Dart 侧回到前台时补武装） -->
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
 
