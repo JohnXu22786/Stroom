@@ -16,6 +16,8 @@ import 'pages/settings_page.dart';
 import 'providers/theme_provider.dart';
 import 'providers/update_provider.dart';
 import 'providers/notification_provider.dart';
+import 'providers/background_task_provider.dart';
+import 'providers/task_provider.dart' show TaskStatus;
 import 'services/app_log_service.dart';
 import 'services/auto_backup_service.dart';
 import 'services/background_service.dart';
@@ -23,6 +25,7 @@ import 'services/desktop_app_service.dart';
 import 'services/notification_service.dart';
 import 'startup/backup_startup_check.dart';
 import 'widgets/update_dialog.dart';
+import 'widgets/quit_confirmation_dialog.dart';
 
 class Application extends ConsumerStatefulWidget {
   const Application({super.key});
@@ -50,6 +53,15 @@ class _ApplicationState extends ConsumerState<Application>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
+    // 桌面端：把「退出确认」注入托盘服务（关闭窗口/完全退出时使用），
+    // 并在首帧后启用「关闭窗口 → 最小化到托盘」行为。
+    if (DesktopAppService.isDesktopPlatform) {
+      DesktopAppService.instance.onQuitConfirmation = _confirmQuitBeforeExit;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(DesktopAppService.instance.setupTrayAndCloseBehavior());
+      });
+    }
+
     // 在进入主界面后执行启动后流程（非 Web 端）：
     // 1. 检查更新（必须弹窗而非静默）
     // 2. 检查备份存储授权 + 自动备份（与检查更新并行）
@@ -59,19 +71,61 @@ class _ApplicationState extends ConsumerState<Application>
       });
     }
 
-    // 桌面端：首帧后启用「关闭窗口 → 最小化到托盘」行为。
-    if (DesktopAppService.isDesktopPlatform) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(DesktopAppService.instance.setupTrayAndCloseBehavior());
-      });
-    }
-
     // Set up in-app notification handler
     NotificationService().onInAppNotification = (payload) {
       if (mounted) {
         ref.read(inAppNotificationProvider.notifier).state = payload;
       }
     };
+  }
+
+  /// 「关闭即退出」模式下，确认对话框打开期间的重复关闭事件保护。
+  /// （拦截永远开启，每次点 X 都会触发 onWindowClose。）
+  bool _quitConfirmInProgress = false;
+
+  /// 桌面端「关闭即退出」/「完全退出应用」前的确认。
+  ///
+  /// 退出会立即中断所有运行中的任务：若有任务正在运行，弹窗确认；
+  /// 没有运行任务时直接放行。返回 true 表示用户确认退出。
+  Future<bool> _confirmQuitBeforeExit() async {
+    if (_quitConfirmInProgress) return false;
+    _quitConfirmInProgress = true;
+    try {
+      final runningCount = ref
+          .read(backgroundTasksProvider)
+          .where((t) => t.status == TaskStatus.running)
+          .length;
+      if (runningCount == 0) return true;
+
+      final navigatorContext = _navigatorKey.currentContext;
+      if (navigatorContext == null || !navigatorContext.mounted) return true;
+
+      try {
+        return await showQuitConfirmationDialog(
+          navigatorContext,
+          runningTaskCount: runningCount,
+        );
+      } catch (e) {
+        // 对话框异常（例如导航器不可用）：降级为直接退出，
+        // 绝不阻塞用户关闭窗口。
+        debugPrint('[Application] 退出确认对话框失败: $e');
+        return true;
+      }
+    } catch (e) {
+      debugPrint('[Application] 检查运行任务失败，放行退出: $e');
+      return true;
+    } finally {
+      _quitConfirmInProgress = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (DesktopAppService.instance.onQuitConfirmation == _confirmQuitBeforeExit) {
+      DesktopAppService.instance.onQuitConfirmation = null;
+    }
+    super.dispose();
   }
 
   /// 执行启动后流程：
@@ -176,12 +230,16 @@ class _ApplicationState extends ConsumerState<Application>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // 如果应用进入后台/暂停状态，且后台备份正在运行，则取消备份
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
       if (AutoBackupService.isRunning) {
         debugPrint('[Application] 应用进入后台，取消正在运行的自动备份');
         AutoBackupService.cancel();
       }
-      return;
+      if (state == AppLifecycleState.paused ||
+          state == AppLifecycleState.detached) {
+        return;
+      }
     }
 
     if (state != AppLifecycleState.resumed) return;
@@ -254,12 +312,6 @@ class _ApplicationState extends ConsumerState<Application>
     } catch (e) {
       debugPrint('[Application] Failed to exit app: $e');
     }
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
   }
 
   Future<void> _checkForUpdatesOnStartup() async {

@@ -7,11 +7,18 @@ import 'package:flutter_background_service_platform_interface/flutter_background
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/background_optimization_page.dart';
 import 'package:stroom/services/desktop_app_service.dart';
+import 'package:stroom/providers/background_task_provider.dart';
+import 'package:stroom/services/ios_continued_task_service.dart';
 
 /// Builds the test app wrapping BackgroundOptimizationPage.
-Widget _buildTestApp() {
-  return const ProviderScope(
-    child: MaterialApp(
+/// Optionally overrides [backgroundTasksProvider] with a pre-seeded notifier
+/// (e.g. to simulate running tasks for the quit-confirmation flow).
+Widget _buildTestApp({BackgroundTaskNotifier? taskNotifier}) {
+  return ProviderScope(
+    overrides: taskNotifier == null
+        ? []
+        : [backgroundTasksProvider.overrideWith((ref) => taskNotifier)],
+    child: const MaterialApp(
       home: BackgroundOptimizationPage(),
     ),
   );
@@ -102,12 +109,40 @@ MockBackgroundServicePlatform registerMockPlatform() {
       return true;
     },
   );
+  // Mock the notification permission channel: without a handler the
+  // status check future never completes in widget tests, forcing the
+  // production 8s timeout to elapse in fake time for every start flow.
+  // statusByValue(1) == PermissionStatus.granted.
+  // Permission.notification has index 17 in permission_handler.
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+    const MethodChannel('flutter.baseflow.com/permissions/methods'),
+    (MethodCall call) async {
+      if (call.method == 'checkPermissionStatus') return 1;
+      if (call.method == 'requestPermissions') {
+        return <int, int>{17: 1}; // notification permission -> granted
+      }
+      return true;
+    },
+  );
   final mock = MockBackgroundServicePlatform();
   FlutterBackgroundServicePlatform.instance = mock;
   return mock;
 }
 
 void main() {
+  tearDown(() {
+    // 清理跨测试泄漏的 mock 通道处理器与平台覆盖。
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'), null);
+    messenger.setMockMethodCallHandler(
+        const MethodChannel('window_manager'), null);
+    messenger.setMockMethodCallHandler(
+        const MethodChannel('flutter.baseflow.com/permissions/methods'), null);
+    IosContinuedTaskService.debugForceSupported = false;
+  });
   group('BackgroundOptimizationPage - rendering', () {
     testWidgets('renders page title', (tester) async {
       registerMockPlatform();
@@ -713,6 +748,386 @@ void main() {
         reason: 're-enabling the watchdog while the service runs must arm '
             'the native keep-alive alarm',
       );
+    });
+  });
+  group('BackgroundOptimizationPage - keep-alive strategy toggles', () {
+    testWidgets('Android shows all three strategy toggles', (tester) async {
+      registerMockPlatform();
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('AlarmManager 看门狗'), findsOneWidget);
+      expect(find.text('冷启动自动恢复'), findsOneWidget);
+      expect(find.text('电池优化提醒'), findsOneWidget);
+      // Desktop-only card must NOT be shown on Android
+      expect(find.text('关闭窗口时最小化'), findsNothing);
+    });
+
+    testWidgets(
+        'toggling watchdog off persists the pref and disables the alarm',
+        (tester) async {
+      registerMockPlatform();
+      // Record keep-alive channel calls.
+      final keepAliveCalls = <String>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall call) async {
+          keepAliveCalls.add(call.method);
+          return true;
+        },
+      );
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Tap the watchdog switch (SwitchListTile) to turn it off.
+      await tester.tap(find.byType(SwitchListTile).first);
+      await tester.pumpAndSettle();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('background_service_watchdog'), isFalse);
+      expect(keepAliveCalls, contains('stopKeepAlive'));
+    });
+
+    testWidgets('disabling battery reminder hides the battery card',
+        (tester) async {
+      registerMockPlatform();
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Battery card is initially visible (Android + reminder enabled).
+      expect(find.text('已忽略电池优化'), findsOneWidget);
+
+      // The battery reminder toggle is the last SwitchListTile.
+      await tester.tap(find.byType(SwitchListTile).last);
+      await tester.pumpAndSettle();
+
+      // Battery card disappears after the reminder is disabled.
+      expect(find.text('已忽略电池优化'), findsNothing);
+    });
+
+    testWidgets('iOS shows only the cold-start toggle', (tester) async {
+      registerMockPlatform();
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        expect(find.text('冷启动自动恢复'), findsOneWidget);
+        // Android-only toggles must not appear on iOS
+        expect(find.text('AlarmManager 看门狗'), findsNothing);
+        expect(find.text('电池优化提醒'), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('desktop shows close-minimize card instead of mobile toggles',
+        (tester) async {
+      registerMockPlatform();
+      // Mock the window_manager channel so setPreventClose etc. work.
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('window_manager'),
+        (MethodCall call) async => true,
+      );
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        // Desktop keep-alive card with minimize-on-close toggle + quit button
+        expect(find.text('关闭窗口时最小化'), findsOneWidget);
+        expect(find.text('完全退出应用'), findsOneWidget);
+        // Mobile strategy toggles must not appear on desktop
+        expect(find.text('AlarmManager 看门狗'), findsNothing);
+        expect(find.text('冷启动自动恢复'), findsNothing);
+        // iOS-only background note card must not appear on desktop
+        expect(find.text('iOS 后台任务提示'), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets(
+        'toggling desktop close-minimize off persists the pref but keeps the close interception',
+        (tester) async {
+      registerMockPlatform();
+      // Record window_manager channel calls (method + arguments).
+      final windowCalls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('window_manager'),
+        (MethodCall call) async {
+          windowCalls.add(call);
+          return true;
+        },
+      );
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        // The desktop card has exactly one SwitchListTile.
+        await tester.tap(find.byType(SwitchListTile).first);
+        await tester.pumpAndSettle();
+
+        // The preference is persisted...
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getBool('desktop_close_minimize'), isFalse);
+        // ...but the close interception must NEVER be released:
+        // releasing it would let the native layer destroy the window
+        // before the quit confirmation can run.
+        final preventCloseCalls =
+            windowCalls.where((c) => c.method == 'setPreventClose').toList();
+        expect(preventCloseCalls, isNotEmpty);
+        expect(
+          preventCloseCalls.every(
+            (c) => (c.arguments as Map)['isPreventClose'] == true,
+          ),
+          isTrue,
+          reason: 'setPreventClose(false) 会释放拦截，导致退出确认失效',
+        );
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('re-checks service status when app resumes from background',
+        (tester) async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+      expect(find.text('后台服务未启动'), findsOneWidget);
+
+      // The service was started elsewhere while the app was in background.
+      mock.setServiceRunning(true);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      expect(find.text('后台服务运行中'), findsOneWidget);
+    });
+
+        testWidgets('quit button exits directly when no tasks are running',
+        (tester) async {
+      registerMockPlatform();
+      // Record window_manager channel calls.
+      final windowCalls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('window_manager'),
+        (MethodCall call) async {
+          windowCalls.add(call);
+          return true;
+        },
+      );
+      // Record the process exit instead of actually exiting.
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
+      try {
+        DesktopAppService.instance.resetForTesting();
+        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        // No quit-confirmation callback injected â€” quit proceeds directly.
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('å®Œå…¨é€€å‡ºåº”ç”¨'));
+        await tester.pumpAndSettle();
+
+        // Quits immediately without a confirmation dialog,
+        // destroying the window and exiting the process.
+        expect(find.text('é€€å‡ºåº”ç”¨ï¼Ÿ'), findsNothing);
+        expect(windowCalls.where((c) => c.method == 'destroy'), hasLength(1));
+        expect(exitCodes, [0]);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.exitApp = exit;
+        DesktopAppService.instance.resetForTesting();
+      }
+    });
+        testWidgets('quit button respects the injected quit confirmation',
+        (tester) async {
+      registerMockPlatform();
+      final windowCalls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('window_manager'),
+        (MethodCall call) async {
+          windowCalls.add(call);
+          return true;
+        },
+      );
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
+      try {
+        DesktopAppService.instance.resetForTesting();
+        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        // User cancels the confirmation -> nothing is destroyed, no exit.
+        DesktopAppService.instance.onQuitConfirmation = () async => false;
+        await tester.tap(find.text('å®Œå…¨é€€å‡ºåº”ç”¨'));
+        await tester.pumpAndSettle();
+        expect(windowCalls.where((c) => c.method == 'destroy'), isEmpty);
+        expect(exitCodes, isEmpty);
+
+        // User confirms -> window destroyed and process exits.
+        DesktopAppService.instance.onQuitConfirmation = () async => true;
+        await tester.tap(find.text('å®Œå…¨é€€å‡ºåº”ç”¨'));
+        await tester.pumpAndSettle();
+        expect(windowCalls.where((c) => c.method == 'destroy'), hasLength(1));
+        expect(exitCodes, [0]);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.exitApp = exit;
+        DesktopAppService.instance.onQuitConfirmation = null;
+        DesktopAppService.instance.resetForTesting();
+      }
+    });
+  });
+
+  group('BackgroundOptimizationPage - iOS background note card', () {
+    testWidgets('iOS shows the background note card with old-iOS tips',
+        (tester) async {
+      registerMockPlatform();
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        // 卡片与「低于 iOS 26」提示（测试机非 iOS 26，isSupported=false）。
+        expect(find.text('iOS 后台任务提示'), findsOneWidget);
+        expect(find.textContaining('低于 iOS 26'), findsOneWidget);
+        expect(find.textContaining('每隔几分钟返回一次'), findsOneWidget);
+        // 通用警示：勿在 App 切换器中划掉。
+        expect(find.textContaining('请勿在 App 切换器中划掉'), findsOneWidget);
+        // 桌面端卡片不显示。
+        expect(find.text('关闭窗口时最小化'), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('iOS 26 shows the resident-background supported message',
+        (tester) async {
+      registerMockPlatform();
+      IosContinuedTaskService.debugForceSupported = true;
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        expect(find.text('iOS 后台任务提示'), findsOneWidget);
+        expect(find.textContaining('支持任务常驻后台'), findsOneWidget);
+        expect(find.textContaining('低于 iOS 26'), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  });
+
+  group('BackgroundOptimizationPage - platform tutorial cards', () {
+    testWidgets('tutorial card list includes a Web entry', (tester) async {
+      registerMockPlatform();
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // 六个平台教程入口都可达（Android 同时出现在平台检测卡，
+      // 因此用 findsWidgets；'Web' 只在教程卡片出现，可精确断言）。
+      expect(find.text('Android'), findsWidgets);
+      expect(find.text('iOS'), findsWidgets);
+      expect(find.text('Windows'), findsWidgets);
+      expect(find.text('macOS'), findsWidgets);
+      expect(find.text('Linux'), findsWidgets);
+      expect(find.text('Web'), findsOneWidget);
     });
   });
 }

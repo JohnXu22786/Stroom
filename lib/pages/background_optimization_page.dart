@@ -1,26 +1,30 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+    show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../services/background_service.dart';
 import '../services/desktop_app_service.dart';
+import '../services/ios_continued_task_service.dart';
 import 'platform_tutorial_page.dart';
 
 /// A page that detects current system environment, checks background optimization
 /// status, and provides tutorials organized by OS categories.
-class BackgroundOptimizationPage extends StatefulWidget {
+class BackgroundOptimizationPage extends ConsumerStatefulWidget {
   const BackgroundOptimizationPage({super.key});
 
   @override
-  State<BackgroundOptimizationPage> createState() =>
+  ConsumerState<BackgroundOptimizationPage> createState() =>
       _BackgroundOptimizationPageState();
 }
 
 class _BackgroundOptimizationPageState
-    extends State<BackgroundOptimizationPage> {
+    extends ConsumerState<BackgroundOptimizationPage>
+    with WidgetsBindingObserver {
   // ── Detection results ────────────────────────────────────────────────
   String _platformName = '';
   IconData _platformIcon = Icons.devices;
@@ -41,9 +45,13 @@ class _BackgroundOptimizationPageState
   bool _coldStartRestoreEnabled = true;
   bool _batteryReminderEnabled = true;
 
+  // ── Desktop: minimize on close ──────────────────────────────────────
+  bool _closeMinimizeEnabled = true;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _detectPlatform();
     _checkBackgroundService();
     _checkBatteryOptimization();
@@ -51,15 +59,38 @@ class _BackgroundOptimizationPageState
     _loadStrategyToggles();
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// 从后台恢复（例如从系统设置返回）时重新检测服务与电池状态：
+  /// 用户可能在其他应用/系统设置中修改了省电白名单或杀掉了服务。
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    _checkBackgroundService();
+    _checkBatteryOptimization();
+  }
+
   Future<void> _loadStrategyToggles() async {
     final w = await isWatchdogEnabled();
     final c = await isColdStartRestoreEnabled();
     final b = await isBatteryReminderEnabled();
+    final closeMinimize =
+        isDesktopPlatform() ? await isDesktopCloseMinimizeEnabled() : true;
+    if (isDesktopPlatform()) {
+      // 兜底：确保窗口关闭事件被拦截（Application 层初始化
+      // 失败时，本页面负责重新建立拦截，保证退出确认始终生效）。
+      _ensureWindowCloseIntercepted();
+    }
     if (mounted) {
       setState(() {
         _watchdogEnabled = w;
         _coldStartRestoreEnabled = c;
         _batteryReminderEnabled = b;
+        _closeMinimizeEnabled = closeMinimize;
       });
     }
   }
@@ -299,12 +330,19 @@ class _BackgroundOptimizationPageState
           const SizedBox(height: 8),
           _buildOptimizationStatusCard(theme),
           const SizedBox(height: 24),
+          _buildWebBackgroundNoteCard(theme),
           _buildBatteryOptimizationCard(theme),
           const SizedBox(height: 24),
-          _buildSectionHeader('保活策略', theme),
-          const SizedBox(height: 8),
-          _buildStrategyTogglesCard(theme),
-          const SizedBox(height: 24),
+          // Web 没有任何保活策略（移动端策略与桌面端策略都不适用），
+          // 此时不显示空的「保活策略」标题。
+          if (_hasKeepAliveStrategies) ...[
+            _buildSectionHeader('保活策略', theme),
+            const SizedBox(height: 8),
+            _buildStrategyTogglesCard(theme),
+            _buildIosBackgroundNoteCard(theme),
+            _buildDesktopKeepAliveCard(theme),
+            const SizedBox(height: 24),
+          ],
           _buildSectionHeader('平台教程', theme),
           const SizedBox(height: 8),
           _buildDescription(
@@ -582,7 +620,90 @@ class _BackgroundOptimizationPageState
 
   // ── Strategy Toggles Card ─────────────────────────────────────────────
 
+  /// 当前平台是否展示任何保活策略（移动端策略卡或桌面端保活卡）。
+  bool get _hasKeepAliveStrategies {
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        isDesktopPlatform();
+  }
+
   Widget _buildStrategyTogglesCard(ThemeData theme) {
+    // 保活策略按平台区分：
+    // - Android：AlarmManager 看门狗 + 冷启动恢复 + 电池优化提醒
+    // - iOS：仅冷启动恢复（iOS 无 AlarmManager 看门狗）
+    // - 桌面/Web：没有移动端保活策略，显示桌面端保活卡片代替
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS) {
+      return const SizedBox.shrink();
+    }
+
+    final tiles = <Widget>[];
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      tiles.addAll([
+        _buildToggleTile(
+          theme: theme,
+          title: 'AlarmManager 看门狗',
+          detail: '启用后，Android 系统会每 5 分钟用原生闹钟检查后台服务是否还活着。'
+              '如果进程被系统杀掉，闹钟会触发自动重启。'
+              '\n\n闹钟在设备休眠（Doze）模式下依然生效，'
+              '重启后也会自动重新调度。'
+              '\n\n适用场景：对后台任务要求极高的用户。'
+              '\n耗电影响：极低（每次仅短暂唤醒检查一次）。',
+          value: _watchdogEnabled,
+          onChanged: (v) {
+            setState(() => _watchdogEnabled = v);
+            setWatchdogEnabled(v);
+            if (v && _isServiceRunning) {
+              startBackgroundService();
+            } else if (!v) {
+              disableKeepAlive();
+            }
+          },
+        ),
+        const Divider(height: 1, indent: 16, endIndent: 16),
+      ]);
+    }
+
+    tiles.addAll([
+      _buildToggleTile(
+        theme: theme,
+        title: '冷启动自动恢复',
+        detail: '启用后，每次重新打开 App 时，会自动检测并恢复之前正在运行的后台服务。'
+            '\n\n如果 App 进程被系统或用户手动杀掉，'
+            '下次打开 App 时后台服务会自动重启，无需手动操作。'
+            '\n\n适用场景：所有用户都建议开启。'
+            '\n耗电影响：无（仅在 App 启动时检查一次）。',
+        value: _coldStartRestoreEnabled,
+        onChanged: (v) {
+          setState(() => _coldStartRestoreEnabled = v);
+          setColdStartRestoreEnabled(v);
+        },
+      ),
+    ]);
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      tiles.addAll([
+        const Divider(height: 1, indent: 16, endIndent: 16),
+        _buildToggleTile(
+          theme: theme,
+          title: '电池优化提醒',
+          detail: '启用后，本页面会显示电池优化状态卡片。'
+              '如果检测到 App 未被添加到省电白名单，'
+              '会提供一键跳转至系统设置进行豁免。'
+              '\n\n电池优化是安卓系统省电机制（Doze），'
+              '会限制后台应用的运行。添加到白名单后，'
+              '系统不会因省电而杀掉本 App。'
+              '\n\n适用场景：关闭本开关仅隐藏提醒卡片，'
+              '不影响实际的电池优化豁免状态。',
+          value: _batteryReminderEnabled,
+          onChanged: (v) {
+            setState(() => _batteryReminderEnabled = v);
+            setBatteryReminderEnabled(v);
+          },
+        ),
+      ]);
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
@@ -602,63 +723,154 @@ class _BackgroundOptimizationPageState
               ),
             ),
             const Divider(height: 1, indent: 16, endIndent: 16),
-            _buildToggleTile(
-              theme: theme,
-              title: 'AlarmManager 看门狗',
-              detail: '启用后，Android 系统会每 5 分钟用原生闹钟检查后台服务是否还活着。'
-                  '如果进程被系统杀掉，闹钟会触发自动重启。'
-                  '\n\n闹钟在设备休眠（Doze）模式下依然生效，'
-                  '重启后也会自动重新调度。'
-                  '\n\n适用场景：对后台任务要求极高的用户。'
-                  '\n耗电影响：极低（系统批量处理闹钟）。',
-              value: _watchdogEnabled,
-              onChanged: (v) {
-                setState(() => _watchdogEnabled = v);
-                setWatchdogEnabled(v);
-                if (v && _isServiceRunning) {
-                  startBackgroundService();
-                } else if (!v) {
-                  disableKeepAlive();
-                }
-              },
+            ...tiles,
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── iOS Background Note Card ───────────────────────────────────────────
+
+  /// iOS 后台任务提示卡：
+  /// - iOS 26+ 支持常驻后台（BGContinuedProcessingTask），正向说明；
+  /// - 低于 iOS 26 给出「定期返回 App + 勿在切换器划掉」的提示。
+  Widget _buildIosBackgroundNoteCard(ThemeData theme) {
+    if (defaultTargetPlatform != TargetPlatform.iOS) {
+      return const SizedBox.shrink();
+    }
+    final supported = IosContinuedTaskService.instance.isSupported;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  supported ? Icons.check_circle_outline : Icons.info_outline,
+                  size: 20,
+                  color: supported ? Colors.green : theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'iOS 后台任务提示',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+              ],
             ),
-            const Divider(height: 1, indent: 16, endIndent: 16),
-            _buildToggleTile(
-              theme: theme,
-              title: '冷启动自动恢复',
-              detail: '启用后，每次重新打开 App 时，会自动检测并恢复之前正在运行的后台服务。'
-                  '\n\n如果 App 进程被系统或用户手动杀掉，'
-                  '下次打开 App 时后台服务会自动重启，无需手动操作。'
-                  '\n\n适用场景：所有用户都建议开启。'
-                  '\n耗电影响：无（仅在 App 启动时检查一次）。',
-              value: _coldStartRestoreEnabled,
-              onChanged: (v) {
-                setState(() => _coldStartRestoreEnabled = v);
-                setColdStartRestoreEnabled(v);
-              },
+            const SizedBox(height: 8),
+            Text(
+              supported
+                  ? '当前系统（iOS 26 及以上）支持任务常驻后台：'
+                      '任务运行期间切换 App 或锁屏，任务通常会继续执行'
+                      '（系统资源紧张时可能终止），'
+                      '并可在锁屏界面查看进度。'
+                  : '当前系统（低于 iOS 26）不支持任务常驻后台。'
+                      '任务运行时请每隔几分钟返回一次 App'
+                      '（建议 5–10 分钟，具体由系统决定），'
+                      '刷新后台执行时间，防止任务被系统挂起。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
-            const Divider(height: 1, indent: 16, endIndent: 16),
-            _buildToggleTile(
-              theme: theme,
-              title: '电池优化提醒',
-              detail: '启用后，本页面会显示电池优化状态卡片。'
-                  '如果检测到 App 未被添加到省电白名单，'
-                  '会提供一键跳转至系统设置进行豁免。'
-                  '\n\n电池优化是安卓系统省电机制（Doze），'
-                  '会限制后台应用的运行。添加到白名单后，'
-                  '系统不会因省电而杀掉本 App。'
-                  '\n\n适用场景：关闭本开关仅隐藏提醒卡片，'
-                  '不影响实际的电池优化豁免状态。',
-              value: _batteryReminderEnabled,
-              onChanged: (v) {
-                setState(() => _batteryReminderEnabled = v);
-                setBatteryReminderEnabled(v);
-              },
+            const SizedBox(height: 8),
+            Text(
+              '注意：所有 iOS 版本都请勿在 App 切换器中划掉 Stroom——'
+              '划掉会立即终止所有运行中的任务。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  // ── Desktop Keep-Alive Card ──────────────────────────────────────────
+
+  /// 桌面端保活：关闭窗口时默认最小化到任务栏，应用与后台任务继续运行。
+  Widget _buildDesktopKeepAliveCard(ThemeData theme) {
+    if (!isDesktopPlatform()) {
+      return const SizedBox.shrink();
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(
+                  left: 16, right: 16, top: 12, bottom: 4),
+              child: Text(
+                '桌面端没有移动系统的进程保活机制，'
+                '但可以让应用在关闭窗口后继续运行。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            _buildToggleTile(
+              theme: theme,
+              title: '关闭窗口时最小化',
+              detail: '启用后，点击窗口关闭按钮不会退出应用，'
+                  '而是隐藏到系统托盘继续运行，后台任务不受影响。'
+                  '\n\n可从托盘图标（或右键菜单「显示主窗口」）恢复窗口；'
+                  '需要真正退出时，点击下方「完全退出应用」按钮。'
+                  '\n\n适用场景：所有桌面用户都建议开启。',
+              value: _closeMinimizeEnabled,
+              onChanged: (v) {
+                setState(() => _closeMinimizeEnabled = v);
+                setDesktopCloseMinimizeEnabled(v);
+                // 拦截保持开启（关闭行为由 Application 层决策）。
+                _ensureWindowCloseIntercepted();
+              },
+            ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _quitDesktopApp,
+                  icon: const Icon(Icons.power_settings_new, size: 18),
+                  label: const Text('完全退出应用'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 确保窗口关闭事件永远被拦截（幂等）。
+  ///
+  /// 注意：不能根据开关状态调用 setPreventClose(false) 释放拦截——
+  /// 拦截一旦释放，原生层会在 Dart 侧确认逻辑运行前直接销毁窗口，
+  /// 「关闭即退出」时的任务运行确认就永远不会触发。
+  /// 关闭行为（最小化 vs 确认后退出）统一由 Application 层的
+  /// onWindowClose 决策（每次读取最新偏好）。
+  Future<void> _ensureWindowCloseIntercepted() async {
+    try {
+      await windowManager.setPreventClose(true);
+    } catch (e) {
+      debugPrint('[BackgroundOptimizationPage] setPreventClose failed: $e');
+    }
+  }
+
+  /// 完全退出应用：先确认（有任务运行时弹窗），再销毁托盘与窗口退出。
+  ///
+  /// 统一走 [DesktopAppService.quitWithConfirmation]，与「关闭即退出」
+  /// 的确认逻辑共用同一入口，并确保托盘图标被正确销毁。
+  Future<void> _quitDesktopApp() async {
+    await DesktopAppService.instance.quitWithConfirmation();
   }
 
   Widget _buildToggleTile({
@@ -716,6 +928,49 @@ class _BackgroundOptimizationPageState
     );
   }
 
+  // ── Web Background Note Card ───────────────────────────────────────────
+
+  /// Web 提示卡：浏览器环境无法后台运行，任务会因关标签页/页面挂起
+  /// 而中断，需要明确告知用户。
+  Widget _buildWebBackgroundNoteCard(ThemeData theme) {
+    if (!kIsWeb) return const SizedBox.shrink();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Web 后台任务提示',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '浏览器没有应用常驻后台的机制。关闭标签页、刷新页面，'
+              '或浏览器冻结长时间不活跃的后台标签页，都会立即中断'
+              '运行中的任务。任务运行时请保持 Stroom 标签页打开并处于前台。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── Platform Tutorial Cards ──────────────────────────────────────────
 
   List<Widget> _buildPlatformTutorialCards() {
@@ -744,6 +999,11 @@ class _BackgroundOptimizationPageState
         platformName: 'Linux',
         icon: Icons.terminal,
         color: Colors.orange,
+      ),
+      PlatformTutorialConfig(
+        platformName: 'Web',
+        icon: Icons.language,
+        color: Colors.purple,
       ),
     ];
 

@@ -13,7 +13,6 @@
     <!-- Required by flutter_background_service_android for boot receiver -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-
     <!--
         允许调度精确闹钟（Android 12+）。
         精确闹钟是「后台启动前台服务」的官方豁免条件之一，

@@ -139,7 +139,8 @@ class PlatformTutorialPage extends StatelessWidget {
           _TutorialStep(
             title: '关闭电池优化',
             description: '进入「设置」→「应用」→「Stroom」→「电池」→ 选择「无限制」或「不优化」。'
-                '不同品牌手机路径可能略有不同。',
+                '也可以直接在本 App 的「后台运行优化」页面点击「忽略电池优化」，'
+                '一键加入系统省电白名单。不同品牌手机路径可能略有不同。',
           ),
           _TutorialStep(
             title: '允许后台活动',
@@ -152,13 +153,31 @@ class PlatformTutorialPage extends StatelessWidget {
                 '锁定应用使其不被系统清理。',
           ),
           _TutorialStep(
+            title: '允许通知权限（Android 13+）',
+            description: 'Android 13 及以上系统需要单独授予通知权限，'
+                '否则后台服务的前台通知不会显示（服务仍会运行）。'
+                '首次点击「启动服务」时 App 会自动请求该权限，'
+                '也可以前往「设置」→「应用」→「Stroom」→「通知」手动开启。',
+          ),
+          _TutorialStep(
             title: '忽略电池优化权限',
             description: '在 Stroom 中开启「任务完成通知」时，App 会自动请求相关权限。'
                 '您也可以手动前往「设置」→「应用」→「特殊权限」→「电池优化」中确认 Stroom 已设为「不优化」。',
           ),
           _TutorialStep(
-            title: '关闭省电模式',
-            description: '进入「设置」→「电池」→ 关闭「省电模式」或「超级省电」。'
+            title: '国产系统自启动与后台管理',
+            description: '国产系统通常有自己的后台管理策略，请按品牌操作：'
+                '\n• 小米/红米（MIUI/HyperOS）：设置 → 应用设置 → 授权管理 → 自启动管理 → 允许 Stroom 自启动；'
+                '「省电与电池」→「应用智能省电」→ Stroom → 无限制。'
+                '\n• 华为/荣耀（EMUI/HarmonyOS）：设置 → 应用 → 应用启动管理 → Stroom → 手动管理 → '
+                '允许自启动/关联启动/后台活动。'
+                '\n• OPPO/一加/真我（ColorOS）：设置 → 电池 → 应用耗电管理 → Stroom → 允许完全后台行为。'
+                '\n• vivo/iQOO（OriginOS）：i管家 → 应用管理 → 自启动 → 允许 Stroom。',
+          ),
+          _TutorialStep(
+            title: '关闭锁屏清理与省电模式',
+            description: '进入「设置」→「电池」→ 关闭「省电模式」或「超级省电」，'
+                '并将「锁屏后清理内存」设为「不清理」。'
                 '省电模式会限制后台应用活动，影响任务完成。',
           ),
         ];
@@ -180,9 +199,31 @@ class PlatformTutorialPage extends StatelessWidget {
                 '低电量模式下系统会限制后台活动。',
           ),
           _TutorialStep(
+            title: '理解 iOS 的后台运行限制',
+            description: 'iOS 26 以下系统不允许应用像 Android 那样常驻后台运行。'
+                '系统仅在特定时机（如后台 App 刷新、定位、播放音频）给应用少量执行时间，'
+                '长时间任务会被系统挂起。建议：'
+                '\n• 需要长时间运行的任务保持 Stroom 在前台；'
+                '\n• 定期切换回 App 以刷新后台执行时间；'
+                '\n• 重要任务配合「任务完成通知」及时获知结果。',
+          ),
+          _TutorialStep(
+            title: '任务运行时的后台注意事项',
+            description: 'iOS 26 及以上系统支持任务常驻后台：'
+                '任务运行期间切换 App 或锁屏，任务通常会继续执行'
+                '（系统资源紧张时可能终止），'
+                '锁屏界面会显示任务进度。'
+                '\n\niOS 26 以下系统不支持常驻后台：'
+                '任务运行时请每隔几分钟返回一次 App（建议 5–10 分钟，'
+                '具体由系统决定），刷新后台执行时间，防止任务被挂起。'
+                '\n\n所有版本都请勿在 App 切换器中划掉 Stroom——'
+                '划掉会立即终止所有运行中的任务。',
+          ),
+          _TutorialStep(
             title: '保持 App 在后台',
-            description: '在 iOS 上，App 在后台的运行时间有限。建议在需要长时间运行任务时，'
-                '保持 Stroom 在前台或定期切换回来以延长后台时间。',
+            description: '在 iOS 26 以下系统上，App 在后台的运行时间有限。'
+                '建议在需要长时间运行任务时，保持 Stroom 在前台或定期切换回来'
+                '以延长后台时间。',
           ),
         ];
       case 'Windows':
@@ -268,6 +309,21 @@ class PlatformTutorialPage extends StatelessWidget {
             title: '开启自动启动',
             description: '在 GNOME 中，使用「优化」(Tweaks) 工具 →「开机启动程序」→ 添加 Stroom。'
                 '或在 ~/.config/autostart/ 下创建 stroom.desktop 文件。',
+          ),
+        ];
+      case 'Web':
+        return [
+          _TutorialStep(
+            title: '保持标签页打开',
+            description: 'Web 浏览器环境不支持后台服务运行。'
+                '任务运行时请保持 Stroom 标签页打开，'
+                '关闭标签页或刷新页面会立即中断任务。',
+          ),
+          _TutorialStep(
+            title: '避免浏览器挂起标签页',
+            description: '浏览器会冻结长时间不活跃的后台标签页以节省资源。'
+                '任务运行时请将 Stroom 标签页保持在前台，'
+                '或定期点击页面保持其活跃。',
           ),
         ];
       default:

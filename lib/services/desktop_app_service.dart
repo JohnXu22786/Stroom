@@ -12,6 +12,7 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app_log_service.dart';
+import 'background_service.dart' show isDesktopCloseMinimizeEnabled;
 
 // ====================================================================
 // DesktopAppService — 桌面端窗口与系统托盘驻留服务
@@ -26,8 +27,11 @@ import 'app_log_service.dart';
 // 2. [setupTrayAndCloseBehavior] 在首帧后调用：设置 setPreventClose(true)
 //    使点击关闭按钮时窗口不销毁（window_manager 拦截 WM_CLOSE /
 //    delete-event / windowShouldClose），并注册托盘图标与右键菜单。
-// 3. 关闭窗口 → [onWindowClose] 隐藏窗口；托盘点击 → 显示并聚焦窗口；
-//    托盘菜单「退出」→ 销毁托盘与窗口后退出进程。
+// 3. 关闭窗口 → [onWindowClose]：按用户设置决策 ——
+//    - 「关闭时最小化」（默认）：隐藏窗口到托盘；
+//    - 「关闭时退出」：先通过 [onQuitConfirmation] 确认（有任务运行时
+//      弹窗提示），确认后销毁托盘与窗口并退出进程。
+//    托盘点击 → 显示并聚焦窗口；托盘菜单「退出」→ 直接彻底退出。
 //
 // 安全兜底：如果托盘初始化失败（例如 Linux 缺少 appindicator 依赖），
 // 会撤销 setPreventClose，恢复「关闭即退出」的默认行为，
@@ -69,6 +73,13 @@ class DesktopAppService extends WindowListener with TrayListener {
 
   /// 托盘是否已成功注册（用于 UI 展示真实状态）。
   bool get isTrayReady => _trayReady;
+
+  /// 「关闭即退出」模式下的退出确认回调。
+  ///
+  /// 由 Application 注入（展示运行中任务的退出确认对话框）。
+  /// 返回 `true` 表示用户确认退出；返回 `false` 取消退出。
+  /// 未注入时视为已确认（直接退出）。
+  Future<bool> Function()? onQuitConfirmation;
 
   /// 测试用：重置单例内部状态，避免用例之间相互污染。
   @visibleForTesting
@@ -158,11 +169,52 @@ class DesktopAppService extends WindowListener with TrayListener {
 
   // ── 窗口事件 ──────────────────────────────────────────────────────
 
-  /// 用户点击窗口关闭按钮：不退出，隐藏到托盘继续后台运行。
+  /// 用户点击窗口关闭按钮：按用户设置最小化到托盘，或确认后退出。
+  ///
+  /// 每次读取最新的用户设置（而不是启动时缓存的标志）：
+  /// 用户在「后台运行优化」页面切换开关后，无需重启应用即生效。
   @override
   void onWindowClose() {
-    debugPrint('[DesktopAppService] Window close intercepted — hiding to tray');
-    unawaited(_hideWindow());
+    debugPrint('[DesktopAppService] Window close intercepted');
+    unawaited(_handleWindowClose());
+  }
+
+  Future<void> _handleWindowClose() async {
+    // 读取失败时默认最小化：绝不因设置读取异常而意外退出应用。
+    var minimize = true;
+    try {
+      minimize = await isDesktopCloseMinimizeEnabled();
+    } catch (e) {
+      debugPrint('[DesktopAppService] 读取关闭行为设置失败，默认最小化: $e');
+    }
+
+    if (minimize) {
+      await _hideWindow();
+      return;
+    }
+    await quitWithConfirmation();
+  }
+
+  /// 带确认的退出：「关闭即退出」模式与「完全退出应用」按钮共用。
+  ///
+  /// 先征求 [onQuitConfirmation] 的同意（例如有任务运行时弹窗确认），
+  /// 用户取消则什么都不做；确认后彻底退出（销毁托盘与窗口）。
+  Future<void> quitWithConfirmation() async {
+    try {
+      final confirm = onQuitConfirmation;
+      if (confirm != null) {
+        final confirmed = await confirm();
+        if (!confirmed) {
+          debugPrint('[DesktopAppService] 退出被用户取消，窗口保持打开');
+          return;
+        }
+      }
+    } catch (e) {
+      // 确认逻辑异常（如 Provider 不可用）：放行退出，
+      // 绝不阻塞用户关闭窗口。
+      debugPrint('[DesktopAppService] 退出确认异常，放行退出: $e');
+    }
+    await quitApplication();
   }
 
   // ── 托盘事件 ──────────────────────────────────────────────────────

@@ -15,9 +15,10 @@ import id.flutter.flutter_background_service.BackgroundService
  * AlarmManager-based keep-alive watchdog for the foreground service.
  *
  * Android (especially Chinese ROMs) may kill the app process even when a
- * foreground service is active. This receiver schedules a periodic alarm
- * that, when fired, tries to restart the foreground service. If the process
- * is already running with the service active, the alarm is a no-op.
+ * foreground service is active. This receiver schedules a periodic
+ * keep-alive alarm that, when fired, tries to restart the foreground
+ * service. If the process is already running with the service active,
+ * the alarm is a no-op.
  *
  * Scheduling strategy:
  * - Prefer an **exact** alarm ([AlarmManager.setExactAndAllowWhileIdle])
@@ -69,6 +70,23 @@ class KeepAliveReceiver : BroadcastReceiver() {
         /**
          * Schedule the next keep-alive alarm (one-shot, self-rescheduling).
          * Safe to call multiple times; the existing alarm is replaced.
+         *
+         * Alarm strategy (strongest → fallback):
+         * 1. Android 12+ (S) with exact-alarm permission:
+         *    [AlarmManager.setExactAndAllowWhileIdle] — fires precisely
+         *    even in Doze; one-shot, re-scheduled by [onReceive] after
+         *    every fire. Exact alarms are exempt from the S+
+         *    background-start restriction, so the foreground service
+         *    can be restarted from the alarm even when the app process
+         *    is not running.
+         * 2. Android 6+ (M): [AlarmManager.setAndAllowWhileIdle] — fires
+         *    within ~10 minutes of the target even in Doze. NOTE: inexact
+         *    alarms are NOT exempt from the S+ background-start
+         *    restriction; on Android 12+ the service restart from this
+         *    alarm only works while the user has granted the battery
+         *    optimization exemption (the app requests it via
+         *    requestIgnoreBatteryOptimizations).
+         * 3. Older versions: [AlarmManager.setInexactRepeating].
          */
         fun scheduleAlarm(context: Context, intervalMs: Long = KEEP_ALIVE_INTERVAL_MS) {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager

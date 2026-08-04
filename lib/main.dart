@@ -142,8 +142,13 @@ Future<void> main() async {
         registerVideoPlayer();
         // 桌面端：在 runApp 之前初始化窗口管理器，
         // 以便首帧后启用「关闭窗口 → 最小化到托盘」行为。
+        // 初始化失败不阻塞启动：窗口管理器不可用时降级为默认关闭行为。
         if (DesktopAppService.isDesktopPlatform) {
           await DesktopAppService.instance.initialize();
+          // 桌面端同样初始化通知服务：窗口最小化/关闭后任务完成
+          // 通知需要走系统通知（in-app 横幅不可见）。
+          // initialize() 内部自带错误保护，失败不会阻塞启动。
+          await NotificationService().initialize();
         }
         if (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS) {

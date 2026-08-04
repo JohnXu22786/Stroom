@@ -2,13 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
 
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
+import '../services/ios_continued_task_service.dart';
 import 'task_provider.dart';
 
 // ============================================================================
@@ -241,7 +242,21 @@ final backgroundTasksProvider =
 class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   final _uuid = const Uuid();
 
+  /// 测试专用：覆盖持久化目录。
+  ///
+  /// 持久化测试需要隔离的目录（真实测试环境所有测试共享同一个
+  /// AppStorage 目录，异步写入链可能跨测试交错，导致读脏数据）。
+  @visibleForTesting
+  static String? debugStorageDirectoryOverride;
+
   BackgroundTaskNotifier() : super([]);
+
+  @override
+  void dispose() {
+    _iosSyncTimer?.cancel();
+    _iosSyncTimer = null;
+    super.dispose();
+  }
 
   /// Add a new background task and return its ID.
   /// Initializes default step chain based on task type.
@@ -269,6 +284,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     );
     state = [task, ...state];
     _persistTasks();
+    _syncIosContinuedTask();
     return id;
   }
 
@@ -284,6 +300,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       );
     }).toList();
     _persistTasks();
+    _syncIosContinuedTask();
   }
 
   /// Mark a task as completed and keep it in the list (visible to user).
@@ -323,6 +340,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       return t.copyWith(steps: steps);
     }).toList();
     _persistTasks();
+    _syncIosContinuedTask();
   }
 
   /// Set raw request/response diagnostic data for error viewing.
@@ -371,12 +389,14 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       return t.copyWith(steps: steps);
     }).toList();
     _persistTasks();
+    _syncIosContinuedTask();
   }
 
   /// Remove a task from the list.
   void removeTask(String taskId) {
     state = state.where((t) => t.id != taskId).toList();
     _persistTasks();
+    _syncIosContinuedTask();
   }
 
   /// Update the retry data for a task (used to set retry data after
@@ -422,6 +442,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         oldTask != null) {
       _sendTaskNotification(oldTask!, status, error);
     }
+    _syncIosContinuedTask();
   }
 
   void _sendTaskNotification(
@@ -444,20 +465,143 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       debugPrint('[BackgroundTaskNotifier] Failed to send notification: $e');
     }
   }
+  // ==========================================================================
+  // iOS 26+ 常驻后台任务同步（BGContinuedProcessingTask）
+  // ==========================================================================
 
+  /// 周期同步间隔：单个步骤可能耗时数分钟（上传/转写），期间步骤
+  /// 进度不动，系统会认为任务停滞（可能提示用户或优先终止）。
+  /// 周期重报进度可避免该问题。
+  static const _iosSyncInterval = Duration(seconds: 30);
+
+  /// 周期性重报进度的定时器（仅在存在运行中任务时激活）。
+  Timer? _iosSyncTimer;
+
+  /// 最近一次上报的进度百分比：多任务并行时新增任务会稀释占比，
+  /// 用单调递增值避免系统进度条回退。
+  int _iosLastPercent = 0;
+
+  /// 将当前任务运行状态同步给 iOS 常驻后台桥接。
+  ///
+  /// - 有任务运行：维持常驻任务（原生侧已激活时自动跳过重复提交），
+  ///   并上报进度（已完成步骤占比，单调不降）。
+  /// - 没有任务运行：通知系统常驻任务完成。
+  ///
+  /// 自愈说明：任务被系统终止后，原生侧引用清空，下一次同步会自动
+  /// 重新提交建立保护；但系统只接受前台状态下的提交，因此若 App
+  /// 仍在后台，自愈会推迟到 App 回到前台后的下一次同步（周期定时器
+  /// 或状态变更触发）。
+  void _syncIosContinuedTask() {
+    if (!IosContinuedTaskService.instance.isSupported) return;
+    final running = state.where((t) => t.status == TaskStatus.running).toList();
+    if (running.isEmpty) {
+      _iosSyncTimer?.cancel();
+      _iosSyncTimer = null;
+      _iosLastPercent = 0;
+      unawaited(IosContinuedTaskService.instance.complete());
+      return;
+    }
+    // 存在运行中任务：启动周期重报定时器（幂等）。
+    _iosSyncTimer ??= Timer.periodic(
+      _iosSyncInterval,
+      (_) => _syncIosContinuedTask(),
+    );
+    unawaited(IosContinuedTaskService.instance.submit());
+    final totalSteps = running.fold<int>(0, (sum, t) => sum + t.steps.length);
+    final doneSteps = running.fold<int>(
+      0,
+      (sum, t) =>
+          sum +
+          t.steps
+              .where((s) =>
+                  s.status == BgStepStatus.completed ||
+                  s.status == BgStepStatus.skipped)
+              .length,
+    );
+    final rawPercent = totalSteps == 0
+        ? 0
+        : ((doneSteps * 100) / totalSteps).round().clamp(0, 99);
+    final percent = rawPercent > _iosLastPercent ? rawPercent : _iosLastPercent;
+    _iosLastPercent = percent;
+    unawaited(IosContinuedTaskService.instance.updateProgress(percent));
+  }
   // ============================================================================
   // Persistence
   // ============================================================================
 
-  Future<void> _persistTasks() async {
-    try {
-      final currentState = state; // capture before any await
-      final file = await _tasksFile();
-      final data = currentState.map((t) => t.toMap()).toList();
-      await file.writeAsString(jsonEncode(data));
-    } catch (e) {
-      debugPrint('[BackgroundTaskNotifier] Failed to persist tasks: $e');
+  /// 写入链：保证多次 _persistTasks 按调用顺序落盘，避免并发写入
+  /// 交错导致旧快照覆盖新快照（步骤更新非常频繁，竞态窗口真实存在）。
+  Future<void>? _pendingWrite;
+
+  Future<void> _persistTasks() {
+    // 在进入异步写入前捕获当前状态的完整快照。
+    final snapshot = state.map((t) => t.toMap()).toList();
+    // 同样在调用时捕获持久化目录覆盖值：写入链可能延迟到调用之后
+    // 才真正执行，若此时再解析目录，测试 teardown 已重置覆盖值，
+    // 残留写入会落到共享的正式目录（跨测试污染）。
+    final dirOverride = debugStorageDirectoryOverride;
+    // 串行化写入：每次写入排在上一次写入完成之后。
+    _pendingWrite = (_pendingWrite ?? Future<void>.value()).then((_) async {
+      try {
+        final file = await _tasksFile(dirOverride);
+        await _writeTasksFile(file, jsonEncode(snapshot));
+      } catch (e) {
+        debugPrint('[BackgroundTaskNotifier] Failed to persist tasks: $e');
+      }
+    });
+    return _pendingWrite!;
+  }
+
+  /// 原子写入任务文件：先写临时文件，再替换目标文件。
+  ///
+  /// 直接 writeAsString 不是原子操作——写入中途崩溃/断电会留下
+  /// 半截 JSON，下次启动恢复时整个文件解析失败、任务全部丢失。
+  /// 临时文件 + 替换保证目标文件要么是完整的旧内容，要么是完整的
+  /// 新内容。（写入链已串行化，不存在并发写同一文件的竞态。）
+  ///
+  /// Windows 上防病毒扫描可能短暂锁定临时文件导致替换失败：
+  /// 重试数次，仍失败则回退为直接写入（非原子，但不丢数据）。
+  Future<void> _writeTasksFile(File file, String data) async {
+    final tmpFile = File('${file.path}.tmp');
+    await tmpFile.writeAsString(data);
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (await file.exists()) {
+          await file.delete();
+        }
+        await tmpFile.rename(file.path);
+        return;
+      } catch (_) {
+        if (attempt == 2) {
+          // 兜底：直接写目标文件（非原子，但至少不丢失数据）。
+          // 若直接写也失败（罕见双重故障），尝试最后一步重命名
+          // （此时目标文件可能已删除，重命名有机会成功）。
+          try {
+            await file.writeAsString(data);
+            // 清理遗留的临时文件（best-effort）。
+            try {
+              if (await tmpFile.exists()) await tmpFile.delete();
+            } catch (_) {}
+            return;
+          } catch (_) {
+            try {
+              await tmpFile.rename(file.path);
+              return;
+            } catch (_) {
+              try {
+                if (await tmpFile.exists()) await tmpFile.delete();
+              } catch (_) {}
+              rethrow;
+            }
+          }
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
     }
+    // 理论不可达：循环内必然 return 或 rethrow。
+    try {
+      if (await tmpFile.exists()) await tmpFile.delete();
+    } catch (_) {}
   }
 
   Future<List<BackgroundTask>> _loadPersistedTasks() async {
@@ -467,19 +611,29 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       final content = await file.readAsString();
       if (content.isEmpty) return [];
       final list = jsonDecode(content) as List;
-      return list
-          .map(
-            (m) => BackgroundTask.fromMap(Map<String, dynamic>.from(m as Map)),
-          )
-          .toList();
+      final tasks = <BackgroundTask>[];
+      for (final m in list) {
+        try {
+          tasks
+              .add(BackgroundTask.fromMap(Map<String, dynamic>.from(m as Map)));
+        } catch (e) {
+          // 单个损坏条目不应导致整个恢复失败：跳过并继续，
+          // 保证其余有效任务仍能恢复。
+          debugPrint(
+              '[BackgroundTaskNotifier] Skipping corrupt task entry: $e');
+        }
+      }
+      return tasks;
     } catch (e) {
       debugPrint('[BackgroundTaskNotifier] Failed to load persisted tasks: $e');
       return [];
     }
   }
 
-  Future<File> _tasksFile() async {
-    final dirPath = await AppStorage.directory;
+  Future<File> _tasksFile([String? dirOverride]) async {
+    final dirPath = dirOverride ??
+        debugStorageDirectoryOverride ??
+        await AppStorage.directory;
     final bgDir = Directory(p.join(dirPath, 'background'));
     try {
       if (!await bgDir.exists()) {
@@ -508,6 +662,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         if (!state.any((s) => s.id == t.id)) t,
       ...state,
     ];
+    // 将"运行中 → 已中断"的状态回写到磁盘，
+    // 使持久化文件与内存状态保持一致（否则下次启动会重复标记）。
+    _persistTasks();
+    // 恢复后没有运行中的任务（进程已重启），结束 iOS 常驻任务保护。
+    _syncIosContinuedTask();
     debugPrint(
       '[BackgroundTaskNotifier] Restored ${tasks.length} tasks from persistence',
     );

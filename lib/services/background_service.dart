@@ -3,9 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_log_service.dart';
-import 'notification_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 const _serviceName = 'com.johntsui.stroom.background_service';
@@ -24,6 +24,11 @@ const _backgroundServiceEnabledKey = 'background_service_enabled';
 const _watchdogEnabledKey = 'background_service_watchdog';
 const _coldStartRestoreEnabledKey = 'background_service_cold_start_restore';
 const _batteryReminderEnabledKey = 'background_service_battery_reminder';
+
+/// SharedPreferences key for the desktop "minimize on close" behavior.
+/// Defaults to true so that closing the window keeps the app running in
+/// the taskbar, letting background tasks continue on desktop platforms.
+const _desktopCloseMinimizeKey = 'desktop_close_minimize';
 
 /// Method channel for communicating with the native Android keep-alive
 /// watchdog (AlarmManager-based BroadcastReceiver).
@@ -107,12 +112,20 @@ Future<void> _createNotificationChannel() async {
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) {
   Timer? timer;
-  if (service is AndroidServiceInstance) {
-    service.on('stopService').listen((_) {
-      timer?.cancel();
-      service.stopSelf();
-    });
 
+  // 在所有平台上注册停止监听（包括 iOS）。
+  //
+  // iOS 上 FlutterBackgroundService 的前台 worker 会把
+  // invoke('stopService') 转发到 on('stopService') 流，
+  // 如果不注册监听，iOS 上的服务将永远无法停止，
+  // isRunning() 会一直返回 true。
+  service.on('stopService').listen((_) {
+    timer?.cancel();
+    // Android 与 iOS 的 ServiceInstance 都实现了 stopSelf()。
+    service.stopSelf();
+  });
+
+  if (service is AndroidServiceInstance) {
     // Set foreground notification immediately to ensure the foreground
     // service is properly recognized by the system from the start.
     // The periodic timer below keeps the notification updated, but the
@@ -127,14 +140,21 @@ void onStart(ServiceInstance service) {
   // Update every 2 seconds to keep the foreground notification
   // visibly active. Frequent updates signal to the OS that the
   // service is important and should not be killed.
-  timer = Timer.periodic(const Duration(seconds: 2), (timer) async {
-    if (service is AndroidServiceInstance) {
-      service.setForegroundNotificationInfo(
-        title: _serviceTitle,
-        content: _serviceContent,
-      );
-    }
-  });
+  //
+  // Android only: iOS 没有前台通知，不需要定时刷新。
+  if (service is AndroidServiceInstance) {
+    timer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      try {
+        service.setForegroundNotificationInfo(
+          title: _serviceTitle,
+          content: _serviceContent,
+        );
+      } catch (e) {
+        // 通知刷新失败不影响服务本身运行，仅记录日志。
+        debugPrint('[BackgroundService] Failed to update notification: $e');
+      }
+    });
+  }
 }
 
 @pragma('vm:entry-point')
@@ -146,11 +166,12 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 Future<void> startBackgroundService() async {
   await AppLogService.info('BackgroundService', '启动后台服务');
   try {
+    // Android 13+ 上通知权限决定前台服务通知是否可见。
+    // 权限被拒绝时服务仍能启动（仅通知不可见），因此请求失败不阻塞。
+    await _requestNotificationPermissionIfNeeded();
+
     final service = FlutterBackgroundService();
     if (!await service.isRunning()) {
-      // Android 13+ 前台服务通知需要 POST_NOTIFICATIONS 运行时权限，
-      // 不授予时通知不显示（服务本身仍可运行）。这里尽力请求一次。
-      await _ensureNotificationPermission();
       final started = await service.startService();
       if (started) {
         await AppLogService.info('BackgroundService', '后台服务已启动');
@@ -171,11 +192,23 @@ Future<void> startBackgroundService() async {
   }
 }
 
-/// 尽力请求 Android 13+ 的通知权限（best-effort，失败不阻塞启动）。
-Future<void> _ensureNotificationPermission() async {
-  if (defaultTargetPlatform != TargetPlatform.android) return;
+/// 在 Android 13+（API 33）上请求通知权限。
+///
+/// 没有该权限时前台服务仍然可以运行，但常驻通知不会显示，
+/// 用户会误以为服务没有启动。请求失败（例如用户拒绝）不抛出异常。
+///
+/// 使用超时保护：在极少数平台通道不可用/无响应的环境（例如测试环境）
+/// 下，避免权限请求永久挂起阻塞服务启动。
+Future<void> _requestNotificationPermissionIfNeeded() async {
   try {
-    await NotificationService().requestPermission(usageReason: '后台任务通知');
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    final status = await Permission.notification.status
+        .timeout(const Duration(seconds: 8));
+    if (!status.isGranted) {
+      await Permission.notification
+          .request()
+          .timeout(const Duration(seconds: 8));
+    }
   } catch (e) {
     debugPrint(
         '[BackgroundService] Failed to request notification permission: $e');
@@ -213,7 +246,15 @@ Future<void> restartBackgroundService() async {
       // a best-effort wait. 300ms is sufficient on all tested devices.
       await Future<void>.delayed(const Duration(milliseconds: 300));
     }
-    await service.startService();
+    final started = await service.startService();
+    if (!started) {
+      await AppLogService.warning('BackgroundService', '重启服务启动返回失败');
+      return;
+    }
+    // 重启后保持持久化状态与看门狗一致，防止重启过程中
+    // 系统杀进程导致状态漂移（例如 enabled 标记丢失）。
+    await _setServiceEnabledPreference(true);
+    await _enableKeepAlive();
     await AppLogService.info('BackgroundService', '后台服务已重新启动');
   } catch (e) {
     debugPrint('[BackgroundService] Failed to restart background service: $e');
@@ -343,8 +384,10 @@ Future<void> setBatteryReminderEnabled(bool enabled) async {
 ///
 /// On Android, this schedules a periodic alarm via AlarmManager that
 /// re-starts the foreground service if the OS killed the process.
-/// The alarm survives process death and fires even if the device is
-/// in deep sleep (Doze mode, with setInexactRepeating).
+/// The alarm survives process death: on Android 12+ with the exact-alarm
+/// permission it uses setExactAndAllowWhileIdle (fires on time even in
+/// deep Doze), otherwise it degrades to setAndAllowWhileIdle /
+/// setInexactRepeating.
 ///
 /// This is a fire-and-forget call — failures are logged but not
 /// propagated since keep-alive is a best-effort enhancement.
@@ -453,4 +496,35 @@ Future<void> rearmKeepAliveOnResume() async {
   } catch (e) {
     debugPrint('[BackgroundService] Failed to re-arm keep-alive on resume: $e');
   }
+}
+
+// ── Desktop keep-alive helpers ───────────────────────────────────────
+
+/// Whether the current platform is a desktop platform
+/// (Windows / macOS / Linux).
+bool isDesktopPlatform() {
+  if (kIsWeb) return false;
+  return defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.linux;
+}
+
+/// Returns whether closing the desktop window should minimize the app
+/// to the taskbar instead of quitting. Defaults to `true` so background
+/// tasks keep running after the window is closed.
+Future<bool> isDesktopCloseMinimizeEnabled() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_desktopCloseMinimizeKey) ?? true;
+  } catch (_) {
+    return true;
+  }
+}
+
+/// Enables or disables the desktop "minimize on close" behavior.
+Future<void> setDesktopCloseMinimizeEnabled(bool enabled) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_desktopCloseMinimizeKey, enabled);
+  } catch (_) {}
 }
