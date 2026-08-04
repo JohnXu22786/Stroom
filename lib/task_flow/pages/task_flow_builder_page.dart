@@ -779,7 +779,6 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           fileIconColor: Colors.blue,
           loadRecords: ImageManifest.loadRecords,
           loadFolders: ImageManifest.getAllFolders,
-          readFile: (r) => ImageManifest.readFile(r.storagePath),
           resolvePath: (r) => ImageManifest.readFilePath(r.storagePath),
         );
       case IOType.audio:
@@ -791,7 +790,6 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           fileIconColor: Colors.green,
           loadRecords: FileManifest.loadRecords,
           loadFolders: FileManifest.getAllFolders,
-          readFile: (r) => FileManifest.readFile(r.storagePath),
           resolvePath: (r) => FileManifest.readFilePath(r.storagePath),
         );
       case IOType.video:
@@ -803,7 +801,6 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           fileIconColor: Colors.orange,
           loadRecords: VideoManifest.loadRecords,
           loadFolders: VideoManifest.getAllFolders,
-          readFile: (r) => VideoManifest.readFile(r.storagePath),
           resolvePath: (r) => VideoManifest.readFilePath(r.storagePath),
         );
       default:
@@ -819,10 +816,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     required Color fileIconColor,
     required Future<List<T>> Function() loadRecords,
     required Future<Set<String>> Function() loadFolders,
-    required Future<Uint8List?> Function(T record) readFile,
     required Future<String?> Function(T record) resolvePath,
   }) async {
     String? pickedPath;
+    // Path-only mode: no readFile — the dialog resolves the path via
+    // onRecordPicked without buffering the whole file in memory.
     final result = await showMediaPickerDialog<T>(
       context,
       MediaPickerConfig<T>(
@@ -833,7 +831,6 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         fileIconColor: fileIconColor,
         loadRecords: loadRecords,
         loadFolders: loadFolders,
-        readFile: readFile,
         displayName: (record) {
           final dynamic r = record;
           return (r.name as String?) ?? '';
@@ -856,7 +853,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     );
 
     if (result == null || pickedPath == null || !mounted) return;
-    if (!File(pickedPath!).existsSync()) {
+    // On web readFilePath returns a WebFileStore key, not a filesystem
+    // path — skip the existence check there (dart:io File throws).
+    if (!kIsWeb && !File(pickedPath!).existsSync()) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('文件不存在，请重新选择')));

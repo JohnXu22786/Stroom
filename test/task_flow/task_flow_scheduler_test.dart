@@ -107,6 +107,32 @@ void main() {
       scheduler.release('f1');
       expect(scheduler.activeWeight, 0);
     });
+
+    test(
+        'a weight-2 head under a contracted budget still runs when idle '
+        '(no queue starvation)', () async {
+      var rss = 100 * 1024 * 1024;
+      final contracted = TaskFlowScheduler(
+        coreCount: 4, // base budget 2
+        rssBytes: () => rss,
+        rssWindow: const Duration(seconds: 30),
+        rssGrowthThresholdBytes: 300 * 1024 * 1024,
+      );
+      await contracted.acquire('f1', 1); // baseline sample
+      rss = 500 * 1024 * 1024; // contract budget to 1
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      final heavy = contracted.acquire('h1', 2); // queued (2 > budget 1)
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(contracted.queuedCount, 1);
+      expect(contracted.currentBudget, 1);
+
+      // f1 releases → queue head (weight 2) proceeds despite 2 > budget 1.
+      contracted.release('f1');
+      await heavy;
+      expect(contracted.activeWeight, 2);
+      expect(contracted.queuedCount, 0);
+      contracted.release('h1');
+    });
   });
 
   group('TaskFlowScheduler dynamic budget (RSS)', () {
@@ -151,6 +177,52 @@ void main() {
       expect(scheduler.activeWeight, 2); // f1 + f2 both running
       scheduler.release('f1');
       scheduler.release('f2');
+    });
+
+    test(
+        'RSS growth during a long block is attributed at the next '
+        'acquire (cross-block baseline)', () async {
+      var rss = 100 * 1024 * 1024;
+      final s = TaskFlowScheduler(
+        coreCount: 4,
+        rssBytes: () => rss,
+        rssWindow: const Duration(seconds: 30),
+        rssGrowthThresholdBytes: 300 * 1024 * 1024,
+      );
+
+      // Block A runs for "minutes" (no sampling happens meanwhile).
+      await s.acquire('a', 1);
+      rss = 500 * 1024 * 1024; // A ballooned memory while running
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      s.release('a'); // samples on release → growth attributed
+
+      // Budget is now contracted even though the samples are sparse.
+      expect(s.currentBudget, 1);
+      expect(s.baseBudget, 2);
+    });
+
+    test('long idle gap re-anchors the RSS baseline (no false contraction)',
+        () async {
+      var rss = 500 * 1024 * 1024; // high from an unrelated previous run
+      var fakeNow = DateTime(2026, 1, 1, 12, 0, 0);
+      final s = TaskFlowScheduler(
+        coreCount: 4,
+        rssBytes: () => rss,
+        now: () => fakeNow,
+        rssWindow: const Duration(seconds: 30),
+        rssGrowthThresholdBytes: 300 * 1024 * 1024,
+      );
+      await s.acquire('a', 1); // baseline 500MB @ 12:00
+      rss = 510 * 1024 * 1024;
+      s.release('a'); // small growth (10MB), no contraction
+      expect(s.currentBudget, 2);
+
+      // Idle for longer than 2x the window, then a new flow starts with
+      // stable RSS — the stale baseline must not trigger contraction.
+      fakeNow = fakeNow.add(const Duration(minutes: 61));
+      await s.acquire('b', 1);
+      expect(s.currentBudget, 2);
+      s.release('b');
     });
   });
 }
