@@ -68,6 +68,10 @@ Future<void> initializeBackgroundService() async {
         autoStartOnBoot: false,
         autoStart: false,
         isForegroundMode: true,
+        // 前台服务类型与 AndroidManifest 中声明的
+        // android:foregroundServiceType="dataSync" 保持一致，
+        // 否则 Android 14+ 会因类型未声明而拒绝 startForeground。
+        foregroundServiceTypes: [AndroidForegroundType.dataSync],
         notificationChannelId: _serviceName,
         initialNotificationTitle: _serviceTitle,
         initialNotificationContent: _serviceContent,
@@ -476,4 +480,52 @@ Future<void> setDesktopCloseMinimizeEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_desktopCloseMinimizeKey, enabled);
   } catch (_) {}
+}
+
+/// Returns whether the app is allowed to schedule exact alarms
+/// (Android 12+). Exact alarms let the watchdog fire on time and are a
+/// documented exemption for starting a foreground service from the
+/// background. Returns `true` on non-Android platforms or if the status
+/// cannot be determined.
+Future<bool> canScheduleExactAlarms() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return true;
+  try {
+    final result =
+        await _keepAliveChannel.invokeMethod<bool>('canScheduleExactAlarms');
+    return result ?? false;
+  } catch (e) {
+    debugPrint('[BackgroundService] Failed to check exact alarm status: $e');
+    return false;
+  }
+}
+
+/// Opens the system "Alarms & reminders" special-access page so the user
+/// can grant the exact-alarm permission. When granted, the system sends
+/// SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED and the native watchdog
+/// re-arms itself immediately.
+void requestScheduleExactAlarm() {
+  if (defaultTargetPlatform != TargetPlatform.android) return;
+  try {
+    _keepAliveChannel.invokeMethod('requestScheduleExactAlarm');
+  } catch (e) {
+    debugPrint(
+        '[BackgroundService] Failed to request exact alarm permission: $e');
+  }
+}
+
+/// 应用回到前台时补武装保活看门狗（best-effort 自愈）。
+///
+/// 系统撤销「精确闹钟」权限时不会发送任何广播，且会静默删除所有
+/// 精确闹钟 —— 此时看门狗会无声失效。用户从系统设置回到应用时
+/// 补一次调度即可恢复。
+Future<void> rearmKeepAliveOnResume() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final serviceEnabled = prefs.getBool(_backgroundServiceEnabledKey) ?? false;
+    if (!serviceEnabled) return;
+    await _enableKeepAlive();
+  } catch (e) {
+    debugPrint('[BackgroundService] Failed to re-arm keep-alive on resume: $e');
+  }
 }

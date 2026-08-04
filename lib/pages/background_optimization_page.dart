@@ -10,6 +10,7 @@ import 'package:window_manager/window_manager.dart';
 import '../providers/background_task_provider.dart';
 import '../providers/task_provider.dart' show TaskStatus;
 import '../services/background_service.dart';
+import '../services/desktop_app_service.dart';
 import '../services/ios_continued_task_service.dart';
 import '../widgets/quit_confirmation_dialog.dart';
 import 'platform_tutorial_page.dart';
@@ -39,6 +40,8 @@ class _BackgroundOptimizationPageState
   bool _isServiceSupported = false;
   bool _isIgnoringBattery = false;
   bool _isCheckingBattery = true;
+  bool _canScheduleExactAlarms = true;
+  bool _isCheckingExactAlarms = true;
 
   // ── Keep-alive strategy toggles ─────────────────────────────────────
   bool _watchdogEnabled = true;
@@ -55,6 +58,7 @@ class _BackgroundOptimizationPageState
     _detectPlatform();
     _checkBackgroundService();
     _checkBatteryOptimization();
+    _checkExactAlarmStatus();
     _loadStrategyToggles();
   }
 
@@ -71,6 +75,7 @@ class _BackgroundOptimizationPageState
     if (state != AppLifecycleState.resumed) return;
     _checkBackgroundService();
     _checkBatteryOptimization();
+    _checkExactAlarmStatus();
   }
 
   Future<void> _loadStrategyToggles() async {
@@ -199,6 +204,38 @@ class _BackgroundOptimizationPageState
       // Re-check after a short delay to let the system dialog complete.
       await Future<void>.delayed(const Duration(seconds: 2));
       await _checkBatteryOptimization();
+    } catch (_) {}
+  }
+
+  // ── Exact Alarm Status Check ───────────────────────────────────────
+
+  Future<void> _checkExactAlarmStatus() async {
+    setState(() {
+      _isCheckingExactAlarms = true;
+    });
+
+    try {
+      _canScheduleExactAlarms = await canScheduleExactAlarms();
+    } catch (_) {
+      _canScheduleExactAlarms = true;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isCheckingExactAlarms = false;
+      });
+    }
+  }
+
+  Future<void> _requestExactAlarm() async {
+    try {
+      requestScheduleExactAlarm();
+      // Re-check after a short delay to let the system page close.
+      // 若用户授予权限，系统会发送
+      // SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED 广播，
+      // 看门狗会立即恢复精确调度（此处刷新仅用于更新按钮状态）。
+      await Future<void>.delayed(const Duration(seconds: 2));
+      await _checkExactAlarmStatus();
     } catch (_) {}
   }
 
@@ -570,6 +607,18 @@ class _BackgroundOptimizationPageState
                 ),
               ),
             ],
+            // Android 12+ 精确闹钟权限（保活看门狗准点触发的关键）
+            if (!_canScheduleExactAlarms && !_isCheckingExactAlarms) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _requestExactAlarm,
+                  icon: const Icon(Icons.alarm_add, size: 18),
+                  label: const Text('允许精确闹钟（保活更可靠）'),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -751,7 +800,8 @@ class _BackgroundOptimizationPageState
 
   // ── Desktop Keep-Alive Card ──────────────────────────────────────────
 
-  /// 桌面端保活：关闭窗口时默认最小化到任务栏，应用与后台任务继续运行。
+  /// 桌面端保活：关闭窗口时默认最小化到系统托盘（托盘不可用时
+  /// 最小化到任务栏），应用与后台任务继续运行。
   Widget _buildDesktopKeepAliveCard(ThemeData theme) {
     if (!isDesktopPlatform()) {
       return const SizedBox.shrink();
@@ -778,7 +828,8 @@ class _BackgroundOptimizationPageState
               theme: theme,
               title: '关闭窗口时最小化',
               detail: '启用后，点击窗口关闭按钮不会退出应用，'
-                  '而是最小化到任务栏，后台任务继续运行。'
+                  '而是最小化到系统托盘（托盘不可用时最小化到任务栏），'
+                  '后台任务继续运行。可从托盘图标或菜单恢复窗口。'
                   '\n\n需要真正退出时，点击下方「完全退出应用」按钮。'
                   '\n\n适用场景：所有桌面用户都建议开启。',
               value: _closeMinimizeEnabled,
@@ -1030,8 +1081,25 @@ class _BackgroundOptimizationPageState
     if (defaultTargetPlatform == TargetPlatform.linux ||
         defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.windows) {
-      return '桌面平台后台服务支持有限。'
-          '请保持应用窗口打开以确保任务正常执行。';
+      // 托盘注册失败时展示真实状态，避免误导用户
+      // （窗口隐藏后将无法找回）。
+      if (!DesktopAppService.instance.isTrayReady) {
+        if (defaultTargetPlatform == TargetPlatform.linux) {
+          return '桌面平台托盘暂不可用（Linux 构建需安装 '
+              'libayatana-appindicator3-dev），关闭窗口将直接退出应用。';
+        }
+        return '桌面平台托盘暂不可用，关闭窗口将直接退出应用。';
+      }
+      if (defaultTargetPlatform == TargetPlatform.linux) {
+        // Linux appindicator 左键点击弹出的是菜单而非恢复窗口事件，
+        // 恢复窗口只能通过托盘菜单项完成。
+        return '桌面平台已启用托盘驻留：关闭窗口后应用会隐藏到系统托盘继续运行，'
+            '从托盘菜单选择「显示主窗口」即可恢复窗口。'
+            '如需彻底退出，请从托盘菜单选择「退出 Stroom」。';
+      }
+      return '桌面平台已启用托盘驻留：关闭窗口后应用会最小化到系统托盘继续运行，'
+          '点击托盘图标（或托盘菜单「显示主窗口」）即可恢复窗口。'
+          '如需彻底退出，请从托盘菜单选择「退出 Stroom」。';
     }
     return '后台服务未启动。请点击下方「启动服务」按钮启动后台服务，'
         '或查看平台教程了解如何优化后台运行设置。';

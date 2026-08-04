@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show exit;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -11,6 +12,7 @@ import 'package:stroom/application.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
 import 'package:stroom/providers/theme_provider.dart';
+import 'package:stroom/services/desktop_app_service.dart';
 
 /// Mock [Dio] that resolves every request with the given response
 /// (same version as the app → no update dialog during startup).
@@ -53,6 +55,13 @@ Future<({List<MethodCall> windowCalls, BackgroundTaskNotifier notifier})>
       return true;
     },
   );
+  // 退出流程经由 DesktopAppService.quitApplication() 销毁托盘：
+  // 未 mock 的通道在 widget 测试中会永久挂起，必须拦截。
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+    const MethodChannel('tray_manager'),
+    (MethodCall call) async => true,
+  );
 
   final notifier = taskNotifier ?? BackgroundTaskNotifier();
 
@@ -90,6 +99,19 @@ Future<void> _emitWindowClose(WidgetTester tester) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  // 退出流程经由 DesktopAppService.quitApplication() 执行
+  // （销毁托盘 + 窗口 + exit(0)）：测试中注入假的退出函数并重置
+  // 单例状态，避免真实 exit(0) 终止测试进程 / 跨用例状态污染。
+  setUp(() {
+    DesktopAppService.exitApp = (_) {};
+    DesktopAppService.instance.resetForTesting();
+  });
+
+  tearDown(() {
+    DesktopAppService.exitApp = exit;
+    DesktopAppService.instance.resetForTesting();
+  });
+
   // 平台覆盖必须在测试体内 try/finally 重置
   // （_verifyInvariants 在 tearDown 之前运行）。
   void useWindowsPlatform() {
@@ -106,8 +128,13 @@ void main() {
         await _emitWindowClose(tester);
 
         expect(find.text('退出应用？'), findsNothing);
-        expect(
-            ctx.windowCalls.where((c) => c.method == 'minimize'), hasLength(1));
+        // 托盘已就绪时隐藏到托盘；托盘不可用时降级为任务栏最小化。
+        final hideCount =
+            ctx.windowCalls.where((c) => c.method == 'hide').length;
+        final minimizeCount =
+            ctx.windowCalls.where((c) => c.method == 'minimize').length;
+        expect(hideCount + minimizeCount, 1,
+            reason: '关闭时最小化必须恰好执行一次（托盘隐藏或任务栏最小化）');
         expect(ctx.windowCalls.where((c) => c.method == 'destroy'), isEmpty);
       } finally {
         debugDefaultTargetPlatformOverride = null;
