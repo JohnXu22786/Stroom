@@ -17,7 +17,6 @@ import BackgroundTasks
 
   /// Currently active continued processing task (one at a time).
   /// 只允许在主线程读写（launch handler 已跳回主队列）。
-  @available(iOS 16.1, *)
   private var continuedTask: BGContinuedProcessingTask?
 
   /// 已提交但系统尚未启动（launch handler 未回调）的挂起状态。
@@ -33,9 +32,7 @@ import BackgroundTasks
     // 注册 BGContinuedProcessingTask 的启动处理器（iOS 26+）。
     // 该 API 允许在应用启动完成后动态注册，但启动时注册最稳妥：
     // 后台拉起（任务恢复执行）时进程从 didFinishLaunching 开始。
-    if #available(iOS 16.1, *) {
-      registerContinuedTaskLaunchHandler()
-    }
+    registerContinuedTaskLaunchHandler()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -56,7 +53,6 @@ import BackgroundTasks
   // 仅 iOS 26.0+ 可用；低版本调用方不会进入（Dart 侧已做版本门控），
   // 本文件所有 API 均以 #available 守卫，旧系统上完全无副作用。
 
-  @available(iOS 16.1, *)
   private func registerContinuedTaskLaunchHandler() {
     guard #available(iOS 26.0, *) else { return }
     guard !launchHandlerRegistered else { return }
@@ -96,9 +92,7 @@ import BackgroundTasks
 
   private func setupContinuedTaskChannel(with registry: FlutterPluginRegistry) {
     let registrar = registry.registrar(forPlugin: "IosContinuedTaskBridge")
-    guard let messenger = registrar.messenger?() else {
-      return
-    }
+    guard let messenger = registrar.messenger?() else { return }
     let channel = FlutterMethodChannel(
       name: Self.channelName,
       binaryMessenger: messenger
@@ -131,7 +125,6 @@ import BackgroundTasks
   /// 幂等：已激活（continuedTask != nil）或已提交尚未启动
   /// （taskSubmitted）时跳过，避免重复提交被系统拒绝产生错误日志；
   /// 任务完成/过期后（两个标志都清空）下一次同步会自动重新提交。
-  @available(iOS 16.1, *)
   private func submitContinuedTask(title: String) {
     guard #available(iOS 26.0, *) else { return }
     guard continuedTask == nil && !taskSubmitted else { return }
@@ -151,7 +144,6 @@ import BackgroundTasks
   }
 
   /// 更新系统进度 UI（0–100）。
-  @available(iOS 16.1, *)
   private func updateContinuedTaskProgress(_ percent: Int) {
     guard #available(iOS 26.0, *), let task = continuedTask else { return }
     let clamped = max(0, min(100, percent))
@@ -166,7 +158,6 @@ import BackgroundTasks
   /// 若任务尚在"已提交未启动"的挂起窗口（例如任务瞬间失败），
   /// 直接取消挂起请求，避免系统稍后启动一个无人完成的"幽灵任务"
   /// （锁屏残留进度 UI，且会阻塞后续提交）。
-  @available(iOS 16.1, *)
   private func completeContinuedTask() {
     guard #available(iOS 26.0, *) else { return }
     if let task = continuedTask {
