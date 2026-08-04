@@ -34,13 +34,15 @@ import BackgroundTasks
   /// Method channel skeleton — fully functional but every call is a no-op
   /// until the BGContinuedProcessingTask carrier ships (see TODO above).
   private func setupContinuedTaskChannel(with registry: FlutterPluginRegistry) {
-    let registrar = registry.registrar(forPlugin: "IosContinuedTaskBridge")
+    guard let registrar = registry.registrar(forPlugin: "IosContinuedTaskBridge") else {
+      return
+    }
     guard let messenger = registrar.messenger?() else { return }
     let channel = FlutterMethodChannel(
       name: Self.channelName,
       binaryMessenger: messenger
     )
-    channel.setMethodCallHandler { [weak self] call, result in
+    channel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
       guard self != nil else {
         result(FlutterError(code: "unavailable", message: "AppDelegate deallocated", details: nil))
         return
