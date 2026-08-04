@@ -37,10 +37,9 @@ import BackgroundTasks
     guard let registrar = registry.registrar(forPlugin: "IosContinuedTaskBridge") else {
       return
     }
-    guard let messenger = registrar.messenger?() else { return }
     let channel = FlutterMethodChannel(
       name: Self.channelName,
-      binaryMessenger: messenger
+      binaryMessenger: registrar.messenger()
     )
     channel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
       guard self != nil else {
