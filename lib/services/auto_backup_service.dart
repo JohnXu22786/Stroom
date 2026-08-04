@@ -103,7 +103,10 @@ class AutoBackupService {
     try {
       return await future;
     } finally {
-      _inFlight = null;
+      // 只清理自己启动的备份：若期间已有新的备份启动，不能误清。
+      if (identical(_inFlight, future)) {
+        _inFlight = null;
+      }
     }
   }
 

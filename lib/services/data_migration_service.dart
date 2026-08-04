@@ -310,8 +310,8 @@ class DataMigrationService {
       final decoded = jsonDecode(raw);
       if (decoded is! List) {
         debugPrint('[DataMigrationService] conversations 不是合法数组，'
-            '已隔离到 conversations_bak 并重置为空列表');
-        await prefs.setString('conversations_bak', raw);
+            '已隔离并重置为空列表');
+        await _quarantineCorruptData(prefs, 'conversations', raw);
         await prefs.setString('conversations', '[]');
         return;
       }

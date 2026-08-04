@@ -152,6 +152,7 @@ class _BackgroundOptimizationPageState
   // ── Background Service Check ─────────────────────────────────────────
 
   Future<void> _checkBackgroundService() async {
+    if (!mounted) return; // 前置 setState 保护：页面可能已销毁
     setState(() {
       _isCheckingService = true;
     });
@@ -189,6 +190,7 @@ class _BackgroundOptimizationPageState
   // ── Battery Optimization Check ───────────────────────────────────────
 
   Future<void> _checkBatteryOptimization() async {
+    if (!mounted) return; // 前置 setState 保护：页面可能已销毁
     setState(() {
       _isCheckingBattery = true;
     });
@@ -218,6 +220,7 @@ class _BackgroundOptimizationPageState
   // ── Exact Alarm Status Check ───────────────────────────────────────
 
   Future<void> _checkExactAlarmStatus() async {
+    if (!mounted) return; // 前置 setState 保护：页面可能已销毁
     setState(() {
       _isCheckingExactAlarms = true;
     });

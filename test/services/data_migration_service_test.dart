@@ -379,7 +379,7 @@ void main() {
         () async {
       // 顶层损坏（provider_entries 不是数组）：旧代码 `as List` 强转
       // TypeError 静默中断修复，版本号仍被提升 → ProviderEntry 解析
-      // 继续闪退、错误边界重试永远失败。现在应隔离到 bak 并重置。
+      // 继续闪退、错误边界重试永远失败。现在应隔离并重置。
       SharedPreferences.setMockInitialValues({
         'data_format_version': 0,
         'provider_entries': '{"not": "an array"}',
@@ -391,8 +391,15 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('provider_entries'), '[]',
           reason: '损坏数据必须被隔离，应用才能正常启动');
-      expect(prefs.getString('provider_entries_bak'), '{"not": "an array"}',
-          reason: '原始损坏数据必须保留在 bak key 中');
+      final corruptKeys = prefs.getKeys()
+          .where((k) => k.startsWith('provider_entries_corrupt_'))
+          .toList();
+      expect(corruptKeys, isNotEmpty,
+          reason: '损坏数据必须保留在带时间戳的隔离 key 中');
+      expect(
+        corruptKeys.any((k) => prefs.getString(k) == '{"not": "an array"}'),
+        isTrue,
+      );
       expect(prefs.getInt('data_format_version'),
           DataMigrationService.currentFormatVersion);
     });
@@ -421,9 +428,16 @@ void main() {
       expect(result.needsMigration, isTrue);
 
       final prefs = await SharedPreferences.getInstance();
-      // 损坏现场必须被保留在 bak 中，而不是被迁移写入覆盖。
-      expect(prefs.getString('provider_entries_bak'), '{"not": "an array"}',
+      // 损坏现场必须被保留在隔离 key 中，而不是被迁移写入覆盖。
+      final corruptKeys = prefs.getKeys()
+          .where((k) => k.startsWith('provider_entries_corrupt_'))
+          .toList();
+      expect(corruptKeys, isNotEmpty,
           reason: '迁移覆盖前必须隔离原始损坏数据');
+      expect(
+        corruptKeys.any((k) => prefs.getString(k) == '{"not": "an array"}'),
+        isTrue,
+      );
       // 迁移结果正常写入（migrated_llm 条目）。
       final entries = jsonDecode(prefs.getString('provider_entries')!) as List;
       expect(entries, isNotEmpty);
@@ -518,8 +532,15 @@ void main() {
 
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('conversations'), '[]');
-      expect(prefs.getString('conversations_bak'), '{"not": "an array"}',
-          reason: '原始损坏数据必须保留在 bak key 中');
+      final corruptKeys = prefs.getKeys()
+          .where((k) => k.startsWith('conversations_corrupt_'))
+          .toList();
+      expect(corruptKeys, isNotEmpty,
+          reason: '原始损坏数据必须保留在隔离 key 中');
+      expect(
+        corruptKeys.any((k) => prefs.getString(k) == '{"not": "an array"}'),
+        isTrue,
+      );
       // 版本正常提升（不再无限重试迁移）。
       expect(prefs.getInt('data_format_version'), 3);
     });

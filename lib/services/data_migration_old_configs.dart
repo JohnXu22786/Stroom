@@ -1,5 +1,35 @@
 part of 'data_migration_service.dart';
 
+/// 损坏备份上限（对齐 provider_config_persistence 的约定）。
+const int _kMaxCorruptBackups = 3;
+
+/// 隔离损坏数据：写入带时间戳的 key（如 `provider_entries_corrupt_123`），
+/// 只保留最近 [_kMaxCorruptBackups] 份。
+///
+/// 使用时间戳而非固定 key：固定 key 会被下一次隔离事件覆盖，丢失
+/// 前一份损坏证据（例如备份恢复重新引入损坏数据时）。
+Future<void> _quarantineCorruptData(
+  SharedPreferences prefs,
+  String keyPrefix,
+  String corruptJson,
+) async {
+  try {
+    final backupKey =
+        '${keyPrefix}_corrupt_${DateTime.now().millisecondsSinceEpoch}';
+    await prefs.setString(backupKey, corruptJson);
+    // 只保留最近的 N 份
+    final keys = prefs.getKeys().toList()
+      ..sort()
+      ..retainWhere((k) => k.startsWith('${keyPrefix}_corrupt_'));
+    while (keys.length > _kMaxCorruptBackups) {
+      await prefs.remove(keys.removeAt(0));
+    }
+    debugPrint('[DataMigrationService] 已隔离损坏数据到 $backupKey');
+  } catch (e) {
+    debugPrint('[DataMigrationService] 隔离损坏数据失败: $e');
+  }
+}
+
 // ====================================================================
 // 旧配置迁移（v0→v1 相关，从 DataMigrationService 拆出控制行数）
 // ====================================================================
@@ -94,8 +124,9 @@ class DataMigrationOldConfigs {
             // 损坏现场（后面 fixNullIdsInProviderEntries 的隔离逻辑
             // 就再也触发不到）。
             debugPrint('[DataMigrationService] 现有 provider_entries 不是'
-                '合法数组，已隔离到 provider_entries_bak');
-            await prefs.setString('provider_entries_bak', existingJson);
+                '合法数组，开始隔离');
+            await _quarantineCorruptData(
+                prefs, 'provider_entries', existingJson);
             existingEntries = [];
           } else {
             // 兜底：使用 whereType 安全过滤非 Map 条目
@@ -105,9 +136,7 @@ class DataMigrationOldConfigs {
           }
         } catch (_) {
           // JSON 无法解析：同样隔离（现有数据损坏，用空列表重新开始）
-          try {
-            await prefs.setString('provider_entries_bak', existingJson);
-          } catch (_) {}
+          await _quarantineCorruptData(prefs, 'provider_entries', existingJson);
           existingEntries = [];
         }
       }
@@ -152,11 +181,11 @@ class DataMigrationOldConfigs {
       // 解析继续闪退，错误边界的「重试」永远无法成功）。
       final decoded = jsonDecode(json);
       if (decoded is! List) {
-        // 隔离损坏数据到 bak key，置空列表让应用可以正常启动；
+        // 隔离损坏数据到带时间戳的 key，置空列表让应用可以正常启动；
         // 原始数据保留，用户可通过备份恢复功能找回。
         debugPrint('[DataMigrationService] provider_entries 不是合法数组，'
-            '已隔离到 provider_entries_bak 并重置为空列表');
-        await prefs.setString('provider_entries_bak', json);
+            '已隔离并重置为空列表');
+        await _quarantineCorruptData(prefs, 'provider_entries', json);
         await prefs.setString('provider_entries', '[]');
         return;
       }

@@ -215,7 +215,8 @@ class DesktopAppService extends WindowListener with TrayListener {
   Future<void> _handleWindowClose() async {
     // 确认对话框已打开时忽略新的关闭事件：此时隐藏窗口会把打开的
     // 对话框一起藏起来，造成「点了退出却毫无反应」的错觉。
-    if (_confirmInProgress) return;
+    // 退出销毁流程进行中也直接忽略（隐藏没有意义）。
+    if (_confirmInProgress || _quitRequested) return;
 
     // 读取失败时默认最小化：绝不因设置读取异常而意外退出应用。
     var minimize = true;
@@ -224,6 +225,10 @@ class DesktopAppService extends WindowListener with TrayListener {
     } catch (e) {
       debugPrint('[DesktopAppService] 读取关闭行为设置失败，默认最小化: $e');
     }
+
+    // await 期间用户可能已发起确认流程（托盘退出/完全退出按钮）：
+    // 重新检查，避免把刚弹出的确认对话框连同窗口一起隐藏。
+    if (_confirmInProgress || _quitRequested) return;
 
     if (minimize) {
       await _hideWindow();

@@ -512,6 +512,70 @@ void main() {
       expect(notifier.state.latestVersion, '0.2.14');
     });
 
+    test('non-semver installed version skips the check without prompting',
+        () async {
+      // 回归：自定义构建版本（如 "dev"）被 Version.parse 宽松解析为
+      // 0.0.0，旧代码会把所有发布版都当作新版本并弹出更新对话框；
+      // 现在应跳过本次检查（不弹窗、不报错）。
+      UpdateNotifier.debugAppVersionOverride = 'dev';
+      try {
+        SharedPreferences.setMockInitialValues({});
+        final dio = Dio(BaseOptions());
+        dio.interceptors.add(InterceptorsWrapper(
+          onRequest: (options, handler) {
+            handler.resolve(Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: [jsonDecode(_githubRelease('v0.2.14'))],
+            ));
+          },
+        ));
+        final notifier = UpdateNotifier(dio: dio);
+
+        await notifier.checkForUpdate(silent: false);
+
+        expect(notifier.state.isChecking, false);
+        expect(notifier.state.updateAvailable, false,
+            reason: '非 semver 版本号不得把 0.0.0 当作当前版本');
+        expect(notifier.state.error, isNull);
+      } finally {
+        UpdateNotifier.debugAppVersionOverride = null;
+      }
+    });
+
+    test('concurrent checkForUpdate awaits the in-flight check', () async {
+      // 回归：错误边界「重试」重新挂载 Application 后可能发起第二次
+      // 检查 —— 必须等待同一个在途检查并共享结果，否则更新弹窗被
+      // 静默吞掉。
+      SharedPreferences.setMockInitialValues({});
+      final completer = Completer<Response<dynamic>>();
+      final dio = Dio(BaseOptions());
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          completer.future.then((r) => handler.resolve(r));
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+
+      final first = notifier.checkForUpdate();
+      // 等一拍让第一次检查进入挂起状态（isChecking=true 已置位）。
+      await Future<void>.delayed(Duration.zero);
+      final second = notifier.checkForUpdate();
+
+      completer.complete(Response(
+        requestOptions: RequestOptions(path: ''),
+        statusCode: 200,
+        data: [jsonDecode(_githubRelease('v0.2.14'))],
+      ));
+
+      await first;
+      await second;
+
+      expect(notifier.state.isChecking, false);
+      expect(notifier.state.updateAvailable, true,
+          reason: '并发调用方应等到在途检查完成并看到其结果');
+    });
+
     test('recovers from error on subsequent check', () async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createFailingDio();

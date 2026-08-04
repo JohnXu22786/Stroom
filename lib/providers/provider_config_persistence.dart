@@ -34,11 +34,14 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
 
       final migratedConfigs = <ProviderConfigItem>[];
       for (final oldItem in oldList) {
-        // 兜底：安全过滤 oldItem['models']
-        final oldModels = (oldItem['models'] as List?)
-                ?.whereType<Map<String, dynamic>>()
-                .toList() ??
-            [];
+        // 兜底：安全过滤 oldItem['models']。
+        // 注意：oldItem['models'] 本身可能是非 List（损坏数据），
+        // 用 `is! List` 判断而不是 `as List?` 强转（强转抛 TypeError
+        // 会静默中断迁移，chat_configs 永不清理、每次启动重复迁移）。
+        final rawModels = oldItem['models'];
+        final oldModels = rawModels is List
+            ? rawModels.whereType<Map<String, dynamic>>().toList()
+            : <Map<String, dynamic>>[];
 
         final models = oldModels.map((m) {
           final typeConfig = <String, dynamic>{};
@@ -47,19 +50,25 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
           final temperature = m['temperature'];
           if (temperature != null) typeConfig['temperature'] = temperature;
 
+          // `is! String`/`is! bool` 而非强转：损坏数据中字段值可能
+          // 是任意类型。
+          final modelId = m['modelId'];
           return ModelConfig(
-            name: m['modelId'] as String? ?? '',
-            modelId: m['modelId'] as String? ?? '',
-            supportStream: m['supportStream'] as bool? ?? true,
+            name: modelId is String ? modelId : '',
+            modelId: modelId is String ? modelId : '',
+            supportStream: m['supportStream'] is bool
+                ? m['supportStream'] as bool
+                : true,
             typeConfig: typeConfig,
           );
         }).toList();
 
         migratedConfigs.add(
           ProviderConfigItem(
-            providerName: oldItem['providerName'] as String? ?? '',
-            host: oldItem['host'] as String? ?? '',
-            key: oldItem['key'] as String? ?? '',
+            providerName:
+                oldItem['providerName'] is String ? oldItem['providerName'] : '',
+            host: oldItem['host'] is String ? oldItem['host'] : '',
+            key: oldItem['key'] is String ? oldItem['key'] : '',
             models: models,
           ),
         );

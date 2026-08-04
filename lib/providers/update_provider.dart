@@ -3,7 +3,7 @@ import 'dart:io' show Directory, File, Platform, Process;
 import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform, debugPrint;
+    show defaultTargetPlatform, kIsWeb, TargetPlatform, debugPrint, visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:path_provider/path_provider.dart';
@@ -295,6 +295,13 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     return UpdateState(acceptPreRelease: state.acceptPreRelease);
   }
 
+  /// 测试用：覆盖当前安装版本号。
+  ///
+  /// [appVersion] 是编译期常量（String.fromEnvironment），测试中无法
+  /// 改变，通过此字段模拟自定义构建版本（如 "dev"）。
+  @visibleForTesting
+  static String? debugAppVersionOverride;
+
   /// 解析当前安装版本号。
   ///
   /// [Version.parse] 是宽松解析：无法解析的输入得到 0.0.0 且从不抛
@@ -338,7 +345,11 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     try {
       await future;
     } finally {
-      _inFlightCheck = null;
+      // 只清理自己启动的检查：若期间已有新的检查启动（旧 future
+      // 完成后、本 finally 运行前），不能把它误清掉。
+      if (identical(_inFlightCheck, future)) {
+        _inFlightCheck = null;
+      }
     }
   }
 
@@ -399,7 +410,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
 
     final releases = response.data as List<dynamic>;
-    final currentVersionStr = appVersion;
+    final currentVersionStr = debugAppVersionOverride ?? appVersion;
 
     final prefs = await SharedPreferences.getInstance();
     final skippedVersion = prefs.getString(_kSkippedVersionKey);

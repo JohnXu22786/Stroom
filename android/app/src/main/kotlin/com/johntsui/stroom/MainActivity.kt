@@ -276,10 +276,7 @@ class MainActivity : FlutterActivity() {
             if (prefs.getBoolean(PENDING_UPDATE_RESTART_KEY, false)) {
                 Log.i(TAG, "onNewIntent: detected pending_update_restart flag — forcing clean restart")
 
-                // Clear the flag to prevent repeated restarts
-                prefs.edit().remove(PENDING_UPDATE_RESTART_KEY).apply()
-
-                // Schedule a delayed launch using an exact alarm.
+                // Schedule a delayed launch.
                 // On Android 12+ Doze mode, setExactAndAllowWhileIdle ensures
                 // the alarm fires even if the device is in deep sleep.
                 val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
@@ -293,27 +290,62 @@ class MainActivity : FlutterActivity() {
                         this, RESTART_REQUEST_CODE, launchIntent, flags
                     )
                     val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        alarmManager.setExactAndAllowWhileIdle(
-                            AlarmManager.RTC,
-                            System.currentTimeMillis() + 200,
-                            pendingIntent
-                        )
-                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                        alarmManager.setExact(
-                            AlarmManager.RTC,
-                            System.currentTimeMillis() + 200,
-                            pendingIntent
-                        )
-                    } else {
-                        alarmManager.set(
-                            AlarmManager.RTC,
-                            System.currentTimeMillis() + 200,
-                            pendingIntent
-                        )
+                    var scheduled = false
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                            alarmManager.canScheduleExactAlarms()
+                        ) {
+                            // 精确闹钟（Doze 下准点触发，且是后台启动豁免）。
+                            alarmManager.setExactAndAllowWhileIdle(
+                                AlarmManager.RTC,
+                                System.currentTimeMillis() + 200,
+                                pendingIntent
+                            )
+                            scheduled = true
+                        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                            alarmManager.setExact(
+                                AlarmManager.RTC,
+                                System.currentTimeMillis() + 200,
+                                pendingIntent
+                            )
+                            scheduled = true
+                        } else {
+                            alarmManager.set(
+                                AlarmManager.RTC,
+                                System.currentTimeMillis() + 200,
+                                pendingIntent
+                            )
+                            scheduled = true
+                        }
+                    } catch (e: SecurityException) {
+                        // Android 14+ 默认拒绝 SCHEDULE_EXACT_ALARM：
+                        // 降级为普通 set()（不需要该权限）。
+                        Log.w(TAG, "Exact alarm denied — falling back to plain set()", e)
+                        try {
+                            alarmManager.set(
+                                AlarmManager.RTC,
+                                System.currentTimeMillis() + 200,
+                                pendingIntent
+                            )
+                            scheduled = true
+                        } catch (e2: Exception) {
+                            Log.e(TAG, "Failed to schedule restart alarm (fallback)", e2)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to schedule restart alarm", e)
                     }
 
-                    handled = true
+                    if (scheduled) {
+                        // 只有真正调度成功后才清除标记：
+                        // 1) 避免 apply() 异步写盘与 killProcess() 竞态，
+                        //    残留标记导致下次安装后误触发重启；
+                        // 2) 调度失败时保留标记，让 Dart 侧 resumed 回退
+                        //    逻辑（application.dart）兜底提示重启。
+                        prefs.edit().remove(PENDING_UPDATE_RESTART_KEY).commit()
+                        handled = true
+                    } else {
+                        Log.w(TAG, "Restart alarm not scheduled — keeping flag for Dart fallback")
+                    }
                 }
             }
         } catch (e: Exception) {
