@@ -172,9 +172,6 @@ Future<void> startBackgroundService() async {
 
     final service = FlutterBackgroundService();
     if (!await service.isRunning()) {
-      // Android 13+ 前台服务通知需要 POST_NOTIFICATIONS 运行时权限，
-      // 不授予时通知不显示（服务本身仍可运行）。这里尽力请求一次。
-      await _ensureNotificationPermission();
       final started = await service.startService();
       if (started) {
         await AppLogService.info('BackgroundService', '后台服务已启动');

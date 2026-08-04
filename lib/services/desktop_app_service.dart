@@ -136,11 +136,9 @@ class DesktopAppService extends TrayListener {
     // Linux 插件未实现 popUpContextMenu（菜单随左键自动弹出），
     // 异常通过 Future 异步抛出，必须用 catchError 兜住。
     unawaited(
-      trayManager
-          .popUpContextMenu()
-          .catchError((Object e) => debugPrint(
-                '[DesktopAppService] popUpContextMenu unsupported: $e',
-              )),
+      trayManager.popUpContextMenu().catchError((Object e) => debugPrint(
+            '[DesktopAppService] popUpContextMenu unsupported: $e',
+          )),
     );
   }
 

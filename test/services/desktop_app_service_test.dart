@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/services/desktop_app_service.dart';
 import 'package:tray_manager/tray_manager.dart' show trayManager;
-import 'package:window_manager/window_manager.dart' show windowManager;
 
 /// Records method calls made on a mocked platform channel.
 class RecordingChannelMock {
@@ -26,8 +25,8 @@ Map<String, RecordingChannelMock> registerChannelMocks() {
     'window_manager': RecordingChannelMock(),
     'tray_manager': RecordingChannelMock(),
   };
-  final messenger = TestDefaultBinaryMessengerBinding.instance
-      .defaultBinaryMessenger;
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   messenger.setMockMethodCallHandler(
     const MethodChannel('window_manager'),
     mocks['window_manager']!.handler,

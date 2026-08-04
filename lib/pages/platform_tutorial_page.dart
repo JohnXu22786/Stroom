@@ -229,7 +229,7 @@ class PlatformTutorialPage extends StatelessWidget {
       case 'Windows':
         return [
           _TutorialStep(
-            title: '关闭窗口时最小化到托盘',
+            title: '关闭窗口时最小化',
             description: '默认情况下，点击窗口关闭按钮不会退出 Stroom，'
                 '而是最小化到系统托盘（任务栏右下角）继续后台运行。'
                 '点击托盘图标（或托盘菜单「显示主窗口」）可恢复窗口。'
@@ -262,7 +262,7 @@ class PlatformTutorialPage extends StatelessWidget {
       case 'macOS':
         return [
           _TutorialStep(
-            title: '关闭窗口时最小化到菜单栏',
+            title: '关闭窗口时最小化',
             description: '默认情况下，点击窗口关闭按钮不会退出 Stroom，'
                 '而是最小化到菜单栏（屏幕右上角）继续后台运行。'
                 '点击菜单栏图标（或菜单「显示主窗口」）可恢复窗口。'
@@ -294,7 +294,7 @@ class PlatformTutorialPage extends StatelessWidget {
       case 'Linux':
         return [
           _TutorialStep(
-            title: '关闭窗口时最小化到托盘',
+            title: '关闭窗口时最小化',
             description: '默认情况下，点击窗口关闭按钮不会退出 Stroom，'
                 '而是隐藏到系统托盘（需桌面环境支持 StatusNotifierItem，'
                 '且构建时已安装 libayatana-appindicator3-dev）继续后台运行。'

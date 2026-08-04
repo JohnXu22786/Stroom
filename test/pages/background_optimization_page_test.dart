@@ -926,8 +926,8 @@ void main() {
     /// Puts the desktop tray service into the ready state so the page
     /// renders the tray-resident copy (matching a real desktop session).
     Future<void> makeTrayReady() async {
-      final messenger = TestDefaultBinaryMessengerBinding.instance
-          .defaultBinaryMessenger;
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       messenger.setMockMethodCallHandler(
         const MethodChannel('window_manager'),
         (MethodCall call) async => true,
@@ -958,8 +958,10 @@ void main() {
         await tester.pumpWidget(_buildTestApp());
         await tester.pumpAndSettle();
 
-        // The desktop description must mention the tray-resident behavior.
-        expect(find.textContaining('系统托盘'), findsOneWidget);
+        // The desktop status description must mention the tray-resident
+        // behavior (unique string — the desktop card uses a different
+        // sentence structure).
+        expect(find.textContaining('已启用托盘驻留'), findsOneWidget);
       } finally {
         debugDefaultTargetPlatformOverride = null;
         DesktopAppService.instance.resetForTesting();
