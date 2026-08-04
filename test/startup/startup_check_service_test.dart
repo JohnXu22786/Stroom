@@ -128,15 +128,17 @@ void main() {
 
       // 不崩溃：损坏条目被报告，且后续合法条目没有被漏检。
       expect(issues, isA<List<StartupIssue>>());
-      final idIssues =
-          issues.where((i) => i.message.contains('id') && i.message.contains('缺失'));
+      final idIssues = issues
+          .where((i) => i.message.contains('id') && i.message.contains('缺失'));
       expect(idIssues, isNotEmpty);
       expect(
-        issues.any((i) => i.message.contains('type') && i.message.contains('缺失')),
+        issues
+            .any((i) => i.message.contains('type') && i.message.contains('缺失')),
         isTrue,
       );
       expect(
-        issues.any((i) => i.message.contains('name') && i.message.contains('缺失')),
+        issues
+            .any((i) => i.message.contains('name') && i.message.contains('缺失')),
         isTrue,
       );
     });
@@ -164,8 +166,7 @@ void main() {
       );
     });
 
-    test('non-list configs/models fields are reported, not crashes',
-        () async {
+    test('non-list configs/models fields are reported, not crashes', () async {
       // 损坏数据：configs 为 Map、models 为 String。
       // 旧代码 `entry['configs'] as List?` 强转抛 TypeError 中断整个验证。
       final prefs = await SharedPreferences.getInstance();
@@ -206,8 +207,7 @@ void main() {
       expect(issues, isA<List<StartupIssue>>());
       expect(
         issues.any((i) =>
-            i.message.contains('configs') &&
-            i.message.contains('不是合法列表')),
+            i.message.contains('configs') && i.message.contains('不是合法列表')),
         isTrue,
         reason: 'configs 非 List 应被上报为问题',
       );
@@ -291,7 +291,11 @@ void main() {
           'provider_entries',
           jsonEncode([
             {'id': 'bad_type', 'type': 123, 'name': 'Bad'},
-            {'id': 'bad_type2', 'type': {'nested': true}, 'name': 'Bad2'},
+            {
+              'id': 'bad_type2',
+              'type': {'nested': true},
+              'name': 'Bad2'
+            },
             {
               'id': 'valid_unknown',
               'type': 'unknown_type',

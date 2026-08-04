@@ -143,15 +143,13 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
         dialogShown = tester.any(find.text('数据格式升级完成'));
       }
-      expect(dialogShown, isTrue,
-          reason: '迁移完成后必须显示重启对话框');
+      expect(dialogShown, isTrue, reason: '迁移完成后必须显示重启对话框');
 
       // Android 系统返回键不能关闭对话框（PopScope(canPop: false)），
       // 否则用户会永远停留在启动页。
       await tester.binding.handlePopRoute();
       await tester.pump();
-      expect(find.text('数据格式升级完成'), findsOneWidget,
-          reason: '系统返回键不能关闭迁移重启对话框');
+      expect(find.text('数据格式升级完成'), findsOneWidget, reason: '系统返回键不能关闭迁移重启对话框');
 
       // 点击「退出应用」：移动端 SystemNavigator.pop() 在测试环境是
       // no-op，进程存活 → 启动页必须继续渐出进入主应用，绝不停留。

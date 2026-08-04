@@ -118,8 +118,7 @@ void main() {
       await tester.pump();
 
       expect(find.text(longMessage), findsOneWidget);
-      expect(tester.takeException(), isNull,
-          reason: '长状态文案必须可滚动而非溢出报错');
+      expect(tester.takeException(), isNull, reason: '长状态文案必须可滚动而非溢出报错');
     });
   });
 
