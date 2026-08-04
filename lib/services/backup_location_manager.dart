@@ -61,6 +61,11 @@ class BackupLocationManager {
   static const MethodChannel _safChannel =
       MethodChannel('com.johntsui.stroom/saf');
 
+  /// SAF 通道调用超时：原生侧卡死（主线程忙/ANR 窗口）时，
+  /// 启动路径上的存储检查/备份写入不能被永久阻塞（见
+  /// [BackupLocationManager.isStorageAccessible] 等启动关键调用）。
+  static const Duration _safChannelTimeout = Duration(seconds: 10);
+
   /// 备份目录路径（所有平台统一，相对于用户选择的 Documents 目录）。
   /// 使用 Stroom/AutoBackups 两级目录结构，便于用户识别和管理。
   static const String _backupDirName = 'Stroom/AutoBackups';
@@ -393,7 +398,9 @@ class BackupLocationManager {
       try {
         if (Platform.isAndroid) {
           try {
-            final uri = await _safChannel.invokeMethod<String>('pickDirectory');
+            final uri = await _safChannel
+                .invokeMethod<String>('pickDirectory')
+                .timeout(_safChannelTimeout);
             if (uri == null || uri.isEmpty) {
               debugPrint('[BackupLocationManager] 用户取消了 SAF 目录选择');
               return false;
@@ -468,7 +475,7 @@ class BackupLocationManager {
             'uri': uri,
             'fileName': relativePath,
             'bytes': data,
-          });
+          }).timeout(_safChannelTimeout);
           return;
         }
       } catch (e) {
@@ -506,7 +513,7 @@ class BackupLocationManager {
           final result = await _safChannel.invokeMethod<Uint8List>('readFile', {
             'uri': uri,
             'fileName': relativePath,
-          });
+          }).timeout(_safChannelTimeout);
           if (result != null) {
             return result;
           }
@@ -545,7 +552,7 @@ class BackupLocationManager {
           await _safChannel.invokeMethod<void>('deleteFile', {
             'uri': uri,
             'fileName': relativePath,
-          });
+          }).timeout(_safChannelTimeout);
           return;
         }
       } catch (e) {
@@ -586,7 +593,7 @@ class BackupLocationManager {
             'uri': uri,
             'oldName': oldRelativePath,
             'newName': newRelativePath,
-          });
+          }).timeout(_safChannelTimeout);
           return;
         }
       } catch (e) {
@@ -624,8 +631,8 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) return [];
-          final result = await _safChannel
-              .invokeMethod<List<dynamic>>('listFiles', {'uri': uri});
+          final result = await _safChannel.invokeMethod<List<dynamic>>(
+              'listFiles', {'uri': uri}).timeout(_safChannelTimeout);
           if (result != null) {
             return result.cast<String>();
           }
@@ -682,7 +689,7 @@ class BackupLocationManager {
             'uri': uri,
             'fileName': relativePath,
             'content': content,
-          });
+          }).timeout(_safChannelTimeout);
           return;
         }
       } catch (e) {
@@ -719,7 +726,7 @@ class BackupLocationManager {
           final result = await _safChannel.invokeMethod<String>('readLog', {
             'uri': uri,
             'fileName': relativePath,
-          });
+          }).timeout(_safChannelTimeout);
           return result;
         }
       } catch (e) {
@@ -746,8 +753,8 @@ class BackupLocationManager {
           if (uri == null) {
             return await _listLogFilesFromDir();
           }
-          final result = await _safChannel
-              .invokeMethod<List<dynamic>>('listLogs', {'uri': uri});
+          final result = await _safChannel.invokeMethod<List<dynamic>>(
+              'listLogs', {'uri': uri}).timeout(_safChannelTimeout);
           if (result != null) {
             return result.cast<String>();
           }
@@ -781,7 +788,7 @@ class BackupLocationManager {
           await _safChannel.invokeMethod<void>('deleteLog', {
             'uri': uri,
             'fileName': relativePath,
-          });
+          }).timeout(_safChannelTimeout);
           return;
         }
       } catch (e) {
@@ -882,7 +889,7 @@ class BackupLocationManager {
             final freeBytes =
                 await _safChannel.invokeMethod<int>('getFreeSpace', {
               'uri': uri,
-            });
+            }).timeout(_safChannelTimeout);
             if (freeBytes != null && freeBytes > 0) {
               return freeBytes > 100 * 1024 * 1024; // 100MB
             }
@@ -930,8 +937,8 @@ class BackupLocationManager {
   /// 检查 SAF URI 是否仍可访问。
   static Future<bool> _checkSafAccess(String uri) async {
     try {
-      final result =
-          await _safChannel.invokeMethod<bool>('checkAccess', {'uri': uri});
+      final result = await _safChannel.invokeMethod<bool>(
+          'checkAccess', {'uri': uri}).timeout(_safChannelTimeout);
       return result ?? false;
     } catch (e) {
       debugPrint('[BackupLocationManager] SAF 访问检查失败: $e');

@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/tool_call.dart';
@@ -111,8 +112,8 @@ class DataMigrationService {
         if (backupPath == null) {
           debugPrint('[DataMigrationService] 迁移前备份失败，'
               '取消本次迁移（下次启动重试）');
-          await AppLogService.error('DataMigrationService',
-              '迁移前备份失败，取消本次迁移（下次启动重试）');
+          await AppLogService.error(
+              'DataMigrationService', '迁移前备份失败，取消本次迁移（下次启动重试）');
           return const MigrationResult(needsMigration: false);
         }
       }

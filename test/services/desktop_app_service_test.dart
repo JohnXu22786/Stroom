@@ -311,8 +311,7 @@ void main() {
         DesktopAppService.instance.onTrayMenuItemClick(quitItem);
         await Future<void>.delayed(const Duration(milliseconds: 20));
         expect(
-          mocks['window_manager']!.calls
-              .where((c) => c.method == 'destroy'),
+          mocks['window_manager']!.calls.where((c) => c.method == 'destroy'),
           isEmpty,
         );
         expect(exitCodes, isEmpty);
@@ -346,7 +345,8 @@ void main() {
         DesktopAppService.instance.onQuitConfirmation = () async {
           final showAlreadyCalled =
               mocks['window_manager']!.calls.any((c) => c.method == 'show');
-          order.add(showAlreadyCalled ? 'confirm-after-show' : 'confirm-no-show');
+          order.add(
+              showAlreadyCalled ? 'confirm-after-show' : 'confirm-no-show');
           return false; // 取消退出
         };
 
@@ -364,7 +364,8 @@ void main() {
       DesktopAppService.instance.onQuitConfirmation = null;
     });
 
-    test('close event racing the minimize-pref read cannot hide the window '
+    test(
+        'close event racing the minimize-pref read cannot hide the window '
         'once a quit flow started', () async {
       // 回归：_handleWindowClose 在 await 读取最小化偏好期间，
       // 用户可能已发起确认流程 —— 重新检查守卫，不得隐藏窗口。
@@ -399,7 +400,8 @@ void main() {
       DesktopAppService.instance.onQuitConfirmation = null;
     });
 
-    test('close event during an in-flight confirmation does not hide the window',
+    test(
+        'close event during an in-flight confirmation does not hide the window',
         () async {
       // 回归：确认对话框打开期间，最小化模式的关闭事件不得隐藏窗口
       // （否则窗口和对话框一起消失，_confirmInProgress 一直锁死）。

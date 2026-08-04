@@ -137,7 +137,8 @@ class _ApplicationState extends ConsumerState<Application>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    if (DesktopAppService.instance.onQuitConfirmation == _confirmQuitBeforeExit) {
+    if (DesktopAppService.instance.onQuitConfirmation ==
+        _confirmQuitBeforeExit) {
       DesktopAppService.instance.onQuitConfirmation = null;
     }
     super.dispose();
@@ -270,7 +271,12 @@ class _ApplicationState extends ConsumerState<Application>
     // Check SharedPreferences flag to confirm it's a real update scenario
     // (not a stale in-memory flag from a previous failed install).
     hasPendingUpdateRestart().then((bool hasPrefsFlag) {
-      if (!hasPrefsFlag) return; // SharedPreferences flag cleared externally
+      if (!hasPrefsFlag) {
+        // SharedPreferences flag cleared externally（例如 Kotlin 侧已处理）：
+        // 同步清除内存标记，避免每次 resume 都重复读取 prefs。
+        setPendingRestartInMemory(false);
+        return;
+      }
       if (!mounted) return;
 
       debugPrint('[Application] Warm resume after APK install detected — '

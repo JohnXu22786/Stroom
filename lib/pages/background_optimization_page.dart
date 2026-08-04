@@ -167,7 +167,9 @@ class _BackgroundOptimizationPageState
       // 不要调用仅 Android/iOS 可用的插件（会抛异常显示误导性文案）。
       _isServiceRunning = false;
       if (isDesktopPlatform()) {
-        _optimizationStatus = '桌面端使用托盘驻留保活';
+        _optimizationStatus = DesktopAppService.instance.isTrayReady
+            ? '桌面端使用托盘驻留保活'
+            : '桌面端托盘暂不可用，关闭窗口将直接退出';
       } else {
         _optimizationStatus = '当前平台不支持后台服务';
       }
@@ -175,8 +177,7 @@ class _BackgroundOptimizationPageState
       try {
         final service = FlutterBackgroundService();
         _isServiceRunning = await service.isRunning();
-        _optimizationStatus =
-            _isServiceRunning ? '后台服务运行中' : '后台服务未启动';
+        _optimizationStatus = _isServiceRunning ? '后台服务运行中' : '后台服务未启动';
       } catch (_) {
         _isServiceRunning = false;
         _optimizationStatus = '无法检测后台服务状态';

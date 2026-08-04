@@ -90,9 +90,8 @@ class DataMigrationOldConfigs {
           return <String, dynamic>{
             'name': modelId is String ? modelId : '',
             'modelId': modelId is String ? modelId : '',
-            'supportStream': m['supportStream'] is bool
-                ? m['supportStream'] as bool
-                : true,
+            'supportStream':
+                m['supportStream'] is bool ? m['supportStream'] as bool : true,
             'typeConfig': typeConfig,
           };
         }).toList();
@@ -130,9 +129,8 @@ class DataMigrationOldConfigs {
             existingEntries = [];
           } else {
             // 兜底：使用 whereType 安全过滤非 Map 条目
-            existingEntries = decoded
-                .whereType<Map<String, dynamic>>()
-                .toList();
+            existingEntries =
+                decoded.whereType<Map<String, dynamic>>().toList();
           }
         } catch (_) {
           // JSON 无法解析：同样隔离（现有数据损坏，用空列表重新开始）

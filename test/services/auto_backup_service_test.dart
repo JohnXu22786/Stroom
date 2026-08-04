@@ -262,8 +262,7 @@ void main() {
       }
       final first = AutoBackupService.performAutoBackup();
       final second = await AutoBackupService.performAutoBackup();
-      expect(second, isTrue,
-          reason: '并发调用应等待在途备份完成并返回相同结果');
+      expect(second, isTrue, reason: '并发调用应等待在途备份完成并返回相同结果');
       await first;
       await dir.delete(recursive: true);
     });
@@ -307,6 +306,36 @@ void main() {
       expect(zips.first.lengthSync(), greaterThan(0));
 
       // Cleanup
+      await dir.delete(recursive: true);
+    });
+
+    test('pre-migration backup ignores the 1-hour rule and always snapshots',
+        () async {
+      // 回归：迁移会原地改写数据，必须使用刚刚创建的新快照。
+      // 旧代码在最近 1 小时内有备份时直接返回 true（跳过），
+      // 迁移前快照可能缺少最新数据（最多 1 小时）。
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+
+      // 先执行一次普通备份：它必然是「1 小时以内」的备份，
+      // 1 小时规则因此会被命中。
+      final first = await AutoBackupService.performAutoBackup();
+      expect(first, isTrue);
+
+      // 迁移前备份必须无视 1 小时规则，创建一份新快照。
+      final result =
+          await AutoBackupService.performAutoBackup(isPreMigration: true);
+      expect(result, isTrue);
+
+      final zips = (await dir.list().toList())
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.zip'))
+          .toList();
+      expect(zips.length, greaterThanOrEqualTo(2), reason: '迁移前备份必须创建新快照而不是跳过');
+
       await dir.delete(recursive: true);
     });
   });

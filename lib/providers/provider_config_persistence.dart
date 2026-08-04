@@ -59,17 +59,17 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
           return ModelConfig(
             name: modelId is String ? modelId : '',
             modelId: modelId is String ? modelId : '',
-            supportStream: m['supportStream'] is bool
-                ? m['supportStream'] as bool
-                : true,
+            supportStream:
+                m['supportStream'] is bool ? m['supportStream'] as bool : true,
             typeConfig: typeConfig,
           );
         }).toList();
 
         migratedConfigs.add(
           ProviderConfigItem(
-            providerName:
-                oldItem['providerName'] is String ? oldItem['providerName'] : '',
+            providerName: oldItem['providerName'] is String
+                ? oldItem['providerName']
+                : '',
             host: oldItem['host'] is String ? oldItem['host'] : '',
             key: oldItem['key'] is String ? oldItem['key'] : '',
             models: models,
@@ -96,9 +96,8 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
             existingEntries = [];
           } else {
             // 兜底：使用 whereType 安全过滤非 Map 条目
-            existingEntries = decoded
-                .whereType<Map<String, dynamic>>()
-                .toList();
+            existingEntries =
+                decoded.whereType<Map<String, dynamic>>().toList();
           }
         } catch (_) {
           // 现有数据损坏，忽略并用空列表重新开始

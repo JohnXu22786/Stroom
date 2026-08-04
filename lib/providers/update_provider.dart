@@ -3,7 +3,12 @@ import 'dart:io' show Directory, File, Platform, Process;
 import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform, debugPrint, visibleForTesting;
+    show
+        defaultTargetPlatform,
+        kIsWeb,
+        TargetPlatform,
+        debugPrint,
+        visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:path_provider/path_provider.dart';
@@ -550,8 +555,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 
         // Find download URL for this release on current platform
         final rawAssets = release['assets'];
-        final assets =
-            rawAssets is List ? rawAssets : const <dynamic>[];
+        final assets = rawAssets is List ? rawAssets : const <dynamic>[];
         final htmlUrl = release['html_url'];
         final directDownloadUrl = getPlatformDownloadUrl(assets);
         final downloadUrl =

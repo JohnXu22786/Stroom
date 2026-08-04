@@ -506,8 +506,7 @@ void main() {
       await notifier.checkForUpdate(silent: false);
 
       expect(notifier.state.isChecking, false);
-      expect(notifier.state.error, isNull,
-          reason: '损坏条目应被跳过而不是报「网络错误」');
+      expect(notifier.state.error, isNull, reason: '损坏条目应被跳过而不是报「网络错误」');
       expect(notifier.state.updateAvailable, true);
       expect(notifier.state.latestVersion, '0.2.14');
     });

@@ -2,11 +2,7 @@ import 'dart:async';
 import 'dart:io' show exit;
 
 import 'package:flutter/foundation.dart'
-    show
-        TargetPlatform,
-        debugPrint,
-        defaultTargetPlatform,
-        visibleForTesting;
+    show TargetPlatform, debugPrint, defaultTargetPlatform, visibleForTesting;
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -127,7 +123,7 @@ class DesktopAppService extends WindowListener with TrayListener {
     if (!isDesktopPlatform || _quitRequested || _trayReady) return;
     // 托盘注册超时：插件挂起（如 Linux 缺少 appindicator 服务）时
     // 走回滚路径，而不是让窗口永远无法关闭。
-    
+
     try {
       await initialize();
       if (!_initialized) return; // 初始化失败，保持默认关闭行为
@@ -140,18 +136,16 @@ class DesktopAppService extends WindowListener with TrayListener {
       try {
         await trayManager
             .setIcon(
-          defaultTargetPlatform == TargetPlatform.windows
-              ? _trayIconIco
-              : _trayIconPng,
-        )
+              defaultTargetPlatform == TargetPlatform.windows
+                  ? _trayIconIco
+                  : _trayIconPng,
+            )
             .timeout(_trayTimeout);
         // setToolTip 在 Linux 插件上未实现（会抛 MissingPluginException），
         // 单独捕获，避免拖垮整个托盘注册流程；同样受超时保护
         // （DBus/appindicator 挂起时不能无限期停留在无监听的拦截状态）。
         try {
-          await trayManager
-              .setToolTip('Stroom 正在后台运行')
-              .timeout(_trayTimeout);
+          await trayManager.setToolTip('Stroom 正在后台运行').timeout(_trayTimeout);
         } catch (e) {
           debugPrint('[DesktopAppService] setToolTip unsupported: $e');
         }
@@ -309,7 +303,9 @@ class DesktopAppService extends WindowListener with TrayListener {
 
   Future<void> _hideWindow() async {
     try {
-      await windowManager.hide();
+      // 超时保护：window_manager 通道卡死（Linux/DBus 挂起）时，
+      // 关闭事件不能永远停在隐藏步骤。
+      await windowManager.hide().timeout(_trayTimeout);
     } catch (e) {
       debugPrint('[DesktopAppService] Failed to hide window: $e');
     }
@@ -318,8 +314,10 @@ class DesktopAppService extends WindowListener with TrayListener {
   Future<void> _showWindow() async {
     if (_quitRequested) return;
     try {
-      await windowManager.show();
-      await windowManager.focus();
+      // 超时保护：show/focus 卡死时不能把退出确认流程永久挂起
+      // （_confirmInProgress 会一直锁死，后续退出全部变成 no-op）。
+      await windowManager.show().timeout(_trayTimeout);
+      await windowManager.focus().timeout(_trayTimeout);
     } catch (e) {
       debugPrint('[DesktopAppService] Failed to show window: $e');
     }

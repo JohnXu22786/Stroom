@@ -65,10 +65,10 @@ class DataMigrationBackup {
       // 验证并返回文件名作为非 null 标记。
       if (await BackupLocationManager.isUsingSafMode()) {
         final files = await BackupLocationManager.listBackupFiles();
-        if (files.isEmpty) return null;
-        debugPrint(
-            '[DataMigrationService] SAF backup verified: ${files.last}');
-        return files.last; // 文件名（非本地路径，仅作成功标记）
+        final newest = latestZipName(files);
+        if (newest == null) return null;
+        debugPrint('[DataMigrationService] SAF backup verified: $newest');
+        return newest;
       }
 
       // 获取最新的备份文件路径
@@ -110,5 +110,16 @@ class DataMigrationBackup {
     await AppLogService.info('DataMigrationService', '开始清理旧备份');
     await AutoBackupService.cleanupOldBackups();
     await AppLogService.info('DataMigrationService', '旧备份清理完成');
+  }
+
+  /// 从 SAF 文件列表中找出最新的 zip 备份文件名。
+  ///
+  /// SAF 返回的列表未排序且可能包含非 zip 文件（如访问测试临时文件），
+  /// 必须过滤 .zip 并按文件名排序（`backup_2026-01-01T00-00-00.zip`
+  /// 这类 ISO 时间戳文件名的字典序即时间序）。无匹配时返回 `null`。
+  @visibleForTesting
+  static String? latestZipName(List<String> files) {
+    final zips = files.where((f) => f.endsWith('.zip')).toList()..sort();
+    return zips.isEmpty ? null : zips.last;
   }
 }

@@ -119,17 +119,22 @@ class AutoBackupService {
     // ================================================================
     // 1 小时规则检查：如果最近 1 小时内有备份，则跳过本次备份
     // ================================================================
-    try {
-      final hasRecentBackup = await _hasBackupWithinLastHour();
-      if (hasRecentBackup) {
-        debugPrint('[AutoBackupService] 最近 1 小时内有备份，跳过本次自动备份');
-        await AppLogService.info('AutoBackupService', '最近 1 小时内有备份，跳过本次自动备份');
-        _isRunning = false;
-        return true; // 返回 true 表示无需备份（非错误）
+    // 注意：迁移前备份（isPreMigration=true）跳过该规则 —— 迁移会
+    // 原地改写数据（如 v2→v3 重写 conversations），必须使用刚刚创建
+    // 的新快照，1 小时前的旧备份可能缺少迁移前的最新会话数据。
+    if (!isPreMigration) {
+      try {
+        final hasRecentBackup = await _hasBackupWithinLastHour();
+        if (hasRecentBackup) {
+          debugPrint('[AutoBackupService] 最近 1 小时内有备份，跳过本次自动备份');
+          await AppLogService.info('AutoBackupService', '最近 1 小时内有备份，跳过本次自动备份');
+          _isRunning = false;
+          return true; // 返回 true 表示无需备份（非错误）
+        }
+      } catch (e) {
+        debugPrint('[AutoBackupService] 检查最近备份失败: $e');
+        // 检查失败不阻止备份
       }
-    } catch (e) {
-      debugPrint('[AutoBackupService] 检查最近备份失败: $e');
-      // 检查失败不阻止备份
     }
 
     await AppLogService.info(

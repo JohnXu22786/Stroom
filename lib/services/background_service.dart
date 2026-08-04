@@ -491,7 +491,9 @@ Future<bool> isIgnoringBatteryOptimizations() async {
 Future<void> requestIgnoreBatteryOptimizations() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
-    await _keepAliveChannel.invokeMethod('requestIgnoreBatteryOptimizations').timeout(_keepAliveChannelTimeout);
+    await _keepAliveChannel
+        .invokeMethod('requestIgnoreBatteryOptimizations')
+        .timeout(_keepAliveChannelTimeout);
   } catch (e) {
     debugPrint(
         '[BackgroundService] Failed to request battery optimization exemption: $e');
@@ -506,8 +508,9 @@ Future<void> requestIgnoreBatteryOptimizations() async {
 Future<bool> canScheduleExactAlarms() async {
   if (defaultTargetPlatform != TargetPlatform.android) return true;
   try {
-    final result =
-        await _keepAliveChannel.invokeMethod<bool>('canScheduleExactAlarms').timeout(_keepAliveChannelTimeout);
+    final result = await _keepAliveChannel
+        .invokeMethod<bool>('canScheduleExactAlarms')
+        .timeout(_keepAliveChannelTimeout);
     return result ?? false;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to check exact alarm status: $e');
@@ -522,7 +525,9 @@ Future<bool> canScheduleExactAlarms() async {
 Future<void> requestScheduleExactAlarm() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
-    await _keepAliveChannel.invokeMethod('requestScheduleExactAlarm').timeout(_keepAliveChannelTimeout);
+    await _keepAliveChannel
+        .invokeMethod('requestScheduleExactAlarm')
+        .timeout(_keepAliveChannelTimeout);
   } catch (e) {
     debugPrint(
         '[BackgroundService] Failed to request exact alarm permission: $e');
@@ -540,6 +545,10 @@ Future<void> rearmKeepAliveOnResume() async {
     final prefs = await SharedPreferences.getInstance();
     final serviceEnabled = prefs.getBool(_backgroundServiceEnabledKey) ?? false;
     if (!serviceEnabled) return;
+    // 与冷启动恢复保持一致的开关语义：用户关闭「冷启动自动恢复」后，
+    // 回到前台同样不得重新武装看门狗 —— 否则闹钟触发会复活一个
+    // 用户已明确不要求恢复的前台服务。
+    if (!await isColdStartRestoreEnabled()) return;
     // 补武装：不清零失败计数（持久失败环境下看门狗应保持退避）。
     await _rearmKeepAlive();
   } catch (e) {

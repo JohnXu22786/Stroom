@@ -42,9 +42,10 @@ import id.flutter.flutter_background_service.BackgroundService
  * Failure backoff: Android 15+ caps dataSync foreground services at 6h per
  * 24h; once exhausted every start throws. After 3 consecutive failures the
  * watchdog backs off to a 30-minute interval instead of waking the device
- * every 5 minutes forever. Any successful start, or an explicit
- * startKeepAlive from Dart (user start / cold-start restore / app resume),
- * resets the counter.
+ * every 5 minutes forever. A successful start resets the counter; only the
+ * explicit startKeepAlive from Dart (user start) resets it — cold-start
+ * restore / app resume use rearmKeepAlive, which re-arms WITHOUT resetting
+ * (so persistent-failure devices stay in backoff).
  *
  * Lifecycle:
  * 1. [scheduleAlarm] — called from Dart via MethodChannel when the
@@ -64,11 +65,15 @@ class KeepAliveReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "KeepAliveReceiver"
         private const val ALARM_REQUEST_CODE = 2001
-        private const val KEEP_ALIVE_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
+
+        // 默认看门狗间隔（MainActivity 的 rearmKeepAlive 需要读取）。
+        const val KEEP_ALIVE_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
 
         // 连续启动失败后的退避间隔（见类注释）。
-        private const val MAX_CONSECUTIVE_FAILURES = 3
-        private const val FAILURE_BACKOFF_INTERVAL_MS = 30 * 60 * 1000L
+        // MainActivity 的 rearmKeepAlive 需要读取，用于退避状态下
+        // 沿用 30 分钟间隔（而不是用 5 分钟间隔替换退避闹钟）。
+        const val MAX_CONSECUTIVE_FAILURES = 3
+        const val FAILURE_BACKOFF_INTERVAL_MS = 30 * 60 * 1000L
 
         const val ACTION_KEEP_ALIVE = "com.johntsui.stroom.KEEP_ALIVE"
 
@@ -77,7 +82,9 @@ class KeepAliveReceiver : BroadcastReceiver() {
         private const val PREF_NAME = "FlutterSharedPreferences"
         private const val KEY_SERVICE_ENABLED = "flutter.background_service_enabled"
         private const val KEY_KEEP_ALIVE_ACTIVE = "flutter.keep_alive_active"
-        private const val KEY_KEEP_ALIVE_FAILURES = "flutter.keep_alive_failures"
+
+        // MainActivity 的 rearmKeepAlive 需要读取失败计数。
+        const val KEY_KEEP_ALIVE_FAILURES = "flutter.keep_alive_failures"
 
         /**
          * Schedule the next keep-alive alarm (one-shot, self-rescheduling).
@@ -178,8 +185,10 @@ class KeepAliveReceiver : BroadcastReceiver() {
 
         /**
          * Reset the consecutive-failure counter. Called when the Dart side
-         * explicitly (re)arms the watchdog (user start / cold-start restore),
+         * explicitly STARTS the watchdog (user start via startKeepAlive),
          * giving the watchdog a fresh chance at the normal interval.
+         * 注意：rearmKeepAlive（冷启动恢复/回到前台补武装）不调用本方法，
+         * 持久失败环境下必须保持退避状态。
          */
         fun resetFailureCount(context: Context) {
             context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)

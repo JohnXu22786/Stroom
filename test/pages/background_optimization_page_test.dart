@@ -648,7 +648,10 @@ void main() {
         await tester.pumpWidget(_buildTestApp());
         await tester.pumpAndSettle();
 
-        expect(find.textContaining('托盘暂不可用'), findsOneWidget);
+        // 状态行与描述卡片都会如实说明托盘不可用（不再显示
+        // 「使用托盘驻留保活」的误导性文案）。
+        expect(find.textContaining('托盘暂不可用'), findsWidgets);
+        expect(find.textContaining('使用托盘驻留保活'), findsNothing);
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
@@ -695,9 +698,48 @@ void main() {
 
       expect(find.text('允许精确闹钟（保活更可靠）'), findsOneWidget);
     });
+
+    testWidgets('exact-alarm status is re-checked when the app resumes',
+        (tester) async {
+      // 回归：精确闹钟权限只可能在系统设置中变更（撤销时系统不发
+      // 广播），回到前台必须重新检测，否则按钮状态永远是旧的。
+      var exactAlarmsAllowed = false;
+      registerMockPlatform();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async =>
+            methodCall.method == 'canScheduleExactAlarms'
+                ? exactAlarmsAllowed
+                : true,
+      );
+
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // 初始：权限缺失 → 显示授权按钮。
+      expect(find.text('允许精确闹钟（保活更可靠）'), findsOneWidget);
+
+      // 用户在系统设置中授予权限 → 回到前台 → 按钮必须消失。
+      exactAlarmsAllowed = true;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      expect(find.text('允许精确闹钟（保活更可靠）'), findsNothing,
+          reason: 'resume 后必须重新检测精确闹钟权限');
+    });
   });
 
-  group('BackgroundOptimizationPage - keep-alive strategy toggles (watchdog)', () {
+  group('BackgroundOptimizationPage - keep-alive strategy toggles (watchdog)',
+      () {
     testWidgets('turning the watchdog off disarms the native alarm',
         (tester) async {
       final mock = registerMockPlatform();
@@ -988,8 +1030,7 @@ void main() {
         // 页面加载与切换开关都不应武装关闭拦截。
         final preventCloseCalls =
             windowCalls.where((c) => c.method == 'setPreventClose').toList();
-        expect(preventCloseCalls, isEmpty,
-            reason: '托盘不可用时重新武装拦截会制造无法关闭的窗口');
+        expect(preventCloseCalls, isEmpty, reason: '托盘不可用时重新武装拦截会制造无法关闭的窗口');
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
@@ -1019,7 +1060,7 @@ void main() {
       expect(find.text('后台服务运行中'), findsOneWidget);
     });
 
-        testWidgets('quit button exits directly when no tasks are running',
+    testWidgets('quit button exits directly when no tasks are running',
         (tester) async {
       registerMockPlatform();
       // Record window_manager channel calls.
@@ -1063,7 +1104,7 @@ void main() {
         DesktopAppService.instance.resetForTesting();
       }
     });
-        testWidgets('quit button respects the injected quit confirmation',
+    testWidgets('quit button respects the injected quit confirmation',
         (tester) async {
       registerMockPlatform();
       final windowCalls = <MethodCall>[];
