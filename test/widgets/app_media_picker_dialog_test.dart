@@ -246,11 +246,63 @@ void main() {
       expect(pickerResult!.first.value, equals([10, 20, 30]));
     });
 
+    testWidgets(
+        'single-select: onRecordPicked fires with the record before closing',
+        (tester) async {
+      final records = [
+        const _TestRecord(id: '1', name: '测试文件', format: 'wav', size: 1024),
+      ];
+      _TestRecord? picked;
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () => showMediaPickerDialog(
+                  context,
+                  MediaPickerConfig<_TestRecord>(
+                    title: '测试选择器',
+                    emptyIcon: Icons.folder_outlined,
+                    emptyText: '暂无文件',
+                    fileIcon: Icons.insert_drive_file,
+                    fileIconColor: Colors.blue,
+                    loadRecords: () async => records,
+                    loadFolders: () async => <String>{},
+                    readFile: (record) async =>
+                        Uint8List.fromList([10, 20, 30]),
+                    displayName: (record) => record.name,
+                    subtitleBuilder: (record) => const Text(''),
+                    onRecordPicked: (record) async {
+                      picked = record;
+                    },
+                  ),
+                ),
+                child: const Text('Open'),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.text('测试文件'));
+      await tester.pumpAndSettle();
+
+      // The callback received the full record (not just bytes) and ran
+      // before the dialog closed.
+      expect(picked, isNotNull);
+      expect(picked!.id, '1');
+      expect(find.byType(AlertDialog), findsNothing);
+    });
+
     testWidgets('single-select: dialog closes after item tap', (tester) async {
       final records = [
         const _TestRecord(id: '1', name: '测试文件', format: 'wav', size: 1024),
       ];
-
       await tester.pumpWidget(
         _buildTestApp(
           Builder(

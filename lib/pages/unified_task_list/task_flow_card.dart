@@ -117,6 +117,27 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                             color: cs.onSurfaceVariant,
                           ),
                         ),
+                        // Queued badge: the flow is alive but its current
+                        // block is waiting for scheduler resources.
+                        if (execution.queued) ...[
+                          const SizedBox(height: 2),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '排队中（等待资源）',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.orange.shade800,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

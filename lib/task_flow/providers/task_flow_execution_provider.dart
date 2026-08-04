@@ -219,6 +219,16 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     _debouncedPersist();
   }
 
+  /// Set the transient queued flag (flow waiting for scheduler resources).
+  /// Never persisted.
+  void setExecutionQueued(String executionId, bool queued) {
+    state = state.map((e) {
+      if (e.id != executionId) return e;
+      if (e.queued == queued) return e;
+      return e.copyWith(queued: queued);
+    }).toList();
+  }
+
   // ===========================================================================
   // Persistence
   // ===========================================================================
