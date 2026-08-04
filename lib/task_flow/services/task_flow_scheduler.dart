@@ -90,11 +90,11 @@ class TaskFlowScheduler {
   DateTime? _lastReleaseAt;
 
   /// Requests resources for [execId]'s next block. Returns immediately
-  /// when the budget allows; otherwise waits FIFO until resources free up
-  /// or the entry is cancelled via [cancel].
+  /// when the budget allows and nothing is queued; otherwise waits FIFO
+  /// until resources free up or the entry is cancelled via [cancel].
   Future<void> acquire(String execId, int weight) async {
     _sampleRss();
-    if (_canRun(weight)) {
+    if (_queue.isEmpty && _canRun(weight)) {
       _active[execId] = weight;
       return;
     }
@@ -171,15 +171,17 @@ class TaskFlowScheduler {
     if (prevSampleRss == null) return;
 
     // Re-anchor only after a genuinely idle gap: a release between the
-    // samples means a block ran across the gap — its memory growth is
-    // real and must be attributed.
+    // samples means a block ran across the gap, and a non-empty active
+    // set means a block is STILL running across it — in both cases the
+    // memory growth is real and must be attributed.
     final lastReleaseAt = _lastReleaseAt;
     final releasedAcrossGap = prevSampleAt != null &&
         lastReleaseAt != null &&
         lastReleaseAt.isAfter(prevSampleAt);
     if (prevSampleAt != null &&
         now.difference(prevSampleAt) > rssWindow * 2 &&
-        !releasedAcrossGap) {
+        !releasedAcrossGap &&
+        _active.isEmpty) {
       return;
     }
 

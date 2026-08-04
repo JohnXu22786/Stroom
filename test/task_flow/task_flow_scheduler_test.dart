@@ -108,6 +108,38 @@ void main() {
       expect(scheduler.activeWeight, 0);
     });
 
+    test('a later light block must not jump a queued heavy head (FIFO)',
+        () async {
+      final s = TaskFlowScheduler(
+        coreCount: 6,
+        rssBytes: () => 100 * 1024 * 1024,
+      );
+      // Budget 3.
+      await s.acquire('a', 2); // 2/3
+      final b = s.acquire('b', 2); // 2+2=4 > 3 → queued (head)
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(s.queuedCount, 1);
+
+      // C (weight 1) fits the remaining budget but must NOT jump B.
+      final c = s.acquire('c', 1); // queued behind B
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(s.queuedCount, 2);
+      expect(s.activeWeight, 2);
+
+      // A releases → B (head) acquires, C still queued.
+      s.release('a');
+      await b;
+      expect(s.activeWeight, 2);
+      expect(s.queuedCount, 1);
+
+      // B releases → C acquires.
+      s.release('b');
+      await c;
+      expect(s.activeWeight, 1);
+      expect(s.queuedCount, 0);
+      s.release('c');
+    });
+
     test(
         'a weight-2 head under a contracted budget still runs when idle '
         '(no queue starvation)', () async {
@@ -202,6 +234,36 @@ void main() {
       // across it, so the growth must NOT be discarded.
       expect(s.currentBudget, 1);
       expect(s.baseBudget, 2);
+    });
+
+    test(
+        'growth while a block is STILL running across a long gap is '
+        'attributed (no re-anchor mid-run)', () async {
+      var rss = 100 * 1024 * 1024;
+      var fakeNow = DateTime(2026, 1, 1, 12, 0, 0);
+      final s = TaskFlowScheduler(
+        coreCount: 6, // budget 3 — A and B can run concurrently
+        rssBytes: () => rss,
+        now: () => fakeNow,
+        rssWindow: const Duration(seconds: 30),
+        rssGrowthThresholdBytes: 300 * 1024 * 1024,
+      );
+
+      // A runs alone for 61 minutes, ballooning memory. No release
+      // happens (A still running), so releasedAcrossGap is false — but
+      // _active is non-empty, so the baseline must NOT re-anchor.
+      await s.acquire('a', 1); // sample 100MB @ 12:00
+      rss = 500 * 1024 * 1024;
+      fakeNow = fakeNow.add(const Duration(minutes: 61));
+      await s.acquire('b', 1); // concurrent acquire samples while A runs
+
+      expect(s.currentBudget, 2,
+          reason: 'A\'s 400MB growth must be '
+              'attributed even though no release happened '
+              '(6 cores → base 3, contracted to 2)');
+      expect(s.baseBudget, 3);
+      s.release('a');
+      s.release('b');
     });
 
     test('long idle gap re-anchors the RSS baseline (no false contraction)',
