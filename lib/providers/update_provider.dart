@@ -197,6 +197,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     String? fallbackUrl;
 
     for (final asset in assets) {
+      // 防御：非 Map 资产条目（异常响应数据）跳过。
+      if (asset is! Map) continue;
       final name = (asset['name'] as String?)?.toLowerCase() ?? '';
       if (!name.contains(key)) continue;
 
@@ -372,11 +374,13 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     for (final release in releases) {
       // 防御：列表元素可能是非 Map（异常响应数据），跳过而非崩溃。
       if (release is! Map) continue;
-      final tagName = release['tag_name'] as String? ?? '';
+      final tagName = release['tag_name'];
+      // 防御：字段值类型错误（如 int）同样跳过。
+      if (tagName is! String) continue;
       final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
       if (versionStr == currentVersionStr) {
-        final publishedAtStr = release['published_at'] as String?;
-        if (publishedAtStr != null) {
+        final publishedAtStr = release['published_at'];
+        if (publishedAtStr is String) {
           cutoffDate = DateTime.tryParse(publishedAtStr);
         }
         currentVersion = Version.parse(versionStr);
@@ -392,14 +396,20 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       final parsedCurrent = Version.parse(currentVersionStr);
       for (final release in releases) {
         if (release is! Map) continue;
-        final tagName = release['tag_name'] as String? ?? '';
+        final tagName = release['tag_name'];
+        if (tagName is! String) continue;
         final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
-        final parsed = Version.parse(versionStr);
+        Version parsed;
+        try {
+          parsed = Version.parse(versionStr);
+        } catch (_) {
+          continue; // 无法解析的版本号（异常数据）跳过
+        }
         if (parsed.major == parsedCurrent.major &&
             parsed.minor == parsedCurrent.minor &&
             parsed.patch == parsedCurrent.patch) {
-          final publishedAtStr = release['published_at'] as String?;
-          if (publishedAtStr != null) {
+          final publishedAtStr = release['published_at'];
+          if (publishedAtStr is String) {
             cutoffDate = DateTime.tryParse(publishedAtStr);
           }
           break;
@@ -417,59 +427,72 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     final List<AvailableUpdate> availableList = [];
 
     for (final release in releases) {
-      // 防御：列表元素可能是非 Map（异常响应数据），跳过而非崩溃。
-      if (release is! Map) continue;
-      final tagName = release['tag_name'] as String? ?? '';
-      final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
-      final parsed = Version.parse(versionStr);
+      // 防御：整个条目的处理包在 try/catch 中 —— 单个条目字段损坏
+      // （非 String 的 tag_name/published_at/assets 等）只跳过该条目，
+      // 绝不中断整个更新检查。
+      try {
+        // 防御：列表元素可能是非 Map（异常响应数据），跳过而非崩溃。
+        if (release is! Map) continue;
+        final tagName = release['tag_name'];
+        if (tagName is! String) continue;
+        final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
+        final parsed = Version.parse(versionStr);
 
-      // Skip the current version itself: either exact string match or
-      // same base version (major.minor.patch). The base version check
-      // handles pre-release/hotfix suffixes so that e.g., "39-hotfix"
-      // does NOT re-prompt about "v39.0.0" (same base).
-      if (versionStr == currentVersionStr ||
-          (parsed.major == currentVersion.major &&
-              parsed.minor == currentVersion.minor &&
-              parsed.patch == currentVersion.patch)) continue;
+        // Skip the current version itself: either exact string match or
+        // same base version (major.minor.patch). The base version check
+        // handles pre-release/hotfix suffixes so that e.g., "39-hotfix"
+        // does NOT re-prompt about "v39.0.0" (same base).
+        if (versionStr == currentVersionStr ||
+            (parsed.major == currentVersion.major &&
+                parsed.minor == currentVersion.minor &&
+                parsed.patch == currentVersion.patch)) continue;
 
-      // Date-based comparison (when we found the current version's publish date)
-      if (cutoffDate != null) {
-        final publishedAtStr = release['published_at'] as String?;
-        if (publishedAtStr != null) {
-          final publishedAt = DateTime.tryParse(publishedAtStr);
-          if (publishedAt != null) {
-            if (!publishedAt.isAfter(cutoffDate)) continue;
+        // Date-based comparison (when we found the current version's publish date)
+        if (cutoffDate != null) {
+          final publishedAtStr = release['published_at'];
+          if (publishedAtStr is String) {
+            final publishedAt = DateTime.tryParse(publishedAtStr);
+            if (publishedAt != null) {
+              if (!publishedAt.isAfter(cutoffDate)) continue;
+            } else {
+              // published_at string is unparseable, fall back to version comparison
+              if (!(parsed > currentVersion)) continue;
+            }
           } else {
-            // published_at string is unparseable, fall back to version comparison
+            // No published_at available, fall back to version comparison
             if (!(parsed > currentVersion)) continue;
           }
         } else {
-          // No published_at available, fall back to version comparison
+          // Fall back to version-based comparison when the current version
+          // is not in the releases list or has no published_at field.
           if (!(parsed > currentVersion)) continue;
         }
-      } else {
-        // Fall back to version-based comparison when the current version
-        // is not in the releases list or has no published_at field.
-        if (!(parsed > currentVersion)) continue;
+
+        // Skip the version the user chose to skip
+        if (versionStr == skippedVersion) continue;
+
+        // Find download URL for this release on current platform
+        final rawAssets = release['assets'];
+        final assets =
+            rawAssets is List ? rawAssets : const <dynamic>[];
+        final htmlUrl = release['html_url'];
+        final directDownloadUrl = getPlatformDownloadUrl(assets);
+        final downloadUrl =
+            directDownloadUrl ?? (htmlUrl is String ? htmlUrl : '');
+        final body = release['body'];
+        final isPrerelease = release['prerelease'] is bool
+            ? release['prerelease'] as bool
+            : false;
+
+        availableList.add(AvailableUpdate(
+          version: versionStr,
+          releaseNotes: body is String ? body : '',
+          downloadUrl: downloadUrl,
+          isPreRelease: isPrerelease,
+        ));
+      } catch (_) {
+        // 单个条目异常（如无法解析的版本号）：跳过该条目继续。
       }
-
-      // Skip the version the user chose to skip
-      if (versionStr == skippedVersion) continue;
-
-      // Find download URL for this release on current platform
-      final assets = release['assets'] as List<dynamic>? ?? [];
-      final htmlUrl = release['html_url'] as String? ?? '';
-      final directDownloadUrl = getPlatformDownloadUrl(assets);
-      final downloadUrl = directDownloadUrl ?? htmlUrl;
-      final body = release['body'] as String? ?? '';
-      final isPrerelease = release['prerelease'] as bool? ?? false;
-
-      availableList.add(AvailableUpdate(
-        version: versionStr,
-        releaseNotes: body,
-        downloadUrl: downloadUrl,
-        isPreRelease: isPrerelease,
-      ));
     }
 
     // Sort descending (newest first)

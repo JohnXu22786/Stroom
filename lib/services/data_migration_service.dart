@@ -100,8 +100,22 @@ class DataMigrationService {
     await cleanOldBackups();
 
     try {
-      // 创建备份到外部位置
-      await createBackup();
+      // 创建备份到外部位置。
+      // 备份失败（或并发备份被取消）时绝不继续迁移：没有安全快照
+      // 的迁移一旦中途失败可能造成数据损坏。返回 needsMigration=false
+      // 保持版本号不变，下次启动自动重试（与 v2→v3 结构性失败
+      // 「版本号永不提升」的哲学一致）。
+      // Web 平台不支持本地备份（createBackup 恒返回 null），直接迁移。
+      if (!kIsWeb) {
+        final backupPath = await createBackup();
+        if (backupPath == null) {
+          debugPrint('[DataMigrationService] 迁移前备份失败，'
+              '取消本次迁移（下次启动重试）');
+          await AppLogService.error('DataMigrationService',
+              '迁移前备份失败，取消本次迁移（下次启动重试）');
+          return const MigrationResult(needsMigration: false);
+        }
+      }
 
       // 执行迁移
       await _performMigration(storedVersion, currentFormatVersion);

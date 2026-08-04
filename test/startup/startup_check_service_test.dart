@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/startup/startup_check_service.dart';
 import 'package:stroom/services/data_migration_service.dart';
+import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
 
 void main() {
@@ -12,6 +13,9 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     AppStorage.resetCache();
+    // 迁移前备份需要可用的存储（JSON 测试模式）：
+    // checkAndMigrate 在备份失败时会取消迁移（生产安全策略）。
+    ManifestDatabase.enableTestMode();
   });
 
   group('StartupCheckService - format version check', () {

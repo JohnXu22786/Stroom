@@ -18,6 +18,12 @@ Widget _buildTestApp() {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUp(() {
+    // 启动后任务标记是进程级的（错误边界重试不重复执行），
+    // 每个测试用例需要复位以获得完整的启动后流程。
+    resetPostStartupTasksFlagForTesting();
+  });
+
   group('Application - Startup (migration handled by StartupApp)', () {
     testWidgets(
         'does not show migration dialog when data format is outdated'

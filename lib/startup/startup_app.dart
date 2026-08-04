@@ -503,20 +503,26 @@ class _AppErrorBoundary extends StatefulWidget {
 class _AppErrorBoundaryState extends State<_AppErrorBoundary> {
   bool _hasError = false;
   String _errorMessage = '';
+  int _retryGeneration = 0;
 
   void _onRetry() {
+    // 增加 generation：给 child 换一个新 Key，强制重建失败子树。
+    // （ErrorWidget 占位符替换了失败的小部件后，同一个 const
+    // Application 实例会被 updateChild 短路复用，不换 Key 重试无效。）
     setState(() {
       _hasError = false;
       _errorMessage = '';
+      _retryGeneration++;
     });
   }
 
   @override
   Widget build(BuildContext context) {
     // 主应用（child）始终保留在 Widget 树中：错误恢复界面以覆盖层
-    // 形式显示在其上方。这样「重试」只是隐藏覆盖层，Application 的
-    // State 不会重建 —— 否则启动后任务（更新检查/备份检查）会重复
-    // 执行并可能叠加弹窗。
+    // 形式显示在其上方，用户始终能看到恢复入口。
+    // 重试时通过 KeyedSubtree 换 Key 强制重新挂载 Application；
+    // 启动后任务（更新检查/备份检查）有进程级去重保护（见
+    // application.dart 的 _postStartupTasksStarted），不会重复执行。
     return Stack(
       textDirection: TextDirection.ltr,
       children: [
@@ -532,7 +538,10 @@ class _AppErrorBoundaryState extends State<_AppErrorBoundary> {
             }
             return _ErrorWidgetPlaceholder();
           },
-          child: widget.child,
+          child: KeyedSubtree(
+            key: ValueKey('app_retry_$_retryGeneration'),
+            child: widget.child,
+          ),
         ),
         if (_hasError)
           Positioned.fill(

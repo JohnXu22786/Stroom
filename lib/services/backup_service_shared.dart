@@ -99,26 +99,32 @@ Future<Set<String>> collectAttachmentPaths() async {
 
     final conversations = jsonDecode(json) as List<dynamic>;
     for (final conv in conversations) {
-      final messages =
-          (conv as Map<String, dynamic>)['messages'] as List<dynamic>? ?? [];
-      for (final msg in messages) {
-        final attachments =
-            (msg as Map<String, dynamic>)['attachments'] as List<dynamic>? ??
-                [];
-        for (final att in attachments) {
-          final attMap = att as Map<String, dynamic>;
-          final storagePath = attMap['storagePath'] as String?;
-          if (storagePath != null && storagePath.isNotEmpty) {
+      // 逐层防御：损坏数据（非 Map 会话/消息、非 List 字段、非 Map
+      // 附件）只跳过对应条目，绝不中断整个扫描 —— 否则一条坏数据
+      // 会让备份丢失所有附件路径（旧代码 TypeError 被外层 catch
+      // 吞掉，静默丢失）。
+      if (conv is! Map<String, dynamic>) continue;
+      final rawMessages = conv['messages'];
+      if (rawMessages is! List) continue;
+      for (final msg in rawMessages) {
+        if (msg is! Map<String, dynamic>) continue;
+        final rawAttachments = msg['attachments'];
+        if (rawAttachments is! List) continue;
+        for (final att in rawAttachments) {
+          if (att is! Map<String, dynamic>) continue;
+          final storagePath = att['storagePath'];
+          if (storagePath is String && storagePath.isNotEmpty) {
             paths.add(storagePath);
           }
-          final thumbnailPath = attMap['thumbnailPath'] as String?;
-          if (thumbnailPath != null && thumbnailPath.isNotEmpty) {
+          final thumbnailPath = att['thumbnailPath'];
+          if (thumbnailPath is String && thumbnailPath.isNotEmpty) {
             paths.add(thumbnailPath);
           }
         }
       }
     }
   } catch (e) {
+    // 仅当整体 JSON 无法解析时才放弃（逐条目损坏已在上面跳过）。
     debugPrint('收集附件路径失败: $e');
   }
   debugPrint(

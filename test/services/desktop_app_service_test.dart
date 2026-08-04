@@ -326,6 +326,42 @@ void main() {
       DesktopAppService.instance.onQuitConfirmation = null;
     });
 
+    test('tray menu quit restores the window before confirming', () async {
+      // 回归：关闭即最小化模式下窗口已隐藏到托盘，托盘「退出 Stroom」
+      // 必须先恢复窗口，否则确认对话框显示在隐藏窗口上（不可见），
+      // 且 _quitConfirmInProgress 会锁死后续所有退出尝试。
+      final mocks = registerChannelMocks();
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        // 模拟窗口已隐藏到托盘。
+        DesktopAppService.instance.onWindowClose();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        bool confirmCalled = false;
+        DesktopAppService.instance.onQuitConfirmation = () async {
+          confirmCalled = true;
+          return false; // 取消退出
+        };
+
+        final menu = DesktopAppService.instance.trayMenuForTesting!;
+        final quitItem = menu.getMenuItem('quit')!;
+        DesktopAppService.instance.onTrayMenuItemClick(quitItem);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(confirmCalled, isTrue,
+            reason: '隐藏窗口时托盘退出必须先恢复窗口再走确认流程');
+        // 确认前必须调用 show（恢复窗口）。
+        final showCalls =
+            mocks['window_manager']!.calls.where((c) => c.method == 'show');
+        expect(showCalls, isNotEmpty);
+        // 用户取消 → 不退出。
+        expect(exitCodes, isEmpty);
+      });
+      DesktopAppService.instance.onQuitConfirmation = null;
+    });
+
     test('close hides to tray when the minimize pref read fails', () async {
       // isDesktopCloseMinimizeEnabled 读取失败时必须默认最小化，
       // 绝不因设置异常而意外退出应用。

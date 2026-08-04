@@ -6,13 +6,12 @@ import 'package:flutter/foundation.dart'
         TargetPlatform,
         debugPrint,
         defaultTargetPlatform,
-        kIsWeb,
         visibleForTesting;
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app_log_service.dart';
-import 'background_service.dart' show isDesktopCloseMinimizeEnabled;
+import 'background_service.dart' as background_service;
 
 // ====================================================================
 // DesktopAppService — 桌面端窗口与系统托盘驻留服务
@@ -61,11 +60,10 @@ class DesktopAppService extends WindowListener with TrayListener {
   Menu? _menu;
 
   /// 当前是否运行在桌面平台（Windows / macOS / Linux）。
-  static bool get isDesktopPlatform =>
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.windows ||
-          defaultTargetPlatform == TargetPlatform.macOS ||
-          defaultTargetPlatform == TargetPlatform.linux);
+  ///
+  /// 唯一实现位于 [background_service.isDesktopPlatform]，此处委托，
+  /// 避免两处平台判断漂移。
+  static bool get isDesktopPlatform => background_service.isDesktopPlatform();
 
   /// 测试用：暴露构建好的托盘菜单，便于模拟菜单点击。
   @visibleForTesting
@@ -142,9 +140,12 @@ class DesktopAppService extends WindowListener with TrayListener {
         )
             .timeout(trayTimeout);
         // setToolTip 在 Linux 插件上未实现（会抛 MissingPluginException），
-        // 单独捕获，避免拖垮整个托盘注册流程。
+        // 单独捕获，避免拖垮整个托盘注册流程；同样受超时保护
+        // （DBus/appindicator 挂起时不能无限期停留在无监听的拦截状态）。
         try {
-          await trayManager.setToolTip('Stroom 正在后台运行');
+          await trayManager
+              .setToolTip('Stroom 正在后台运行')
+              .timeout(trayTimeout);
         } catch (e) {
           debugPrint('[DesktopAppService] setToolTip unsupported: $e');
         }
@@ -155,6 +156,11 @@ class DesktopAppService extends WindowListener with TrayListener {
       } catch (e) {
         debugPrint('[DesktopAppService] Tray registration failed: $e');
         await AppLogService.error('DesktopAppService', '托盘注册失败', e);
+        // 清理可能已半注册的托盘图标（例如 setIcon 成功但
+        // setContextMenu 超时），避免残留死托盘条目。
+        try {
+          await trayManager.destroy();
+        } catch (_) {}
         // 托盘不可用：撤销拦截，恢复「关闭即退出」。
         // 此时尚未注册监听，也不会有幽灵窗口。
         await windowManager.setPreventClose(false);
@@ -199,7 +205,7 @@ class DesktopAppService extends WindowListener with TrayListener {
     // 读取失败时默认最小化：绝不因设置读取异常而意外退出应用。
     var minimize = true;
     try {
-      minimize = await isDesktopCloseMinimizeEnabled();
+      minimize = await background_service.isDesktopCloseMinimizeEnabled();
     } catch (e) {
       debugPrint('[DesktopAppService] 读取关闭行为设置失败，默认最小化: $e');
     }
@@ -216,6 +222,9 @@ class DesktopAppService extends WindowListener with TrayListener {
   /// 先征求 [onQuitConfirmation] 的同意（例如有任务运行时弹窗确认），
   /// 用户取消则什么都不做；确认后彻底退出（销毁托盘与窗口）。
   Future<void> quitWithConfirmation() async {
+    // 托盘退出时窗口可能已隐藏到托盘：先恢复窗口，确认对话框才可见。
+    // （窗口已可见时 _showWindow 是幂等 no-op；_quitRequested 时跳过。）
+    await _showWindow();
     try {
       final confirm = onQuitConfirmation;
       if (confirm != null) {

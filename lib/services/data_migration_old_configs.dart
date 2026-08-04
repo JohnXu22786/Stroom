@@ -22,11 +22,14 @@ class DataMigrationOldConfigs {
 
       final migratedConfigs = <Map<String, dynamic>>[];
       for (final oldItem in oldList) {
-        // 兜底：安全过滤 models 中的非 Map 条目
-        final oldModels = (oldItem['models'] as List?)
-                ?.whereType<Map<String, dynamic>>()
-                .toList() ??
-            [];
+        // 兜底：安全过滤 models 中的非 Map 条目。
+        // 注意：oldItem['models'] 本身可能是非 List（损坏数据），
+        // 用 `is! List` 判断而不是 `as List?` 强转（强转抛 TypeError
+        // 会中断整个迁移，版本号仍会被提升，损坏数据永远无法修复）。
+        final rawModels = oldItem['models'];
+        final oldModels = rawModels is List
+            ? rawModels.whereType<Map<String, dynamic>>().toList()
+            : <Map<String, dynamic>>[];
 
         final models = oldModels.map((m) {
           final typeConfig = <String, dynamic>{};
@@ -39,18 +42,24 @@ class DataMigrationOldConfigs {
           final context = m['maxTokens'] ?? m['context'];
           if (context != null) typeConfig['context'] = context;
 
+          // `is! String` 而非 `as String?`：损坏数据中字段值可能
+          // 是任意类型，强转会中断整个迁移。
+          final modelId = m['modelId'];
           return <String, dynamic>{
-            'name': m['modelId'] as String? ?? '',
-            'modelId': m['modelId'] as String? ?? '',
-            'supportStream': m['supportStream'] as bool? ?? true,
+            'name': modelId is String ? modelId : '',
+            'modelId': modelId is String ? modelId : '',
+            'supportStream': m['supportStream'] is bool
+                ? m['supportStream'] as bool
+                : true,
             'typeConfig': typeConfig,
           };
         }).toList();
 
         migratedConfigs.add(<String, dynamic>{
-          'providerName': oldItem['providerName'] as String? ?? '',
-          'host': oldItem['host'] as String? ?? '',
-          'key': oldItem['key'] as String? ?? '',
+          'providerName':
+              oldItem['providerName'] is String ? oldItem['providerName'] : '',
+          'host': oldItem['host'] is String ? oldItem['host'] : '',
+          'key': oldItem['key'] is String ? oldItem['key'] : '',
           'models': models,
         });
       }
@@ -117,31 +126,36 @@ class DataMigrationOldConfigs {
 
       for (int i = 0; i < list.length; i++) {
         final entry = list[i];
-        if (entry['id'] == null || (entry['id'] as String?)?.isEmpty == true) {
-          // 为 null id 的条目生成一个唯一 ID
-          final type = entry['type'] as String? ?? 'unknown';
-          entry['id'] = 'migrated_${type}_$i';
+        // `is! String` 而非 `as String?`：损坏数据中字段值可能
+        // 是任意类型，强转会中断整个修复循环（版本号仍被提升，
+        // 损坏数据永远无法修复）。
+        final id = entry['id'];
+        if (id is! String || id.isEmpty) {
+          // 为无效 id 的条目生成一个唯一 ID
+          final type = entry['type'];
+          final typeName = type is String ? type : 'unknown';
+          entry['id'] = 'migrated_${typeName}_$i';
           changed = true;
           debugPrint(
-              '[DataMigrationService] Fixed null id for provider entry at index $i (type: $type)');
+              '[DataMigrationService] Fixed null id for provider entry at index $i (type: $typeName)');
         }
 
         // 修复自定义参数中缺少 type 字段的旧格式
-        final configs = entry['configs'] as List?;
-        if (configs != null) {
-          for (final config in configs) {
+        final rawConfigs = entry['configs'];
+        if (rawConfigs is List) {
+          for (final config in rawConfigs) {
             // 兜底：跳过非 Map 的 config 条目
             if (config is! Map<String, dynamic>) continue;
             final configMap = config;
-            final models = configMap['models'] as List?;
-            if (models == null) continue;
-            for (final model in models) {
+            final rawModels = configMap['models'];
+            if (rawModels is! List) continue;
+            for (final model in rawModels) {
               // 兜底：跳过非 Map 的 model 条目
               if (model is! Map<String, dynamic>) continue;
               final modelMap = model;
-              final customParams = modelMap['customParams'] as List?;
-              if (customParams == null) continue;
-              for (final param in customParams) {
+              final rawCustomParams = modelMap['customParams'];
+              if (rawCustomParams is! List) continue;
+              for (final param in rawCustomParams) {
                 // 兜底：跳过非 Map 的 param 条目
                 if (param is! Map<String, dynamic>) continue;
                 final paramMap = param;
@@ -155,8 +169,8 @@ class DataMigrationOldConfigs {
         }
 
         // 确保每条记录都有 type 字段（旧版可能缺失）
-        if (entry['type'] == null ||
-            (entry['type'] as String?)?.isEmpty == true) {
+        final entryType = entry['type'];
+        if (entryType is! String || entryType.isEmpty) {
           entry['type'] = 'tts';
           changed = true;
           debugPrint(

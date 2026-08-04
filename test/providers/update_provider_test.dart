@@ -476,6 +476,42 @@ void main() {
       expect(notifier.state.latestVersion, '0.2.14');
     });
 
+    test('skips releases with wrong-typed fields without crashing', () async {
+      // Map 元素内部的字段值类型错误（tag_name 为 int、assets 为 Map、
+      // prerelease 为字符串）：旧代码逐个 TypeError 中断整个检查并
+      // 显示误导性的「网络错误」；现在跳过损坏条目、保留合法条目。
+      SharedPreferences.setMockInitialValues({});
+      final dio = Dio(BaseOptions());
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(Response(
+            requestOptions: options,
+            statusCode: 200,
+            data: [
+              {
+                'tag_name': 12345, // 非 String
+                'published_at': '2024-01-15T10:00:00Z',
+              },
+              {
+                'tag_name': 'v0.2.13-garbage!',
+                'assets': {'not': 'a list'}, // 非 List
+              },
+              jsonDecode(_githubRelease('v0.2.14')),
+            ],
+          ));
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate(silent: false);
+
+      expect(notifier.state.isChecking, false);
+      expect(notifier.state.error, isNull,
+          reason: '损坏条目应被跳过而不是报「网络错误」');
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.latestVersion, '0.2.14');
+    });
+
     test('recovers from error on subsequent check', () async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createFailingDio();

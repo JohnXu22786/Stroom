@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
-    show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
+    show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform, visibleForTesting;
 import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -27,6 +27,22 @@ import 'startup/backup_startup_check.dart';
 import 'widgets/update_dialog.dart';
 import 'widgets/quit_confirmation_dialog.dart';
 
+/// 启动后任务（更新检查 + 备份检查）的进程级去重标记。
+///
+/// 放在 State 之外：错误边界「重试」会重新挂载 [Application]
+/// （State 字段会复位导致任务重复执行、弹窗叠加），而应用进程
+/// 内这些任务只需要执行一次。
+///
+/// 测试通过 [resetPostStartupTasksFlagForTesting] 复位，
+/// 保证每个测试用例都能完整走一遍启动后流程。
+bool _postStartupTasksStarted = false;
+
+/// 测试用：复位启动后任务标记。
+@visibleForTesting
+void resetPostStartupTasksFlagForTesting() {
+  _postStartupTasksStarted = false;
+}
+
 class Application extends ConsumerStatefulWidget {
   const Application({super.key});
 
@@ -45,8 +61,6 @@ class _ApplicationState extends ConsumerState<Application>
   /// [showDialog] can find [MaterialLocalizations] and the
   /// [NavigatorState] it needs.
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
-
-  bool _postStartupTasksStarted = false;
 
   @override
   void initState() {

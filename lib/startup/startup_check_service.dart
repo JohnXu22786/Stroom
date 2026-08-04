@@ -344,10 +344,19 @@ class StartupCheckService {
         ));
       }
 
-      if (conv['messages'] == null) {
+      // messages 非 List（如字符串/对象）时运行时会静默当作空列表，
+      // 用户聊天记录无声消失 —— 必须显式上报。
+      final rawMessages = conv['messages'];
+      if (rawMessages == null) {
         issues.add(StartupIssue(
           message: 'conversations[$i]: messages 字段缺失',
           severity: StartupIssueSeverity.warning,
+          dataKey: 'conversations',
+        ));
+      } else if (rawMessages is! List) {
+        issues.add(StartupIssue(
+          message: 'conversations[$i]: messages 字段不是合法列表',
+          severity: StartupIssueSeverity.error,
           dataKey: 'conversations',
         ));
       }
