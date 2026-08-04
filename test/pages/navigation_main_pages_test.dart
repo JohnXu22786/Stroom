@@ -57,9 +57,10 @@ void main() {
   });
 
   group('Main page navigation (4 buttons, state preservation)', () {
-    testWidgets('renders four nav destinations on mobile, no plus button',
+    testWidgets(
+        'renders four nav destinations on portrait screens, no plus button',
         (tester) async {
-      // Use mobile width so bottom nav bar is shown
+      // Use a portrait size (height > width) so the bottom nav bar is shown
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
       await tester.pumpAndSettle();
 
@@ -292,6 +293,108 @@ void main() {
 
       // Should navigate to OCR page
       expect(find.text('文字识别'), findsOneWidget);
+    });
+  });
+
+  group('Navigation placement by screen aspect ratio', () {
+    testWidgets(
+        'wide screen (width > height) shows the side NavigationRail, '
+        'no bottom NavigationBar', (tester) async {
+      // e.g. a phone rotated to landscape or a wide desktop window.
+      await tester.pumpWidget(_buildTestApp(screenSize: const Size(844, 390)));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
+
+      // All four destinations are reachable from the rail
+      expect(find.text('主页'), findsOneWidget);
+      expect(find.text('对话'), findsOneWidget);
+      expect(find.text('文件'), findsOneWidget);
+      expect(find.text('设置'), findsOneWidget);
+    });
+
+    testWidgets(
+        'tall screen (height > width) shows the bottom NavigationBar, '
+        'no side NavigationRail', (tester) async {
+      // A wide-but-tall window (e.g. a tablet in portrait) must NOT show
+      // the side rail even though its width is well above 600 px.
+      await tester.pumpWidget(_buildTestApp(screenSize: const Size(800, 1200)));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.byType(NavigationRail), findsNothing);
+    });
+
+    testWidgets(
+        'short wide window (narrow width but wider than tall) shows the '
+        'side NavigationRail', (tester) async {
+      // Regression: a small landscape window (width < 600) previously got
+      // the bottom bar; by aspect ratio it is wider than tall → side rail.
+      await tester.pumpWidget(_buildTestApp(screenSize: const Size(500, 300)));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
+    });
+
+    testWidgets('square screen shows the side NavigationRail (not taller)',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(screenSize: const Size(600, 600)));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
+    });
+
+    testWidgets('side rail taps switch pages on wide screens', (tester) async {
+      await tester.pumpWidget(_buildTestApp(screenSize: const Size(844, 390)));
+      await tester.pumpAndSettle();
+
+      // Tap "文件" in the rail to go to the Files page. Its root key proves
+      // the Files page actually opened (the "文件" label itself would match
+      // the rail even if navigation never happened).
+      await tester.tap(find.text('文件'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('files_page')), findsOneWidget);
+
+      // Tap "设置" in the rail to go to the Settings page. Its "主题" section
+      // header proves the Settings page actually opened (the "设置" label
+      // itself would match the rail even if navigation never happened).
+      await tester.tap(find.text('设置'));
+      await tester.pumpAndSettle();
+      expect(find.text('主题'), findsOneWidget);
+    });
+
+    testWidgets(
+        'resizing from landscape to portrait moves the nav to the bottom',
+        (tester) async {
+      // Simulate a screen rotation: the same widget tree is re-pumped with a
+      // new size and updated in place, so placement must update live (not be
+      // decided once at startup) and page state must survive the resize.
+      await tester.pumpWidget(_buildTestApp(screenSize: const Size(844, 390)));
+      await tester.pumpAndSettle();
+      expect(find.byType(NavigationRail), findsOneWidget);
+
+      // Navigate to the Files page before rotating, so state survival is
+      // verified across the resize
+      await tester.tap(find.text('文件'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('files_page')), findsOneWidget);
+
+      await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
+      await tester.pumpAndSettle();
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.byType(NavigationRail), findsNothing);
+      // Still on the Files page after the resize
+      expect(find.byKey(const Key('files_page')), findsOneWidget);
+
+      // And back to landscape again
+      await tester.pumpWidget(_buildTestApp(screenSize: const Size(844, 390)));
+      await tester.pumpAndSettle();
+      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byKey(const Key('files_page')), findsOneWidget);
     });
   });
 }

@@ -29,7 +29,7 @@ extension _HomePageNavigationExt on _HomePageState {
     }
   }
 
-  /// 构建侧边栏导航（用于桌面端）
+  /// 构建侧边栏导航（用于较宽的横向屏幕）
   Widget _buildNavigationRail(BuildContext context) {
     final selectedPage = ref.watch(selectedPageProvider);
 
@@ -91,7 +91,7 @@ extension _HomePageNavigationExt on _HomePageState {
     );
   }
 
-  /// 构建底部导航栏（用于移动端）
+  /// 构建底部导航栏（用于较高的竖向屏幕）
   Widget _buildBottomNavigationBar(BuildContext context) {
     final selectedPage = ref.watch(selectedPageProvider);
 
