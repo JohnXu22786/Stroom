@@ -374,6 +374,39 @@ void main() {
 
       await dir.delete(recursive: true);
     });
+
+    test(
+        'pre-migration caller shares a cancelled in-flight backup without '
+        'retrying', () async {
+      // 回归：共享结果为失败/取消时，迁移前备份必须共享该结果而不是
+      // 无视取消再跑一次完整备份 —— 应用进入后台触发 cancel() 后
+      // 继续备份并迁移，正是生命周期取消要防止的。
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+
+      // 普通备份在途（无最近备份 → 不触发 1 小时跳过，进入创建流程）。
+      final normal = AutoBackupService.performAutoBackup();
+      // 应用进入后台 → 取消在途备份（同步置位，先于备份的取消检查）。
+      AutoBackupService.cancel();
+      final preMigration =
+          await AutoBackupService.performAutoBackup(isPreMigration: true);
+      await normal;
+      expect(preMigration, isFalse, reason: '取消的备份结果必须被共享，不得重试执行新备份');
+      // 备份目录可能从未创建（取消发生在创建之前）。
+      final zips = (await dir.exists())
+          ? (await dir.list().toList())
+              .whereType<File>()
+              .where((f) => f.path.endsWith('.zip'))
+              .toList()
+          : <File>[];
+      expect(zips, isEmpty, reason: '取消后不得再创建任何备份文件');
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+    });
   });
   // ==================================================================
   // Atomic rename (tmp -> zip)
