@@ -24,13 +24,16 @@ void chatAgentSemanticsGroup4() {
         history: [ChatMessage(role: 'user', content: 'hi')],
       );
 
+      // 主请求 + fire-and-forget 自动标题请求（每次请求完整数据回来立即累加）
+      await _waitFor(() => provider.captures.length >= 2);
       final conv = container
           .read(conversationsProvider)
           .where((c) => c.id == 'conv-usage')
           .first;
       expect(conv.lastInputTokens, 1200);
       expect(conv.lastOutputTokens, 300);
-      expect(conv.totalCost, closeTo(0.00036, 1e-9));
+      // 主请求 0.00036 + 标题请求 0.00036（标题请求只累计 cost，不写 tokens）
+      expect(conv.totalCost, closeTo(0.00072, 1e-9));
       container.dispose();
     });
 
@@ -65,15 +68,14 @@ void chatAgentSemanticsGroup4() {
         ],
       );
 
-      // 2 次主请求计入；fire-and-forget 标题请求不计入累计
-      // （accumulateUsage: false，避免并发读取共享 usage 槽）
-      await _waitFor(() => provider.captures.length >= 3);
+      // 2 次主请求 + 2 次标题请求都计入累计（每次请求完整数据回来立即累加）
+      await _waitFor(() => provider.captures.length >= 4);
       final conv = container
           .read(conversationsProvider)
           .where((c) => c.id == 'conv-usage4')
           .first;
-      expect(conv.totalCost, closeTo(0.0002, 1e-9));
-      // 标题请求也不污染 lastInputTokens（只累计主请求的 100）
+      expect(conv.totalCost, closeTo(0.0004, 1e-9));
+      // 标题请求不污染 lastInputTokens（只累计主请求的 100）
       expect(conv.lastInputTokens, 100);
       container.dispose();
     });

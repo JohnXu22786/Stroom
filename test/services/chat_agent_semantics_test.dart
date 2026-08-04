@@ -32,6 +32,7 @@ part 'chat_agent_semantics_test_p4.dart';
 part 'chat_agent_semantics_test_p5.dart';
 part 'chat_agent_semantics_test_p6.dart';
 part 'chat_agent_semantics_test_p7.dart';
+part 'chat_agent_semantics_test_p8.dart';
 
 /// 按调用顺序提供 usage 的 provider（第 N 次 chatStream 用 usageQueue[N]）。
 class _UsageQueueProvider extends _RecordingProvider {
@@ -304,4 +305,5 @@ void main() {
   chatAgentSemanticsGroup5();
   chatAgentSemanticsGroup6();
   chatAgentSemanticsGroup7();
+  chatAgentSemanticsGroup8();
 }
