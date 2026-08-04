@@ -147,6 +147,72 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
     }
   }
 
+  /// 迁移旧版推理力度参数：为 isEffortParam 标志出现之前保存的模型数据
+  /// 补上标志（旧语义：第一个非开关推理参数即推理力度）。
+  ///
+  /// 幂等：仅当模型的全部推理参数都不含 `isEffortParam` 键（即数据诞生于
+  /// 该标志之前）时才处理，把第一个「非开关、参数名非空且有选项」的参数
+  /// 标记为推理力度（与 [findEffortParam] 的旧数据回退规则一致）。
+  /// 现代数据（键已存在，false 表示刻意不设力度）不受影响。
+  Future<void> _migrateLegacyEffortParams(SharedPreferences prefs) async {
+    try {
+      final json = prefs.getString('provider_entries');
+      if (json == null || json.isEmpty) return;
+
+      final list =
+          (jsonDecode(json) as List).whereType<Map<String, dynamic>>().toList();
+      bool changed = false;
+
+      for (final entry in list) {
+        // 推理力度概念只存在于 LLM 模型（聊天侧），其余类型不迁移
+        if (entry['type'] != 'llm') continue;
+        final configs = entry['configs'] as List?;
+        if (configs == null) continue;
+        for (final config in configs) {
+          if (config is! Map<String, dynamic>) continue;
+          final models = config['models'] as List?;
+          if (models == null) continue;
+          for (final model in models) {
+            if (model is! Map<String, dynamic>) continue;
+            final reasoningParams = model['reasoningParams'] as List?;
+            if (reasoningParams == null || reasoningParams.isEmpty) continue;
+            // 现代数据：任何参数都带 isEffortParam 键 → 不迁移
+            if (reasoningParams.any(
+              (p) => p is Map && p.containsKey('isEffortParam'),
+            )) {
+              continue;
+            }
+            for (final rawParam in reasoningParams) {
+              if (rawParam is! Map<String, dynamic>) continue;
+              // defaultValue 时代的旧格式（无 options）：fromMap 会忽略
+              // isEffortParam，promote 只会造成持久化与内存解析不一致。
+              if (rawParam.containsKey('defaultValue') &&
+                  !rawParam.containsKey('options')) {
+                continue;
+              }
+              final isToggle = rawParam['isReasoningToggle'] as bool? ?? false;
+              if (isToggle) continue;
+              final name = rawParam['paramName'] as String? ?? '';
+              if (name.trim().isEmpty) continue;
+              // 无选项的力度参数无法选择值，promote 后也无法使用
+              final options = rawParam['options'];
+              if (options is! List || options.isEmpty) continue;
+              rawParam['isEffortParam'] = true;
+              changed = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (changed) {
+        await prefs.setString('provider_entries', jsonEncode(list));
+      }
+    } catch (e) {
+      debugPrint('Failed to migrate legacy effort params: $e');
+    }
+  }
+
   /// 创建内置 MCP 配置列表（预置的供应商 MCP 服务 + HTTP 工具配置）
   List<ProviderConfigItem> _createBuiltinMcpConfigs() {
     return [
