@@ -19,14 +19,17 @@ class TaskFlowScheduler {
   TaskFlowScheduler({
     int? coreCount,
     int Function()? rssBytes,
+    DateTime Function()? now,
     this.rssWindow = const Duration(seconds: 30),
     this.rssGrowthThresholdBytes = 300 * 1024 * 1024,
     this.minBudget = 1,
   })  : _coreCount = coreCount ?? Platform.numberOfProcessors,
-        _rssBytes = rssBytes ?? (() => ProcessInfo.currentRss);
+        _rssBytes = rssBytes ?? (() => ProcessInfo.currentRss),
+        _now = now ?? DateTime.now;
 
   final int _coreCount;
   final int Function() _rssBytes;
+  final DateTime Function() _now;
   final Duration rssWindow;
   final int rssGrowthThresholdBytes;
   final int minBudget;
@@ -74,6 +77,11 @@ class TaskFlowScheduler {
 
   /// RSS samples within [rssWindow]: (timestamp, rss).
   final List<(DateTime, int)> _rssSamples = [];
+
+  /// Last sampled RSS — kept as a cross-block baseline even after the
+  /// window prunes older samples, so memory growth during a long block
+  /// is attributed to the next acquire.
+  int? _lastSampleRss;
   DateTime? _lastSampleAt;
 
   /// Requests resources for [execId]'s next block. Returns immediately
@@ -94,8 +102,11 @@ class TaskFlowScheduler {
       if (entry.cancelled) {
         throw const FlowSchedulerCancelledException();
       }
-      // FIFO: only the head of the queue may acquire.
-      if (_queue.first == entry && _canRun(entry.weight)) {
+      // FIFO: only the head of the queue may acquire. When nothing is
+      // running, the head always proceeds — even a weight-2 block under a
+      // contracted budget — so a heavy head can never starve the queue.
+      if (_queue.first == entry &&
+          (activeWeight == 0 || activeWeight + entry.weight <= currentBudget)) {
         _queue.remove(entry);
         _active[execId] = weight;
         entry.done = true;
@@ -121,14 +132,25 @@ class TaskFlowScheduler {
     entry.done = true;
   }
 
-  bool _canRun(int weight) => activeWeight + weight <= currentBudget;
+  bool _canRun(int weight) =>
+      activeWeight == 0 || activeWeight + weight <= currentBudget;
 
   /// Samples the process RSS and re-evaluates the contraction state.
   /// Hysteresis: contract when growth exceeds the threshold; recover only
   /// when growth drops below half the threshold.
+  ///
+  /// Growth is measured against the earliest sample inside the window; if
+  /// the window holds a single sample (long block between acquisitions),
+  /// the last sampled RSS serves as the baseline instead, so memory
+  /// growth during a block still counts. After a long idle gap (> 2x the
+  /// window) the baseline re-anchors to the current RSS.
   void _sampleRss() {
-    final now = DateTime.now();
+    final now = _now();
     final rss = _rssBytes();
+    final prevSampleRss = _lastSampleRss;
+    final prevSampleAt = _lastSampleAt;
+    _lastSampleRss = rss;
+    _lastSampleAt = now;
     _rssSamples.add((now, rss));
     // Drop samples outside the window.
     final cutoff = now.subtract(rssWindow);
@@ -136,9 +158,17 @@ class TaskFlowScheduler {
       _rssSamples.removeAt(0);
     }
     // Skip the very first sample (no baseline yet).
-    if (_rssSamples.length < 2) return;
+    if (prevSampleRss == null) return;
 
-    final growth = _rssSamples.last.$2 - _rssSamples.first.$2;
+    // Re-anchor after a long idle gap — a stale baseline would
+    // misattribute unrelated memory to the current run.
+    if (prevSampleAt != null && now.difference(prevSampleAt) > rssWindow * 2) {
+      return;
+    }
+
+    final baseline =
+        _rssSamples.length >= 2 ? _rssSamples.first.$2 : prevSampleRss;
+    final growth = rss - baseline;
     if (growth > rssGrowthThresholdBytes) {
       _contracted = true;
     } else if (growth < rssGrowthThresholdBytes ~/ 2) {
