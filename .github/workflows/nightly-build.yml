@@ -208,7 +208,8 @@ jobs:
           channel: stable
           cache: true
           pub-cache: true
-      - run: flutter create --platforms=ios .
+      # ios/ 工程已随仓库提交（含 BGContinuedProcessingTask 常驻后台配置），
+      # 不再现场生成。
       - run: flutter pub get
       - name: Clean SwiftPM cache and artifacts
         run: |
