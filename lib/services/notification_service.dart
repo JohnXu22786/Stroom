@@ -33,6 +33,16 @@ class NotificationService {
   FlutterLocalNotificationsPlugin? _plugin;
   bool _initialized = false;
 
+  /// 单调递增的通知 ID 计数器。
+  ///
+  /// 不直接使用 taskId.hashCode：哈希可能碰撞（导致新通知覆盖
+  /// 旧通知，用户看不到第一个任务的完成通知），也可能是负数
+  /// （部分厂商 ROM 对负 ID 处理异常）。
+  ///
+  /// 初始值用当前时间（秒）播种：进程重启后 ID 不会从头开始，
+  /// 避免新通知意外覆盖上个进程还残留在通知栏的旧通知。
+  int _notificationIdCounter = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
   /// Callback for in-app notification display.
   /// Set by the app shell to show an in-app banner.
   void Function(NotificationPayload)? onInAppNotification;
@@ -56,9 +66,18 @@ class NotificationService {
         requestSoundPermission: true,
       );
 
+      // 桌面端也需要初始化：窗口最小化/关闭后任务完成通知
+      // 仍要通过系统通知提示用户（in-app 横幅不可见）。
       const settings = InitializationSettings(
         android: androidSettings,
         iOS: iosSettings,
+        macOS: iosSettings,
+        linux: LinuxInitializationSettings(defaultActionName: '打开 Stroom'),
+        windows: WindowsInitializationSettings(
+          appName: 'Stroom',
+          appUserModelId: 'com.johntsui.stroom',
+          guid: '1a2b3c4d-0000-4000-8000-000000000000',
+        ),
       );
 
       await _plugin!.initialize(
@@ -199,6 +218,9 @@ class NotificationService {
       final details = NotificationDetails(
         android: androidDetails,
         iOS: iosDetails,
+        macOS: iosDetails,
+        linux: const LinuxNotificationDetails(),
+        windows: const WindowsNotificationDetails(),
       );
 
       final title = payload.success
@@ -208,8 +230,10 @@ class NotificationService {
           ? '${payload.title} 已完成'
           : '${payload.title} 失败: ${payload.error ?? "未知错误"}';
 
+      // 使用单调递增 ID，避免 hashCode 碰撞导致通知互相覆盖。
+      _notificationIdCounter += 1;
       await _plugin!.show(
-        id: payload.taskId.hashCode,
+        id: _notificationIdCounter,
         title: title,
         body: body,
         notificationDetails: details,

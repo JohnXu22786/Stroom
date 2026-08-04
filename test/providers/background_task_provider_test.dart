@@ -1,10 +1,67 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:fake_async/fake_async.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/task_provider.dart';
+import 'package:stroom/services/ios_continued_task_service.dart';
+
+/// Returns the on-disk tasks.json inside [dirPath] (per-test isolated dir).
+File _tasksFileIn(String dirPath) =>
+    File(p.join(dirPath, 'background', 'tasks.json'));
+
+/// Waits (up to ~3s) until [check] returns true.
+Future<void> _waitFor(Future<bool> Function() check) async {
+  for (var i = 0; i < 150; i++) {
+    if (await check()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  fail('Timed out waiting for condition');
+}
+
+/// Reads the file content, or null when the file does not exist yet
+/// or is momentarily locked by a concurrent write/delete.
+Future<String?> _readFileIfExists(File file) async {
+  try {
+    if (!await file.exists()) return null;
+    return await file.readAsString();
+  } catch (_) {
+    return null; // 读与写/删竞争时视为"尚未就绪"
+  }
+}
 
 void main() {
+  // 初始化绑定，使 path_provider 在测试环境中走 MissingPluginException
+  // 回退路径，持久化测试才能真正落盘。
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('BackgroundTaskNotifier', () {
+    // 每个测试使用独立的持久化目录：真实测试环境的所有测试共享
+    // 同一个 AppStorage 临时目录，异步写入链可能跨测试交错
+    // （上一个测试的写入在本测试写入之后才落盘），
+    // 独立目录彻底消除跨测试污染。
+    late Directory testDir;
+
+    setUp(() async {
+      testDir = await Directory.systemTemp.createTemp('bg_task_test_');
+      BackgroundTaskNotifier.debugStorageDirectoryOverride = testDir.path;
+      // iOS 常驻任务桥接默认关闭（测试机非 iOS）。
+      IosContinuedTaskService.debugForceSupported = false;
+    });
+
+    tearDown(() async {
+      BackgroundTaskNotifier.debugStorageDirectoryOverride = null;
+      IosContinuedTaskService.debugForceSupported = false;
+      try {
+        await testDir.delete(recursive: true);
+      } catch (_) {
+        // Windows 上文件句柄可能尚未释放，忽略清理失败。
+      }
+    });
     test('addTask creates a running task with correct type', () {
       final notifier = BackgroundTaskNotifier();
 
@@ -582,7 +639,7 @@ void main() {
 
     test('startTask on paused task does nothing', () {
       final notifier = BackgroundTaskNotifier();
-      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
+      notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR1');
       // Add a paused task directly
       notifier.state = [
         notifier.state[0],
@@ -794,6 +851,239 @@ void main() {
       // Task execution should still work after retryData is set
       notifier.completeTask(id);
       expect(notifier.state[0].status, TaskStatus.completed);
+    });
+
+    // ==================================================================
+    // Persistence tests (real file under the per-test isolated directory)
+    // ==================================================================
+
+    test('tasks persist to disk and restore across notifier instances',
+        () async {
+      final file = _tasksFileIn(testDir.path);
+
+      final n1 = BackgroundTaskNotifier();
+      final id = n1.addTask(type: BackgroundTaskType.ocr, title: '持久化任务');
+      n1.completeTask(id, downloadedFilePath: 'C:\\result.txt');
+
+      // 等待本测试的数据真正落盘（按内容判断：写入是异步的）。
+      await _waitFor(() async {
+        final content = await _readFileIfExists(file);
+        return (content?.contains(id) ?? false) &&
+            (content?.contains('"status":"completed"') ?? false);
+      });
+
+      final n2 = BackgroundTaskNotifier();
+      await n2.restoreFromPersistence();
+
+      expect(n2.state.length, 1);
+      expect(n2.state[0].id, id);
+      expect(n2.state[0].status, TaskStatus.completed);
+      expect(n2.state[0].downloadedFilePath, 'C:\\result.txt');
+    });
+
+    test('corrupt persisted entries are skipped, valid entries survive',
+        () async {
+      final file = _tasksFileIn(testDir.path);
+      await file.parent.create(recursive: true);
+      await file.writeAsString(jsonEncode([
+        {
+          'id': 'good-id',
+          'type': 'ocr',
+          'title': '有效任务',
+          'status': 'completed',
+          'createdAt': DateTime.now().toIso8601String(),
+        },
+        'garbage entry', // non-map entry
+        {
+          'id': 'bad-id',
+          'type': 'unknown-type', // unknown enum value
+          'title': '坏任务',
+          'status': 'running',
+          'createdAt': 'not-a-date',
+        },
+      ]));
+
+      final notifier = BackgroundTaskNotifier();
+      await notifier.restoreFromPersistence();
+
+      // Only the valid entry survives; corrupt entries must not crash
+      // the whole restore.
+      expect(notifier.state.length, 1);
+      expect(notifier.state[0].id, 'good-id');
+      expect(notifier.state[0].status, TaskStatus.completed);
+    });
+
+    test('restoreFromPersistence marks running tasks as failed and persists',
+        () async {
+      final file = _tasksFileIn(testDir.path);
+
+      final n1 = BackgroundTaskNotifier();
+      final id = n1.addTask(type: BackgroundTaskType.asr, title: '中断任务');
+      // 等待本测试的任务落盘。
+      await _waitFor(() async {
+        final content = await _readFileIfExists(file);
+        return content?.contains(id) ?? false;
+      });
+
+      final n2 = BackgroundTaskNotifier();
+      await n2.restoreFromPersistence();
+
+      expect(n2.state.length, 1);
+      expect(n2.state[0].id, id);
+      expect(n2.state[0].status, TaskStatus.failed);
+      expect(n2.state[0].error, '应用重启，已中断');
+
+      // The corrected state must be written back to disk so the next
+      // startup doesn't re-mark the same task again.
+      await _waitFor(() async {
+        final content = await _readFileIfExists(file);
+        return content?.contains('"status":"failed"') ?? false;
+      });
+    });
+    test('rapid consecutive mutations end with the final state on disk',
+        () async {
+      final file = _tasksFileIn(testDir.path);
+
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '快速变更');
+      notifier.completeTask(id);
+      notifier.removeTask(id);
+
+      // Even with several immediate mutations, the serialized write chain
+      // must leave the latest state on disk (no stale-snapshot overwrite).
+      await _waitFor(() async {
+        final content = await _readFileIfExists(file);
+        return content == '[]';
+      });
+    });
+
+    // ==================================================================
+    // iOS 26+ 常驻后台任务桥接挂钩
+    // ==================================================================
+
+    test(
+        'iOS continued task bridge: submit while running, progress on steps, '
+        'complete when no running tasks remain', () async {
+      IosContinuedTaskService.debugForceSupported = true;
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/ios_continued_task'),
+        (MethodCall call) async {
+          calls.add(call);
+          return null;
+        },
+      );
+      // 等待未等待（fire-and-forget）的通道调用落盘。
+      Future<void> flush() =>
+          Future<void>.delayed(const Duration(milliseconds: 20));
+
+      final notifier = BackgroundTaskNotifier();
+
+      // 任务启动（running）→ 提交常驻任务 + 上报进度（0 步完成）。
+      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR任务');
+      await flush();
+      expect(calls.where((c) => c.method == 'submit'), hasLength(1));
+      expect(calls.where((c) => c.method == 'updateProgress'), isNotEmpty);
+
+      // 步骤完成 → 继续上报进度。
+      calls.clear();
+      notifier.updateStep(id, 0, completed: true);
+      await flush();
+      expect(calls.where((c) => c.method == 'submit'), hasLength(1),
+          reason: '任务仍在运行，常驻任务保持提交（幂等）');
+      final progress =
+          calls.where((c) => c.method == 'updateProgress').toList();
+      expect(progress, isNotEmpty);
+      expect((progress.last.arguments as Map)['percent'], greaterThan(0));
+
+      // 新增第二个任务会稀释占比，但上报进度必须单调不降。
+      calls.clear();
+      final id2 =
+          notifier.addTask(type: BackgroundTaskType.ocr, title: '第二个任务');
+      await flush();
+      final progress2 =
+          calls.where((c) => c.method == 'updateProgress').toList();
+      expect(progress2, isNotEmpty);
+      final prev = (progress.last.arguments as Map)['percent'] as int;
+      final now = (progress2.last.arguments as Map)['percent'] as int;
+      expect(now, greaterThanOrEqualTo(prev), reason: '系统进度条不允许回退');
+
+      // 所有任务完成 → 没有运行中的任务 → 结束常驻任务。
+      // （completeTask(id) 时 id2 仍在运行，中间态会合法地再提交一次，
+      // 因此这里只断言 complete 被调用；"完成后不再有调用"由
+      // 周期同步定时器测试覆盖。）
+      calls.clear();
+      notifier.completeTask(id);
+      notifier.completeTask(id2);
+      await flush();
+      expect(calls.where((c) => c.method == 'complete'), hasLength(1));
+    });
+
+    test(
+        'iOS continued task bridge: periodic sync keeps reporting progress '
+        'while a task is running (long steps must not stall the system UI)',
+        () {
+      IosContinuedTaskService.debugForceSupported = true;
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/ios_continued_task'),
+        (MethodCall call) async {
+          calls.add(call);
+          return null;
+        },
+      );
+
+      fakeAsync((async) {
+        final notifier = BackgroundTaskNotifier();
+        final id =
+            notifier.addTask(type: BackgroundTaskType.ocr, title: '长步骤任务');
+        async.flushMicrotasks();
+
+        // 周期定时器（30s）在任务运行期间持续重报进度。
+        calls.clear();
+        async.elapse(const Duration(seconds: 30));
+        async.flushMicrotasks();
+        expect(calls.where((c) => c.method == 'updateProgress'), isNotEmpty,
+            reason: '长步骤期间也要周期性上报进度，防止系统判定任务停滞');
+        calls.clear();
+        async.elapse(const Duration(seconds: 30));
+        async.flushMicrotasks();
+        expect(calls.where((c) => c.method == 'updateProgress'), isNotEmpty);
+
+        // 任务完成后定时器停止，不再产生任何调用。
+        notifier.completeTask(id);
+        async.flushMicrotasks();
+        calls.clear();
+        async.elapse(const Duration(seconds: 90));
+        async.flushMicrotasks();
+        expect(calls, isEmpty, reason: '没有运行中任务时不得周期重报');
+
+        notifier.dispose();
+      });
+    });
+
+    test('iOS continued task bridge: no channel calls when not supported',
+        () async {
+      // debugForceSupported 保持 false（setUp 已重置）。
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/ios_continued_task'),
+        (MethodCall call) async {
+          calls.add(call);
+          return null;
+        },
+      );
+
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR任务');
+      notifier.updateStep(id, 0, completed: true);
+      notifier.completeTask(id);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(calls, isEmpty, reason: '非 iOS 平台（或 iOS < 26）不得触发任何桥接调用');
     });
   });
 }
