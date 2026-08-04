@@ -398,9 +398,11 @@ class BackupLocationManager {
       try {
         if (Platform.isAndroid) {
           try {
-            final uri = await _safChannel
-                .invokeMethod<String>('pickDirectory')
-                .timeout(_safChannelTimeout);
+            // 注意：pickDirectory 是用户操作的系统选择器 Activity
+            // （ACTION_OPEN_DOCUMENT_TREE），用户浏览目录可能耗时
+            // 远超普通通道调用 —— 不能套用 _safChannelTimeout，
+            // 否则超时后用户选择的 URI 会被静默丢弃。
+            final uri = await _safChannel.invokeMethod<String>('pickDirectory');
             if (uri == null || uri.isEmpty) {
               debugPrint('[BackupLocationManager] 用户取消了 SAF 目录选择');
               return false;

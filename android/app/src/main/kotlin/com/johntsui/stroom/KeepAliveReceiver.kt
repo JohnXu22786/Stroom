@@ -151,10 +151,14 @@ class KeepAliveReceiver : BroadcastReceiver() {
                         alarmManager.setInexactRepeating(
                             AlarmManager.ELAPSED_REALTIME_WAKEUP,
                             triggerAt,
-                            KEEP_ALIVE_INTERVAL_MS,
+                            // 退避间隔同样作用于重复周期：API < 23 上
+                            // 只有首触发间隔会被尊重，重复周期必须显式
+                            // 传 intervalMs，否则退避设备仍每 5 分钟
+                            // 被唤醒一次。
+                            intervalMs,
                             pendingIntent
                         )
-                        Log.i(TAG, "Keep-alive repeating alarm scheduled (interval=${KEEP_ALIVE_INTERVAL_MS / 60000}min)")
+                        Log.i(TAG, "Keep-alive repeating alarm scheduled (interval=${intervalMs / 60000}min)")
                     }
                     scheduled = true
                 } catch (e: Exception) {
@@ -238,7 +242,17 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 // 停止流程中途进程被杀，active 标记残留）绝不重新武装。
                 val serviceEnabled = prefs.getBoolean(KEY_SERVICE_ENABLED, false)
                 if (prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) && serviceEnabled) {
-                    scheduleAlarm(context)
+                    // 与 MainActivity.rearmKeepAlive 一致：已处于退避状态
+                    // 时沿用 30 分钟间隔，而不是用 5 分钟间隔替换掉
+                    // 退避闹钟（否则持久失败设备每次开机/更新都会被
+                    // 额外唤醒一次并失败一次）。
+                    val failures = prefs.getInt(KEY_KEEP_ALIVE_FAILURES, 0)
+                    val interval = if (failures >= MAX_CONSECUTIVE_FAILURES) {
+                        FAILURE_BACKOFF_INTERVAL_MS
+                    } else {
+                        KEEP_ALIVE_INTERVAL_MS
+                    }
+                    scheduleAlarm(context, interval)
                 }
             }
 

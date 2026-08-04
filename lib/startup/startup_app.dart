@@ -338,6 +338,9 @@ class _StartupAppState extends State<StartupApp>
   /// a buttery-smooth fade.
   void _startFadeOut() {
     if (!mounted || _isFadingOut) return;
+    // 通知 Application：启动页即将渐出，启动后任务（更新/备份检查）
+    // 的对话框现在可以显示了（不会被不透明的启动页遮住）。
+    startupReadyNotifier.value = true;
     setState(() {
       _isFadingOut = true;
     });

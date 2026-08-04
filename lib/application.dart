@@ -34,6 +34,14 @@ import 'widgets/quit_confirmation_dialog.dart';
 /// 内这些任务只需要执行一次。
 bool _postStartupTasksStarted = false;
 
+/// 启动页渐出完成通知。
+///
+/// 启动后任务（更新检查/备份检查）的对话框必须在启动页不再遮挡 UI
+/// 之后才显示 —— 否则对话框渲染在不透明的启动页之下，用户看不到也
+/// 无法交互。StartupApp 在开始渐出时置为 `true`；
+/// 测试中直接泵 Application 时手动置位。
+final ValueNotifier<bool> startupReadyNotifier = ValueNotifier<bool>(false);
+
 /// 复位启动后任务标记。
 ///
 /// 生产用途：错误边界「重试」前调用 —— 第一次启动构建失败时任务
@@ -80,9 +88,14 @@ class _ApplicationState extends ConsumerState<Application>
     // 在进入主界面后执行启动后流程（非 Web 端）：
     // 1. 检查更新（必须弹窗而非静默）
     // 2. 检查备份存储授权 + 自动备份（与检查更新并行）
+    // 启动后任务等 StartupApp 开始渐出（startupReadyNotifier）后才执行：
+    // 对话框不能被不透明的启动页遮住。
     if (!kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _runPostStartupTasks();
+        startupReadyNotifier.addListener(_onStartupReady);
+        if (startupReadyNotifier.value) {
+          _onStartupReady();
+        }
       });
     }
 
@@ -137,11 +150,18 @@ class _ApplicationState extends ConsumerState<Application>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    startupReadyNotifier.removeListener(_onStartupReady);
     if (DesktopAppService.instance.onQuitConfirmation ==
         _confirmQuitBeforeExit) {
       DesktopAppService.instance.onQuitConfirmation = null;
     }
     super.dispose();
+  }
+
+  /// 启动页开始渐出（或测试中手动置位）后执行启动后任务。
+  void _onStartupReady() {
+    if (!mounted) return;
+    _runPostStartupTasks();
   }
 
   /// 执行启动后流程：

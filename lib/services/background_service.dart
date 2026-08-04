@@ -545,11 +545,13 @@ Future<void> rearmKeepAliveOnResume() async {
     final prefs = await SharedPreferences.getInstance();
     final serviceEnabled = prefs.getBool(_backgroundServiceEnabledKey) ?? false;
     if (!serviceEnabled) return;
-    // 与冷启动恢复保持一致的开关语义：用户关闭「冷启动自动恢复」后，
-    // 回到前台同样不得重新武装看门狗 —— 否则闹钟触发会复活一个
-    // 用户已明确不要求恢复的前台服务。
-    if (!await isColdStartRestoreEnabled()) return;
     // 补武装：不清零失败计数（持久失败环境下看门狗应保持退避）。
+    // 注意：这里不再检查「冷启动自动恢复」开关 —— 该开关只控制冷启动
+    // 恢复路径；看门狗开关（isWatchdogEnabled）在 _rearmKeepAlive 内部
+    // 已检查。若用冷启动开关门控 resume 补武装，看门狗开启的用户在
+    // 精确闹钟被系统撤销后会永久失去看门狗（resume 是唯一的补武装
+    // 时机），而且已武装的闹钟触发时只检查 background_service_enabled，
+    // 并不会因为冷启动开关而停止复活服务。
     await _rearmKeepAlive();
   } catch (e) {
     debugPrint('[BackgroundService] Failed to re-arm keep-alive on resume: $e');

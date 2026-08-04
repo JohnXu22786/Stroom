@@ -53,11 +53,6 @@ class BackupStartupResult {
 class BackupStartupCheck {
   BackupStartupCheck._();
 
-  /// 标记启动时自动备份是否已在 startup 流程中执行。
-  ///
-  /// 用于防止 [HomePage] 等后续触发重复执行自动备份。
-  static bool startupBackupPerformed = false;
-
   /// 执行启动时的备份存储检查和自动备份。
   ///
   /// 此方法会阻塞直到：
@@ -112,8 +107,8 @@ class BackupStartupCheck {
           if (!isAndroid && accessAttempts >= 2) {
             debugPrint('[BackupStartupCheck] 非 Android 平台存储仍不可访问，'
                 '降级继续（备份失败将另行提示）');
-            await AppLogService.warning('BackupStartupCheck',
-                '非 Android 平台备份存储不可访问，降级继续');
+            await AppLogService.warning(
+                'BackupStartupCheck', '非 Android 平台备份存储不可访问，降级继续');
             return const BackupStartupResult(
               storageReady: true,
               autoBackupPerformed: false,
@@ -200,7 +195,6 @@ class BackupStartupCheck {
     } while (needReAuth && context.mounted);
 
     if (backupSuccess) {
-      startupBackupPerformed = true;
       await AppLogService.info('BackupStartupCheck', '启动后自动备份成功');
     } else {
       await AppLogService.warning(

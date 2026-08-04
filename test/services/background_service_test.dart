@@ -455,13 +455,12 @@ void main() {
       }
       expect(keepAliveCalls, isEmpty);
     });
-
     test('rearmKeepAliveOnResume re-arms the watchdog when service enabled',
         () async {
       registerMockPlatform();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('background_service_enabled', true);
-      await prefs.setBool('background_service_cold_start_restore', true);
+      await prefs.setBool('background_service_watchdog', true);
 
       await withAndroidPlatform(() async {
         await rearmKeepAliveOnResume();
@@ -478,20 +477,19 @@ void main() {
           reason: 'resume 是补武装场景，不得使用带计数清零的 startKeepAlive');
     });
 
-    test('rearmKeepAliveOnResume respects the cold-start restore toggle',
-        () async {
-      // 回归：用户关闭「冷启动自动恢复」后，回到前台同样不得重新武装
-      // 看门狗 —— 否则闹钟触发会复活一个用户已明确不要求恢复的服务。
+    test('rearmKeepAliveOnResume respects the watchdog toggle', () async {
+      // 看门狗开关是 resume 补武装的正确门控：关闭看门狗后回到前台
+      // 不得重新武装（冷启动恢复开关与看门狗相互独立，不参与门控）。
       registerMockPlatform();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('background_service_enabled', true);
-      await prefs.setBool('background_service_cold_start_restore', false);
+      await prefs.setBool('background_service_watchdog', false);
 
       await withAndroidPlatform(() async {
         await rearmKeepAliveOnResume();
       });
 
-      expect(keepAliveCalls, isEmpty, reason: '关闭冷启动恢复后 resume 不得重新武装看门狗');
+      expect(keepAliveCalls, isEmpty, reason: '关闭看门狗后 resume 不得重新武装闹钟');
     });
 
     test('rearmKeepAliveOnResume does nothing when service is disabled',

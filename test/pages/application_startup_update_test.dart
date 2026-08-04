@@ -113,6 +113,9 @@ Future<void> _pumpThroughStartup(WidgetTester tester,
     prefs.addAll(extraPrefs);
   }
   SharedPreferences.setMockInitialValues(prefs);
+  // 测试中直接泵 Application（无 StartupApp 驱动启动页渐出）：
+  // 手动置位启动就绪标记，触发启动后任务。
+  startupReadyNotifier.value = true;
 
   await tester.pumpWidget(_buildTestApp(dio: dio));
   // Process post-frame callback → _performStartupChecks starts
@@ -130,6 +133,7 @@ void main() {
     // 启动后任务标记是进程级的（错误边界重试不重复执行），
     // 每个测试用例需要复位以获得完整的启动后流程。
     resetPostStartupTasksFlag();
+    startupReadyNotifier.value = false;
   });
 
   group('Application - Startup Update Check', () {
