@@ -51,6 +51,11 @@ class DesktopAppService extends WindowListener with TrayListener {
   static const _trayIconIco = 'assets/images/tray_icon.ico';
   static const _trayIconPng = 'assets/images/tray_icon.png';
 
+  /// 托盘注册/销毁操作超时：插件挂起（如 Linux appindicator/DBus）时
+  /// 所有涉及托盘与窗口的操作都必须受此保护，避免流程被永久阻塞
+  /// （例如回滚路径无法撤销关闭拦截、退出路径无法退出进程）。
+  static const _trayTimeout = Duration(seconds: 10);
+
   static const _menuShowKey = 'show';
   static const _menuQuitKey = 'quit';
 
@@ -121,7 +126,7 @@ class DesktopAppService extends WindowListener with TrayListener {
     if (!isDesktopPlatform || _quitRequested || _trayReady) return;
     // 托盘注册超时：插件挂起（如 Linux 缺少 appindicator 服务）时
     // 走回滚路径，而不是让窗口永远无法关闭。
-    const trayTimeout = Duration(seconds: 10);
+    
     try {
       await initialize();
       if (!_initialized) return; // 初始化失败，保持默认关闭行为
@@ -138,19 +143,19 @@ class DesktopAppService extends WindowListener with TrayListener {
               ? _trayIconIco
               : _trayIconPng,
         )
-            .timeout(trayTimeout);
+            .timeout(_trayTimeout);
         // setToolTip 在 Linux 插件上未实现（会抛 MissingPluginException），
         // 单独捕获，避免拖垮整个托盘注册流程；同样受超时保护
         // （DBus/appindicator 挂起时不能无限期停留在无监听的拦截状态）。
         try {
           await trayManager
               .setToolTip('Stroom 正在后台运行')
-              .timeout(trayTimeout);
+              .timeout(_trayTimeout);
         } catch (e) {
           debugPrint('[DesktopAppService] setToolTip unsupported: $e');
         }
         _menu = _buildMenu();
-        await trayManager.setContextMenu(_menu!).timeout(trayTimeout);
+        await trayManager.setContextMenu(_menu!).timeout(_trayTimeout);
         _trayReady = true;
         debugPrint('[DesktopAppService] Tray icon registered');
       } catch (e) {
@@ -158,8 +163,10 @@ class DesktopAppService extends WindowListener with TrayListener {
         await AppLogService.error('DesktopAppService', '托盘注册失败', e);
         // 清理可能已半注册的托盘图标（例如 setIcon 成功但
         // setContextMenu 超时），避免残留死托盘条目。
+        // 同样受超时保护：回滚路径绝不能再次被插件挂起阻塞
+        // （否则 setPreventClose(false) 永远执行不到，窗口无法关闭）。
         try {
-          await trayManager.destroy();
+          await trayManager.destroy().timeout(_trayTimeout);
         } catch (_) {}
         // 托盘不可用：撤销拦截，恢复「关闭即退出」。
         // 此时尚未注册监听，也不会有幽灵窗口。
@@ -202,6 +209,10 @@ class DesktopAppService extends WindowListener with TrayListener {
   }
 
   Future<void> _handleWindowClose() async {
+    // 确认对话框已打开时忽略新的关闭事件：此时隐藏窗口会把打开的
+    // 对话框一起藏起来，造成「点了退出却毫无反应」的错觉。
+    if (_confirmInProgress) return;
+
     // 读取失败时默认最小化：绝不因设置读取异常而意外退出应用。
     var minimize = true;
     try {
@@ -217,15 +228,21 @@ class DesktopAppService extends WindowListener with TrayListener {
     await quitWithConfirmation();
   }
 
+  /// 退出确认是否正在进行（防重复进入）。
+  bool _confirmInProgress = false;
+
   /// 带确认的退出：「关闭即退出」模式与「完全退出应用」按钮共用。
   ///
   /// 先征求 [onQuitConfirmation] 的同意（例如有任务运行时弹窗确认），
   /// 用户取消则什么都不做；确认后彻底退出（销毁托盘与窗口）。
   Future<void> quitWithConfirmation() async {
-    // 托盘退出时窗口可能已隐藏到托盘：先恢复窗口，确认对话框才可见。
-    // （窗口已可见时 _showWindow 是幂等 no-op；_quitRequested 时跳过。）
-    await _showWindow();
+    if (_confirmInProgress) return;
+    // 在任何 await 之前同步置位，杜绝两个并发调用同时通过检查。
+    _confirmInProgress = true;
     try {
+      // 托盘退出时窗口可能已隐藏到托盘：先恢复窗口，确认对话框才可见。
+      // （窗口已可见时 _showWindow 是幂等 no-op；_quitRequested 时跳过。）
+      await _showWindow();
       final confirm = onQuitConfirmation;
       if (confirm != null) {
         final confirmed = await confirm();
@@ -238,6 +255,8 @@ class DesktopAppService extends WindowListener with TrayListener {
       // 确认逻辑异常（如 Provider 不可用）：放行退出，
       // 绝不阻塞用户关闭窗口。
       debugPrint('[DesktopAppService] 退出确认异常，放行退出: $e');
+    } finally {
+      _confirmInProgress = false;
     }
     await quitApplication();
   }
@@ -302,13 +321,16 @@ class DesktopAppService extends WindowListener with TrayListener {
     if (_quitRequested) return;
     _quitRequested = true;
     debugPrint('[DesktopAppService] Quitting from tray');
+    // 销毁操作同样受超时保护：插件挂起（如 Linux appindicator/DBus）
+    // 时绝不能让 exitApp 永远执行不到 —— 最坏情况是残留一个原生托盘
+    // 条目，进程退出时由系统清理。
     try {
-      await trayManager.destroy();
+      await trayManager.destroy().timeout(_trayTimeout);
     } catch (e) {
       debugPrint('[DesktopAppService] Failed to destroy tray: $e');
     }
     try {
-      await windowManager.destroy();
+      await windowManager.destroy().timeout(_trayTimeout);
     } catch (e) {
       debugPrint('[DesktopAppService] Failed to destroy window: $e');
     }

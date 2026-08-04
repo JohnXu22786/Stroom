@@ -13,11 +13,18 @@ class DataMigrationOldConfigs {
     if (oldJson == null || oldJson.isEmpty) return;
 
     try {
+      // 顶层也需防御：chat_configs 整体不是数组（对象/标量）时，
+      // `as List?` 强转抛 TypeError 会静默中断迁移（版本号仍被提升）。
+      final decoded = jsonDecode(oldJson);
+      if (decoded is! List) {
+        debugPrint('[DataMigrationService] chat_configs 不是合法数组，'
+            '跳过旧配置迁移');
+        await prefs.remove('chat_configs');
+        await prefs.remove('chat_selected_config_id');
+        return;
+      }
       // 兜底：使用 whereType 安全过滤非 Map 条目
-      final oldList = (jsonDecode(oldJson) as List?)
-              ?.whereType<Map<String, dynamic>>()
-              .toList() ??
-          [];
+      final oldList = decoded.whereType<Map<String, dynamic>>().toList();
       if (oldList.isEmpty) return;
 
       final migratedConfigs = <Map<String, dynamic>>[];
@@ -119,9 +126,21 @@ class DataMigrationOldConfigs {
     if (json == null || json.isEmpty) return;
 
     try {
+      // 顶层也需防御：provider_entries 整体不是数组时，`as List` 强转
+      // 抛 TypeError 会静默中断修复（版本号仍被提升，而 ProviderEntry
+      // 解析继续闪退，错误边界的「重试」永远无法成功）。
+      final decoded = jsonDecode(json);
+      if (decoded is! List) {
+        // 隔离损坏数据到 bak key，置空列表让应用可以正常启动；
+        // 原始数据保留，用户可通过备份恢复功能找回。
+        debugPrint('[DataMigrationService] provider_entries 不是合法数组，'
+            '已隔离到 provider_entries_bak 并重置为空列表');
+        await prefs.setString('provider_entries_bak', json);
+        await prefs.setString('provider_entries', '[]');
+        return;
+      }
       // 兜底：使用 whereType 安全过滤非 Map 条目
-      final list =
-          (jsonDecode(json) as List).whereType<Map<String, dynamic>>().toList();
+      final list = decoded.whereType<Map<String, dynamic>>().toList();
       bool changed = false;
 
       for (int i = 0; i < list.length; i++) {

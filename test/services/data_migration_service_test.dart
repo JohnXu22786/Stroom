@@ -374,6 +374,30 @@ void main() {
     });
   });
 
+  group('DataMigrationService - corrupt provider_entries quarantine', () {
+    test('non-list provider_entries is quarantined and reset to empty list',
+        () async {
+      // 顶层损坏（provider_entries 不是数组）：旧代码 `as List` 强转
+      // TypeError 静默中断修复，版本号仍被提升 → ProviderEntry 解析
+      // 继续闪退、错误边界重试永远失败。现在应隔离到 bak 并重置。
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 0,
+        'provider_entries': '{"not": "an array"}',
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('provider_entries'), '[]',
+          reason: '损坏数据必须被隔离，应用才能正常启动');
+      expect(prefs.getString('provider_entries_bak'), '{"not": "an array"}',
+          reason: '原始损坏数据必须保留在 bak key 中');
+      expect(prefs.getInt('data_format_version'),
+          DataMigrationService.currentFormatVersion);
+    });
+  });
+
   group('DataMigrationService - v2→v3 defensive migration', () {
     test('corrupt tool call entries are skipped, migration still completes',
         () async {

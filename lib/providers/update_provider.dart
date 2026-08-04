@@ -199,11 +199,14 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     for (final asset in assets) {
       // 防御：非 Map 资产条目（异常响应数据）跳过。
       if (asset is! Map) continue;
-      final name = (asset['name'] as String?)?.toLowerCase() ?? '';
+      final rawName = asset['name'];
+      // 防御：字段值类型错误只跳过该资产，不拖垮整个 release。
+      if (rawName is! String) continue;
+      final name = rawName.toLowerCase();
       if (!name.contains(key)) continue;
 
-      final url = asset['browser_download_url'] as String?;
-      if (url == null) continue;
+      final url = asset['browser_download_url'];
+      if (url is! String) continue;
 
       // 优先选择安装包 (.exe/.msi/.dmg)，其次才是压缩包
       if (name.endsWith('.exe') ||
@@ -393,32 +396,61 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     // while the GitHub tag is "v0.2.13" (without suffix). Using the same-base
     // release's published_at ensures correct date-based comparison.
     if (cutoffDate == null) {
-      final parsedCurrent = Version.parse(currentVersionStr);
-      for (final release in releases) {
-        if (release is! Map) continue;
-        final tagName = release['tag_name'];
-        if (tagName is! String) continue;
-        final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
-        Version parsed;
-        try {
-          parsed = Version.parse(versionStr);
-        } catch (_) {
-          continue; // 无法解析的版本号（异常数据）跳过
-        }
-        if (parsed.major == parsedCurrent.major &&
-            parsed.minor == parsedCurrent.minor &&
-            parsed.patch == parsedCurrent.patch) {
-          final publishedAtStr = release['published_at'];
-          if (publishedAtStr is String) {
-            cutoffDate = DateTime.tryParse(publishedAtStr);
+      // 防御：当前安装版本号可能是非 semver 的自定义构建
+      // （如 "1.0" / "dev"），Version.parse 抛 FormatException
+      // 会让整个检查报误导性的「网络错误」。
+      Version? parsedCurrent;
+      try {
+        parsedCurrent = Version.parse(currentVersionStr);
+      } catch (_) {
+        debugPrint('[UpdateNotifier] 当前版本号无法解析（$currentVersionStr），'
+            '跳过日期比较');
+      }
+      if (parsedCurrent != null) {
+        for (final release in releases) {
+          if (release is! Map) continue;
+          final tagName = release['tag_name'];
+          if (tagName is! String) continue;
+          final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
+          Version parsed;
+          try {
+            parsed = Version.parse(versionStr);
+          } catch (_) {
+            continue; // 无法解析的版本号（异常数据）跳过
           }
-          break;
+          if (parsed.major == parsedCurrent.major &&
+              parsed.minor == parsedCurrent.minor &&
+              parsed.patch == parsedCurrent.patch) {
+            final publishedAtStr = release['published_at'];
+            if (publishedAtStr is String) {
+              cutoffDate = DateTime.tryParse(publishedAtStr);
+            }
+            break;
+          }
         }
       }
     }
     // Fall back to version-based comparison when the current version is not
     // found in the releases list (e.g., very old version or custom build).
-    currentVersion ??= Version.parse(currentVersionStr);
+    // 同样防御非 semver 版本号：解析失败则跳过本次检查（记录日志）。
+    if (currentVersion == null) {
+      try {
+        currentVersion = Version.parse(currentVersionStr);
+      } catch (_) {
+        debugPrint('[UpdateNotifier] 当前版本号无法解析（$currentVersionStr），'
+            '跳过本次更新检查');
+        if (!silent) {
+          state = state.copyWith(
+            isChecking: false,
+            updateAvailable: false,
+            error: null,
+          );
+        } else {
+          state = _resetState();
+        }
+        return;
+      }
+    }
 
     // Collect all available updates newer than current version.
     // The acceptPreRelease toggle only controls the default SELECTION and

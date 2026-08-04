@@ -333,15 +333,18 @@ void main() {
       final mocks = registerChannelMocks();
       final exitCodes = <int>[];
       DesktopAppService.exitApp = exitCodes.add;
+      // 精确断言顺序：确认回调执行时，show（恢复窗口）必须已经发出。
+      final order = <String>[];
       await withDesktopPlatform(TargetPlatform.windows, () async {
         await DesktopAppService.instance.setupTrayAndCloseBehavior();
         // 模拟窗口已隐藏到托盘。
         DesktopAppService.instance.onWindowClose();
         await Future<void>.delayed(const Duration(milliseconds: 20));
 
-        bool confirmCalled = false;
         DesktopAppService.instance.onQuitConfirmation = () async {
-          confirmCalled = true;
+          final showAlreadyCalled =
+              mocks['window_manager']!.calls.any((c) => c.method == 'show');
+          order.add(showAlreadyCalled ? 'confirm-after-show' : 'confirm-no-show');
           return false; // 取消退出
         };
 
@@ -350,12 +353,9 @@ void main() {
         DesktopAppService.instance.onTrayMenuItemClick(quitItem);
         await Future<void>.delayed(const Duration(milliseconds: 20));
 
-        expect(confirmCalled, isTrue,
-            reason: '隐藏窗口时托盘退出必须先恢复窗口再走确认流程');
-        // 确认前必须调用 show（恢复窗口）。
-        final showCalls =
-            mocks['window_manager']!.calls.where((c) => c.method == 'show');
-        expect(showCalls, isNotEmpty);
+        expect(order, contains('confirm-after-show'),
+            reason: 'show（恢复窗口）必须发生在确认回调之前，'
+                '否则对话框显示在隐藏窗口上');
         // 用户取消 → 不退出。
         expect(exitCodes, isEmpty);
       });

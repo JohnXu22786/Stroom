@@ -509,6 +509,9 @@ class _AppErrorBoundaryState extends State<_AppErrorBoundary> {
     // 增加 generation：给 child 换一个新 Key，强制重建失败子树。
     // （ErrorWidget 占位符替换了失败的小部件后，同一个 const
     // Application 实例会被 updateChild 短路复用，不换 Key 重试无效。）
+    // 同时复位启动后任务标记：首次启动构建失败时任务已在坏实例上
+    // 消耗过标记，重试后的健康实例必须重新执行更新/备份检查。
+    resetPostStartupTasksFlag();
     setState(() {
       _hasError = false;
       _errorMessage = '';

@@ -97,7 +97,14 @@ Future<Set<String>> collectAttachmentPaths() async {
     final json = prefs.getString('conversations');
     if (json == null) return paths;
 
-    final conversations = jsonDecode(json) as List<dynamic>;
+    // 顶层也需防御：conversations 整体不是数组时，`as List` 强转抛
+    // TypeError 会让整个备份静默丢失所有附件路径。
+    final decoded = jsonDecode(json);
+    if (decoded is! List) {
+      debugPrint('conversations 不是合法数组，跳过附件路径收集');
+      return paths;
+    }
+    final conversations = decoded;
     for (final conv in conversations) {
       // 逐层防御：损坏数据（非 Map 会话/消息、非 List 字段、非 Map
       // 附件）只跳过对应条目，绝不中断整个扫描 —— 否则一条坏数据

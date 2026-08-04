@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
-    show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform, visibleForTesting;
+    show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -32,14 +32,15 @@ import 'widgets/quit_confirmation_dialog.dart';
 /// 放在 State 之外：错误边界「重试」会重新挂载 [Application]
 /// （State 字段会复位导致任务重复执行、弹窗叠加），而应用进程
 /// 内这些任务只需要执行一次。
-///
-/// 测试通过 [resetPostStartupTasksFlagForTesting] 复位，
-/// 保证每个测试用例都能完整走一遍启动后流程。
 bool _postStartupTasksStarted = false;
 
-/// 测试用：复位启动后任务标记。
-@visibleForTesting
-void resetPostStartupTasksFlagForTesting() {
+/// 复位启动后任务标记。
+///
+/// 生产用途：错误边界「重试」前调用 —— 第一次启动构建失败时任务
+/// 已在坏实例上启动过（标记被消耗），重试后的健康实例必须重新执行
+/// 更新检查与备份检查。
+/// 测试用途：每个测试用例复位以获得完整的启动后流程。
+void resetPostStartupTasksFlag() {
   _postStartupTasksStarted = false;
 }
 

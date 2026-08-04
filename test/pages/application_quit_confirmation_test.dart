@@ -109,7 +109,7 @@ void main() {
     DesktopAppService.instance.resetForTesting();
     // 启动后任务标记是进程级的（错误边界重试不重复执行），
     // 每个测试用例需要复位以获得完整的启动后流程。
-    resetPostStartupTasksFlagForTesting();
+    resetPostStartupTasksFlag();
   });
 
   group('Application - close-to-quit confirmation', () {
