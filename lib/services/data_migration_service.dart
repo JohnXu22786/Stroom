@@ -303,7 +303,19 @@ class DataMigrationService {
     if (raw == null || raw.isEmpty) return;
 
     try {
-      final list = jsonDecode(raw) as List<dynamic>;
+      // 顶层也需防御：conversations 是可解析但不是数组（对象/标量）时，
+      // `as List` 强转抛 TypeError 被误判为「结构性错误」上抛，导致
+      // 版本号永不提升、每次启动都重复迁移与备份。这类数据属于损坏
+      // 数据而非解码失败：隔离原始数据并重置为空列表。
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        debugPrint('[DataMigrationService] conversations 不是合法数组，'
+            '已隔离到 conversations_bak 并重置为空列表');
+        await prefs.setString('conversations_bak', raw);
+        await prefs.setString('conversations', '[]');
+        return;
+      }
+      final list = decoded;
       var migrated = 0;
       var skipped = 0;
       for (final c in list) {

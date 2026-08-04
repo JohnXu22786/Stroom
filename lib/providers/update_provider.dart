@@ -295,8 +295,35 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     return UpdateState(acceptPreRelease: state.acceptPreRelease);
   }
 
+  /// 解析当前安装版本号。
+  ///
+  /// [Version.parse] 是宽松解析：无法解析的输入得到 0.0.0 且从不抛
+  /// 异常。自定义构建版本（如 "dev"）会被误判为 0.0.0，导致所有发布
+  /// 版都被视为「新版本」并弹出更新对话框。因此先校验格式（必须以
+  /// 数字.数字 开头）再解析；格式不合法时返回 `null`。
+  static Version? _parseInstalledVersion(String versionStr) {
+    final match = RegExp(r'^\d+\.\d+(\.\d+)?').firstMatch(versionStr);
+    if (match == null) return null;
+    try {
+      return Version.parse(versionStr);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 正在执行的更新检查 Future（防并发）。
+  ///
+  /// 错误边界「重试」重新挂载 Application 后可能发起第二次检查：
+  /// 此时不能静默跳过（否则在途检查完成后的更新弹窗无人消费），
+  /// 而是等待同一个在途检查完成并共享其结果。
+  Future<void>? _inFlightCheck;
+
   Future<void> checkForUpdate({bool silent = false}) async {
-    if (state.isChecking) return;
+    if (state.isChecking) {
+      // 已有检查在途：等待它完成（调用方随后读取 state 即可）。
+      await (_inFlightCheck ?? Future<void>.value());
+      return;
+    }
 
     // Web platform does not support direct download updates
     if (kIsWeb) {
@@ -306,6 +333,16 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 
     state = state.copyWith(isChecking: true, error: null);
 
+    final future = _performCheck(silent: silent);
+    _inFlightCheck = future;
+    try {
+      await future;
+    } finally {
+      _inFlightCheck = null;
+    }
+  }
+
+  Future<void> _performCheck({required bool silent}) async {
     try {
       await _checkForUpdates(silent: silent);
     } catch (e) {
@@ -386,6 +423,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         if (publishedAtStr is String) {
           cutoffDate = DateTime.tryParse(publishedAtStr);
         }
+        // 该分支仅在发布 tag 与安装版本号完全一致时可达（意味着
+        // 版本号是合法 semver），宽松解析即可。
         currentVersion = Version.parse(versionStr);
         break;
       }
@@ -396,16 +435,10 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     // while the GitHub tag is "v0.2.13" (without suffix). Using the same-base
     // release's published_at ensures correct date-based comparison.
     if (cutoffDate == null) {
-      // 防御：当前安装版本号可能是非 semver 的自定义构建
-      // （如 "1.0" / "dev"），Version.parse 抛 FormatException
-      // 会让整个检查报误导性的「网络错误」。
-      Version? parsedCurrent;
-      try {
-        parsedCurrent = Version.parse(currentVersionStr);
-      } catch (_) {
-        debugPrint('[UpdateNotifier] 当前版本号无法解析（$currentVersionStr），'
-            '跳过日期比较');
-      }
+      // 防御：当前安装版本号可能是非 semver 的自定义构建（如 "dev"）。
+      // Version.parse 是宽松解析（从不抛异常，非法输入得到 0.0.0），
+      // 必须显式校验格式，否则 0.0.0 会让所有发布版都被当作新版本。
+      final parsedCurrent = _parseInstalledVersion(currentVersionStr);
       if (parsedCurrent != null) {
         for (final release in releases) {
           if (release is! Map) continue;
@@ -432,13 +465,13 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
     // Fall back to version-based comparison when the current version is not
     // found in the releases list (e.g., very old version or custom build).
-    // 同样防御非 semver 版本号：解析失败则跳过本次检查（记录日志）。
+    // 同样防御非 semver 版本号：格式不合法则跳过本次检查（记录日志），
+    // 而不是把 0.0.0 当作当前版本导致所有发布版都弹更新提示。
     if (currentVersion == null) {
-      try {
-        currentVersion = Version.parse(currentVersionStr);
-      } catch (_) {
-        debugPrint('[UpdateNotifier] 当前版本号无法解析（$currentVersionStr），'
-            '跳过本次更新检查');
+      final parsedCurrent = _parseInstalledVersion(currentVersionStr);
+      if (parsedCurrent == null) {
+        debugPrint('[UpdateNotifier] 当前版本号不是合法 semver'
+            '（$currentVersionStr），跳过本次更新检查');
         if (!silent) {
           state = state.copyWith(
             isChecking: false,
@@ -450,6 +483,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         }
         return;
       }
+      currentVersion = parsedCurrent;
     }
 
     // Collect all available updates newer than current version.

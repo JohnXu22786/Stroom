@@ -92,6 +92,7 @@ class DesktopAppService extends WindowListener with TrayListener {
     _initialized = false;
     _trayReady = false;
     _quitRequested = false;
+    _confirmInProgress = false;
     _menu = null;
     onQuitConfirmation = null;
   }
@@ -170,7 +171,10 @@ class DesktopAppService extends WindowListener with TrayListener {
         } catch (_) {}
         // 托盘不可用：撤销拦截，恢复「关闭即退出」。
         // 此时尚未注册监听，也不会有幽灵窗口。
-        await windowManager.setPreventClose(false);
+        // 同样受超时保护：回滚路径绝不能再次被插件挂起阻塞。
+        try {
+          await windowManager.setPreventClose(false).timeout(_trayTimeout);
+        } catch (_) {}
         return;
       }
 
@@ -236,7 +240,9 @@ class DesktopAppService extends WindowListener with TrayListener {
   /// 先征求 [onQuitConfirmation] 的同意（例如有任务运行时弹窗确认），
   /// 用户取消则什么都不做；确认后彻底退出（销毁托盘与窗口）。
   Future<void> quitWithConfirmation() async {
-    if (_confirmInProgress) return;
+    // _quitRequested 也拦截：退出销毁流程（最长约 20s）进行期间，
+    // 新的关闭事件/托盘点击不得再弹第二个确认对话框。
+    if (_confirmInProgress || _quitRequested) return;
     // 在任何 await 之前同步置位，杜绝两个并发调用同时通过检查。
     _confirmInProgress = true;
     try {

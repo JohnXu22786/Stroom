@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show exit;
 
 import 'package:flutter/foundation.dart';
@@ -360,6 +361,42 @@ void main() {
         expect(exitCodes, isEmpty);
       });
       DesktopAppService.instance.onQuitConfirmation = null;
+    });
+
+    test('close event during an in-flight confirmation does not hide the window',
+        () async {
+      // 回归：确认对话框打开期间，最小化模式的关闭事件不得隐藏窗口
+      // （否则窗口和对话框一起消失，_confirmInProgress 一直锁死）。
+      final mocks = registerChannelMocks();
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
+      final completer = Completer<bool>();
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        DesktopAppService.instance.onQuitConfirmation = () => completer.future;
+
+        final quitFuture = DesktopAppService.instance.quitWithConfirmation();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        // 确认仍在进行中 → 关闭事件必须被忽略（不隐藏窗口）。
+        DesktopAppService.instance.onWindowClose();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(
+          mocks['window_manager']!.calls.where((c) => c.method == 'hide'),
+          isEmpty,
+          reason: '确认进行中隐藏窗口会把对话框一起藏起来',
+        );
+
+        // 用户取消 → 无销毁、无退出，守卫释放。
+        completer.complete(false);
+        await quitFuture;
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(
+          mocks['window_manager']!.calls.where((c) => c.method == 'destroy'),
+          isEmpty,
+        );
+        expect(exitCodes, isEmpty);
+      });
     });
 
     test('close hides to tray when the minimize pref read fails', () async {

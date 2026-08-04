@@ -25,7 +25,12 @@ class DataMigrationOldConfigs {
       }
       // 兜底：使用 whereType 安全过滤非 Map 条目
       final oldList = decoded.whereType<Map<String, dynamic>>().toList();
-      if (oldList.isEmpty) return;
+      if (oldList.isEmpty) {
+        // 空/全损坏的旧数据：清理残留 key，避免每次启动重复解析。
+        await prefs.remove('chat_configs');
+        await prefs.remove('chat_selected_config_id');
+        return;
+      }
 
       final migratedConfigs = <Map<String, dynamic>>[];
       for (final oldItem in oldList) {
@@ -82,12 +87,28 @@ class DataMigrationOldConfigs {
       List<Map<String, dynamic>> existingEntries = [];
       if (existingJson != null && existingJson.isNotEmpty) {
         try {
-          // 兜底：使用 whereType 安全过滤非 Map 条目
-          existingEntries = (jsonDecode(existingJson) as List)
-              .whereType<Map<String, dynamic>>()
-              .toList();
+          final decoded = jsonDecode(existingJson);
+          if (decoded is! List) {
+            // 现有 provider_entries 整体损坏（非数组）：
+            // 必须先隔离原始数据再覆盖 —— 否则这里的写入会永久销毁
+            // 损坏现场（后面 fixNullIdsInProviderEntries 的隔离逻辑
+            // 就再也触发不到）。
+            debugPrint('[DataMigrationService] 现有 provider_entries 不是'
+                '合法数组，已隔离到 provider_entries_bak');
+            await prefs.setString('provider_entries_bak', existingJson);
+            existingEntries = [];
+          } else {
+            // 兜底：使用 whereType 安全过滤非 Map 条目
+            existingEntries = decoded
+                .whereType<Map<String, dynamic>>()
+                .toList();
+          }
         } catch (_) {
-          // 现有数据损坏，忽略并用空列表重新开始
+          // JSON 无法解析：同样隔离（现有数据损坏，用空列表重新开始）
+          try {
+            await prefs.setString('provider_entries_bak', existingJson);
+          } catch (_) {}
+          existingEntries = [];
         }
       }
 

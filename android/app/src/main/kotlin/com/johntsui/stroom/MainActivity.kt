@@ -262,7 +262,11 @@ class MainActivity : FlutterActivity() {
     // 重启逻辑竞争。
     // ======================================================================
 
-    private val PENDING_UPDATE_RESTART_KEY = "pending_update_restart"
+    // shared_preferences 插件会把所有 key 加上 "flutter." 前缀写入
+    // FlutterSharedPreferences；Dart 侧写入的是 'pending_update_restart'
+    // （update_provider.dart），这里必须读前缀后的完整 key，
+    // 否则 onNewIntent 永远读不到标记，原生重启路径永不触发。
+    private val PENDING_UPDATE_RESTART_KEY = "flutter.pending_update_restart"
 
     override fun onNewIntent(intent: Intent) {
         var handled = false

@@ -396,6 +396,40 @@ void main() {
       expect(prefs.getInt('data_format_version'),
           DataMigrationService.currentFormatVersion);
     });
+
+    test('corrupt provider_entries is quarantined even when chat_configs '
+        'triggers an overwrite', () async {
+      // 回归：migrateOldChatConfigs 在 chat_configs 存在时会重写
+      // provider_entries —— 若此时现有数据已损坏（非数组），旧代码
+      // 会直接覆盖销毁损坏现场（后续隔离逻辑永远触发不到）。
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 0,
+        'provider_entries': '{"not": "an array"}',
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Old',
+            'host': '',
+            'key': '',
+            'models': [
+              {'modelId': 'm1', 'temperature': 0.5},
+            ],
+          },
+        ]),
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      // 损坏现场必须被保留在 bak 中，而不是被迁移写入覆盖。
+      expect(prefs.getString('provider_entries_bak'), '{"not": "an array"}',
+          reason: '迁移覆盖前必须隔离原始损坏数据');
+      // 迁移结果正常写入（migrated_llm 条目）。
+      final entries = jsonDecode(prefs.getString('provider_entries')!) as List;
+      expect(entries, isNotEmpty);
+      expect(prefs.getInt('data_format_version'),
+          DataMigrationService.currentFormatVersion);
+    });
   });
 
   group('DataMigrationService - v2→v3 defensive migration', () {
@@ -467,6 +501,27 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       // 版本不提升 → 下次启动自动重试（而非"假成功"永久跳过）
       expect(prefs.getInt('data_format_version'), 2);
+    });
+
+    test('decodable-but-non-array conversations is quarantined, not rethrown',
+        () async {
+      // 回归：conversations 是可解析但不是数组（对象/标量）时，旧代码
+      // `as List` 强转抛 TypeError 被误判为「结构性错误」上抛 → 版本号
+      // 永不提升、每次启动都重复迁移与备份。现在应隔离并重置。
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 2,
+        'conversations': '{"not": "an array"}',
+      });
+
+      final result = await DataMigrationService.migrateDataFormatIfNeeded();
+      expect(result.needsMigration, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('conversations'), '[]');
+      expect(prefs.getString('conversations_bak'), '{"not": "an array"}',
+          reason: '原始损坏数据必须保留在 bak key 中');
+      // 版本正常提升（不再无限重试迁移）。
+      expect(prefs.getInt('data_format_version'), 3);
     });
   });
 }
