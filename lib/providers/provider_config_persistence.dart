@@ -15,41 +15,63 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
     if (oldJson == null || oldJson.isEmpty) return;
 
     try {
+      // 顶层也需防御：chat_configs 整体不是数组时，`as List?` 强转
+      // 抛 TypeError 会静默中断迁移。
+      final decoded = jsonDecode(oldJson);
+      if (decoded is! List) {
+        debugPrint('chat_configs 不是合法数组，跳过旧配置迁移');
+        await prefs.remove('chat_configs');
+        await prefs.remove('chat_selected_config_id');
+        return;
+      }
       // 兜底：使用 whereType 安全过滤，避免非 Map 条目导致的闪退
-      final oldList = (jsonDecode(oldJson) as List?)
-              ?.whereType<Map<String, dynamic>>()
-              .toList() ??
-          [];
-      if (oldList.isEmpty) return;
+      final oldList = decoded.whereType<Map<String, dynamic>>().toList();
+      if (oldList.isEmpty) {
+        await prefs.remove('chat_configs');
+        await prefs.remove('chat_selected_config_id');
+        return;
+      }
 
       final migratedConfigs = <ProviderConfigItem>[];
       for (final oldItem in oldList) {
-        // 兜底：安全过滤 oldItem['models']
-        final oldModels = (oldItem['models'] as List?)
-                ?.whereType<Map<String, dynamic>>()
-                .toList() ??
-            [];
+        // 兜底：安全过滤 oldItem['models']。
+        // 注意：oldItem['models'] 本身可能是非 List（损坏数据），
+        // 用 `is! List` 判断而不是 `as List?` 强转（强转抛 TypeError
+        // 会静默中断迁移，chat_configs 永不清理、每次启动重复迁移）。
+        final rawModels = oldItem['models'];
+        final oldModels = rawModels is List
+            ? rawModels.whereType<Map<String, dynamic>>().toList()
+            : <Map<String, dynamic>>[];
 
         final models = oldModels.map((m) {
           final typeConfig = <String, dynamic>{};
-          // NOTE: context 是 per-model 配置，由模型设置页显式填写，
-          // 不在 provider 迁移时注入（context 与 provider 无关）。
+          // 与 startup 迁移副本保持一致：迁移 per-model 的
+          // context/maxTokens（旧数据把压缩阈值挂在 model 上，
+          // 不迁移则老用户的自动压缩静默失效）。
+          final context = m['maxTokens'] ?? m['context'];
+          if (context != null) typeConfig['context'] = context;
           final temperature = m['temperature'];
           if (temperature != null) typeConfig['temperature'] = temperature;
 
+          // `is! String`/`is! bool` 而非强转：损坏数据中字段值可能
+          // 是任意类型。
+          final modelId = m['modelId'];
           return ModelConfig(
-            name: m['modelId'] as String? ?? '',
-            modelId: m['modelId'] as String? ?? '',
-            supportStream: m['supportStream'] as bool? ?? true,
+            name: modelId is String ? modelId : '',
+            modelId: modelId is String ? modelId : '',
+            supportStream:
+                m['supportStream'] is bool ? m['supportStream'] as bool : true,
             typeConfig: typeConfig,
           );
         }).toList();
 
         migratedConfigs.add(
           ProviderConfigItem(
-            providerName: oldItem['providerName'] as String? ?? '',
-            host: oldItem['host'] as String? ?? '',
-            key: oldItem['key'] as String? ?? '',
+            providerName: oldItem['providerName'] is String
+                ? oldItem['providerName']
+                : '',
+            host: oldItem['host'] is String ? oldItem['host'] : '',
+            key: oldItem['key'] is String ? oldItem['key'] : '',
             models: models,
           ),
         );
@@ -66,12 +88,23 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       List<Map<String, dynamic>> existingEntries = [];
       if (existingJson != null && existingJson.isNotEmpty) {
         try {
-          // 兜底：使用 whereType 安全过滤非 Map 条目
-          existingEntries = (jsonDecode(existingJson) as List)
-              .whereType<Map<String, dynamic>>()
-              .toList();
+          final decoded = jsonDecode(existingJson);
+          if (decoded is! List) {
+            // 现有 provider_entries 整体损坏（非数组）：先备份原始
+            // 数据再覆盖 —— 否则这里的写入会永久销毁损坏现场。
+            await _backupCorruptProviderEntries(prefs, existingJson);
+            existingEntries = [];
+          } else {
+            // 兜底：使用 whereType 安全过滤非 Map 条目
+            existingEntries =
+                decoded.whereType<Map<String, dynamic>>().toList();
+          }
         } catch (_) {
           // 现有数据损坏，忽略并用空列表重新开始
+          try {
+            await _backupCorruptProviderEntries(prefs, existingJson);
+          } catch (_) {}
+          existingEntries = [];
         }
       }
 

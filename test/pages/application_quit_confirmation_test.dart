@@ -34,9 +34,9 @@ Dio _createMockDio() {
 }
 
 /// Pumps the full [Application] (like the real app root) with the
-/// window-manager channel mocked and the platform forced to Windows.
-Future<({List<MethodCall> windowCalls, BackgroundTaskNotifier notifier})>
-    _pumpApplication(
+/// window_manager / tray_manager channels mocked and the platform forced
+/// to Windows. Returns the recorded channel calls and the exit codes.
+Future<({List<MethodCall> windowCalls, List<int> exitCodes})> _pumpApplication(
   WidgetTester tester, {
   required bool closeMinimizes,
   BackgroundTaskNotifier? taskNotifier,
@@ -55,15 +55,22 @@ Future<({List<MethodCall> windowCalls, BackgroundTaskNotifier notifier})>
       return true;
     },
   );
-  // 退出流程经由 DesktopAppService.quitApplication() 销毁托盘：
-  // 未 mock 的通道在 widget 测试中会永久挂起，必须拦截。
+  // The tray channel must also succeed so the close listener stays
+  // registered (tray registration failure rolls the interception back).
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(
     const MethodChannel('tray_manager'),
     (MethodCall call) async => true,
   );
 
+  // Record the process exit instead of actually exiting.
+  final exitCodes = <int>[];
+  DesktopAppService.exitApp = exitCodes.add;
+
   final notifier = taskNotifier ?? BackgroundTaskNotifier();
+
+  // 测试中直接泵 Application（无 StartupApp）：手动置位启动就绪标记。
+  startupReadyNotifier.value = true;
 
   await tester.pumpWidget(ProviderScope(
     overrides: [
@@ -78,7 +85,7 @@ Future<({List<MethodCall> windowCalls, BackgroundTaskNotifier notifier})>
   await tester.pump(const Duration(milliseconds: 100));
   await tester.pump();
 
-  return (windowCalls: windowCalls, notifier: notifier);
+  return (windowCalls: windowCalls, exitCodes: exitCodes);
 }
 
 /// Simulates the native window close event arriving on the
@@ -99,51 +106,38 @@ Future<void> _emitWindowClose(WidgetTester tester) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  // 退出流程经由 DesktopAppService.quitApplication() 执行
-  // （销毁托盘 + 窗口 + exit(0)）：测试中注入假的退出函数并重置
-  // 单例状态，避免真实 exit(0) 终止测试进程 / 跨用例状态污染。
   setUp(() {
-    DesktopAppService.exitApp = (_) {};
-    DesktopAppService.instance.resetForTesting();
-  });
-
-  tearDown(() {
+    // Restore the real exit function and reset the singleton between tests.
     DesktopAppService.exitApp = exit;
     DesktopAppService.instance.resetForTesting();
+    // 启动后任务标记是进程级的（错误边界重试不重复执行），
+    // 每个测试用例需要复位以获得完整的启动后流程。
+    resetPostStartupTasksFlag();
+    startupReadyNotifier.value = false;
   });
 
-  // 平台覆盖必须在测试体内 try/finally 重置
-  // （_verifyInvariants 在 tearDown 之前运行）。
-  void useWindowsPlatform() {
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-  }
-
   group('Application - close-to-quit confirmation', () {
-    testWidgets('close in minimize mode minimizes without confirmation',
+    testWidgets('close in minimize mode hides to tray without confirmation',
         (tester) async {
-      useWindowsPlatform();
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       try {
         final ctx = await _pumpApplication(tester, closeMinimizes: true);
 
         await _emitWindowClose(tester);
 
         expect(find.text('退出应用？'), findsNothing);
-        // 托盘已就绪时隐藏到托盘；托盘不可用时降级为任务栏最小化。
-        final hideCount =
-            ctx.windowCalls.where((c) => c.method == 'hide').length;
-        final minimizeCount =
-            ctx.windowCalls.where((c) => c.method == 'minimize').length;
-        expect(hideCount + minimizeCount, 1,
-            reason: '关闭时最小化必须恰好执行一次（托盘隐藏或任务栏最小化）');
+        expect(ctx.windowCalls.where((c) => c.method == 'hide'), hasLength(1));
         expect(ctx.windowCalls.where((c) => c.method == 'destroy'), isEmpty);
+        expect(ctx.exitCodes, isEmpty);
       } finally {
         debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.instance.resetForTesting();
       }
     });
 
     testWidgets('close in quit mode with no tasks quits directly',
         (tester) async {
-      useWindowsPlatform();
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       try {
         final ctx = await _pumpApplication(tester, closeMinimizes: false);
 
@@ -152,15 +146,17 @@ void main() {
         expect(find.text('退出应用？'), findsNothing);
         expect(
             ctx.windowCalls.where((c) => c.method == 'destroy'), hasLength(1));
+        expect(ctx.exitCodes, [0]);
       } finally {
         debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.instance.resetForTesting();
       }
     });
 
     testWidgets(
         'close in quit mode with running tasks asks for confirmation '
         'and cancelling keeps the window open', (tester) async {
-      useWindowsPlatform();
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       try {
         final notifier = BackgroundTaskNotifier();
         notifier.addTask(type: BackgroundTaskType.ocr, title: '运行中任务');
@@ -175,14 +171,16 @@ void main() {
         await tester.tap(find.text('取消'));
         await tester.pumpAndSettle();
         expect(ctx.windowCalls.where((c) => c.method == 'destroy'), isEmpty);
+        expect(ctx.exitCodes, isEmpty);
       } finally {
         debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.instance.resetForTesting();
       }
     });
 
     testWidgets('close in quit mode with running tasks quits after confirm',
         (tester) async {
-      useWindowsPlatform();
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       try {
         final notifier = BackgroundTaskNotifier();
         notifier.addTask(type: BackgroundTaskType.ocr, title: '运行中任务');
@@ -196,15 +194,17 @@ void main() {
         await tester.pumpAndSettle();
         expect(
             ctx.windowCalls.where((c) => c.method == 'destroy'), hasLength(1));
+        expect(ctx.exitCodes, [0]);
       } finally {
         debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.instance.resetForTesting();
       }
     });
 
     testWidgets(
         'repeated close events while the dialog is open do not stack '
         'a second dialog', (tester) async {
-      useWindowsPlatform();
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       try {
         final notifier = BackgroundTaskNotifier();
         notifier.addTask(type: BackgroundTaskType.ocr, title: '运行中任务');
@@ -223,8 +223,10 @@ void main() {
         await tester.pumpAndSettle();
         expect(
             ctx.windowCalls.where((c) => c.method == 'destroy'), hasLength(1));
+        expect(ctx.exitCodes, [0]);
       } finally {
         debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.instance.resetForTesting();
       }
     });
   });

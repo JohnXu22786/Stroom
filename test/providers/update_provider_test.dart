@@ -420,6 +420,161 @@ void main() {
       expect(notifier.state.updateAvailable, false);
     });
 
+    test('handles 200 response with non-list body without crashing', () async {
+      // GitHub 限流（HTTP 403 带 JSON 对象）等异常数据：旧代码直接
+      // `as List` 抛 TypeError 并显示误导性错误；现在应优雅降级。
+      SharedPreferences.setMockInitialValues({});
+      final dio = Dio(BaseOptions());
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(Response(
+            requestOptions: options,
+            statusCode: 200,
+            data: {
+              'message': 'API rate limit exceeded',
+              'documentation_url': 'https://docs.github.com/rest',
+            },
+          ));
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate(silent: false);
+
+      expect(notifier.state.isChecking, false);
+      expect(notifier.state.error, isNotNull);
+      expect(notifier.state.error, isNot(contains('is not a subtype')));
+      expect(notifier.state.updateAvailable, false);
+    });
+
+    test('skips non-Map elements inside a valid list without crashing',
+        () async {
+      // 200 响应是数组，但混入了非 Map 元素：旧代码
+      // `release['tag_name']` 抛 TypeError；现在应跳过并正常处理合法项。
+      SharedPreferences.setMockInitialValues({});
+      final dio = Dio(BaseOptions());
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(Response(
+            requestOptions: options,
+            statusCode: 200,
+            data: [
+              'garbage-string',
+              42,
+              jsonDecode(_githubRelease('v0.2.14')),
+            ],
+          ));
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate(silent: false);
+
+      expect(notifier.state.isChecking, false);
+      expect(notifier.state.error, isNull);
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.latestVersion, '0.2.14');
+    });
+
+    test('skips releases with wrong-typed fields without crashing', () async {
+      // Map 元素内部的字段值类型错误（tag_name 为 int、assets 为 Map、
+      // prerelease 为字符串）：旧代码逐个 TypeError 中断整个检查并
+      // 显示误导性的「网络错误」；现在跳过损坏条目、保留合法条目。
+      SharedPreferences.setMockInitialValues({});
+      final dio = Dio(BaseOptions());
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(Response(
+            requestOptions: options,
+            statusCode: 200,
+            data: [
+              {
+                'tag_name': 12345, // 非 String
+                'published_at': '2024-01-15T10:00:00Z',
+              },
+              {
+                'tag_name': 'v0.2.13-garbage!',
+                'assets': {'not': 'a list'}, // 非 List
+              },
+              jsonDecode(_githubRelease('v0.2.14')),
+            ],
+          ));
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate(silent: false);
+
+      expect(notifier.state.isChecking, false);
+      expect(notifier.state.error, isNull, reason: '损坏条目应被跳过而不是报「网络错误」');
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.latestVersion, '0.2.14');
+    });
+
+    test('non-semver installed version skips the check without prompting',
+        () async {
+      // 回归：自定义构建版本（如 "dev"）被 Version.parse 宽松解析为
+      // 0.0.0，旧代码会把所有发布版都当作新版本并弹出更新对话框；
+      // 现在应跳过本次检查（不弹窗、不报错）。
+      UpdateNotifier.debugAppVersionOverride = 'dev';
+      try {
+        SharedPreferences.setMockInitialValues({});
+        final dio = Dio(BaseOptions());
+        dio.interceptors.add(InterceptorsWrapper(
+          onRequest: (options, handler) {
+            handler.resolve(Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: [jsonDecode(_githubRelease('v0.2.14'))],
+            ));
+          },
+        ));
+        final notifier = UpdateNotifier(dio: dio);
+
+        await notifier.checkForUpdate(silent: false);
+
+        expect(notifier.state.isChecking, false);
+        expect(notifier.state.updateAvailable, false,
+            reason: '非 semver 版本号不得把 0.0.0 当作当前版本');
+        expect(notifier.state.error, isNull);
+      } finally {
+        UpdateNotifier.debugAppVersionOverride = null;
+      }
+    });
+
+    test('concurrent checkForUpdate awaits the in-flight check', () async {
+      // 回归：错误边界「重试」重新挂载 Application 后可能发起第二次
+      // 检查 —— 必须等待同一个在途检查并共享结果，否则更新弹窗被
+      // 静默吞掉。
+      SharedPreferences.setMockInitialValues({});
+      final completer = Completer<Response<dynamic>>();
+      final dio = Dio(BaseOptions());
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          completer.future.then((r) => handler.resolve(r));
+        },
+      ));
+      final notifier = UpdateNotifier(dio: dio);
+
+      final first = notifier.checkForUpdate();
+      // 等一拍让第一次检查进入挂起状态（isChecking=true 已置位）。
+      await Future<void>.delayed(Duration.zero);
+      final second = notifier.checkForUpdate();
+
+      completer.complete(Response(
+        requestOptions: RequestOptions(path: ''),
+        statusCode: 200,
+        data: [jsonDecode(_githubRelease('v0.2.14'))],
+      ));
+
+      await first;
+      await second;
+
+      expect(notifier.state.isChecking, false);
+      expect(notifier.state.updateAvailable, true,
+          reason: '并发调用方应等到在途检查完成并看到其结果');
+    });
+
     test('recovers from error on subsequent check', () async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createFailingDio();

@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 
 /// Builds the test app matching the real app structure.
 Widget _buildTestApp() {
+  // 测试中直接泵 Application（无 StartupApp）：手动置位启动就绪标记。
+  startupReadyNotifier.value = true;
   return ProviderScope(
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
@@ -17,6 +19,13 @@ Widget _buildTestApp() {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    // 启动后任务标记是进程级的（错误边界重试不重复执行），
+    // 每个测试用例需要复位以获得完整的启动后流程。
+    resetPostStartupTasksFlag();
+    startupReadyNotifier.value = false;
+  });
 
   group('Application - Startup (migration handled by StartupApp)', () {
     testWidgets(
@@ -33,7 +42,9 @@ void main() {
 
       // Application no longer shows migration dialog — it now shows
       // HomePage directly. Migration is handled by StartupPage.
-      expect(find.text('数据迁移'), findsNothing);
+      // 断言真实哨兵（对话框组件 + 实际对话框标题），而非从不存在的文案。
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('数据格式升级完成'), findsNothing);
     });
 
     testWidgets('does not show migration dialog when format is current',
@@ -48,7 +59,8 @@ void main() {
       await tester.pump();
 
       // No migration dialog (migration is handled by StartupPage)
-      expect(find.text('数据迁移'), findsNothing);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('数据格式升级完成'), findsNothing);
     });
   });
 }

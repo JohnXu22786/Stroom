@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart'
@@ -18,10 +19,11 @@ import 'package:flutter/services.dart' show SystemNavigator;
 ///
 /// 在桌面平台会尝试启动一个新的应用进程；在移动平台仅退出应用。
 void restartApp() {
-  _restartApp();
+  // fire-and-forget：所有失败都在 _restartApp 内部捕获。
+  unawaited(_restartApp());
 }
 
-void _restartApp() {
+Future<void> _restartApp() async {
   // Web 平台：dart:io 不可用，直接返回
   if (kIsWeb) {
     debugPrint('[AppRestart] Auto-restart not supported on web');
@@ -44,11 +46,26 @@ void _restartApp() {
   try {
     if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
       final executable = Platform.resolvedExecutable;
-      Process.start(executable, []);
+      // detached 模式：新进程不继承本进程的终端/句柄，
+      // 本进程 exit 后新进程继续独立运行。
+      await Process.start(
+        executable,
+        const [],
+        mode: ProcessStartMode.detached,
+      );
       started = true;
     }
   } catch (e) {
     debugPrint('[AppRestart] Process.start failed: $e');
+  }
+
+  // 仅当新进程确实启动成功后才退出当前进程；
+  // 启动失败时（可执行文件缺失、被杀软拦截等）保持应用运行，
+  // 避免「点了重启结果应用直接消失」。
+  if (!started) {
+    debugPrint('[AppRestart] Could not restart app automatically — '
+        'keeping the current process alive');
+    return;
   }
 
   // 退出当前进程
@@ -56,9 +73,5 @@ void _restartApp() {
     exit(0);
   } catch (e) {
     debugPrint('[AppRestart] exit failed: $e');
-  }
-
-  if (!started) {
-    debugPrint('[AppRestart] Could not restart app automatically');
   }
 }

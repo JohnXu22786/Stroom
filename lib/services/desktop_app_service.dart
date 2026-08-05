@@ -2,39 +2,39 @@ import 'dart:async';
 import 'dart:io' show exit;
 
 import 'package:flutter/foundation.dart'
-    show
-        TargetPlatform,
-        debugPrint,
-        defaultTargetPlatform,
-        kIsWeb,
-        visibleForTesting;
+    show TargetPlatform, debugPrint, defaultTargetPlatform, visibleForTesting;
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app_log_service.dart';
+import 'background_service.dart' as background_service;
 
 // ====================================================================
-// DesktopAppService — 桌面端系统托盘服务
+// DesktopAppService — 桌面端窗口与系统托盘驻留服务
 // ====================================================================
 //
-// 目标：桌面端（Windows / macOS / Linux）关闭窗口时默认「最小化到
-// 托盘/后台」继续运行，并可从托盘图标/菜单恢复窗口或彻底退出。
+// 目标：桌面端（Windows / macOS / Linux）关闭窗口时默认「最小化到托盘」，
+// 应用继续在后台运行，并可从托盘图标恢复窗口或彻底退出。
 //
-// 职责划分：
-// - 窗口关闭事件的拦截与「最小化 vs 退出」决策由 Application 层负责
-//   （window_manager.setPreventClose + 用户偏好 + 退出确认对话框）。
-// - 本服务只负责系统托盘：注册托盘图标与菜单、托盘事件处理
-//   （点击恢复窗口 / 菜单退出），以及供 Application 调用的
-//   [hideToTray] / [quitApplication]。
+// 实现：
+// 1. [initialize] 在 runApp 之前调用（window_manager 要求在 Flutter
+//    UI 启动前完成初始化）。
+// 2. [setupTrayAndCloseBehavior] 在首帧后调用：设置 setPreventClose(true)
+//    使点击关闭按钮时窗口不销毁（window_manager 拦截 WM_CLOSE /
+//    delete-event / windowShouldClose），并注册托盘图标与右键菜单。
+// 3. 关闭窗口 → [onWindowClose]：按用户设置决策 ——
+//    - 「关闭时最小化」（默认）：隐藏窗口到托盘；
+//    - 「关闭时退出」：先通过 [onQuitConfirmation] 确认（有任务运行时
+//      弹窗提示），确认后销毁托盘与窗口并退出进程。
+//    托盘点击 → 显示并聚焦窗口；托盘菜单「退出」→ 直接彻底退出。
 //
-// 安全兜底：托盘初始化失败（例如 Linux 缺少 appindicator 依赖）时
-// 仅记录日志并保持 _trayReady=false —— Application 层会降级为
-// 「最小化到任务栏」，窗口始终可找回，不会出现隐藏后无法恢复的
-// 「幽灵进程」。
+// 安全兜底：如果托盘初始化失败（例如 Linux 缺少 appindicator 依赖），
+// 会撤销 setPreventClose，恢复「关闭即退出」的默认行为，
+// 避免出现窗口关闭后无法找回应用的「幽灵进程」。
 // ====================================================================
 
-/// 桌面端系统托盘服务（单例）。
-class DesktopAppService extends TrayListener {
+/// 桌面端窗口管理 + 系统托盘驻留服务（单例）。
+class DesktopAppService extends WindowListener with TrayListener {
   DesktopAppService._();
 
   /// The shared instance.
@@ -47,65 +47,137 @@ class DesktopAppService extends TrayListener {
   static const _trayIconIco = 'assets/images/tray_icon.ico';
   static const _trayIconPng = 'assets/images/tray_icon.png';
 
+  /// 托盘注册/销毁操作超时：插件挂起（如 Linux appindicator/DBus）时
+  /// 所有涉及托盘与窗口的操作都必须受此保护，避免流程被永久阻塞
+  /// （例如回滚路径无法撤销关闭拦截、退出路径无法退出进程）。
+  static const _trayTimeout = Duration(seconds: 10);
+
   static const _menuShowKey = 'show';
   static const _menuQuitKey = 'quit';
 
+  bool _initialized = false;
   bool _trayReady = false;
   bool _quitRequested = false;
   Menu? _menu;
 
   /// 当前是否运行在桌面平台（Windows / macOS / Linux）。
-  static bool get isDesktopPlatform =>
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.windows ||
-          defaultTargetPlatform == TargetPlatform.macOS ||
-          defaultTargetPlatform == TargetPlatform.linux);
-
-  /// 托盘是否已成功注册（用于 UI / Application 展示真实状态）。
-  bool get isTrayReady => _trayReady;
+  ///
+  /// 唯一实现位于 [background_service.isDesktopPlatform]，此处委托，
+  /// 避免两处平台判断漂移。
+  static bool get isDesktopPlatform => background_service.isDesktopPlatform();
 
   /// 测试用：暴露构建好的托盘菜单，便于模拟菜单点击。
   @visibleForTesting
   Menu? get trayMenuForTesting => _menu;
 
+  /// 托盘是否已成功注册（用于 UI 展示真实状态）。
+  bool get isTrayReady => _trayReady;
+
+  /// 「关闭即退出」模式下的退出确认回调。
+  ///
+  /// 由 Application 注入（展示运行中任务的退出确认对话框）。
+  /// 返回 `true` 表示用户确认退出；返回 `false` 取消退出。
+  /// 未注入时视为已确认（直接退出）。
+  Future<bool> Function()? onQuitConfirmation;
+
   /// 测试用：重置单例内部状态，避免用例之间相互污染。
   @visibleForTesting
   void resetForTesting() {
+    windowManager.removeListener(this);
     trayManager.removeListener(this);
+    _initialized = false;
     _trayReady = false;
     _quitRequested = false;
+    _confirmInProgress = false;
     _menu = null;
+    onQuitConfirmation = null;
   }
 
-  /// 注册系统托盘图标与菜单（应用首帧后调用）。
+  /// 在 runApp 之前调用，初始化窗口管理器。
   ///
-  /// 幂等：重复调用不会重复注册。任何失败都会被捕获并记录，
-  /// 不会导致应用崩溃（Application 层会降级为任务栏最小化）。
-  Future<void> setupTray() async {
-    if (!isDesktopPlatform || _quitRequested || _trayReady) return;
+  /// 非桌面平台为安全的 no-op。
+  Future<void> initialize() async {
+    if (!isDesktopPlatform || _initialized) return;
     try {
-      trayManager.addListener(this);
-
-      await trayManager.setIcon(
-        defaultTargetPlatform == TargetPlatform.windows
-            ? _trayIconIco
-            : _trayIconPng,
-      );
-      // setToolTip 在 Linux 插件上未实现（会抛 MissingPluginException），
-      // 单独捕获，避免拖垮整个托盘注册流程。
-      try {
-        await trayManager.setToolTip('Stroom 正在后台运行');
-      } catch (e) {
-        debugPrint('[DesktopAppService] setToolTip unsupported: $e');
-      }
-      _menu = _buildMenu();
-      await trayManager.setContextMenu(_menu!);
-      _trayReady = true;
-      debugPrint('[DesktopAppService] Tray icon registered');
+      await windowManager.ensureInitialized();
+      _initialized = true;
+      debugPrint('[DesktopAppService] Window manager initialized');
     } catch (e) {
-      debugPrint('[DesktopAppService] Tray registration failed: $e');
-      await AppLogService.error('DesktopAppService', '托盘注册失败', e);
-      trayManager.removeListener(this);
+      debugPrint('[DesktopAppService] Window manager init failed: $e');
+      await AppLogService.error('DesktopAppService', '窗口管理器初始化失败', e);
+    }
+  }
+
+  /// 设置「关闭窗口 → 最小化到托盘」行为并注册托盘图标。
+  ///
+  /// 应在应用首帧之后调用。幂等：重复调用不会重复注册托盘。
+  /// 任何失败都会被捕获并记录，不会导致应用崩溃。
+  ///
+  /// 安全顺序：
+  /// 1. 先 setPreventClose(true) 拦截关闭事件；
+  /// 2. 注册托盘（带超时，防止 Linux DBus/appindicator 挂起）；
+  /// 3. 托盘就绪后才注册事件监听 —— 若托盘失败回滚为「关闭即退出」，
+  ///    期间到达的关闭事件只会让窗口保持打开（尚未隐藏），不会出现
+  ///    「窗口已隐藏但无托盘可恢复」的幽灵进程。
+  Future<void> setupTrayAndCloseBehavior() async {
+    if (!isDesktopPlatform || _quitRequested || _trayReady) return;
+    // 托盘注册超时：插件挂起（如 Linux 缺少 appindicator 服务）时
+    // 走回滚路径，而不是让窗口永远无法关闭。
+
+    try {
+      await initialize();
+      if (!_initialized) return; // 初始化失败，保持默认关闭行为
+
+      // 1. 先拦截窗口关闭事件。
+      await windowManager.setPreventClose(true);
+
+      // 2. 注册托盘图标与菜单。失败则回退为「关闭即退出」，
+      //    避免窗口隐藏后应用无法找回。
+      try {
+        await trayManager
+            .setIcon(
+              defaultTargetPlatform == TargetPlatform.windows
+                  ? _trayIconIco
+                  : _trayIconPng,
+            )
+            .timeout(_trayTimeout);
+        // setToolTip 在 Linux 插件上未实现（会抛 MissingPluginException），
+        // 单独捕获，避免拖垮整个托盘注册流程；同样受超时保护
+        // （DBus/appindicator 挂起时不能无限期停留在无监听的拦截状态）。
+        try {
+          await trayManager.setToolTip('Stroom 正在后台运行').timeout(_trayTimeout);
+        } catch (e) {
+          debugPrint('[DesktopAppService] setToolTip unsupported: $e');
+        }
+        _menu = _buildMenu();
+        await trayManager.setContextMenu(_menu!).timeout(_trayTimeout);
+        _trayReady = true;
+        debugPrint('[DesktopAppService] Tray icon registered');
+      } catch (e) {
+        debugPrint('[DesktopAppService] Tray registration failed: $e');
+        await AppLogService.error('DesktopAppService', '托盘注册失败', e);
+        // 清理可能已半注册的托盘图标（例如 setIcon 成功但
+        // setContextMenu 超时），避免残留死托盘条目。
+        // 同样受超时保护：回滚路径绝不能再次被插件挂起阻塞
+        // （否则 setPreventClose(false) 永远执行不到，窗口无法关闭）。
+        try {
+          await trayManager.destroy().timeout(_trayTimeout);
+        } catch (_) {}
+        // 托盘不可用：撤销拦截，恢复「关闭即退出」。
+        // 此时尚未注册监听，也不会有幽灵窗口。
+        // 同样受超时保护：回滚路径绝不能再次被插件挂起阻塞。
+        try {
+          await windowManager.setPreventClose(false).timeout(_trayTimeout);
+        } catch (_) {}
+        return;
+      }
+
+      // 3. 托盘就绪后注册事件监听。
+      windowManager.addListener(this);
+      trayManager.addListener(this);
+    } catch (e) {
+      debugPrint('[DesktopAppService] Tray setup failed: $e');
+      await AppLogService.error('DesktopAppService', '托盘设置失败', e);
     }
   }
 
@@ -122,12 +194,84 @@ class DesktopAppService extends TrayListener {
     );
   }
 
+  // ── 窗口事件 ──────────────────────────────────────────────────────
+
+  /// 用户点击窗口关闭按钮：按用户设置最小化到托盘，或确认后退出。
+  ///
+  /// 每次读取最新的用户设置（而不是启动时缓存的标志）：
+  /// 用户在「后台运行优化」页面切换开关后，无需重启应用即生效。
+  @override
+  void onWindowClose() {
+    debugPrint('[DesktopAppService] Window close intercepted');
+    unawaited(_handleWindowClose());
+  }
+
+  Future<void> _handleWindowClose() async {
+    // 确认对话框已打开时忽略新的关闭事件：此时隐藏窗口会把打开的
+    // 对话框一起藏起来，造成「点了退出却毫无反应」的错觉。
+    // 退出销毁流程进行中也直接忽略（隐藏没有意义）。
+    if (_confirmInProgress || _quitRequested) return;
+
+    // 读取失败时默认最小化：绝不因设置读取异常而意外退出应用。
+    var minimize = true;
+    try {
+      minimize = await background_service.isDesktopCloseMinimizeEnabled();
+    } catch (e) {
+      debugPrint('[DesktopAppService] 读取关闭行为设置失败，默认最小化: $e');
+    }
+
+    // await 期间用户可能已发起确认流程（托盘退出/完全退出按钮）：
+    // 重新检查，避免把刚弹出的确认对话框连同窗口一起隐藏。
+    if (_confirmInProgress || _quitRequested) return;
+
+    if (minimize) {
+      await _hideWindow();
+      return;
+    }
+    await quitWithConfirmation();
+  }
+
+  /// 退出确认是否正在进行（防重复进入）。
+  bool _confirmInProgress = false;
+
+  /// 带确认的退出：「关闭即退出」模式与「完全退出应用」按钮共用。
+  ///
+  /// 先征求 [onQuitConfirmation] 的同意（例如有任务运行时弹窗确认），
+  /// 用户取消则什么都不做；确认后彻底退出（销毁托盘与窗口）。
+  Future<void> quitWithConfirmation() async {
+    // _quitRequested 也拦截：退出销毁流程（最长约 20s）进行期间，
+    // 新的关闭事件/托盘点击不得再弹第二个确认对话框。
+    if (_confirmInProgress || _quitRequested) return;
+    // 在任何 await 之前同步置位，杜绝两个并发调用同时通过检查。
+    _confirmInProgress = true;
+    try {
+      // 托盘退出时窗口可能已隐藏到托盘：先恢复窗口，确认对话框才可见。
+      // （窗口已可见时 _showWindow 是幂等 no-op；_quitRequested 时跳过。）
+      await _showWindow();
+      final confirm = onQuitConfirmation;
+      if (confirm != null) {
+        final confirmed = await confirm();
+        if (!confirmed) {
+          debugPrint('[DesktopAppService] 退出被用户取消，窗口保持打开');
+          return;
+        }
+      }
+    } catch (e) {
+      // 确认逻辑异常（如 Provider 不可用）：放行退出，
+      // 绝不阻塞用户关闭窗口。
+      debugPrint('[DesktopAppService] 退出确认异常，放行退出: $e');
+    } finally {
+      _confirmInProgress = false;
+    }
+    await quitApplication();
+  }
+
   // ── 托盘事件 ──────────────────────────────────────────────────────
 
   /// 左键点击托盘图标：恢复并聚焦主窗口。
   @override
   void onTrayIconMouseDown() {
-    unawaited(showWindow());
+    unawaited(_showWindow());
   }
 
   /// 右键点击托盘图标：弹出菜单。
@@ -147,29 +291,33 @@ class DesktopAppService extends TrayListener {
   void onTrayMenuItemClick(MenuItem menuItem) {
     final key = menuItem.key;
     if (key == _menuShowKey) {
-      unawaited(showWindow());
+      unawaited(_showWindow());
     } else if (key == _menuQuitKey) {
-      unawaited(quitApplication());
+      // 与「关闭即退出」/「完全退出应用」共用确认逻辑：
+      // 有任务运行时先弹窗确认，避免静默中断任务。
+      unawaited(quitWithConfirmation());
     }
   }
 
   // ── 行为实现 ──────────────────────────────────────────────────────
 
-  /// 将窗口隐藏到系统托盘（关闭窗口时最小化）。仅当托盘就绪时调用。
-  Future<void> hideToTray() async {
+  Future<void> _hideWindow() async {
     try {
-      await windowManager.hide();
+      // 超时保护：window_manager 通道卡死（Linux/DBus 挂起）时，
+      // 关闭事件不能永远停在隐藏步骤。
+      await windowManager.hide().timeout(_trayTimeout);
     } catch (e) {
       debugPrint('[DesktopAppService] Failed to hide window: $e');
     }
   }
 
-  /// 从托盘恢复并聚焦主窗口。
-  Future<void> showWindow() async {
+  Future<void> _showWindow() async {
     if (_quitRequested) return;
     try {
-      await windowManager.show();
-      await windowManager.focus();
+      // 超时保护：show/focus 卡死时不能把退出确认流程永久挂起
+      // （_confirmInProgress 会一直锁死，后续退出全部变成 no-op）。
+      await windowManager.show().timeout(_trayTimeout);
+      await windowManager.focus().timeout(_trayTimeout);
     } catch (e) {
       debugPrint('[DesktopAppService] Failed to show window: $e');
     }
@@ -178,23 +326,26 @@ class DesktopAppService extends TrayListener {
   /// 从托盘彻底退出：销毁托盘图标与窗口，然后退出进程。
   ///
   /// 幂等：重复调用（例如菜单连点）只执行一次。
-  /// macOS 在最后一个窗口关闭后默认不退出，必须显式退出进程；
-  /// Windows/Linux 上 windowManager.destroy() 会结束消息循环，
-  /// 这里统一显式退出以保证确定性。
   Future<void> quitApplication() async {
     if (_quitRequested) return;
     _quitRequested = true;
-    debugPrint('[DesktopAppService] Quitting');
+    debugPrint('[DesktopAppService] Quitting from tray');
+    // 销毁操作同样受超时保护：插件挂起（如 Linux appindicator/DBus）
+    // 时绝不能让 exitApp 永远执行不到 —— 最坏情况是残留一个原生托盘
+    // 条目，进程退出时由系统清理。
     try {
-      await trayManager.destroy();
+      await trayManager.destroy().timeout(_trayTimeout);
     } catch (e) {
       debugPrint('[DesktopAppService] Failed to destroy tray: $e');
     }
     try {
-      await windowManager.destroy();
+      await windowManager.destroy().timeout(_trayTimeout);
     } catch (e) {
       debugPrint('[DesktopAppService] Failed to destroy window: $e');
     }
+    // macOS 在最后一个窗口关闭后默认不退出，必须显式退出进程；
+    // Windows/Linux 上 windowManager.destroy() 会结束消息循环，
+    // 这里统一显式退出以保证确定性。
     exitApp(0);
   }
 }
