@@ -119,13 +119,14 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
     }
   }
 
-  /// Clear all pending attachments and clean up temp files.
+  /// Clear all pending attachments.
+  ///
+  /// 注意：发送后**不删除** temp_edited 文件——消息已持久化引用该文件，
+  /// 删除会让发送后的气泡预览/加载失败（“无法加载文件”）。
+  /// 未被发送的编辑产物由 _removePendingAttachment 在用户移除时清理；
+  /// 消息删除时由 _deleteMessage 的 isReferencedElsewhere 检查清理；
+  /// 编辑提交后未被引用的孤儿文件由删除整个对话时的附件清理兜底。
   void _clearPendingAttachments() {
-    for (final att in _pendingAttachments) {
-      if (att.storagePath.startsWith('temp_edited/')) {
-        _deleteTempFile(att.storagePath);
-      }
-    }
     _pendingAttachments.clear();
     _pendingImageBytes.clear();
   }

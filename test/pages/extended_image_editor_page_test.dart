@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:stroom/pages/extended_image_editor_page.dart';
 
 /// Creates a small valid PNG (8x8 green) via the real engine.
@@ -94,6 +95,18 @@ Future<void> _pushEditor(
         () => Future<void>.delayed(const Duration(milliseconds: 300)));
     await tester.pump();
   }
+}
+
+/// 生成一张小尺寸 JPEG（8x8 渐变），作为"照片源"编辑夹具。
+Uint8List _createSmallJpeg() {
+  final im = img.Image(width: 8, height: 8, numChannels: 3);
+  for (final p in im) {
+    p
+      ..r = p.x * 30
+      ..g = p.y * 30
+      ..b = 100;
+  }
+  return img.encodeJpg(im, quality: 90);
 }
 
 void main() {
@@ -424,6 +437,65 @@ void main() {
         // The host page must still be here.
         expect(find.text('Open'), findsOneWidget);
         expect(find.byType(ExtendedImageEditorPage), findsNothing);
+      });
+    });
+
+    // ── 输出格式（回归：非 JPEG 源必须输出编码后的 PNG 而不是
+    //    raw RGBA 像素；JPEG 源输出 JPEG q90 而非体积暴涨的 PNG）──
+    // 直接调用顶层处理管线（与 widget 生命周期解耦），比走完整
+    // 编辑器 UI 更稳定（不依赖编辑器状态就绪时序）。
+    group('output format selection', () {
+      Future<QuickEditProcessingResult> runPipeline(
+        WidgetTester tester, {
+        required Uint8List rawData,
+      }) async {
+        final messengerKey = GlobalKey<ScaffoldMessengerState>();
+        await tester.pumpWidget(MaterialApp(
+          home: ScaffoldMessenger(
+            key: messengerKey,
+            child: const Scaffold(body: SizedBox()),
+          ),
+        ));
+
+        QuickEditProcessingResult? outcome;
+        await tester.runAsync(
+          () => runQuickEditProcessing(
+            rawData: rawData,
+            cropRect: null,
+            action: null,
+            messenger: messengerKey.currentState!,
+            onProcessed: (result) => outcome = result,
+          ),
+        );
+        await tester.pump();
+        return outcome!;
+      }
+
+      testWidgets('PNG 源输出可解码的 PNG（不能是 raw RGBA 像素）',
+          (tester) async {
+        final png = await tester.runAsync(createTestImage);
+        final outcome = await runPipeline(tester, rawData: png!);
+
+        expect(outcome, isA<QuickEditProcessingSuccess>());
+        final bytes = (outcome as QuickEditProcessingSuccess).editedBytes;
+        expect(img.decodeImage(bytes), isNotNull,
+            reason: 'PNG 源编辑结果必须是可解码的图片（不能是 raw RGBA）');
+        expect(bytes[0], 0x89);
+        expect(bytes[1], 0x50, reason: 'PNG 源应保持无损 PNG 输出');
+      });
+
+      testWidgets('JPEG 源输出可解码的 JPEG（修复 4MB→12MB 膨胀）',
+          (tester) async {
+        final outcome =
+            await runPipeline(tester, rawData: _createSmallJpeg());
+
+        expect(outcome, isA<QuickEditProcessingSuccess>());
+        final bytes = (outcome as QuickEditProcessingSuccess).editedBytes;
+        expect(img.decodeImage(bytes), isNotNull,
+            reason: 'JPEG 源编辑结果必须是可解码的图片');
+        expect(bytes[0], 0xFF);
+        expect(bytes[1], 0xD8,
+            reason: 'JPEG 照片源应输出 JPEG（旧实现输出 PNG 导致体积暴涨）');
       });
     });
   });

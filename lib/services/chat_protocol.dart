@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../models/chat_message.dart';
 import '../models/tool_call.dart';
+import '../utils/image_send_compressor.dart';
 import 'anthropic_protocol.dart';
 import 'attachment_storage.dart';
 import 'context_manager.dart'
@@ -98,49 +99,94 @@ class AttachmentReadOutcome {
   final AttachmentReadStatus status;
   final String? base64;
 
-  const AttachmentReadOutcome(this.status, this.base64);
+  /// 实际载荷的 MIME 类型。
+  ///
+  /// 图片超限自动压缩可能改变格式（PNG→JPEG）。非 null 时协议层必须
+  /// 用它覆盖 [Attachment] 的 mimeType 声明，否则 API 会收到
+  /// "宣称 PNG 实为 JPEG" 的不一致载荷。null 表示格式未变。
+  final String? mimeType;
+
+  const AttachmentReadOutcome(this.status, this.base64, {this.mimeType});
 }
 
 /// 单个附件允许的最大字节数（10 MB，与既有逻辑一致）。
 const int maxAttachmentBytes = 10 * 1024 * 1024;
 
-/// 读取附件 base64 载荷，遵守 10 MB 上限。
+/// 读取附件 base64 载荷，遵守 [maxBytes] 上限。
 ///
 /// 优先使用附件内存缓存（[Attachment.base64Data]），避免重复读取磁盘。
-/// 超过大小限制返回 [AttachmentReadStatus.tooLarge]，
+///
+/// **图片超限不再跳过**（用户已选择的图片必须发送）：超过上限的图片
+/// 会在发送前自动压缩（无损优先、JPEG 渐进降级，见
+/// [compressImageForSend]），并在格式变化时通过
+/// [AttachmentReadOutcome.mimeType] 告知协议层。
+///
+/// 非图片附件（音频/视频等）超过上限仍返回 [AttachmentReadStatus.tooLarge]
+/// （无法无损压缩，且提前按 fileSize 拦截可避免读取超大文件）。
+///
 /// 读取失败返回 [AttachmentReadStatus.unreadable]。
-Future<AttachmentReadOutcome> readAttachmentBase64(Attachment att) async {
+Future<AttachmentReadOutcome> readAttachmentBase64(
+  Attachment att, {
+  int maxBytes = maxAttachmentBytes,
+}) async {
+  // 已缓存：先尝试解码缓存（损坏缓存回退磁盘读取）
+  Uint8List? bytes;
   if (att.base64Data != null && att.base64Data!.isNotEmpty) {
-    // 已缓存：校验可解码性（损坏缓存原样发给 API 会 400）与大小
     try {
-      base64Decode(att.base64Data!);
-      if (att.fileSize > maxAttachmentBytes) {
-        return const AttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
-      }
-      return AttachmentReadOutcome(AttachmentReadStatus.ok, att.base64Data);
+      bytes = base64Decode(att.base64Data!);
     } catch (_) {
-      // 缓存损坏：回退磁盘读取（下方继续）
+      bytes = null;
     }
   }
-  // 未缓存：先按大小检查避免加载超大文件
-  if (att.fileSize > maxAttachmentBytes) {
-    return const AttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
-  }
-  try {
-    final bytes = await AttachmentStorage.readFile(att.storagePath);
-    if (bytes == null || bytes.isEmpty) {
+
+  if (bytes == null) {
+    // 非图片超限：按 fileSize 提前拦截，避免加载超大文件
+    if (att.fileSize > maxBytes && att.fileType != 'image') {
+      return const AttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
+    }
+    try {
+      final diskBytes = await AttachmentStorage.readFile(att.storagePath);
+      if (diskBytes == null || diskBytes.isEmpty) {
+        return const AttachmentReadOutcome(
+            AttachmentReadStatus.unreadable, null);
+      }
+      bytes = diskBytes;
+    } catch (e) {
+      // 瞬时 IO 异常（权限、磁盘满等）：降级为 unreadable 占位，
+      // 与 readTextAttachmentContent 行为一致——不能让整次发送失败。
+      debugPrint('[ChatProtocol] 附件读取失败: ${att.fileName}: $e');
       return const AttachmentReadOutcome(AttachmentReadStatus.unreadable, null);
     }
-    final b64 = base64Encode(bytes);
-    // 缓存 base64 供后续复用
-    att.base64Data = b64;
-    return AttachmentReadOutcome(AttachmentReadStatus.ok, b64);
-  } catch (e) {
-    // 瞬时 IO 异常（权限、磁盘满等）：降级为 unreadable 占位，
-    // 与 readTextAttachmentContent 行为一致——不能让整次发送失败。
-    debugPrint('[ChatProtocol] 附件读取失败: ${att.fileName}: $e');
-    return const AttachmentReadOutcome(AttachmentReadStatus.unreadable, null);
   }
+
+  // 图片超限 → 自动压缩后发送（替代旧行为的"跳过"）
+  String? mimeTypeOverride;
+  if (att.fileType == 'image' && bytes.length > maxBytes) {
+    final compression = await compressImageForSend(
+      bytes,
+      maxBytes: maxBytes,
+    );
+    if (compression.decodable && compression.compressed != null) {
+      bytes = compression.compressed!.bytes;
+      mimeTypeOverride = compression.compressed!.mimeType;
+    }
+    // 压缩后仍超限（无法解码的 HEIC/损坏文件，或病理级超大图在
+    // 极限压缩下仍超限）：发送必然整条请求被 API 拒绝，且白白撑大
+    // 请求体 → 保持"过大跳过"占位，让其余图片/文本正常发送。
+    if (bytes.length > maxBytes) {
+      return const AttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
+    }
+  }
+
+  if (bytes.length > maxBytes && att.fileType != 'image') {
+    return const AttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
+  }
+
+  final b64 = base64Encode(bytes);
+  // 缓存（压缩后的）base64 供后续复用
+  att.base64Data = b64;
+  return AttachmentReadOutcome(AttachmentReadStatus.ok, b64,
+      mimeType: mimeTypeOverride);
 }
 
 /// 文本类附件的扩展名列表（可从文件中读取 UTF-8 文本）。

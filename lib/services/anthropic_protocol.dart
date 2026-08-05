@@ -90,7 +90,7 @@ class AnthropicProtocol implements ChatProtocol {
                 'type': 'image',
                 'source': {
                   'type': 'base64',
-                  'media_type': att.mimeType,
+                  'media_type': outcome.mimeType ?? att.mimeType,
                   'data': outcome.base64,
                 },
               });
