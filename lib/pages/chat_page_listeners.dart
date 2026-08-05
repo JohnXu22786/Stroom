@@ -130,6 +130,13 @@ extension _ChatPageListenersExt on _ChatPageState {
         _reasoningContents.clear();
         _finalizedMessages.clear();
         _isReasoningCompletedForMsg.clear();
+        // Abandon any keyboard scroll session from the previous
+        // conversation — its saved position and pinning belong to a list
+        // that is about to be replaced.
+        _lastScrollPositionBeforeKeyboard = null;
+        _anchorToBottomWhileKeyboard = false;
+        _isRestoringKeyboardScroll = false;
+        _restoreCompletedSinceLastSave = false;
         manager.activateConversation(next);
         // Only schedule _loadConversationMessages for actual conversation
         // SWITCHES (prev != null), not for the initial registration of this
