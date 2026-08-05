@@ -376,7 +376,8 @@ void chatServiceToolsGroup2() {
       }
     });
 
-    test('multiple tool calls execute in parallel (both start before any completes)',
+    test(
+        'multiple tool calls execute in parallel (both start before any completes)',
         () async {
       // Requirement: when the assistant triggers multiple tool calls at once,
       // they must run SIMULTANEOUSLY, not one after another.
@@ -445,8 +446,10 @@ void chatServiceToolsGroup2() {
           )
           .asFuture();
 
-      final starts =
-          events.whereType<ToolCallStartEvent>().map((e) => e.toolCall.id).toList();
+      final starts = events
+          .whereType<ToolCallStartEvent>()
+          .map((e) => e.toolCall.id)
+          .toList();
       final completes = events
           .whereType<ToolCallCompleteEvent>()
           .map((e) => e.toolCallId)
@@ -461,9 +464,8 @@ void chatServiceToolsGroup2() {
       // The core parallel assertion: the second Start event must arrive
       // BEFORE the first Complete event. With sequential execution this
       // ordering is impossible (Complete(A) would precede Start(B)).
-      final eventsAfterFilteringEnd = events
-          .where((e) => e is! ReasoningSectionEndEvent)
-          .toList();
+      final eventsAfterFilteringEnd =
+          events.where((e) => e is! ReasoningSectionEndEvent).toList();
       expect(eventsAfterFilteringEnd[0], isA<ToolCallStartEvent>());
       expect(eventsAfterFilteringEnd[1], isA<ToolCallStartEvent>(),
           reason: 'Second tool call must START before the first completes — '
@@ -556,7 +558,8 @@ void chatServiceToolsGroup2() {
       expect(completes[1].$2, 'ok_result');
     });
 
-    test('cancelling during parallel execution stops cleanly (no complete events)',
+    test(
+        'cancelling during parallel execution stops cleanly (no complete events)',
         () async {
       // User taps Stop while tools are still running: the stream must end
       // without emitting ToolCallCompleteEvent and without hanging or

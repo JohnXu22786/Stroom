@@ -386,8 +386,8 @@ extension ChatServiceStreamingExt on ChatService {
             final executed = await Future.wait(pendingResults);
             for (var i = 0; i < neutralCalls.length; i++) {
               if (_isCancelledByUser || controller.isClosed) break;
-              controller.add(
-                  ToolCallCompleteEvent(neutralCalls[i].id, executed[i]));
+              controller
+                  .add(ToolCallCompleteEvent(neutralCalls[i].id, executed[i]));
               results.add(ToolCallResult(
                   toolCallId: neutralCalls[i].id, result: executed[i]));
             }
