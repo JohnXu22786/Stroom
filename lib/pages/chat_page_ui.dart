@@ -393,6 +393,63 @@ extension _ChatPageUiExt on _ChatPageState {
     );
   }
 
+  /// Centered floating warning shown while editing a user message:
+  /// re-sending the edit deletes this message and everything below it.
+  /// Fades in on entry; dismissal (2s auto-hide or close button) is handled
+  /// by [_ChatPageState] removing it from the Stack.
+  Widget _buildEditWarningOverlay({required BuildContext context}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Center(
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 150),
+        builder: (context, value, child) =>
+            Opacity(opacity: value, child: child),
+        child: Material(
+          elevation: 6,
+          borderRadius: BorderRadius.circular(12),
+          color: isDark ? Colors.grey[850] : Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 20,
+                  color: isDark ? Colors.amber[300] : Colors.orange[700],
+                ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    '重新编辑发送后下面所有的消息将丢失',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isDark ? Colors.grey[200] : Colors.grey[800],
+                    ),
+                  ),
+                ),
+                IconButton(
+                  key: const Key('editWarningCloseButton'),
+                  icon: Icon(Icons.close, size: 18, color: Colors.grey[500]),
+                  tooltip: '关闭',
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(28, 28),
+                    padding: const EdgeInsets.all(4),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: _hideEditWarning,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Action buttons (copy / retry or edit / raw data / JSON / delete).
   Widget _buildMessageActionButtons({
     required BuildContext context,
