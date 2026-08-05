@@ -294,6 +294,22 @@ class TaskFlowExecutionService {
         final chatAssistant = assistantId.isNotEmpty
             ? assistants.where((a) => a.id == assistantId).firstOrNull
             : null;
+        // A configured assistant that no longer exists must fail loudly
+        // (mirrors the ASR config resolution) — silently falling back to
+        // whatever assistant the chat page last selected would produce
+        // unexpected output.
+        if (assistantId.isNotEmpty && chatAssistant == null) {
+          execNotifier.updateSubTaskStatus(
+            execId,
+            flowSubTask.id,
+            TaskStatus.failed,
+          );
+          throw BlockExecutionException(
+            '助手已删除或不存在',
+            blockType: def.typeKey.name,
+            blockTitle: def.label,
+          );
+        }
         return await executeChatBlock(
           block: block,
           def: def,

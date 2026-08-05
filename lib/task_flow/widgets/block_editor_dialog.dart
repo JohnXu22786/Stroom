@@ -29,10 +29,12 @@ Future<TaskFlowBlock?> showBlockEditorDialog(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (ctx) => Padding(
+    builder: (ctx) => AnimatedPadding(
       // Lift the sheet above the keyboard so the confirm/cancel row stays
       // reachable while typing (showModalBottomSheet does not inset by
       // viewInsets for isScrollControlled sheets).
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
       padding: EdgeInsets.only(
         bottom: MediaQuery.viewInsetsOf(ctx).bottom,
       ),
@@ -135,9 +137,16 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
       );
     }
 
+    // Floor the min drag size in pixels: minChildSize is a fraction of
+    // the (keyboard-reduced) available height, and the fixed header +
+    // actions must never exceed the sheet's minimum.
+    final availableHeight =
+        screenHeight - MediaQuery.viewInsetsOf(context).bottom;
+    final minFraction = math.max(0.4, 170 / availableHeight);
+
     return DraggableScrollableSheet(
-      initialChildSize: math.min(0.75, 520 / screenHeight),
-      minChildSize: 0.4,
+      initialChildSize: math.min(0.75, 520 / availableHeight),
+      minChildSize: math.min(minFraction, 0.75),
       maxChildSize: 0.9,
       expand: false,
       builder: (scrollCtx, scrollController) => Column(
@@ -387,8 +396,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         // Voices of the SAME TTS model the executor uses
         // (tts_executor: configs.first.models.first) — listing voices of
         // every config would offer voices the executed model can't use.
-        // Deduped by id (two models can share a voice id, which would
-        // otherwise break the dropdown's exactly-one-item value assert).
+        // Deduped by id (a model can list the same voice id twice, which
+        // would otherwise break the dropdown's exactly-one-item assert).
         final voices = <VoiceEntry>[];
         {
           final byId = <String, VoiceEntry>{};
@@ -471,47 +480,61 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         final currentId = value?.toString() ?? '';
         final currentAssistant =
             assistants.where((a) => a.id == currentId).firstOrNull;
-        return DropdownButtonFormField<String?>(
-          // A persisted id whose assistant was deleted must not be passed
-          // as value (no matching item → debug assert crash); the hint
-          // then guides the user to re-select.
-          value: currentId.isNotEmpty && currentAssistant != null
-              ? currentId
-              : null,
-          isDense: true,
-          decoration: InputDecoration(
-            isDense: true,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 10,
-              vertical: 8,
-            ),
-          ),
-          style: TextStyle(fontSize: 13, color: cs.onSurface),
-          hint: Text(
-            currentId.isNotEmpty && currentAssistant == null
-                ? '助手已删除，请重新选择'
-                : '当前选中的助手',
-            style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
-          ),
-          items: [
-            const DropdownMenuItem<String?>(
-              value: null,
-              child: Text('（使用当前选中的助手）'),
-            ),
-            ...assistants.map((a) {
-              return DropdownMenuItem<String?>(
-                value: a.id,
-                child: Text(
-                  '${a.emoji} ${a.name}',
-                  overflow: TextOverflow.ellipsis,
+        // The dropdown has an enabled null-valued item, so the hint
+        // mechanism never shows (the framework selects the null item) —
+        // a deleted-assistant warning is rendered as a line below instead.
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DropdownButtonFormField<String?>(
+              // A persisted id whose assistant was deleted must not be
+              // passed as value (no matching item → debug assert crash).
+              value: currentId.isNotEmpty && currentAssistant != null
+                  ? currentId
+                  : null,
+              isDense: true,
+              decoration: InputDecoration(
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              );
-            }),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+              ),
+              style: TextStyle(fontSize: 13, color: cs.onSurface),
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('（使用当前选中的助手）'),
+                ),
+                ...assistants.map((a) {
+                  return DropdownMenuItem<String?>(
+                    value: a.id,
+                    child: Text(
+                      '${a.emoji} ${a.name}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }),
+              ],
+              onChanged: (v) {
+                setState(() => _params[param.key] = v ?? '');
+              },
+            ),
+            if (currentId.isNotEmpty && currentAssistant == null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '配置的助手已删除，请重新选择',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: cs.error,
+                  ),
+                ),
+              ),
           ],
-          onChanged: (v) {
-            setState(() => _params[param.key] = v ?? '');
-          },
         );
 
       case BlockParamType.number:
