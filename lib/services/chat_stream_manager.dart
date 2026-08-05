@@ -303,7 +303,16 @@ class ChatStreamManager {
     // Snapshot this conversation's ChatService before any await.
     // The adapter creates a per-conversation service on demand, so
     // capture it here for raw data (lastRequestBody etc.) in finally.
-    final snappedChatService = _adapter.getOrCreateService(convId);
+    // The assistant (and entries) are passed so the snapshot itself
+    // resolves the assistant's model — otherwise the pre-stream snapshot
+    // would cache a global-config service and the send below would
+    // silently ignore the assistant binding (putIfAbsent first-writer
+    // wins).
+    final snappedChatService = _adapter.getOrCreateService(
+      convId,
+      assistant: assistant,
+      entriesState: _ref?.read(providerEntriesProvider),
+    );
 
     // ── 上下文管理：摘要注入 + 发送量过滤 + 超限自动压缩 ──
     // 1. 每次请求都注入对话已有的压缩摘要（如有）

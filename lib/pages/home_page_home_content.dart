@@ -122,7 +122,11 @@ extension _HomePageHomeContentExt on _HomePageState {
               LayoutBuilder(
                 builder: (context, constraints) {
                   final width = constraints.maxWidth;
-                  final cols = math.max(1, (width / 180).floor());
+                  // Same column math as the old
+                  // SliverGridDelegateWithMaxCrossAxisExtent(180, spacing 12):
+                  // ceil(width / (180 + 12)) — floor(width/180) would give
+                  // fewer, much wider columns on phones.
+                  final cols = math.max(1, (width / 192).ceil());
                   final cardWidth = (width - (cols - 1) * 12) / cols;
                   return Wrap(
                     spacing: 12,

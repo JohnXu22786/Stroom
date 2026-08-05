@@ -174,6 +174,60 @@ void main() {
   });
 
   testWidgets(
+      'selecting the null item resets the assistant to the current '
+      'one (assistantId = "")', (tester) async {
+    TaskFlowBlock? result;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          providerEntriesProvider.overrideWith(
+            (ref) => _FakeEntriesNotifier(const ProviderEntriesState()),
+          ),
+          assistantProvider.overrideWith(
+            (ref) => _FakeAssistantsNotifier([
+              Assistant(id: 'a1', name: '翻译助手', prompt: 'p'),
+            ]),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    result = await showBlockEditorDialog(
+                      context,
+                      block: TaskFlowBlock(
+                        typeKey: BlockType.chat,
+                        params: {'assistantId': 'a1'},
+                      ),
+                    );
+                  },
+                  child: const Text('打开设置'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('打开设置'));
+    await tester.pumpAndSettle();
+
+    // Select the null item ('（使用当前选中的助手）') — no assert, and
+    // confirming stores assistantId ''.
+    await tester.tap(find.byType(DropdownButtonFormField<String?>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('（使用当前选中的助手）').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认'));
+    await tester.pumpAndSettle();
+
+    expect(result, isNotNull);
+    expect(result!.params['assistantId'], '');
+  });
+
+  testWidgets(
       'TTS panel with duplicate voice ids within one model does not '
       'crash (deduped dropdown)', (tester) async {
     final entries = ProviderEntriesState(
