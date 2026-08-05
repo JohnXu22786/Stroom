@@ -741,9 +741,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                       _selectedItems.remove(key);
                     });
                   },
-                  onTap: isImage
-                      ? () => _onPreviewImageTap(entry.key, entry.value)
-                      : null,
+                  onTap: isImage ? () => _onPreviewImageTap(entry) : null,
                 );
               },
             ),
@@ -755,7 +753,11 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   /// Handle tap on an image preview chip: show fullscreen preview with edit.
   /// Edited bytes are saved to temp cache (original file NOT overwritten).
-  Future<void> _onPreviewImageTap(String fileName, Uint8List imageBytes) async {
+  /// [entry] is the exact [MapEntry] instance stored in [_selectedItems]
+  /// (identity is used to locate the item after editing).
+  Future<void> _onPreviewImageTap(MapEntry<String, Uint8List> entry) async {
+    final fileName = entry.key;
+    final imageBytes = entry.value;
     final shouldEdit = await showDialog<bool>(
       context: context,
       builder: (ctx) => ImagePreviewDialog(
@@ -766,42 +768,49 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
     if (shouldEdit != true || !mounted) return;
 
-    final editedBytes = await Navigator.push<Uint8List>(
+    // Open quick editor. The editor pops immediately and processes in
+    // the background; the selection is updated from the callback once
+    // the edited bytes are ready.
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ExtendedImageEditorPage(
           imageBytes: imageBytes,
           fileName: fileName,
+          onProcessed: (result) async {
+            if (result is! QuickEditProcessingSuccess) return;
+            final editedBytes = result.editedBytes;
+            if (!mounted) return;
+
+            // Save edited bytes to temp cache directory (do NOT overwrite
+            // original)
+            try {
+              final tempDir = await getTemporaryDirectory();
+              final tempFileName =
+                  'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+              final tempFile = File('${tempDir.path}/$tempFileName');
+              await tempFile.writeAsBytes(editedBytes);
+              _tempEditFiles.add(tempFile.path);
+            } catch (_) {
+              // Temp file save is best-effort; keep bytes in memory
+            }
+
+            // Update the selected item in-memory with edited bytes
+            try {
+              final key = _selectedItems.entries
+                  .firstWhere((e) => e.value == entry)
+                  .key;
+              if (mounted) {
+                setState(() {
+                  _selectedItems[key] = MapEntry(fileName, editedBytes);
+                });
+              }
+            } catch (_) {
+              // Item was removed while editor was open — silently ignore
+            }
+          },
         ),
       ),
     );
-
-    if (editedBytes == null || !mounted) return;
-
-    // Save edited bytes to temp cache directory (do NOT overwrite original)
-    try {
-      final tempDir = await getTemporaryDirectory();
-      final tempFileName =
-          'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
-      final tempFile = File('${tempDir.path}/$tempFileName');
-      await tempFile.writeAsBytes(editedBytes);
-      _tempEditFiles.add(tempFile.path);
-    } catch (_) {
-      // Temp file save is best-effort; keep bytes in memory
-    }
-
-    // Update the selected item in-memory with edited bytes
-    try {
-      final key = _selectedItems.entries
-          .firstWhere((e) => e.value == MapEntry(fileName, imageBytes))
-          .key;
-      if (mounted) {
-        setState(() {
-          _selectedItems[key] = MapEntry(fileName, editedBytes);
-        });
-      }
-    } catch (_) {
-      // Item was removed while editor was open — silently ignore
-    }
   }
 }

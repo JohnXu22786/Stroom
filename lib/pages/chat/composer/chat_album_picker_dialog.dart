@@ -525,35 +525,51 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
 
     if (shouldEdit != true || !mounted) return;
 
-    // User tapped edit — open quick editor
-    final editedBytes = await Navigator.push<Uint8List>(
+    // User tapped edit — open quick editor. The editor pops immediately
+    // and processes in the background; the selection is updated from the
+    // callback once the edited bytes are ready.
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ExtendedImageEditorPage(
           imageBytes: imageBytes,
           fileName: fileName,
+          onProcessed: (result) async {
+            if (result is! QuickEditProcessingSuccess) return;
+            final editedBytes = result.editedBytes;
+            if (!mounted) return;
+
+            // Save edited bytes to temp cache directory instead of
+            // overwriting original
+            try {
+              final tempDir = await getTemporaryDirectory();
+              final tempFileName =
+                  'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+              final tempFile = File('${tempDir.path}/$tempFileName');
+              await tempFile.writeAsBytes(editedBytes);
+              _tempEditFiles.add(tempFile.path);
+            } catch (_) {
+              // Temp file save is best-effort; we keep the bytes in memory
+            }
+
+            // The dialog is interactive while the editor processes in
+            // the background — it may have been dismissed, or the item
+            // removed (and possibly re-added) since the edit started.
+            // Only apply the edit if it is still the same entry.
+            if (!mounted) return;
+            final current = _selectedItems[recordKey];
+            if (current == null || !identical(current.value, imageBytes)) {
+              return;
+            }
+
+            // Update the selected item in-memory with edited bytes
+            setState(() {
+              _selectedItems[recordKey] = MapEntry(fileName, editedBytes);
+            });
+          },
         ),
       ),
     );
-
-    if (editedBytes == null || !mounted) return;
-
-    // Save edited bytes to temp cache directory instead of overwriting original
-    try {
-      final tempDir = await getTemporaryDirectory();
-      final tempFileName =
-          'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
-      final tempFile = File('${tempDir.path}/$tempFileName');
-      await tempFile.writeAsBytes(editedBytes);
-      _tempEditFiles.add(tempFile.path);
-    } catch (_) {
-      // Temp file save is best-effort; we keep the bytes in memory
-    }
-
-    // Update the selected item in-memory with edited bytes
-    setState(() {
-      _selectedItems[recordKey] = MapEntry(fileName, editedBytes);
-    });
   }
 
   String _formatSize(int bytes) {

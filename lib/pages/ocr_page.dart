@@ -1284,16 +1284,21 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (index >= _selectedImages.length) return;
 
     final currentImage = _selectedImages[index];
-    Uint8List? editedBytes;
 
     if (result == 'crop') {
-      // Quick edit — directly opens crop editor, no choice dialog needed
-      editedBytes = await Navigator.push<Uint8List>(
+      // Quick edit — directly opens crop editor, no choice dialog needed.
+      // The editor pops immediately and processes in the background;
+      // the edited bytes are applied from the callback once ready.
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => ExtendedImageEditorPage(
             imageBytes: currentImage.bytes,
             fileName: '图片_${index + 1}.${currentImage.format}',
+            onProcessed: (result) {
+              if (result is! QuickEditProcessingSuccess) return;
+              _applyEditedImage(index, currentImage, result.editedBytes);
+            },
           ),
         ),
       );
@@ -1310,11 +1315,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ),
       );
       if (editorResult != null) {
-        editedBytes = editorResult.editedBytes;
+        _applyEditedImage(index, currentImage, editorResult.editedBytes);
       }
     }
+  }
 
-    if (editedBytes == null || !mounted) return;
+  /// Applies [editedBytes] to the in-memory selected image, guarding
+  /// against the image at [index] having changed since the editor opened.
+  void _applyEditedImage(
+    int index,
+    SelectedImage currentImage,
+    Uint8List editedBytes,
+  ) {
+    if (!mounted) return;
     if (index >= _selectedImages.length) return;
     // Verify the image at this index is still the same one
     if (_selectedImages[index].bytes != currentImage.bytes) return;
@@ -1322,7 +1335,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // Update the selected image with edited bytes (in-memory only)
     setState(() {
       _selectedImages[index] = SelectedImage(
-        bytes: editedBytes!,
+        bytes: editedBytes,
         format: currentImage.format,
       );
     });
