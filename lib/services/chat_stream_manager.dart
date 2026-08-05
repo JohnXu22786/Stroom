@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/legacy.dart'
     show StateProvider, StateProviderFamily;
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
+import '../models/assistant.dart' show Assistant;
 import '../models/message_block.dart';
 import '../models/tool_call.dart';
 import '../pages/chat/chat_types.dart';
@@ -14,6 +15,7 @@ import '../providers/context_management_provider.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/system_assistant_provider.dart';
 import '../providers/assistant_provider.dart';
+import '../providers/provider_config.dart';
 import 'app_log_service.dart';
 import 'chat_adapter.dart';
 import 'chat_protocol.dart' show rebuildToolResultText;
@@ -213,6 +215,7 @@ class ChatStreamManager {
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
     String? streamingMsgId,
+    Assistant? assistant,
   }) async {
     // If this conversation already has a stream running, return the
     // pending future so the caller awaits the same result.
@@ -376,6 +379,8 @@ class ChatStreamManager {
             reasoningParamValues: reasoningParamValues,
             tools: tools,
             convId: convId,
+            assistant: assistant,
+            entriesState: _ref?.read(providerEntriesProvider),
           );
 
     // Now safe to yield to event loop — all state is established and the

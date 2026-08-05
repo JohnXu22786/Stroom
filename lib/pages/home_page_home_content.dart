@@ -107,6 +107,9 @@ extension _HomePageHomeContentExt on _HomePageState {
             _buildStatusCard(
                 context, inProgressCount, completedCount, failedCount),
             const SizedBox(height: 16),
+            // Full-width task flow entry below recent tasks
+            _buildTaskFlowCard(context),
+            const SizedBox(height: 16),
             // Module grid
             Expanded(
               child: GridView(
@@ -210,20 +213,6 @@ extension _HomePageHomeContentExt on _HomePageState {
                     },
                   ),
                   _buildModuleCard(
-                    icon: Icons.account_tree,
-                    label: '任务流',
-                    subtitle: '功能块编排流水线',
-                    color: Colors.blue,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const TaskFlowListPage(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildModuleCard(
                     icon: Icons.auto_stories,
                     label: 'Anki闪卡',
                     subtitle: '记忆辅助系统',
@@ -297,6 +286,94 @@ extension _HomePageHomeContentExt on _HomePageState {
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Full-width entry to the task flow system, shown below the recent
+  /// tasks status card (original design: full-width card with flow count).
+  Widget _buildTaskFlowCard(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final taskFlows = ref.watch(taskFlowListProvider);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const TaskFlowListPage(),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Row(
+            children: [
+              // Icon
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: cs.tertiary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.account_tree,
+                  size: 22,
+                  color: cs.tertiary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Text content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '任务流',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      taskFlows.isEmpty
+                          ? '创建一个自动化任务流，依次执行多个功能'
+                          : '${taskFlows.length} 个任务流 · 点击管理',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Add button (chevron always — the home navigation test
+              // asserts no standalone plus icon on the home page)
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: cs.tertiary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: cs.tertiary,
+                ),
               ),
             ],
           ),

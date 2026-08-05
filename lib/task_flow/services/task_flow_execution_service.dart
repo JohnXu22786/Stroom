@@ -4,6 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../catcatch/providers/catcatch_provider.dart';
+import '../../models/assistant.dart';
+import '../../providers/assistant_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/chat_manager_provider.dart';
 import '../../providers/provider_config.dart';
@@ -286,6 +288,13 @@ class TaskFlowExecutionService {
           providerEntries: providerEntries,
         );
       case BlockType.chat:
+        // Resolve the block's assistantId (empty = use the currently
+        // selected assistant) to the assistant object for this run.
+        final assistantId = block.params['assistantId']?.toString() ?? '';
+        final assistants = _ref.read(assistantProvider);
+        final chatAssistant = assistantId.isNotEmpty
+            ? assistants.where((a) => a.id == assistantId).firstOrNull
+            : null;
         return await executeChatBlock(
           block: block,
           def: def,
@@ -295,6 +304,7 @@ class TaskFlowExecutionService {
           flowSubTask: flowSubTask,
           bgNotifier: bgNotifier,
           chatManager: _ref.read(chatStreamManagerProvider),
+          assistant: chatAssistant,
         );
       case BlockType.custom:
         execNotifier.updateSubTaskStatus(
