@@ -289,6 +289,19 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     if (imageBytes == null) return;
     if (!mounted) return;
 
+    // Another edit is still processing — starting a second one could
+    // silently discard the newer edit (both pipelines resolve against
+    // the same original bytes). Ask the user to wait.
+    if (_editsInFlight > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('图片处理中，请稍候再编辑'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     final shouldEdit = await showDialog<bool>(
       context: context,
       builder: (ctx) => ImagePreviewDialog(
@@ -303,26 +316,39 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     // (no save dialog needed for chat page attachments).
     // The editor pops immediately and processes in the background;
     // the pending attachment is updated from the callback once ready.
-    await Navigator.push(
+    final confirmed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => ExtendedImageEditorPage(
           imageBytes: imageBytes,
           fileName: att.fileName,
           onProcessed: (result) async {
-            if (result is! QuickEditProcessingSuccess) return;
-            if (!mounted) return;
-            if (index >= _pendingAttachments.length) return;
-            // Verify the attachment at this index is still the same one
-            // we tapped
-            if (_pendingAttachments[index].id != att.id) return;
+            try {
+              if (result is! QuickEditProcessingSuccess) return;
+              if (!mounted) return;
+              if (index >= _pendingAttachments.length) return;
+              // Verify the attachment at this index is still the same
+              // one we tapped
+              if (_pendingAttachments[index].id != att.id) return;
 
-            // Editor delivered edited bytes — update the pending attachment
-            await _updatePendingAttachmentAfterEdit(index, result.editedBytes);
+              // Editor delivered edited bytes — update the pending
+              // attachment
+              await _updatePendingAttachmentAfterEdit(
+                  index, result.editedBytes);
+            } finally {
+              // The pipeline always fires the callback (success or
+              // failure) — release the send-blocking guard here.
+              if (mounted) setState(() => _editsInFlight--);
+            }
           },
         ),
       ),
     );
+    if (confirmed == true && mounted) {
+      // The pipeline is now running — hold the send button until the
+      // callback releases it.
+      setState(() => _editsInFlight++);
+    }
   }
 
   /// Updates the pending attachment at [index] with [editedBytes].

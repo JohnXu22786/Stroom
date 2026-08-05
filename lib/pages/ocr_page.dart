@@ -99,6 +99,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   String? _errorMessage;
   int _selectedModelIndex = 0;
 
+  /// Number of quick image edits still processing in the background.
+  /// While non-zero, starting OCR is blocked — it would otherwise run
+  /// on the unedited image bytes.
+  int _editsInFlight = 0;
+
   /// Whether reorder mode is active
   bool _reorderMode = false;
 
@@ -883,9 +888,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed:
-                    _selectedImages.isEmpty || _isProcessing ? null : _startOcr,
-                icon: _isProcessing
+                onPressed: _selectedImages.isEmpty ||
+                        _isProcessing ||
+                        _editsInFlight > 0
+                    ? null
+                    : _startOcr,
+                icon: _isProcessing || _editsInFlight > 0
                     ? const SizedBox(
                         width: 18,
                         height: 18,
@@ -896,7 +904,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       )
                     : const Icon(Icons.text_snippet, size: 20),
                 label: Text(
-                  _isProcessing ? '识别中...' : '开始识别',
+                  _isProcessing
+                      ? '识别中...'
+                      : _editsInFlight > 0
+                          ? '图片处理中...'
+                          : '开始识别',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -1286,22 +1298,45 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final currentImage = _selectedImages[index];
 
     if (result == 'crop') {
+      // Another edit is still processing — starting a second one could
+      // silently discard the newer edit. Ask the user to wait.
+      if (_editsInFlight > 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('图片处理中，请稍候再编辑'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
       // Quick edit — directly opens crop editor, no choice dialog needed.
       // The editor pops immediately and processes in the background;
       // the edited bytes are applied from the callback once ready.
-      await Navigator.push(
+      final confirmed = await Navigator.push<bool>(
         context,
         MaterialPageRoute(
           builder: (_) => ExtendedImageEditorPage(
             imageBytes: currentImage.bytes,
             fileName: '图片_${index + 1}.${currentImage.format}',
             onProcessed: (result) {
-              if (result is! QuickEditProcessingSuccess) return;
-              _applyEditedImage(index, currentImage, result.editedBytes);
+              try {
+                if (result is! QuickEditProcessingSuccess) return;
+                _applyEditedImage(index, currentImage, result.editedBytes);
+              } finally {
+                if (mounted) setState(() => _editsInFlight--);
+              }
             },
           ),
         ),
       );
+      if (confirmed == true && mounted) {
+        // The pipeline is now running — hold the start button until the
+        // callback (which always fires) releases it.
+        setState(() => _editsInFlight++);
+      }
     } else {
       // Full editor — opens with showSaveDialog=false so it directly
       // overwrites the in-memory data without asking the user
@@ -1360,6 +1395,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   Future<void> _startOcr() async {
     if (_selectedImages.isEmpty) return;
+    // A quick image edit is still processing — starting now would run
+    // OCR on the unedited bytes.
+    if (_editsInFlight > 0) return;
 
     final modelOptions = _getOcrModelOptions(ref);
     if (modelOptions.isEmpty || _selectedModelIndex >= modelOptions.length) {
