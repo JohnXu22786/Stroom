@@ -394,5 +394,37 @@ void chatTypesGroup2() {
       expect(segments[3], isA<TextSegment>());
       expect((segments[3] as TextSegment).text, 'text2');
     });
+
+    test('reasoning-only round 2 renders interleaved, not at the bottom', () {
+      // Real post-stream data for a 2-round flow where each round is
+      // reasoning + tool call with NO visible text:
+      //   reasoningSections = ['think1', 'think2', ''] (trailing placeholder
+      //     from the final ReasoningSectionEndEvent)
+      //   textChunks = ['', '', 'final answer'] (round 1/2 text empty)
+      //   toolCalls = [A, B], roundStarts = [0, 1]
+      // Regression guard for the "all thoughts at the bottom" bug: with the
+      // correct round boundary (roundStarts=[0,1]), think2 must appear
+      // between tool A and tool B — NOT after all tools.
+      final segments = buildAgentChainSegments(
+        reasoningSections: ['think1', 'think2', ''],
+        textChunks: ['', '', 'final answer'],
+        toolCalls: [_tc('1', 'A'), _tc('2', 'B')],
+        toolCallRoundStarts: [0, 1],
+      );
+      // R0, TC(A), R1, TC(B), T(final answer)
+      expect(segments.length, 5);
+      expect(segments[0], isA<ReasoningSegment>());
+      expect((segments[0] as ReasoningSegment).sectionIndex, 0);
+      expect(segments[1], isA<ToolCallSegment>());
+      expect((segments[1] as ToolCallSegment).data.name, 'A');
+      expect(segments[2], isA<ReasoningSegment>());
+      expect((segments[2] as ReasoningSegment).sectionIndex, 1,
+          reason: 'think2 must be interleaved after tool A. If it is at the '
+              'end of the segment list, the round-boundary bug regressed.');
+      expect(segments[3], isA<ToolCallSegment>());
+      expect((segments[3] as ToolCallSegment).data.name, 'B');
+      expect(segments[4], isA<TextSegment>());
+      expect((segments[4] as TextSegment).text, 'final answer');
+    });
   });
 }

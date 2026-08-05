@@ -34,7 +34,9 @@ class StreamResult {
 
   /// Indices into [toolCalls] where each new tool-call round begins.
   /// Used by [buildAgentChainSegments] to group consecutive tool calls
-  /// that belong to the same assistant step (separated by non-empty text).
+  /// that belong to the same assistant step. Each round is sealed by a
+  /// ReasoningSectionEndEvent (recorded via pendingRoundStart) or by
+  /// non-empty text before the round's first tool call.
   final List<int> toolCallRoundStarts;
   final List<MessageBlock> blocks;
 
@@ -96,6 +98,16 @@ class _ConversationStreamState {
   /// would cause a duplicate [0, 0], splitting round 0's tools across
   /// phantom rounds.
   List<int> toolCallRoundStarts = [];
+
+  /// Set by [ReasoningSectionEndEvent] and consumed by the next
+  /// [ToolCallStartEvent]. Marks that the next tool call begins a NEW
+  /// round — the reasoning-section boundary is the authoritative round
+  /// boundary (the service emits one end event per tool round), while
+  /// text chunks alone miss rounds that start with reasoning and no
+  /// visible text (the standard reasoning-model agent pattern).
+  /// Without this, such rounds were merged into the previous round and
+  /// their reasoning section was rendered at the bottom of the message.
+  bool pendingRoundStart = false;
   List<MessageBlock> blocks = [];
 
   /// Throttle timers
