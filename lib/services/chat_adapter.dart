@@ -126,33 +126,34 @@ class ChatAdapter {
   /// built from the assistant's bound model (its `modelId`) and carries
   /// the assistant's prompt/settings — the global cached model selection
   /// is NOT touched, so a task-flow chat block and the chat page can run
-  /// concurrently with different models/assistants. If the assistant's
-  /// model cannot be resolved, it falls back to the global config (but
-  /// still applies the assistant's prompt/settings).
+  /// concurrently with different models/assistants. The assistant model
+  /// resolution does NOT depend on the global cache: it works even in a
+  /// fresh session where the chat page was never opened. If the
+  /// assistant's model cannot be resolved, it falls back to the global
+  /// config (still applying the assistant's prompt/settings).
   ChatService? getOrCreateService(
     String convId, {
     Assistant? assistant,
     ProviderEntriesState? entriesState,
   }) {
-    if (_cachedProvider == null || _cachedModelConfig == null) return null;
-    return _activeServices.putIfAbsent(convId, () {
-      if (assistant != null && entriesState != null) {
-        final resolved = _resolveAssistantModel(
-          assistant.modelId,
-          entriesState,
+    if (assistant != null && entriesState != null) {
+      final resolved = _resolveAssistantModel(
+        assistant.modelId,
+        entriesState,
+      );
+      if (resolved != null) {
+        final (config, modelConfig) = resolved;
+        final endpointType = effectiveEndpointType(
+          modelConfig.endpointType,
+          config.endpointType,
         );
-        if (resolved != null) {
-          final (config, modelConfig) = resolved;
-          final endpointType = effectiveEndpointType(
-            modelConfig.endpointType,
-            config.endpointType,
-          );
-          final provider = createChatProviderFromConfig(
-            providerName: config.providerName,
-            baseUrl: config.host,
-            apiKey: config.key,
-            endpointType: endpointType,
-          );
+        final provider = createChatProviderFromConfig(
+          providerName: config.providerName,
+          baseUrl: config.host,
+          apiKey: config.key,
+          endpointType: endpointType,
+        );
+        return _activeServices.putIfAbsent(convId, () {
           return _buildService(
             provider,
             modelConfig,
@@ -160,8 +161,14 @@ class ChatAdapter {
             endpointType,
             assistant: assistant,
           );
-        }
+        });
       }
+    }
+
+    // Fallback: the global cached model (requires the adapter to have
+    // been configured — e.g. the chat page opened this session).
+    if (_cachedProvider == null || _cachedModelConfig == null) return null;
+    return _activeServices.putIfAbsent(convId, () {
       final svc = _buildService(
         _cachedProvider!,
         _cachedModelConfig!,

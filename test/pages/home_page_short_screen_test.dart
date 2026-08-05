@@ -28,4 +28,41 @@ void main() {
           reason: 'home page overflowed at $size');
     }
   });
+
+  testWidgets(
+      'dragging on the module grid scrolls the page '
+      '(no scroll dead-zone)', (tester) async {
+    // 375x667: the body viewport (below the 80px NavigationBar) shows the
+    // grid's first rows, so a drag starting on a card must scroll the page.
+    tester.view.physicalSize = const Size(375, 667);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(home: HomePage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Drag upward from a point inside the module grid (starts ≈312px;
+    // the body viewport bottom is ≈587px on this size).
+    await tester.dragFrom(const Offset(50, 500), const Offset(0, -120));
+    await tester.pumpAndSettle();
+
+    // The page (SingleChildScrollView) must have scrolled.
+    final scrollable = find.byType(SingleChildScrollView).first;
+    final position = tester
+        .state<ScrollableState>(
+          find
+              .descendant(
+                of: scrollable,
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        )
+        .position;
+    expect(position.pixels, greaterThan(0),
+        reason: 'drag on the grid must scroll the page, not dead-zone');
+  });
 }
