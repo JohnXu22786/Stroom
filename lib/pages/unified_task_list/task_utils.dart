@@ -217,7 +217,11 @@ void removeFlowSubTaskTasks(WidgetRef ref, TaskFlowExecution execution) {
     removeSynthesis: (id) => ref.read(taskListProvider.notifier).removeTask(id),
     removeBackground: (id) =>
         ref.read(backgroundTasksProvider.notifier).removeTask(id),
-    cancelChat: (convId) => ref.read(chatStreamManagerProvider).cancel(convId),
+    // convId derivation matches chat_executor:
+    // 'flow_${execId}_${flowSubTask.id}' (execution.id == execId).
+    cancelChat: (st) => ref
+        .read(chatStreamManagerProvider)
+        .cancel('flow_${execution.id}_${st.id}'),
     cancelActiveRequest: shouldCancelActiveRequest(execution)
         ? () {
             ref
@@ -239,7 +243,7 @@ void removeFlowSubTaskTasksCore(
   required void Function(String id) removeCatCatch,
   required void Function(String id) removeSynthesis,
   required void Function(String id) removeBackground,
-  required void Function(String convId) cancelChat,
+  required void Function(FlowSubTask st) cancelChat,
   void Function()? cancelActiveRequest,
 }) {
   for (final st in execution.subTasks) {
@@ -251,9 +255,9 @@ void removeFlowSubTaskTasksCore(
         removeSynthesis(st.subTaskId);
       default: // 'background' (including legacy 'chat' records)
         if (st.subTaskId.startsWith('chat_')) {
-          // Cancel the live chat stream (convId is derived from the
-          // FlowSubTask id, matching chat_executor).
-          cancelChat('flow_${st.id}');
+          // Cancel the live chat stream (convId derived from the
+          // execution id + FlowSubTask id, matching chat_executor).
+          cancelChat(st);
         }
         removeBackground(st.subTaskId);
     }

@@ -68,14 +68,15 @@ void main() {
         removeCatCatch: (id) => removedCatCatch.add(id),
         removeSynthesis: (id) => removedSynthesis.add(id),
         removeBackground: (id) => removedBackground.add(id),
-        cancelChat: (convId) => cancelledChats.add(convId),
+        cancelChat: (st) => cancelledChats.add('flow_${st.id}'),
       );
 
       expect(removedCatCatch, ['catcatch-real-1']);
       expect(removedSynthesis, ['tts-real-2']);
       expect(removedBackground, ['chat_real_3', 'asr-real-4']);
       expect(cancelledChats, ['flow_3'],
-          reason: 'chat sub-task convId is derived from the FlowSubTask id');
+          reason: 'chat sub-task convId is derived from the FlowSubTask id '
+              '(the execId prefix is added by the production wrapper)');
     });
 
     test(

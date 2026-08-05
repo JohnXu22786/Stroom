@@ -30,7 +30,12 @@ Future<String> executeChatBlock({
   final promptPrefix = asStringParam(block.params, 'promptPrefix', '').trim();
   final prompt = promptPrefix.isNotEmpty ? '$promptPrefix\n\n$input' : input;
 
-  final taskId = 'chat_${flowSubTask.id}';
+  // Unique per EXECUTION: flowSubTask.id is a positional placeholder
+  // ('pending_chat_0') shared across flows and runs — without execId,
+  // concurrent chat blocks would collide on the same convId/taskId
+  // (cross-flow output contamination) and re-runs would reuse stale
+  // per-conversation services.
+  final taskId = 'chat_${execId}_${flowSubTask.id}';
   execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
   execNotifier.updateSubTaskStatus(execId, flowSubTask.id, TaskStatus.running);
   bgNotifier.addTask(
@@ -42,10 +47,7 @@ Future<String> executeChatBlock({
   try {
     bgNotifier.updateStep(taskId, 0, running: true);
 
-    // Generate a unique conversation ID for this block execution.
-    // Using the flow sub-task ID ensures each execution has its own
-    // conversation context (no cross-contamination with other flows).
-    final convId = 'flow_${flowSubTask.id}';
+    final convId = 'flow_${execId}_${flowSubTask.id}';
 
     final result = await chatManager
         .startStreaming(

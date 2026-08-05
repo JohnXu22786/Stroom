@@ -1394,7 +1394,6 @@ void main() {
       expect(svc!.assistantPrompt, '你是测试助手');
       adapter.cancelService('conv-fallback');
     });
-
     test('per-conversation services are independent (concurrent flows)', () {
       final svcA = adapter.getOrCreateService(
         'flow_conv_a',
@@ -1413,6 +1412,40 @@ void main() {
       expect(identical(svcA, svcB), isFalse);
       adapter.cancelService('flow_conv_a');
       adapter.cancelService('flow_conv_b');
+    });
+
+    test(
+        'assistant with a resolvable model works in a FRESH session '
+        '(no global configure yet)', () {
+      // The adapter has NOT been configured (no chat page opened this
+      // session): the assistant's bound model must still resolve.
+      final fresh = ChatAdapter();
+      final svc = fresh.getOrCreateService(
+        'flow_conv_fresh',
+        assistant: _assistant(modelId: 'claude-3-opus', prompt: '你是测试助手'),
+        entriesState: entriesState,
+      );
+      expect(svc, isNotNull,
+          reason: 'a resolvable assistant must not depend on the global '
+              'cache (fresh session)');
+      expect(svc!.assistantPrompt, '你是测试助手');
+      expect(fresh.isConfigured, isFalse,
+          reason: 'the fresh adapter must remain unconfigured');
+      fresh.cancelService('flow_conv_fresh');
+    });
+
+    test(
+        'assistant with an unresolvable model on a fresh adapter returns '
+        'null (fallback guard preserved)', () {
+      final fresh = ChatAdapter();
+      final svc = fresh.getOrCreateService(
+        'flow_conv_fresh_miss',
+        assistant: _assistant(modelId: 'does-not-exist'),
+        entriesState: entriesState,
+      );
+      expect(svc, isNull,
+          reason: 'without a global cache AND an unresolvable assistant '
+              'model there is nothing to build the service from');
     });
   });
 }
