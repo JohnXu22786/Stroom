@@ -50,6 +50,15 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         sections.add('');
         state.reasoningSections = sections;
         state.reasoningBuffer = ''; // Reset for new reasoning section
+        // The service emits one ReasoningSectionEndEvent per tool round,
+        // right before that round's ToolCallStartEvents. Mark that the
+        // next tool call begins a new round: the reasoning-section
+        // boundary is authoritative even when the round starts with
+        // reasoning and no visible text (the standard reasoning-model
+        // agent pattern). Without this, such rounds were merged into the
+        // previous round and their reasoning section was rendered at the
+        // bottom of the message by _buildWithRounds' trailing loop.
+        state.pendingRoundStart = true;
         _pushToProvider(convId, streamingReasoningSectionsProvider, sections);
 
       case ToolCallStartEvent e:
@@ -64,21 +73,36 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         // Start a new text chunk at tool call boundary so that
         // assistant speech is interleaved between tool call rounds
         // rather than all appearing at the end.
-        if (state.textChunks.last.isNotEmpty || state.textChunks.length == 1) {
+        // A new round starts when:
+        // 1. the reasoning-section boundary says so (pendingRoundStart —
+        //    the previous round sealed its reasoning section), or
+        // 2. the last text chunk is non-empty (speech preceded this
+        //    tool call), or
+        // 3. this is the very first tool call.
+        // Consecutive tool calls within the same assistant step (parallel
+        // tools emitted in one response) don't satisfy any condition and
+        // stay grouped in the same round.
+        if (state.pendingRoundStart ||
+            state.textChunks.last.isNotEmpty ||
+            state.textChunks.length == 1) {
           state.textChunks.add('');
           // Record that this tool call starts a new round.
-          // Consecutive tool calls that don't create new text chunks
-          // are grouped together in the same round.
           state.toolCallRoundStarts.add(state.toolCalls.length - 1);
         }
-        // Set textSections first (no listener) so that when
-        // toolCalls fires its listener, it reads the updated value.
+        state.pendingRoundStart = false;
+        // Push order matters: the textSections and toolCalls listeners call
+        // _rebuildLiveSegments synchronously (Riverpod fires listeners on
+        // state change), which reads ALL segment providers. roundStarts must
+        // therefore be pushed BEFORE toolCalls — otherwise the rebuild
+        // triggered by the toolCalls push reads the stale round boundary and
+        // renders the new round's reasoning at the bottom until the first
+        // complete event of the round.
         _pushToProvider(convId, streamingTextSectionsProvider,
             List<String>.from(state.textChunks));
-        _pushToProvider(convId, streamingToolCallsProvider,
-            List<ToolCallData>.from(state.toolCalls));
         _pushToProvider(convId, streamingToolCallRoundStartsProvider,
             List<int>.from(state.toolCallRoundStarts));
+        _pushToProvider(convId, streamingToolCallsProvider,
+            List<ToolCallData>.from(state.toolCalls));
 
       case ToolCallCompleteEvent e:
         for (var i = 0; i < state.toolCalls.length; i++) {

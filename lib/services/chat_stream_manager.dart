@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart' show Ref;
 import 'package:flutter_riverpod/legacy.dart'
     show StateProvider, StateProviderFamily;
@@ -73,6 +73,25 @@ class ChatStreamManager {
   // ── 上下文管理常量 ──
   /// 压缩请求的最大输出 token 数。
   static const int _compactionMaxTokens = 4096;
+
+  /// Whether the partial streaming state contains anything worth
+  /// persisting during periodic saves: visible text, any reasoning
+  /// section content (including a reasoning round whose buffer was just
+  /// reset by ReasoningSectionEndEvent), or tool calls.
+  ///
+  /// Pure and testable; used as the single source of truth by both the
+  /// periodic-persist guard and the partial-message builder so they can
+  /// never disagree.
+  @visibleForTesting
+  static bool partialPersistHasContent({
+    required String fullReply,
+    required List<String> reasoningSections,
+    required bool hasAccumulatedToolCalls,
+  }) {
+    return fullReply.isNotEmpty ||
+        reasoningSections.any((s) => s.isNotEmpty) ||
+        hasAccumulatedToolCalls;
+  }
 
   ChatStreamManager([this._ref]);
 
