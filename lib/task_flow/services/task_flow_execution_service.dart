@@ -33,7 +33,7 @@ final taskFlowSchedulerProvider = Provider<TaskFlowScheduler>(
 ///
 /// Must match the switch in `TaskFlowCard._buildSubTaskCard`
 /// ('catcatch' | 'background' | 'synthesis'). The chat block creates a
-/// [BackgroundTask] (id `chat_<subTaskId>`), so it must map to
+/// [BackgroundTask] (id `chat_<execId>_<subTaskId>`), so it must map to
 /// 'background' — otherwise the flow card never links to the real task.
 ///
 /// Note: executions persisted before chat mapped to 'background' still
