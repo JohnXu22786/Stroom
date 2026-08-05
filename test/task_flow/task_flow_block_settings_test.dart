@@ -169,7 +169,7 @@ void main() {
   });
 
   testWidgets(
-      'TTS panel with duplicate voice ids across models does not '
+      'TTS panel with duplicate voice ids within one model does not '
       'crash (deduped dropdown)', (tester) async {
     final entries = ProviderEntriesState(
       entries: [
@@ -188,13 +188,7 @@ void main() {
                   modelId: 'edge-a',
                   voices: [
                     VoiceEntry(name: '晓晓', id: 'shared-voice'),
-                  ],
-                ),
-                ModelConfig(
-                  name: 'edge-b',
-                  modelId: 'edge-b',
-                  voices: [
-                    VoiceEntry(name: '晓晓', id: 'shared-voice'),
+                    VoiceEntry(name: '晓晓（备选）', id: 'shared-voice'),
                   ],
                 ),
               ],

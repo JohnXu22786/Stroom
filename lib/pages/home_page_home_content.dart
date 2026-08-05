@@ -73,46 +73,51 @@ extension _HomePageHomeContentExt on _HomePageState {
       top: true,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header — no notification button (replaced by status card)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                children: [
-                  Icon(Icons.auto_awesome, size: 24, color: cs.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '欢迎使用 Stroom',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: cs.onSurface,
+        // Whole content scrolls so short/landscape screens don't overflow
+        // (the module grid is shrink-wrapped — a fixed handful of cards,
+        // no perf concern).
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header — no notification button (replaced by status card)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.auto_awesome, size: 24, color: cs.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '欢迎使用 Stroom',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: cs.onSurface,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '选择一个功能模块开始使用',
-              style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
-            ),
-            const SizedBox(height: 16),
-            // Status card — shows task counts by status
-            _buildStatusCard(
-                context, inProgressCount, completedCount, failedCount),
-            const SizedBox(height: 16),
-            // Full-width task flow entry below recent tasks
-            _buildTaskFlowCard(context),
-            const SizedBox(height: 16),
-            // Module grid
-            Expanded(
-              child: GridView(
+              const SizedBox(height: 4),
+              Text(
+                '选择一个功能模块开始使用',
+                style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 16),
+              // Status card — shows task counts by status
+              _buildStatusCard(
+                  context, inProgressCount, completedCount, failedCount),
+              const SizedBox(height: 16),
+              // Full-width task flow entry below recent tasks
+              _buildTaskFlowCard(context),
+              const SizedBox(height: 16),
+              // Module grid
+              GridView(
+                shrinkWrap: true,
+                physics: const AlwaysScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                   maxCrossAxisExtent: 180,
                   mainAxisSpacing: 12,
@@ -228,8 +233,8 @@ extension _HomePageHomeContentExt on _HomePageState {
                   ),
                 ],
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
