@@ -75,8 +75,7 @@ class AttachmentStorage {
   /// （“无法加载文件”）。现在编辑产物与普通附件同目录存储，
   /// readFile/deleteFile 通过 basename 即可正确解析（Web 端则因键名
   /// 本身就是 storagePath 而天然一致），标记仍保留用于移除/删除语义。
-  static Future<String> saveEditedFile(
-      String fileName, Uint8List bytes) async {
+  static Future<String> saveEditedFile(String fileName, Uint8List bytes) async {
     final ext = _extractExtension(fileName);
     final hash = computeHash(bytes);
     final uniqueId = DateTime.now().millisecondsSinceEpoch.toString();

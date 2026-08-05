@@ -440,6 +440,7 @@ void main() {
       });
     });
 
+<<<<<<< HEAD
     // ── 输出格式（回归：非 JPEG 源必须输出编码后的 PNG 而不是
     //    raw RGBA 像素；JPEG 源输出 JPEG q90 而非体积暴涨的 PNG）──
     // 直接调用顶层处理管线（与 widget 生命周期解耦），比走完整
@@ -450,6 +451,12 @@ void main() {
         required Uint8List rawData,
       }) async {
         final messengerKey = GlobalKey<ScaffoldMessengerState>();
+=======
+    testWidgets('JPEG 源保存后弹出可解码的 JPEG 字节（修复 4MB→12MB 膨胀）', (tester) async {
+      final jpeg = _createSmallJpeg();
+      Uint8List? result;
+      await tester.runAsync(() async {
+>>>>>>> 115a5ae (style: dart format on changed files)
         await tester.pumpWidget(MaterialApp(
           home: ScaffoldMessenger(
             key: messengerKey,
@@ -484,6 +491,7 @@ void main() {
         expect(bytes[1], 0x50, reason: 'PNG 源应保持无损 PNG 输出');
       });
 
+<<<<<<< HEAD
       testWidgets('JPEG 源输出可解码的 JPEG（修复 4MB→12MB 膨胀）',
           (tester) async {
         final outcome =
@@ -497,6 +505,13 @@ void main() {
         expect(bytes[1], 0xD8,
             reason: 'JPEG 照片源应输出 JPEG（旧实现输出 PNG 导致体积暴涨）');
       });
+=======
+      expect(result, isNotNull, reason: '保存必须返回编辑后的字节');
+      expect(img.decodeImage(result!), isNotNull,
+          reason: 'JPEG 源编辑结果必须是可解码的图片');
+      expect(result![0], 0xFF);
+      expect(result![1], 0xD8, reason: 'JPEG 照片源应输出 JPEG（旧实现输出 PNG 导致体积暴涨）');
+>>>>>>> 115a5ae (style: dart format on changed files)
     });
   });
 }

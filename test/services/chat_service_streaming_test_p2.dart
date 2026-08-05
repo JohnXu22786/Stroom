@@ -325,8 +325,10 @@ void chatServiceStreamingGroup2() {
         final d = (dx * dx + dy * dy) / (2800 * 2100);
         p
           ..r = (128 + 50 * (d % 1) + rng.nextInt(18)).round().clamp(0, 255)
-          ..g = (100 + 80 * (p.x / 2800) + rng.nextInt(18)).round().clamp(0, 255)
-          ..b = (150 + 60 * (p.y / 2100) + rng.nextInt(18)).round().clamp(0, 255);
+          ..g =
+              (100 + 80 * (p.x / 2800) + rng.nextInt(18)).round().clamp(0, 255)
+          ..b =
+              (150 + 60 * (p.y / 2100) + rng.nextInt(18)).round().clamp(0, 255);
       }
       final hugePng = img.encodePng(im, level: 6);
       expect(hugePng.length, greaterThan(10 * 1024 * 1024),

@@ -37,8 +37,7 @@ void main() {
   });
 
   group('AttachmentStorage 编辑后附件存储', () {
-    test('saveEditedFile 返回 temp_edited/ 前缀路径，readFile 可读回（显示修复）',
-        () async {
+    test('saveEditedFile 返回 temp_edited/ 前缀路径，readFile 可读回（显示修复）', () async {
       // 回归：编辑后的图片之前被存到系统临时目录，但 storagePath 是
       // temp_edited/xxx —— AttachmentStorage.readFile 解析到附件目录，
       // 文件不存在 → 气泡显示“无法加载文件”。
@@ -50,17 +49,16 @@ void main() {
 
       expect(path.startsWith('temp_edited/'), isTrue,
           reason: '编辑后附件必须保留 temp_edited/ 标记供清理逻辑识别');
-      final onDisk = File(p.join(tmpRoot.path, 'attachments', p.basename(path)));
-      expect(await onDisk.exists(), isTrue,
-          reason: '文件必须落在附件存储目录（而非系统临时目录）');
+      final onDisk =
+          File(p.join(tmpRoot.path, 'attachments', p.basename(path)));
+      expect(await onDisk.exists(), isTrue, reason: '文件必须落在附件存储目录（而非系统临时目录）');
 
       final readBack = await AttachmentStorage.readFile(path);
       expect(readBack, isNotNull);
       expect(readBack, edited);
     });
 
-    test('saveEditedFile 路径与普通附件同目录（可被统一 readFile/deleteFile 处理）',
-        () async {
+    test('saveEditedFile 路径与普通附件同目录（可被统一 readFile/deleteFile 处理）', () async {
       final normal = await AttachmentStorage.saveFile(
           'a.png', Uint8List.fromList([1, 2, 3]));
       final edited = await AttachmentStorage.saveEditedFile(

@@ -35,13 +35,13 @@ void main() {
   });
 
   group('compressImageForSend', () {
-    test('JPEG 输入超过 maxBytes 时压缩为更小、可解码且低于上限的 JPEG',
-        () async {
+    test('JPEG 输入超过 maxBytes 时压缩为更小、可解码且低于上限的 JPEG', () async {
       expect(bigJpeg.length, greaterThan(500 * 1024),
           reason: '夹具 JPEG 应显著大于测试上限');
       const maxBytes = 500 * 1024;
 
-      final result = (await compressImageForSend(bigJpeg, maxBytes: maxBytes)).compressed;
+      final result =
+          (await compressImageForSend(bigJpeg, maxBytes: maxBytes)).compressed;
 
       expect(result, isNotNull);
       final bytes = result!.bytes;
@@ -49,24 +49,22 @@ void main() {
       expect(bytes.length, lessThan(maxBytes));
       expect(bytes[0], 0xFF);
       expect(bytes[1], 0xD8);
-      expect(img.decodeImage(bytes), isNotNull,
-          reason: '压缩结果必须是可解码的 JPEG');
+      expect(img.decodeImage(bytes), isNotNull, reason: '压缩结果必须是可解码的 JPEG');
     });
 
-    test('PNG 输入超过 maxBytes 时先尝试无损 PNG 重编码，结果可解码且低于上限',
-        () async {
+    test('PNG 输入超过 maxBytes 时先尝试无损 PNG 重编码，结果可解码且低于上限', () async {
       expect(bigPng.length, greaterThan(2 * 1024 * 1024),
           reason: '夹具 PNG 应显著大于测试上限');
       const maxBytes = 1024 * 1024;
 
-      final result = (await compressImageForSend(bigPng, maxBytes: maxBytes)).compressed;
+      final result =
+          (await compressImageForSend(bigPng, maxBytes: maxBytes)).compressed;
 
       expect(result, isNotNull);
       final bytes = result!.bytes;
       expect(bytes.length, lessThan(bigPng.length));
       expect(bytes.length, lessThan(maxBytes));
-      expect(img.decodeImage(bytes), isNotNull,
-          reason: '压缩结果必须是可解码的图片');
+      expect(img.decodeImage(bytes), isNotNull, reason: '压缩结果必须是可解码的图片');
     });
 
     test('无损 PNG 重编码即可达标时优先返回 PNG（保真）', () async {
@@ -84,7 +82,8 @@ void main() {
       expect(loosePng.length, greaterThan(2 * 1024 * 1024));
 
       const maxBytes = 1024 * 1024;
-      final result = (await compressImageForSend(loosePng, maxBytes: maxBytes)).compressed;
+      final result =
+          (await compressImageForSend(loosePng, maxBytes: maxBytes)).compressed;
 
       expect(result, isNotNull);
       final bytes = result!.bytes;
@@ -110,7 +109,8 @@ void main() {
       expect(alphaPng.length, greaterThan(2 * 1024 * 1024));
 
       const maxBytes = 1024 * 1024;
-      final result = (await compressImageForSend(alphaPng, maxBytes: maxBytes)).compressed;
+      final result =
+          (await compressImageForSend(alphaPng, maxBytes: maxBytes)).compressed;
 
       expect(result, isNotNull);
       final bytes = result!.bytes;
@@ -119,8 +119,7 @@ void main() {
           reason: '带 alpha 的 PNG 降级为 JPEG 后必须可解码');
     });
 
-    test('输入已在上限以内时返回 null（不做无谓重编码，字节原样保留）',
-        () async {
+    test('输入已在上限以内时返回 null（不做无谓重编码，字节原样保留）', () async {
       final tiny = img.encodePng(buildPhotoLikeImage(width: 64, height: 64));
       expect(tiny.length, lessThan(10 * 1024 * 1024));
 
@@ -132,19 +131,18 @@ void main() {
     });
 
     test('无法解码的字节 decodable=false（优雅降级，不抛异常）', () async {
-      final garbage = Uint8List.fromList(List.generate(256, (i) => i * 7 % 256));
+      final garbage =
+          Uint8List.fromList(List.generate(256, (i) => i * 7 % 256));
 
       // maxBytes 必须小于输入才会触发解码尝试
       final outcome = await compressImageForSend(garbage, maxBytes: 128);
 
-      expect(outcome.decodable, isFalse,
-          reason: '无法解码的图片必须标记为不可发送，调用方据此走跳过路径');
+      expect(outcome.decodable, isFalse, reason: '无法解码的图片必须标记为不可发送，调用方据此走跳过路径');
       expect(outcome.compressed, isNull);
     });
 
     test('空输入 decodable=true 且无压缩结果', () async {
-      final outcome =
-          await compressImageForSend(Uint8List(0), maxBytes: 1024);
+      final outcome = await compressImageForSend(Uint8List(0), maxBytes: 1024);
 
       expect(outcome.decodable, isTrue);
       expect(outcome.compressed, isNull);

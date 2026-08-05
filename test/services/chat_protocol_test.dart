@@ -541,8 +541,10 @@ void main() {
         final d = (dx * dx + dy * dy) / (1600 * 1200);
         p
           ..r = (128 + 50 * (d % 1) + rng.nextInt(18)).round().clamp(0, 255)
-          ..g = (100 + 80 * (p.x / 1600) + rng.nextInt(18)).round().clamp(0, 255)
-          ..b = (150 + 60 * (p.y / 1200) + rng.nextInt(18)).round().clamp(0, 255);
+          ..g =
+              (100 + 80 * (p.x / 1600) + rng.nextInt(18)).round().clamp(0, 255)
+          ..b =
+              (150 + 60 * (p.y / 1200) + rng.nextInt(18)).round().clamp(0, 255);
       }
       bigPng = img.encodePng(im, level: 6);
     });
@@ -590,8 +592,7 @@ void main() {
 
       expect(outcome.status, AttachmentReadStatus.ok);
       expect(outcome.base64, b64);
-      expect(outcome.mimeType, isNull,
-          reason: '未发生格式转换时不应覆盖 mimeType');
+      expect(outcome.mimeType, isNull, reason: '未发生格式转换时不应覆盖 mimeType');
     });
 
     test('超限非图片（音频）仍返回 tooLarge（不读盘）', () async {
@@ -611,8 +612,7 @@ void main() {
       expect(outcome.base64, isNull);
     });
 
-    test('超限但无法解码的图片返回 tooLarge（发送必然失败，不发垃圾载荷）',
-        () async {
+    test('超限但无法解码的图片返回 tooLarge（发送必然失败，不发垃圾载荷）', () async {
       // 可解码但压缩无收益的图片才"必须发送"；无法解码（如 HEIC/损坏
       // 文件）的图片即使发送 API 也无法读取 → 保持跳过占位。
       final garbage = Uint8List.fromList(List.filled(11 * 1024 * 1024, 0xAB));
@@ -646,8 +646,10 @@ void main() {
         final d = (dx * dx + dy * dy) / (2800 * 2100);
         p
           ..r = (128 + 50 * (d % 1) + rng.nextInt(18)).round().clamp(0, 255)
-          ..g = (100 + 80 * (p.x / 2800) + rng.nextInt(18)).round().clamp(0, 255)
-          ..b = (150 + 60 * (p.y / 2100) + rng.nextInt(18)).round().clamp(0, 255);
+          ..g =
+              (100 + 80 * (p.x / 2800) + rng.nextInt(18)).round().clamp(0, 255)
+          ..b =
+              (150 + 60 * (p.y / 2100) + rng.nextInt(18)).round().clamp(0, 255);
       }
       final hugePng = img.encodePng(im, level: 6);
       expect(hugePng.length, greaterThan(10 * 1024 * 1024),
@@ -695,8 +697,10 @@ void main() {
         final d = (dx * dx + dy * dy) / (2800 * 2100);
         p
           ..r = (128 + 50 * (d % 1) + rng.nextInt(18)).round().clamp(0, 255)
-          ..g = (100 + 80 * (p.x / 2800) + rng.nextInt(18)).round().clamp(0, 255)
-          ..b = (150 + 60 * (p.y / 2100) + rng.nextInt(18)).round().clamp(0, 255);
+          ..g =
+              (100 + 80 * (p.x / 2800) + rng.nextInt(18)).round().clamp(0, 255)
+          ..b =
+              (150 + 60 * (p.y / 2100) + rng.nextInt(18)).round().clamp(0, 255);
       }
       final hugePng = img.encodePng(im, level: 6);
       expect(hugePng.length, greaterThan(10 * 1024 * 1024));
@@ -720,9 +724,8 @@ void main() {
         ],
       );
       final content = req.messages[0]['content'] as List;
-      final imagePart = content
-          .cast<Map>()
-          .firstWhere((p) => p['type'] == 'image');
+      final imagePart =
+          content.cast<Map>().firstWhere((p) => p['type'] == 'image');
       final source = imagePart['source'] as Map;
       expect(source['media_type'], 'image/jpeg',
           reason: 'PNG→JPEG 压缩后 media_type 必须与真实内容一致');
