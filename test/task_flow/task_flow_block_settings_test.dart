@@ -147,8 +147,8 @@ void main() {
   });
 
   testWidgets(
-      'chat panel with a DELETED assistant id does not crash '
-      '(hint guides re-selection)', (tester) async {
+      'chat panel with a DELETED assistant id shows the warning line '
+      '(no crash, re-selection works)', (tester) async {
     await pumpPanel(
       tester,
       block: TaskFlowBlock(
@@ -160,12 +160,17 @@ void main() {
       ],
     );
 
-    // Panel renders without a debug assert (the stale id must not be
-    // passed as the dropdown value — no matching item would crash);
-    // the dropdown still opens and lists the existing assistant.
+    // The stale id must not be passed as the dropdown value (no matching
+    // item → debug assert crash); the warning line guides re-selection.
+    expect(find.text('配置的助手已删除，请重新选择'), findsOneWidget);
     await tester.tap(find.byType(DropdownButtonFormField<String?>));
     await tester.pumpAndSettle();
     expect(find.textContaining('现存助手'), findsOneWidget);
+
+    // Re-selecting a valid assistant clears the warning.
+    await tester.tap(find.textContaining('现存助手').last);
+    await tester.pumpAndSettle();
+    expect(find.text('配置的助手已删除，请重新选择'), findsNothing);
   });
 
   testWidgets(

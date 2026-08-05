@@ -114,130 +114,146 @@ extension _HomePageHomeContentExt on _HomePageState {
               // Full-width task flow entry below recent tasks
               _buildTaskFlowCard(context),
               const SizedBox(height: 16),
-              // Module grid
-              GridView(
-                shrinkWrap: true,
-                physics: const AlwaysScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 180,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 1.2,
-                ),
-                children: [
-                  _buildModuleCard(
-                    icon: Icons.text_snippet,
-                    label: 'OCR',
-                    subtitle: '文字识别',
-                    color: Colors.teal,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const OcrPage()),
-                      );
-                    },
-                  ),
-                  _buildModuleCard(
-                    icon: Icons.multitrack_audio,
-                    label: '语音识别',
-                    subtitle: '语音转文字',
-                    color: Colors.deepPurple,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const AsrPage()),
-                      );
-                    },
-                  ),
-                  _buildModuleCard(
-                    icon: Icons.language,
-                    label: '下载网页资源',
-                    subtitle: '下载网页中的音视频',
-                    color: Colors.purple,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const CatCatchPage()),
-                      );
-                    },
-                  ),
-                  _buildModuleCard(
-                    icon: Icons.music_note,
-                    label: '音频分离',
-                    subtitle: '从视频中提取音频',
-                    color: Colors.indigo,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const AudioSeparationPage(),
+              // Module grid — a Wrap (NOT a GridView): a scrollable grid
+              // registers its own drag recognizer even with
+              // NeverScrollableScrollPhysics and swallows page swipes that
+              // start on it (deepest recognizer wins the gesture arena).
+              // Fixed handful of cards — no perf concern.
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth;
+                  final cols = math.max(1, (width / 180).floor());
+                  final cardWidth = (width - (cols - 1) * 12) / cols;
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      for (final card in _moduleCards())
+                        SizedBox(
+                          width: cardWidth,
+                          height: cardWidth / 1.2,
+                          child: card,
                         ),
-                      );
-                    },
-                  ),
-                  _buildModuleCard(
-                    icon: Icons.record_voice_over,
-                    label: '语音合成',
-                    subtitle: '文字转语音',
-                    color: Colors.cyan,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const TTSCreatePage(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildModuleCard(
-                    icon: Icons.account_tree,
-                    label: '图表制作',
-                    subtitle: 'Mermaid图表编辑',
-                    color: Colors.orange,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const MermaidChartPage(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildModuleCard(
-                    icon: Icons.functions,
-                    label: '数学绘图',
-                    subtitle: '函数绘图',
-                    color: Colors.blue,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const MathDrawingPage(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildModuleCard(
-                    icon: Icons.auto_stories,
-                    label: 'Anki闪卡',
-                    subtitle: '记忆辅助系统',
-                    color: Colors.teal,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const AnkiDroidPage(),
-                        ),
-                      );
-                    },
-                  ),
-                ],
+                    ],
+                  );
+                },
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  List<Widget> _moduleCards() {
+    return [
+      _buildModuleCard(
+        icon: Icons.text_snippet,
+        label: 'OCR',
+        subtitle: '文字识别',
+        color: Colors.teal,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const OcrPage()),
+          );
+        },
+      ),
+      _buildModuleCard(
+        icon: Icons.multitrack_audio,
+        label: '语音识别',
+        subtitle: '语音转文字',
+        color: Colors.deepPurple,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AsrPage()),
+          );
+        },
+      ),
+      _buildModuleCard(
+        icon: Icons.language,
+        label: '下载网页资源',
+        subtitle: '下载网页中的音视频',
+        color: Colors.purple,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CatCatchPage()),
+          );
+        },
+      ),
+      _buildModuleCard(
+        icon: Icons.music_note,
+        label: '音频分离',
+        subtitle: '从视频中提取音频',
+        color: Colors.indigo,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const AudioSeparationPage(),
+            ),
+          );
+        },
+      ),
+      _buildModuleCard(
+        icon: Icons.record_voice_over,
+        label: '语音合成',
+        subtitle: '文字转语音',
+        color: Colors.cyan,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const TTSCreatePage(),
+            ),
+          );
+        },
+      ),
+      _buildModuleCard(
+        icon: Icons.account_tree,
+        label: '图表制作',
+        subtitle: 'Mermaid图表编辑',
+        color: Colors.orange,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const MermaidChartPage(),
+            ),
+          );
+        },
+      ),
+      _buildModuleCard(
+        icon: Icons.functions,
+        label: '数学绘图',
+        subtitle: '函数绘图',
+        color: Colors.blue,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const MathDrawingPage(),
+            ),
+          );
+        },
+      ),
+      _buildModuleCard(
+        icon: Icons.auto_stories,
+        label: 'Anki闪卡',
+        subtitle: '记忆辅助系统',
+        color: Colors.teal,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const AnkiDroidPage(),
+            ),
+          );
+        },
+      ),
+    ];
   }
 
   /// 构建模块卡片

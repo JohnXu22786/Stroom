@@ -138,15 +138,18 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     }
 
     // Floor the min drag size in pixels: minChildSize is a fraction of
-    // the (keyboard-reduced) available height, and the fixed header +
-    // actions must never exceed the sheet's minimum.
+    // the (keyboard-reduced) available height, and the fixed chrome
+    // (handle + header ≈ 90px — the actions row lives inside the
+    // scrollable list) must never exceed the sheet's minimum.
     final availableHeight =
         screenHeight - MediaQuery.viewInsetsOf(context).bottom;
-    final minFraction = math.max(0.4, 170 / availableHeight);
+    final initialChildSize = math.min(0.75, 520 / availableHeight);
+    final minFraction =
+        math.min(math.max(0.4, 90 / availableHeight), initialChildSize);
 
     return DraggableScrollableSheet(
-      initialChildSize: math.min(0.75, 520 / availableHeight),
-      minChildSize: math.min(minFraction, 0.75),
+      initialChildSize: initialChildSize,
+      minChildSize: minFraction,
       maxChildSize: 0.9,
       expand: false,
       builder: (scrollCtx, scrollController) => Column(
@@ -257,31 +260,28 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 else
                   ...def.params.map((param) => _buildParamField(param, cs)),
                 const SizedBox(height: 8),
+                // Actions live INSIDE the scrollable list so the sheet can
+                // shrink below the fixed chrome (handle + header) when the
+                // keyboard is open on short screens without overflowing.
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('取消'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () {
+                        final updated = widget.block.copyWithParams(_params);
+                        Navigator.pop(context, updated);
+                      },
+                      child: const Text('确认'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
               ],
-            ),
-          ),
-          // Actions
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('取消'),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: () {
-                      final updated = widget.block.copyWithParams(_params);
-                      Navigator.pop(context, updated);
-                    },
-                    child: const Text('确认'),
-                  ),
-                ],
-              ),
             ),
           ),
         ],
