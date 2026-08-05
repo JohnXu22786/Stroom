@@ -103,13 +103,6 @@ class ChatAdapter {
     return _cachedModelConfig?.reasoningParams ?? [];
   }
 
-  /// Gets the model-level custom parameters (模型页自定义参数)
-  /// from the current model config.
-  /// These are distinct from reasoning/inference parameters.
-  List<CustomParam> get customParams {
-    return _cachedModelConfig?.customParams ?? [];
-  }
-
   /// 获取当前 MCP 工具定义列表
   List<ToolDefinition> get mcpToolDefinitions =>
       List.unmodifiable(_mcpToolDefinitions);

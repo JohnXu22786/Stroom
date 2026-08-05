@@ -47,31 +47,11 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       }
     } catch (_) {}
     // ── 实际 token 计量与花费（来自 API usage，非估算） ──
-    // 更新对话的 lastInputTokens/lastOutputTokens 与累计花费。
-    // 花费纯粹采用 API 返回的 cost（如 OpenRouter usage.total_cost），
-    // 不自统计（缓存/推理 token 计价要素太多，自统计不准）。
+    // 对话级计费累计已由 per-request 事件驱动完成（_commitUsage：
+    // 每次请求的完整 usage 数据返回时立即增量累加，含压缩/标题内部
+    // 任务请求）。这里不再整次发送一次性提交——避免 service 复用/
+    // 异常清理路径把旧请求 usage 重复提交（双计）。
     final wasCancelled = state.cancelledByUser;
-    try {
-      final usage = snappedChatService?.lastUsage;
-      if (usage != null) {
-        final inputTokens = usage['inputTokens'] as int?;
-        final outputTokens = usage['outputTokens'] as int?;
-        final cost = usage['cost'] as double? ?? 0;
-        if (inputTokens != null || outputTokens != null || cost > 0) {
-          await _ref?.read(conversationsProvider.notifier).updateUsage(
-                conversationId: convId,
-                // 用户取消的流：usage 可能不完整（流被截断），写
-                // input/output 会让 lastInputTokens 虚低（压缩触发
-                // 判断失真）；cost 是已发生的事实，保留累计。
-                inputTokens: wasCancelled ? null : inputTokens,
-                outputTokens: wasCancelled ? null : outputTokens,
-                costIncrement: cost,
-              );
-        }
-      }
-    } catch (e) {
-      debugPrint('[ChatStreamManager] usage 计量更新失败: $e');
-    }
 
     // Do NOT overwrite state.reasoningSections or state.reasoningBuffer
     // from _adapter.reasoningContent. The manager already correctly
@@ -199,8 +179,9 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     // _startStreaming 的 await 被拖住（秒级），且此窗口内用户的再次
     // 发送会命中 _streams 去重而丢失新消息。
     // 结果构造必须保证不抛异常：completer 一旦不 complete，页面
-    // await 永久挂起、service 残留（下一条消息复用旧 service 会
-    // 导致 usage 双计）。
+    // await 永久挂起、service 残留（下一条消息复用旧 service 拿到
+    // 过期配置/请求体快照）。计费不受影响——usage 已按请求事件
+    // 驱动即时累计，与 finalize 是否执行无关。
     StreamResult result;
     try {
       result = StreamResult(
