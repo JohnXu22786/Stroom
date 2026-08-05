@@ -129,6 +129,74 @@ void chatAgentSemanticsGroup8() {
       container.dispose();
     });
 
+    test('多步工具调用：每轮 cost 独立计费（不是只计最后一轮）', () async {
+      final container =
+          _makeContainer(conversations: [convWithTitle('conv-multi2')]);
+      final manager = container.read(chatStreamManagerProvider);
+      // 2 轮工具 + 1 轮文本收尾，每轮 cost 不同：每步都必须是独立计费
+      final provider = _UsageQueueProvider([
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'm1',
+              'type': 'function',
+              'function': {
+                'name': 'loop_tool',
+                'arguments': '{"i": 1}',
+              },
+            },
+          ]),
+        ],
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'm2',
+              'type': 'function',
+              'function': {
+                'name': 'loop_tool',
+                'arguments': '{"i": 2}',
+              },
+            },
+          ]),
+        ],
+        [AIStreamEvent('完成')],
+      ]);
+      provider.usageQueue = [
+        {'inputTokens': 100, 'outputTokens': 10, 'cost': 0.0001},
+        {'inputTokens': 200, 'outputTokens': 20, 'cost': 0.0002},
+        {'inputTokens': 300, 'outputTokens': 30, 'cost': 0.0003},
+      ];
+      manager.adapter.forceService(_makeService(provider));
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'loop_tool',
+          description: 'loop',
+          parameters: {'type': 'object'},
+        ),
+        (args) => 'ok',
+      );
+
+      await manager.startStreaming(
+        text: 'go',
+        convId: 'conv-multi2',
+        history: [ChatMessage(role: 'user', content: 'go')],
+        tools: ChatService.getRegisteredToolDefinitions(),
+      );
+
+      final conv = container
+          .read(conversationsProvider)
+          .where((c) => c.id == 'conv-multi2')
+          .first;
+      // 多步调用的每一步都是独立 API 请求、独立计费：0.0001 + 0.0002
+      // + 0.0003 = 0.0006。若只计最后一轮，会得到 0.0003。
+      expect(conv.totalCost, closeTo(0.0006, 1e-9),
+          reason: '多步工具调用每轮 cost 都必须累计（0.0001+0.0002+0.0003）');
+      // lastInputTokens = 最近一轮（第 3 轮）的输入（"最近一次请求"语义）
+      expect(conv.lastInputTokens, 300);
+      expect(conv.lastOutputTokens, 30);
+      container.dispose();
+    });
+
     test('Stop→re-Send 且两流都有 usage：旧流 cost + 新流 cost 各自计一次', () async {
       final container =
           _makeContainer(conversations: [convWithTitle('conv-rs2')]);
