@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/tool_call.dart';
@@ -100,8 +101,22 @@ class DataMigrationService {
     await cleanOldBackups();
 
     try {
-      // 创建备份到外部位置
-      await createBackup();
+      // 创建备份到外部位置。
+      // 备份失败（或并发备份被取消）时绝不继续迁移：没有安全快照
+      // 的迁移一旦中途失败可能造成数据损坏。返回 needsMigration=false
+      // 保持版本号不变，下次启动自动重试（与 v2→v3 结构性失败
+      // 「版本号永不提升」的哲学一致）。
+      // Web 平台不支持本地备份（createBackup 恒返回 null），直接迁移。
+      if (!kIsWeb) {
+        final backupPath = await createBackup();
+        if (backupPath == null) {
+          debugPrint('[DataMigrationService] 迁移前备份失败，'
+              '取消本次迁移（下次启动重试）');
+          await AppLogService.error(
+              'DataMigrationService', '迁移前备份失败，取消本次迁移（下次启动重试）');
+          return const MigrationResult(needsMigration: false);
+        }
+      }
 
       // 执行迁移
       await _performMigration(storedVersion, currentFormatVersion);
@@ -289,7 +304,19 @@ class DataMigrationService {
     if (raw == null || raw.isEmpty) return;
 
     try {
-      final list = jsonDecode(raw) as List<dynamic>;
+      // 顶层也需防御：conversations 是可解析但不是数组（对象/标量）时，
+      // `as List` 强转抛 TypeError 被误判为「结构性错误」上抛，导致
+      // 版本号永不提升、每次启动都重复迁移与备份。这类数据属于损坏
+      // 数据而非解码失败：隔离原始数据并重置为空列表。
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        debugPrint('[DataMigrationService] conversations 不是合法数组，'
+            '已隔离并重置为空列表');
+        await _quarantineCorruptData(prefs, 'conversations', raw);
+        await prefs.setString('conversations', '[]');
+        return;
+      }
+      final list = decoded;
       var migrated = 0;
       var skipped = 0;
       for (final c in list) {

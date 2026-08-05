@@ -205,7 +205,11 @@ class StartupCheckService {
       }
       final entry = list[i] as Map<String, dynamic>;
 
-      if (entry['id'] == null || (entry['id'] as String?)?.isEmpty == true) {
+      // 注意：不能用 `as String?` 强转 —— 损坏数据中字段值可能是
+      // 任意类型（int/list/map），强转会抛 TypeError 中断整个检查。
+      // 用 `is! String` 判断，非字符串一律视为「缺失/无效」。
+      final id = entry['id'];
+      if (id is! String || id.isEmpty) {
         issues.add(StartupIssue(
           message: 'provider_entries[$i]: id 字段缺失或为空',
           severity: StartupIssueSeverity.error,
@@ -213,8 +217,8 @@ class StartupCheckService {
         ));
       }
 
-      if (entry['type'] == null ||
-          (entry['type'] as String?)?.isEmpty == true) {
+      final type = entry['type'];
+      if (type is! String || type.isEmpty) {
         issues.add(StartupIssue(
           message: 'provider_entries[$i]: type 字段缺失或为空',
           severity: StartupIssueSeverity.warning,
@@ -222,8 +226,8 @@ class StartupCheckService {
         ));
       }
 
-      if (entry['name'] == null ||
-          (entry['name'] as String?)?.isEmpty == true) {
+      final name = entry['name'];
+      if (name is! String || name.isEmpty) {
         issues.add(StartupIssue(
           message: 'provider_entries[$i]: name 字段缺失或为空',
           severity: StartupIssueSeverity.warning,
@@ -236,14 +240,33 @@ class StartupCheckService {
       // reasoningParams 中是否包含非 Map 条目（这些会导致 ProviderEntry
       // 解析时 `as Map` 闪退）。
       // ================================================================
+      // 注意：configs/models 字段本身也可能是损坏的（int/map/string），
+      // 不能用 `as List?` 强转 —— 非 List 类型一律按「字段无效」上报。
+      final rawConfigs = entry['configs'];
+      if (rawConfigs != null && rawConfigs is! List) {
+        issues.add(StartupIssue(
+          message: 'provider_entries[$i].configs: 字段不是合法列表',
+          severity: StartupIssueSeverity.error,
+          dataKey: 'provider_entries',
+        ));
+      }
       _validateNestedListSync(entry, 'configs', i, issues);
-      final configs = entry['configs'] as List?;
+      final configs = rawConfigs is List ? rawConfigs : null;
       if (configs != null) {
         for (int ci = 0; ci < configs.length; ci++) {
           if (configs[ci] is! Map<String, dynamic>) continue;
           final config = configs[ci] as Map<String, dynamic>;
+          final rawModels = config['models'];
+          if (rawModels != null && rawModels is! List) {
+            issues.add(StartupIssue(
+              message: 'provider_entries[$i].configs[$ci].models: '
+                  '字段不是合法列表',
+              severity: StartupIssueSeverity.error,
+              dataKey: 'provider_entries',
+            ));
+          }
           _validateNestedListSync(config, 'models', i, issues);
-          final models = config['models'] as List?;
+          final models = rawModels is List ? rawModels : null;
           if (models != null) {
             for (int mi = 0; mi < models.length; mi++) {
               if (models[mi] is! Map<String, dynamic>) continue;
@@ -310,7 +333,10 @@ class StartupCheckService {
       }
       final conv = list[i] as Map<String, dynamic>;
 
-      if (conv['id'] == null || (conv['id'] as String?)?.isEmpty == true) {
+      // `is! String` 而非 `as String?`：损坏数据中 id 可能是任意类型，
+      // 强转会抛 TypeError 中断整个检查。
+      final convId = conv['id'];
+      if (convId is! String || convId.isEmpty) {
         issues.add(StartupIssue(
           message: 'conversations[$i]: id 字段缺失',
           severity: StartupIssueSeverity.error,
@@ -318,10 +344,19 @@ class StartupCheckService {
         ));
       }
 
-      if (conv['messages'] == null) {
+      // messages 非 List（如字符串/对象）时运行时会静默当作空列表，
+      // 用户聊天记录无声消失 —— 必须显式上报。
+      final rawMessages = conv['messages'];
+      if (rawMessages == null) {
         issues.add(StartupIssue(
           message: 'conversations[$i]: messages 字段缺失',
           severity: StartupIssueSeverity.warning,
+          dataKey: 'conversations',
+        ));
+      } else if (rawMessages is! List) {
+        issues.add(StartupIssue(
+          message: 'conversations[$i]: messages 字段不是合法列表',
+          severity: StartupIssueSeverity.error,
           dataKey: 'conversations',
         ));
       }
@@ -369,26 +404,34 @@ class StartupCheckService {
       return issues;
     }
 
+    List<dynamic> list;
     try {
-      final list = jsonDecode(providerEntriesJson) as List<dynamic>;
-      for (int i = 0; i < list.length; i++) {
-        // 兜底：跳过非 Map 条目
-        if (list[i] is! Map<String, dynamic>) {
-          continue;
-        }
-        final entry = list[i] as Map<String, dynamic>;
-        final type = entry['type'] as String?;
-        if (type != null && type.isNotEmpty && !_isKnownProviderType(type)) {
-          issues.add(StartupIssue(
-            message: 'provider_entries[$i]: 未知的供应商类型 "$type"，'
-                '应用可能无法正常使用该供应商',
-            severity: StartupIssueSeverity.warning,
-            dataKey: 'provider_entries',
-          ));
-        }
-      }
+      list = jsonDecode(providerEntriesJson) as List<dynamic>;
     } catch (e) {
-      debugPrint('[StartupCheckService] Failed to check provider types: $e');
+      // 整体不是合法 JSON 数组：交给格式验证（validateDataFormats）
+      // 报告具体错误，这里直接返回，不再重复上报。
+      debugPrint('[StartupCheckService] Failed to decode provider entries: $e');
+      return issues;
+    }
+
+    for (int i = 0; i < list.length; i++) {
+      // 兜底：跳过非 Map 条目
+      if (list[i] is! Map<String, dynamic>) {
+        continue;
+      }
+      final entry = list[i] as Map<String, dynamic>;
+      // `is! String` 而非 `as String?`：损坏数据中 type 可能是任意类型，
+      // 强转会抛 TypeError 中断整个检查（遗漏其余条目）。
+      final type = entry['type'];
+      if (type is! String || type.isEmpty) continue;
+      if (!_isKnownProviderType(type)) {
+        issues.add(StartupIssue(
+          message: 'provider_entries[$i]: 未知的供应商类型 "$type"，'
+              '应用可能无法正常使用该供应商',
+          severity: StartupIssueSeverity.warning,
+          dataKey: 'provider_entries',
+        ));
+      }
     }
     return issues;
   }

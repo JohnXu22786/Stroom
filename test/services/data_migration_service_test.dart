@@ -374,6 +374,143 @@ void main() {
     });
   });
 
+  group('DataMigrationService - SAF backup verification', () {
+    test('_latestZipName filters non-zip files and picks the newest', () {
+      // 回归：SAF 列表未排序且可能包含非 zip 文件（如访问测试临时文件），
+      // 直接取 files.last 会返回错误的「已校验」文件。
+      final files = [
+        '.saf_access_test_123.tmp',
+        'backup_2026-01-01T10-00-00.zip',
+        'notes.txt',
+        'backup_2026-08-04T22-00-00.zip',
+        'backup_2026-03-15T08-30-00.zip',
+      ];
+      expect(DataMigrationBackup.latestZipName(files),
+          'backup_2026-08-04T22-00-00.zip');
+
+      expect(DataMigrationBackup.latestZipName(['a.txt', 'b.log']), isNull);
+      expect(DataMigrationBackup.latestZipName(const []), isNull);
+    });
+  });
+
+  group('DataMigrationService - corrupt provider_entries quarantine', () {
+    test('non-list provider_entries is quarantined and reset to empty list',
+        () async {
+      // 顶层损坏（provider_entries 不是数组）：旧代码 `as List` 强转
+      // TypeError 静默中断修复，版本号仍被提升 → ProviderEntry 解析
+      // 继续闪退、错误边界重试永远失败。现在应隔离并重置。
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 0,
+        'provider_entries': '{"not": "an array"}',
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('provider_entries'), '[]',
+          reason: '损坏数据必须被隔离，应用才能正常启动');
+      final corruptKeys = prefs
+          .getKeys()
+          .where((k) => k.startsWith('provider_entries_corrupt_'))
+          .toList();
+      expect(corruptKeys, isNotEmpty, reason: '损坏数据必须保留在带时间戳的隔离 key 中');
+      expect(
+        corruptKeys.any((k) => prefs.getString(k) == '{"not": "an array"}'),
+        isTrue,
+      );
+      expect(prefs.getInt('data_format_version'),
+          DataMigrationService.currentFormatVersion);
+    });
+
+    test(
+        'corrupt provider_entries is quarantined even when chat_configs '
+        'triggers an overwrite', () async {
+      // 回归：migrateOldChatConfigs 在 chat_configs 存在时会重写
+      // provider_entries —— 若此时现有数据已损坏（非数组），旧代码
+      // 会直接覆盖销毁损坏现场（后续隔离逻辑永远触发不到）。
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 0,
+        'provider_entries': '{"not": "an array"}',
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Old',
+            'host': '',
+            'key': '',
+            'models': [
+              {'modelId': 'm1', 'temperature': 0.5},
+            ],
+          },
+        ]),
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      // 损坏现场必须被保留在隔离 key 中，而不是被迁移写入覆盖。
+      final corruptKeys = prefs
+          .getKeys()
+          .where((k) => k.startsWith('provider_entries_corrupt_'))
+          .toList();
+      expect(corruptKeys, isNotEmpty, reason: '迁移覆盖前必须隔离原始损坏数据');
+      expect(
+        corruptKeys.any((k) => prefs.getString(k) == '{"not": "an array"}'),
+        isTrue,
+      );
+      // 迁移结果正常写入（migrated_llm 条目）。
+      final entries = jsonDecode(prefs.getString('provider_entries')!) as List;
+      expect(entries, isNotEmpty);
+      expect(prefs.getInt('data_format_version'),
+          DataMigrationService.currentFormatVersion);
+    });
+
+    test('quarantine pruning keeps only the 3 newest corrupt backups',
+        () async {
+      // 回归：隔离数据使用带时间戳的 key 且只保留最近 3 份。
+      // 旧固定 key 会被下一次隔离覆盖，丢失前一份损坏证据。
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 0,
+        'provider_entries': '{"not": "an array"}',
+        // 预先存在 5 份旧的隔离数据（13 位 epoch 毫秒时间戳，
+        // 全部早于当前时间 2026-08 ≈ 1.785e12，保证本次新隔离的
+        // 数据（时间戳最大）是「最新」的）
+        'provider_entries_corrupt_1700000000000': '{"old": 1}',
+        'provider_entries_corrupt_1710000000000': '{"old": 2}',
+        'provider_entries_corrupt_1720000000000': '{"old": 3}',
+        'provider_entries_corrupt_1730000000000': '{"old": 4}',
+        'provider_entries_corrupt_1740000000000': '{"old": 5}',
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      final corruptKeys = prefs
+          .getKeys()
+          .where((k) => k.startsWith('provider_entries_corrupt_'))
+          .toList()
+        ..sort();
+      // 旧的 5 份 + 本次新隔离的 1 份 = 6 份，裁剪后只保留 3 份。
+      expect(corruptKeys, hasLength(3), reason: '只保留最近的 3 份隔离备份');
+      // 保留的是时间戳最大的 3 份（含本次新隔离的）。
+      expect(corruptKeys.contains('provider_entries_corrupt_1700000000000'),
+          isFalse,
+          reason: '最旧的 3 份必须被裁剪');
+      expect(corruptKeys.contains('provider_entries_corrupt_1710000000000'),
+          isFalse);
+      expect(corruptKeys.contains('provider_entries_corrupt_1720000000000'),
+          isFalse);
+      expect(corruptKeys.contains('provider_entries_corrupt_1730000000000'),
+          isTrue);
+      expect(corruptKeys.contains('provider_entries_corrupt_1740000000000'),
+          isTrue);
+      expect(
+          corruptKeys.last.startsWith('provider_entries_corrupt_178'), isTrue,
+          reason: '本次新隔离的备份（当前时间戳）必须被保留');
+    });
+  });
+
   group('DataMigrationService - v2→v3 defensive migration', () {
     test('corrupt tool call entries are skipped, migration still completes',
         () async {
@@ -443,6 +580,34 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       // 版本不提升 → 下次启动自动重试（而非"假成功"永久跳过）
       expect(prefs.getInt('data_format_version'), 2);
+    });
+
+    test('decodable-but-non-array conversations is quarantined, not rethrown',
+        () async {
+      // 回归：conversations 是可解析但不是数组（对象/标量）时，旧代码
+      // `as List` 强转抛 TypeError 被误判为「结构性错误」上抛 → 版本号
+      // 永不提升、每次启动都重复迁移与备份。现在应隔离并重置。
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 2,
+        'conversations': '{"not": "an array"}',
+      });
+
+      final result = await DataMigrationService.migrateDataFormatIfNeeded();
+      expect(result.needsMigration, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('conversations'), '[]');
+      final corruptKeys = prefs
+          .getKeys()
+          .where((k) => k.startsWith('conversations_corrupt_'))
+          .toList();
+      expect(corruptKeys, isNotEmpty, reason: '原始损坏数据必须保留在隔离 key 中');
+      expect(
+        corruptKeys.any((k) => prefs.getString(k) == '{"not": "an array"}'),
+        isTrue,
+      );
+      // 版本正常提升（不再无限重试迁移）。
+      expect(prefs.getInt('data_format_version'), 3);
     });
   });
 }

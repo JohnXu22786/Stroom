@@ -6,7 +6,6 @@ import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:dynamic_color/dynamic_color.dart';
-import 'package:window_manager/window_manager.dart';
 import 'dart:async';
 import 'dart:io' show exit, Platform;
 
@@ -28,6 +27,31 @@ import 'startup/backup_startup_check.dart';
 import 'widgets/update_dialog.dart';
 import 'widgets/quit_confirmation_dialog.dart';
 
+/// 启动后任务（更新检查 + 备份检查）的进程级去重标记。
+///
+/// 放在 State 之外：错误边界「重试」会重新挂载 [Application]
+/// （State 字段会复位导致任务重复执行、弹窗叠加），而应用进程
+/// 内这些任务只需要执行一次。
+bool _postStartupTasksStarted = false;
+
+/// 启动页渐出完成通知。
+///
+/// 启动后任务（更新检查/备份检查）的对话框必须在启动页不再遮挡 UI
+/// 之后才显示 —— 否则对话框渲染在不透明的启动页之下，用户看不到也
+/// 无法交互。StartupApp 在开始渐出时置为 `true`；
+/// 测试中直接泵 Application 时手动置位。
+final ValueNotifier<bool> startupReadyNotifier = ValueNotifier<bool>(false);
+
+/// 复位启动后任务标记。
+///
+/// 生产用途：错误边界「重试」前调用 —— 第一次启动构建失败时任务
+/// 已在坏实例上启动过（标记被消耗），重试后的健康实例必须重新执行
+/// 更新检查与备份检查。
+/// 测试用途：每个测试用例复位以获得完整的启动后流程。
+void resetPostStartupTasksFlag() {
+  _postStartupTasksStarted = false;
+}
+
 class Application extends ConsumerStatefulWidget {
   const Application({super.key});
 
@@ -47,31 +71,31 @@ class _ApplicationState extends ConsumerState<Application>
   /// [NavigatorState] it needs.
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
-  bool _postStartupTasksStarted = false;
-
-  /// 桌面端窗口关闭事件监听器。
-  _DesktopWindowCloseListener? _windowCloseListener;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // 桌面端：关闭窗口时默认最小化到托盘/任务栏，应用与后台任务继续运行。
-    if (isDesktopPlatform()) {
-      _initDesktopWindowBehavior();
-      // 首帧后注册系统托盘图标与菜单（托盘点击可恢复窗口）。
+    // 桌面端：把「退出确认」注入托盘服务（关闭窗口/完全退出时使用），
+    // 并在首帧后启用「关闭窗口 → 最小化到托盘」行为。
+    if (DesktopAppService.isDesktopPlatform) {
+      DesktopAppService.instance.onQuitConfirmation = _confirmQuitBeforeExit;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(DesktopAppService.instance.setupTray());
+        unawaited(DesktopAppService.instance.setupTrayAndCloseBehavior());
       });
     }
 
     // 在进入主界面后执行启动后流程（非 Web 端）：
     // 1. 检查更新（必须弹窗而非静默）
     // 2. 检查备份存储授权 + 自动备份（与检查更新并行）
+    // 启动后任务等 StartupApp 开始渐出（startupReadyNotifier）后才执行：
+    // 对话框不能被不透明的启动页遮住。
     if (!kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _runPostStartupTasks();
+        startupReadyNotifier.addListener(_onStartupReady);
+        if (startupReadyNotifier.value) {
+          _onStartupReady();
+        }
       });
     }
 
@@ -83,101 +107,61 @@ class _ApplicationState extends ConsumerState<Application>
     };
   }
 
-  /// 初始化桌面端窗口行为：拦截关闭事件，按用户设置最小化或退出。
-  ///
-  /// 顺序说明：先注册关闭监听器，再启用拦截。即使 setPreventClose
-  /// 失败，监听器也已就位——页面上的「关闭窗口时最小化」开关后续
-  /// 启用拦截时，关闭事件仍有处理器，不会出现窗口无法关闭的僵局。
-  Future<void> _initDesktopWindowBehavior() async {
-    try {
-      _windowCloseListener = _DesktopWindowCloseListener(_handleWindowClose);
-      windowManager.addListener(_windowCloseListener!);
-      // 先拦截（默认按最小化处理），再读取用户设置覆盖。
-      // 若读取失败，保留"关闭即最小化"的默认行为，应用不会意外退出。
-      await windowManager.setPreventClose(true);
-      final closeMinimizes = await isDesktopCloseMinimizeEnabled();
-      debugPrint('[Application] 桌面端窗口关闭行为已启用（最小化=$closeMinimizes）');
-    } catch (e) {
-      // 窗口管理器不可用（如部分 Linux 桌面环境）时降级为默认关闭行为。
-      // 监听器已注册，后续页面重新启用拦截时仍能正确处理关闭事件。
-      debugPrint('[Application] 桌面端窗口行为初始化失败: $e');
-    }
-  }
-
-  /// 关闭即退出模式下，确认对话框打开期间的重复关闭事件保护。
+  /// 「关闭即退出」模式下，确认对话框打开期间的重复关闭事件保护。
   /// （拦截永远开启，每次点 X 都会触发 onWindowClose。）
   bool _quitConfirmInProgress = false;
 
-  /// 用户点击窗口关闭按钮时的处理。
+  /// 桌面端「关闭即退出」/「完全退出应用」前的确认。
   ///
-  /// 每次都读取最新的用户设置（而不是启动时缓存的标志）：
-  /// 用户在「后台运行优化」页面切换开关后，无需重启应用即生效。
-  Future<void> _handleWindowClose() async {
-    var minimize = true;
+  /// 退出会立即中断所有运行中的任务：若有任务正在运行，弹窗确认；
+  /// 没有运行任务时直接放行。返回 true 表示用户确认退出。
+  Future<bool> _confirmQuitBeforeExit() async {
+    if (_quitConfirmInProgress) return false;
+    _quitConfirmInProgress = true;
     try {
-      minimize = await isDesktopCloseMinimizeEnabled();
-    } catch (e) {
-      debugPrint('[Application] 读取关闭行为设置失败，默认最小化: $e');
-    }
-
-    try {
-      if (minimize) {
-        // 托盘可用时隐藏到系统托盘（真正"后台运行"）；
-        // 托盘不可用时降级为最小化到任务栏（窗口仍可找回）。
-        if (DesktopAppService.instance.isTrayReady) {
-          await DesktopAppService.instance.hideToTray();
-          debugPrint('[Application] 窗口已隐藏到系统托盘（关闭时最小化）');
-        } else {
-          await windowManager.minimize();
-          debugPrint('[Application] 窗口已最小化到任务栏（关闭时最小化）');
-        }
-        return;
-      }
-
-      // 关闭即退出模式：退出会立即中断所有运行中的任务，先确认。
-      if (_quitConfirmInProgress) return;
       final runningCount = ref
           .read(backgroundTasksProvider)
           .where((t) => t.status == TaskStatus.running)
           .length;
-      if (runningCount > 0) {
-        final navigatorContext = _navigatorKey.currentContext;
-        if (navigatorContext != null && navigatorContext.mounted) {
-          _quitConfirmInProgress = true;
-          var confirmed = false;
-          try {
-            confirmed = await showQuitConfirmationDialog(
-              navigatorContext,
-              runningTaskCount: runningCount,
-            );
-          } catch (e) {
-            // 对话框异常（例如导航器不可用）：降级为直接退出，
-            // 绝不阻塞用户关闭窗口。
-            debugPrint('[Application] 退出确认对话框失败: $e');
-            confirmed = true;
-          } finally {
-            _quitConfirmInProgress = false;
-          }
-          if (!confirmed) return; // 取消：窗口保持打开
-        }
+      if (runningCount == 0) return true;
+
+      final navigatorContext = _navigatorKey.currentContext;
+      if (navigatorContext == null || !navigatorContext.mounted) return true;
+
+      try {
+        return await showQuitConfirmationDialog(
+          navigatorContext,
+          runningTaskCount: runningCount,
+        );
+      } catch (e) {
+        // 对话框异常（例如导航器不可用）：降级为直接退出，
+        // 绝不阻塞用户关闭窗口。
+        debugPrint('[Application] 退出确认对话框失败: $e');
+        return true;
       }
-      // 彻底退出：销毁托盘图标与窗口，并显式退出进程
-      // （macOS 在最后一个窗口关闭后默认不退出，必须显式退出）。
-      await DesktopAppService.instance.quitApplication();
-      debugPrint('[Application] 窗口已关闭（关闭时退出）');
     } catch (e) {
-      debugPrint('[Application] 处理窗口关闭失败: $e');
+      debugPrint('[Application] 检查运行任务失败，放行退出: $e');
+      return true;
+    } finally {
+      _quitConfirmInProgress = false;
     }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    if (_windowCloseListener != null) {
-      windowManager.removeListener(_windowCloseListener!);
-      _windowCloseListener = null;
+    startupReadyNotifier.removeListener(_onStartupReady);
+    if (DesktopAppService.instance.onQuitConfirmation ==
+        _confirmQuitBeforeExit) {
+      DesktopAppService.instance.onQuitConfirmation = null;
     }
     super.dispose();
+  }
+
+  /// 启动页开始渐出（或测试中手动置位）后执行启动后任务。
+  void _onStartupReady() {
+    if (!mounted) return;
+    _runPostStartupTasks();
   }
 
   /// 执行启动后流程：
@@ -280,9 +264,14 @@ class _ApplicationState extends ConsumerState<Application>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // 如果应用进入后台/暂停状态，且后台备份正在运行，则取消备份
+    // 如果应用真正进入后台或被销毁，且后台备份正在运行，则取消备份。
+    //
+    // 注意：仅在 paused / detached 时取消，不在 inactive 时取消 ——
+    // inactive 在移动端会因通知栏下拉/权限弹窗触发，在桌面端会因
+    // 窗口失焦/最小化触发（关闭到托盘后应用仍在运行），这些场景
+    // 下取消备份会误伤仍在进行的任务。
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
+        state == AppLifecycleState.detached) {
       if (AutoBackupService.isRunning) {
         debugPrint('[Application] 应用进入后台，取消正在运行的自动备份');
         AutoBackupService.cancel();
@@ -302,7 +291,12 @@ class _ApplicationState extends ConsumerState<Application>
     // Check SharedPreferences flag to confirm it's a real update scenario
     // (not a stale in-memory flag from a previous failed install).
     hasPendingUpdateRestart().then((bool hasPrefsFlag) {
-      if (!hasPrefsFlag) return; // SharedPreferences flag cleared externally
+      if (!hasPrefsFlag) {
+        // SharedPreferences flag cleared externally（例如 Kotlin 侧已处理）：
+        // 同步清除内存标记，避免每次 resume 都重复读取 prefs。
+        setPendingRestartInMemory(false);
+        return;
+      }
       if (!mounted) return;
 
       debugPrint('[Application] Warm resume after APK install detected — '
@@ -502,22 +496,5 @@ class _InAppBannerOverlay extends ConsumerWidget {
         },
       ),
     );
-  }
-}
-
-// ============================================================================
-// Desktop Window Close Listener
-// ============================================================================
-
-/// 桌面端窗口关闭事件转发：把 window_manager 的 onWindowClose 回调
-/// 转发给 Application 层的处理函数（最小化或退出）。
-class _DesktopWindowCloseListener with WindowListener {
-  final VoidCallback onClose;
-
-  _DesktopWindowCloseListener(this.onClose);
-
-  @override
-  void onWindowClose() {
-    onClose();
   }
 }

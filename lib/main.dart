@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:window_manager/window_manager.dart';
 import 'services/app_log_service.dart';
 import 'services/video_player_init.dart';
 
@@ -16,6 +15,7 @@ import 'providers/background_task_provider.dart';
 import 'providers/notification_provider.dart';
 import 'pages/unified_task_list/task_utils.dart';
 import 'services/background_service.dart';
+import 'services/desktop_app_service.dart';
 import 'services/notification_service.dart';
 
 /// 初始化 ProviderScope 的 overrides
@@ -140,17 +140,11 @@ Future<void> main() async {
         WidgetsFlutterBinding.ensureInitialized();
         await AppLogService.info('App', '应用启动: Stroom');
         registerVideoPlayer();
-        // 桌面端初始化窗口管理器，供「关闭窗口时最小化」使用
-        // （Application 层在 onWindowClose 中执行最小化/退出决策）。
+        // 桌面端：在 runApp 之前初始化窗口管理器，
+        // 以便首帧后启用「关闭窗口 → 最小化到托盘」行为。
         // 初始化失败不阻塞启动：窗口管理器不可用时降级为默认关闭行为。
-        if (defaultTargetPlatform == TargetPlatform.windows ||
-            defaultTargetPlatform == TargetPlatform.macOS ||
-            defaultTargetPlatform == TargetPlatform.linux) {
-          try {
-            await windowManager.ensureInitialized();
-          } catch (e) {
-            debugPrint('[App] 窗口管理器初始化失败，降级为默认关闭行为: $e');
-          }
+        if (DesktopAppService.isDesktopPlatform) {
+          await DesktopAppService.instance.initialize();
           // 桌面端同样初始化通知服务：窗口最小化/关闭后任务完成
           // 通知需要走系统通知（in-app 横幅不可见）。
           // initialize() 内部自带错误保护，失败不会阻塞启动。

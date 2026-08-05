@@ -34,6 +34,11 @@ const _desktopCloseMinimizeKey = 'desktop_close_minimize';
 /// watchdog (AlarmManager-based BroadcastReceiver).
 const _keepAliveChannel = MethodChannel('com.johntsui.stroom/keepalive');
 
+/// Timeout for keep-alive channel calls: a stalled platform channel
+/// (busy main thread / ANR window) must never block startup, resume
+/// or page checks forever.
+const _keepAliveChannelTimeout = Duration(seconds: 8);
+
 Future<void> initializeBackgroundService() async {
   await AppLogService.info('BackgroundService', '初始化后台服务');
   // ====================================================================
@@ -163,7 +168,11 @@ Future<bool> onIosBackground(ServiceInstance service) async {
   return true;
 }
 
-Future<void> startBackgroundService() async {
+/// 启动后台服务。
+///
+/// 返回 `true` 表示服务已启动（或已在运行），`false` 表示启动失败。
+/// 失败原因已记录日志。
+Future<bool> startBackgroundService() async {
   await AppLogService.info('BackgroundService', '启动后台服务');
   try {
     // Android 13+ 上通知权限决定前台服务通知是否可见。
@@ -177,7 +186,7 @@ Future<void> startBackgroundService() async {
         await AppLogService.info('BackgroundService', '后台服务已启动');
       } else {
         await AppLogService.warning('BackgroundService', '后台服务启动返回失败');
-        return;
+        return false;
       }
     }
     // Persist the enabled state so that if the process is killed by the
@@ -186,9 +195,11 @@ Future<void> startBackgroundService() async {
     // Activate the native AlarmManager keep-alive watchdog (only if
     // the user has the watchdog toggle enabled).
     await _enableKeepAlive();
+    return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to start background service: $e');
     await AppLogService.error('BackgroundService', '启动后台服务失败', e);
+    return false;
   }
 }
 
@@ -215,7 +226,10 @@ Future<void> _requestNotificationPermissionIfNeeded() async {
   }
 }
 
-Future<void> stopBackgroundService() async {
+/// 停止后台服务。
+///
+/// 返回 `true` 表示停止流程成功执行（服务已停止或原本未运行）。
+Future<bool> stopBackgroundService() async {
   await AppLogService.info('BackgroundService', '停止后台服务');
   try {
     final service = FlutterBackgroundService();
@@ -223,18 +237,25 @@ Future<void> stopBackgroundService() async {
       service.invoke('stopService');
       await AppLogService.info('BackgroundService', '后台服务已停止');
     }
+    // 先取消 AlarmManager 看门狗，再持久化 enabled=false：
+    // 顺序反了的话，若进程在这两步之间被杀，系统重启后会重新
+    // 调度看门狗去复活一个用户已明确停止的服务。
+    await _disableKeepAlive();
     // Clear the persisted enabled state so the service is not
     // auto-restored on the next cold start.
     await _setServiceEnabledPreference(false);
-    // Deactivate the native AlarmManager keep-alive watchdog.
-    _disableKeepAlive();
+    return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to stop background service: $e');
     await AppLogService.error('BackgroundService', '停止后台服务失败', e);
+    return false;
   }
 }
 
-Future<void> restartBackgroundService() async {
+/// 重新启动后台服务。
+///
+/// 返回 `true` 表示重启成功，`false` 表示启动失败。
+Future<bool> restartBackgroundService() async {
   await AppLogService.info('BackgroundService', '重新启动后台服务');
   try {
     final service = FlutterBackgroundService();
@@ -249,16 +270,18 @@ Future<void> restartBackgroundService() async {
     final started = await service.startService();
     if (!started) {
       await AppLogService.warning('BackgroundService', '重启服务启动返回失败');
-      return;
+      return false;
     }
     // 重启后保持持久化状态与看门狗一致，防止重启过程中
     // 系统杀进程导致状态漂移（例如 enabled 标记丢失）。
     await _setServiceEnabledPreference(true);
     await _enableKeepAlive();
     await AppLogService.info('BackgroundService', '后台服务已重新启动');
+    return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to restart background service: $e');
     await AppLogService.error('BackgroundService', '重新启动后台服务失败', e);
+    return false;
   }
 }
 
@@ -301,10 +324,10 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
       await service.startService();
       await AppLogService.info('BackgroundService', '后台服务已恢复');
     }
-    // 重新确保 AlarmManager 看门狗处于激活状态（幂等操作）。
-    // 系统重启或闹钟被系统清理后，冷启动恢复是重新挂上看门狗的
-    // 可靠时机；若服务已经由闹钟唤醒，重复调度只会替换旧闹钟。
-    await _enableKeepAlive();
+    // 重新武装 AlarmManager 看门狗：进程被强杀/应用更新后闹钟可能丢失，
+    // 冷启动恢复服务时必须同步重新调度，否则看门狗会永久失效。
+    // 注意：恢复场景不清零失败计数（见 _rearmKeepAlive 注释）。
+    await _rearmKeepAlive();
   } catch (e) {
     debugPrint('[BackgroundService] Failed to restore background service: $e');
     await AppLogService.error('BackgroundService', '恢复后台服务失败', e);
@@ -396,17 +419,40 @@ Future<void> _enableKeepAlive() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   if (!await isWatchdogEnabled()) return;
   try {
-    _keepAliveChannel.invokeMethod('startKeepAlive');
+    // await：invokeMethod 的失败是异步抛出的，不 await 会变成
+    // 未处理的异步异常（每次冷启动/恢复前台都会触发）。
+    // 超时保护：平台通道卡死时不能阻塞启动/恢复流程。
+    await _keepAliveChannel
+        .invokeMethod('startKeepAlive')
+        .timeout(_keepAliveChannelTimeout);
   } catch (e) {
     debugPrint('[BackgroundService] Failed to enable keep-alive alarm: $e');
   }
 }
 
-/// Deactivates the native AlarmManager keep-alive watchdog.
-void _disableKeepAlive() {
+/// 重新武装看门狗（冷启动恢复 / 回到前台补武装）。
+///
+/// 与 [_enableKeepAlive] 的区别：只重新调度闹钟，不清零连续失败计数。
+/// 持久失败环境（Android 15 dataSync 上限、无电池豁免等）下，每次
+/// 打开应用都清零计数会让看门狗永远无法进入退避保护。
+Future<void> _rearmKeepAlive() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return;
+  if (!await isWatchdogEnabled()) return;
+  try {
+    await _keepAliveChannel
+        .invokeMethod('rearmKeepAlive')
+        .timeout(_keepAliveChannelTimeout);
+  } catch (e) {
+    debugPrint('[BackgroundService] Failed to re-arm keep-alive alarm: $e');
+  }
+}
+
+Future<void> _disableKeepAlive() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
-    _keepAliveChannel.invokeMethod('stopKeepAlive');
+    await _keepAliveChannel
+        .invokeMethod('stopKeepAlive')
+        .timeout(_keepAliveChannelTimeout);
   } catch (e) {
     debugPrint('[BackgroundService] Failed to disable keep-alive alarm: $e');
   }
@@ -414,7 +460,7 @@ void _disableKeepAlive() {
 
 /// Public wrapper for disabling the keep-alive watchdog from the UI.
 void disableKeepAlive() {
-  _disableKeepAlive();
+  unawaited(_disableKeepAlive());
 }
 
 /// Checks whether the app is exempt from Android battery optimization.
@@ -426,7 +472,8 @@ Future<bool> isIgnoringBatteryOptimizations() async {
   if (defaultTargetPlatform != TargetPlatform.android) return true;
   try {
     final result = await _keepAliveChannel
-        .invokeMethod<bool>('isIgnoringBatteryOptimizations');
+        .invokeMethod<bool>('isIgnoringBatteryOptimizations')
+        .timeout(_keepAliveChannelTimeout);
     return result ?? false;
   } catch (e) {
     debugPrint(
@@ -441,13 +488,73 @@ Future<bool> isIgnoringBatteryOptimizations() async {
 /// On Android 6+, this shows the system's "Ignore battery optimization"
 /// confirmation dialog. On some Chinese ROMs, this may fall back to
 /// opening the app's settings page.
-void requestIgnoreBatteryOptimizations() {
+Future<void> requestIgnoreBatteryOptimizations() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
-    _keepAliveChannel.invokeMethod('requestIgnoreBatteryOptimizations');
+    await _keepAliveChannel
+        .invokeMethod('requestIgnoreBatteryOptimizations')
+        .timeout(_keepAliveChannelTimeout);
   } catch (e) {
     debugPrint(
         '[BackgroundService] Failed to request battery optimization exemption: $e');
+  }
+}
+
+/// Returns whether the app is allowed to schedule exact alarms
+/// (Android 12+). Exact alarms let the watchdog fire on time and are a
+/// documented exemption for starting a foreground service from the
+/// background. Returns `true` on non-Android platforms or if the status
+/// cannot be determined.
+Future<bool> canScheduleExactAlarms() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return true;
+  try {
+    final result = await _keepAliveChannel
+        .invokeMethod<bool>('canScheduleExactAlarms')
+        .timeout(_keepAliveChannelTimeout);
+    return result ?? false;
+  } catch (e) {
+    debugPrint('[BackgroundService] Failed to check exact alarm status: $e');
+    return false;
+  }
+}
+
+/// Opens the system "Alarms & reminders" special-access page so the user
+/// can grant the exact-alarm permission. When granted, the system sends
+/// SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED and the native watchdog
+/// re-arms itself immediately.
+Future<void> requestScheduleExactAlarm() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return;
+  try {
+    await _keepAliveChannel
+        .invokeMethod('requestScheduleExactAlarm')
+        .timeout(_keepAliveChannelTimeout);
+  } catch (e) {
+    debugPrint(
+        '[BackgroundService] Failed to request exact alarm permission: $e');
+  }
+}
+
+/// 应用回到前台时补武装保活看门狗（best-effort 自愈）。
+///
+/// 系统撤销「精确闹钟」权限时不会发送任何广播，且会静默删除所有
+/// 精确闹钟 —— 此时看门狗会无声失效。用户从系统设置回到应用时
+/// 补一次调度即可恢复。
+Future<void> rearmKeepAliveOnResume() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final serviceEnabled = prefs.getBool(_backgroundServiceEnabledKey) ?? false;
+    if (!serviceEnabled) return;
+    // 补武装：不清零失败计数（持久失败环境下看门狗应保持退避）。
+    // 注意：这里不再检查「冷启动自动恢复」开关 —— 该开关只控制冷启动
+    // 恢复路径；看门狗开关（isWatchdogEnabled）在 _rearmKeepAlive 内部
+    // 已检查。若用冷启动开关门控 resume 补武装，看门狗开启的用户在
+    // 精确闹钟被系统撤销后会永久失去看门狗（resume 是唯一的补武装
+    // 时机），而且已武装的闹钟触发时只检查 background_service_enabled，
+    // 并不会因为冷启动开关而停止复活服务。
+    await _rearmKeepAlive();
+  } catch (e) {
+    debugPrint('[BackgroundService] Failed to re-arm keep-alive on resume: $e');
   }
 }
 
@@ -480,52 +587,4 @@ Future<void> setDesktopCloseMinimizeEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_desktopCloseMinimizeKey, enabled);
   } catch (_) {}
-}
-
-/// Returns whether the app is allowed to schedule exact alarms
-/// (Android 12+). Exact alarms let the watchdog fire on time and are a
-/// documented exemption for starting a foreground service from the
-/// background. Returns `true` on non-Android platforms or if the status
-/// cannot be determined.
-Future<bool> canScheduleExactAlarms() async {
-  if (defaultTargetPlatform != TargetPlatform.android) return true;
-  try {
-    final result =
-        await _keepAliveChannel.invokeMethod<bool>('canScheduleExactAlarms');
-    return result ?? false;
-  } catch (e) {
-    debugPrint('[BackgroundService] Failed to check exact alarm status: $e');
-    return false;
-  }
-}
-
-/// Opens the system "Alarms & reminders" special-access page so the user
-/// can grant the exact-alarm permission. When granted, the system sends
-/// SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED and the native watchdog
-/// re-arms itself immediately.
-void requestScheduleExactAlarm() {
-  if (defaultTargetPlatform != TargetPlatform.android) return;
-  try {
-    _keepAliveChannel.invokeMethod('requestScheduleExactAlarm');
-  } catch (e) {
-    debugPrint(
-        '[BackgroundService] Failed to request exact alarm permission: $e');
-  }
-}
-
-/// 应用回到前台时补武装保活看门狗（best-effort 自愈）。
-///
-/// 系统撤销「精确闹钟」权限时不会发送任何广播，且会静默删除所有
-/// 精确闹钟 —— 此时看门狗会无声失效。用户从系统设置回到应用时
-/// 补一次调度即可恢复。
-Future<void> rearmKeepAliveOnResume() async {
-  if (defaultTargetPlatform != TargetPlatform.android) return;
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    final serviceEnabled = prefs.getBool(_backgroundServiceEnabledKey) ?? false;
-    if (!serviceEnabled) return;
-    await _enableKeepAlive();
-  } catch (e) {
-    debugPrint('[BackgroundService] Failed to re-arm keep-alive on resume: $e');
-  }
 }

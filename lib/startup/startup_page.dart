@@ -209,15 +209,22 @@ class _StartupPageState extends State<StartupPage>
         ),
         const SizedBox(height: 20),
         // Status message
+        // 限制高度并允许滚动：启动检查发现多个问题时状态文案可能很长，
+        // 不加约束会在小屏上触发 RenderFlex overflow。
         if (widget.statusMessage.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 48),
-            child: Text(
-              widget.statusMessage,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                color: Colors.white.withValues(alpha: 0.9),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 140),
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 48),
+                child: Text(
+                  widget.statusMessage,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Colors.white.withValues(alpha: 0.9),
+                  ),
+                ),
               ),
             ),
           ),

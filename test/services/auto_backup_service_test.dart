@@ -250,7 +250,11 @@ void main() {
       await dir.delete(recursive: true);
     });
 
-    test('second call returns false when backup is running', () async {
+    test('concurrent calls wait for the in-flight backup and share its result',
+        () async {
+      // 回归：启动备份与迁移前备份并发时，后到者必须等待同一个在途
+      // 备份并共享结果 —— 直接返回 false 会让迁移前备份被静默跳过
+      // （迁移时无安全快照），或让启动备份被误报为失败。
       final root = await DataMigrationService.getExternalBackupRootPath();
       final dir = Directory(root);
       if (await dir.exists()) {
@@ -258,7 +262,7 @@ void main() {
       }
       final first = AutoBackupService.performAutoBackup();
       final second = await AutoBackupService.performAutoBackup();
-      expect(second, isFalse);
+      expect(second, isTrue, reason: '并发调用应等待在途备份完成并返回相同结果');
       await first;
       await dir.delete(recursive: true);
     });
@@ -304,8 +308,106 @@ void main() {
       // Cleanup
       await dir.delete(recursive: true);
     });
-  });
 
+    test('pre-migration backup ignores the 1-hour rule and always snapshots',
+        () async {
+      // 回归：迁移会原地改写数据，必须使用刚刚创建的新快照。
+      // 旧代码在最近 1 小时内有备份时直接返回 true（跳过），
+      // 迁移前快照可能缺少最新数据（最多 1 小时）。
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+
+      // 先执行一次普通备份：它必然是「1 小时以内」的备份，
+      // 1 小时规则因此会被命中。
+      final first = await AutoBackupService.performAutoBackup();
+      expect(first, isTrue);
+
+      // 迁移前备份必须无视 1 小时规则，创建一份新快照。
+      final result =
+          await AutoBackupService.performAutoBackup(isPreMigration: true);
+      expect(result, isTrue);
+
+      final zips = (await dir.list().toList())
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.zip'))
+          .toList();
+      expect(zips.length, greaterThanOrEqualTo(2), reason: '迁移前备份必须创建新快照而不是跳过');
+
+      await dir.delete(recursive: true);
+    });
+
+    test(
+        'pre-migration caller sharing a 1-hour-skipped backup forces a '
+        'fresh snapshot', () async {
+      // 回归：普通备份在途时命中「1 小时规则」跳过（未创建快照），
+      // 并发到达的迁移前备份必须强制自己再跑一次 —— 共享跳过结果
+      // 会让迁移在无新快照的情况下进行。
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+
+      // 造一份「1 小时以内」的备份现场（1 小时规则会被命中）。
+      final seed = await AutoBackupService.performAutoBackup();
+      expect(seed, isTrue);
+
+      // 普通备份在途（命中 1 小时规则 → skippedOneHour）。
+      final normal = AutoBackupService.performAutoBackup();
+      await Future<void>.delayed(Duration.zero);
+
+      // 迁移前备份共享该结果：必须强制创建新快照。
+      final preMigration =
+          await AutoBackupService.performAutoBackup(isPreMigration: true);
+      await normal;
+
+      expect(preMigration, isTrue);
+      final zips = (await dir.list().toList())
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.zip'))
+          .toList();
+      expect(zips.length, greaterThanOrEqualTo(2),
+          reason: '共享的 1 小时跳过结果不得抑制迁移前快照');
+
+      await dir.delete(recursive: true);
+    });
+
+    test(
+        'pre-migration caller shares a cancelled in-flight backup without '
+        'retrying', () async {
+      // 回归：共享结果为失败/取消时，迁移前备份必须共享该结果而不是
+      // 无视取消再跑一次完整备份 —— 应用进入后台触发 cancel() 后
+      // 继续备份并迁移，正是生命周期取消要防止的。
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+
+      // 普通备份在途（无最近备份 → 不触发 1 小时跳过，进入创建流程）。
+      final normal = AutoBackupService.performAutoBackup();
+      // 应用进入后台 → 取消在途备份（同步置位，先于备份的取消检查）。
+      AutoBackupService.cancel();
+      final preMigration =
+          await AutoBackupService.performAutoBackup(isPreMigration: true);
+      await normal;
+      expect(preMigration, isFalse, reason: '取消的备份结果必须被共享，不得重试执行新备份');
+      // 备份目录可能从未创建（取消发生在创建之前）。
+      final zips = (await dir.exists())
+          ? (await dir.list().toList())
+              .whereType<File>()
+              .where((f) => f.path.endsWith('.zip'))
+              .toList()
+          : <File>[];
+      expect(zips, isEmpty, reason: '取消后不得再创建任何备份文件');
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+    });
+  });
   // ==================================================================
   // Atomic rename (tmp -> zip)
   // ==================================================================
