@@ -103,6 +103,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
   }
 
   void _clearConversationView() {
+    // The warning refers to the previous conversation's messages — a stale
+    // overlay would be misleading after switching conversations.
+    _hideEditWarning();
     final oldCtrl = _controller;
     _controller = InMemoryChatController();
     _history.clear();
@@ -379,6 +382,10 @@ extension _ChatPageMessagesExt on _ChatPageState {
       _editingMessageId = null;
       _editingMessageText = null;
       _editingMessageAttachments = null;
+      // The data-loss warning refers to the previous conversation's
+      // messages — a stale overlay would be misleading after a reload or
+      // conversation switch (same lifecycle as the edit-mode state above).
+      _hideEditWarning();
       _isLoadingMore = false;
       _loadedUpToIndex = loadedUpToIndex;
       final oldCtrl = _controller;

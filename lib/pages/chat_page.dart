@@ -186,6 +186,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// The original attachments of the message being edited.
   List<Attachment>? _editingMessageAttachments;
 
+  /// Timer that auto-hides the edit data-loss warning overlay.
+  Timer? _editWarningTimer;
+
+  /// Whether the "editing will delete all messages below" warning overlay
+  /// is currently visible in the message display area.
+  bool _editWarningVisible = false;
+
   // ── Infinite Scroll / Lazy Load pagination state ──
   /// Number of messages to load per page.
   static const int _pageSize = 20;
@@ -244,6 +251,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _editWarningTimer?.cancel();
     // The ChatStreamManager owns the adapter lifecycle. We do NOT cancel
     // or dispose it here — if streaming is active, it continues in the
     // background and saves results when complete. The adapter is cleaned
@@ -366,6 +374,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
                           // ── Scroll-to-bottom overlay button ──
                           if (_showScrollToBottomButton)
                             _buildScrollToBottomButton(isDark: isDark),
+                          // ── Edit data-loss warning overlay ──
+                          // Centered in the message display area; auto-hides
+                          // after 2 seconds or on close-button tap.
+                          if (_editWarningVisible)
+                            _buildEditWarningOverlay(context: context),
                         ],
                       ),
               ),
