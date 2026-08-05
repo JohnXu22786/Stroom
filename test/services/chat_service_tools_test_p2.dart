@@ -375,5 +375,369 @@ void chatServiceToolsGroup2() {
         expect(msg['tool_calls'], isA<List>());
       }
     });
+
+    test('multiple tool calls execute in parallel (both start before any completes)',
+        () async {
+      // Requirement: when the assistant triggers multiple tool calls at once,
+      // they must run SIMULTANEOUSLY, not one after another.
+      // Sequential execution yields: Start(A), Complete(A), Start(B), Complete(B).
+      // Parallel execution yields:   Start(A), Start(B), Complete(A), Complete(B).
+      // Both Start events are emitted synchronously before any async handler
+      // can finish, so this ordering is deterministic.
+      mockProvider = _MockToolCallProvider([
+        const [
+          {
+            'id': 'call_par_a',
+            'type': 'function',
+            'function': {
+              'name': 'parallel_slow_a',
+              'arguments': '{}',
+            },
+          },
+          {
+            'id': 'call_par_b',
+            'type': 'function',
+            'function': {
+              'name': 'parallel_slow_b',
+              'arguments': '{}',
+            },
+          },
+        ],
+      ]);
+      service = ChatService(
+        provider: mockProvider,
+        modelConfig: _createMockModelConfig(),
+      );
+
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'parallel_slow_a',
+          description: 'Slow tool A',
+          parameters: {'type': 'object'},
+        ),
+        (args) async {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          return 'result_a';
+        },
+      );
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'parallel_slow_b',
+          description: 'Slow tool B',
+          parameters: {'type': 'object'},
+        ),
+        (args) async {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          return 'result_b';
+        },
+      );
+
+      final events = <ChatEvent>[];
+      await service
+          .sendStreamWithTools(
+            'test',
+            history: [ChatMessage(role: 'user', content: 'test')],
+            tools: ChatService.getRegisteredToolDefinitions(),
+          )
+          .listen(
+            (event) => events.add(event),
+            onError: (e) => fail('Unexpected error: $e'),
+          )
+          .asFuture();
+
+      final starts =
+          events.whereType<ToolCallStartEvent>().map((e) => e.toolCall.id).toList();
+      final completes = events
+          .whereType<ToolCallCompleteEvent>()
+          .map((e) => e.toolCallId)
+          .toList();
+
+      expect(starts, ['call_par_a', 'call_par_b'],
+          reason: 'Both tool calls must be started.');
+      expect(completes, ['call_par_a', 'call_par_b'],
+          reason: 'Results must be reported in declaration order '
+              '(Anthropic requires tool_result blocks ordered like tool_use blocks).');
+
+      // The core parallel assertion: the second Start event must arrive
+      // BEFORE the first Complete event. With sequential execution this
+      // ordering is impossible (Complete(A) would precede Start(B)).
+      final eventsAfterFilteringEnd = events
+          .where((e) => e is! ReasoningSectionEndEvent)
+          .toList();
+      expect(eventsAfterFilteringEnd[0], isA<ToolCallStartEvent>());
+      expect(eventsAfterFilteringEnd[1], isA<ToolCallStartEvent>(),
+          reason: 'Second tool call must START before the first completes — '
+              'tools must run in parallel, not sequentially.');
+      expect(eventsAfterFilteringEnd[2], isA<ToolCallCompleteEvent>());
+      expect(eventsAfterFilteringEnd[3], isA<ToolCallCompleteEvent>());
+
+      // Both results must be preserved.
+      final results = events
+          .whereType<ToolCallCompleteEvent>()
+          .map((e) => e.result)
+          .toList();
+      expect(results, ['result_a', 'result_b']);
+    });
+
+    test('a failing tool among parallel tools does not abort the others',
+        () async {
+      // One tool throws, the other succeeds: the failing tool's result is
+      // 'Error: ...', the other still completes, and both results are sent
+      // back to the model in declaration order.
+      mockProvider = _MockToolCallProvider([
+        const [
+          {
+            'id': 'call_fail_1',
+            'type': 'function',
+            'function': {
+              'name': 'parallel_fail_a',
+              'arguments': '{}',
+            },
+          },
+          {
+            'id': 'call_ok_2',
+            'type': 'function',
+            'function': {
+              'name': 'parallel_ok_b',
+              'arguments': '{}',
+            },
+          },
+        ],
+      ]);
+      service = ChatService(
+        provider: mockProvider,
+        modelConfig: _createMockModelConfig(),
+      );
+
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'parallel_fail_a',
+          description: 'Failing tool',
+          parameters: {'type': 'object'},
+        ),
+        (args) async {
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+          throw Exception('boom');
+        },
+      );
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'parallel_ok_b',
+          description: 'OK tool',
+          parameters: {'type': 'object'},
+        ),
+        (args) async {
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+          return 'ok_result';
+        },
+      );
+
+      final events = <ChatEvent>[];
+      await service
+          .sendStreamWithTools(
+            'test',
+            history: [ChatMessage(role: 'user', content: 'test')],
+            tools: ChatService.getRegisteredToolDefinitions(),
+          )
+          .listen(
+            (event) => events.add(event),
+            onError: (e) => fail('Unexpected error: $e'),
+          )
+          .asFuture();
+
+      final completes = events
+          .whereType<ToolCallCompleteEvent>()
+          .map((e) => (e.toolCallId, e.result))
+          .toList();
+      expect(completes.length, 2);
+      expect(completes[0].$1, 'call_fail_1');
+      expect(completes[0].$2, startsWith('Error:'));
+      expect(completes[1].$1, 'call_ok_2');
+      expect(completes[1].$2, 'ok_result');
+    });
+
+    test('cancelling during parallel execution stops cleanly (no complete events)',
+        () async {
+      // User taps Stop while tools are still running: the stream must end
+      // without emitting ToolCallCompleteEvent and without hanging or
+      // throwing. The already-started tool futures are abandoned safely
+      // (_runTool never throws → no unhandled async errors).
+      mockProvider = _MockToolCallProvider([
+        const [
+          {
+            'id': 'call_cancel_1',
+            'type': 'function',
+            'function': {
+              'name': 'cancel_slow_a',
+              'arguments': '{}',
+            },
+          },
+          {
+            'id': 'call_cancel_2',
+            'type': 'function',
+            'function': {
+              'name': 'cancel_slow_b',
+              'arguments': '{}',
+            },
+          },
+        ],
+      ]);
+      service = ChatService(
+        provider: mockProvider,
+        modelConfig: _createMockModelConfig(),
+      );
+
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'cancel_slow_a',
+          description: 'Slow tool',
+          parameters: {'type': 'object'},
+        ),
+        (args) async {
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+          return 'a';
+        },
+      );
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'cancel_slow_b',
+          description: 'Slow tool',
+          parameters: {'type': 'object'},
+        ),
+        (args) async {
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+          return 'b';
+        },
+      );
+
+      final events = <ChatEvent>[];
+      final sub = service
+          .sendStreamWithTools(
+            'test',
+            history: [ChatMessage(role: 'user', content: 'test')],
+            tools: ChatService.getRegisteredToolDefinitions(),
+          )
+          .listen(
+            (event) => events.add(event),
+            onError: (e) => fail('Unexpected error: $e'),
+          );
+      // Cancel shortly after the start events are emitted (handlers still
+      // running — deterministic: starts are synchronous, handlers take 200ms).
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      service.cancel();
+
+      await sub.asFuture().timeout(const Duration(seconds: 5),
+          onTimeout: () => fail('Stream did not complete after cancel'));
+
+      expect(events.whereType<ToolCallStartEvent>().length, 2,
+          reason: 'Both tools must have started before cancel.');
+      expect(events.whereType<ToolCallCompleteEvent>(), isEmpty,
+          reason: 'No complete events after cancel.');
+    });
+
+    test(
+        'cancel then immediately resend: old round must not disturb the new request',
+        () async {
+      // The cancel→resend race: while round 1's tools are still running the
+      // user cancels and immediately sends a new message. _isCancelledByUser
+      // is reset by the new send, so the old round must terminate via its
+      // controller.isClosed guard — otherwise it would cancel the new
+      // request's _cancelToken/_streamSubscription (aborting or hanging the
+      // new stream) and fire a ghost, billed provider request.
+      mockProvider = _MockToolCallProvider([
+        // Round 1 (old send): 2 slow tool calls
+        const [
+          {
+            'id': 'call_resend_1',
+            'type': 'function',
+            'function': {
+              'name': 'resend_slow_a',
+              'arguments': '{}',
+            },
+          },
+          {
+            'id': 'call_resend_2',
+            'type': 'function',
+            'function': {
+              'name': 'resend_slow_b',
+              'arguments': '{}',
+            },
+          },
+        ],
+        // Round 2 (new send): immediate text response
+      ]);
+      service = ChatService(
+        provider: mockProvider,
+        modelConfig: _createMockModelConfig(),
+      );
+
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'resend_slow_a',
+          description: 'Slow tool',
+          parameters: {'type': 'object'},
+        ),
+        (args) async {
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+          return 'a';
+        },
+      );
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'resend_slow_b',
+          description: 'Slow tool',
+          parameters: {'type': 'object'},
+        ),
+        (args) async {
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+          return 'b';
+        },
+      );
+
+      final events1 = <ChatEvent>[];
+      final sub1 = service
+          .sendStreamWithTools(
+            'first message',
+            history: [ChatMessage(role: 'user', content: 'first message')],
+            tools: ChatService.getRegisteredToolDefinitions(),
+          )
+          .listen(
+            (event) => events1.add(event),
+            onError: (e) => fail('Unexpected error in first stream: $e'),
+          );
+
+      // Let the start events fire (synchronous), then cancel while the
+      // 200ms tool handlers are still running.
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      service.cancel();
+
+      // Immediately resend: provider call #2 yields an immediate text reply.
+      final events2 = <ChatEvent>[];
+      final sub2 = service
+          .sendStreamWithTools(
+            'second message',
+            history: [ChatMessage(role: 'user', content: 'second message')],
+            tools: ChatService.getRegisteredToolDefinitions(),
+          )
+          .listen(
+            (event) => events2.add(event),
+            onError: (e) => fail('Unexpected error in second stream: $e'),
+          );
+
+      await sub1.asFuture().timeout(const Duration(seconds: 5),
+          onTimeout: () => fail('First stream did not complete'));
+      await sub2.asFuture().timeout(const Duration(seconds: 5),
+          onTimeout: () => fail(
+              'Second stream hung — the old round likely cancelled the new request'));
+
+      // The old round: both tools started, no completions (cancelled).
+      expect(events1.whereType<ToolCallStartEvent>().length, 2);
+      expect(events1.whereType<ToolCallCompleteEvent>(), isEmpty);
+      // The new send must complete normally with its text reply.
+      expect(events2.whereType<TextEvent>(), isNotEmpty,
+          reason: 'New request must not be disturbed by the old round.');
+      expect(events2.whereType<ToolCallStartEvent>(), isEmpty,
+          reason: 'The new round has no tool calls in this mock.');
+    });
   });
 }
