@@ -89,6 +89,9 @@ dev_dependencies:
   # Used by tests to disable visibility_detector's debounce timer
   # (transitive via flutter_chat_ui, but must be declared to import it).
   visibility_detector: ^0.4.0+2
+  # Used by tests to fake path_provider directories (transitive via
+  # path_provider, but must be declared to import it).
+  path_provider_platform_interface: ^2.1.0
 
 flutter:
   config:

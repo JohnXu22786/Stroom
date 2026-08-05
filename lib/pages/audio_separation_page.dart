@@ -13,6 +13,7 @@ import '../utils/audio_separation.dart';
 import '../utils/audio_utils.dart' show detectAudioFormat, normalizeAudioFormat;
 import '../providers/background_task_provider.dart';
 import '../utils/file_manifest.dart';
+import '../utils/pop_animation.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'tts_page.dart';
 import 'audio_separation_shared.dart';
@@ -889,36 +890,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     // Riverpod state updates that cascade to home-page watchers;
     // if those rebuilds happen during the pop animation they
     // compete with the transition frames and freeze it mid-flight.
-    //
-    // We use the route's AnimationController status to detect
-    // the exact moment the exit transition completes.  (Using
-    // route.popped won't work — it completes synchronously in
-    // ModalRoute.didPop, BEFORE the animation even starts.)
-    final animation = route?.animation;
-    if (animation != null && animation.status != AnimationStatus.dismissed) {
-      final done = Completer<void>();
-      void listener(AnimationStatus s) {
-        if (s == AnimationStatus.dismissed) {
-          if (!done.isCompleted) done.complete();
-          animation.removeStatusListener(listener);
-        }
-      }
-
-      animation.addStatusListener(listener);
-      await done.future.timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          animation.removeStatusListener(listener);
-          // Timeout waiting for dismissed — proceed anyway rather
-          // than silently dropping the extraction.
-        },
-      );
-    } else if (route == null) {
-      // No route — unexpected, but guard with a fallback delay.
-      await Future<void>.delayed(const Duration(milliseconds: 400));
-    }
-    // Implicit else: animation already dismissed — no wait needed;
-    // fall through to fire-and-forget immediately.
+    await waitForPopAnimation(route);
 
     // Route transition is complete — now fire-and-forget the pipeline.
     // _runAudioSeparation is a top-level function with no access to

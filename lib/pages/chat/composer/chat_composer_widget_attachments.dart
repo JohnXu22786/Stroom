@@ -289,6 +289,19 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     if (imageBytes == null) return;
     if (!mounted) return;
 
+    // Another edit is still processing — starting a second one could
+    // silently discard the newer edit (both pipelines resolve against
+    // the same original bytes). Ask the user to wait.
+    if (_editsInFlight > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('图片处理中，请稍候再编辑'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     final shouldEdit = await showDialog<bool>(
       context: context,
       builder: (ctx) => ImagePreviewDialog(
@@ -300,24 +313,42 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     if (shouldEdit != true || !mounted) return;
 
     // User tapped edit — open the ExtendedImage quick editor
-    // (no save dialog needed for chat page attachments)
-    final editedBytes = await Navigator.push<Uint8List>(
+    // (no save dialog needed for chat page attachments).
+    // The editor pops immediately and processes in the background;
+    // the pending attachment is updated from the callback once ready.
+    final confirmed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => ExtendedImageEditorPage(
           imageBytes: imageBytes,
           fileName: att.fileName,
+          onProcessed: (result) async {
+            try {
+              if (result is! QuickEditProcessingSuccess) return;
+              if (!mounted) return;
+              if (index >= _pendingAttachments.length) return;
+              // Verify the attachment at this index is still the same
+              // one we tapped
+              if (_pendingAttachments[index].id != att.id) return;
+
+              // Editor delivered edited bytes — update the pending
+              // attachment
+              await _updatePendingAttachmentAfterEdit(
+                  index, result.editedBytes);
+            } finally {
+              // The pipeline always fires the callback (success or
+              // failure) — release the send-blocking guard here.
+              if (mounted) setState(() => _editsInFlight--);
+            }
+          },
         ),
       ),
     );
-
-    if (editedBytes == null || !mounted) return;
-    if (index >= _pendingAttachments.length) return;
-    // Verify the attachment at this index is still the same one we tapped
-    if (_pendingAttachments[index].id != att.id) return;
-
-    // Editor returned edited bytes — update the pending attachment
-    await _updatePendingAttachmentAfterEdit(index, editedBytes);
+    if (confirmed == true && mounted) {
+      // The pipeline is now running — hold the send button until the
+      // callback releases it.
+      setState(() => _editsInFlight++);
+    }
   }
 
   /// Updates the pending attachment at [index] with [editedBytes].
@@ -327,6 +358,11 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     int index,
     Uint8List editedBytes,
   ) async {
+    // The composer is interactive while the editor processes in the
+    // background — the attachment at [index] may have been removed or
+    // reordered since the edit started. Bail out BEFORE any file I/O
+    // so we never delete the file of an attachment that is still in use.
+    if (index >= _pendingAttachments.length) return;
     final oldAtt = _pendingAttachments[index];
 
     try {
@@ -341,6 +377,25 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       final tempStoragePath = 'temp_edited/$tempFileName';
       final newHash = AttachmentStorage.computeHash(editedBytes);
       final newBase64 = base64Encode(editedBytes);
+
+      // Update attachment with new temp-stored properties
+      final updatedAtt = oldAtt.copyWith(
+        hash: newHash,
+        storagePath: tempStoragePath,
+        fileSize: editedBytes.length,
+        base64Data: newBase64,
+      );
+
+      // The composer is interactive while the editor processes in the
+      // background — the attachment at [index] may have been removed or
+      // reordered during the awaits above. Re-validate BEFORE any
+      // destructive file I/O so we never delete the file of an
+      // attachment that is still in the list.
+      if (!mounted ||
+          index >= _pendingAttachments.length ||
+          _pendingAttachments[index].id != oldAtt.id) {
+        return;
+      }
 
       // Clean up old temp file if it was also a temp edit
       if (oldAtt.storagePath.startsWith('temp_edited/')) {
@@ -360,13 +415,13 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         // 在真正删除消息时清理。
       }
 
-      // Update attachment with new temp-stored properties
-      final updatedAtt = oldAtt.copyWith(
-        hash: newHash,
-        storagePath: tempStoragePath,
-        fileSize: editedBytes.length,
-        base64Data: newBase64,
-      );
+      // Re-validate after the delete await — the list may have changed
+      // while the file work was running.
+      if (!mounted ||
+          index >= _pendingAttachments.length ||
+          _pendingAttachments[index].id != oldAtt.id) {
+        return;
+      }
 
       setState(() {
         _pendingAttachments[index] = updatedAtt;
