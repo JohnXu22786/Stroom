@@ -30,11 +30,9 @@ Future<String> executeChatBlock({
   final promptPrefix = asStringParam(block.params, 'promptPrefix', '').trim();
   final prompt = promptPrefix.isNotEmpty ? '$promptPrefix\n\n$input' : input;
 
-  // Unique per EXECUTION: flowSubTask.id is a positional placeholder
-  // ('pending_chat_0') shared across flows and runs — without execId,
-  // concurrent chat blocks would collide on the same convId/taskId
-  // (cross-flow output contamination) and re-runs would reuse stale
-  // per-conversation services.
+  // The execId prefix keeps the convId/taskId aligned with the delete
+  // path's derivation (removeFlowSubTaskTasks cancels
+  // 'flow_<execution.id>_<st.id>') — both sides must use the same shape.
   final taskId = 'chat_${execId}_${flowSubTask.id}';
   execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
   execNotifier.updateSubTaskStatus(execId, flowSubTask.id, TaskStatus.running);
