@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/chat/composer/chat_composer_widget.dart';
+import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/pages/chat_page.dart';
@@ -36,10 +37,16 @@ Widget wrapComposerInApp({
   List<Attachment>? editingMessageAttachments,
   void Function(String messageId, String text, List<Attachment>)? onEditSend,
   VoidCallback? onEditCancel,
+  void Function(String text, List<Attachment> attachments)? onSend,
+  String? conversationId,
+  Set<String> streamingConversations = const {},
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
     overrides: [
+      streamingConversationsProvider.overrideWith(
+        (ref) => streamingConversations,
+      ),
       conversationsProvider.overrideWith((ref) {
         return ConversationsNotifier(ref);
       }),
@@ -51,12 +58,13 @@ Widget wrapComposerInApp({
     child: MaterialApp(
       home: Scaffold(
         body: ChatComposerWidget(
-          onSend: (text, attachments) {},
+          onSend: onSend ?? (text, attachments) {},
           onStop: () {},
           onEnabledToolsChanged: (_) {},
           modelNames: const ['model-a', 'model-b'],
           selectedModelIndex: 0,
           onModelSelected: (_) {},
+          conversationId: conversationId,
           editingMessageId: editingMessageId,
           editingMessageText: editingMessageText,
           editingMessageAttachments: editingMessageAttachments,
@@ -484,6 +492,244 @@ void main() {
       await tester.tap(find.byIcon(Icons.send_rounded));
       await tester.pump();
       expect(lastEditId, 'msg-2');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // Fullscreen editor dialog exit behavior
+  // ═══════════════════════════════════════════════════════════
+  // Regression: exiting the fullscreen editor with the system back key
+  // (navigation key) must behave like clicking the top-right X button —
+  // the edited text is written back to the main input instead of being
+  // discarded. Before the fix, back/pop discarded the content.
+
+  group('Fullscreen editor dialog exit behavior', () {
+    /// Pumps the composer, opens the fullscreen editor, and settles the
+    /// dialog entrance animation.
+    Future<void> openFullscreenEditor(
+      WidgetTester tester, {
+      String? editingMessageId,
+      String? editingMessageText,
+      String? conversationId,
+      Set<String> streamingConversations = const {},
+      void Function(String text, List<Attachment> attachments)? onSend,
+    }) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(
+        wrapComposerInApp(
+          editingMessageId: editingMessageId,
+          editingMessageText: editingMessageText,
+          conversationId: conversationId,
+          streamingConversations: streamingConversations,
+          onSend: onSend,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      // Consume the pre-existing benign framework exceptions the other
+      // tests in this file tolerate; fail loudly if anything else is thrown.
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byIcon(Icons.fullscreen));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    /// The TextField inside the fullscreen editor dialog.
+    Finder dialogTextField() => find.descendant(
+          of: find.byType(Dialog),
+          matching: find.byType(TextField),
+        );
+
+    /// The main composer input TextField (outside the dialog).
+    Finder mainInputField() => find.descendant(
+          of: find.byType(ChatComposerWidget),
+          matching: find.byType(TextField),
+        );
+
+    String mainInputText(WidgetTester tester) =>
+        tester.widget<TextField>(mainInputField()).controller?.text ?? '';
+
+    testWidgets('X button preserves edited text back to main input', (
+      tester,
+    ) async {
+      await openFullscreenEditor(tester);
+      await tester.enterText(dialogTextField(), 'edited in dialog');
+
+      // Tap the top-right X button
+      await tester.tap(
+        find.descendant(
+          of: find.byType(Dialog),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Dialog closed and content preserved in the main input
+      expect(find.byType(Dialog), findsNothing);
+      expect(mainInputText(tester), 'edited in dialog');
+    });
+
+    testWidgets('system back key preserves edited text like the X button', (
+      tester,
+    ) async {
+      await openFullscreenEditor(tester);
+      await tester.enterText(dialogTextField(), 'typed in fullscreen');
+
+      // Simulate the system back navigation key
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Dialog closed and content preserved — same as the X button,
+      // NOT discarded.
+      expect(find.byType(Dialog), findsNothing);
+      expect(mainInputText(tester), 'typed in fullscreen');
+    });
+
+    testWidgets('barrier tap preserves edited text like the X button', (
+      tester,
+    ) async {
+      await openFullscreenEditor(tester);
+      await tester.enterText(dialogTextField(), 'typed before barrier tap');
+
+      // Tap the 8px barrier ring outside the dialog (insetPadding: 8).
+      // Barrier dismiss flows through Navigator.maybePop, so it must end
+      // up in the same preserve-on-close path as the X button.
+      await tester.tapAt(const Offset(4, 1000));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(Dialog), findsNothing);
+      expect(mainInputText(tester), 'typed before barrier tap');
+    });
+
+    testWidgets('back key with unchanged text keeps the original text', (
+      tester,
+    ) async {
+      await openFullscreenEditor(
+        tester,
+        editingMessageId: 'msg-1',
+        editingMessageText: 'original text',
+      );
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(Dialog), findsNothing);
+      expect(mainInputText(tester), 'original text');
+    });
+
+    testWidgets('send button still works with back-key guard in place', (
+      tester,
+    ) async {
+      String? sentText;
+      await openFullscreenEditor(tester, onSend: (text, atts) {
+        sentText = text;
+      });
+      await tester.enterText(dialogTextField(), 'hello from fullscreen');
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(Dialog),
+          matching: find.byIcon(Icons.send_rounded),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Dialog closed, message sent, composer input cleared (send behavior
+      // must not be broken by the PopScope guard).
+      expect(find.byType(Dialog), findsNothing);
+      expect(sentText, 'hello from fullscreen');
+      expect(mainInputText(tester), isEmpty);
+    });
+
+    testWidgets('send during streaming is blocked but typed text is kept', (
+      tester,
+    ) async {
+      bool sendCalled = false;
+      await openFullscreenEditor(
+        tester,
+        conversationId: 'test-conv-id',
+        streamingConversations: {'test-conv-id'},
+        onSend: (text, atts) {
+          sendCalled = true;
+        },
+      );
+      await tester.enterText(dialogTextField(), 'typed during stream');
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(Dialog),
+          matching: find.byIcon(Icons.send_rounded),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // The streaming guard inside _handleSubmitted blocks the send, but
+      // the dialog's write-back must not lose the typed text — it stays
+      // in the main input instead of being discarded.
+      expect(find.byType(Dialog), findsNothing);
+      expect(sendCalled, false);
+      expect(mainInputText(tester), 'typed during stream');
+    });
+
+    testWidgets('double back during exit animation does not pop the page', (
+      tester,
+    ) async {
+      await openFullscreenEditor(tester);
+      await tester.enterText(dialogTextField(), 'typed text');
+
+      // First back press starts the exit animation...
+      await tester.binding.handlePopRoute();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(mainInputText(tester), 'typed text');
+
+      // ...second back press mid-animation: the _closed guard (plus the
+      // framework) must keep this from closing anything else. The dialog
+      // closes exactly once and the composer page beneath survives.
+      await tester.binding.handlePopRoute();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(Dialog), findsNothing);
+      // The composer page must still be present (not popped twice).
+      expect(find.byType(ChatComposerWidget), findsOneWidget);
+      expect(mainInputText(tester), 'typed text');
+    });
+
+    testWidgets('re-opening the editor starts fresh and keeps the text', (
+      tester,
+    ) async {
+      await openFullscreenEditor(tester);
+      await tester.enterText(dialogTextField(), 'round trip text');
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(mainInputText(tester), 'round trip text');
+
+      // Re-open: a fresh dialog State seeded from the written-back text.
+      await tester.tap(find.byIcon(Icons.fullscreen));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        tester.widget<TextField>(dialogTextField()).controller?.text,
+        'round trip text',
+      );
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(Dialog),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(Dialog), findsNothing);
+      expect(mainInputText(tester), 'round trip text');
     });
   });
 }
