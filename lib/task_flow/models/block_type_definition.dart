@@ -32,8 +32,16 @@ enum BlockParamType {
   /// File/folder path selector
   filePath,
 
-  /// Model selector (references a configured model)
+  /// Model selector (references a configured model of [configType],
+  /// e.g. 'asr' — the executor indexes the same flattened list).
   modelSelector,
+
+  /// Voice selector (dropdown of the voices of the configured TTS model).
+  voiceSelector,
+
+  /// Assistant selector (dropdown of user-defined assistants from
+  /// [assistantProvider]; empty = the currently selected assistant).
+  assistantSelector,
 
   /// API key / secret
   secret,
@@ -55,6 +63,10 @@ class BlockParamDefinition {
   final dynamic defaultValue;
   final String? hintText;
 
+  /// Provider type ('asr', 'ocr', 'tts', 'llm', ...) whose configs the
+  /// [modelSelector] dropdown lists. Only used by modelSelector.
+  final String configType;
+
   const BlockParamDefinition({
     required this.key,
     required this.label,
@@ -62,6 +74,7 @@ class BlockParamDefinition {
     this.required = false,
     this.defaultValue,
     this.hintText,
+    this.configType = 'asr',
   });
 
   Map<String, dynamic> toMap() => {
@@ -71,6 +84,7 @@ class BlockParamDefinition {
         'required': required,
         if (defaultValue != null) 'defaultValue': defaultValue,
         if (hintText != null) 'hintText': hintText,
+        if (configType != 'asr') 'configType': configType,
       };
 
   factory BlockParamDefinition.fromMap(Map<String, dynamic> map) =>
@@ -84,6 +98,7 @@ class BlockParamDefinition {
         required: map['required'] as bool? ?? false,
         defaultValue: map['defaultValue'],
         hintText: map['hintText'] as String?,
+        configType: map['configType'] as String? ?? 'asr',
       );
 }
 
@@ -221,7 +236,8 @@ class BlockTypeDefinition {
       BlockParamDefinition(
         key: 'voice',
         label: '语音',
-        type: BlockParamType.string,
+        type: BlockParamType.voiceSelector,
+        hintText: '选择配置的TTS模型音色',
       ),
       BlockParamDefinition(
         key: 'speed',
@@ -239,9 +255,10 @@ class BlockTypeDefinition {
 
   /// Chat (Assistant Conversation): any → text
   ///
-  /// Sends the input text to the current assistant model and returns
-  /// the response. Accepts any input type — whatever can be typed into
-  /// the chat page (text, URLs, file references) can be the input.
+  /// Sends the input text (the previous block's output) to the selected
+  /// assistant and returns the response. Accepts any input type —
+  /// whatever can be typed into the chat page (text, URLs, file
+  /// references) can be the input.
   static const chat = BlockTypeDefinition(
     typeKey: BlockType.chat,
     label: '助手对话',
@@ -250,6 +267,12 @@ class BlockTypeDefinition {
     icon: Icons.chat_bubble_outline,
     color: Color(0xFF2196F3),
     params: [
+      BlockParamDefinition(
+        key: 'assistantId',
+        label: '助手',
+        type: BlockParamType.assistantSelector,
+        hintText: '留空使用当前选中的助手',
+      ),
       BlockParamDefinition(
         key: 'promptPrefix',
         label: '提示前缀',

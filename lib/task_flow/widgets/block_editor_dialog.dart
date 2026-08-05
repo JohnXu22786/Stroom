@@ -2,6 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/assistant.dart';
+import '../../models/tts_models.dart';
+import '../../providers/assistant_provider.dart';
 import '../../providers/provider_config.dart';
 import '../../utils/file_manifest.dart';
 import '../../utils/video_manifest.dart';
@@ -9,17 +12,24 @@ import '../../widgets/folder_picker_dialog.dart';
 import '../models/task_flow_definition.dart';
 import '../models/block_type_definition.dart';
 
-/// A dialog for editing the parameters of a [TaskFlowBlock] instance.
+/// Opens the block settings panel for editing a [TaskFlowBlock] instance.
 ///
-/// Shows fields for each parameter defined in the block's
-/// [BlockTypeDefinition], pre-populated with the block's current values.
-/// Returns updated [TaskFlowBlock] if the user confirms, or null if cancelled.
+/// A bottom-sheet panel that renders every parameter defined in the
+/// block's [BlockTypeDefinition] using the same native-style controls as
+/// the standalone pages (model dropdowns, voice dropdowns, assistant
+/// selection, folder pickers, toggles, number fields).
+/// Returns the updated [TaskFlowBlock] if confirmed, or null if cancelled.
 Future<TaskFlowBlock?> showBlockEditorDialog(
   BuildContext context, {
   required TaskFlowBlock block,
 }) {
-  return showDialog<TaskFlowBlock>(
+  return showModalBottomSheet<TaskFlowBlock>(
     context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
     builder: (ctx) => _BlockEditorDialog(block: block),
   );
 }
@@ -44,24 +54,19 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     _params = Map<String, dynamic>.from(widget.block.params);
     _definition = widget.block.getDefinition();
 
-    // Clamp persisted modelSelector values into the CURRENT ASR config
-    // range (configs may have been deleted since the block was saved) — a
-    // stale out-of-range index would otherwise survive untouched through a
+    // Clamp persisted modelSelector values into the CURRENT config range
+    // (configs may have been deleted since the block was saved) — a stale
+    // out-of-range index would otherwise survive untouched through a
     // confirm and fail at execution time.
     if (_definition != null) {
-      final asrCount = ref
-          .read(providerEntriesProvider)
-          .entries
-          .where((e) => e.type == 'asr')
-          .expand((e) => e.configs)
-          .length;
-      if (asrCount > 0) {
-        for (final p in _definition!.params) {
-          if (p.type != BlockParamType.modelSelector) continue;
-          final raw = _params[p.key];
-          final idx = raw is num ? raw.toInt() : (int.tryParse('$raw') ?? 0);
-          _params[p.key] = idx.clamp(0, asrCount - 1).toInt();
-        }
+      final def = _definition!;
+      for (final p in def.params) {
+        if (p.type != BlockParamType.modelSelector) continue;
+        final configs = _configsOf(p.configType);
+        if (configs.isEmpty) continue;
+        final raw = _params[p.key];
+        final idx = raw is num ? raw.toInt() : (int.tryParse('$raw') ?? 0);
+        _params[p.key] = idx.clamp(0, configs.length - 1).toInt();
       }
     }
 
@@ -87,94 +92,184 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     super.dispose();
   }
 
+  /// Configs of a provider type (flattened, in the same order the
+  /// executors index them).
+  List<dynamic> _configsOf(String configType) {
+    return ref
+        .read(providerEntriesProvider)
+        .entries
+        .where((e) => e.type == configType)
+        .expand((e) => e.configs)
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final def = _definition;
+    final screenHeight = MediaQuery.of(context).size.height;
 
-    if (_definition == null) {
-      return AlertDialog(
-        title: const Text('未知功能块'),
-        content: Text('功能块类型 "${widget.block.typeKey.name}" 未注册'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('关闭'),
-          ),
-        ],
-      );
-    }
-
-    final def = _definition!;
-
-    return AlertDialog(
-      title: Row(
-        children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              color: def.color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(def.icon, size: 16, color: def.color),
-          ),
-          const SizedBox(width: 8),
-          Text('${def.label} 参数'),
-        ],
-      ),
-      content: SizedBox(
-        width: math.min(MediaQuery.of(context).size.width * 0.9, 420),
-        child: SingleChildScrollView(
+    if (def == null) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Block info
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '输入: ${def.inputType.label}  →  输出: ${def.outputType.label}',
-                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                ),
+              Text('功能块类型 "${widget.block.typeKey.name}" 未注册'),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('关闭'),
               ),
-              const SizedBox(height: 16),
-
-              if (def.params.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 20),
-                  child: Center(
-                    child: Text(
-                      '该功能块无额外参数',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                )
-              else
-                ...def.params.map((param) => _buildParamField(param, cs)),
             ],
           ),
         ),
+      );
+    }
+
+    return DraggableScrollableSheet(
+      initialChildSize: math.min(0.75, 520 / screenHeight),
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (scrollCtx, scrollController) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle
+          Center(
+            child: Container(
+              width: 32,
+              height: 4,
+              margin: const EdgeInsets.only(top: 10),
+              decoration: BoxDecoration(
+                color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 12, 4),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: def.color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(def.icon, size: 18, color: def.color),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${def.label} 设置',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        '输入: ${def.inputType.label}  →  输出: ${def.outputType.label}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.pop(context),
+                  tooltip: '关闭',
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          // Params
+          Flexible(
+            child: ListView(
+              controller: scrollController,
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              children: [
+                // Chat blocks: note about the user message being the
+                // previous step's output.
+                if (def.typeKey == BlockType.chat)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.arrow_downward, size: 14, color: cs.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '发送给助手的用户消息 = 上一步的输出',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: cs.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (def.params.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Center(
+                      child: Text(
+                        '该功能块无额外参数',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  ...def.params.map((param) => _buildParamField(param, cs)),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+          // Actions
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('取消'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () {
+                      final updated = widget.block.copyWithParams(_params);
+                      Navigator.pop(context, updated);
+                    },
+                    child: const Text('确认'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final updated = widget.block.copyWithParams(_params);
-            Navigator.pop(context, updated);
-          },
-          child: const Text('确认'),
-        ),
-      ],
     );
   }
 
@@ -219,7 +314,6 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
       case BlockParamType.secret:
         final controller = _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');
-        // Ensure new controllers are tracked
         if (_controllers[param.key] == null) {
           _controllers[param.key] = controller;
         }
@@ -237,31 +331,25 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           style: const TextStyle(fontSize: 13),
           onChanged: (v) => _params[param.key] = v,
         );
+
       case BlockParamType.modelSelector:
         // Persisted JSON round-trips numbers as `num` — `int.tryParse('2.0')`
         // would fail and silently reset the selection to 0.
         final currentIndex =
             value is num ? value.toInt() : (int.tryParse('$value') ?? 0);
-        // Populate from the actually-configured ASR models — the executor
-        // indexes the same flattened list, so a selected index is always
-        // valid and the labels are recognizable instead of generic slots.
-        final asrConfigs = ref
-            .read(providerEntriesProvider)
-            .entries
-            .where((e) => e.type == 'asr')
-            .expand((e) => e.configs)
-            .toList();
-        if (asrConfigs.isEmpty) {
+        final configs = _configsOf(param.configType);
+        if (configs.isEmpty) {
           return const ListTile(
             dense: true,
+            contentPadding: EdgeInsets.zero,
             title: Text(
-              '未配置ASR模型',
+              '未配置模型',
               style: TextStyle(fontSize: 13),
             ),
           );
         }
         final clampedIndex =
-            currentIndex.clamp(0, math.max(0, asrConfigs.length - 1)).toInt();
+            currentIndex.clamp(0, math.max(0, configs.length - 1)).toInt();
         return DropdownButtonFormField<int>(
           value: clampedIndex,
           isDense: true,
@@ -274,9 +362,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             ),
           ),
           style: TextStyle(fontSize: 13, color: cs.onSurface),
-          items: List.generate(asrConfigs.length, (i) {
-            final providerName = asrConfigs[i].providerName.isNotEmpty
-                ? asrConfigs[i].providerName
+          items: List.generate(configs.length, (i) {
+            final dynamic c = configs[i];
+            final providerName = (c.providerName as String?)?.isNotEmpty == true
+                ? c.providerName as String
                 : '模型 $i';
             return DropdownMenuItem<int>(value: i, child: Text(providerName));
           }),
@@ -286,6 +375,125 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             }
           },
         );
+
+      case BlockParamType.voiceSelector:
+        // Voices of the configured TTS models (same source as the TTS
+        // page's voice dropdown). `voices` may be typed VoiceEntry lists
+        // or raw maps depending on the source.
+        final voices = <VoiceEntry>[];
+        for (final c in _configsOf('tts')) {
+          final dynamic models = c.models as List<dynamic>? ?? const [];
+          for (final m in models) {
+            final mVoices = m.voices as List<dynamic>? ?? const [];
+            for (final v in mVoices) {
+              final entry = v is VoiceEntry
+                  ? v
+                  : VoiceEntry.fromMap(Map<String, dynamic>.from(v as Map));
+              if (entry.name.isNotEmpty && entry.id.isNotEmpty) {
+                voices.add(entry);
+              }
+            }
+          }
+        }
+        final current = value?.toString() ?? '';
+        if (voices.isEmpty) {
+          return TextField(
+            controller:
+                _controllers[param.key] ?? TextEditingController(text: current),
+            onChanged: (v) => _params[param.key] = v,
+            decoration: InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 8,
+              ),
+              hintText: '未配置TTS音色，可手动输入ID',
+            ),
+            style: const TextStyle(fontSize: 13),
+          );
+        }
+        // Keep the controller in sync for the manual-input fallback.
+        _controllers[param.key] ??= TextEditingController(text: current);
+        return DropdownButtonFormField<String>(
+          value: voices.any((v) => v.id == current) ? current : null,
+          isDense: true,
+          decoration: InputDecoration(
+            isDense: true,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 8,
+            ),
+          ),
+          style: TextStyle(fontSize: 13, color: cs.onSurface),
+          hint: Text(
+            current.isNotEmpty && !voices.any((v) => v.id == current)
+                ? current
+                : '选择音色',
+            style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+          ),
+          items: voices.map((v) {
+            return DropdownMenuItem<String>(
+              value: v.id,
+              child: Text('${v.name} (${v.id})'),
+            );
+          }).toList(),
+          onChanged: (v) {
+            if (v != null) {
+              setState(() {
+                _params[param.key] = v;
+                _controllers[param.key]?.text = v;
+              });
+            }
+          },
+        );
+
+      case BlockParamType.assistantSelector:
+        final assistants = ref.watch(assistantProvider);
+        final currentId = value?.toString() ?? '';
+        final currentAssistant =
+            assistants.where((a) => a.id == currentId).firstOrNull;
+        return DropdownButtonFormField<String?>(
+          value: currentId.isNotEmpty ? currentId : null,
+          isDense: true,
+          decoration: InputDecoration(
+            isDense: true,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 8,
+            ),
+          ),
+          style: TextStyle(fontSize: 13, color: cs.onSurface),
+          hint: Text(
+            currentId.isNotEmpty && currentAssistant == null
+                ? '助手已删除，请重新选择'
+                : '当前选中的助手',
+            style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+          ),
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('（使用当前选中的助手）'),
+            ),
+            ...assistants.map((a) {
+              return DropdownMenuItem<String?>(
+                value: a.id,
+                child: Text(
+                  '${a.emoji} ${a.name}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+            }),
+          ],
+          onChanged: (v) {
+            setState(() => _params[param.key] = v ?? '');
+          },
+        );
+
       case BlockParamType.number:
         final controller = _controllers[param.key] ??
             TextEditingController(text: value?.toString() ?? '');

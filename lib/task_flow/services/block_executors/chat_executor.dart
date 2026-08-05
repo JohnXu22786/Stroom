@@ -1,3 +1,4 @@
+import '../../../models/assistant.dart';
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/task_provider_shared.dart';
 import '../../../services/app_log_service.dart';
@@ -11,8 +12,9 @@ import 'shared_helpers.dart';
 
 /// Executes a chat (assistant conversation) block.
 ///
-/// Sends [input] to the current assistant model via [ChatStreamManager]
-/// and returns the assistant's text response as output.
+/// Sends [input] (the previous block's output) to the selected assistant
+/// (or the currently selected one when [assistant] is null) via
+/// [ChatStreamManager] and returns the assistant's text response.
 Future<String> executeChatBlock({
   required TaskFlowBlock block,
   required BlockTypeDefinition def,
@@ -22,6 +24,7 @@ Future<String> executeChatBlock({
   required FlowSubTask flowSubTask,
   required BackgroundTaskNotifier bgNotifier,
   required ChatStreamManager chatManager,
+  Assistant? assistant,
   Duration maxWait = const Duration(minutes: 10),
 }) async {
   final promptPrefix = asStringParam(block.params, 'promptPrefix', '').trim();
@@ -44,12 +47,15 @@ Future<String> executeChatBlock({
     // conversation context (no cross-contamination with other flows).
     final convId = 'flow_${flowSubTask.id}';
 
-    final result = await chatManager.startStreaming(
+    final result = await chatManager
+        .startStreaming(
       text: prompt,
       convId: convId,
       history: [], // Fresh conversation – no prior context
       tools: [], // No tool access in flow blocks
-    ).timeout(maxWait, onTimeout: () {
+      assistant: assistant,
+    )
+        .timeout(maxWait, onTimeout: () {
       // A stalled model stream must not hang the flow forever —
       // cancel the stream and surface the failure like any other.
       chatManager.cancel(convId);

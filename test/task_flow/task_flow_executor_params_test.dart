@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/background_task_provider.dart';
@@ -32,6 +33,7 @@ class _FakeChatStreamManager extends ChatStreamManager {
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
     String? streamingMsgId,
+    Assistant? assistant,
   }) {
     return onStart();
   }
