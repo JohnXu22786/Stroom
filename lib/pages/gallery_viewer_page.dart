@@ -129,36 +129,68 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
   Future<void> _onCrop() async {
     if (_isLoading) return;
     _isLoading = true;
+    // When the editor is confirmed, the background pipeline keeps
+    // running after the pop — the guard stays held until the callback
+    // (which always fires, success or failure) releases it. On every
+    // other path the guard is released here in `finally`.
+    var pipelineRunning = false;
     try {
       final record = widget.images[_currentIndex];
       final bytes = await _readImageBytes(record);
       if (bytes == null || bytes.isEmpty || !mounted) return;
 
-      final editedBytes = await Navigator.push<Uint8List>(
+      // The editor pops immediately and processes in the background;
+      // the save dialog is shown from the callback once processing done.
+      final confirmed = await Navigator.push<bool>(
         context,
         MaterialPageRoute(
           builder: (_) => ExtendedImageEditorPage(
             imageBytes: bytes,
             fileName: '${record.name}.${record.format}',
+            onProcessed: (result) async {
+              try {
+                await _onQuickEditProcessed(record, result);
+              } catch (e) {
+                // Callback errors must not surface as unhandled async
+                // errors — the failure snackbar is the pipeline's job.
+                debugPrint('Quick edit result handling failed: $e');
+              } finally {
+                // Release the re-entry guard once the background
+                // pipeline has finished (success OR failure — the
+                // callback always fires).
+                _isLoading = false;
+              }
+            },
           ),
         ),
       );
-
-      if (editedBytes == null || !mounted) return;
-
-      // Show the same save dialog as the full editor uses.
-      final saveAction = await showImageSaveDialog(context);
-      if (!mounted) return;
-      if (saveAction == null || saveAction == SaveAction.cancel) return;
-
-      await _saveEditedImage(
-        record,
-        editedBytes,
-        isSaveAs: saveAction == SaveAction.saveAs,
-      );
+      pipelineRunning = confirmed == true;
+      // Confirmed — the guard stays held until the callback releases it,
+      // so the user cannot start a second overlapping edit pipeline.
     } finally {
-      _isLoading = false;
+      if (!pipelineRunning) _isLoading = false;
     }
+  }
+
+  /// Called when the quick editor finishes background processing (the
+  /// editor has already popped). On success shows the save dialog and
+  /// persists; on failure the pipeline already showed a snackbar.
+  Future<void> _onQuickEditProcessed(
+    ImageRecord record,
+    QuickEditProcessingResult result,
+  ) async {
+    if (result is! QuickEditProcessingSuccess) return;
+    if (!mounted) return;
+
+    final saveAction = await showImageSaveDialog(context);
+    if (!mounted) return;
+    if (saveAction == null || saveAction == SaveAction.cancel) return;
+
+    await _saveEditedImage(
+      record,
+      result.editedBytes,
+      isSaveAs: saveAction == SaveAction.saveAs,
+    );
   }
 
   Future<void> _onEdit() async {

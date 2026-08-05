@@ -75,6 +75,10 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   void _handleSubmitted(String text) {
     if (text.trim().isEmpty && _pendingAttachments.isEmpty) return;
 
+    // A quick image edit is still processing — sending now would use
+    // the unedited attachment bytes.
+    if (_editsInFlight > 0) return;
+
     // 流式守卫（与 Enter 键路径一致）：流式期间发送按钮被替换为停止
     // 按钮，但全屏编辑器的发送路径没有按钮级保护——chat_page 的
     // _onMessageSend 对流式中的对话静默 return，不清空这里会导致

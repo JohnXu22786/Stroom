@@ -100,6 +100,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   final Map<String, Uint8List> _pendingImageBytes = {};
   final GlobalKey _composerKey = GlobalKey();
 
+  /// Number of quick image edits still processing in the background.
+  /// While non-zero, sending is blocked — the pending attachments still
+  /// hold the unedited bytes until the edit callback applies them.
+  int _editsInFlight = 0;
+
   Timer? _draftTimer;
 
   /// Tracks the last draft text that was saved, so we can avoid redundant
@@ -298,6 +303,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
             ),
             // ── Edit mode capsule ──
             if (widget.editingMessageId != null) _buildEditModeCapsule(cs: cs),
+            // ── Quick-edit processing banner ──
+            if (_editsInFlight > 0) _buildProcessingBanner(cs: cs),
             // ── Input row ──
             _buildInputRow(
               cs: cs,
