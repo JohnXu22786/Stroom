@@ -145,4 +145,75 @@ void main() {
     expect(find.textContaining('翻译助手'), findsOneWidget);
     expect(find.textContaining('代码助手'), findsOneWidget);
   });
+
+  testWidgets(
+      'chat panel with a DELETED assistant id does not crash '
+      '(hint guides re-selection)', (tester) async {
+    await pumpPanel(
+      tester,
+      block: TaskFlowBlock(
+        typeKey: BlockType.chat,
+        params: {'assistantId': 'deleted-id'},
+      ),
+      assistants: [
+        Assistant(id: 'a1', name: '现存助手', prompt: 'p'),
+      ],
+    );
+
+    // Panel renders without a debug assert (the stale id must not be
+    // passed as the dropdown value — no matching item would crash);
+    // the dropdown still opens and lists the existing assistant.
+    await tester.tap(find.byType(DropdownButtonFormField<String?>));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('现存助手'), findsOneWidget);
+  });
+
+  testWidgets(
+      'TTS panel with duplicate voice ids across models does not '
+      'crash (deduped dropdown)', (tester) async {
+    final entries = ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          id: 'tts-1',
+          type: 'tts',
+          name: 'TTS',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'EdgeTTS',
+              host: 'https://example.com',
+              key: 'k',
+              models: [
+                ModelConfig(
+                  name: 'edge-a',
+                  modelId: 'edge-a',
+                  voices: [
+                    VoiceEntry(name: '晓晓', id: 'shared-voice'),
+                  ],
+                ),
+                ModelConfig(
+                  name: 'edge-b',
+                  modelId: 'edge-b',
+                  voices: [
+                    VoiceEntry(name: '晓晓', id: 'shared-voice'),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    await pumpPanel(
+      tester,
+      block: TaskFlowBlock(
+        typeKey: BlockType.tts,
+        params: {'voice': 'shared-voice'},
+      ),
+      entries: entries,
+    );
+
+    // The dropdown renders with the persisted voice selected (exactly one
+    // matching item after dedup) — no debug assert.
+    expect(find.textContaining('晓晓'), findsOneWidget);
+  });
 }

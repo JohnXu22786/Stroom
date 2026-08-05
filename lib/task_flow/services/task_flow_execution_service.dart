@@ -4,7 +4,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../catcatch/providers/catcatch_provider.dart';
-import '../../models/assistant.dart';
 import '../../providers/assistant_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/chat_manager_provider.dart';

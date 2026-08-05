@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../models/assistant.dart';
 import '../../models/tts_models.dart';
 import '../../providers/assistant_provider.dart';
 import '../../providers/provider_config.dart';
@@ -30,7 +29,15 @@ Future<TaskFlowBlock?> showBlockEditorDialog(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (ctx) => _BlockEditorDialog(block: block),
+    builder: (ctx) => Padding(
+      // Lift the sheet above the keyboard so the confirm/cancel row stays
+      // reachable while typing (showModalBottomSheet does not inset by
+      // viewInsets for isScrollControlled sheets).
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+      ),
+      child: _BlockEditorDialog(block: block),
+    ),
   );
 }
 
@@ -377,29 +384,39 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         );
 
       case BlockParamType.voiceSelector:
-        // Voices of the configured TTS models (same source as the TTS
-        // page's voice dropdown). `voices` may be typed VoiceEntry lists
-        // or raw maps depending on the source.
+        // Voices of the SAME TTS model the executor uses
+        // (tts_executor: configs.first.models.first) — listing voices of
+        // every config would offer voices the executed model can't use.
+        // Deduped by id (two models can share a voice id, which would
+        // otherwise break the dropdown's exactly-one-item value assert).
         final voices = <VoiceEntry>[];
-        for (final c in _configsOf('tts')) {
-          final dynamic models = c.models as List<dynamic>? ?? const [];
-          for (final m in models) {
-            final mVoices = m.voices as List<dynamic>? ?? const [];
-            for (final v in mVoices) {
-              final entry = v is VoiceEntry
-                  ? v
-                  : VoiceEntry.fromMap(Map<String, dynamic>.from(v as Map));
-              if (entry.name.isNotEmpty && entry.id.isNotEmpty) {
-                voices.add(entry);
+        {
+          final byId = <String, VoiceEntry>{};
+          final ttsConfigs = _configsOf('tts');
+          if (ttsConfigs.isNotEmpty) {
+            final dynamic config = ttsConfigs.first;
+            final models = config.models as List<dynamic>? ?? const [];
+            if (models.isNotEmpty) {
+              final mVoices = models.first.voices as List<dynamic>? ?? const [];
+              for (final v in mVoices) {
+                final entry = v is VoiceEntry
+                    ? v
+                    : VoiceEntry.fromMap(Map<String, dynamic>.from(v as Map));
+                if (entry.name.isNotEmpty && entry.id.isNotEmpty) {
+                  byId[entry.id] = entry;
+                }
               }
             }
           }
+          voices.addAll(byId.values);
         }
         final current = value?.toString() ?? '';
+        // Track the controller in both branches (dropdown + manual
+        // fallback) so it is disposed with the panel.
+        _controllers[param.key] ??= TextEditingController(text: current);
         if (voices.isEmpty) {
           return TextField(
-            controller:
-                _controllers[param.key] ?? TextEditingController(text: current),
+            controller: _controllers[param.key],
             onChanged: (v) => _params[param.key] = v,
             decoration: InputDecoration(
               isDense: true,
@@ -415,8 +432,6 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             style: const TextStyle(fontSize: 13),
           );
         }
-        // Keep the controller in sync for the manual-input fallback.
-        _controllers[param.key] ??= TextEditingController(text: current);
         return DropdownButtonFormField<String>(
           value: voices.any((v) => v.id == current) ? current : null,
           isDense: true,
@@ -457,7 +472,12 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         final currentAssistant =
             assistants.where((a) => a.id == currentId).firstOrNull;
         return DropdownButtonFormField<String?>(
-          value: currentId.isNotEmpty ? currentId : null,
+          // A persisted id whose assistant was deleted must not be passed
+          // as value (no matching item → debug assert crash); the hint
+          // then guides the user to re-select.
+          value: currentId.isNotEmpty && currentAssistant != null
+              ? currentId
+              : null,
           isDense: true,
           decoration: InputDecoration(
             isDense: true,
