@@ -40,6 +40,10 @@ extension _ChatPageUiExt on _ChatPageState {
 
   /// Handles chat list scroll events to track auto-scroll state.
   void _onChatScroll() {
+    // While the initial positioning pass runs the list is hidden and all
+    // scroll events are programmatic — skip auto-scroll/button bookkeeping
+    // so the pass isn't disturbed.
+    if (_pendingInitialScrollAdjustment) return;
     if (!_chatScrollController.hasClients) return;
     final maxScroll = _chatScrollController.position.maxScrollExtent;
     final currentScroll = _chatScrollController.position.pixels;
@@ -77,6 +81,228 @@ extension _ChatPageUiExt on _ChatPageState {
       _autoScrollEnabled = true;
       _showScrollToBottomButton = false;
     });
+  }
+
+  /// Maximum number of frames the initial positioning pass may consume
+  /// before giving up (defensive against pathological layouts).
+  static const int _maxInitialAdjustSteps = 120;
+
+  /// Consecutive frames the pass spends chasing a growing bottom
+  /// (maxScrollExtent moving) before giving up and stepping up anyway —
+  /// bounds how long a fast background stream can keep the list hidden.
+  static const int _maxInitialAdjustChaseFrames = 30;
+
+  /// Schedules the next frame of the initial positioning pass. At most one
+  /// step runs per frame.
+  void _scheduleInitialAdjustStep() {
+    if (!mounted || _initialAdjustStepScheduled) return;
+    _initialAdjustStepScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initialAdjustStepScheduled = false;
+      if (!mounted) return;
+      if (_pendingInitialScrollAdjustment) _initialAdjustStep();
+    });
+  }
+
+  /// One frame of the initial positioning pass, run while the list is
+  /// hidden (offstage).
+  ///
+  /// A freshly loaded list starts at the top, so the last user message is
+  /// usually not laid out yet. Each step jumps toward the bottom (where the
+  /// latest messages live) until the last user message has a render box,
+  /// then jumps to the resolved target — the top of that message, or the
+  /// bottom when the remaining content fits in one viewport.
+  ///
+  /// Wrapped in try/catch: if a step ever throws, the pass must still
+  /// terminate and reveal the list — a permanently hidden chat is worse
+  /// than any wrong landing position.
+  void _initialAdjustStep() {
+    try {
+      _initialAdjustStepInner();
+    } catch (e, s) {
+      debugPrint('[ChatPage] initial scroll adjustment failed: $e\n$s');
+      _finishInitialScrollAdjustment();
+    }
+  }
+
+  void _initialAdjustStepInner() {
+    final c = _chatScrollController;
+    if (!c.hasClients) {
+      // List not attached yet — retry on the next frame.
+      if (++_initialAdjustStepsTaken <= _maxInitialAdjustSteps) {
+        _scheduleInitialAdjustStep();
+      } else {
+        _finishInitialScrollAdjustment();
+      }
+      return;
+    }
+    final pos = c.position;
+    final maxExtent = pos.maxScrollExtent;
+    if (maxExtent <= 0) {
+      // Nothing scrollable — no positioning needed.
+      _finishInitialScrollAdjustment();
+      return;
+    }
+
+    final lastUserMsgId = _lastUserMessageId();
+    if (lastUserMsgId == null) {
+      // Conversation has no user message — settle at the true bottom.
+      _settleAtBottomAndFinish();
+      return;
+    }
+    // The target message must be in the chat controller (only the last
+    // _pageSize messages are loaded into it). If it isn't, it can never be
+    // laid out — settle at the true bottom.
+    final targetInController =
+        _controller?.messages.any((m) => m.id == lastUserMsgId) ?? false;
+    if (!targetInController) {
+      _settleAtBottomAndFinish();
+      return;
+    }
+    final box = _messageKeys[lastUserMsgId]?.currentContext?.findRenderObject()
+        as RenderBox?;
+    if (box == null || !box.attached) {
+      // Target message not laid out yet. First land at the bottom; while
+      // maxScrollExtent is still moving (the sliver estimates it from the
+      // built children, so jumping down grows it toward the true value —
+      // or a background stream is growing the content), keep re-jumping
+      // down. Once the bottom is stable, step UP one viewport per frame
+      // until the target message is built. The chase cap makes the pass
+      // give up on a fast-growing stream and step up anyway.
+      if (++_initialAdjustStepsTaken > _maxInitialAdjustSteps) {
+        _finishAtBottom();
+        return;
+      }
+      final double next;
+      if (pos.pixels < maxExtent - 1.0) {
+        if (++_initialAdjustChaseFrames > _maxInitialAdjustChaseFrames) {
+          _initialAdjustChaseFrames = 0;
+          next = (pos.pixels - pos.viewportDimension).clamp(0.0, maxExtent);
+          if (next >= pos.pixels - 1.0) {
+            _finishAtBottom();
+            return;
+          }
+        } else {
+          next = maxExtent;
+        }
+      } else {
+        _initialAdjustChaseFrames = 0;
+        next = (pos.pixels - pos.viewportDimension).clamp(0.0, maxExtent);
+        if (next >= pos.pixels - 1.0) {
+          // No progress possible (degenerate viewport) — settle at the
+          // bottom.
+          _finishAtBottom();
+          return;
+        }
+      }
+      c.jumpTo(next);
+      _scheduleInitialAdjustStep();
+      return;
+    }
+
+    // Target message is laid out — resolve the exact scroll offset.
+    final viewportBox =
+        pos.context.notificationContext?.findRenderObject() as RenderBox?;
+    if (viewportBox == null) {
+      _finishAtBottom();
+      return;
+    }
+    final targetTop = box.localToGlobal(Offset.zero).dy -
+        viewportBox.localToGlobal(Offset.zero).dy +
+        pos.pixels;
+    // Measure the tail from the LAST message's render box (when it is
+    // built, the geometry is exact — unlike maxScrollExtent, which the
+    // sliver can only estimate while its last child is unbuilt).
+    final lastMessageId = _controller?.messages.isNotEmpty == true
+        ? _controller!.messages.last.id
+        : null;
+    final lastBox = lastMessageId == null
+        ? null
+        : _messageKeys[lastMessageId]?.currentContext?.findRenderObject()
+            as RenderBox?;
+    if (lastBox == null || !lastBox.attached) {
+      // Tail not measurable (e.g. the last message is a streaming
+      // placeholder without a key) — assume it does not fit and show the
+      // last user message at the top. targetTop is measured from a built
+      // box, so it is in-range by construction; the viewport clamps at
+      // layout if the estimated maxScrollExtent ever disagrees.
+      c.jumpTo(targetTop);
+      _finishInitialScrollAdjustment();
+      return;
+    }
+    final tailBottom = lastBox.localToGlobal(Offset.zero).dy -
+        viewportBox.localToGlobal(Offset.zero).dy +
+        pos.pixels +
+        lastBox.size.height;
+    final target = resolveInitialChatScrollTarget(
+      lastUserMessageTop: targetTop,
+      tailBottom: tailBottom,
+      maxScrollExtent: maxExtent,
+      viewportDimension: pos.viewportDimension,
+    );
+    c.jumpTo(target);
+    _finishInitialScrollAdjustment();
+  }
+
+  /// Settles at the TRUE bottom: while maxScrollExtent is still moving
+  /// (the sliver estimates it from the built children — jumping down grows
+  /// it toward the true value), keep re-jumping down; once it stabilizes,
+  /// finish the pass at the exact bottom. Used when no meaningful target
+  /// can be positioned (no user message, or the target is older than the
+  /// loaded controller window).
+  void _settleAtBottomAndFinish() {
+    final c = _chatScrollController;
+    if (!c.hasClients) {
+      _finishInitialScrollAdjustment();
+      return;
+    }
+    final pos = c.position;
+    if (pos.maxScrollExtent <= 0) {
+      _finishInitialScrollAdjustment();
+      return;
+    }
+    if (pos.pixels < pos.maxScrollExtent - 1.0) {
+      if (++_initialAdjustStepsTaken > _maxInitialAdjustSteps) {
+        _finishInitialScrollAdjustment();
+        return;
+      }
+      c.jumpTo(pos.maxScrollExtent);
+      _scheduleInitialAdjustStep();
+      return;
+    }
+    _finishInitialScrollAdjustment();
+  }
+
+  /// Gives up the pass at the current bottom position and makes the list
+  /// visible.
+  void _finishAtBottom() {
+    final c = _chatScrollController;
+    if (c.hasClients && c.position.maxScrollExtent > 0) {
+      c.jumpTo(c.position.maxScrollExtent);
+    }
+    _finishInitialScrollAdjustment();
+  }
+
+  /// Completes the initial positioning pass and makes the list visible.
+  void _finishInitialScrollAdjustment() {
+    _pendingInitialScrollAdjustment = false;
+    _initialAdjustStepsTaken = 0;
+    _initialAdjustChaseFrames = 0;
+    _initialAdjustStepScheduled = false;
+    // Re-run the normal scroll bookkeeping once against the settled
+    // position: at the bottom it re-enables auto-scroll, elsewhere it
+    // surfaces the scroll-to-bottom button.
+    _onChatScroll();
+    if (mounted) setState(() {});
+  }
+
+  /// ID of the last user message in [_history], or null when the
+  /// conversation has no user messages.
+  String? _lastUserMessageId() {
+    for (var i = _history.length - 1; i >= 0; i--) {
+      if (_history[i].role == 'user') return _history[i].id;
+    }
+    return null;
   }
 
   void _showJsonInspection(String msgId) {
