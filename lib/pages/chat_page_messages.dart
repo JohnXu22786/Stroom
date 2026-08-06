@@ -134,6 +134,12 @@ extension _ChatPageMessagesExt on _ChatPageState {
     _expandedErrors.clear();
     _loadedUpToIndex = 0;
     _isLoadingMore = false;
+    // Abort any in-flight initial positioning pass — the view is being
+    // cleared, there is nothing left to position.
+    _pendingInitialScrollAdjustment = false;
+    _initialAdjustStepScheduled = false;
+    _initialAdjustChaseFrames = 0;
+    _loadedConversationId = null;
     if (mounted) setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
       oldCtrl?.dispose();
@@ -348,6 +354,28 @@ extension _ChatPageMessagesExt on _ChatPageState {
       if (savedStreamingMsgId != null && !liveStreamStillActive) {
         if (_isStreamingActive) _reloadAfterLoading = true;
         _isStreamingActive = false;
+      }
+      // Entry or conversation switch: after the swap, position the list so
+      // the top of the LAST USER message sits at the top of the viewport
+      // (falling back to the bottom when the remaining content fits one
+      // screen). Same-conversation reloads (e.g. after a background stream
+      // completes) keep the built-in jump-to-bottom, so their behavior is
+      // unchanged. A reload landing mid-pass keeps the pass running.
+      // (`_history.isEmpty` is defensive: current paths that empty history
+      // also reset `_loadedConversationId`, so the first clause already
+      // covers them.)
+      final isInitialEntryOrSwitch =
+          _loadedConversationId != activeId || _history.isEmpty;
+      _loadedConversationId = activeId;
+      _pendingInitialScrollAdjustment =
+          isInitialEntryOrSwitch || _pendingInitialScrollAdjustment;
+      if (_pendingInitialScrollAdjustment) {
+        _initialAdjustStepsTaken = 0;
+        _initialAdjustChaseFrames = 0;
+        // Kick the pass through the scheduler: if a step is already
+        // scheduled (reload landing mid-pass), the kick is a no-op and the
+        // running chain continues — never two pass frames per frame.
+        _scheduleInitialAdjustStep();
       }
       _history
         ..clear()
