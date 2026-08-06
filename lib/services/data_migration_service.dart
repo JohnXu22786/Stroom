@@ -214,8 +214,7 @@ class DataMigrationService {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) {
-        debugPrint(
-            '[DataMigrationService] data_format_versions 不是合法对象，视为未存储');
+        debugPrint('[DataMigrationService] data_format_versions 不是合法对象，视为未存储');
         return null;
       }
       return {
@@ -302,8 +301,7 @@ class DataMigrationService {
     final detail = outdatedParts
         .map((p) => '$p v${stored[p] ?? 0}→v${DataParts.currentVersions[p]}')
         .join(', ');
-    await AppLogService.info(
-        'DataMigrationService', '需要数据格式迁移: $detail');
+    await AppLogService.info('DataMigrationService', '需要数据格式迁移: $detail');
 
     // 需要迁移：清理旧备份
     await cleanOldBackups();
@@ -337,8 +335,7 @@ class DataMigrationService {
 
       debugPrint('[DataMigrationService] Per-part data format migration '
           'completed: $detail');
-      await AppLogService.info(
-          'DataMigrationService', '数据格式迁移成功: $detail');
+      await AppLogService.info('DataMigrationService', '数据格式迁移成功: $detail');
     } catch (e) {
       debugPrint('[DataMigrationService] Migration failed: $e');
       await AppLogService.error('DataMigrationService', '数据格式迁移失败', e);
@@ -415,8 +412,8 @@ class DataMigrationService {
   ///（共享 folders 表 → per-type 文件夹表），任一媒体部分落后时执行
   /// 一次即可完成全部四部分的物理迁移，避免重复执行 4 次。
   static Future<void> _performPartMigrations(Map<String, int> stored) async {
-    final mediaNeedsMigration = _mediaParts.any(
-        (p) => (stored[p] ?? 0) < DataParts.currentVersions[p]!);
+    final mediaNeedsMigration = _mediaParts
+        .any((p) => (stored[p] ?? 0) < DataParts.currentVersions[p]!);
     if (mediaNeedsMigration) {
       await _migrateMediaV0ToV1();
     }
@@ -656,7 +653,8 @@ class DataMigrationService {
         }
       }
       await prefs.setString('conversations', jsonEncode(list));
-      debugPrint('[DataMigrationService] chat v0→v1: Migrated $migrated messages'
+      debugPrint(
+          '[DataMigrationService] chat v0→v1: Migrated $migrated messages'
           '${skipped > 0 ? ', skipped $skipped corrupt entries' : ''}');
     } catch (e) {
       // 结构性迁移失败（jsonDecode 失败等）必须上抛：否则

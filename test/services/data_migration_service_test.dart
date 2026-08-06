@@ -261,10 +261,8 @@ void main() {
           .getKeys()
           .where((k) => k.startsWith('data_format_versions_corrupt_'))
           .toList();
-      expect(corruptKeys, isNotEmpty,
-          reason: '非对象记录必须被隔离保留');
-      expect(corruptKeys.any((k) => prefs.getString(k) == '[1, 2, 3]'),
-          isTrue);
+      expect(corruptKeys, isNotEmpty, reason: '非对象记录必须被隔离保留');
+      expect(corruptKeys.any((k) => prefs.getString(k) == '[1, 2, 3]'), isTrue);
       await _expectAllPartsCurrent();
     });
 
@@ -411,8 +409,7 @@ void main() {
       await _expectAllPartsCurrent();
     });
 
-    test('media migration actually migrates legacy shared folders',
-        () async {
+    test('media migration actually migrates legacy shared folders', () async {
       // 回归：media 部分的迁移接线必须真正执行物理迁移（共享 folders
       // → per-type 文件夹表），而不是只提升版本记账 —— 否则误删
       // media 迁移分支时测试依然通过（review 发现的问题）。
@@ -447,8 +444,8 @@ void main() {
         ManifestTables.imageRecords,
         ManifestTables.videoRecords,
       ]) {
-        final folders = await ManifestDatabase.getAllFolders(
-            recordTable: recordTable);
+        final folders =
+            await ManifestDatabase.getAllFolders(recordTable: recordTable);
         expect(folders, containsAll(['legacy_folder', 'shared_folder']),
             reason: '$recordTable 必须获得 legacy folders');
       }
@@ -503,7 +500,8 @@ void main() {
           reason: '超前的 settings 部分必须保持原值，绝不降级');
     });
 
-    test('corrupt data_format_versions is quarantined, not silently overwritten',
+    test(
+        'corrupt data_format_versions is quarantined, not silently overwritten',
         () async {
       // 回归：版本记录本身损坏（JSON 解析失败）时，必须按项目
       // 「先隔离再覆盖」的约定保留损坏现场，再重新展开迁移 ——
@@ -521,10 +519,9 @@ void main() {
           .getKeys()
           .where((k) => k.startsWith('data_format_versions_corrupt_'))
           .toList();
-      expect(corruptKeys, isNotEmpty,
-          reason: '损坏现场必须保留在带时间戳的隔离 key 中');
-      expect(corruptKeys.any((k) => prefs.getString(k) == 'not-json{{{'),
-          isTrue);
+      expect(corruptKeys, isNotEmpty, reason: '损坏现场必须保留在带时间戳的隔离 key 中');
+      expect(
+          corruptKeys.any((k) => prefs.getString(k) == 'not-json{{{'), isTrue);
       await _expectAllPartsCurrent();
     });
 
@@ -582,8 +579,7 @@ void main() {
       final conversations =
           jsonDecode(prefs.getString('conversations')!) as List;
       final message = (conversations[0] as Map)['messages'][0] as Map;
-      expect(message.containsKey('blocks'), isTrue,
-          reason: '落后的 chat 部分必须迁移');
+      expect(message.containsKey('blocks'), isTrue, reason: '落后的 chat 部分必须迁移');
 
       await _expectAllPartsCurrent();
     });
