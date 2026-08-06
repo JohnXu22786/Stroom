@@ -64,6 +64,12 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   /// Called when user taps X on the edit capsule to cancel editing.
   final VoidCallback? onEditCancel;
 
+  /// Called when the input field gains/loses focus. The chat page uses the
+  /// gain event to react to the tap immediately — before the soft-keyboard
+  /// animation starts — so the message list shifts up without the usual
+  /// delay.
+  final ValueChanged<bool>? onFocusChanged;
+
   const ChatComposerWidget({
     super.key,
     required this.onSend,
@@ -84,6 +90,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.editingMessageAttachments,
     this.onEditSend,
     this.onEditCancel,
+    this.onFocusChanged,
   });
 
   @override
@@ -138,6 +145,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     // Listen to app lifecycle events so drafts are saved even when the
     // app goes to background or is terminated unexpectedly.
     WidgetsBinding.instance.addObserver(this);
+
+    // Notify the chat page the moment the input gains/loses focus so it can
+    // react to the tap before the soft-keyboard animation starts.
+    _focusNode.addListener(_onFocusChanged);
 
     // Restore draft text for the current conversation, if any
     if (widget.initialDraftText.isNotEmpty) {
@@ -238,9 +249,15 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     }
   }
 
+  /// Forwards focus changes (with the current focus state) to the page.
+  void _onFocusChanged() {
+    widget.onFocusChanged?.call(_focusNode.hasFocus);
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _focusNode.removeListener(_onFocusChanged);
     _draftTimer?.cancel();
     // Save draft before disposing. Use try-catch because ref may
     // already be disposed during teardown, especially in tests.

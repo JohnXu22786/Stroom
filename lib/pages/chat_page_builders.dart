@@ -10,59 +10,77 @@ extension _ChatPageBuildersExt on _ChatPageState {
     required String? activeId,
     required InMemoryChatController controller,
   }) {
-    return Chat(
-      key: ValueKey(controller.hashCode),
-      currentUserId: _currentUser.id,
-      resolveUser: (id) async {
-        if (id == _currentUser.id) return _currentUser;
-        if (id == _aiUser.id) return _aiUser;
-        return null;
-      },
-      chatController: controller,
-      onMessageSend: (text) => _onMessageSend(text, []),
-      theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
-      timeFormat: DateFormat('yyyy-MM-dd HH:mm'),
-      builders: Builders(
-        chatAnimatedListBuilder: (context, itemBuilder) =>
-            _buildChatAnimatedList(context, itemBuilder),
-        // Suppress the built-in scroll-to-bottom
-        // button — we provide our own overlay below.
-        scrollToBottomBuilder: (context, animation, onPressed) =>
-            const SizedBox.shrink(),
-        // Empty composer builder — the actual composer is
-        // rendered below the Chat widget so it participates
-        // in the Column layout flow instead of overlaying
-        // the message list via the internal Stack. This
-        // ensures the scroll area auto-adjusts as the
-        // composer height changes (e.g. multi-line input).
-        composerBuilder: (_) => const SizedBox.shrink(),
-        textMessageBuilder: (context, message, index,
-                {required bool isSentByMe, MessageGroupStatus? groupStatus}) =>
-            _buildTextMessage(
-          context,
-          message,
-          index,
-          isSentByMe: isSentByMe,
-          groupStatus: groupStatus,
-          isDark: isDark,
-          isStreaming: isStreaming,
-          activeId: activeId,
-        ),
-        textStreamMessageBuilder: (context, message, index,
-                {required bool isSentByMe, MessageGroupStatus? groupStatus}) =>
-            _buildTextStreamMessage(
-          context,
-          message,
-          index,
-          isSentByMe: isSentByMe,
-          groupStatus: groupStatus,
-          isStreaming: isStreaming,
-          streamingFullReply: streamingFullReply,
-          streamingMsgId: streamingMsgId,
-          isDark: isDark,
+    return NotificationListener<ScrollNotification>(
+      onNotification: _onChatScrollNotification,
+      child: Chat(
+        key: ValueKey(controller.hashCode),
+        currentUserId: _currentUser.id,
+        resolveUser: (id) async {
+          if (id == _currentUser.id) return _currentUser;
+          if (id == _aiUser.id) return _aiUser;
+          return null;
+        },
+        chatController: controller,
+        onMessageSend: (text) => _onMessageSend(text, []),
+        theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
+        timeFormat: DateFormat('yyyy-MM-dd HH:mm'),
+        builders: Builders(
+          chatAnimatedListBuilder: (context, itemBuilder) =>
+              _buildChatAnimatedList(context, itemBuilder),
+          // Suppress the built-in scroll-to-bottom
+          // button — we provide our own overlay below.
+          scrollToBottomBuilder: (context, animation, onPressed) =>
+              const SizedBox.shrink(),
+          // Empty composer builder — the actual composer is
+          // rendered below the Chat widget so it participates
+          // in the Column layout flow instead of overlaying
+          // the message list via the internal Stack. This
+          // ensures the scroll area auto-adjusts as the
+          // composer height changes (e.g. multi-line input).
+          composerBuilder: (_) => const SizedBox.shrink(),
+          textMessageBuilder: (context, message, index,
+                  {required bool isSentByMe,
+                  MessageGroupStatus? groupStatus}) =>
+              _buildTextMessage(
+            context,
+            message,
+            index,
+            isSentByMe: isSentByMe,
+            groupStatus: groupStatus,
+            isDark: isDark,
+            isStreaming: isStreaming,
+            activeId: activeId,
+          ),
+          textStreamMessageBuilder: (context, message, index,
+                  {required bool isSentByMe,
+                  MessageGroupStatus? groupStatus}) =>
+              _buildTextStreamMessage(
+            context,
+            message,
+            index,
+            isSentByMe: isSentByMe,
+            groupStatus: groupStatus,
+            isStreaming: isStreaming,
+            streamingFullReply: streamingFullReply,
+            streamingMsgId: streamingMsgId,
+            isDark: isDark,
+          ),
         ),
       ),
     );
+  }
+
+  /// Tracks user drags on the chat list via scroll notifications, so the
+  /// keyboard bottom-pinning never fights a finger scroll. Programmatic
+  /// scrolls (jumpTo / animateTo — e.g. the chat library's own keyboard
+  /// handling) have null [ScrollNotification.dragDetails] and are ignored.
+  bool _onChatScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollStartNotification) {
+      _userIsDragging = notification.dragDetails != null;
+    } else if (notification is ScrollEndNotification) {
+      _userIsDragging = false;
+    }
+    return false;
   }
 
   /// Chat animated list with lazy pagination and auto-scroll control.
