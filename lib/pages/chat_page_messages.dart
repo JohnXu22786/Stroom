@@ -34,18 +34,34 @@ extension _ChatPageMessagesExt on _ChatPageState {
 
     // Then discover MCP server tools (SSE / stdio) dynamically.
     // MCP discovery failures don't affect already-registered built-in tools.
+    // Re-read the entries state here: the snapshot taken at the top of
+    // _initialize may predate ProviderEntriesNotifier.load() completing
+    // (async SharedPreferences + migrations). Passing the stale (possibly
+    // empty) snapshot would skip MCP discovery entirely and leave the tool
+    // list at built-in-only.
     try {
+      final freshEntriesState =
+          mounted ? ref.read(providerEntriesProvider) : null;
       await AppLogService.info('ChatPage',
-          '开始初始化 MCP 服务器，当前有 ${entriesState.entries.length} 个供应商配置');
-      await _adapter.initializeMcpServers(entriesState);
+          '开始初始化 MCP 服务器，当前有 ${freshEntriesState?.entries.length ?? 0} 个供应商配置');
+      if (freshEntriesState != null) {
+        await _adapter.initializeMcpServers(freshEntriesState);
+        // MCP tools may have been discovered AFTER _loadConversationMessages
+        // resolved the enabled set. Re-resolve so newly discovered MCP tools
+        // are auto-enabled for conversations without explicit prefs — this
+        // matches resolveEnabledToolNames' contract ("no saved preferences →
+        // enable all available tools") and keeps the badge/list at the full
+        // count (12) instead of 7 on first entry.
+        if (mounted) _resolveEnabledToolsForActiveConversation();
+      }
       await AppLogService.info('ChatPage', 'MCP 服务器初始化完成');
     } finally {
       // Rebuild UI so the tool panel reflects the newly discovered MCP tools.
       // Must check mounted because the async gap may outlive the widget.
       if (mounted) setState(() {});
-      // Do NOT auto-enable all tools. All tools default to OFF.
-      // Per-conversation enabled tools are restored in _loadConversationMessages.
-      // Using finally ensures MCP discovery errors don't prevent the rest.
+      // 工具启用集已在 MCP 发现完成后重新解析：无显式偏好的新对话默认
+      // 启用全部可用工具；有显式偏好（用户手动开关过）的对话保留其
+      // 保存的选择。使用 finally 确保 MCP 发现错误不会阻断其余初始化。
     }
     // Restore saved model selection and restore per-model settings
     SharedPreferences.getInstance().then((prefs) {
@@ -222,20 +238,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
       // toggled-off state is then persisted into
       // conv.enabledMcpToolNames + conv.hasExplicitEnabledMcpTools on
       // the next save.
-      // 注意：此默认只覆盖**加载时已知**的工具；加载之后才发现的
-      // MCP 工具（initializeMcpServers 异步完成）保持 OFF，不自动
-      // 加入启用集（与 _initialize 的 "All tools default to OFF" 一致
-      // ——那是针对后续发现的工具），直到切换对话触发重新加载。
-      final convEnabled = (conv != null)
-          ? Set<String>.from(conv.enabledMcpToolNames)
-          : <String>{};
-      final hasExplicitPrefs = conv?.hasExplicitEnabledMcpTools ?? false;
-      ref.read(enabledToolNamesProvider.notifier).state =
-          resolveEnabledToolNames(
-        allTools: _adapter.getAllToolDefinitions(),
-        savedEnabledNames: convEnabled,
-        hasExplicitSavedPrefs: hasExplicitPrefs,
-      );
+      _resolveEnabledToolsForActiveConversation();
       if (messages.isEmpty) {
         _clearConversationView();
         return;
@@ -486,5 +489,33 @@ extension _ChatPageMessagesExt on _ChatPageState {
       _history.clear();
       _history.addAll(conv.messages);
     }
+  }
+
+  /// Resolves the enabled tool names for the active conversation using the
+  /// adapter's CURRENT tool definitions (built-in + discovered MCP tools).
+  ///
+  /// - Conversations with explicit saved prefs keep their saved selection.
+  /// - New conversations (no explicit prefs) auto-enable EVERY available
+  ///   tool — including MCP tools discovered after the initial message load.
+  ///
+  /// Called both from [_loadConversationMessages] and after MCP discovery
+  /// completes in [_initialize], so that MCP tools discovered asynchronously
+  /// are immediately visible and enabled (badge/list show the full count)
+  /// instead of staying OFF until the next conversation switch.
+  void _resolveEnabledToolsForActiveConversation() {
+    final activeId = ref.read(activeConversationIdProvider);
+    if (activeId == null) return;
+    final convs = ref.read(conversationsProvider);
+    final conv = convs.where((c) => c.id == activeId).firstOrNull;
+    final convEnabled = (conv != null)
+        ? Set<String>.from(conv.enabledMcpToolNames)
+        : <String>{};
+    final hasExplicitPrefs = conv?.hasExplicitEnabledMcpTools ?? false;
+    ref.read(enabledToolNamesProvider.notifier).state =
+        resolveEnabledToolNames(
+      allTools: _adapter.getAllToolDefinitions(),
+      savedEnabledNames: convEnabled,
+      hasExplicitSavedPrefs: hasExplicitPrefs,
+    );
   }
 }
