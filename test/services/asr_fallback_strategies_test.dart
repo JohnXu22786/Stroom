@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -126,8 +126,9 @@ Uint8List _buildWav({
 void main() {
   const host = 'https://api.test.com/audio/transcriptions';
 
-  Dio testDio(_RouteAdapter adapter) => Dio(BaseOptions(baseUrl: 'https://api.test.com'))
-    ..httpClientAdapter = adapter;
+  Dio testDio(_RouteAdapter adapter) =>
+      Dio(BaseOptions(baseUrl: 'https://api.test.com'))
+        ..httpClientAdapter = adapter;
 
   ResponseBody ok(String text) => ResponseBody.fromString(
         '{"text":"$text"}',
@@ -194,7 +195,8 @@ void main() {
 
       expect(result.text, 'base64 fallback works');
       expect(adapter.requests.length, 1);
-      expect(adapter.requests.first['contentType'], contains('application/json'));
+      expect(
+          adapter.requests.first['contentType'], contains('application/json'));
       final body = jsonDecode(adapter.requests.first['bodyString'] as String)
           as Map<String, dynamic>;
       expect(body['file'], isA<String>());
@@ -205,7 +207,8 @@ void main() {
       );
     });
 
-    test('fallbackMethod=specific with base64Json primary has no specific '
+    test(
+        'fallbackMethod=specific with base64Json primary has no specific '
         'fallback and rejects', () async {
       final adapter = _RouteAdapter();
       final service = AsrService(
@@ -298,7 +301,8 @@ void main() {
           reason: 'payload must be WAVE_FORMAT_IMA_ADPCM (0x11)');
     });
 
-    test('fallbackMethod=generic chunking splits over-limit WAV into '
+    test(
+        'fallbackMethod=generic chunking splits over-limit WAV into '
         'multiple uploads and concatenates results', () async {
       final adapter = _RouteAdapter();
       var call = 0;
@@ -353,8 +357,8 @@ void main() {
           audioBytes: _buildWav(seconds: 10),
           audioFormat: 'wav',
         ),
-        throwsA(predicate((e) =>
-            e is Exception && e.toString().contains('切块转写全部失败'))),
+        throwsA(predicate(
+            (e) => e is Exception && e.toString().contains('切块转写全部失败'))),
       );
     });
 
@@ -388,7 +392,8 @@ void main() {
       expect(adapter.requests.length, 2);
       // 1st attempt: base64 JSON; 2nd: multipart with compressed FLAC.
       expect(adapter.requests[0]['contentType'], contains('application/json'));
-      expect(adapter.requests[1]['contentType'], contains('multipart/form-data'));
+      expect(
+          adapter.requests[1]['contentType'], contains('multipart/form-data'));
       expect(
         adapter.requests[1]['bodyString'] as String,
         contains('audio.flac'),
@@ -425,8 +430,8 @@ void main() {
       expect(adapter.requests.length, 4);
       expect(result.text, 'b64 chunk 1 b64 chunk 2 b64 chunk 3 b64 chunk 4');
       for (final req in adapter.requests) {
-        final body = jsonDecode(req['bodyString'] as String)
-            as Map<String, dynamic>;
+        final body =
+            jsonDecode(req['bodyString'] as String) as Map<String, dynamic>;
         final file = body['file'] as String;
         // The base64 STRING length == payload bytes — must stay within the
         // provider's file size limit.
@@ -435,7 +440,8 @@ void main() {
       }
     });
 
-    test('ADPCM + chunking never splits compressed data — falls back to a '
+    test(
+        'ADPCM + chunking never splits compressed data — falls back to a '
         'friendly rejection instead of crashing', () async {
       final adapter = _RouteAdapter();
       adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
@@ -462,13 +468,14 @@ void main() {
           audioBytes: _buildWav(seconds: 10),
           audioFormat: 'wav',
         ),
-        throwsA(predicate((e) =>
-            e is Exception && e.toString().contains('文件大小超过限制'))),
+        throwsA(predicate(
+            (e) => e is Exception && e.toString().contains('文件大小超过限制'))),
       );
       expect(adapter.requests, isEmpty);
     });
 
-    test('non-WAV over-limit files with chunking get a friendly rejection, '
+    test(
+        'non-WAV over-limit files with chunking get a friendly rejection, '
         'not a raw parser error', () async {
       final adapter = _RouteAdapter();
       adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
@@ -494,13 +501,14 @@ void main() {
               List.generate(5000, (i) => i % 256)), // fake mp3 bytes
           audioFormat: 'mp3',
         ),
-        throwsA(predicate((e) =>
-            e is Exception && e.toString().contains('文件大小超过限制'))),
+        throwsA(predicate(
+            (e) => e is Exception && e.toString().contains('文件大小超过限制'))),
       );
       expect(adapter.requests, isEmpty);
     });
 
-    test('truncated WAV with chunking gets the friendly rejection, not a '
+    test(
+        'truncated WAV with chunking gets the friendly rejection, not a '
         'RangeError', () async {
       final adapter = _RouteAdapter();
       adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
@@ -523,7 +531,9 @@ void main() {
       // rejection, not a raw RangeError.
       final truncated = _buildWav(seconds: 1); // 16044 bytes total
       final wav = Uint8List(44 + 1000);
-      wav.setRange(0, 44 + 1000 < truncated.length ? 44 + 1000 : truncated.length,
+      wav.setRange(
+          0,
+          44 + 1000 < truncated.length ? 44 + 1000 : truncated.length,
           truncated);
       final bd = ByteData.view(wav.buffer);
       bd.setUint32(4, wav.length - 8, Endian.little);
@@ -534,8 +544,8 @@ void main() {
           audioBytes: wav,
           audioFormat: 'wav',
         ),
-        throwsA(predicate((e) =>
-            e is Exception && e.toString().contains('文件大小超过限制'))),
+        throwsA(predicate(
+            (e) => e is Exception && e.toString().contains('文件大小超过限制'))),
       );
       expect(adapter.requests, isEmpty);
     });

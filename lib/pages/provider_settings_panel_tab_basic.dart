@@ -329,8 +329,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                   ),
                   DropdownMenuItem(
                     value: 'specific',
-                    child: Text('特定兜底（Base64）',
-                        style: TextStyle(fontSize: 13)),
+                    child: Text('特定兜底（Base64）', style: TextStyle(fontSize: 13)),
                   ),
                   DropdownMenuItem(
                     value: 'generic',

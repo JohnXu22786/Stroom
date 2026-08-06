@@ -325,9 +325,10 @@ class AsrService {
     if (fallback == 'specific' || fallback == 'all') {
       final specificMethod = _getSpecificFallback(config.uploadMethod);
       if (specificMethod == null) {
-        await AppLogService.info('AsrService',
+        await AppLogService.info(
+            'AsrService',
             '当前上传方式 (${config.uploadMethod.name}) 没有可用的特定兜底'
-            '（URL 需要公网链接，multipart 不缓解超限）');
+                '（URL 需要公网链接，multipart 不缓解超限）');
       } else {
         try {
           if (specificMethod == AudioUploadMethod.base64Json) {
@@ -717,8 +718,7 @@ class AsrService {
     // non-overlapping audio it can remove legitimate repeated text at
     // chunk boundaries.
     if (texts.isEmpty) {
-      throw Exception(
-          '切块转写全部失败（${chunks.length} 个片段均未成功），请检查网络或 API 配置后重试');
+      throw Exception('切块转写全部失败（${chunks.length} 个片段均未成功），请检查网络或 API 配置后重试');
     }
 
     return AsrResult(

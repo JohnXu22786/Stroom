@@ -871,9 +871,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   static String _urlDisplayName(String url) {
     try {
       final uri = Uri.parse(url);
-      final segments = uri.pathSegments
-          .where((s) => s.isNotEmpty)
-          .toList(growable: false);
+      final segments =
+          uri.pathSegments.where((s) => s.isNotEmpty).toList(growable: false);
       final name = segments.isNotEmpty ? segments.last : uri.host;
       return name.length <= 40 ? name : name.substring(0, 40);
     } catch (_) {
