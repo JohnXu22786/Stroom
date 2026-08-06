@@ -88,7 +88,7 @@ Future<void> _selectDropdownOption(
 }
 
 /// Enters text into the [index]-th TextField of the page (0 = 模型名称,
-/// 1 = 模型 ID, then max tokens / seed / stop / min pixels / max pixels).
+/// 1 = 模型 ID, then max tokens / seed / min pixels / max pixels).
 Future<void> _enterField(WidgetTester tester, int index, String text) async {
   await tester.enterText(find.byType(TextField).at(index), text);
   await tester.pump();
@@ -115,22 +115,22 @@ Future<void> _enterFieldInCard(
 void main() {
   group('OcrModelConfigPage built-in OpenAI-compatible params', () {
     testWidgets(
-        'renders frequency/presence penalty, stop, response format, '
-        'min/max pixels sections', (tester) async {
+        'renders OCR-specific param sections (detail, response format, '
+        'min/max pixels); LLM sampling params absent', (tester) async {
       await _pumpConfigPage(tester);
 
-      await _scrollTo(tester, find.text('频率惩罚 (Frequency Penalty)'));
-      expect(find.text('频率惩罚 (Frequency Penalty)'), findsOneWidget);
-      await _scrollTo(tester, find.text('存在惩罚 (Presence Penalty)'));
-      expect(find.text('存在惩罚 (Presence Penalty)'), findsOneWidget);
-      await _scrollTo(tester, find.text('停止序列 (Stop)'));
-      expect(find.text('停止序列 (Stop)'), findsOneWidget);
+      await _scrollTo(tester, find.text('图片细节级别 (Detail)'));
+      expect(find.text('图片细节级别 (Detail)'), findsOneWidget);
       await _scrollTo(tester, find.text('输出格式 (Response Format)'));
       expect(find.text('输出格式 (Response Format)'), findsOneWidget);
       await _scrollTo(tester, find.text('最小像素 (min_pixels)'));
       expect(find.text('最小像素 (min_pixels)'), findsOneWidget);
       await _scrollTo(tester, find.text('最大像素 (max_pixels)'));
       expect(find.text('最大像素 (max_pixels)'), findsOneWidget);
+      // LLM sampling params (frequency/presence penalty, stop) are not
+      // built into the OCR page — the built-in set is OCR-specific.
+      expect(find.text('频率惩罚 (Frequency Penalty)'), findsNothing);
+      expect(find.text('停止序列 (Stop)'), findsNothing);
     });
 
     testWidgets('saving with toggles on writes new keys to typeConfig',
@@ -141,10 +141,6 @@ void main() {
       // Model ID (index 1 = model ID, index 0 = model name)
       await _enterField(tester, 1, 'qwen-vl-ocr');
 
-      await _toggleParam(tester, '频率惩罚 (Frequency Penalty)', on: true);
-      await _toggleParam(tester, '存在惩罚 (Presence Penalty)', on: true);
-      await _toggleParam(tester, '停止序列 (Stop)', on: true);
-      await _enterFieldInCard(tester, '停止序列 (Stop)', 'END,STOP');
       await _toggleParam(tester, '输出格式 (Response Format)', on: true);
       await _selectDropdownOption(
           tester, '输出格式 (Response Format)', 'json_object - 结构化 JSON');
@@ -158,12 +154,6 @@ void main() {
 
       expect(saved, isNotNull);
       final tc = saved!.typeConfig;
-      expect(tc['enableFrequencyPenalty'], isTrue);
-      expect(tc.containsKey('frequencyPenalty'), isTrue);
-      expect(tc['enablePresencePenalty'], isTrue);
-      expect(tc.containsKey('presencePenalty'), isTrue);
-      expect(tc['enableStop'], isTrue);
-      expect(tc['stop'], 'END,STOP');
       expect(tc['enableResponseFormat'], isTrue);
       expect(tc['responseFormat'], 'json_object');
       expect(tc['enableMinPixels'], isTrue);
@@ -183,61 +173,12 @@ void main() {
 
       expect(saved, isNotNull);
       final tc = saved!.typeConfig;
-      expect(tc['enableFrequencyPenalty'], isFalse);
-      expect(tc['enablePresencePenalty'], isFalse);
-      expect(tc['enableStop'], isFalse);
       expect(tc['enableResponseFormat'], isFalse);
       expect(tc['enableMinPixels'], isFalse);
       expect(tc['enableMaxPixels'], isFalse);
-      expect(tc.containsKey('frequencyPenalty'), isFalse);
-      expect(tc.containsKey('stop'), isFalse);
       expect(tc.containsKey('responseFormat'), isFalse);
       expect(tc.containsKey('minPixels'), isFalse);
       expect(tc.containsKey('maxPixels'), isFalse);
-    });
-
-    testWidgets('stop with more than 4 sequences is rejected on save',
-        (tester) async {
-      await _pumpConfigPage(tester);
-
-      await _enterField(tester, 1, 'gpt-4o');
-      await _toggleParam(tester, '停止序列 (Stop)', on: true);
-      await _enterFieldInCard(tester, '停止序列 (Stop)', 'a,b,c,d,e');
-
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('停止序列最多支持 4 个'), findsOneWidget);
-      // Page should not pop
-      expect(find.byType(OcrModelConfigPage), findsOneWidget);
-    });
-
-    testWidgets('stop enabled but empty is rejected on save', (tester) async {
-      await _pumpConfigPage(tester);
-
-      await _enterField(tester, 1, 'gpt-4o');
-      await _toggleParam(tester, '停止序列 (Stop)', on: true);
-
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('停止序列已启用但未填写'), findsOneWidget);
-      expect(find.byType(OcrModelConfigPage), findsOneWidget);
-    });
-
-    testWidgets('stop with only commas is treated as empty on save',
-        (tester) async {
-      await _pumpConfigPage(tester);
-
-      await _enterField(tester, 1, 'gpt-4o');
-      await _toggleParam(tester, '停止序列 (Stop)', on: true);
-      await _enterFieldInCard(tester, '停止序列 (Stop)', ',,,');
-
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('停止序列已启用但未填写'), findsOneWidget);
-      expect(find.byType(OcrModelConfigPage), findsOneWidget);
     });
 
     testWidgets('min/max pixels enabled but empty is rejected on save',
@@ -309,12 +250,6 @@ void main() {
         name: 'OCR模型',
         modelId: 'qwen-vl-ocr',
         typeConfig: {
-          'enableFrequencyPenalty': true,
-          'frequencyPenalty': 1.0,
-          'enablePresencePenalty': true,
-          'presencePenalty': 0.5,
-          'enableStop': true,
-          'stop': 'END,STOP',
           'enableResponseFormat': true,
           'responseFormat': 'json_object',
           'enableMinPixels': true,
@@ -326,19 +261,8 @@ void main() {
       await _pumpConfigPage(tester, model: model);
 
       // Scroll top → bottom only (scrollUntilVisible cannot scroll up).
-      await _scrollTo(tester, find.text('频率惩罚 (Frequency Penalty)'));
-      final freqCard = find
-          .ancestor(
-              of: find.text('频率惩罚 (Frequency Penalty)'),
-              matching: find.byType(Card))
-          .first;
-      final slider = tester.widget<Slider>(
-        find.descendant(of: freqCard, matching: find.byType(Slider)),
-      );
-      expect(slider.value, 1.0);
-
-      await _scrollTo(tester, find.text('停止序列 (Stop)'));
-      expect(find.text('END,STOP'), findsOneWidget);
+      await _scrollTo(tester, find.text('输出格式 (Response Format)'));
+      expect(find.text('json_object - 结构化 JSON'), findsOneWidget);
 
       await _scrollTo(tester, find.text('最小像素 (min_pixels)'));
       expect(find.text('3072'), findsOneWidget);
