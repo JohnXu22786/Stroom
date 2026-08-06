@@ -1,54 +1,126 @@
+import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:stroom/pages/extended_image_editor_page.dart';
 
-/// Create a small valid PNG (1x1 white pixel) for widget tests.
-Uint8List _createValidPng() {
-  // Minimal PNG (1x1 pixel, 8-bit grayscale)
-  final png = <int>[
-    0x89, 0x50, 0x4E, 0x47, // PNG signature
-    0x0D, 0x0A, 0x1A, 0x0A, // CR+LF+CtrlZ+LF
-    0x00, 0x00, 0x00, 0x0D, // IHDR chunk length = 13
-    0x49, 0x48, 0x44, 0x52, // "IHDR" type
-    0x00, 0x00, 0x00, 0x01, // width = 1
-    0x00, 0x00, 0x00, 0x01, // height = 1
-    0x08, 0x00, // bit depth = 8, color type = Grayscale
-    0x00, 0x00, 0x00, // compression, filter, interlace (defaults)
-    0x0A, 0xFC, 0xFF, 0xFD, // IHDR CRC
-    0x00, 0x00, 0x00, 0x0A, // IDAT chunk length = 10
-    0x49, 0x44, 0x41, 0x54, // "IDAT" type
-    0x08, 0xD7, 0x63, 0x68,
-    0x37, 0x60, 0x48, 0x01,
-    0x00, 0x00, 0x12, 0xE3,
-    0x01, 0x6F, // IDAT data + CRC
-    0x00, 0x00, 0x00, 0x00, // IEND chunk length = 0
-    0x49, 0x45, 0x4E, 0x44, // "IEND"
-    0xAE, 0x42, 0x60, 0x82, // IEND CRC
-  ];
-  return Uint8List.fromList(png);
+/// Creates a small valid PNG (8x8 green) via the real engine.
+///
+/// Must be called from `tester.runAsync` — engine image work never
+/// completes inside the widget-test FakeAsync zone.
+Future<Uint8List> createTestImage() async {
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  canvas.drawRect(
+    Rect.fromLTWH(0, 0, 8, 8),
+    Paint()..color = const Color(0xFF00FF00),
+  );
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(8, 8);
+  final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+  image.dispose();
+  return byteData!.buffer.asUint8List();
+}
+
+/// Pumps until [condition] is true or [timeout] elapses.
+///
+/// Background image processing alternates between engine calls (decode,
+/// rasterize, encode — need real async) and fake-zone continuations
+/// (need pumps), so each iteration runs a real-async window followed by
+/// a pump.
+Future<void> pumpUntil(
+  WidgetTester tester,
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 10),
+}) async {
+  final end = DateTime.now().add(timeout);
+  while (!condition()) {
+    if (DateTime.now().isAfter(end)) {
+      fail('Timed out waiting for condition');
+    }
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+}
+
+/// Pushes [ExtendedImageEditorPage] from a host button and waits for the
+/// editor state to exist (the image must decode first — a real-async
+/// process). Polls instead of sleeping a fixed time so a slow engine
+/// decode on CI cannot race the test.
+Future<void> _pushEditor(
+  WidgetTester tester, {
+  required Uint8List imageBytes,
+  required FutureOr<void> Function(QuickEditProcessingResult result)
+      onProcessed,
+  bool waitForEditorReady = true,
+}) async {
+  await tester.pumpWidget(MaterialApp(
+    home: Builder(
+      builder: (context) => ElevatedButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ExtendedImageEditorPage(
+                imageBytes: imageBytes,
+                fileName: 'test.png',
+                onProcessed: onProcessed,
+              ),
+            ),
+          );
+        },
+        child: const Text('Open'),
+      ),
+    ),
+  ));
+
+  await tester.tap(find.text('Open'));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+
+  if (waitForEditorReady) {
+    // The editor widget is only built after the image finishes loading.
+    await pumpUntil(
+      tester,
+      () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
+    );
+  } else {
+    // Give the (failing) load a moment to settle either way.
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await tester.pump();
+  }
+}
+
+/// 生成一张小尺寸 JPEG（8x8 渐变），作为"照片源"编辑夹具。
+Uint8List _createSmallJpeg() {
+  final im = img.Image(width: 8, height: 8, numChannels: 3);
+  for (final p in im) {
+    p
+      ..r = p.x * 30
+      ..g = p.y * 30
+      ..b = 100;
+  }
+  return img.encodeJpg(im, quality: 90);
 }
 
 void main() {
   group('ExtendedImageEditorPage', () {
-    final validPng = _createValidPng();
-
-    Widget buildPage({
-      Uint8List? imageBytes,
-      String fileName = 'test.jpg',
-    }) {
-      return MaterialApp(
-        home: ExtendedImageEditorPage(
-          imageBytes: imageBytes ?? validPng,
-          fileName: fileName,
-        ),
-      );
-    }
-
     testWidgets('renders without crash when image data is provided',
         (tester) async {
-      await tester.pumpWidget(buildPage());
+      final png = await tester.runAsync(createTestImage);
+      await tester.pumpWidget(MaterialApp(
+        home: ExtendedImageEditorPage(
+          imageBytes: png!,
+          fileName: 'test.jpg',
+          onProcessed: (_) async {},
+        ),
+      ));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
@@ -57,7 +129,14 @@ void main() {
     });
 
     testWidgets('shows rotate and flip tool buttons', (tester) async {
-      await tester.pumpWidget(buildPage());
+      final png = await tester.runAsync(createTestImage);
+      await tester.pumpWidget(MaterialApp(
+        home: ExtendedImageEditorPage(
+          imageBytes: png!,
+          fileName: 'test.jpg',
+          onProcessed: (_) async {},
+        ),
+      ));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
@@ -69,17 +148,19 @@ void main() {
     });
 
     testWidgets('close button pops with null', (tester) async {
-      Uint8List? result;
+      bool? result;
+      final png = await tester.runAsync(createTestImage);
       await tester.pumpWidget(MaterialApp(
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
-              result = await Navigator.push<Uint8List>(
+              result = await Navigator.push<bool>(
                 context,
                 MaterialPageRoute(
                   builder: (_) => ExtendedImageEditorPage(
-                    imageBytes: Uint8List(0),
+                    imageBytes: png!,
                     fileName: 'test.jpg',
+                    onProcessed: (_) async {},
                   ),
                 ),
               );
@@ -100,16 +181,318 @@ void main() {
       expect(result, isNull);
     });
 
-    testWidgets('save button shows loading state then saves', (tester) async {
-      // This test just verifies the save button is present and triggers
-      // the save flow. The actual image processing is async and uses
-      // dart:ui which requires a real Flutter environment.
-      await tester.pumpWidget(buildPage());
+    testWidgets('save button is present', (tester) async {
+      final png = await tester.runAsync(createTestImage);
+      await tester.pumpWidget(MaterialApp(
+        home: ExtendedImageEditorPage(
+          imageBytes: png!,
+          fileName: 'test.jpg',
+          onProcessed: (_) async {},
+        ),
+      ));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
       // Find the save/complete button
       expect(find.text('完成'), findsOneWidget);
+    });
+
+    // ====================================================================
+    // Immediate pop + background processing
+    //
+    // The editor must pop as soon as the user taps 完成 and process the
+    // image in the background — the edit result must survive the widget
+    // being disposed (delivered via [onProcessed] afterwards).
+    // ====================================================================
+    group('immediate pop + background processing', () {
+      testWidgets(
+          'tapping 完成 pops the editor before processing runs, then '
+          'delivers the processed bytes', (tester) async {
+        final png = await tester.runAsync(createTestImage);
+        Uint8List? delivered;
+        await _pushEditor(
+          tester,
+          imageBytes: png!,
+          onProcessed: (result) {
+            if (result is QuickEditProcessingSuccess) {
+              delivered = result.editedBytes;
+            }
+          },
+        );
+
+        // Tap 完成 — the editor pops immediately.
+        await tester.tap(find.text('完成'));
+        await tester.pump();
+
+        // Mid-transition sanity check: nothing can have been delivered
+        // yet (the pipeline waits for the pop animation, and engine work
+        // cannot complete without a real-async window anyway).
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(delivered, isNull,
+            reason: 'processing must not run during the pop transition');
+
+        // The route completes its exit — the editor widget is disposed.
+        await pumpUntil(
+          tester,
+          () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty,
+        );
+        // REAL GATE: by the time the widget is gone the pipeline has had
+        // real-async windows — if the pop-animation wait were dropped the
+        // bytes would already be delivered here.
+        expect(delivered, isNull,
+            reason: 'processing must start only after the pop animation');
+
+        // The edit result is NOT lost: background processing still
+        // completes and delivers the bytes via onProcessed.
+        await pumpUntil(tester, () => delivered != null);
+        expect(delivered, isNotNull);
+        expect(delivered!.isNotEmpty, isTrue);
+      });
+
+      testWidgets('delivered bytes decode to a valid image', (tester) async {
+        final png = await tester.runAsync(createTestImage);
+        Uint8List? delivered;
+        await _pushEditor(
+          tester,
+          imageBytes: png!,
+          onProcessed: (result) {
+            if (result is QuickEditProcessingSuccess) {
+              delivered = result.editedBytes;
+            }
+          },
+        );
+
+        await tester.tap(find.text('完成'));
+        await tester.pump();
+        await pumpUntil(tester, () => delivered != null);
+
+        // The 8x8 input PNG should come back as a valid 8x8 image.
+        final codec =
+            await tester.runAsync(() => ui.instantiateImageCodec(delivered!));
+        final frame = await tester.runAsync(() => codec!.getNextFrame());
+        expect(frame!.image.width, 8);
+        expect(frame.image.height, 8);
+        frame.image.dispose();
+        codec!.dispose();
+      });
+
+      testWidgets('closing with X does not deliver bytes', (tester) async {
+        final png = await tester.runAsync(createTestImage);
+        Uint8List? delivered;
+        await _pushEditor(
+          tester,
+          imageBytes: png!,
+          onProcessed: (result) {
+            if (result is QuickEditProcessingSuccess) {
+              delivered = result.editedBytes;
+            }
+          },
+        );
+
+        // Close the editor without confirming — no processing should run.
+        await tester.tap(find.byIcon(Icons.close));
+        await tester.pumpAndSettle();
+
+        expect(delivered, isNull);
+        expect(find.byType(ExtendedImageEditorPage), findsNothing);
+      });
+
+      testWidgets(
+          'invalid image data shows an error snackbar and delivers nothing',
+          (tester) async {
+        QuickEditProcessingResult? outcome;
+        // Invalid image data — the editor image never loads, so the
+        // editor state is never created and confirming reports an error
+        // without starting the pipeline.
+        await _pushEditor(
+          tester,
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+          onProcessed: (result) => outcome = result,
+          // The image never loads — do not wait for an editor state.
+          waitForEditorReady: false,
+        );
+
+        await tester.tap(find.text('完成'));
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(outcome, isNull,
+            reason: 'no pipeline runs when the editor never initialized');
+        expect(find.byType(SnackBar), findsOneWidget);
+      });
+
+      testWidgets('pipeline always delivers an outcome, including failures',
+          (tester) async {
+        final messengerKey = GlobalKey<ScaffoldMessengerState>();
+        await tester.pumpWidget(MaterialApp(
+          home: ScaffoldMessenger(
+            key: messengerKey,
+            child: const Scaffold(body: SizedBox()),
+          ),
+        ));
+
+        QuickEditProcessingResult? outcome;
+        // Invalid image data — the background decode fails. The pipeline
+        // must still deliver a failure outcome (callers rely on the
+        // always-fires contract to release their guards).
+        await tester.runAsync(
+          () => runQuickEditProcessing(
+            rawData: Uint8List.fromList([1, 2, 3]),
+            cropRect: null,
+            action: null,
+            messenger: messengerKey.currentState!,
+            onProcessed: (result) => outcome = result,
+          ),
+        );
+        await tester.pump();
+
+        expect(outcome, isA<QuickEditProcessingFailure>());
+        expect(find.byType(SnackBar), findsOneWidget);
+      });
+
+      testWidgets('pop result is true when confirming', (tester) async {
+        final png = await tester.runAsync(createTestImage);
+        bool? popResult;
+        await tester.pumpWidget(MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () async {
+                popResult = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ExtendedImageEditorPage(
+                      imageBytes: png!,
+                      fileName: 'test.png',
+                      onProcessed: (_) async {},
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Open'),
+            ),
+          ),
+        ));
+        await tester.tap(find.text('Open'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await pumpUntil(
+          tester,
+          () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
+        );
+
+        await tester.tap(find.text('完成'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+
+        expect(popResult, isTrue);
+      });
+
+      testWidgets('close button cannot pop the page below during exit',
+          (tester) async {
+        final png = await tester.runAsync(createTestImage);
+        await tester.pumpWidget(MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ExtendedImageEditorPage(
+                      imageBytes: png!,
+                      fileName: 'test.png',
+                      onProcessed: (_) async {},
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Open'),
+            ),
+          ),
+        ));
+        await tester.tap(find.text('Open'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await pumpUntil(
+          tester,
+          () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
+        );
+
+        // Confirm and immediately tap close mid-transition. While the
+        // editor route is exiting it is no longer "present" — an
+        // unguarded second pop would pop the page BELOW the editor.
+        await tester.tap(find.text('完成'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        // The exiting route is not rebuilt, so the close handler is the
+        // stale closure from the last build — invoke it directly to
+        // prove the runtime guard makes it a no-op.
+        final closeButton = tester.widget<IconButton>(
+          find.widgetWithIcon(IconButton, Icons.close),
+        );
+        closeButton.onPressed!.call();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+
+        // The host page must still be here.
+        expect(find.text('Open'), findsOneWidget);
+        expect(find.byType(ExtendedImageEditorPage), findsNothing);
+      });
+    });
+
+    // ── 输出格式（回归：非 JPEG 源必须输出编码后的 PNG 而不是
+    //    raw RGBA 像素；JPEG 源输出 JPEG q90 而非体积暴涨的 PNG）──
+    // 直接调用顶层处理管线（与 widget 生命周期解耦），比走完整
+    // 编辑器 UI 更稳定（不依赖编辑器状态就绪时序）。
+    group('output format selection', () {
+      Future<QuickEditProcessingResult> runPipeline(
+        WidgetTester tester, {
+        required Uint8List rawData,
+      }) async {
+        final messengerKey = GlobalKey<ScaffoldMessengerState>();
+        await tester.pumpWidget(MaterialApp(
+          home: ScaffoldMessenger(
+            key: messengerKey,
+            child: const Scaffold(body: SizedBox()),
+          ),
+        ));
+
+        QuickEditProcessingResult? outcome;
+        await tester.runAsync(
+          () => runQuickEditProcessing(
+            rawData: rawData,
+            cropRect: null,
+            action: null,
+            messenger: messengerKey.currentState!,
+            onProcessed: (result) => outcome = result,
+          ),
+        );
+        await tester.pump();
+        return outcome!;
+      }
+
+      testWidgets('PNG 源输出可解码的 PNG（不能是 raw RGBA 像素）', (tester) async {
+        final png = await tester.runAsync(createTestImage);
+        final outcome = await runPipeline(tester, rawData: png!);
+
+        expect(outcome, isA<QuickEditProcessingSuccess>());
+        final bytes = (outcome as QuickEditProcessingSuccess).editedBytes;
+        expect(img.decodeImage(bytes), isNotNull,
+            reason: 'PNG 源编辑结果必须是可解码的图片（不能是 raw RGBA）');
+        expect(bytes[0], 0x89);
+        expect(bytes[1], 0x50, reason: 'PNG 源应保持无损 PNG 输出');
+      });
+
+      testWidgets('JPEG 源输出可解码的 JPEG（修复 4MB→12MB 膨胀）', (tester) async {
+        final outcome = await runPipeline(tester, rawData: _createSmallJpeg());
+
+        expect(outcome, isA<QuickEditProcessingSuccess>());
+        final bytes = (outcome as QuickEditProcessingSuccess).editedBytes;
+        expect(img.decodeImage(bytes), isNotNull,
+            reason: 'JPEG 源编辑结果必须是可解码的图片');
+        expect(bytes[0], 0xFF);
+        expect(bytes[1], 0xD8, reason: 'JPEG 照片源应输出 JPEG（旧实现输出 PNG 导致体积暴涨）');
+      });
     });
   });
 }

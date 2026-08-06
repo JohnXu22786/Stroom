@@ -15,6 +15,7 @@ import 'backup_service_shared.dart';
 import 'data_migration_service.dart';
 import 'manifest_database.dart';
 import 'storage_service.dart';
+import '../anki/database/anki_database.dart';
 import '../utils/app_version.dart';
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
@@ -23,6 +24,19 @@ import 'app_log_service.dart';
 class BackupCancelledException implements Exception {
   final String message;
   const BackupCancelledException([this.message = '备份操作已取消']);
+
+  @override
+  String toString() => message;
+}
+
+/// Exception thrown when a backup file fails validation BEFORE any
+/// existing data is touched (invalid/corrupt archive, manifest, JSON).
+///
+/// 调用方可用 `is BackupValidationException` 区分"恢复开始前就失败"
+/// （未删除任何数据，无需重启）与"恢复中途失败"（可能已部分清除）。
+class BackupValidationException implements Exception {
+  final String message;
+  const BackupValidationException(this.message);
 
   @override
   String toString() => message;
@@ -497,6 +511,15 @@ class BackupService {
     return key == 'conversations' || key == 'active_conversation_id';
   }
 
+  /// 判断一个 SharedPreferences 键是否属于 [selection] 中选中的类别。
+  ///
+  /// `flutter.*` 内部键永不参与备份/恢复/清除。
+  static bool _isKeyInSelection(String key, BackupSelection selection) {
+    if (key.startsWith('flutter.')) return false;
+    if (_isChatPrefKey(key)) return selection.chatRecordsAndAttachments;
+    return selection.settings;
+  }
+
   /// 短暂的延迟以让出事件循环，确保 UI 可以处理帧渲染。
   /// 这是防止导出备份时页面冻结的关键机制。
   ///
@@ -868,7 +891,7 @@ class BackupService {
       archive = ZipDecoder().decodeBytes(bytes);
     } catch (e) {
       debugPrint('[BackupService] _restoreFromBytes: 备份文件解压失败: $e');
-      throw Exception('无效的备份文件：无法解压 ($e)');
+      throw BackupValidationException('无效的备份文件：无法解压 ($e)');
     }
     onProgress?.call(0.1);
     await _yieldToEventLoop();
@@ -890,65 +913,200 @@ class BackupService {
     // 验证 manifest（兼容 v1 和 v2）
     final manifestJson = fileMap['manifest.json'];
     if (manifestJson == null) {
-      throw Exception('无效的备份文件：缺少 manifest.json');
+      throw BackupValidationException('无效的备份文件：缺少 manifest.json');
     }
-    final manifest =
-        jsonDecode(utf8.decode(manifestJson)) as Map<String, dynamic>;
-    final version = manifest['version'] as int? ?? 0;
-    if (version != 1 && version != 2) {
-      throw Exception('不支持的备份版本: $version (仅支持 v1 和 v2)');
+    final Map<String, dynamic> manifest;
+    try {
+      final decoded = jsonDecode(utf8.decode(manifestJson));
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('结构不是对象');
+      }
+      manifest = decoded;
+    } catch (e) {
+      throw BackupValidationException('无效的备份文件：manifest.json 损坏 ($e)');
+    }
+    final int? version;
+    try {
+      version = manifest['version'] as int?;
+    } catch (e) {
+      throw BackupValidationException('无效的备份文件：version 字段损坏 ($e)');
+    }
+    if (version == null || (version != 1 && version != 2)) {
+      throw BackupValidationException('不支持的备份版本: $version (仅支持 v1 和 v2)');
     }
     final isV1Format = version == 1;
     onProgress?.call(0.15);
     await _yieldToEventLoop();
 
-    // 恢复数据库记录
-    debugPrint('[BackupService] _restoreFromBytes: restoring database');
+    // ================================================================
+    // 预解析并校验备份中的全部 JSON 数据（在删除任何现有文件之前）。
+    // 无效备份直接中止恢复，避免"选中类别的文件已被删除但恢复失败"
+    // 造成的数据丢失。
+    // ================================================================
+    Map<String, dynamic>? dbData;
     final dbJson = fileMap['stroom_manifest.json'] ??
         fileMap['database/manifest_data.json'];
     if (dbJson != null) {
-      await _restoreDatabaseFromJson(utf8.decode(dbJson), selection: selection);
+      try {
+        final decoded = jsonDecode(utf8.decode(dbJson));
+        if (decoded is! Map<String, dynamic>) {
+          throw const FormatException('结构不是对象');
+        }
+        // 校验嵌套结构（与 _restoreDatabaseFromJson 的取值逻辑一致），
+        // 防止恢复中途因字段形状错误抛错
+        void validateRecordList(Object? value, String field) {
+          if (value == null) return;
+          if (value is! List) throw FormatException('$field 不是数组');
+          for (final item in value) {
+            if (item is! Map<String, dynamic>) {
+              throw FormatException('$field 包含非对象记录');
+            }
+          }
+        }
+
+        void validateFolderList(Object? value, String field) {
+          if (value == null) return;
+          if (value is! List) throw FormatException('$field 不是数组');
+          for (final item in value) {
+            if (item is! String) {
+              throw FormatException('$field 包含非字符串项');
+            }
+          }
+        }
+
+        validateRecordList(decoded['image_records'], 'image_records');
+        validateRecordList(decoded['audio_records'], 'audio_records');
+        validateRecordList(decoded['video_records'], 'video_records');
+        validateRecordList(decoded['text_records'], 'text_records');
+        validateFolderList(decoded['folders'], 'folders');
+        validateFolderList(
+            decoded[ManifestTables.textFolders], ManifestTables.textFolders);
+        validateFolderList(
+            decoded[ManifestTables.audioFolders], ManifestTables.audioFolders);
+        validateFolderList(
+            decoded[ManifestTables.imageFolders], ManifestTables.imageFolders);
+        validateFolderList(
+            decoded[ManifestTables.videoFolders], ManifestTables.videoFolders);
+        dbData = decoded;
+      } catch (e) {
+        throw BackupValidationException('无效的备份文件：数据库记录损坏 ($e)');
+      }
+    }
+    Map<String, dynamic>? v1Prefs;
+    Map<String, dynamic>? chatPrefs;
+    Map<String, dynamic>? settingsPrefs;
+    Map<String, dynamic>? validatePrefsFile(String name) {
+      final raw = fileMap[name];
+      if (raw == null) return null;
+      try {
+        final decoded = jsonDecode(utf8.decode(raw));
+        if (decoded is! Map<String, dynamic>) {
+          throw const FormatException('结构不是对象');
+        }
+        return decoded;
+      } catch (e) {
+        throw BackupValidationException('无效的备份文件：$name 损坏 ($e)');
+      }
+    }
+
+    // 只校验选中类别的偏好设置文件（未选中的类别不参与恢复，
+    // 其文件损坏不应阻止其他类别的恢复）
+    if (isV1Format) {
+      if (selection.chatRecordsAndAttachments || selection.settings) {
+        v1Prefs = validatePrefsFile('preferences.json');
+      }
+    } else {
+      if (selection.chatRecordsAndAttachments) {
+        chatPrefs = validatePrefsFile('chat_data.json');
+      }
+      if (selection.settings) {
+        settingsPrefs = validatePrefsFile('settings.json');
+      }
+    }
+
+    // 勾选即清空：先清除选中类别的现有文件。
+    // 即使备份中缺少对应文件，选中的类别也会被清空（与数据库/偏好设置
+    // 类别的语义一致）。必须在数据库记录替换之前执行，因为媒体文件按
+    // 当前数据库记录逐个删除。
+    // 删除失败（如 Windows 上文件被占用）时中止恢复并提示重启重试，
+    // 与清除功能的行为一致。
+    if (await _deleteSelectedFiles(selection)) {
+      throw Exception('部分数据文件删除失败，请重启应用后重试');
+    }
+
+    // 恢复数据库记录（使用已解析校验的数据）
+    debugPrint('[BackupService] _restoreFromBytes: restoring database');
+    if (dbData != null) {
+      await _restoreDatabaseFromJson(dbData, selection: selection);
+    } else if (selection.pictures ||
+        selection.audio ||
+        selection.videos ||
+        selection.texts) {
+      // 备份中没有数据库清单：勾选即清空 —— 清空选中媒体类别的
+      // 记录与文件夹（其文件已在 _deleteSelectedFiles 中删除），
+      // 避免记录悬空指向已删除的文件。
+      if (selection.pictures) {
+        await ManifestDatabase.clearRecords(ManifestTables.imageRecords);
+        await ManifestDatabase.clearFolders(
+            recordTable: ManifestTables.imageRecords);
+      }
+      if (selection.audio) {
+        await ManifestDatabase.clearRecords(ManifestTables.audioRecords);
+        await ManifestDatabase.clearFolders(
+            recordTable: ManifestTables.audioRecords);
+      }
+      if (selection.videos) {
+        await ManifestDatabase.clearRecords(ManifestTables.videoRecords);
+        await ManifestDatabase.clearFolders(
+            recordTable: ManifestTables.videoRecords);
+      }
+      if (selection.texts) {
+        await ManifestDatabase.clearRecords(ManifestTables.textRecords);
+        await ManifestDatabase.clearFolders(
+            recordTable: ManifestTables.textRecords);
+      }
     }
     onProgress?.call(0.4);
     await _yieldToEventLoop();
 
     // 恢复 SharedPreferences（兼容 v1/v2 格式）
     // 注意：必须将要恢复的所有数据合并后一次性调用 _restorePreferencesFromJson，
-    // 因为该方法会清除现有所有非 flutter.* 键。分两次调用会导致先恢复的数据被后一次清除。
+    // 因为该方法会清除选中类别的现有键。分两次调用会导致先恢复的数据被后一次清除。
     if (isV1Format) {
       // v1 格式：preferences.json 包含所有键（聊天+设置合并）
-      // 如果用户选中 chatRecordsAndAttachments 或 settings，恢复完整文件
+      // 按 key 分类拆分：只恢复选中类别对应的键，未选中的类别保持原样
       if (selection.chatRecordsAndAttachments || selection.settings) {
         debugPrint(
             '[BackupService] _restoreFromBytes: restoring v1 preferences');
-        final prefJson = fileMap['preferences.json'];
-        if (prefJson != null) {
-          await _restorePreferencesFromJson(utf8.decode(prefJson));
+        final restorePrefs = <String, dynamic>{};
+        if (v1Prefs != null) {
+          for (final entry in v1Prefs.entries) {
+            final isChat = _isChatPrefKey(entry.key);
+            if ((isChat && selection.chatRecordsAndAttachments) ||
+                (!isChat && selection.settings)) {
+              restorePrefs[entry.key] = entry.value;
+            }
+          }
         }
+        await _restorePreferencesFromJson(restorePrefs, selection: selection);
       }
     } else {
       // v2 格式：chat_data.json + settings.json 分开，合并后一次性恢复
       final mergedPrefs = <String, dynamic>{};
       if (selection.chatRecordsAndAttachments) {
         debugPrint('[BackupService] _restoreFromBytes: merging chat_data.json');
-        final chatJson = fileMap['chat_data.json'];
-        if (chatJson != null) {
-          final chatData =
-              jsonDecode(utf8.decode(chatJson)) as Map<String, dynamic>;
-          mergedPrefs.addAll(chatData);
+        if (chatPrefs != null) {
+          mergedPrefs.addAll(chatPrefs);
         }
       }
       if (selection.settings) {
         debugPrint('[BackupService] _restoreFromBytes: merging settings.json');
-        final settingsJson = fileMap['settings.json'];
-        if (settingsJson != null) {
-          final settingsData =
-              jsonDecode(utf8.decode(settingsJson)) as Map<String, dynamic>;
-          mergedPrefs.addAll(settingsData);
+        if (settingsPrefs != null) {
+          mergedPrefs.addAll(settingsPrefs);
         }
       }
-      if (mergedPrefs.isNotEmpty) {
-        await _restorePreferencesFromJson(jsonEncode(mergedPrefs));
+      if (selection.chatRecordsAndAttachments || selection.settings) {
+        await _restorePreferencesFromJson(mergedPrefs, selection: selection);
       }
     }
     onProgress?.call(0.55);
@@ -979,15 +1137,12 @@ class BackupService {
       'browser_cookies.json',
     };
 
-    // 恢复浏览器Cookies持久化数据（选中则恢复，未选中则删除）
+    // 恢复浏览器Cookies持久化数据（选中则恢复，未选中则保持原样）
     if (selection.browserCookies) {
       final bcData = fileMap['browser_cookies.json'];
       if (bcData != null) {
         await writeBackupFile('', 'browser_cookies.json', bcData);
       }
-    } else {
-      // 未勾选浏览器Cookies → 删除现有关联数据
-      await _deleteFile('', 'browser_cookies.json');
     }
 
     // 根据 selection 决定哪些目录需要恢复
@@ -1060,6 +1215,16 @@ class BackupService {
 
       final relativePath = key.substring(matchedDir.length + 1);
 
+      if (matchedDir == 'anki') {
+        // 实际数据库位于应用数据目录根目录 collection.anki2
+        //（备份归档内的路径为 anki/collection.anki2）。
+        // 先关闭可能打开的数据库连接（Windows 上文件被占用时无法写入）。
+        await AnkiDatabase.closeOpenedInstance();
+        await writeBackupFile('', relativePath, entry.value);
+        restoreIndex++;
+        continue;
+      }
+
       if (matchedDir == 'synthesis' || matchedDir == 'catcatch') {
         if (relativePath == 'tasks.json') {
           await writeBackupFile(matchedDir, 'tasks.json', entry.value);
@@ -1075,9 +1240,10 @@ class BackupService {
       if (restoreIndex % 20 == 0) await _yieldToEventLoop();
     }
 
-    // 清理未选中目录中的现有文件
-    // 对于未勾选的类别，删除磁盘上已有的文件，确保恢复后干干净净
-    await _cleanupUnselectedDirs(selection);
+    // 未选中的类别保持原样：不清理、不覆盖其现有文件/记录，
+    // 只有选中的类别会被备份中的数据替换。
+    // 选中类别的现有文件已在恢复开始时清除（见 _deleteSelectedFiles），
+    // 这里只需写入备份中包含的文件。
 
     // 数据迁移：确保恢复后的数据格式是最新的
     // 旧格式备份（pre-migration）中包含 chat_configs、null IDs 等，
@@ -1091,7 +1257,9 @@ class BackupService {
   // ================================================================
 
   /// 删除指定目录中的一个文件。
-  static Future<void> _deleteFile(String subDir, String fileName) async {
+  ///
+  /// 返回是否删除成功：文件不存在视为成功；删除异常返回 `false` 并记录日志。
+  static Future<bool> _deleteFile(String subDir, String fileName) async {
     try {
       if (kIsWeb || WebFileStore.isTestMode) {
         await WebFileStore.delete('$subDir/$fileName');
@@ -1102,47 +1270,33 @@ class BackupService {
           await file.delete();
         }
       }
+      return true;
     } catch (e) {
       debugPrint('删除文件 $subDir/$fileName 失败: $e');
+      return false;
     }
   }
 
-  /// 清理未选中目录中的所有文件。
+  /// 删除应用数据目录下的整个子目录（仅原生模式）。
   ///
-  /// 对于用户未勾选的类别，删除对应目录下的所有现有文件，
-  /// 确保恢复后只保留用户选中的数据。
-  static Future<void> _cleanupUnselectedDirs(BackupSelection selection) async {
-    // 目录与对应 selection 标记的映射
-    final dirsToCheck = {
-      'attachments': selection.chatRecordsAndAttachments,
-      'pictures': selection.pictures,
-      'tts_audio': selection.audio,
-      'videos': selection.videos,
-      'texts': selection.texts,
-      'synthesis': selection.tasks,
-      'catcatch': selection.tasks,
-      'anki': selection.ankiData,
-    };
-
-    for (final entry in dirsToCheck.entries) {
-      if (entry.value) continue; // 已选中，不需要清理
-      final dir = entry.key;
-
-      try {
-        if (kIsWeb || WebFileStore.isTestMode) {
-          // Web/test 模式下没有目录结构概念，无法递归删除
-          // 依靠 DB 记录清除来控制数据
-          continue;
-        }
-        final appDir = await AppStorage.directory;
-        final targetDir = Directory(p.join(appDir, dir));
-        if (await targetDir.exists()) {
-          await targetDir.delete(recursive: true);
-          debugPrint('[BackupService] 已清理未选中目录: $dir');
-        }
-      } catch (e) {
-        debugPrint('[BackupService] 清理未选中目录 $dir 失败: $e');
+  /// Web / 测试模式下没有目录结构概念，无法递归删除，
+  /// 依靠 DB 记录清除 + 逐文件删除来控制数据。
+  /// 返回是否删除成功（目录不存在视为成功）。
+  static Future<bool> _deleteDirectory(String subDir) async {
+    try {
+      if (kIsWeb || WebFileStore.isTestMode) {
+        return true;
       }
+      final appDir = await AppStorage.directory;
+      final targetDir = Directory(p.join(appDir, subDir));
+      if (await targetDir.exists()) {
+        await targetDir.delete(recursive: true);
+        debugPrint('[BackupService] 已删除目录: $subDir');
+      }
+      return true;
+    } catch (e) {
+      debugPrint('[BackupService] 删除目录 $subDir 失败: $e');
+      return false;
     }
   }
 
@@ -1151,10 +1305,9 @@ class BackupService {
   // ================================================================
 
   static Future<void> _restoreDatabaseFromJson(
-    String json, {
+    Map<String, dynamic> data, {
     BackupSelection selection = BackupSelection.all,
   }) async {
-    final data = jsonDecode(json) as Map<String, dynamic>;
     final imageRecords = (data['image_records'] as List<dynamic>?)
             ?.cast<Map<String, dynamic>>() ??
         [];
@@ -1187,51 +1340,35 @@ class BackupService {
         'image(${imageRecords.length}) audio(${audioRecords.length}) '
         'video(${videoRecords.length}) text(${textRecords.length})');
 
-    // 选择性恢复：勾选的类别从备份恢复，未勾选的类别清除现有数据。
-    // 这样确保恢复后只保留用户勾选的数据类别，实现真正意义上的选择性恢复。
-    // 注意：只有当至少有一个 DB 类别被选中时才执行清除操作，
-    // 防止"全不选"时意外清空所有数据。
-    final hasAnyDbCategory = selection.pictures ||
-        selection.audio ||
-        selection.videos ||
-        selection.texts;
-
+    // 选择性恢复：勾选的类别清空后从备份恢复，未勾选的类别保持原样。
+    // 选中的类别：先清除现有记录，再写入备份中的记录（即使备份中为空）。
     if (selection.pictures) {
       await ManifestDatabase.clearRecords('image_records');
       for (final record in imageRecords) {
         await ManifestDatabase.insertImageRecord(record);
       }
-    } else if (hasAnyDbCategory) {
-      // 用户未勾选图片但有其他 DB 类别被选中 → 清除现有图片记录
-      await ManifestDatabase.clearRecords('image_records');
     }
     if (selection.audio) {
       await ManifestDatabase.clearRecords('audio_records');
       for (final record in audioRecords) {
         await ManifestDatabase.insertAudioRecord(record);
       }
-    } else if (hasAnyDbCategory) {
-      await ManifestDatabase.clearRecords('audio_records');
     }
     if (selection.videos) {
       await ManifestDatabase.clearRecords('video_records');
       for (final record in videoRecords) {
         await ManifestDatabase.insertVideoRecord(record);
       }
-    } else if (hasAnyDbCategory) {
-      await ManifestDatabase.clearRecords('video_records');
     }
     if (selection.texts) {
       await ManifestDatabase.clearRecords('text_records');
       for (final record in textRecords) {
         await ManifestDatabase.insertTextRecord(record);
       }
-    } else if (hasAnyDbCategory) {
-      await ManifestDatabase.clearRecords('text_records');
     }
 
     // Restore folders only for selected record types;
-    // clear folders for unselected types to remove all data cleanly.
+    // unselected types keep their existing folders.
     if (selection.texts) {
       final dirs = textFolders.isNotEmpty ? textFolders : folders;
       await ManifestDatabase.clearFolders(
@@ -1240,9 +1377,6 @@ class BackupService {
         await ManifestDatabase.insertFolder(folder,
             recordTable: ManifestTables.textRecords);
       }
-    } else if (hasAnyDbCategory) {
-      await ManifestDatabase.clearFolders(
-          recordTable: ManifestTables.textRecords);
     }
     if (selection.audio) {
       final dirs = audioFolders.isNotEmpty ? audioFolders : folders;
@@ -1252,9 +1386,6 @@ class BackupService {
         await ManifestDatabase.insertFolder(folder,
             recordTable: ManifestTables.audioRecords);
       }
-    } else if (hasAnyDbCategory) {
-      await ManifestDatabase.clearFolders(
-          recordTable: ManifestTables.audioRecords);
     }
     if (selection.pictures) {
       final dirs = imageFolders.isNotEmpty ? imageFolders : folders;
@@ -1264,9 +1395,6 @@ class BackupService {
         await ManifestDatabase.insertFolder(folder,
             recordTable: ManifestTables.imageRecords);
       }
-    } else if (hasAnyDbCategory) {
-      await ManifestDatabase.clearFolders(
-          recordTable: ManifestTables.imageRecords);
     }
     if (selection.videos) {
       final dirs = videoFolders.isNotEmpty ? videoFolders : folders;
@@ -1276,28 +1404,31 @@ class BackupService {
         await ManifestDatabase.insertFolder(folder,
             recordTable: ManifestTables.videoRecords);
       }
-    } else if (hasAnyDbCategory) {
-      await ManifestDatabase.clearFolders(
-          recordTable: ManifestTables.videoRecords);
     }
   }
 
-  /// 从 JSON 恢复 SharedPreferences。
+  /// 从 Map 恢复 SharedPreferences 中选中的类别。
   ///
-  /// 先清除所有非 flutter.* 键，再写入备份数据。
-  /// 未选中的类别会被清除——这是设计意图：选择性恢复时，
-  /// 只保留勾选的类别数据，未勾选的会被删除。
-  static Future<void> _restorePreferencesFromJson(String json) async {
-    final backupPrefs = jsonDecode(json) as Map<String, dynamic>;
+  /// 只清除并替换 [selection] 中选中的类别键，未选中的类别保持原样：
+  /// - chatRecordsAndAttachments → 清除现有聊天键，写入备份中的聊天键
+  /// - settings → 清除现有设置键，写入备份中的设置键
+  ///
+  /// 写入时同样按类别过滤，防止备份文件中混入其他类别的键
+  /// （如异常的 chat_data.json 中包含设置键）覆盖未选中的类别。
+  static Future<void> _restorePreferencesFromJson(
+    Map<String, dynamic> backupPrefs, {
+    required BackupSelection selection,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
 
     final keysToRemove =
-        prefs.getKeys().where((k) => !k.startsWith('flutter.')).toList();
+        prefs.getKeys().where((k) => _isKeyInSelection(k, selection)).toList();
     for (final key in keysToRemove) {
       await prefs.remove(key);
     }
 
     for (final entry in backupPrefs.entries) {
+      if (!_isKeyInSelection(entry.key, selection)) continue;
       final v = entry.value;
       try {
         if (v is String) {
@@ -1316,7 +1447,7 @@ class BackupService {
       }
     }
     await AppLogService.info('BackupService',
-        '_restorePreferencesFromJson: restored ${backupPrefs.length} keys');
+        '_restorePreferencesFromJson: restored ${backupPrefs.length} keys, removed ${keysToRemove.length}');
   }
 
   // ================================================================
@@ -1366,7 +1497,8 @@ class BackupService {
   /// 导入备份：弹出打开文件对话框，从选中的 zip 恢复。
   ///
   /// [selection] 控制只恢复哪些数据类别。默认全量恢复。
-  /// 返回 `true` 表示恢复成功，`false` 表示用户取消或失败。
+  /// 返回 `true` 表示恢复成功，`false` 表示用户取消选择文件；
+  /// 恢复过程中出错时抛出异常（并已弹出错误提示）。
   static Future<bool> importBackup(
     BuildContext context, {
     BackupSelection selection = BackupSelection.all,
@@ -1388,7 +1520,7 @@ class BackupService {
         await restoreBackup(file.path!, selection: selection);
       }
 
-      // 恢复成功 — 让调用方处理倒计时和重启
+      // 恢复成功 — 让调用方处理重启提示
       await AppLogService.info('BackupService', 'importBackup: success');
       return true;
     } catch (e) {
@@ -1398,8 +1530,188 @@ class BackupService {
           SnackBar(content: Text('恢复失败: $e'), backgroundColor: Colors.red),
         );
       }
-      return false;
+      // 重新抛出：让调用方区分"恢复失败"与"用户取消"
+      // （失败时恢复可能已部分完成，需要提示用户重启应用）
+      rethrow;
     }
+  }
+
+  /// 清除选中的数据类别（不涉及任何备份文件）。
+  ///
+  /// 只清除 [selection] 中选中的类别，未选中的类别保持原样：
+  /// - 聊天记录和附件：删除聊天相关 Preferences 键 + 附件文件（含孤儿）
+  /// - 设置：删除所有设置相关 Preferences 键
+  /// - 图片/音频/视频/文本：删除对应数据库记录、文件夹表、逐文件删除
+  ///   （Web/测试模式同样生效），并在原生模式删除整个目录
+  /// - 任务：删除 synthesis/tasks.json 和 catcatch/tasks.json
+  /// - Anki数据：先关闭可能打开的数据库连接，再删除 collection.anki2
+  /// - 浏览器Cookies：删除 browser_cookies.json
+  ///
+  /// 与选择性恢复的语义一致：选中的类别被清空，未选中的保持原样。
+  /// 若有文件删除失败（如 Windows 上文件被占用），抛出异常，由调用方提示。
+  static Future<void> clearSelectedData(
+    BackupSelection selection, {
+    void Function(double progress)? onProgress,
+  }) async {
+    onProgress?.call(0.0);
+    await _yieldToEventLoop();
+
+    // 1. SharedPreferences — 只删除选中类别的键
+    if (selection.chatRecordsAndAttachments || selection.settings) {
+      final prefs = await SharedPreferences.getInstance();
+      final keysToRemove = prefs
+          .getKeys()
+          .where((k) => _isKeyInSelection(k, selection))
+          .toList();
+      for (final key in keysToRemove) {
+        await prefs.remove(key);
+      }
+      await AppLogService.info('BackupService',
+          'clearSelectedData: removed ${keysToRemove.length} preference keys');
+    }
+
+    // 2. 选中类别的文件（附件目录整清，孤儿文件一并删除）
+    final deleteFailed = await _deleteSelectedFiles(selection);
+
+    // 3. 媒体数据库记录 + 文件夹表（文件已由 _deleteSelectedFiles 删除）
+    if (selection.pictures) {
+      await ManifestDatabase.clearRecords(ManifestTables.imageRecords);
+      await ManifestDatabase.clearFolders(
+          recordTable: ManifestTables.imageRecords);
+    }
+    if (selection.audio) {
+      await ManifestDatabase.clearRecords(ManifestTables.audioRecords);
+      await ManifestDatabase.clearFolders(
+          recordTable: ManifestTables.audioRecords);
+    }
+    if (selection.videos) {
+      await ManifestDatabase.clearRecords(ManifestTables.videoRecords);
+      await ManifestDatabase.clearFolders(
+          recordTable: ManifestTables.videoRecords);
+    }
+    if (selection.texts) {
+      await ManifestDatabase.clearRecords(ManifestTables.textRecords);
+      await ManifestDatabase.clearFolders(
+          recordTable: ManifestTables.textRecords);
+    }
+    onProgress?.call(0.6);
+    await _yieldToEventLoop();
+
+    if (deleteFailed) {
+      throw Exception('部分数据文件删除失败，请重启应用后重试');
+    }
+
+    onProgress?.call(1.0);
+  }
+
+  /// 删除 [selection] 中选中类别的现有文件。
+  ///
+  /// 恢复"勾选即清空"与清除功能共用此方法。
+  /// 返回是否有删除失败（调用方决定如何处理）：
+  /// - 聊天附件：整个 attachments/ 目录/前缀删除 —— 附件全部存储在该目录，
+  ///   引用文件与无引用的孤儿文件一并清除
+  /// - 图片/音频/视频/文本：按当前数据库记录逐文件删除（Web/测试模式），
+  ///   原生模式再整目录删除（清理无记录的孤儿文件）
+  /// - 任务：删除 synthesis/tasks.json 和 catcatch/tasks.json
+  /// - Anki：先关闭可能打开的数据库连接，再删除 collection.anki2
+  ///   （应用数据目录根路径 + 历史恢复写入的 anki/ 残留）
+  /// - 浏览器Cookies：删除 browser_cookies.json
+  static Future<bool> _deleteSelectedFiles(BackupSelection selection) async {
+    var deleteFailed = false;
+
+    // 聊天附件：附件全部存储在 attachments/ 目录，整目录/前缀删除
+    // 即可同时清掉引用文件与无引用的孤儿文件。
+    if (selection.chatRecordsAndAttachments) {
+      if (kIsWeb || WebFileStore.isTestMode) {
+        try {
+          await WebFileStore.deleteByPrefix('attachments/');
+        } catch (e) {
+          debugPrint('删除附件文件失败: $e');
+          deleteFailed = true;
+        }
+      } else if (!await _deleteDirectory('attachments')) {
+        deleteFailed = true;
+      }
+    }
+
+    // 媒体：先按数据库记录逐文件删除（Web/测试模式同样生效），
+    // 原生模式再删除整个目录以清理无记录的孤儿文件。
+    if (selection.pictures) {
+      final records = await ManifestDatabase.getAllImageRecords();
+      for (final record in records) {
+        final hash = record['hash'] as String?;
+        final format = record['format'] as String? ?? 'jpg';
+        if (hash == null) continue;
+        if (!await _deleteFile('pictures', '$hash.$format')) {
+          deleteFailed = true;
+        }
+        if (!await _deleteFile('pictures', '${hash}_thumb.png')) {
+          deleteFailed = true;
+        }
+      }
+      if (!await _deleteDirectory('pictures')) deleteFailed = true;
+    }
+    if (selection.audio) {
+      final records = await ManifestDatabase.getAllAudioRecords();
+      for (final record in records) {
+        final hash = record['hash'] as String?;
+        final format = record['format'] as String? ?? 'wav';
+        if (hash == null) continue;
+        if (!await _deleteFile('tts_audio', '$hash.$format')) {
+          deleteFailed = true;
+        }
+        if (!await _deleteFile('tts_audio', '$hash.txt')) {
+          deleteFailed = true;
+        }
+      }
+      if (!await _deleteDirectory('tts_audio')) deleteFailed = true;
+    }
+    if (selection.videos) {
+      final records = await ManifestDatabase.getAllVideoRecords();
+      for (final record in records) {
+        final hash = record['hash'] as String?;
+        final format = record['format'] as String? ?? 'mp4';
+        if (hash == null) continue;
+        if (!await _deleteFile('videos', '$hash.$format')) {
+          deleteFailed = true;
+        }
+      }
+      if (!await _deleteDirectory('videos')) deleteFailed = true;
+    }
+    if (selection.texts) {
+      final records = await ManifestDatabase.getAllTextRecords();
+      for (final record in records) {
+        final hash = record['hash'] as String?;
+        if (hash == null) continue;
+        if (!await _deleteFile('texts', '$hash.txt')) {
+          deleteFailed = true;
+        }
+      }
+      if (!await _deleteDirectory('texts')) deleteFailed = true;
+    }
+
+    // 任务文件
+    if (selection.tasks) {
+      if (!await _deleteFile('synthesis', 'tasks.json')) deleteFailed = true;
+      if (!await _deleteFile('catcatch', 'tasks.json')) deleteFailed = true;
+    }
+
+    // Anki 闪卡数据库
+    // 先关闭可能打开的数据库连接（Windows 上文件被占用时无法删除），
+    // 实际数据库位于应用数据目录根目录 collection.anki2；
+    // 同时清理历史恢复写入的 anki/collection.anki2 残留文件。
+    if (selection.ankiData) {
+      await AnkiDatabase.closeOpenedInstance();
+      if (!await _deleteFile('', 'collection.anki2')) deleteFailed = true;
+      if (!await _deleteFile('anki', 'collection.anki2')) deleteFailed = true;
+    }
+
+    // 浏览器Cookies持久化数据
+    if (selection.browserCookies) {
+      if (!await _deleteFile('', 'browser_cookies.json')) deleteFailed = true;
+    }
+
+    return deleteFailed;
   }
 
   // ================================================================
@@ -1433,7 +1745,8 @@ class BackupService {
     String json, {
     BackupSelection selection = BackupSelection.all,
   }) =>
-      _restoreDatabaseFromJson(json, selection: selection);
+      _restoreDatabaseFromJson(jsonDecode(json) as Map<String, dynamic>,
+          selection: selection);
 }
 
 /// 从磁盘流式读取的 [InputStream] 实现（不将整个文件加载到内存）。

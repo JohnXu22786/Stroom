@@ -94,17 +94,7 @@ HTML_CONTENT_PLACEHOLDER
             horizontal: 10,
             vertical: 16,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, semanticLabel: label),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: const TextStyle(fontSize: 12),
-              ),
-            ],
-          ),
+          child: Icon(icon, size: 18, semanticLabel: label),
         ),
       ),
     );

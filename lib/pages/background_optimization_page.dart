@@ -7,12 +7,9 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../providers/background_task_provider.dart';
-import '../providers/task_provider.dart' show TaskStatus;
 import '../services/background_service.dart';
 import '../services/desktop_app_service.dart';
 import '../services/ios_continued_task_service.dart';
-import '../widgets/quit_confirmation_dialog.dart';
 import 'platform_tutorial_page.dart';
 
 /// A page that detects current system environment, checks background optimization
@@ -69,7 +66,9 @@ class _BackgroundOptimizationPageState
   }
 
   /// 从后台恢复（例如从系统设置返回）时重新检测服务与电池状态：
-  /// 用户可能在其他应用/系统设置中修改了省电白名单或杀掉了服务。
+  /// 用户可能在其他应用/系统设置中修改了省电白名单、精确闹钟权限
+  /// 或杀掉了服务。（精确闹钟权限只可能在系统设置中变更，且撤销时
+  /// 系统不发任何广播 —— 回到前台是唯一可靠的重新检测时机。）
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
@@ -156,19 +155,33 @@ class _BackgroundOptimizationPageState
   // ── Background Service Check ─────────────────────────────────────────
 
   Future<void> _checkBackgroundService() async {
+    if (!mounted) return; // 前置 setState 保护：页面可能已销毁
     setState(() {
       _isCheckingService = true;
     });
 
     _isServiceSupported = isBackgroundServiceSupported();
 
-    try {
-      final service = FlutterBackgroundService();
-      _isServiceRunning = await service.isRunning();
-      _optimizationStatus = _isServiceRunning ? '后台服务运行中' : '后台服务未启动';
-    } catch (_) {
+    if (!_isServiceSupported) {
+      // 桌面/Web 没有前台服务：直接给出平台对应的真实状态，
+      // 不要调用仅 Android/iOS 可用的插件（会抛异常显示误导性文案）。
       _isServiceRunning = false;
-      _optimizationStatus = '无法检测后台服务状态';
+      if (isDesktopPlatform()) {
+        _optimizationStatus = DesktopAppService.instance.isTrayReady
+            ? '桌面端使用托盘驻留保活'
+            : '桌面端托盘暂不可用，关闭窗口将直接退出';
+      } else {
+        _optimizationStatus = '当前平台不支持后台服务';
+      }
+    } else {
+      try {
+        final service = FlutterBackgroundService();
+        _isServiceRunning = await service.isRunning();
+        _optimizationStatus = _isServiceRunning ? '后台服务运行中' : '后台服务未启动';
+      } catch (_) {
+        _isServiceRunning = false;
+        _optimizationStatus = '无法检测后台服务状态';
+      }
     }
 
     if (mounted) {
@@ -181,6 +194,7 @@ class _BackgroundOptimizationPageState
   // ── Battery Optimization Check ───────────────────────────────────────
 
   Future<void> _checkBatteryOptimization() async {
+    if (!mounted) return; // 前置 setState 保护：页面可能已销毁
     setState(() {
       _isCheckingBattery = true;
     });
@@ -200,7 +214,7 @@ class _BackgroundOptimizationPageState
 
   Future<void> _requestBatteryExemption() async {
     try {
-      requestIgnoreBatteryOptimizations();
+      await requestIgnoreBatteryOptimizations();
       // Re-check after a short delay to let the system dialog complete.
       await Future<void>.delayed(const Duration(seconds: 2));
       await _checkBatteryOptimization();
@@ -210,6 +224,7 @@ class _BackgroundOptimizationPageState
   // ── Exact Alarm Status Check ───────────────────────────────────────
 
   Future<void> _checkExactAlarmStatus() async {
+    if (!mounted) return; // 前置 setState 保护：页面可能已销毁
     setState(() {
       _isCheckingExactAlarms = true;
     });
@@ -217,7 +232,10 @@ class _BackgroundOptimizationPageState
     try {
       _canScheduleExactAlarms = await canScheduleExactAlarms();
     } catch (_) {
-      _canScheduleExactAlarms = true;
+      // 无法确定状态时按「未授权」处理（与电池卡片同向）：
+      // 未知状态保守地展示授权入口，而不是隐藏按钮让看门狗
+      // 静默降级为不精确闹钟。
+      _canScheduleExactAlarms = false;
     }
 
     if (mounted) {
@@ -229,11 +247,8 @@ class _BackgroundOptimizationPageState
 
   Future<void> _requestExactAlarm() async {
     try {
-      requestScheduleExactAlarm();
+      await requestScheduleExactAlarm();
       // Re-check after a short delay to let the system page close.
-      // 若用户授予权限，系统会发送
-      // SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED 广播，
-      // 看门狗会立即恢复精确调度（此处刷新仅用于更新按钮状态）。
       await Future<void>.delayed(const Duration(seconds: 2));
       await _checkExactAlarmStatus();
     } catch (_) {}
@@ -246,9 +261,8 @@ class _BackgroundOptimizationPageState
       _isOperating = true;
     });
 
-    try {
-      await startBackgroundService();
-    } catch (_) {
+    final ok = await startBackgroundService();
+    if (!ok) {
       if (mounted) {
         setState(() {
           _optimizationStatus = '启动服务失败';
@@ -271,9 +285,8 @@ class _BackgroundOptimizationPageState
       _isOperating = true;
     });
 
-    try {
-      await stopBackgroundService();
-    } catch (_) {
+    final ok = await stopBackgroundService();
+    if (!ok) {
       if (mounted) {
         setState(() {
           _optimizationStatus = '停止服务失败';
@@ -296,9 +309,8 @@ class _BackgroundOptimizationPageState
       _isOperating = true;
     });
 
-    try {
-      await restartBackgroundService();
-    } catch (_) {
+    final ok = await restartBackgroundService();
+    if (!ok) {
       if (mounted) {
         setState(() {
           _optimizationStatus = '重启服务失败';
@@ -553,6 +565,11 @@ class _BackgroundOptimizationPageState
   // ── Battery Optimization Card ────────────────────────────────────────
 
   Widget _buildBatteryOptimizationCard(ThemeData theme) {
+    // Web 上 defaultTargetPlatform 会报告宿主 OS（手机浏览器 = android），
+    // 必须显式排除 Web，否则会在 Web 页面渲染 Android 专属卡片。
+    if (kIsWeb) {
+      return const SizedBox.shrink();
+    }
     if (defaultTargetPlatform != TargetPlatform.android) {
       return const SizedBox.shrink();
     }
@@ -629,6 +646,8 @@ class _BackgroundOptimizationPageState
 
   /// 当前平台是否展示任何保活策略（移动端策略卡或桌面端保活卡）。
   bool get _hasKeepAliveStrategies {
+    // Web 上 defaultTargetPlatform 会报告宿主 OS，必须显式排除。
+    if (kIsWeb) return false;
     return defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS ||
         isDesktopPlatform();
@@ -639,6 +658,9 @@ class _BackgroundOptimizationPageState
     // - Android：AlarmManager 看门狗 + 冷启动恢复 + 电池优化提醒
     // - iOS：仅冷启动恢复（iOS 无 AlarmManager 看门狗）
     // - 桌面/Web：没有移动端保活策略，显示桌面端保活卡片代替
+    if (kIsWeb) {
+      return const SizedBox.shrink();
+    }
     if (defaultTargetPlatform != TargetPlatform.android &&
         defaultTargetPlatform != TargetPlatform.iOS) {
       return const SizedBox.shrink();
@@ -743,6 +765,10 @@ class _BackgroundOptimizationPageState
   /// - iOS 26+ 支持常驻后台（BGContinuedProcessingTask），正向说明；
   /// - 低于 iOS 26 给出「定期返回 App + 勿在切换器划掉」的提示。
   Widget _buildIosBackgroundNoteCard(ThemeData theme) {
+    // Web 上 defaultTargetPlatform 会报告宿主 OS，必须显式排除。
+    if (kIsWeb) {
+      return const SizedBox.shrink();
+    }
     if (defaultTargetPlatform != TargetPlatform.iOS) {
       return const SizedBox.shrink();
     }
@@ -800,8 +826,7 @@ class _BackgroundOptimizationPageState
 
   // ── Desktop Keep-Alive Card ──────────────────────────────────────────
 
-  /// 桌面端保活：关闭窗口时默认最小化到系统托盘（托盘不可用时
-  /// 最小化到任务栏），应用与后台任务继续运行。
+  /// 桌面端保活：关闭窗口时默认最小化到任务栏，应用与后台任务继续运行。
   Widget _buildDesktopKeepAliveCard(ThemeData theme) {
     if (!isDesktopPlatform()) {
       return const SizedBox.shrink();
@@ -828,9 +853,9 @@ class _BackgroundOptimizationPageState
               theme: theme,
               title: '关闭窗口时最小化',
               detail: '启用后，点击窗口关闭按钮不会退出应用，'
-                  '而是最小化到系统托盘（托盘不可用时最小化到任务栏），'
-                  '后台任务继续运行。可从托盘图标或菜单恢复窗口。'
-                  '\n\n需要真正退出时，点击下方「完全退出应用」按钮。'
+                  '而是隐藏到系统托盘继续运行，后台任务不受影响。'
+                  '\n\n可从托盘图标（或右键菜单「显示主窗口」）恢复窗口；'
+                  '需要真正退出时，点击下方「完全退出应用」按钮。'
                   '\n\n适用场景：所有桌面用户都建议开启。',
               value: _closeMinimizeEnabled,
               onChanged: (v) {
@@ -863,9 +888,17 @@ class _BackgroundOptimizationPageState
   /// 注意：不能根据开关状态调用 setPreventClose(false) 释放拦截——
   /// 拦截一旦释放，原生层会在 Dart 侧确认逻辑运行前直接销毁窗口，
   /// 「关闭即退出」时的任务运行确认就永远不会触发。
-  /// 关闭行为（最小化 vs 确认后退出）统一由 Application 层的
+  /// 关闭行为（最小化 vs 确认后退出）统一由 DesktopAppService 的
   /// onWindowClose 决策（每次读取最新偏好）。
+  ///
+  /// 仅在托盘服务已就绪时重新武装：若托盘注册失败（DesktopAppService
+  /// 已回滚为「关闭即退出」并撤销拦截），这里绝不能只恢复 setPreventClose
+  /// 而不恢复事件监听 —— 否则窗口将无法关闭且没有兜底。
   Future<void> _ensureWindowCloseIntercepted() async {
+    if (!DesktopAppService.instance.isTrayReady) {
+      debugPrint('[BackgroundOptimizationPage] 托盘未就绪，跳过关闭拦截武装');
+      return;
+    }
     try {
       await windowManager.setPreventClose(true);
     } catch (e) {
@@ -873,25 +906,12 @@ class _BackgroundOptimizationPageState
     }
   }
 
+  /// 完全退出应用：先确认（有任务运行时弹窗），再销毁托盘与窗口退出。
+  ///
+  /// 统一走 [DesktopAppService.quitWithConfirmation]，与「关闭即退出」
+  /// 的确认逻辑共用同一入口，并确保托盘图标被正确销毁。
   Future<void> _quitDesktopApp() async {
-    try {
-      // 桌面端退出会立即中断所有运行中的任务：先确认。
-      final runningCount = ref
-          .read(backgroundTasksProvider)
-          .where((t) => t.status == TaskStatus.running)
-          .length;
-      if (runningCount > 0) {
-        if (!mounted) return;
-        final confirmed = await showQuitConfirmationDialog(
-          context,
-          runningTaskCount: runningCount,
-        );
-        if (!confirmed) return;
-      }
-      await windowManager.destroy();
-    } catch (e) {
-      debugPrint('[BackgroundOptimizationPage] destroy window failed: $e');
-    }
+    await DesktopAppService.instance.quitWithConfirmation();
   }
 
   Widget _buildToggleTile({

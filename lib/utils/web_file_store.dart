@@ -194,4 +194,24 @@ class WebFileStore {
     await txn.completed;
     return count > 0;
   }
+
+  /// 删除所有以 [prefix] 开头的文件（如 `'attachments/'`）。
+  ///
+  /// 用于清除/恢复场景中按目录前缀清理文件（Web 端没有目录结构，
+  /// 文件 key 即存储路径）。
+  static Future<void> deleteByPrefix(String prefix) async {
+    if (_testMode) {
+      _inMemoryStore.removeWhere((k, _) => k.startsWith(prefix));
+      return;
+    }
+    final db = await _database;
+    final txn = db.transaction('files', idbModeReadWrite);
+    final store = txn.objectStore('files');
+    await for (final cwv in store.openCursor(autoAdvance: true)) {
+      if (cwv.key is String && (cwv.key as String).startsWith(prefix)) {
+        await cwv.delete();
+      }
+    }
+    await txn.completed;
+  }
 }

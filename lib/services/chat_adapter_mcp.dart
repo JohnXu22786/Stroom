@@ -29,10 +29,38 @@ extension ChatAdapterMcpExt on ChatAdapter {
   Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
     // Skip if config hasn't changed since last init (prevents redundant
     // network discovery on every page mount after IndexedStack removal).
+    // Only skip when tools were actually discovered: if the cache is empty
+    // (first run, a previously failed run, or disposeMcp cleared it), always
+    // re-discover so the tool list never gets stuck at built-in-only.
     final hash = Object.hashAll(entriesState.entries.map((e) => e.hashCode));
-    if (_lastMcpEntriesHash == hash) return;
-    _lastMcpEntriesHash = hash;
+    if (_lastMcpEntriesHash == hash && _mcpToolDefinitions.isNotEmpty) return;
 
+    // Serialize concurrent discovery: a second call (e.g. page _initialize +
+    // provider-change listener, or a config edit landing during a slow
+    // discovery) must wait for the in-flight run instead of racing it.
+    // Otherwise the second call's addClient would dispose the first call's
+    // in-flight client, silently losing that server's tools. After the
+    // in-flight run finishes, re-check the guard — if it already covered
+    // this config and populated the cache, nothing more to do.
+    final inFlight = _mcpInitFuture;
+    if (inFlight != null) {
+      await inFlight;
+      if (_lastMcpEntriesHash == hash && _mcpToolDefinitions.isNotEmpty) {
+        return;
+      }
+    }
+
+    _lastMcpEntriesHash = hash;
+    final future = _discoverMcpTools(entriesState);
+    _mcpInitFuture = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_mcpInitFuture, future)) _mcpInitFuture = null;
+    }
+  }
+
+  Future<void> _discoverMcpTools(ProviderEntriesState entriesState) async {
     final mcpEntry =
         entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
     if (mcpEntry == null || mcpEntry.configs.isEmpty) return;
@@ -123,5 +151,6 @@ extension ChatAdapterMcpExt on ChatAdapter {
   void disposeMcp() {
     _mcpClientManager.disposeAll();
     _mcpToolDefinitions = [];
+    _mcpInitFuture = null;
   }
 }

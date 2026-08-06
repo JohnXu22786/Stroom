@@ -64,6 +64,33 @@ class AttachmentStorage {
     }
   }
 
+  /// 保存"编辑后"的附件文件。
+  ///
+  /// 与 [saveFile] 的物理位置完全一致（桌面端落在附件存储目录、Web 端
+  /// 使用相同存储键规则），但返回的 storagePath 带 `temp_edited/` 前缀
+  /// 标记，供清理逻辑识别"编辑产物"。
+  ///
+  /// 修复背景：编辑后的图片之前被直接写入系统临时目录，而 readFile 按
+  /// basename 解析到附件目录 → 发送后消息气泡加载文件失败
+  /// （“无法加载文件”）。现在编辑产物与普通附件同目录存储，
+  /// readFile/deleteFile 通过 basename 即可正确解析（Web 端则因键名
+  /// 本身就是 storagePath 而天然一致），标记仍保留用于移除/删除语义。
+  static Future<String> saveEditedFile(String fileName, Uint8List bytes) async {
+    final ext = _extractExtension(fileName);
+    final hash = computeHash(bytes);
+    final uniqueId = DateTime.now().millisecondsSinceEpoch.toString();
+    final storageName = '${hash}_$uniqueId.$ext';
+    final storagePath = 'temp_edited/$storageName';
+
+    if (kIsWeb) {
+      await WebFileStore.write(storagePath, bytes);
+    } else {
+      final dir = await _storageDir;
+      await File(p.join(dir, storageName)).writeAsBytes(bytes);
+    }
+    return storagePath;
+  }
+
   static Future<Uint8List?> readFile(String storagePath) async {
     await AppLogService.info('AttachmentStorage', '读取文件: $storagePath');
     try {

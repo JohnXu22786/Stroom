@@ -143,7 +143,8 @@ class ChatMessage {
   /// Indices into [toolCalls] where each new tool-call round begins.
   /// Round 0 always starts at index 0 (when [toolCalls] is non-empty).
   /// Each subsequent entry is the index of the first tool call in that
-  /// round (separated from the previous round by non-empty text).
+  /// round (sealed by the previous round's ReasoningSectionEndEvent, or
+  /// by non-empty text before the round's first tool call).
   ///
   /// Persisted so that reloaded messages render multi-tool rounds
   /// correctly via [buildAgentChainSegments]'s round-based algorithm.

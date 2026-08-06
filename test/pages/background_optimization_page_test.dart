@@ -1,13 +1,15 @@
-import 'package:flutter/material.dart';
+import 'dart:io' show exit;
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/background_optimization_page.dart';
-import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/services/desktop_app_service.dart';
+import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/services/ios_continued_task_service.dart';
 
 /// Builds the test app wrapping BackgroundOptimizationPage.
@@ -90,9 +92,13 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   }
 }
 
+/// Records method calls made on the keep-alive method channel.
+final List<MethodCall> keepAliveCalls = [];
+
 /// Registers a mock background service platform for testing.
 /// Returns the mock so tests can control its behavior.
 MockBackgroundServicePlatform registerMockPlatform() {
+  keepAliveCalls.clear();
   SharedPreferences.setMockInitialValues({});
   // Set up a mock MethodChannel handler for the keep-alive channel
   // so that fire-and-forget invokeMethod calls don't create pending
@@ -100,7 +106,10 @@ MockBackgroundServicePlatform registerMockPlatform() {
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(
     const MethodChannel('com.johntsui.stroom/keepalive'),
-    (MethodCall methodCall) async => true,
+    (MethodCall methodCall) async {
+      keepAliveCalls.add(methodCall);
+      return true;
+    },
   );
   // Mock the notification permission channel: without a handler the
   // status check future never completes in widget tests, forcing the
@@ -503,8 +512,10 @@ void main() {
       await tester.tap(find.text('启动服务'));
       await tester.pumpAndSettle();
 
-      // UI should still be intact with error status
-      expect(find.text('无法检测后台服务状态'), findsOneWidget);
+      // startBackgroundService 内部捕获异常并返回 false，
+      // 页面应显示真实的失败状态（而非静默忽略）。
+      expect(find.text('启动服务失败'), findsOneWidget);
+      // UI should still be intact
       expect(find.text('启动服务'), findsOneWidget);
     });
   });
@@ -548,6 +559,244 @@ void main() {
     });
   });
 
+  group('BackgroundOptimizationPage - platform specific messaging', () {
+    /// Puts the desktop tray service into the ready state so the page
+    /// renders the tray-resident copy (matching a real desktop session).
+    Future<void> makeTrayReady() async {
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        const MethodChannel('window_manager'),
+        (MethodCall call) async => true,
+      );
+      messenger.setMockMethodCallHandler(
+        const MethodChannel('tray_manager'),
+        (MethodCall call) async => true,
+      );
+      await DesktopAppService.instance.setupTrayAndCloseBehavior();
+    }
+
+    testWidgets('desktop platforms explain tray-resident close behavior',
+        (tester) async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        await makeTrayReady();
+
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        // The desktop description must mention the tray-resident behavior
+        // (also present in the close-minimize toggle's detail text).
+        expect(find.textContaining('系统托盘'), findsWidgets);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.instance.resetForTesting();
+      }
+    });
+
+    testWidgets('linux explains restore via the tray menu', (tester) async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      try {
+        await makeTrayReady();
+
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        // On Linux, restore happens via the tray menu, not icon click.
+        expect(find.textContaining('托盘菜单选择「显示主窗口」'), findsOneWidget);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.instance.resetForTesting();
+      }
+    });
+
+    testWidgets('desktop platforms warn honestly when tray is unavailable',
+        (tester) async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        // No tray setup performed — the service is not tray-ready.
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        // 状态行与描述卡片都会如实说明托盘不可用（不再显示
+        // 「使用托盘驻留保活」的误导性文案）。
+        expect(find.textContaining('托盘暂不可用'), findsWidgets);
+        expect(find.textContaining('使用托盘驻留保活'), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('android shows battery optimization card', (tester) async {
+      registerMockPlatform();
+
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // Default test platform is Android — the battery card must render its
+      // status row (mock reports the app already ignores battery optimization).
+      expect(find.text('已忽略电池优化'), findsOneWidget);
+    });
+
+    testWidgets('android shows exact-alarm button when permission is missing',
+        (tester) async {
+      registerMockPlatform();
+      // Mock reports exact alarms are NOT permitted (Android 14+ default).
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async =>
+            methodCall.method == 'canScheduleExactAlarms' ? false : true,
+      );
+
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('允许精确闹钟（保活更可靠）'), findsOneWidget);
+    });
+
+    testWidgets('exact-alarm status is re-checked when the app resumes',
+        (tester) async {
+      // 回归：精确闹钟权限只可能在系统设置中变更（撤销时系统不发
+      // 广播），回到前台必须重新检测，否则按钮状态永远是旧的。
+      var exactAlarmsAllowed = false;
+      registerMockPlatform();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async =>
+            methodCall.method == 'canScheduleExactAlarms'
+                ? exactAlarmsAllowed
+                : true,
+      );
+
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      // 初始：权限缺失 → 显示授权按钮。
+      expect(find.text('允许精确闹钟（保活更可靠）'), findsOneWidget);
+
+      // 用户在系统设置中授予权限 → 回到前台 → 按钮必须消失。
+      exactAlarmsAllowed = true;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      expect(find.text('允许精确闹钟（保活更可靠）'), findsNothing,
+          reason: 'resume 后必须重新检测精确闹钟权限');
+    });
+  });
+
+  group('BackgroundOptimizationPage - keep-alive strategy toggles (watchdog)',
+      () {
+    testWidgets('turning the watchdog off disarms the native alarm',
+        (tester) async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('AlarmManager 看门狗'));
+      await tester.pumpAndSettle();
+
+      expect(
+        keepAliveCalls.any((c) => c.method == 'stopKeepAlive'),
+        isTrue,
+        reason:
+            'disabling the watchdog must cancel the native keep-alive alarm',
+      );
+    });
+
+    testWidgets('turning the watchdog on while running arms the alarm',
+        (tester) async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(true);
+
+      // Watchdog starts disabled so the toggle can be turned on.
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+      });
+
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('AlarmManager 看门狗'));
+      await tester.pumpAndSettle();
+
+      expect(
+        keepAliveCalls.any((c) => c.method == 'startKeepAlive'),
+        isTrue,
+        reason: 're-enabling the watchdog while the service runs must arm '
+            'the native keep-alive alarm',
+      );
+    });
+  });
   group('BackgroundOptimizationPage - keep-alive strategy toggles', () {
     testWidgets('Android shows all three strategy toggles', (tester) async {
       registerMockPlatform();
@@ -697,8 +946,18 @@ void main() {
           return true;
         },
       );
+      // 托盘通道同样 mock，并先完成托盘注册 —— 页面只会在托盘就绪后
+      // 才重新武装关闭拦截（托盘不可用时不武装，保证窗口仍可关闭）。
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('tray_manager'),
+        (MethodCall call) async => true,
+      );
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       try {
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        expect(DesktopAppService.instance.isTrayReady, isTrue);
+
         tester.view.physicalSize = const Size(1080, 5000);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(() {
@@ -729,6 +988,49 @@ void main() {
           isTrue,
           reason: 'setPreventClose(false) 会释放拦截，导致退出确认失效',
         );
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.instance.resetForTesting();
+      }
+    });
+
+    testWidgets(
+        'does not re-arm close interception when the tray is unavailable',
+        (tester) async {
+      // 托盘注册失败（未 mock tray 通道）→ DesktopAppService 已回滚为
+      // 「关闭即退出」。页面此时绝不能只恢复 setPreventClose 而不恢复
+      // 事件监听 —— 否则窗口将无法关闭。
+      registerMockPlatform();
+      final windowCalls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('window_manager'),
+        (MethodCall call) async {
+          windowCalls.add(call);
+          return true;
+        },
+      );
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        expect(DesktopAppService.instance.isTrayReady, isFalse);
+
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byType(SwitchListTile).first);
+        await tester.pumpAndSettle();
+
+        // 页面加载与切换开关都不应武装关闭拦截。
+        final preventCloseCalls =
+            windowCalls.where((c) => c.method == 'setPreventClose').toList();
+        expect(preventCloseCalls, isEmpty, reason: '托盘不可用时重新武装拦截会制造无法关闭的窗口');
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
@@ -771,8 +1073,12 @@ void main() {
           return true;
         },
       );
-      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      // Record the process exit instead of actually exiting.
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
       try {
+        DesktopAppService.instance.resetForTesting();
+        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
         tester.view.physicalSize = const Size(1080, 5000);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(() {
@@ -780,22 +1086,25 @@ void main() {
           tester.view.resetDevicePixelRatio();
         });
 
-        // No tasks in the provider (default empty notifier).
+        // No quit-confirmation callback injected — quit proceeds directly.
         await tester.pumpWidget(_buildTestApp());
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('完全退出应用'));
         await tester.pumpAndSettle();
 
-        // Exits immediately without a confirmation dialog.
+        // Quits immediately without a confirmation dialog,
+        // destroying the window and exiting the process.
         expect(find.text('退出应用？'), findsNothing);
         expect(windowCalls.where((c) => c.method == 'destroy'), hasLength(1));
+        expect(exitCodes, [0]);
       } finally {
         debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.exitApp = exit;
+        DesktopAppService.instance.resetForTesting();
       }
     });
-
-    testWidgets('quit button asks for confirmation when tasks are running',
+    testWidgets('quit button respects the injected quit confirmation',
         (tester) async {
       registerMockPlatform();
       final windowCalls = <MethodCall>[];
@@ -807,8 +1116,11 @@ void main() {
           return true;
         },
       );
-      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
       try {
+        DesktopAppService.instance.resetForTesting();
+        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
         tester.view.physicalSize = const Size(1080, 5000);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(() {
@@ -816,30 +1128,27 @@ void main() {
           tester.view.resetDevicePixelRatio();
         });
 
-        // One running task in the provider.
-        final notifier = BackgroundTaskNotifier();
-        notifier.addTask(type: BackgroundTaskType.ocr, title: '运行中任务');
-        await tester.pumpWidget(_buildTestApp(taskNotifier: notifier));
+        await tester.pumpWidget(_buildTestApp());
         await tester.pumpAndSettle();
 
+        // User cancels the confirmation -> nothing is destroyed, no exit.
+        DesktopAppService.instance.onQuitConfirmation = () async => false;
         await tester.tap(find.text('完全退出应用'));
-        await tester.pumpAndSettle();
-
-        // Confirmation dialog appears; cancel keeps the app running.
-        expect(find.text('退出应用？'), findsOneWidget);
-        expect(find.textContaining('1 个任务正在运行'), findsOneWidget);
-        await tester.tap(find.text('取消'));
         await tester.pumpAndSettle();
         expect(windowCalls.where((c) => c.method == 'destroy'), isEmpty);
+        expect(exitCodes, isEmpty);
 
-        // Confirming quits the app.
+        // User confirms -> window destroyed and process exits.
+        DesktopAppService.instance.onQuitConfirmation = () async => true;
         await tester.tap(find.text('完全退出应用'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('退出'));
-        await tester.pumpAndSettle();
         expect(windowCalls.where((c) => c.method == 'destroy'), hasLength(1));
+        expect(exitCodes, [0]);
       } finally {
         debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.exitApp = exit;
+        DesktopAppService.instance.onQuitConfirmation = null;
+        DesktopAppService.instance.resetForTesting();
       }
     });
   });
@@ -919,127 +1228,6 @@ void main() {
       expect(find.text('macOS'), findsWidgets);
       expect(find.text('Linux'), findsWidgets);
       expect(find.text('Web'), findsOneWidget);
-    });
-  });
-
-  group('BackgroundOptimizationPage - tray resident messaging', () {
-    /// Puts the desktop tray service into the ready state so the page
-    /// renders the tray-resident copy (matching a real desktop session).
-    Future<void> makeTrayReady() async {
-      final messenger =
-          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-      messenger.setMockMethodCallHandler(
-        const MethodChannel('window_manager'),
-        (MethodCall call) async => true,
-      );
-      messenger.setMockMethodCallHandler(
-        const MethodChannel('tray_manager'),
-        (MethodCall call) async => true,
-      );
-      await DesktopAppService.instance.setupTray();
-    }
-
-    testWidgets('desktop platforms explain tray-resident close behavior',
-        (tester) async {
-      final mock = registerMockPlatform();
-      mock.setServiceRunning(false);
-
-      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-      try {
-        await makeTrayReady();
-
-        tester.view.physicalSize = const Size(1080, 4000);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-
-        await tester.pumpWidget(_buildTestApp());
-        await tester.pumpAndSettle();
-
-        // The desktop status description must mention the tray-resident
-        // behavior (unique string — the desktop card uses a different
-        // sentence structure).
-        expect(find.textContaining('已启用托盘驻留'), findsOneWidget);
-      } finally {
-        debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
-      }
-    });
-
-    testWidgets('linux explains restore via the tray menu', (tester) async {
-      final mock = registerMockPlatform();
-      mock.setServiceRunning(false);
-
-      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-      try {
-        await makeTrayReady();
-
-        tester.view.physicalSize = const Size(1080, 4000);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-
-        await tester.pumpWidget(_buildTestApp());
-        await tester.pumpAndSettle();
-
-        // On Linux, restore happens via the tray menu, not icon click.
-        expect(find.textContaining('托盘菜单选择「显示主窗口」'), findsOneWidget);
-      } finally {
-        debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
-      }
-    });
-
-    testWidgets('desktop platforms warn honestly when tray is unavailable',
-        (tester) async {
-      final mock = registerMockPlatform();
-      mock.setServiceRunning(false);
-
-      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-      try {
-        // No tray setup performed — the service is not tray-ready.
-        tester.view.physicalSize = const Size(1080, 4000);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-
-        await tester.pumpWidget(_buildTestApp());
-        await tester.pumpAndSettle();
-
-        expect(find.textContaining('托盘暂不可用'), findsOneWidget);
-      } finally {
-        debugDefaultTargetPlatformOverride = null;
-      }
-    });
-
-    testWidgets('android shows exact-alarm button when permission is missing',
-        (tester) async {
-      registerMockPlatform();
-      // Mock reports exact alarms are NOT permitted (Android 14+ default).
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(
-        const MethodChannel('com.johntsui.stroom/keepalive'),
-        (MethodCall methodCall) async =>
-            methodCall.method == 'canScheduleExactAlarms' ? false : true,
-      );
-
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('允许精确闹钟（保活更可靠）'), findsOneWidget);
     });
   });
 }

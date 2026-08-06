@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,11 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:mime/mime.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
-import 'package:stroom/models/tts_models.dart' show CustomParam;
-import 'package:stroom/providers/provider_config.dart' show ReasoningParam;
+import 'package:stroom/providers/provider_config.dart'
+    show ReasoningParam, findEffortParam;
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/widgets/file_preview.dart';
@@ -46,10 +44,6 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final ValueChanged<List<String>>? onModelsReordered;
   final List<ReasoningParam> reasoningParams;
 
-  /// Model-level custom parameters (模型页自定义参数) used for the badge
-  /// count on the "自定义参数" chip. Distinct from reasoning/inference params.
-  final List<CustomParam> customParams;
-
   // ── Edit mode support ──
   /// When non-null, the composer enters edit mode for the given message.
   final String? editingMessageId;
@@ -70,6 +64,12 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   /// Called when user taps X on the edit capsule to cancel editing.
   final VoidCallback? onEditCancel;
 
+  /// Called when the input field gains/loses focus. The chat page uses the
+  /// gain event to react to the tap immediately — before the soft-keyboard
+  /// animation starts — so the message list shifts up without the usual
+  /// delay.
+  final ValueChanged<bool>? onFocusChanged;
+
   const ChatComposerWidget({
     super.key,
     required this.onSend,
@@ -85,12 +85,12 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.initialDraftText = '',
     this.onModelsReordered,
     this.reasoningParams = const [],
-    this.customParams = const [],
     this.editingMessageId,
     this.editingMessageText,
     this.editingMessageAttachments,
     this.onEditSend,
     this.onEditCancel,
+    this.onFocusChanged,
   });
 
   @override
@@ -104,6 +104,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   final List<Attachment> _pendingAttachments = [];
   final Map<String, Uint8List> _pendingImageBytes = {};
   final GlobalKey _composerKey = GlobalKey();
+
+  /// Number of quick image edits still processing in the background.
+  /// While non-zero, sending is blocked — the pending attachments still
+  /// hold the unedited bytes until the edit callback applies them.
+  int _editsInFlight = 0;
 
   Timer? _draftTimer;
 
@@ -140,6 +145,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     // Listen to app lifecycle events so drafts are saved even when the
     // app goes to background or is terminated unexpectedly.
     WidgetsBinding.instance.addObserver(this);
+
+    // Notify the chat page the moment the input gains/loses focus so it can
+    // react to the tap before the soft-keyboard animation starts.
+    _focusNode.addListener(_onFocusChanged);
 
     // Restore draft text for the current conversation, if any
     if (widget.initialDraftText.isNotEmpty) {
@@ -240,9 +249,15 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     }
   }
 
+  /// Forwards focus changes (with the current focus state) to the page.
+  void _onFocusChanged() {
+    widget.onFocusChanged?.call(_focusNode.hasFocus);
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _focusNode.removeListener(_onFocusChanged);
     _draftTimer?.cancel();
     // Save draft before disposing. Use try-catch because ref may
     // already be disposed during teardown, especially in tests.
@@ -303,6 +318,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
             ),
             // ── Edit mode capsule ──
             if (widget.editingMessageId != null) _buildEditModeCapsule(cs: cs),
+            // ── Quick-edit processing banner ──
+            if (_editsInFlight > 0) _buildProcessingBanner(cs: cs),
             // ── Input row ──
             _buildInputRow(
               cs: cs,

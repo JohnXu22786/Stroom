@@ -40,9 +40,9 @@ enum AppPage { home, chat, files, settings }
 /// 当前选中页面的状态提供器
 final selectedPageProvider = StateProvider<AppPage>((ref) => AppPage.home);
 
-/// 主页，采用 FlClash 风格的响应式布局：
-/// - 移动端：底部导航栏（主页、对话、文件、设置）
-/// - 桌面端：侧边栏导航
+/// 主页，采用基于屏幕长宽比的响应式布局：
+/// - 较宽（横向，width > height）：左侧导航栏
+/// - 较高（竖向，height > width）：底部导航栏
 /// 导航逻辑：切换页面时保留状态，再次点击同一项回到该页面的首页。
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -71,9 +71,12 @@ class _HomePageState extends ConsumerState<HomePage> {
     });
   }
 
-  /// 根据屏幕宽度判断是否为移动设备（宽度小于600像素）
-  bool _isMobile(BuildContext context) {
-    return MediaQuery.of(context).size.width < 600;
+  /// 根据屏幕长宽比决定导航栏位置：
+  /// 屏幕较高（竖向，height > width）时用底部导航栏；
+  /// 否则（较宽或正方形）用左侧导航栏。
+  bool _isPortrait(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    return size.height > size.width;
   }
 
   @override
@@ -81,7 +84,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     // 在启动时消费 catcatchStartupProvider，触发 restoreUnfinishedTasks
     ref.watch(main_lib.catcatchStartupProvider);
 
-    final isMobile = _isMobile(context);
+    final isPortrait = _isPortrait(context);
     final selectedPage = ref.watch(selectedPageProvider);
 
     ref.listen(catcatchTasksProvider, (prev, next) {
@@ -139,8 +142,8 @@ class _HomePageState extends ConsumerState<HomePage> {
       child: Scaffold(
         body: Row(
           children: [
-            // 桌面端显示侧边栏导航
-            if (!isMobile) _buildNavigationRail(context),
+            // 较宽（横向）的屏幕显示左侧导航栏
+            if (!isPortrait) _buildNavigationRail(context),
             // Page content area. Widgets are rebuilt on navigation
             // (no IndexedStack keep-alive) because ChatStreamManager
             // now handles background streaming independently.
@@ -150,7 +153,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           ],
         ),
         bottomNavigationBar:
-            isMobile ? _buildBottomNavigationBar(context) : null,
+            isPortrait ? _buildBottomNavigationBar(context) : null,
       ),
     );
   }

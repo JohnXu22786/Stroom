@@ -119,12 +119,36 @@ class McpClient {
   /// 获取缓存的工具列表
   List<McpTool> get cachedTools => List.unmodifiable(_cachedTools);
 
+  /// 正在进行的 connect() future。
+  ///
+  /// 防并发重连：并行工具执行时，同一断开的 MCP 服务器可能同时收到
+  /// 多个工具调用，各自触发 connect()。没有此守卫会并发执行两次
+  /// 连接：stdio 启动两个子进程（一个孤儿）、SSE 建立两条持久连接
+  /// （一条泄漏），且共享的 _sseEndpointCompleter/_cancelToken 会被
+  /// 互相覆盖。连接完成后置空，允许后续重连。
+  Future<bool>? _connectFuture;
+
   /// 连接到 MCP 服务器
-  Future<bool> connect() async {
+  Future<bool> connect() {
+    if (_state == _McpClientState.disposed) return Future.value(false);
+    if (_state == _McpClientState.connected) return Future.value(true);
+    final inFlight = _connectFuture;
+    if (inFlight != null) return inFlight;
+
+    final future = _connectInternal().whenComplete(() {
+      _connectFuture = null;
+    });
+    _connectFuture = future;
+    return future;
+  }
+
+  Future<bool> _connectInternal() async {
     await AppLogService.info('McpClient',
         '连接 MCP 服务器: ${config.name} (${config.transportType.name})');
+    // 日志 await 期间可能已 dispose()：不得把 disposed 状态覆盖回
+    // connecting（否则整个连接流程会在已释放的客户端上继续执行，
+    // 启动无人清理的新进程/新 SSE 连接）。
     if (_state == _McpClientState.disposed) return false;
-    if (_state == _McpClientState.connected) return true;
 
     _state = _McpClientState.connecting;
 
@@ -138,12 +162,19 @@ class McpClient {
 
       // 发送 initialize 请求
       await _sendInitialize();
+      // 连接期间被 dispose()：不复活已释放的客户端（否则后续
+      // callTool 会对空 _process/已取消的 SSE 请求超时 30s）。
+      if (_state == _McpClientState.disposed) return false;
       _state = _McpClientState.connected;
       await AppLogService.info('McpClient', 'MCP 服务器连接成功: ${config.name}');
       return true;
     } catch (e) {
       debugPrint('McpClient.connect failed for ${config.name}: $e');
-      _state = _McpClientState.disconnected;
+      // dispose() 后的失败不得把 disposed 状态覆盖回 disconnected
+      //（否则后续 connect() 会重新拉起一个已释放客户端的连接）。
+      if (_state != _McpClientState.disposed) {
+        _state = _McpClientState.disconnected;
+      }
       await AppLogService.error('McpClient', 'MCP 服务器连接失败: ${config.name}', e);
       return false;
     }
@@ -162,6 +193,13 @@ class McpClient {
         environment: config.env.isNotEmpty ? config.env : null,
         mode: ProcessStartMode.normal,
       );
+      // 启动期间已 dispose()：终止刚拉起的孤儿进程（dispose 的 kill
+      // 发生在 _process 赋值之前，够不到这个新进程）。
+      if (_state == _McpClientState.disposed) {
+        _process?.kill();
+        _process = null;
+        return;
+      }
 
       _stdoutSubscription = _process!.stdout
           .transform(utf8.decoder)
@@ -176,6 +214,9 @@ class McpClient {
       });
 
       _process!.exitCode.then((code) {
+        // dispose() 后进程被 kill：不得把 disposed 状态覆盖回
+        // disconnected（否则后续 connect() 会重新拉起已释放的客户端）。
+        if (_state == _McpClientState.disposed) return;
         debugPrint('MCP[${config.name}] process exited with code $code');
         _state = _McpClientState.disconnected;
         for (final entry in _pendingRequests.entries) {
@@ -261,6 +302,8 @@ class McpClient {
         },
         onError: (Object error) {
           debugPrint('MCP[${config.name}]: SSE connection error: $error');
+          // dispose() 已取消 _cancelToken 触发本回调：保持 disposed 终态
+          if (_state == _McpClientState.disposed) return;
           if (!_sseEndpointCompleter.isCompleted) {
             _sseEndpointCompleter.completeError(error);
           }
@@ -270,6 +313,8 @@ class McpClient {
         },
         onDone: () {
           debugPrint('MCP[${config.name}]: SSE connection closed');
+          // dispose() 取消订阅触发本回调：保持 disposed 终态
+          if (_state == _McpClientState.disposed) return;
           _completePendingRequestsWithError(
               Exception('SSE connection closed unexpectedly'));
           _state = _McpClientState.disconnected;
@@ -279,6 +324,11 @@ class McpClient {
 
       // Wait for the endpoint event with a 30-second timeout
       await _sseEndpointCompleter.future.timeout(const Duration(seconds: 30));
+      // 等待期间可能已 dispose()（取消订阅后 endpoint completer 由
+      // dispose 以错误完成，或 30s 超时）：不得把 disposed 覆盖回
+      // connected——后续 _sendInitialize 会因状态检查全部跳过，
+      // _connectInternal 的 disposed 检查兜底返回 false。
+      if (_state == _McpClientState.disposed) return;
       _state = _McpClientState.connected;
       debugPrint(
           'MCP[${config.name}]: SSE transport connected, endpoint: $_sseEndpointUrl');
@@ -288,7 +338,11 @@ class McpClient {
       _sseSubscription = null;
       _cancelToken?.cancel();
       _cancelToken = null;
-      _state = _McpClientState.disconnected;
+      // dispose() 后的失败不得把 disposed 状态覆盖回 disconnected
+      //（否则后续 connect() 会重新拉起一个已释放客户端的连接）。
+      if (_state != _McpClientState.disposed) {
+        _state = _McpClientState.disconnected;
+      }
       rethrow;
     }
   }
@@ -547,6 +601,15 @@ class McpClient {
     _sseSubscription = null;
     _cancelToken?.cancel();
     _cancelToken = null;
+
+    // 让正在等待 endpoint 事件的 connect() 快速失败（取消订阅不会触发
+    // onDone，不完成此 completer 会让 connect 空等 30s 超时）。
+    // 用值完成而非 completeError：无监听者时 completeError 会产生
+    // 未处理异步错误；_connectSse 的 await 之后有 disposed 状态检查，
+    // 值完成同样会让 connect 立即走 disposed 短路返回。
+    if (!_sseEndpointCompleter.isCompleted) {
+      _sseEndpointCompleter.complete();
+    }
 
     // 完成所有挂起的请求（带错误）
     _completePendingRequestsWithError(Exception('Client disposed'));

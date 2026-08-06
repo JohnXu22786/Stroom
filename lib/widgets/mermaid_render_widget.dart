@@ -99,8 +99,10 @@ class ImmediateMermaidGestureRecognizer extends OneSequenceGestureRecognizer {
 ///   and the raw Mermaid source code view.
 ///
 /// The pan and zoom logic is implemented in JavaScript inside the WebView
-/// HTML template. The Flutter side communicates zoom level changes via
-/// [InAppWebViewController.evaluateJavascript].
+/// HTML template, which is SHARED with the full-screen dialog
+/// ([MermaidPreviewDialog]) so zoom anchoring and auto-fit behavior stay
+/// identical everywhere. The Flutter side communicates zoom level changes
+/// via [InAppWebViewController.evaluateJavascript].
 class MermaidRenderWidget extends StatefulWidget {
   /// The Mermaid diagram code to render.
   final String mermaidCode;
@@ -176,16 +178,6 @@ class MermaidRenderWidget extends StatefulWidget {
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
         .replaceAll('>', '&gt;');
-  }
-
-  /// Builds an HTML document for inline rendering, including touch-only JS
-  /// gesture handlers for mobile support. Mouse/trackpad gestures are
-  /// handled at the Flutter level to prevent parent scroll view interference.
-  static String _buildInlineMermaidHtml(String mermaidCode) {
-    final escaped = _escapeMermaidCode(mermaidCode);
-    return _mermaidHtmlTemplate
-        .replaceFirst('GESTURE_SCRIPT_PLACEHOLDER', _mermaidTouchGestureJs)
-        .replaceFirst('MERMAID_CODE_PLACEHOLDER', escaped);
   }
 
   /// Core HTML/CSS/JS template. [GESTURE_SCRIPT_PLACEHOLDER] is replaced
@@ -267,6 +259,16 @@ MERMAID_CODE_PLACEHOLDER
       } catch(_) {}
     }
 
+    // Reports the current zoom + pan to Flutter so the Flutter side always
+    // mirrors the JS state (used for button anchors and gesture bases).
+    function notifyTransform() {
+      try {
+        if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+          window.flutter_inappwebview.callHandler('onTransformChanged', zoomLevel, panX, panY);
+        }
+      } catch(_) {}
+    }
+
     // Called from Flutter or local handlers to set zoom level.
     // When centerX / centerY are provided, the zoom is anchored at that
     // point (in viewport coordinates) instead of the top-left corner.
@@ -278,18 +280,51 @@ MERMAID_CODE_PLACEHOLDER
         panY = centerY - (centerY - panY) * (zoomLevel / oldZoom);
       }
       updateTransform();
-      try {
-        if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-          window.flutter_inappwebview.callHandler('onZoomChanged', zoomLevel);
-        }
-      } catch(_) {}
+      notifyTransform();
     };
 
-    // Called from Flutter to set pan offset
-    window.setPan = function(x, y) {
+    // Sets absolute pan offset and zoom level in a single call. Used by the
+    // inline widget, which tracks pan/zoom on the Flutter side and computes
+    // the zoom anchor (finger position / preview center) itself.
+    window.setPanZoom = function(x, y, level) {
       panX = x;
       panY = y;
+      zoomLevel = Math.max(0.1, Math.min(10, level));
       updateTransform();
+    };
+
+    // Fits the rendered diagram into the viewport: zooms so that the WHOLE
+    // diagram is visible (contain, NOT cover) at the maximum zoom, then
+    // centers it. Called automatically once rendering completes.
+    window.fitToViewport = function() {
+      var viewport = document.getElementById('viewport');
+      var container = document.getElementById('diagram-container');
+      if (!viewport || !container) return;
+      var svg = container.querySelector('svg');
+      if (!svg) return;
+      var vw = viewport.clientWidth;
+      var vh = viewport.clientHeight;
+      if (vw <= 0 || vh <= 0) return;
+      var sw = 0, sh = 0;
+      try {
+        var bbox = svg.getBBox();
+        sw = bbox.width;
+        sh = bbox.height;
+      } catch(_) {}
+      if (sw <= 0 || sh <= 0) {
+        var wAttr = parseFloat(svg.getAttribute('width'));
+        var hAttr = parseFloat(svg.getAttribute('height'));
+        if (!isNaN(wAttr) && !isNaN(hAttr)) {
+          sw = wAttr;
+          sh = hAttr;
+        }
+      }
+      if (sw <= 0 || sh <= 0) return;
+      zoomLevel = Math.max(0.1, Math.min(10, Math.min(vw / sw, vh / sh)));
+      panX = (vw - sw * zoomLevel) / 2;
+      panY = (vh - sh * zoomLevel) / 2;
+      updateTransform();
+      notifyTransform();
     };
 
 GESTURE_SCRIPT_PLACEHOLDER
@@ -303,6 +338,8 @@ GESTURE_SCRIPT_PLACEHOLDER
       });
       mermaid.run({
         nodes: [document.getElementById('mermaid-code')],
+      }).then(function() {
+        window.fitToViewport();
       }).catch(function(err) {
         reportError('Mermaid render error: ' + err.message);
       });
@@ -341,6 +378,7 @@ GESTURE_SCRIPT_PLACEHOLDER
         panX = panStartX + (e.clientX - dragStartX);
         panY = panStartY + (e.clientY - dragStartY);
         updateTransform();
+        notifyTransform();
         e.preventDefault();
       }
     });
@@ -385,64 +423,7 @@ GESTURE_SCRIPT_PLACEHOLDER
         panX = touchPanStartX + (e.touches[0].clientX - touchStartX);
         panY = touchPanStartY + (e.touches[0].clientY - touchStartY);
         updateTransform();
-        e.preventDefault();
-      } else if (e.touches.length === 2) {
-        var dist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY
-        );
-        var scale = dist / lastTouchDist;
-        lastTouchDist = dist;
-        var midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-        var midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-        var rect = document.getElementById('viewport').getBoundingClientRect();
-        var centerX = midX - rect.left;
-        var centerY = midY - rect.top;
-        window.setZoom(zoomLevel * scale, centerX, centerY);
-        e.preventDefault();
-      }
-    }, { passive: false });
-
-    document.addEventListener('touchend', function(e) {
-      lastTouchDist = 0;
-      if (e.touches.length === 1) {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        touchPanStartX = panX;
-        touchPanStartY = panY;
-      }
-    });
-''';
-
-  /// JavaScript snippet for touch-only pan/zoom gesture handlers.
-  /// Used for inline Mermaid rendering where Flutter handles mouse
-  /// gestures (to prevent parent scroll view interference) and JS
-  /// handles touch gestures for mobile support.
-  static const _mermaidTouchGestureJs = '''
-    // Touch events for mobile pan
-    var touchStartX, touchStartY;
-    var touchPanStartX, touchPanStartY;
-    var lastTouchDist = 0;
-
-    document.addEventListener('touchstart', function(e) {
-      if (e.touches.length === 1) {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        touchPanStartX = panX;
-        touchPanStartY = panY;
-      } else if (e.touches.length === 2) {
-        lastTouchDist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY
-        );
-      }
-    });
-
-    document.addEventListener('touchmove', function(e) {
-      if (e.touches.length === 1) {
-        panX = touchPanStartX + (e.touches[0].clientX - touchStartX);
-        panY = touchPanStartY + (e.touches[0].clientY - touchStartY);
-        updateTransform();
+        notifyTransform();
         e.preventDefault();
       } else if (e.touches.length === 2) {
         var dist = Math.hypot(
@@ -553,10 +534,13 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       return;
     }
 
-    // Inline rendering includes touch-only JS gesture handlers (mobile).
-    // Mouse/trackpad gestures are handled at the Flutter level for better
-    // integration with the parent scroll view gesture arena.
-    final html = MermaidRenderWidget._buildInlineMermaidHtml(code);
+    // Inline rendering uses the SAME HTML template as the fullscreen
+    // dialog ([buildMermaidHtml], with full mouse + touch gesture JS).
+    // On desktop the Flutter gesture wrapper intercepts pointer events, so
+    // the JS mouse handlers act as a fallback (e.g. mobile platforms where
+    // the platform view receives events directly). Sharing one template
+    // keeps zoom anchoring and auto-fit behavior identical everywhere.
+    final html = MermaidRenderWidget.buildMermaidHtml(code);
     ctrl.loadData(
       data: html,
       mimeType: 'text/html',
@@ -585,6 +569,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// recognizer claims the pointer event in Flutter's gesture arena,
   /// naturally preventing the parent scroll view from responding while
   /// the user interacts with the Mermaid diagram.
+  ///
+  /// Zoom is anchored at the gesture focal point (finger / cursor) instead
+  /// of the top-left corner: the diagram point under the finger stays fixed
+  /// while zooming.
   void _onScaleUpdate(ScaleUpdateDetails details) {
     final ctrl = _webViewController;
     if (ctrl == null) return;
@@ -597,18 +585,24 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // (details.scale is 1.0 for single-pointer drag, changes for pinch)
     final hasZoom = details.scale != 1.0;
     if (hasZoom) {
-      _zoomLevel = (_gestureStartZoom * details.scale).clamp(0.1, 10.0);
+      final newZoom = (_gestureStartZoom * details.scale).clamp(0.1, 10.0);
+      final renderBox = context.findRenderObject() as RenderBox?;
+      if (renderBox != null && renderBox.hasSize) {
+        final localPos = renderBox.globalToLocal(details.focalPoint);
+        _applyZoomAnchored(
+          newZoom: newZoom,
+          centerX: localPos.dx.clamp(0.0, renderBox.size.width),
+          centerY: localPos.dy.clamp(0.0, renderBox.size.height),
+        );
+      } else {
+        _zoomLevel = newZoom;
+      }
     }
 
     // Batch pan and zoom in a single evaluateJavascript call to avoid
     // multiple expensive platform channel round-trips per gesture frame
-    // and prevent race conditions between separate setPan/setZoom calls.
-    final jsBuf = StringBuffer();
-    jsBuf.write('window.setPan($_panX, $_panY);');
-    if (hasZoom) {
-      jsBuf.write('window.setZoom($_zoomLevel);');
-    }
-    ctrl.evaluateJavascript(source: jsBuf.toString());
+    // and prevent race conditions between separate pan/zoom calls.
+    _syncPanZoomToWebView();
   }
 
   /// Handles mouse wheel zoom with Ctrl/Meta modifier.
@@ -638,10 +632,35 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     final newZoom = (_zoomLevel + delta).clamp(0.1, 10.0);
     if (newZoom != _zoomLevel) {
       _zoomLevel = newZoom;
+      // Anchor in JS at the cursor position: the JS side owns the pan
+      // state here, so no absolute pan is pushed (avoids snap-back).
       _webViewController?.evaluateJavascript(
         source: 'window.setZoom($newZoom, $centerX, $centerY)',
       );
     }
+  }
+
+  /// Applies a new zoom level while keeping the viewport point
+  /// ([centerX], [centerY]) fixed on screen. Mirrors the anchor math of
+  /// the JS `setZoom`: newPan = center - (center - oldPan) * (new / old).
+  void _applyZoomAnchored({
+    required double newZoom,
+    required double centerX,
+    required double centerY,
+  }) {
+    final oldZoom = _zoomLevel;
+    _zoomLevel = newZoom;
+    if (oldZoom <= 0) return;
+    _panX = centerX - (centerX - _panX) * (newZoom / oldZoom);
+    _panY = centerY - (centerY - _panY) * (newZoom / oldZoom);
+  }
+
+  /// Pushes the Flutter-tracked pan/zoom state to the WebView in a single
+  /// evaluateJavascript call.
+  void _syncPanZoomToWebView() {
+    _webViewController?.evaluateJavascript(
+      source: 'window.setPanZoom($_panX, $_panY, $_zoomLevel);',
+    );
   }
 
   /// Wraps the rendered diagram [child] in gesture detectors that provide
@@ -692,12 +711,16 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// Ctrl/MouseWheel zoom on desktop.
   ///
   /// All gestures are communicated to the WebView via [evaluateJavascript]
-  /// calls (see [_onScaleUpdate] and [_onPointerSignal]), so the WebView
-  /// JS handlers are no longer needed for inline rendering — all gesture
-  /// logic is handled at the Flutter level.
+  /// calls (see [_onScaleUpdate], [_onPointerSignal] and
+  /// [_zoomAroundCenter]), so the inline widget owns pan/zoom state and
+  /// sends it to the page via `window.setPanZoom`.
   ///
-  /// Note: The inline HTML template still includes touch gesture JS as a
-  /// fallback; it is not actively used by this gesture wrapper.
+  /// Note: the inline HTML template is the SAME template used by the
+  /// full-screen dialog ([MermaidRenderWidget.buildMermaidHtml], with full
+  /// mouse + touch gesture JS). On desktop the overlay intercepts pointer
+  /// events so the JS mouse handlers stay idle; on mobile platforms where
+  /// the platform view receives events directly, the JS handlers act as a
+  /// fallback. Zoom anchoring and auto-fit behave identically in both.
   Widget _buildGestureWrapper(Widget child) {
     // Shared gesture arena team: when the immediate recognizer wins the arena
     // on first pointer move, the ScaleGestureRecognizer also accepts.
@@ -763,18 +786,33 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   Future<void> _zoomIn() async {
-    final newZoom = (_zoomLevel + 0.1).clamp(0.1, 10.0);
-    setState(() => _zoomLevel = newZoom);
-    await _webViewController?.evaluateJavascript(
-      source: 'window.setZoom($newZoom)',
-    );
+    await _zoomAroundCenter(_zoomLevel + 0.1);
   }
 
   Future<void> _zoomOut() async {
-    final newZoom = (_zoomLevel - 0.1).clamp(0.1, 10.0);
-    setState(() => _zoomLevel = newZoom);
-    await _webViewController?.evaluateJavascript(
-      source: 'window.setZoom($newZoom)',
+    await _zoomAroundCenter(_zoomLevel - 0.1);
+  }
+
+  /// Zooms to [newZoom] anchored at the CENTER of the preview area, so the
+  /// diagram zooms towards the middle instead of the top-left corner.
+  ///
+  /// The center is computed IN JS (`viewport.clientWidth/2`) so the anchor
+  /// is exact in the page's own coordinate space at any display scaling.
+  /// The anchor math runs in JS (`window.setZoom` with a center point),
+  /// which keeps the JS-owned pan state untouched — Flutter never pushes
+  /// its own (possibly stale) pan here.
+  Future<void> _zoomAroundCenter(double newZoom) async {
+    final ctrl = _webViewController;
+    if (ctrl == null) return;
+    final target = newZoom.clamp(0.1, 10.0);
+    if (target == _zoomLevel) return;
+    // Optimistic local update so rapid clicks accumulate; the JS handler
+    // round-trip (onTransformChanged) confirms the same value.
+    _zoomLevel = target;
+    await ctrl.evaluateJavascript(
+      source: 'window.setZoom($target, '
+          "document.getElementById('viewport').clientWidth / 2, "
+          "document.getElementById('viewport').clientHeight / 2)",
     );
   }
 
@@ -918,8 +956,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     if (code.isEmpty) {
       return _emptyPlaceholderHtml;
     }
-    // Inline rendering uses touch-only JS gesture handlers for mobile.
-    return MermaidRenderWidget._buildInlineMermaidHtml(code);
+    // Same shared template as the fullscreen dialog.
+    return MermaidRenderWidget.buildMermaidHtml(code);
   }
 
   @override
@@ -1004,12 +1042,24 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   },
                 );
                 ctrl.addJavaScriptHandler(
-                  handlerName: 'onZoomChanged',
+                  handlerName: 'onTransformChanged',
                   callback: (args) {
-                    if (mounted && args.isNotEmpty) {
-                      final level = double.tryParse(args[0].toString()) ?? 1.0;
-                      setState(() => _zoomLevel = level);
-                    }
+                    // Mirrors the JS-side zoom + pan (set by setZoom,
+                    // fitToViewport, or the JS gesture fallback handlers)
+                    // into Flutter state, so button/wheel anchors and
+                    // gesture bases always continue from the current view
+                    // instead of jumping back to a stale position.
+                    //
+                    // No setState: these values are not read in build();
+                    // the WebView itself reflects the transform visually.
+                    if (!mounted || args.length < 3) return;
+                    final zoom = double.tryParse(args[0].toString());
+                    final px = double.tryParse(args[1].toString());
+                    final py = double.tryParse(args[2].toString());
+                    if (zoom == null || px == null || py == null) return;
+                    _zoomLevel = zoom;
+                    _panX = px;
+                    _panY = py;
                   },
                 );
               },
@@ -1082,15 +1132,19 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   ///
   /// The [effectiveHeight] is passed through so the source code view
   /// uses the same height as the render mode, ensuring visual consistency.
-  /// The "查看图表" toggle button is passed as an action button.
+  ///
+  /// Button order follows the shared toolbar convention: block-specific
+  /// buttons (wrap) on the left, common buttons on the right in the same
+  /// order as the mermaid render toolbar — save before the code/view-chart
+  /// toggle — so muscle memory carries over between views.
   Widget _buildSourceCodeView(
       ColorScheme cs, bool isDark, double? effectiveHeight) {
     return CodeBlockSourceView(
       code: widget.mermaidCode,
       height: effectiveHeight,
       actionButtons: [
-        _buildSrcCodeActionButton(),
         _buildSrcSaveButton(),
+        _buildSrcCodeActionButton(),
       ],
     );
   }
@@ -1102,22 +1156,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: _toggleSourceCode,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
+        child: const Padding(
+          padding: EdgeInsets.symmetric(
             horizontal: 10,
             vertical: 16,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.image, size: 18, semanticLabel: '查看图表'),
-              const SizedBox(width: 4),
-              const Text(
-                '查看图表',
-                style: TextStyle(fontSize: 12),
-              ),
-            ],
-          ),
+          child: Icon(Icons.image, size: 18, semanticLabel: '查看图表'),
         ),
       ),
     );
@@ -1130,22 +1174,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: _saveAsMmd,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
+        child: const Padding(
+          padding: EdgeInsets.symmetric(
             horizontal: 10,
             vertical: 16,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.save, size: 18, semanticLabel: '保存'),
-              const SizedBox(width: 4),
-              const Text(
-                '保存',
-                style: TextStyle(fontSize: 12),
-              ),
-            ],
-          ),
+          child: Icon(Icons.save, size: 18, semanticLabel: '保存'),
         ),
       ),
     );
@@ -1155,6 +1189,16 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   // Button row (top right toolbar)
   // ---------------------------------------------------------------------------
 
+  /// Builds the render-mode toolbar.
+  ///
+  /// Only reachable in render mode ([build] returns the source-code view
+  /// before this when [_showSourceCode] is true).
+  ///
+  /// Button order follows the shared toolbar convention across mermaid
+  /// and code-block toolbars: block-specific buttons (zoom) on the left,
+  /// common buttons (fullscreen, save, code toggle) on the right in the
+  /// same order everywhere — fullscreen → save → code. All buttons are
+  /// pure icons (text-free) so the toolbars stay compact and consistent.
   Widget _buildButtonRow(ColorScheme cs) {
     return ConstrainedBox(
       constraints: const BoxConstraints(
@@ -1169,36 +1213,32 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ---- Zoom controls (only in render mode) ----
-            if (!_showSourceCode) ...[
-              _buildActionButton(
-                icon: Icons.zoom_out,
-                label: '缩小',
-                onTap: _zoomOut,
-              ),
-              _buildActionButton(
-                icon: Icons.zoom_in,
-                label: '放大',
-                onTap: _zoomIn,
-              ),
-              _buildActionButton(
-                icon: Icons.fullscreen,
-                label: '全屏',
-                onTap: _openFullScreen,
-              ),
-            ],
+            // ---- Zoom controls (block-specific, left side) ----
+            _buildActionButton(
+              icon: Icons.zoom_out,
+              label: '缩小',
+              onTap: _zoomOut,
+            ),
+            _buildActionButton(
+              icon: Icons.zoom_in,
+              label: '放大',
+              onTap: _zoomIn,
+            ),
 
-            // ---- Save button ----
+            // ---- Common buttons (right-aligned, fixed order) ----
+            _buildActionButton(
+              icon: Icons.fullscreen,
+              label: '全屏',
+              onTap: _openFullScreen,
+            ),
             _buildActionButton(
               icon: Icons.save,
               label: '保存',
               onTap: _saveAsMmd,
             ),
-
-            // ---- Source code toggle ----
             _buildActionButton(
-              icon: _showSourceCode ? Icons.image : Icons.code,
-              label: _showSourceCode ? '查看图表' : '查看源码',
+              icon: Icons.code,
+              label: '查看源码',
               onTap: _toggleSourceCode,
             ),
           ],
@@ -1222,19 +1262,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             horizontal: 10,
             vertical: 16,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, semanticLabel: label),
-              if (_showSourceCode) ...[
-                const SizedBox(width: 4),
-                Text(
-                  label,
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ],
-            ],
-          ),
+          child: Icon(icon, size: 18, semanticLabel: label),
         ),
       ),
     );

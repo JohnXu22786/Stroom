@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart' show Ref;
 import 'package:flutter_riverpod/legacy.dart'
     show StateProvider, StateProviderFamily;
@@ -75,6 +75,25 @@ class ChatStreamManager {
   // ── 上下文管理常量 ──
   /// 压缩请求的最大输出 token 数。
   static const int _compactionMaxTokens = 4096;
+
+  /// Whether the partial streaming state contains anything worth
+  /// persisting during periodic saves: visible text, any reasoning
+  /// section content (including a reasoning round whose buffer was just
+  /// reset by ReasoningSectionEndEvent), or tool calls.
+  ///
+  /// Pure and testable; used as the single source of truth by both the
+  /// periodic-persist guard and the partial-message builder so they can
+  /// never disagree.
+  @visibleForTesting
+  static bool partialPersistHasContent({
+    required String fullReply,
+    required List<String> reasoningSections,
+    required bool hasAccumulatedToolCalls,
+  }) {
+    return fullReply.isNotEmpty ||
+        reasoningSections.any((s) => s.isNotEmpty) ||
+        hasAccumulatedToolCalls;
+  }
 
   ChatStreamManager([this._ref]);
 
@@ -314,6 +333,16 @@ class ChatStreamManager {
       entriesState: _ref?.read(providerEntriesProvider),
     );
 
+    // ── 对话级计费累计（per-request 事件驱动） ──
+    // 每次请求的完整 usage 数据返回时（流末尾/错误轮的 usage 事件）
+    // **立即**增量累加到对话，而非整次发送攒到流结束一次性提交：
+    // - 重发/重试/编辑只会在累计值上继续增加，绝不重置、不从头重算；
+    // - 每请求提交一次，service 复用/异常清理也不会重复提交（双计）。
+    // 压缩请求先于主请求执行，绑定在同一个 service 上，同样走此回调。
+    snappedChatService?.onUsageEvent = (usage, {required bool recordInput}) {
+      _commitUsage(convId, usage, recordInput: recordInput);
+    };
+
     // ── 上下文管理：摘要注入 + 发送量过滤 + 超限自动压缩 ──
     // 1. 每次请求都注入对话已有的压缩摘要（如有）
     // 2. 发送历史 = 有摘要时从"压缩时记录的尾部起点"起（固定快照，
@@ -483,6 +512,46 @@ class ChatStreamManager {
     _streams.clear();
     _setProvider(streamingConversationsProvider, <String>{});
     _adapter.dispose();
+  }
+
+  /// 把一次请求的 usage 计量**立即**累加到对话（对话级累计）。
+  ///
+  /// 由 ChatService.onUsageEvent 回调触发：每次请求的完整 usage 数据
+  /// 返回时增量提交（Conversation.totalCost += costIncrement），
+  /// 绝不从头重算。重发/重试/编辑只会继续累加，不会重置。
+  ///
+  /// [recordInput] 为 false 时只累计 cost（压缩/标题等内部任务请求的
+  /// 输入 ≈ 头部大小/仅一条消息，写入 lastInputTokens 会污染"当前
+  /// 上下文大小"：压缩触发判断膨胀、状态行显示虚高）。
+  ///
+  /// 取消语义：usage 事件在请求正常结束以及错误/取消路径（provider
+  /// 已收集到部分计量时也会先产出事件再上抛）都会产出，这里一律按
+  /// API 返回的原值提交——cost 是已发生的事实，必须保留累计；tokens
+  /// 若因截断而偏小，lastInputTokens 是"最近一次请求"的语义，压缩
+  /// 触发另有 max(实际, 估算) 兜底，不会因偏小值漏压缩。
+  ///
+  /// fire-and-forget（不 await）：幂等的增量累加 + 防抖持久化，
+  /// 多请求并发提交安全。
+  void _commitUsage(String convId, Map<String, dynamic> usage,
+      {required bool recordInput}) {
+    final ref = _ref;
+    if (ref == null) return;
+    try {
+      final inputTokens = usage['inputTokens'] as int?;
+      final outputTokens = usage['outputTokens'] as int?;
+      final cost = usage['cost'] as double? ?? 0;
+      final hasMetering =
+          recordInput && (inputTokens != null || outputTokens != null);
+      if (!hasMetering && cost <= 0) return;
+      unawaited(ref.read(conversationsProvider.notifier).updateUsage(
+            conversationId: convId,
+            inputTokens: recordInput ? inputTokens : null,
+            outputTokens: recordInput ? outputTokens : null,
+            costIncrement: cost,
+          ));
+    } catch (e) {
+      debugPrint('[ChatStreamManager] usage 计量更新失败: $e');
+    }
   }
 
   // ── 上下文压缩（compaction） ────────────────────────────────────

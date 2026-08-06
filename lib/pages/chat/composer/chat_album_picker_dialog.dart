@@ -43,6 +43,11 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   // 多选状态: key = recordId, value = (fileName, bytes)
   final Map<String, MapEntry<String, Uint8List>> _selectedItems = {};
 
+  /// Number of quick image edits still processing in the background.
+  /// While non-zero, confirming is blocked — the selection still holds
+  /// the unedited bytes until the edit callback applies them.
+  int _editsInFlight = 0;
+
   /// Track temp file paths created during edit for cleanup on dialog close.
   final List<String> _tempEditFiles = [];
 
@@ -231,13 +236,27 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 ),
                 child: FilledButton.icon(
                   key: const Key('album_picker_confirm_btn'),
-                  onPressed: () {
-                    final result = _selectedItems.values.toList();
-                    Navigator.of(context).pop(result);
-                  },
-                  icon: const Icon(Icons.check, size: 18),
-                  label: Text(
-                      hasSelection ? '确定 (${_selectedItems.length})' : '确定'),
+                  onPressed: _editsInFlight > 0
+                      ? null
+                      : () {
+                          final result = _selectedItems.values.toList();
+                          Navigator.of(context).pop(result);
+                        },
+                  icon: _editsInFlight > 0
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.check, size: 18),
+                  label: Text(_editsInFlight > 0
+                      ? '处理中...'
+                      : hasSelection
+                          ? '确定 (${_selectedItems.length})'
+                          : '确定'),
                 ),
               ),
             ),
@@ -525,35 +544,76 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
 
     if (shouldEdit != true || !mounted) return;
 
-    // User tapped edit — open quick editor
-    final editedBytes = await Navigator.push<Uint8List>(
+    // Another edit is still processing — starting a second one could
+    // silently discard the newer edit (both pipelines resolve against
+    // the same original bytes). Ask the user to wait.
+    if (_editsInFlight > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('图片处理中，请稍候再编辑'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    // User tapped edit — open quick editor. The editor pops immediately
+    // and processes in the background; the selection is updated from the
+    // callback once the edited bytes are ready.
+    final confirmed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => ExtendedImageEditorPage(
           imageBytes: imageBytes,
           fileName: fileName,
+          onProcessed: (result) async {
+            try {
+              if (result is! QuickEditProcessingSuccess) return;
+              final editedBytes = result.editedBytes;
+              if (!mounted) return;
+
+              // Save edited bytes to temp cache directory instead of
+              // overwriting original
+              try {
+                final tempDir = await getTemporaryDirectory();
+                final tempFileName =
+                    'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+                final tempFile = File('${tempDir.path}/$tempFileName');
+                await tempFile.writeAsBytes(editedBytes);
+                _tempEditFiles.add(tempFile.path);
+              } catch (_) {
+                // Temp file save is best-effort; we keep the bytes in
+                // memory
+              }
+
+              // The dialog is interactive while the editor processes in
+              // the background — it may have been dismissed, or the item
+              // removed (and possibly re-added) since the edit started.
+              // Only apply the edit if it is still the same entry.
+              if (!mounted) return;
+              final current = _selectedItems[recordKey];
+              if (current == null || !identical(current.value, imageBytes)) {
+                return;
+              }
+
+              // Update the selected item in-memory with edited bytes
+              setState(() {
+                _selectedItems[recordKey] = MapEntry(fileName, editedBytes);
+              });
+            } finally {
+              // The pipeline always fires the callback (success or
+              // failure) — release the confirm-blocking guard here.
+              if (mounted) setState(() => _editsInFlight--);
+            }
+          },
         ),
       ),
     );
-
-    if (editedBytes == null || !mounted) return;
-
-    // Save edited bytes to temp cache directory instead of overwriting original
-    try {
-      final tempDir = await getTemporaryDirectory();
-      final tempFileName =
-          'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
-      final tempFile = File('${tempDir.path}/$tempFileName');
-      await tempFile.writeAsBytes(editedBytes);
-      _tempEditFiles.add(tempFile.path);
-    } catch (_) {
-      // Temp file save is best-effort; we keep the bytes in memory
+    if (confirmed == true && mounted) {
+      // The pipeline is now running — hold the confirm button until the
+      // callback releases it.
+      setState(() => _editsInFlight++);
     }
-
-    // Update the selected item in-memory with edited bytes
-    setState(() {
-      _selectedItems[recordKey] = MapEntry(fileName, editedBytes);
-    });
   }
 
   String _formatSize(int bytes) {
