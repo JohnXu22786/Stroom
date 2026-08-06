@@ -73,9 +73,7 @@ void main() {
   /// SingleChildScrollView). SelectableText lines contain inner scrollables,
   /// so the outermost one (first in tree order) is the page scrollable.
   ScrollPosition currentPosition(WidgetTester tester) =>
-      tester
-          .state<ScrollableState>(find.byType(Scrollable).first)
-          .position;
+      tester.state<ScrollableState>(find.byType(Scrollable).first).position;
 
   /// A point inside the view's left padding strip, where a drag reliably
   /// reaches the scrollable — dragging on a SelectableText row would hand
@@ -94,8 +92,7 @@ void main() {
   }
 
   group('LogContentPage — auto-scroll behavior', () {
-    testWidgets('structured view scrolls to bottom on entry',
-        (tester) async {
+    testWidgets('structured view scrolls to bottom on entry', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: LogContentPage(
@@ -155,8 +152,8 @@ void main() {
       expect(position.pixels, lessThan(position.maxScrollExtent - 2000),
           reason: 'switching modes must not scroll to the bottom — only '
               'the initial page entry may auto-scroll');
-      final expectedProportional = structuredOffset / bottomOffset *
-          position.maxScrollExtent;
+      final expectedProportional =
+          structuredOffset / bottomOffset * position.maxScrollExtent;
       expect(
         (position.pixels - expectedProportional).abs(),
         lessThan(300),
@@ -272,8 +269,7 @@ void main() {
 
       final scrollView = tester
           .widget<SingleChildScrollView>(find.byType(SingleChildScrollView));
-      final padding =
-          scrollView.padding!.resolve(TextDirection.ltr);
+      final padding = scrollView.padding!.resolve(TextDirection.ltr);
       expect(padding.left, greaterThanOrEqualTo(20),
           reason: 'plain text mode needs roomy left edge whitespace');
       expect(padding.right, greaterThanOrEqualTo(20),
@@ -319,8 +315,7 @@ void main() {
       SelectableText firstVisibleLevelLine(String level) => tester.widget(
             find
                 .byWidgetPredicate((w) =>
-                    w is SelectableText &&
-                    w.data?.contains('[$level]') == true)
+                    w is SelectableText && w.data?.contains('[$level]') == true)
                 .first,
           );
       expect(firstVisibleLevelLine('ERROR').style?.color, Colors.red);
@@ -346,7 +341,8 @@ void main() {
       expect(find.text('共 500 行'), findsOneWidget);
     });
 
-    testWidgets('line count handles empty content and missing trailing '
+    testWidgets(
+        'line count handles empty content and missing trailing '
         'newline', (tester) async {
       // Empty content: 0 lines.
       await tester.pumpWidget(
@@ -357,8 +353,7 @@ void main() {
       expect(find.text('共 0 行'), findsOneWidget);
     });
 
-    testWidgets('line count without trailing newline is exact',
-        (tester) async {
+    testWidgets('line count without trailing newline is exact', (tester) async {
       // No trailing newline: 'a\nb' is exactly 2 lines.
       await tester.pumpWidget(
         MaterialApp(

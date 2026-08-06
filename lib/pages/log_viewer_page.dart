@@ -470,8 +470,7 @@ class _LogContentPageState extends State<LogContentPage> {
   /// 停留在同一段日志上（而不是跳到文件头或文件尾）。
   void _toggleView() {
     final wasRaw = _showRaw;
-    final current =
-        wasRaw ? _rawScrollController : _structuredScrollController;
+    final current = wasRaw ? _rawScrollController : _structuredScrollController;
 
     // 当前视图的阅读比例，用于另一个视图首次显示时映射位置。
     double? leavingFraction;
@@ -593,8 +592,7 @@ class _LogContentPageState extends State<LogContentPage> {
           ),
         ],
       ),
-      body:
-          _showRaw ? _buildRawView(theme) : _buildStructuredView(theme),
+      body: _showRaw ? _buildRawView(theme) : _buildStructuredView(theme),
     );
   }
 
