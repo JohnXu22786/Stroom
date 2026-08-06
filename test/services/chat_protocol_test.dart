@@ -1,4 +1,9 @@
+import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/services/chat_protocol.dart';
@@ -517,6 +522,304 @@ void main() {
       expect(createChatProtocol('anthropic'), isA<AnthropicProtocol>());
       expect(createChatProtocol('openai'), isA<OpenAIProtocol>());
       expect(createChatProtocol('unknown'), isA<OpenAIProtocol>());
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════
+  // readAttachmentBase64 —— 超限图片自动压缩（用户已选择就必须发送）
+  // ═════════════════════════════════════════════════════════════════════
+  group('readAttachmentBase64 图片超限自动压缩', () {
+    /// 照片风格大 PNG 夹具（约 3.6MB），全组共享只生成一次。
+    late Uint8List bigPng;
+
+    setUpAll(() {
+      final rng = Random(7);
+      final im = img.Image(width: 1600, height: 1200, numChannels: 3);
+      for (final p in im) {
+        final dx = p.x - 800;
+        final dy = p.y - 600;
+        final d = (dx * dx + dy * dy) / (1600 * 1200);
+        p
+          ..r = (128 + 50 * (d % 1) + rng.nextInt(18)).round().clamp(0, 255)
+          ..g =
+              (100 + 80 * (p.x / 1600) + rng.nextInt(18)).round().clamp(0, 255)
+          ..b =
+              (150 + 60 * (p.y / 1200) + rng.nextInt(18)).round().clamp(0, 255);
+      }
+      bigPng = img.encodePng(im, level: 6);
+    });
+
+    test('超限图片压缩后返回 ok，且带格式覆盖（PNG→JPEG）', () async {
+      expect(bigPng.length, greaterThan(2 * 1024 * 1024),
+          reason: '夹具 PNG 应显著大于测试上限');
+      const maxBytes = 1024 * 1024;
+      final att = Attachment(
+        fileName: 'photo.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'h',
+        storagePath: 'attachments/h_photo.png',
+        fileSize: bigPng.length,
+      )..base64Data = base64Encode(bigPng);
+
+      final outcome = await readAttachmentBase64(att, maxBytes: maxBytes);
+
+      expect(outcome.status, AttachmentReadStatus.ok);
+      expect(outcome.base64, isNotNull);
+      final payload = base64Decode(outcome.base64!);
+      expect(payload.length, lessThan(maxBytes));
+      expect(payload.length, lessThan(bigPng.length));
+      // PNG 无损重编码无法达标 → 降级 JPEG，必须告知协议层格式已变
+      expect(outcome.mimeType, 'image/jpeg');
+      expect(img.decodeImage(payload), isNotNull);
+    });
+
+    test('未超限图片原样返回（字节不变，格式按魔数检测）', () async {
+      final tinyPng = img.encodePng(
+        img.Image(width: 8, height: 8, numChannels: 3),
+      );
+      final b64 = base64Encode(tinyPng);
+      final att = Attachment(
+        fileName: 'small.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'h',
+        storagePath: 'attachments/h_small.png',
+        fileSize: tinyPng.length,
+      )..base64Data = b64;
+
+      final outcome = await readAttachmentBase64(att);
+
+      expect(outcome.status, AttachmentReadStatus.ok);
+      expect(outcome.base64, b64, reason: '阈值以内的图片字节必须原样保留');
+      expect(outcome.mimeType, 'image/png', reason: '载荷格式按魔数检测（与声明一致时结果相同）');
+    });
+    test('超限非图片（音频）仍返回 tooLarge（不读盘）', () async {
+      final fakeAudio = Uint8List.fromList(List.filled(11 * 1024 * 1024, 0x55));
+      final att = Attachment(
+        fileName: 'big.wav',
+        mimeType: 'audio/wav',
+        fileType: 'audio',
+        hash: 'h',
+        storagePath: 'attachments/h_big.wav',
+        fileSize: fakeAudio.length,
+      )..base64Data = base64Encode(fakeAudio);
+
+      final outcome = await readAttachmentBase64(att);
+
+      expect(outcome.status, AttachmentReadStatus.tooLarge);
+      expect(outcome.base64, isNull);
+    });
+
+    test('超限但无法解码的图片返回 tooLarge（发送必然失败，不发垃圾载荷）', () async {
+      // 可解码但压缩无收益的图片才"必须发送"；无法解码（如 HEIC/损坏
+      // 文件）的图片即使发送 API 也无法读取 → 保持跳过占位。
+      final garbage = Uint8List.fromList(List.filled(11 * 1024 * 1024, 0xAB));
+      final att = Attachment(
+        fileName: 'broken.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'h',
+        storagePath: 'attachments/h_broken.png',
+        fileSize: garbage.length,
+      )..base64Data = base64Encode(garbage);
+
+      final outcome = await readAttachmentBase64(att);
+
+      expect(outcome.status, AttachmentReadStatus.tooLarge);
+      expect(outcome.base64, isNull);
+    });
+
+    test('2~10MB 之间的图片在默认通用阈值下也会被压缩（所有图片都压缩）', () async {
+      // 回归：旧行为只压缩 >10MB 的图片，3.6MB 的照片原样 base64
+      // （约 4.8MB）发送，多张图 + 多轮历史重发很容易顶爆
+      // Anthropic 32MB / Gemini 20MB 的请求体上限。
+      // 现在默认阈值 2MB：3.6MB 的图压缩到 2MB 以内。
+      final att = Attachment(
+        fileName: 'photo.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'h',
+        storagePath: 'attachments/h_photo.png',
+        fileSize: bigPng.length,
+      )..base64Data = base64Encode(bigPng);
+
+      final outcome = await readAttachmentBase64(att); // 默认 maxBytes=2MB
+
+      expect(outcome.status, AttachmentReadStatus.ok);
+      expect(outcome.base64, isNotNull);
+      final payload = base64Decode(outcome.base64!);
+      expect(payload.length, lessThanOrEqualTo(2 * 1024 * 1024),
+          reason: '超过通用阈值的图片必须压缩到阈值以内');
+      expect(payload.length, lessThan(bigPng.length));
+      expect(outcome.mimeType, 'image/jpeg');
+      expect(img.decodeImage(payload), isNotNull);
+    });
+
+    test('低于 2MB 通用阈值的图片原样保留（真正无损，零开销）', () async {
+      final rng = Random(21);
+      final im = img.Image(width: 1024, height: 768, numChannels: 3);
+      for (final p in im) {
+        final dx = p.x - 512;
+        final dy = p.y - 384;
+        final d = (dx * dx + dy * dy) / (1024 * 768);
+        p
+          ..r = (128 + 50 * (d % 1) + rng.nextInt(14)).round().clamp(0, 255)
+          ..g =
+              (100 + 80 * (p.x / 1024) + rng.nextInt(14)).round().clamp(0, 255)
+          ..b =
+              (150 + 60 * (p.y / 768) + rng.nextInt(14)).round().clamp(0, 255);
+      }
+      final midPng = img.encodePng(im, level: 6);
+      expect(midPng.length, lessThan(2 * 1024 * 1024));
+      expect(midPng.length, greaterThan(512 * 1024),
+          reason: '夹具应处于 0.5~2MB 之间才有区分度');
+      final b64 = base64Encode(midPng);
+      final att = Attachment(
+        fileName: 'mid.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'h',
+        storagePath: 'attachments/h_mid.png',
+        fileSize: midPng.length,
+      )..base64Data = b64;
+      final outcome = await readAttachmentBase64(att);
+
+      expect(outcome.status, AttachmentReadStatus.ok);
+      expect(outcome.base64, b64, reason: '阈值以内的图片必须字节原样保留（无损优先）');
+      expect(outcome.mimeType, 'image/png', reason: '载荷格式按魔数检测');
+    });
+
+    test('压缩结果缓存复用（下一轮发送）时格式覆盖不丢失', () async {
+      // 回归：第一轮把 PNG 压缩成 JPEG 并回写缓存后，第二轮命中缓存
+      // （压缩后载荷 ≤ 阈值，不再压缩）——若格式覆盖在此路径丢失，
+      // JPEG 载荷会被声明成 image/png，Anthropic 会整条 400。
+      final att = Attachment(
+        fileName: 'photo.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'h',
+        storagePath: 'attachments/h_photo.png',
+        fileSize: bigPng.length,
+      )..base64Data = base64Encode(bigPng);
+
+      final first = await readAttachmentBase64(att);
+      expect(first.status, AttachmentReadStatus.ok);
+      expect(first.mimeType, 'image/jpeg');
+      final firstPayload = base64Decode(first.base64!);
+      expect(firstPayload.length, lessThanOrEqualTo(2 * 1024 * 1024));
+
+      // 第二轮：命中缓存，载荷不变
+      final second = await readAttachmentBase64(att);
+      expect(second.status, AttachmentReadStatus.ok);
+      expect(second.base64, first.base64, reason: '缓存应直接复用压缩结果');
+      final secondPayload = base64Decode(second.base64!);
+      expect(secondPayload[0], 0xFF);
+      expect(secondPayload[1], 0xD8, reason: '载荷仍是 JPEG');
+      expect(second.mimeType, 'image/jpeg',
+          reason: '缓存复用路径不得丢失格式覆盖（否则 Anthropic 整条 400）');
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════
+  // 协议层：超限图片必须作为图片发送，而不是占位文本
+  // ═════════════════════════════════════════════════════════════════════
+  group('协议层超限图片自动压缩发送', () {
+    test('OpenAI 协议：>10MB 图片压缩后以 image_url 发送', () async {
+      // 2800x2100 照片风格 PNG ≈ 11MB，超过 10MB 上限
+      final rng = Random(11);
+      final im = img.Image(width: 2800, height: 2100, numChannels: 3);
+      for (final p in im) {
+        final dx = p.x - 1400;
+        final dy = p.y - 1050;
+        final d = (dx * dx + dy * dy) / (2800 * 2100);
+        p
+          ..r = (128 + 50 * (d % 1) + rng.nextInt(18)).round().clamp(0, 255)
+          ..g =
+              (100 + 80 * (p.x / 2800) + rng.nextInt(18)).round().clamp(0, 255)
+          ..b =
+              (150 + 60 * (p.y / 2100) + rng.nextInt(18)).round().clamp(0, 255);
+      }
+      final hugePng = img.encodePng(im, level: 6);
+      expect(hugePng.length, greaterThan(10 * 1024 * 1024),
+          reason: '夹具必须超过 10MB 上限才能触发压缩');
+
+      final att = Attachment(
+        fileName: 'huge_photo.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'huge',
+        storagePath: 'attachments/huge_photo.png',
+        fileSize: hugePng.length,
+      )..base64Data = base64Encode(hugePng);
+
+      final req = await OpenAIProtocol().buildRequest(
+        history: [
+          ChatMessage(
+            role: 'user',
+            content: '看这张图',
+            attachments: [att],
+          ),
+        ],
+      );
+      final content = req.messages[0]['content'] as List;
+      expect(content, hasLength(2));
+      expect(content[0], {'type': 'text', 'text': '看这张图'});
+      final part = content[1] as Map;
+      expect(part['type'], 'image_url',
+          reason: '超限图片必须发送，不能退化为“[图片过大已跳过]”占位文本');
+      final url = ((part['image_url'] as Map)['url'] as String);
+      expect(url.startsWith('data:image/jpeg;base64,'), isTrue,
+          reason: '压缩后格式为 JPEG，data URI 必须声明新格式');
+      final payload =
+          base64Decode(url.substring('data:image/jpeg;base64,'.length));
+      expect(payload.length, lessThan(10 * 1024 * 1024));
+      expect(payload.length, lessThan(hugePng.length));
+    });
+
+    test('Anthropic 协议：超限图片压缩后 media_type 与内容一致', () async {
+      final rng = Random(13);
+      final im = img.Image(width: 2800, height: 2100, numChannels: 3);
+      for (final p in im) {
+        final dx = p.x - 1400;
+        final dy = p.y - 1050;
+        final d = (dx * dx + dy * dy) / (2800 * 2100);
+        p
+          ..r = (128 + 50 * (d % 1) + rng.nextInt(18)).round().clamp(0, 255)
+          ..g =
+              (100 + 80 * (p.x / 2800) + rng.nextInt(18)).round().clamp(0, 255)
+          ..b =
+              (150 + 60 * (p.y / 2100) + rng.nextInt(18)).round().clamp(0, 255);
+      }
+      final hugePng = img.encodePng(im, level: 6);
+      expect(hugePng.length, greaterThan(10 * 1024 * 1024));
+
+      final att = Attachment(
+        fileName: 'huge_photo.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'huge',
+        storagePath: 'attachments/huge_photo.png',
+        fileSize: hugePng.length,
+      )..base64Data = base64Encode(hugePng);
+
+      final req = await AnthropicProtocol().buildRequest(
+        history: [
+          ChatMessage(
+            role: 'user',
+            content: '看这张图',
+            attachments: [att],
+          ),
+        ],
+      );
+      final content = req.messages[0]['content'] as List;
+      final imagePart =
+          content.cast<Map>().firstWhere((p) => p['type'] == 'image');
+      final source = imagePart['source'] as Map;
+      expect(source['media_type'], 'image/jpeg',
+          reason: 'PNG→JPEG 压缩后 media_type 必须与真实内容一致');
+      final payload = base64Decode(source['data'] as String);
+      expect(payload.length, lessThan(10 * 1024 * 1024));
     });
   });
 }

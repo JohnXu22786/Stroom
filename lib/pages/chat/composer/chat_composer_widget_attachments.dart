@@ -234,8 +234,14 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   void _removePendingAttachment(int index) {
     final att = _pendingAttachments[index];
     _pendingImageBytes.remove(att.id);
-    // Clean up temp file if it exists
-    if (att.storagePath.startsWith('temp_edited/')) {
+    // 清理编辑产物文件：仅限普通模式（pending 中未被任何消息引用）。
+    // 编辑模式：附件仍被原消息引用（取消编辑后气泡仍需加载），
+    // 删除会让原消息附件悬空。已提交编辑时被移除的文件成为孤儿，
+    // 由删除整个对话时的附件清理兜底（见 conversations 删除逻辑）；
+    // 若后续删除引用它的消息，_deleteMessage 的 isReferencedElsewhere
+    // 检查会一并清理。
+    if (widget.editingMessageId == null &&
+        att.storagePath.startsWith('temp_edited/')) {
       _deleteTempFile(att.storagePath);
     }
     setState(() {
@@ -243,15 +249,10 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     });
   }
 
-  /// Delete a temp file from the cache directory.
+  /// Delete a temp-edited file from the attachment storage.
   Future<void> _deleteTempFile(String tempStoragePath) async {
     try {
-      final tempDir = await getTemporaryDirectory();
-      final name = tempStoragePath.replaceFirst('temp_edited/', '');
-      final file = File('${tempDir.path}/$name');
-      if (await file.exists()) {
-        await file.delete();
-      }
+      await AttachmentStorage.deleteFile(tempStoragePath);
     } catch (_) {
       // Non-critical cleanup
     }
@@ -352,7 +353,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   }
 
   /// Updates the pending attachment at [index] with [editedBytes].
-  /// Saves the edited file to temp cache (does NOT overwrite the original).
+  /// Saves the edited file into the attachment storage with a
+  /// `temp_edited/` marker (does NOT overwrite the original).
   /// Updates both [_pendingAttachments] and [_pendingImageBytes].
   Future<void> _updatePendingAttachmentAfterEdit(
     int index,
@@ -366,15 +368,15 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     final oldAtt = _pendingAttachments[index];
 
     try {
-      // Save edited file to temp cache directory instead of permanent storage
-      final tempDir = await getTemporaryDirectory();
-      final tempFileName =
-          'edited_${DateTime.now().millisecondsSinceEpoch}_${oldAtt.fileName}';
-      final tempFile = File('${tempDir.path}/$tempFileName');
-      await tempFile.writeAsBytes(editedBytes);
-
-      // Track as a temp-edited file
-      final tempStoragePath = 'temp_edited/$tempFileName';
+      // 编辑后的文件存入附件存储目录（与未编辑附件同一位置），
+      // storagePath 保留 temp_edited/ 标记，供移除/清理逻辑识别。
+      // 修复前：文件被写入系统临时目录但 storagePath 记为
+      // temp_edited/xxx —— AttachmentStorage.readFile 解析到附件目录，
+      // 文件不存在 → 发送后的消息气泡显示“无法加载文件”。
+      final tempStoragePath = await AttachmentStorage.saveEditedFile(
+        oldAtt.fileName,
+        editedBytes,
+      );
       final newHash = AttachmentStorage.computeHash(editedBytes);
       final newBase64 = base64Encode(editedBytes);
 
@@ -383,6 +385,10 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         hash: newHash,
         storagePath: tempStoragePath,
         fileSize: editedBytes.length,
+        // 编辑输出格式可能与源不同（编辑器对 JPEG 源输出 JPEG，
+        // 其余源输出 PNG）：mimeType 必须与真实内容一致，否则
+        // data URI / media_type 声明与实际载荷不符。
+        mimeType: _detectEditedImageMimeType(editedBytes, oldAtt.mimeType),
         base64Data: newBase64,
       );
 
@@ -397,22 +403,20 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         return;
       }
 
-      // Clean up old temp file if it was also a temp edit
-      if (oldAtt.storagePath.startsWith('temp_edited/')) {
-        _deleteTempFile(oldAtt.storagePath);
-      } else if (widget.editingMessageId == null) {
-        // 普通模式：新选附件编辑后，旧永久文件不再被任何消息引用
-        // （仅存在于 _pendingAttachments），清理孤儿文件。
-        try {
-          await AttachmentStorage.deleteFile(oldAtt.storagePath);
-        } catch (_) {
-          // Non-fatal cleanup
+      // 清理旧文件：仅限普通模式（pending 中未被任何消息引用）。
+      // 编辑模式：旧附件可能仍被原消息引用（取消编辑后气泡仍需加载），
+      // 删除会让附件悬空；已提交编辑时被替换的文件成为孤儿，由删除
+      // 整个对话时的附件清理兜底。
+      if (widget.editingMessageId == null) {
+        if (oldAtt.storagePath.startsWith('temp_edited/')) {
+          await _deleteTempFile(oldAtt.storagePath);
+        } else {
+          try {
+            await AttachmentStorage.deleteFile(oldAtt.storagePath);
+          } catch (_) {
+            // Non-fatal cleanup
+          }
         }
-      } else {
-        // 编辑模式：附件可能引用原消息的永久文件，**不删除**——
-        // 删除会让原消息附件悬空（取消编辑后气泡加载失败）。
-        // 孤儿文件由 _deleteMessage 的 isReferencedElsewhere 检查
-        // 在真正删除消息时清理。
       }
 
       // Re-validate after the delete await — the list may have changed
@@ -438,5 +442,21 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         );
       }
     }
+  }
+
+  /// 根据编辑后的实际字节推断 mimeType（PNG/JPEG 魔数），
+  /// 无法识别时保留原 mimeType。
+  String _detectEditedImageMimeType(Uint8List bytes, String fallback) {
+    if (bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return 'image/png';
+    }
+    if (bytes.length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8) {
+      return 'image/jpeg';
+    }
+    return fallback;
   }
 }
