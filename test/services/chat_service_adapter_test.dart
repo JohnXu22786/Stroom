@@ -911,6 +911,61 @@ void main() {
     });
 
     test(
+        'initializeMcpServers with an empty entries state does not prevent '
+        'later discovery with the real state', () async {
+      // Simulates _initialize running before ProviderEntriesNotifier.load()
+      // completes (the snapshot is empty), then the provider-change listener
+      // re-initializing with the loaded state. The empty-state call must not
+      // record a hash that blocks the later real-state discovery.
+      await adapter
+          .initializeMcpServers(const ProviderEntriesState(entries: []));
+      expect(adapter.mcpToolDefinitions, isEmpty);
+
+      await adapter.initializeMcpServers(_vendorState());
+      expect(adapter.mcpToolDefinitions, isNotEmpty,
+          reason: 'MCP tools must be discovered once the real entries state '
+              'arrives, even if an earlier call saw empty entries');
+    });
+
+    test(
+        'initializeMcpServers re-discovers tools after the cache is cleared '
+        '(hash match must not skip an empty cache)', () async {
+      final state = _vendorState();
+      await adapter.initializeMcpServers(state);
+      expect(adapter.mcpToolDefinitions, isNotEmpty,
+          reason: 'sanity: discovery populates the cache');
+
+      // Simulate the cache being cleared (e.g. disposeMcp) while the entries
+      // state hash stays unchanged — re-init must re-discover, not
+      // early-return with an empty tool list (the "sometimes only built-in
+      // tools show" bug).
+      adapter.disposeMcp();
+      expect(adapter.mcpToolDefinitions, isEmpty);
+
+      await adapter.initializeMcpServers(state);
+      expect(adapter.mcpToolDefinitions, isNotEmpty,
+          reason: 'an unchanged config hash must not skip discovery when the '
+              'cached tool list is empty');
+    });
+
+    test(
+        'concurrent initializeMcpServers calls with the same state are '
+        'serialized and both complete with tools', () async {
+      // Simulates page _initialize and the provider-change listener firing
+      // at the same time with the same entries state. Without the in-flight
+      // guard, the second call's addClient would dispose the first call's
+      // client mid-request and lose its tools.
+      final state = _vendorState();
+      final results = await Future.wait([
+        adapter.initializeMcpServers(state),
+        adapter.initializeMcpServers(state),
+      ]);
+      expect(results, hasLength(2));
+      expect(adapter.mcpToolDefinitions, isNotEmpty,
+          reason: 'concurrent same-state init must not lose discovered tools');
+    });
+
+    test(
         'initializeBuiltinTools can be called repeatedly without side effects'
         '(simulates repeated provider change listener firing)', () {
       // First call with empty state (simulating load not yet completed)
@@ -1342,4 +1397,38 @@ void main() {
               'should NOT be auto-enabled — they must be explicitly toggled.');
     });
   });
+}
+
+/// Builds a provider entries state containing a single vendor SSE MCP config
+/// (Exa) whose server is unreachable — used to exercise MCP discovery paths
+/// without real network dependencies.
+ProviderEntriesState _vendorState() {
+  return ProviderEntriesState(
+    entries: [
+      ProviderEntry(
+        id: 'test_mcp',
+        type: 'mcp',
+        name: 'MCP供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: 'Exa',
+            host: 'https://mcp.example.com/mcp',
+            key: '',
+            models: [
+              ModelConfig(
+                name: 'Exa',
+                modelId: 'sse',
+                typeConfig: {
+                  'transport': 'sse',
+                  'url': 'https://mcp.example.com/mcp',
+                  'isVendor': true,
+                  'description': 'Exa MCP search tool',
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  );
 }

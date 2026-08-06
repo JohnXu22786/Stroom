@@ -208,12 +208,18 @@ extension _ChatPageListenersExt on _ChatPageState {
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           if (!mounted) return;
           _configureAdapter();
-          // Re-initialize built-in and MCP tools with the updated provider data.
-          // This is safe to call multiple times — initializeMcpServers disposes
-          // old clients before creating new ones.
+          // Re-initialize built-in and MCP tools with the updated provider
+          // data. initializeMcpServers serializes concurrent calls (joins an
+          // in-flight discovery) and only re-discovers when the config
+          // actually changed, so this is safe to call repeatedly.
           final entriesState = ref.read(providerEntriesProvider);
           _adapter.initializeBuiltinTools(entriesState);
           await _adapter.initializeMcpServers(entriesState);
+          // MCP tools discovered on this late path (load() completed after the
+          // initial _initialize snapshot) must be auto-enabled for
+          // conversations without explicit prefs — same as the _initialize
+          // path — so the tool badge/list shows the full count.
+          if (mounted) _resolveEnabledToolsForActiveConversation();
           if (mounted) setState(() {});
           // _configureAdapter resets the adapter to model 0. Restore the
           // saved model selection so the adapter and reasoning params
