@@ -511,8 +511,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
         ? Set<String>.from(conv.enabledMcpToolNames)
         : <String>{};
     final hasExplicitPrefs = conv?.hasExplicitEnabledMcpTools ?? false;
-    ref.read(enabledToolNamesProvider.notifier).state =
-        resolveEnabledToolNames(
+    ref.read(enabledToolNamesProvider.notifier).state = resolveEnabledToolNames(
       allTools: _adapter.getAllToolDefinitions(),
       savedEnabledNames: convEnabled,
       hasExplicitSavedPrefs: hasExplicitPrefs,

@@ -61,7 +61,6 @@ extension ChatAdapterMcpExt on ChatAdapter {
   }
 
   Future<void> _discoverMcpTools(ProviderEntriesState entriesState) async {
-
     final mcpEntry =
         entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
     if (mcpEntry == null || mcpEntry.configs.isEmpty) return;

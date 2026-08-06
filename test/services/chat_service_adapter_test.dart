@@ -917,7 +917,8 @@ void main() {
       // completes (the snapshot is empty), then the provider-change listener
       // re-initializing with the loaded state. The empty-state call must not
       // record a hash that blocks the later real-state discovery.
-      await adapter.initializeMcpServers(const ProviderEntriesState(entries: []));
+      await adapter
+          .initializeMcpServers(const ProviderEntriesState(entries: []));
       expect(adapter.mcpToolDefinitions, isEmpty);
 
       await adapter.initializeMcpServers(_vendorState());
