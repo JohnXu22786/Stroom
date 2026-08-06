@@ -34,6 +34,7 @@ import 'message_search_page.dart';
 import 'provider_config_page.dart';
 
 import 'chat/chat_types.dart';
+import 'chat/chat_initial_scroll.dart';
 
 export 'chat/utils/format_chat_error.dart' show formatChatErrorMessage;
 import 'chat/widgets/action_button.dart';
@@ -163,6 +164,31 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// change, so [didChangeMetrics] can detect show/hide transitions.
   bool _wasKeyboardVisible = false;
 
+  /// Whether the chat list is currently being positioned so the top of the
+  /// last user message is at the top of the viewport after a conversation
+  /// load. While true, the message list is hidden (offstage) so the
+  /// positioning pass is never visible to the user.
+  bool _pendingInitialScrollAdjustment = false;
+
+  /// ID of the conversation whose messages are currently shown in
+  /// [_history]. Used to distinguish entry/conversation switches (which
+  /// reposition to the last user message) from same-conversation reloads
+  /// (which keep the built-in jump-to-bottom behavior).
+  String? _loadedConversationId;
+
+  /// Frame counter for the initial positioning pass — guards against
+  /// pathological layouts looping forever.
+  int _initialAdjustStepsTaken = 0;
+
+  /// Whether the next frame of the initial positioning pass is already
+  /// scheduled, so the pass advances at most one step per frame.
+  bool _initialAdjustStepScheduled = false;
+
+  /// Consecutive frames the pass has been chasing a growing bottom
+  /// (maxScrollExtent still moving); capped by the pass so a fast
+  /// background stream cannot keep the list hidden indefinitely.
+  int _initialAdjustChaseFrames = 0;
+
   /// Captured scroll position before the keyboard opened, so it can be
   /// restored when the keyboard is dismissed.
   double? _lastScrollPositionBeforeKeyboard;
@@ -271,6 +297,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (!mounted) return;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final isNowVisible = bottomInset > 100;
+    // While the initial positioning pass runs the list is hidden; keyboard /
+    // viewport changes must not fight the pass. Still track the keyboard
+    // visibility flag so the post-pass close transition is not missed.
+    if (_pendingInitialScrollAdjustment) {
+      _wasKeyboardVisible = isNowVisible;
+      return;
+    }
 
     if (isNowVisible && !_wasKeyboardVisible) {
       // Keyboard just appeared — save scroll position and jump to bottom
@@ -358,25 +391,33 @@ class _ChatPageState extends ConsumerState<ChatPage>
               Expanded(
                 child: controller == null
                     ? const SizedBox.shrink()
-                    : Stack(
-                        children: [
-                          _buildChatWidget(
-                            isDark: isDark,
-                            isStreaming: isStreaming,
-                            streamingFullReply: streamingFullReply,
-                            streamingMsgId: streamingMsgId,
-                            activeId: activeId,
-                            controller: controller,
-                          ),
-                          // ── Scroll-to-bottom overlay button ──
-                          if (_showScrollToBottomButton)
-                            _buildScrollToBottomButton(isDark: isDark),
-                          // ── Edit data-loss warning overlay ──
-                          // Centered in the message display area; auto-hides
-                          // after 2 seconds or on close-button tap.
-                          if (_editWarningVisible)
-                            _buildEditWarningOverlay(context: context),
-                        ],
+                    : Visibility(
+                        // While the initial positioning pass runs the list is
+                        // kept mounted and laid out (message positions are
+                        // measured from render boxes) but hidden, so the
+                        // pass itself is never visible to the user.
+                        visible: !_pendingInitialScrollAdjustment,
+                        maintainState: true,
+                        child: Stack(
+                          children: [
+                            _buildChatWidget(
+                              isDark: isDark,
+                              isStreaming: isStreaming,
+                              streamingFullReply: streamingFullReply,
+                              streamingMsgId: streamingMsgId,
+                              activeId: activeId,
+                              controller: controller,
+                            ),
+                            // ── Scroll-to-bottom overlay button ──
+                            if (_showScrollToBottomButton)
+                              _buildScrollToBottomButton(isDark: isDark),
+                            // ── Edit data-loss warning overlay ──
+                            // Centered in the message display area; auto-hides
+                            // after 2 seconds or on close-button tap.
+                            if (_editWarningVisible)
+                              _buildEditWarningOverlay(context: context),
+                          ],
+                        ),
                       ),
               ),
               // ── Chat composer (below chat, in Column flow) ──

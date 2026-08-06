@@ -81,6 +81,13 @@ extension _ChatPageBuildersExt on _ChatPageState {
       itemBuilder: itemBuilder,
       onEndReached: _loadMoreMessages,
       scrollController: _chatScrollController,
+      // While the initial positioning pass runs (entry / conversation
+      // switch), suppress the built-in jump-to-bottom — the page positions
+      // the list at the last user message itself. Same-conversation reloads
+      // keep the built-in jump so their behavior is unchanged.
+      initialScrollToEndMode: _pendingInitialScrollAdjustment
+          ? InitialScrollToEndMode.none
+          : InitialScrollToEndMode.jump,
       // Initially disable auto-scroll. User must
       // tap the scroll-to-bottom button to enable.
       shouldScrollToEndWhenAtBottom: _autoScrollEnabled,
