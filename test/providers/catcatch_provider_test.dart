@@ -105,7 +105,7 @@ void main() {
       final noDotTemp = File(p.join(appDir, 'catcatch', 'downloads',
           '$fileName${DefaultRules.tempFileSuffix}'));
       final dotTemp = File(p.join(appDir, 'catcatch', 'downloads',
-          '.${fileName}${DefaultRules.tempFileSuffix}'));
+          '.$fileName${DefaultRules.tempFileSuffix}'));
       expect(noDotTemp.existsSync(), isTrue);
       expect(dotTemp.existsSync(), isFalse,
           reason:
@@ -187,6 +187,72 @@ void main() {
       expect(partsDir.existsSync(), isFalse);
       expect(File(p.join(downloadDir.path, 'playlist_merged.ts')).existsSync(),
           isFalse);
+    });
+
+    test('deletes converted file for playlist downloads (merged naming)',
+        () async {
+      final media = MediaResource(
+        url: 'https://example.com/playlist.m3u8',
+        name: 'playlist',
+        ext: 'm3u8',
+        isPlaylist: true,
+      );
+      final taskId = 'test-playlist-convert';
+      final task = createTask(
+        id: taskId,
+        status: TaskStatus.running,
+        selectedMedia: media,
+      );
+
+      // The actual convert output for a playlist is <base>_merged.mp4
+      // (input is downloads/<base>_merged.ts), NOT <base>.mp4.
+      final convertDir = Directory(p.join(appDir, 'catcatch', 'converted'));
+      await convertDir.create(recursive: true);
+      final convertedFile =
+          File(p.join(convertDir.path, 'playlist_merged.mp4'));
+      await convertedFile.writeAsString('converted data');
+      expect(convertedFile.existsSync(), isTrue);
+
+      await CatCatchNotifier.cleanupTaskFiles(task, appDirPath: appDir);
+
+      expect(convertedFile.existsSync(), isFalse,
+          reason:
+              'Playlist converted file (<base>_merged.mp4) must be deleted');
+    });
+
+    test('retries deletion while download write handle is still open',
+        () async {
+      final media = createMedia();
+      final taskId = 'test-locked';
+      final task = createTask(
+        id: taskId,
+        status: TaskStatus.running,
+        selectedMedia: media,
+      );
+      final downloadDir = Directory(p.join(appDir, 'catcatch', 'downloads'));
+      await downloadDir.create(recursive: true);
+      final tempFile = File(p.join(
+          downloadDir.path, 'test_video.mp4${DefaultRules.tempFileSuffix}'));
+      await tempFile.writeAsString('partial data');
+
+      // Simulate a download that has just been cancelled: the write handle is
+      // still open when cleanup starts, and is released shortly after.
+      //
+      // Timing coupling: cleanup retries at ~150ms (attempt 1), ~450ms
+      // (attempt 2) and ~900ms (attempt 3). On Windows the first attempt(s)
+      // fail while the handle is open, so the handle must be released before
+      // the 450ms attempt — 250ms sits between the two. On POSIX deletion of
+      // an open file succeeds immediately, so this test passes trivially there.
+      final raf = await tempFile.open(mode: FileMode.append);
+      final release =
+          Future<void>.delayed(const Duration(milliseconds: 250), raf.close);
+
+      await CatCatchNotifier.cleanupTaskFiles(task, appDirPath: appDir);
+      await release;
+
+      expect(tempFile.existsSync(), isFalse,
+          reason:
+              'Temp file must be deleted once the download handle is released');
     });
 
     test('does NOT delete downloadedFilePath for completed tasks', () async {
@@ -324,7 +390,7 @@ void main() {
       // Also create the dot-prefixed temp variant (used by task_executor for resume)
       final dotTempFile = File(
         p.join(appDir, 'catcatch', 'downloads',
-            '.${fileName}${DefaultRules.tempFileSuffix}'),
+            '.$fileName${DefaultRules.tempFileSuffix}'),
       );
       await dotTempFile.writeAsString('partial data');
 
@@ -334,7 +400,7 @@ void main() {
           reason: 'Download file itself should be deleted for paused task');
       expect(
         File(p.join(appDir, 'catcatch', 'downloads',
-                '.${fileName}${DefaultRules.tempFileSuffix}'))
+                '.$fileName${DefaultRules.tempFileSuffix}'))
             .existsSync(),
         isFalse,
         reason: 'Dot-prefixed temp file should be deleted for paused task',
