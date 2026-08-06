@@ -107,9 +107,7 @@ void main() {
 
     test('HTML includes window.setPanZoom for Flutter-driven pan/zoom', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(
-          html,
-          contains('window.setPanZoom = function(x, y, level)'),
+      expect(html, contains('window.setPanZoom = function(x, y, level)'),
           reason:
               'the inline widget drives pan/zoom from Flutter via setPanZoom');
     });

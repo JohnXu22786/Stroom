@@ -235,8 +235,7 @@ void main() {
 
       // The fullscreen icon should be present with an accessibility label
       expect(find.byIcon(Icons.fullscreen), findsOneWidget);
-      final fullscreenIcon =
-          tester.widget<Icon>(find.byIcon(Icons.fullscreen));
+      final fullscreenIcon = tester.widget<Icon>(find.byIcon(Icons.fullscreen));
       expect(fullscreenIcon.semanticLabel, isNotNull);
 
       // Tapping should not throw (the dialog requires InAppWebView

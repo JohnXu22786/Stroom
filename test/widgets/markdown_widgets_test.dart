@@ -339,13 +339,11 @@ void main() {
       );
       final widget = config.pre.builder!('graph TD\nA-->B', 'mermaid');
       expect(widget, isA<MermaidRenderWidget>(),
-          reason:
-              'an old message must render mermaid normally, not show the '
+          reason: 'an old message must render mermaid normally, not show the '
               'streaming loading placeholder');
     });
 
-    test('the message currently being generated uses the streaming config',
-        () {
+    test('the message currently being generated uses the streaming config', () {
       final config = buildMessageMarkdownConfig(
         isDark: false,
         conversationIsStreaming: true,

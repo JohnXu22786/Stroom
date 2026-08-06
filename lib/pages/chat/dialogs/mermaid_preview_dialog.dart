@@ -156,8 +156,7 @@ class _MermaidPreviewDialogContentState
                     // _zoomLevel is not read in build() and the WebView
                     // reflects the transform visually.
                     if (mounted && args.isNotEmpty) {
-                      _zoomLevel =
-                          double.tryParse(args[0].toString()) ?? 1.0;
+                      _zoomLevel = double.tryParse(args[0].toString()) ?? 1.0;
                     }
                   },
                 );
