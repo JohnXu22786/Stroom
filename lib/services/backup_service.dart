@@ -1285,10 +1285,8 @@ class BackupService {
   }) async {
     final prefs = await SharedPreferences.getInstance();
 
-    final keysToRemove = prefs
-        .getKeys()
-        .where((k) => _isKeyInSelection(k, selection))
-        .toList();
+    final keysToRemove =
+        prefs.getKeys().where((k) => _isKeyInSelection(k, selection)).toList();
     for (final key in keysToRemove) {
       await prefs.remove(key);
     }

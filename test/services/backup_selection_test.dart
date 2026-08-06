@@ -1074,8 +1074,8 @@ void main() {
           reason:
               'Settings (provider_entries) must be preserved when only chat is restored');
 
-      expect(restoredPrefs.getString('per_model_chat_settings'),
-          contains('gpt-4'),
+      expect(
+          restoredPrefs.getString('per_model_chat_settings'), contains('gpt-4'),
           reason: 'Settings (per_model_chat_settings) must be preserved');
       expect(restoredPrefs.getInt('selected_model_index'), equals(0),
           reason: 'Settings (selected_model_index) must be preserved');
@@ -1551,11 +1551,13 @@ void main() {
       // Settings should be restored from backup
       expect(restoredPrefs.getString('assistants'), contains('备份助手2'),
           reason: 'Settings should be restored from v1 preferences.json');
-      expect(restoredPrefs.getString('provider_entries'), contains('v1_backup_p2'),
+      expect(
+          restoredPrefs.getString('provider_entries'), contains('v1_backup_p2'),
           reason: 'Settings should be restored from v1 preferences.json');
 
       // Chat preserved: only settings keys are restored from the merged file
-      expect(restoredPrefs.getString('conversations'), contains('v1_orig_conv2'),
+      expect(
+          restoredPrefs.getString('conversations'), contains('v1_orig_conv2'),
           reason:
               'Chat must be preserved when only settings is restored (v1 split by key)');
       expect(restoredPrefs.getString('active_conversation_id'),
@@ -2910,7 +2912,8 @@ void main() {
           reason: 'Attachment file must be deleted when chat is cleared');
     });
 
-    testWidgets('settings-only clear removes settings keys, preserves chat keys',
+    testWidgets(
+        'settings-only clear removes settings keys, preserves chat keys',
         (WidgetTester t) async {
       SharedPreferences.setMockInitialValues({
         'conversations': '[{"id":"conv1"}]',
@@ -3026,16 +3029,16 @@ void main() {
         (WidgetTester t) async {
       await WebFileStore.write('synthesis/tasks.json',
           Uint8List.fromList(utf8.encode('["task_1"]')));
-      await WebFileStore.write('catcatch/tasks.json',
-          Uint8List.fromList(utf8.encode('["task_2"]')));
+      await WebFileStore.write(
+          'catcatch/tasks.json', Uint8List.fromList(utf8.encode('["task_2"]')));
       // 实际 Anki 数据库位于根目录（WebFileStore 根级文件带前导斜杠）；
       // 历史恢复残留位于 anki/ 子目录
-      await WebFileStore.write('/collection.anki2',
-          Uint8List.fromList(utf8.encode('anki_db')));
+      await WebFileStore.write(
+          '/collection.anki2', Uint8List.fromList(utf8.encode('anki_db')));
       await WebFileStore.write('anki/collection.anki2',
           Uint8List.fromList(utf8.encode('anki_db_residue')));
-      await WebFileStore.write('/browser_cookies.json',
-          Uint8List.fromList(utf8.encode('cookies')));
+      await WebFileStore.write(
+          '/browser_cookies.json', Uint8List.fromList(utf8.encode('cookies')));
 
       final sel = BackupSelection(
         chatRecordsAndAttachments: false,
@@ -3067,10 +3070,10 @@ void main() {
       // （验证每个 flag 只删除自己对应的文件）
       await WebFileStore.write('synthesis/tasks.json',
           Uint8List.fromList(utf8.encode('["task_1"]')));
-      await WebFileStore.write('/collection.anki2',
-          Uint8List.fromList(utf8.encode('anki_db')));
-      await WebFileStore.write('/browser_cookies.json',
-          Uint8List.fromList(utf8.encode('cookies')));
+      await WebFileStore.write(
+          '/collection.anki2', Uint8List.fromList(utf8.encode('anki_db')));
+      await WebFileStore.write(
+          '/browser_cookies.json', Uint8List.fromList(utf8.encode('cookies')));
 
       final cookiesOnly = BackupSelection(
         chatRecordsAndAttachments: false,
@@ -3088,7 +3091,8 @@ void main() {
       expect(await WebFileStore.read('/browser_cookies.json'), isNull,
           reason: 'browser_cookies.json must be deleted');
       expect(await WebFileStore.read('synthesis/tasks.json'), isNotNull,
-          reason: 'tasks.json must NOT be deleted when only cookies is cleared');
+          reason:
+              'tasks.json must NOT be deleted when only cookies is cleared');
       expect(await WebFileStore.read('/collection.anki2'), isNotNull,
           reason:
               'collection.anki2 must NOT be deleted when only cookies is cleared');
@@ -3113,10 +3117,10 @@ void main() {
       });
       await WebFileStore.write('synthesis/tasks.json',
           Uint8List.fromList(utf8.encode('["task_1"]')));
-      await WebFileStore.write('/collection.anki2',
-          Uint8List.fromList(utf8.encode('anki_db')));
-      await WebFileStore.write('/browser_cookies.json',
-          Uint8List.fromList(utf8.encode('cookies')));
+      await WebFileStore.write(
+          '/collection.anki2', Uint8List.fromList(utf8.encode('anki_db')));
+      await WebFileStore.write(
+          '/browser_cookies.json', Uint8List.fromList(utf8.encode('cookies')));
 
       final sel = BackupSelection(
         chatRecordsAndAttachments: false,

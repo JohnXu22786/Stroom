@@ -342,8 +342,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                     Icon(Icons.delete_outline, color: Colors.red, size: 18),
                     const SizedBox(width: 8),
                     Expanded(
-                        child: Text(label,
-                            style: const TextStyle(fontSize: 13))),
+                        child:
+                            Text(label, style: const TextStyle(fontSize: 13))),
                   ],
                 ),
               ),
