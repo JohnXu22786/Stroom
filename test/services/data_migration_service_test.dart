@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -116,7 +117,7 @@ void main() {
     });
   });
 
-  group('DataMigrationService - format version', () {
+  group('DataMigrationService - legacy global format version', () {
     test('returns current format version constant', () {
       expect(DataMigrationService.currentFormatVersion, equals(3));
     });
@@ -135,22 +136,530 @@ void main() {
     });
   });
 
-  group('DataMigrationService - checkAndMigrate', () {
-    test('no migration needed when version matches current', () async {
+  group('DataMigrationService - per-part versioning', () {
+    test('current part versions: chat/settings/media = 1, others = 0',
+        () async {
+      // 回归：各部分当前版本号是独立的。只有实际发生（过）格式迁移的
+      // 部分才有 > 0 的当前版本；tasks/anki/cookies 从未迁移，保持 0
+      //（机制就位，未来各自演进时递增各自版本号）。
+      final current = DataMigrationService.currentPartVersions;
+      expect(current[DataMigrationService.partChat], equals(1),
+          reason: 'chat: blocks 格式（原全局 v2→v3）');
+      expect(current[DataMigrationService.partSettings], equals(1),
+          reason: 'settings: provider_entries 格式（原全局 v0→v1）');
+      for (final part in [
+        DataMigrationService.partPictures,
+        DataMigrationService.partAudio,
+        DataMigrationService.partVideos,
+        DataMigrationService.partTexts,
+      ]) {
+        expect(current[part], equals(1),
+            reason: '$part: per-type folders（原全局 v1→v2）');
+      }
+      for (final part in [
+        DataMigrationService.partTasks,
+        DataMigrationService.partAnki,
+        DataMigrationService.partBrowserCookies,
+      ]) {
+        expect(current[part], equals(0), reason: '$part: 无迁移历史');
+      }
+      // 所有备份类别都有各自的版本号（与 BackupSelection 一一对应）。
+      expect(current.length, equals(9));
+    });
+
+    test('getStoredPartVersions defaults to all zero when never stored',
+        () async {
+      final stored = await DataMigrationService.getStoredPartVersions();
+      for (final part in DataMigrationService.partIds) {
+        expect(stored[part], equals(0), reason: 'part $part');
+      }
+    });
+
+    test('getStoredPartVersions reads stored JSON, missing parts default 0',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions':
+            '{"chat": 1, "settings": 1, "audio": 1, "tasks": 0}',
+      });
+      final stored = await DataMigrationService.getStoredPartVersions();
+      expect(stored[DataMigrationService.partChat], equals(1));
+      expect(stored[DataMigrationService.partSettings], equals(1));
+      expect(stored[DataMigrationService.partAudio], equals(1));
+      expect(stored[DataMigrationService.partTasks], equals(0));
+      // JSON 中缺失的部分（如 pictures）按 0 处理 → 需要迁移
+      expect(stored[DataMigrationService.partPictures], equals(0));
+    });
+
+    test('invalid value type in one part is isolated to that part', () async {
+      // 回归：单个部分的值类型错误（如 "chat": "v1"）只让该部分按 0
+      // 处理（重新迁移），绝不能导致整个记录作废 —— 否则其他已迁移
+      // 部分会被降级重新迁移（一个坏键丢整个记录的旧实现）。
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions': jsonEncode({
+          DataMigrationService.partChat: 'v1', // 类型错误
+          DataMigrationService.partSettings: 1,
+          DataMigrationService.partPictures: 1,
+          DataMigrationService.partAudio: 1,
+          DataMigrationService.partVideos: 1,
+          DataMigrationService.partTexts: 1,
+          DataMigrationService.partTasks: 0,
+          DataMigrationService.partAnki: 0,
+          DataMigrationService.partBrowserCookies: 0,
+        }),
+        'conversations': jsonEncode([
+          {
+            'id': 'c1',
+            'messages': [
+              {
+                'role': 'assistant',
+                'content': 'hi',
+                'reasoningSections': ['think'],
+                'textSections': ['answer'],
+                'toolCalls': [],
+              },
+            ],
+          },
+        ]),
+        'provider_entries': jsonEncode([
+          {'id': 'p1', 'type': 'llm', 'name': 'P1', 'configs': []},
+        ]),
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      // 值损坏的 chat 部分按 0 处理并迁移到当前版本。
+      final stored = await DataMigrationService.getStoredPartVersions();
+      expect(stored[DataMigrationService.partChat], equals(1),
+          reason: '值类型损坏的部分按 0 处理并重新迁移');
+      // 值正常的 settings 部分保持原记录，不被降级或重迁。
+      expect(stored[DataMigrationService.partSettings], equals(1));
+      // 记录整体未损坏：不应产生隔离 key。
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 3);
+      expect(
+        prefs
+            .getKeys()
+            .where((k) => k.startsWith('data_format_versions_corrupt_')),
+        isEmpty,
+        reason: '逐键防御下整个记录没有被当作损坏处理',
+      );
+    });
+
+    test('non-object data_format_versions is quarantined and rebuilt',
+        () async {
+      // 回归：版本记录可解析但不是对象（如数组/标量）时，与解析失败
+      // 同样处理 —— 先隔离损坏现场，再从旧全局版本/v0 展开重建。
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions': '[1, 2, 3]',
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      final corruptKeys = prefs
+          .getKeys()
+          .where((k) => k.startsWith('data_format_versions_corrupt_'))
+          .toList();
+      expect(corruptKeys, isNotEmpty,
+          reason: '非对象记录必须被隔离保留');
+      expect(corruptKeys.any((k) => prefs.getString(k) == '[1, 2, 3]'),
+          isTrue);
+      await _expectAllPartsCurrent();
+    });
+
+    test('legacy v3 expands to all parts current, no migration, key removed',
+        () async {
+      // 回归：现有最新用户（旧全局 v3）升级到 per-part 机制时
+      // 必须无感 —— 不迁移、不重启，只把版本记录转为 per-part。
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 3,
+        'conversations': jsonEncode([
+          {
+            'id': 'c1',
+            'messages': [
+              {'role': 'assistant', 'content': 'hi', 'blocks': []},
+            ],
+          },
+        ]),
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isFalse);
+      expect(result.restartRequired, isFalse);
+
+      // 展开的 per-part 版本已落盘，旧 key 退役。
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey('data_format_version'), isFalse,
+          reason: '旧全局 key 必须被移除，避免双源版本记录');
+      await _expectAllPartsCurrent();
+    });
+
+    test('legacy v2 migrates ONLY the chat part (blocks)', () async {
+      // 回归：旧全局 v2 只说明 chat 部分（v3 引入的 blocks）未迁移；
+      // settings（v1）与 media（v2）已是最新，绝不能重复执行它们的迁移。
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 2,
+        'conversations': jsonEncode([
+          {
+            'id': 'c1',
+            'messages': [
+              {
+                'role': 'assistant',
+                'content': 'hi',
+                'reasoningSections': ['think'],
+                'textSections': ['answer'],
+                'toolCalls': [],
+                'toolCallRoundStarts': [0],
+              },
+            ],
+          },
+        ]),
+        'provider_entries': jsonEncode([
+          {'id': 'p1', 'type': 'llm', 'name': 'P1', 'configs': []},
+        ]),
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      // chat 部分迁移完成：assistant 消息获得了 blocks。
+      final prefs = await SharedPreferences.getInstance();
+      final conversations =
+          jsonDecode(prefs.getString('conversations')!) as List;
+      final message = (conversations[0] as Map)['messages'][0] as Map;
+      expect(message.containsKey('blocks'), isTrue,
+          reason: 'chat 部分必须执行 v0→v1（blocks）迁移');
+
+      // settings 数据原样保留（未重复迁移）。
+      final providerEntries =
+          jsonDecode(prefs.getString('provider_entries')!) as List;
+      expect(providerEntries, hasLength(1));
+
+      await _expectAllPartsCurrent();
+    });
+
+    test('legacy v1 migrates chat + media parts, settings not repeated',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 1,
+        'conversations': jsonEncode([
+          {
+            'id': 'c1',
+            'messages': [
+              {
+                'role': 'assistant',
+                'content': 'hi',
+                'reasoningSections': ['think'],
+                'textSections': ['answer'],
+                'toolCalls': [],
+              },
+            ],
+          },
+        ]),
+        'provider_entries': jsonEncode([
+          {'id': 'p1', 'type': 'llm', 'name': 'P1', 'configs': []},
+        ]),
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      // chat 迁移执行。
+      final conversations =
+          jsonDecode(prefs.getString('conversations')!) as List;
+      final message = (conversations[0] as Map)['messages'][0] as Map;
+      expect(message.containsKey('blocks'), isTrue);
+      // settings 未重复迁移（provider_entries 原样，无 migrated_llm 混入）。
+      final providerEntries =
+          jsonDecode(prefs.getString('provider_entries')!) as List;
+      expect(providerEntries, hasLength(1));
+      // media 迁移执行（legacy folders 表被清理，JSON 模式下无 legacy key）。
+      final stored = await DataMigrationService.getStoredPartVersions();
+      expect(stored[DataMigrationService.partPictures], equals(1));
+      expect(stored[DataMigrationService.partAudio], equals(1));
+
+      await _expectAllPartsCurrent();
+    });
+
+    test('legacy v0 performs full migration (chat_configs → provider_entries)',
+        () async {
+      // 回归：最老的数据（无任何版本标记）必须走完全量迁移链。
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 0,
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Old',
+            'host': '',
+            'key': '',
+            'models': [
+              {'modelId': 'm1', 'temperature': 0.5},
+            ],
+          },
+        ]),
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      // settings 部分迁移：chat_configs → provider_entries。
+      expect(prefs.getString('provider_entries'), isNotNull);
+      expect(prefs.containsKey('chat_configs'), isFalse);
+
+      await _expectAllPartsCurrent();
+    });
+
+    test('media migration actually migrates legacy shared folders',
+        () async {
+      // 回归：media 部分的迁移接线必须真正执行物理迁移（共享 folders
+      // → per-type 文件夹表），而不是只提升版本记账 —— 否则误删
+      // media 迁移分支时测试依然通过（review 发现的问题）。
+      // 播种 v1 时代的 JSON 数据：带 legacy 共享 folders 键。
+      final legacyWebData = <String, dynamic>{
+        'image_records': <Map<String, dynamic>>[],
+        'audio_records': <Map<String, dynamic>>[],
+        'video_records': <Map<String, dynamic>>[],
+        'text_records': <Map<String, dynamic>>[],
+        'folders': <String>['legacy_folder', 'shared_folder'],
+        'text_folders': <String>[],
+        'audio_folders': <String>[],
+        'image_folders': <String>[],
+        'video_folders': <String>[],
+      };
+      await WebFileStore.write(
+        'manifest_database_data',
+        utf8Encode(jsonEncode(legacyWebData)),
+      );
+
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 1, // settings 已迁移，media/chat 落后
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      // legacy folders 被复制到全部四个 per-type 文件夹表。
+      for (final recordTable in [
+        ManifestTables.textRecords,
+        ManifestTables.audioRecords,
+        ManifestTables.imageRecords,
+        ManifestTables.videoRecords,
+      ]) {
+        final folders = await ManifestDatabase.getAllFolders(
+            recordTable: recordTable);
+        expect(folders, containsAll(['legacy_folder', 'shared_folder']),
+            reason: '$recordTable 必须获得 legacy folders');
+      }
+      // legacy key 被移除。
+      final raw = await WebFileStore.read('manifest_database_data');
+      final data = jsonDecode(utf8.decode(raw!)) as Map<String, dynamic>;
+      expect(data.containsKey('folders'), isFalse,
+          reason: '迁移后 legacy 共享 folders 键必须被移除');
+
+      await _expectAllPartsCurrent();
+    });
+
+    test('migration does NOT downgrade parts with future versions', () async {
+      // 回归：某部分存储版本高于当前版本（未来版本迁移后回滚到本构建）
+      // 时，迁移其他落后部分不得把超前部分降级 —— 否则回滚再升级会
+      // 对已迁移数据重复执行迁移。
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions': jsonEncode({
+          DataMigrationService.partChat: 0,
+          DataMigrationService.partSettings: 5, // 超前（未来版本）
+          DataMigrationService.partPictures: 1,
+          DataMigrationService.partAudio: 1,
+          DataMigrationService.partVideos: 1,
+          DataMigrationService.partTexts: 1,
+          DataMigrationService.partTasks: 0,
+          DataMigrationService.partAnki: 0,
+          DataMigrationService.partBrowserCookies: 0,
+        }),
+        'conversations': jsonEncode([
+          {
+            'id': 'c1',
+            'messages': [
+              {
+                'role': 'assistant',
+                'content': 'hi',
+                'reasoningSections': ['think'],
+                'textSections': ['answer'],
+                'toolCalls': [],
+              },
+            ],
+          },
+        ]),
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      final stored = await DataMigrationService.getStoredPartVersions();
+      expect(stored[DataMigrationService.partChat], equals(1),
+          reason: '落后的 chat 部分被迁移到当前版本');
+      expect(stored[DataMigrationService.partSettings], equals(5),
+          reason: '超前的 settings 部分必须保持原值，绝不降级');
+    });
+
+    test('corrupt data_format_versions is quarantined, not silently overwritten',
+        () async {
+      // 回归：版本记录本身损坏（JSON 解析失败）时，必须按项目
+      // 「先隔离再覆盖」的约定保留损坏现场，再重新展开迁移 ——
+      // 否则损坏证据被静默销毁，无法排查。
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions': 'not-json{{{',
+        'conversations': jsonEncode([]),
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      final corruptKeys = prefs
+          .getKeys()
+          .where((k) => k.startsWith('data_format_versions_corrupt_'))
+          .toList();
+      expect(corruptKeys, isNotEmpty,
+          reason: '损坏现场必须保留在带时间戳的隔离 key 中');
+      expect(corruptKeys.any((k) => prefs.getString(k) == 'not-json{{{'),
+          isTrue);
+      await _expectAllPartsCurrent();
+    });
+
+    test('all parts current in per-part JSON → no migration', () async {
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions':
+            jsonEncode(DataMigrationService.currentPartVersions),
+        'conversations': jsonEncode([]),
+      });
 
       final result = await DataMigrationService.checkAndMigrate();
       expect(result.needsMigration, isFalse);
       expect(result.restartRequired, isFalse);
     });
 
-    test('no migration needed when version is newer than current', () async {
+    test('only the outdated part migrates when per-part JSON is stale',
+        () async {
+      // 回归：per-part 机制下，单个部分的迁移失败/落后不应波及其他部分
+      // —— 只重试落后的部分，已是最新的部分原样保留。
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions': jsonEncode({
+          DataMigrationService.partChat: 0,
+          DataMigrationService.partSettings: 1,
+          DataMigrationService.partPictures: 1,
+          DataMigrationService.partAudio: 1,
+          DataMigrationService.partVideos: 1,
+          DataMigrationService.partTexts: 1,
+          DataMigrationService.partTasks: 0,
+          DataMigrationService.partAnki: 0,
+          DataMigrationService.partBrowserCookies: 0,
+        }),
+        'conversations': jsonEncode([
+          {
+            'id': 'c1',
+            'messages': [
+              {
+                'role': 'assistant',
+                'content': 'hi',
+                'reasoningSections': ['think'],
+                'textSections': ['answer'],
+                'toolCalls': [],
+              },
+            ],
+          },
+        ]),
+        'provider_entries': jsonEncode([
+          {'id': 'p1', 'type': 'llm', 'name': 'P1', 'configs': []},
+        ]),
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      final conversations =
+          jsonDecode(prefs.getString('conversations')!) as List;
+      final message = (conversations[0] as Map)['messages'][0] as Map;
+      expect(message.containsKey('blocks'), isTrue,
+          reason: '落后的 chat 部分必须迁移');
+
+      await _expectAllPartsCurrent();
+    });
+
+    test('both keys present → per-part wins, legacy key removed', () async {
+      // 回滚再升级场景：旧版应用把旧 key 写回 3，但 per-part 记录
+      // 显示某部分落后 —— per-part 是唯一事实来源，旧 key 被忽略并清理。
+      SharedPreferences.setMockInitialValues({
+        'data_format_version': 3,
+        'data_format_versions': jsonEncode({
+          DataMigrationService.partChat: 0,
+          DataMigrationService.partSettings: 1,
+          DataMigrationService.partPictures: 1,
+          DataMigrationService.partAudio: 1,
+          DataMigrationService.partVideos: 1,
+          DataMigrationService.partTexts: 1,
+          DataMigrationService.partTasks: 0,
+          DataMigrationService.partAnki: 0,
+          DataMigrationService.partBrowserCookies: 0,
+        }),
+      });
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue,
+          reason: 'per-part 记录显示 chat 落后，不能因旧 key=3 而跳过');
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey('data_format_version'), isFalse,
+          reason: '旧 key 必须清理，避免误导');
+      await _expectAllPartsCurrent();
+    });
+
+    test('structural failure in chat part does NOT bump versions', () async {
+      // 回归（延续旧 v2→v3 哲学）：结构性迁移失败（JSON 无法解析）时
+      // 版本不得提升 —— 否则数据永久停留在"假成功"且永远不会重试。
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions': jsonEncode({
+          DataMigrationService.partChat: 0,
+          DataMigrationService.partSettings: 1,
+          DataMigrationService.partPictures: 1,
+          DataMigrationService.partAudio: 1,
+          DataMigrationService.partVideos: 1,
+          DataMigrationService.partTexts: 1,
+          DataMigrationService.partTasks: 0,
+          DataMigrationService.partAnki: 0,
+          DataMigrationService.partBrowserCookies: 0,
+        }),
+        'conversations': 'not-json{{{',
+      });
+
+      await expectLater(
+        DataMigrationService.checkAndMigrate(),
+        throwsA(anything),
+      );
+
+      final stored = await DataMigrationService.getStoredPartVersions();
+      expect(stored[DataMigrationService.partChat], equals(0),
+          reason: '失败的 chat 部分版本不得提升，下次启动自动重试');
+      expect(stored[DataMigrationService.partSettings], equals(1),
+          reason: '其他部分保持原记录');
+    });
+  });
+
+  group('DataMigrationService - checkAndMigrate', () {
+    test('no migration needed when legacy version is newer than current',
+        () async {
+      // 999 是展开输入：全部部分展开为当前版本 → 无迁移、无重启，
+      // 且展开结果必须落盘、旧 key 必须退役（不依赖下次启动）。
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('data_format_version', 999);
 
       final result = await DataMigrationService.checkAndMigrate();
       expect(result.needsMigration, isFalse);
+      expect(result.restartRequired, isFalse);
+
+      await _expectAllPartsCurrent();
     });
 
     test('migration needed when no version stored', () async {
@@ -158,9 +667,8 @@ void main() {
       expect(result.needsMigration, isTrue);
       expect(result.restartRequired, isTrue);
 
-      // After migration, version should be updated
-      final storedVersion = await DataMigrationService.getStoredFormatVersion();
-      expect(storedVersion, equals(3));
+      // After migration, per-part versions should all be current
+      await _expectAllPartsCurrent();
     });
 
     test('subsequent call does not need migration', () async {
@@ -282,9 +790,8 @@ void main() {
       final result = await DataMigrationService.migrateDataFormatIfNeeded();
       expect(result.needsMigration, isTrue);
 
-      // Version should be updated
-      final storedVersion = await DataMigrationService.getStoredFormatVersion();
-      expect(storedVersion, equals(3));
+      // Per-part versions should all be current
+      await _expectAllPartsCurrent();
     });
 
     test('does NOT create external backup during migration', () async {
@@ -419,8 +926,7 @@ void main() {
         corruptKeys.any((k) => prefs.getString(k) == '{"not": "an array"}'),
         isTrue,
       );
-      expect(prefs.getInt('data_format_version'),
-          DataMigrationService.currentFormatVersion);
+      await _expectAllPartsCurrent();
     });
 
     test(
@@ -461,8 +967,7 @@ void main() {
       // 迁移结果正常写入（migrated_llm 条目）。
       final entries = jsonDecode(prefs.getString('provider_entries')!) as List;
       expect(entries, isNotEmpty);
-      expect(prefs.getInt('data_format_version'),
-          DataMigrationService.currentFormatVersion);
+      await _expectAllPartsCurrent();
     });
 
     test('quarantine pruning keeps only the 3 newest corrupt backups',
@@ -538,8 +1043,7 @@ void main() {
       });
       final result = await DataMigrationService.migrateDataFormatIfNeeded();
       expect(result.needsMigration, isTrue);
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getInt('data_format_version'), 3);
+      await _expectAllPartsCurrent();
     });
 
     test('non-Map message entries are skipped, migration still completes',
@@ -563,8 +1067,7 @@ void main() {
       });
       final result = await DataMigrationService.migrateDataFormatIfNeeded();
       expect(result.needsMigration, isTrue);
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getInt('data_format_version'), 3);
+      await _expectAllPartsCurrent();
     });
 
     test('structural failure (invalid JSON) does NOT bump the version',
@@ -577,9 +1080,12 @@ void main() {
         DataMigrationService.migrateDataFormatIfNeeded(),
         throwsA(anything),
       );
-      final prefs = await SharedPreferences.getInstance();
       // 版本不提升 → 下次启动自动重试（而非"假成功"永久跳过）
-      expect(prefs.getInt('data_format_version'), 2);
+      final stored = await DataMigrationService.getStoredPartVersions();
+      expect(stored[DataMigrationService.partChat], equals(0),
+          reason: '失败的 chat 部分版本不得提升');
+      expect(stored[DataMigrationService.partSettings], equals(1),
+          reason: '其他部分保持展开后的版本记录');
     });
 
     test('decodable-but-non-array conversations is quarantined, not rethrown',
@@ -607,9 +1113,21 @@ void main() {
         isTrue,
       );
       // 版本正常提升（不再无限重试迁移）。
-      expect(prefs.getInt('data_format_version'), 3);
+      await _expectAllPartsCurrent();
     });
   });
+}
+
+/// 断言迁移后所有部分的存储版本都是当前版本，且旧全局 key 已退役。
+Future<void> _expectAllPartsCurrent() async {
+  final prefs = await SharedPreferences.getInstance();
+  expect(prefs.containsKey('data_format_version'), isFalse,
+      reason: '迁移完成后旧全局 key 必须被移除（per-part 唯一事实来源）');
+  final stored = await DataMigrationService.getStoredPartVersions();
+  for (final entry in DataMigrationService.currentPartVersions.entries) {
+    expect(stored[entry.key], equals(entry.value),
+        reason: 'part ${entry.key} 必须迁移到当前版本');
+  }
 }
 
 String _pad(int n) => n.toString().padLeft(2, '0');
