@@ -1,6 +1,9 @@
-import 'dart:async';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart'
+    show debugPrint, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -22,7 +25,6 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   bool _isImporting = false;
   bool _isClearing = false;
   String? _externalBackupPath;
-  Timer? _restartTimer;
   bool _isAnkiExporting = false;
   bool _isAnkiImporting = false;
 
@@ -54,12 +56,6 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   void initState() {
     super.initState();
     _loadExternalBackupPath();
-  }
-
-  @override
-  void dispose() {
-    _restartTimer?.cancel();
-    super.dispose();
   }
 
   Future<void> _loadExternalBackupPath() async {
@@ -266,7 +262,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '导入完成后应用将自动重启，请确保已保存当前工作。',
+                      '恢复完成后需重启应用才能生效，请确保已保存当前工作。',
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ),
@@ -290,16 +286,34 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
 
     if (confirmed != true) return;
 
+    if (!mounted) return;
     setState(() => _isImporting = true);
     try {
-      if (!mounted) return;
       final success = await BackupService.importBackup(
         context,
         selection: selection,
       );
       if (success && mounted) {
-        await _showRestartCountdown();
+        // 弹窗展示期间停止按钮 spinner（避免模态框背后持续动画）
+        setState(() => _isImporting = false);
+        await _showRestartPrompt();
       }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isImporting = false);
+      if (e is BackupValidationException) {
+        // 恢复开始前就失败（备份文件无效）：未删除任何数据，
+        // 错误提示已由 importBackup 弹出，无需重启。
+        return;
+      }
+      // 恢复失败时恢复可能已部分完成（选中类别的文件已被清除但恢复中断），
+      // 提示重启以恢复干净状态（失败详情已由 importBackup 弹出）。
+      await _showRestartPrompt(
+        title: '恢复未完成',
+        message: '数据未能完整恢复，部分数据可能已被清除。请重启应用后重试。',
+        icon: Icons.warning_amber_rounded,
+        iconColor: Colors.orange,
+      );
     } finally {
       if (mounted) setState(() => _isImporting = false);
     }
@@ -378,7 +392,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '此操作不可撤销。清除完成后应用将自动重启。',
+                      '此操作不可撤销。清除完成后需重启应用才能生效。',
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ),
@@ -434,15 +448,17 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       if (!mounted) return;
 
       await BackupService.clearSelectedData(selection);
-      // 先关闭进度弹窗，再展示重启倒计时弹窗，避免弹窗叠放
+      // 先关闭进度弹窗，再展示重启提示弹窗，避免弹窗叠放
       if (mounted && progressShown) {
         Navigator.of(context, rootNavigator: true).pop();
         progressShown = false;
       }
       if (mounted) {
-        await _showRestartCountdown(
+        // 弹窗展示期间停止按钮 spinner（避免模态框背后持续动画）
+        setState(() => _isClearing = false);
+        await _showRestartPrompt(
           title: '数据清除完成',
-          message: '所选数据已清除。应用将在倒计时后自动重启。',
+          message: '所选数据已清除。请重启应用以生效。',
         );
       }
     } catch (e) {
@@ -457,11 +473,14 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         );
       }
       // 清除可能已部分完成（磁盘数据与内存状态不一致，且 Anki 数据库连接
-      // 可能已被关闭），失败后同样重启，保证应用以干净状态重新加载。
+      // 可能已被关闭），失败后同样提示重启，保证应用以干净状态重新加载。
       if (mounted) {
-        await _showRestartCountdown(
+        setState(() => _isClearing = false);
+        await _showRestartPrompt(
           title: '清除未完成',
-          message: '部分数据未能清除，应用将自动重启。重启后可重试清除操作。',
+          message: '部分数据未能清除。请重启应用后重试清除操作。',
+          icon: Icons.warning_amber_rounded,
+          iconColor: Colors.orange,
         );
       }
     } finally {
@@ -532,71 +551,64 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     }
   }
 
-  Future<void> _showRestartCountdown({
+  /// 展示"操作完成，需要重启"提示弹窗（与启动时数据迁移弹窗同款）。
+  ///
+  /// 由用户选择「退出应用」或「立即重启」，不做自动倒计时重启。
+  Future<void> _showRestartPrompt({
     String title = '数据恢复成功',
-    String message = '数据已从备份中恢复。应用将在倒计时后自动重启。',
+    String message = '数据已从备份中恢复。请重启应用以使用恢复的数据。',
+    IconData icon = Icons.check_circle,
+    Color iconColor = const Color(0xFF43A047),
   }) async {
     if (!mounted) return;
-
-    final countdown = ValueNotifier<int>(5);
-
-    _restartTimer?.cancel();
-    _restartTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      countdown.value--;
-      if (countdown.value <= 0) {
-        timer.cancel();
-        _restartTimer = null;
-        if (mounted) {
-          Navigator.of(context, rootNavigator: true).pop();
-        }
-        restartApp();
-      }
-    });
 
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => PopScope(
+      builder: (dialogContext) => PopScope(
         canPop: false,
         child: AlertDialog(
           title: Row(
             children: [
-              Icon(Icons.check_circle, color: Colors.green.shade600, size: 24),
+              Icon(icon, color: iconColor, size: 24),
               const SizedBox(width: 8),
               Text(title),
             ],
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(message),
-              const SizedBox(height: 16),
-              Center(
-                child: ValueListenableBuilder<int>(
-                  valueListenable: countdown,
-                  builder: (_, value, __) => Text(
-                    '$value',
-                    style: TextStyle(
-                      fontSize: 48,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(ctx).colorScheme.primary,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Center(
-                child: Text('秒后自动重启'),
-              ),
-            ],
-          ),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _exitApp();
+              },
+              child: const Text('退出应用'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                restartApp();
+              },
+              child: const Text('立即重启'),
+            ),
+          ],
         ),
       ),
     );
+  }
 
-    _restartTimer?.cancel();
-    _restartTimer = null;
+  /// 退出应用（与启动迁移弹窗的行为一致）。
+  void _exitApp() {
+    try {
+      if (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS) {
+        SystemNavigator.pop();
+      } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+        exit(0);
+      }
+    } catch (e) {
+      debugPrint('[BackupRestorePage] Failed to exit app: $e');
+    }
   }
 
   @override

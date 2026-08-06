@@ -2864,6 +2864,349 @@ void main() {
   });
 
   // ==================================================================
+  // 恢复"勾选即清空"：选中的文件类类别在备份中缺失对应文件时，
+  // 现有文件也会被清除（与 DB/偏好设置类别语义一致）
+  // ==================================================================
+
+  group('Restore clears selected file categories even when backup lacks them',
+      () {
+    testWidgets(
+        'selected file categories are cleared when backup has no files for them',
+        (WidgetTester t) async {
+      // Seed existing files for every file-based category
+      await WebFileStore.write('/collection.anki2',
+          Uint8List.fromList(utf8.encode('existing_anki')));
+      await WebFileStore.write('/browser_cookies.json',
+          Uint8List.fromList(utf8.encode('existing_cookies')));
+      await WebFileStore.write(
+          'synthesis/tasks.json', Uint8List.fromList(utf8.encode('["t1"]')));
+      await WebFileStore.write(
+          'catcatch/tasks.json', Uint8List.fromList(utf8.encode('["t2"]')));
+      // Attachment files (referenced + orphan) — all under attachments/
+      await WebFileStore.write(
+          'attachments/ref.jpg', Uint8List.fromList(utf8.encode('ref_bytes')));
+      await WebFileStore.write('attachments/orphan.bin',
+          Uint8List.fromList(utf8.encode('orphan_bytes')));
+      // Media record + file
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_sel_clear',
+        'name': 'sel_clear',
+        'hash': 'img_sel_clear_hash',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 10,
+        'folder': '',
+        'width': 10,
+        'height': 10,
+      });
+      await WebFileStore.write('pictures/img_sel_clear_hash.jpg',
+          Uint8List.fromList(utf8.encode('img_bytes')));
+      await WebFileStore.write('pictures/img_sel_clear_hash_thumb.png',
+          Uint8List.fromList(utf8.encode('thumb_bytes')));
+
+      // Build a backup WITHOUT any of those files (empty stroom_manifest,
+      // no chat_data/settings/tasks/anki/cookies/attachments)
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore with all file-based categories selected
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: true,
+        settings: false,
+        pictures: true,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: true,
+        browserCookies: true,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      // Selected categories: existing files cleared even though the backup
+      // has no corresponding files
+      expect(await WebFileStore.read('/collection.anki2'), isNull,
+          reason:
+              'Selected anki category must be cleared when backup has no anki file');
+      expect(await WebFileStore.read('/browser_cookies.json'), isNull,
+          reason:
+              'Selected cookies category must be cleared when backup has no cookies file');
+      expect(await WebFileStore.read('synthesis/tasks.json'), isNull,
+          reason:
+              'Selected tasks category must be cleared when backup has no tasks file');
+      expect(await WebFileStore.read('catcatch/tasks.json'), isNull,
+          reason: 'Selected tasks category must be cleared');
+      expect(await WebFileStore.read('attachments/ref.jpg'), isNull,
+          reason:
+              'Selected chat category must clear existing attachment files');
+      expect(await WebFileStore.read('attachments/orphan.bin'), isNull,
+          reason:
+              'Selected chat category must clear orphan attachment files too');
+      expect(await WebFileStore.read('pictures/img_sel_clear_hash.jpg'), isNull,
+          reason: 'Selected pictures category must clear existing media files');
+      expect(await WebFileStore.read('pictures/img_sel_clear_hash_thumb.png'),
+          isNull,
+          reason: 'Selected pictures category must clear thumbnails too');
+
+      // DB records also cleared (backup has empty records)
+      final images = await ManifestDatabase.getAllImageRecords();
+      expect(images.length, equals(0),
+          reason: 'Selected pictures records must be cleared');
+    });
+
+    testWidgets(
+        'unselected file categories keep their files when backup lacks them',
+        (WidgetTester t) async {
+      // Seed files for categories that will NOT be selected
+      await WebFileStore.write('/browser_cookies.json',
+          Uint8List.fromList(utf8.encode('existing_cookies')));
+      await WebFileStore.write('/collection.anki2',
+          Uint8List.fromList(utf8.encode('existing_anki')));
+      await WebFileStore.write('attachments/keep.bin',
+          Uint8List.fromList(utf8.encode('keep_bytes')));
+      await WebFileStore.write(
+          'synthesis/tasks.json', Uint8List.fromList(utf8.encode('["t1"]')));
+
+      // Backup without any files
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore with ONLY pictures selected (cookies/chat/tasks unselected)
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: true,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      expect(await WebFileStore.read('/browser_cookies.json'), isNotNull,
+          reason: 'Unselected cookies must keep their file');
+      expect(await WebFileStore.read('/collection.anki2'), isNotNull,
+          reason: 'Unselected anki data must keep its file');
+      expect(await WebFileStore.read('attachments/keep.bin'), isNotNull,
+          reason: 'Unselected chat attachments must keep their files');
+      expect(await WebFileStore.read('synthesis/tasks.json'), isNotNull,
+          reason: 'Unselected tasks must keep their files');
+    });
+
+    testWidgets('corrupt backup aborts BEFORE deleting any existing files',
+        (WidgetTester t) async {
+      // Seed existing media record + file
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_corrupt',
+        'name': 'corrupt_img',
+        'hash': 'img_corrupt_hash',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 10,
+        'folder': '',
+        'width': 10,
+        'height': 10,
+      });
+      await WebFileStore.write('pictures/img_corrupt_hash.jpg',
+          Uint8List.fromList(utf8.encode('img_bytes')));
+
+      // Backup with a NESTED-shape-corrupt stroom_manifest.json
+      // (valid JSON, wrong inner shape: image_records is a string)
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': 'garbage', // ← wrong shape
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore with pictures selected → must throw and NOT delete files
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: true,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await expectLater(
+        BackupService.restoreFromBytesForTest(backupBytes, selection: sel),
+        throwsA(isA<BackupValidationException>()),
+        reason: 'Corrupt backup must abort the restore before deleting data',
+      );
+
+      // Existing files must survive (validation happens before deletion)
+      expect(
+          await WebFileStore.read('pictures/img_corrupt_hash.jpg'), isNotNull,
+          reason:
+              'Existing files must NOT be deleted when the backup is corrupt');
+      final images = await ManifestDatabase.getAllImageRecords();
+      expect(images.length, equals(1),
+          reason: 'Existing records must survive a corrupt backup');
+    });
+
+    testWidgets(
+        'backup without database manifest still clears selected media records',
+        (WidgetTester t) async {
+      // Seed existing media record + file
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_no_manifest',
+        'name': 'no_manifest_img',
+        'hash': 'img_no_manifest_hash',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 10,
+        'folder': '',
+        'width': 10,
+        'height': 10,
+      });
+      await WebFileStore.write('pictures/img_no_manifest_hash.jpg',
+          Uint8List.fromList(utf8.encode('img_bytes')));
+
+      // Backup WITHOUT stroom_manifest.json / database/manifest_data.json
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore with pictures selected
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: true,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      // Selected category: files deleted AND records cleared (no dangling
+      // records pointing at deleted files)
+      expect(
+          await WebFileStore.read('pictures/img_no_manifest_hash.jpg'), isNull,
+          reason: 'Selected media files must be deleted');
+      final images = await ManifestDatabase.getAllImageRecords();
+      expect(images.length, equals(0),
+          reason:
+              'Media records must be cleared even without a database manifest');
+    });
+
+    testWidgets(
+        'corrupt prefs file of an UNSELECTED category does not block restore',
+        (WidgetTester t) async {
+      // Backup with corrupt chat_data.json (not valid object)
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      backupArchive.addFile(ArchiveFile('chat_data.json', 0,
+          utf8.encode('{"conversations": '))); // ← malformed JSON
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore with pictures selected (chat NOT selected)
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: true,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      // Must not throw: unselected category's corrupt file is ignored
+      expect(true, isTrue,
+          reason: 'Restore must succeed despite corrupt unselected prefs file');
+    });
+  });
+
+  // ==================================================================
   // clearSelectedData：只清除选中的类别，未选中的类别保持原样
   // ==================================================================
 
@@ -2882,6 +3225,9 @@ void main() {
       });
       await WebFileStore.write('attachments/sub/1.jpg',
           Uint8List.fromList(utf8.encode('attachment_bytes')));
+      // 孤儿附件：不再被任何对话引用，清除聊天时也必须被删除
+      await WebFileStore.write('attachments/orphan.bin',
+          Uint8List.fromList(utf8.encode('orphan_bytes')));
 
       final sel = BackupSelection(
         chatRecordsAndAttachments: true,
@@ -2906,10 +3252,15 @@ void main() {
       expect(prefs.getString('provider_entries'), contains('p1'),
           reason: 'Settings keys must be preserved');
 
-      // Attachment file referenced by the cleared conversations must be deleted
+      // Attachment files referenced by the cleared conversations must be deleted
       final attachment = await WebFileStore.read('attachments/sub/1.jpg');
       expect(attachment, isNull,
           reason: 'Attachment file must be deleted when chat is cleared');
+      // Orphan attachment files (not referenced by any conversation) too
+      final orphan = await WebFileStore.read('attachments/orphan.bin');
+      expect(orphan, isNull,
+          reason:
+              'Orphan attachment files must also be deleted when chat is cleared');
     });
 
     testWidgets(
