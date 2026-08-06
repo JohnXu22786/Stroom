@@ -561,21 +561,32 @@ void main() {
         expect(service.lastRequestBody?['top_p'], equals(0.9));
       });
 
-      test('request body includes seed from typeConfig when enabled', () async {
-        final dio = _mockDioWithSuccess({
-          'choices': [
-            {
-              'message': {'content': 'test'},
+      test('single image with userInstruction sends instruction after image',
+          () async {
+        Map<String, dynamic>? capturedBody;
+        final dio = Dio()
+          ..interceptors.add(_InterceptorWithCallback(
+            callback: (options, handler) {
+              capturedBody = options.data as Map<String, dynamic>;
+              handler.resolve(Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'choices': [
+                    {
+                      'message': {'content': 'test'},
+                    },
+                  ],
+                },
+              ));
             },
-          ],
-        });
+          ));
         final config = OcrConfig(
-          model: 'gpt-4o',
+          model: 'qwen-vl-ocr',
           apiKey: 'key',
           host: 'https://api.test.com',
           typeConfig: {
-            'enableSeed': true,
-            'seed': 42,
+            'userInstruction': '提取发票号码和金额，以 JSON 输出',
             'maxTokens': 4096,
           },
         );
@@ -584,7 +595,236 @@ void main() {
           imageBytes: Uint8List.fromList([1, 2, 3]),
           imageFormat: 'jpeg',
         );
-        expect(service.lastRequestBody?['seed'], equals(42));
+        final messages = capturedBody?['messages'] as List?;
+        final userContent = messages?.lastWhere(
+          (m) => m['role'] == 'user',
+        )['content'] as List;
+        // Official qwen-vl-ocr / DeepSeek-OCR examples put the image first,
+        // the instruction text after it.
+        expect(userContent.length, equals(2));
+        expect(userContent[0]['type'], equals('image_url'));
+        expect(
+            userContent[1],
+            equals({
+              'type': 'text',
+              'text': '提取发票号码和金额，以 JSON 输出',
+            }));
+      });
+
+      test(
+          'batch with userInstruction sends instruction after all images '
+          'without per-image labels', () async {
+        Map<String, dynamic>? capturedBody;
+        final dio = Dio()
+          ..interceptors.add(_InterceptorWithCallback(
+            callback: (options, handler) {
+              capturedBody = options.data as Map<String, dynamic>;
+              handler.resolve(Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'choices': [
+                    {
+                      'message': {'content': 'test'},
+                    },
+                  ],
+                },
+              ));
+            },
+          ));
+        final config = OcrConfig(
+          model: 'qwen-vl-ocr',
+          apiKey: 'key',
+          host: 'https://api.test.com',
+          typeConfig: {
+            'userInstruction': '提取每张图片中的全部文字',
+            'maxTokens': 4096,
+          },
+        );
+        final service = OcrService(config: config, dio: dio);
+        await service.recognizeBatch(
+          imageBytesList: [
+            (Uint8List.fromList([1, 2, 3]), 'jpeg'),
+            (Uint8List.fromList([4, 5, 6]), 'jpeg'),
+          ],
+        );
+        final messages = capturedBody?['messages'] as List?;
+        final userContent = messages?.lastWhere(
+          (m) => m['role'] == 'user',
+        )['content'] as List;
+        // Consecutive images (no "图片 N：" labels), instruction text last.
+        expect(userContent.length, equals(3));
+        expect(userContent[0]['type'], equals('image_url'));
+        expect(userContent[1]['type'], equals('image_url'));
+        expect(
+            userContent[2],
+            equals({
+              'type': 'text',
+              'text': '提取每张图片中的全部文字',
+            }));
+        final textParts =
+            userContent.where((c) => c['type'] == 'text').toList();
+        expect(textParts.length, equals(1));
+      });
+
+      test('single image without instruction has only the image', () async {
+        Map<String, dynamic>? capturedBody;
+        final dio = Dio()
+          ..interceptors.add(_InterceptorWithCallback(
+            callback: (options, handler) {
+              capturedBody = options.data as Map<String, dynamic>;
+              handler.resolve(Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'choices': [
+                    {
+                      'message': {'content': 'test'},
+                    },
+                  ],
+                },
+              ));
+            },
+          ));
+        final config = OcrConfig(
+          model: 'qwen-vl-ocr',
+          apiKey: 'key',
+          host: 'https://api.test.com',
+          typeConfig: {'maxTokens': 4096},
+        );
+        final service = OcrService(config: config, dio: dio);
+        await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+          imageFormat: 'jpeg',
+        );
+        final messages = capturedBody?['messages'] as List?;
+        final userContent = messages?.lastWhere(
+          (m) => m['role'] == 'user',
+        )['content'] as List;
+        expect(userContent.length, equals(1));
+        expect(userContent[0]['type'], equals('image_url'));
+      });
+
+      test('batch without instruction has only images (no labels)', () async {
+        Map<String, dynamic>? capturedBody;
+        final dio = Dio()
+          ..interceptors.add(_InterceptorWithCallback(
+            callback: (options, handler) {
+              capturedBody = options.data as Map<String, dynamic>;
+              handler.resolve(Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'choices': [
+                    {
+                      'message': {'content': 'test'},
+                    },
+                  ],
+                },
+              ));
+            },
+          ));
+        final config = OcrConfig(
+          model: 'qwen-vl-ocr',
+          apiKey: 'key',
+          host: 'https://api.test.com',
+          typeConfig: {'maxTokens': 4096},
+        );
+        final service = OcrService(config: config, dio: dio);
+        await service.recognizeBatch(
+          imageBytesList: [
+            (Uint8List.fromList([1, 2, 3]), 'jpeg'),
+            (Uint8List.fromList([4, 5, 6]), 'jpeg'),
+          ],
+        );
+        final messages = capturedBody?['messages'] as List?;
+        final userContent = messages?.lastWhere(
+          (m) => m['role'] == 'user',
+        )['content'] as List;
+        expect(userContent.length, equals(2));
+        expect(userContent.every((c) => c['type'] == 'image_url'), isTrue);
+      });
+
+      test('whitespace-only instruction is treated as absent', () async {
+        Map<String, dynamic>? capturedBody;
+        final dio = Dio()
+          ..interceptors.add(_InterceptorWithCallback(
+            callback: (options, handler) {
+              capturedBody = options.data as Map<String, dynamic>;
+              handler.resolve(Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'choices': [
+                    {
+                      'message': {'content': 'test'},
+                    },
+                  ],
+                },
+              ));
+            },
+          ));
+        final config = OcrConfig(
+          model: 'qwen-vl-ocr',
+          apiKey: 'key',
+          host: 'https://api.test.com',
+          typeConfig: {
+            'userInstruction': '   \n\n  ',
+            'maxTokens': 4096,
+          },
+        );
+        final service = OcrService(config: config, dio: dio);
+        await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+          imageFormat: 'jpeg',
+        );
+        final messages = capturedBody?['messages'] as List?;
+        final userContent = messages?.lastWhere(
+          (m) => m['role'] == 'user',
+        )['content'] as List;
+        expect(userContent.length, equals(1));
+        expect(userContent[0]['type'], equals('image_url'));
+      });
+
+      test('multi-line instruction is sent as a single text part', () async {
+        Map<String, dynamic>? capturedBody;
+        final dio = Dio()
+          ..interceptors.add(_InterceptorWithCallback(
+            callback: (options, handler) {
+              capturedBody = options.data as Map<String, dynamic>;
+              handler.resolve(Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'choices': [
+                    {
+                      'message': {'content': 'test'},
+                    },
+                  ],
+                },
+              ));
+            },
+          ));
+        final config = OcrConfig(
+          model: 'qwen-vl-ocr',
+          apiKey: 'key',
+          host: 'https://api.test.com',
+          typeConfig: {
+            'userInstruction': '第一行\n第二行',
+            'maxTokens': 4096,
+          },
+        );
+        final service = OcrService(config: config, dio: dio);
+        await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+          imageFormat: 'jpeg',
+        );
+        final messages = capturedBody?['messages'] as List?;
+        final userContent = messages?.lastWhere(
+          (m) => m['role'] == 'user',
+        )['content'] as List;
+        expect(userContent.length, equals(2));
+        expect(userContent[1], equals({'type': 'text', 'text': '第一行\n第二行'}));
       });
 
       test('request body includes custom params', () async {
@@ -755,318 +995,6 @@ void main() {
           imageFormat: 'jpeg',
         );
         expect(service.lastRequestBody?['top_p'], isNull);
-      });
-
-      test('seed omitted when not enabled', () async {
-        final dio = _mockDioWithSuccess({
-          'choices': [
-            {
-              'message': {'content': 'test'},
-            },
-          ],
-        });
-        final config = OcrConfig(
-          model: 'gpt-4o',
-          apiKey: 'key',
-          host: 'https://api.test.com',
-          typeConfig: {
-            'enableSeed': false,
-            'seed': 42,
-            'maxTokens': 4096,
-          },
-        );
-        final service = OcrService(config: config, dio: dio);
-        await service.recognize(
-          imageBytes: Uint8List.fromList([1, 2, 3]),
-          imageFormat: 'jpeg',
-        );
-        expect(service.lastRequestBody?['seed'], isNull);
-      });
-
-      test('detail defaults to omitted when enableDetail is false', () async {
-        Map<String, dynamic>? capturedBody;
-        final dio = Dio()
-          ..interceptors.add(_InterceptorWithCallback(
-            callback: (options, handler) {
-              capturedBody = options.data as Map<String, dynamic>;
-              handler.resolve(Response(
-                requestOptions: options,
-                statusCode: 200,
-                data: {
-                  'choices': [
-                    {
-                      'message': {'content': 'test'},
-                    },
-                  ],
-                },
-              ));
-            },
-          ));
-        final config = OcrConfig(
-          model: 'gpt-4o',
-          apiKey: 'key',
-          host: 'https://api.test.com',
-          typeConfig: {
-            'enableDetail': false,
-            'detail': 'high',
-            'maxTokens': 4096,
-          },
-        );
-        final service = OcrService(config: config, dio: dio);
-        await service.recognize(
-          imageBytes: Uint8List.fromList([1, 2, 3]),
-          imageFormat: 'jpeg',
-        );
-        final messages = capturedBody?['messages'] as List?;
-        final userContent = messages?.lastWhere(
-          (m) => m['role'] == 'user',
-        )['content'] as List;
-        final imageUrl = userContent.firstWhere(
-          (c) => c['type'] == 'image_url',
-        )['image_url'] as Map;
-        // When toggle is off, detail should NOT be in the image_url
-        expect(imageUrl.containsKey('detail'), isFalse);
-      });
-
-      test('image content includes detail from typeConfig', () async {
-        // We need a custom interceptor to capture the request body
-        Map<String, dynamic>? capturedBody;
-        final dio = Dio()
-          ..interceptors.add(_InterceptorWithCallback(
-            callback: (options, handler) {
-              capturedBody = options.data as Map<String, dynamic>;
-              handler.resolve(Response(
-                requestOptions: options,
-                statusCode: 200,
-                data: {
-                  'choices': [
-                    {
-                      'message': {'content': 'test'},
-                    },
-                  ],
-                },
-              ));
-            },
-          ));
-        final config = OcrConfig(
-          model: 'gpt-4o',
-          apiKey: 'key',
-          host: 'https://api.test.com',
-          typeConfig: {
-            'enableDetail': true,
-            'detail': 'low',
-            'maxTokens': 4096,
-          },
-        );
-        final service = OcrService(config: config, dio: dio);
-        await service.recognize(
-          imageBytes: Uint8List.fromList([1, 2, 3]),
-          imageFormat: 'jpeg',
-        );
-        final messages = capturedBody?['messages'] as List?;
-        final userContent = messages?.lastWhere(
-          (m) => m['role'] == 'user',
-        )['content'] as List;
-        final imageUrl = userContent.firstWhere(
-          (c) => c['type'] == 'image_url',
-        )['image_url'] as Map;
-        expect(imageUrl['detail'], equals('low'));
-      });
-
-      test('image_url passes detail original through when enabled', () async {
-        Map<String, dynamic>? capturedBody;
-        final dio = Dio()
-          ..interceptors.add(_InterceptorWithCallback(
-            callback: (options, handler) {
-              capturedBody = options.data as Map<String, dynamic>;
-              handler.resolve(Response(
-                requestOptions: options,
-                statusCode: 200,
-                data: {
-                  'choices': [
-                    {
-                      'message': {'content': 'test'},
-                    },
-                  ],
-                },
-              ));
-            },
-          ));
-        final config = OcrConfig(
-          model: 'gpt-5.4',
-          apiKey: 'key',
-          host: 'https://api.test.com',
-          typeConfig: {
-            'enableDetail': true,
-            'detail': 'original',
-            'maxTokens': 4096,
-          },
-        );
-        final service = OcrService(config: config, dio: dio);
-        await service.recognize(
-          imageBytes: Uint8List.fromList([1, 2, 3]),
-          imageFormat: 'jpeg',
-        );
-        final messages = capturedBody?['messages'] as List?;
-        final userContent = messages?.lastWhere(
-          (m) => m['role'] == 'user',
-        )['content'] as List;
-        final imageUrl = userContent.firstWhere(
-          (c) => c['type'] == 'image_url',
-        )['image_url'] as Map;
-        expect(imageUrl['detail'], equals('original'));
-      });
-
-      test('request body includes response_format object when enabled',
-          () async {
-        final dio = _mockDioWithSuccess({
-          'choices': [
-            {
-              'message': {'content': 'test'},
-            },
-          ],
-        });
-        final config = OcrConfig(
-          model: 'gpt-4o',
-          apiKey: 'key',
-          host: 'https://api.test.com',
-          typeConfig: {
-            'enableResponseFormat': true,
-            'responseFormat': 'json_object',
-            'maxTokens': 4096,
-          },
-        );
-        final service = OcrService(config: config, dio: dio);
-        await service.recognize(
-          imageBytes: Uint8List.fromList([1, 2, 3]),
-          imageFormat: 'jpeg',
-        );
-        expect(service.lastRequestBody?['response_format'], isA<Map>());
-        expect(
-          (service.lastRequestBody?['response_format'] as Map)['type'],
-          equals('json_object'),
-        );
-      });
-
-      test('request body omits response_format when not enabled', () async {
-        final dio = _mockDioWithSuccess({
-          'choices': [
-            {
-              'message': {'content': 'test'},
-            },
-          ],
-        });
-        final config = OcrConfig(
-          model: 'gpt-4o',
-          apiKey: 'key',
-          host: 'https://api.test.com',
-          typeConfig: {
-            'enableResponseFormat': false,
-            'responseFormat': 'json_object',
-            'maxTokens': 4096,
-          },
-        );
-        final service = OcrService(config: config, dio: dio);
-        await service.recognize(
-          imageBytes: Uint8List.fromList([1, 2, 3]),
-          imageFormat: 'jpeg',
-        );
-        expect(service.lastRequestBody?['response_format'], isNull);
-      });
-
-      test('image_url includes min_pixels and max_pixels when enabled',
-          () async {
-        Map<String, dynamic>? capturedBody;
-        final dio = Dio()
-          ..interceptors.add(_InterceptorWithCallback(
-            callback: (options, handler) {
-              capturedBody = options.data as Map<String, dynamic>;
-              handler.resolve(Response(
-                requestOptions: options,
-                statusCode: 200,
-                data: {
-                  'choices': [
-                    {
-                      'message': {'content': 'test'},
-                    },
-                  ],
-                },
-              ));
-            },
-          ));
-        final config = OcrConfig(
-          model: 'gpt-4o',
-          apiKey: 'key',
-          host: 'https://api.test.com',
-          typeConfig: {
-            'enableMinPixels': true,
-            'minPixels': 3072,
-            'enableMaxPixels': true,
-            'maxPixels': 8388608,
-            'maxTokens': 4096,
-          },
-        );
-        final service = OcrService(config: config, dio: dio);
-        await service.recognize(
-          imageBytes: Uint8List.fromList([1, 2, 3]),
-          imageFormat: 'jpeg',
-        );
-        final messages = capturedBody?['messages'] as List?;
-        final userContent = messages?.lastWhere(
-          (m) => m['role'] == 'user',
-        )['content'] as List;
-        final imageUrl = userContent.firstWhere(
-          (c) => c['type'] == 'image_url',
-        )['image_url'] as Map;
-        expect(imageUrl['min_pixels'], equals(3072));
-        expect(imageUrl['max_pixels'], equals(8388608));
-      });
-
-      test('image_url omits min_pixels/max_pixels when not enabled', () async {
-        Map<String, dynamic>? capturedBody;
-        final dio = Dio()
-          ..interceptors.add(_InterceptorWithCallback(
-            callback: (options, handler) {
-              capturedBody = options.data as Map<String, dynamic>;
-              handler.resolve(Response(
-                requestOptions: options,
-                statusCode: 200,
-                data: {
-                  'choices': [
-                    {
-                      'message': {'content': 'test'},
-                    },
-                  ],
-                },
-              ));
-            },
-          ));
-        final config = OcrConfig(
-          model: 'gpt-4o',
-          apiKey: 'key',
-          host: 'https://api.test.com',
-          typeConfig: {
-            'enableMinPixels': false,
-            'minPixels': 3072,
-            'enableMaxPixels': false,
-            'maxPixels': 8388608,
-            'maxTokens': 4096,
-          },
-        );
-        final service = OcrService(config: config, dio: dio);
-        await service.recognize(
-          imageBytes: Uint8List.fromList([1, 2, 3]),
-          imageFormat: 'jpeg',
-        );
-        final messages = capturedBody?['messages'] as List?;
-        final userContent = messages?.lastWhere(
-          (m) => m['role'] == 'user',
-        )['content'] as List;
-        final imageUrl = userContent.firstWhere(
-          (c) => c['type'] == 'image_url',
-        )['image_url'] as Map;
-        expect(imageUrl.containsKey('min_pixels'), isFalse);
-        expect(imageUrl.containsKey('max_pixels'), isFalse);
       });
 
       test('diagnostics are captured on successful response', () async {

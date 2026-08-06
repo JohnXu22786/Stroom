@@ -4,7 +4,8 @@ import '../providers/provider_config.dart';
 import 'llm_model_config_shared.dart';
 
 /// OCR 模型配置编辑页面
-/// 包含基本设置和 OCR 专有参数（temperature、detail 等）
+/// 包含基本设置、可选用户指令、OCR 参数（temperature/topP/maxTokens）
+/// 和自定义参数；所有参数均为可选，未开启/未填写则不发送。
 class OcrModelConfigPage extends StatefulWidget {
   final ModelConfig? model; // null = 新建, non-null = 编辑
 
@@ -18,9 +19,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _modelIdController;
   late final TextEditingController _maxTokensController;
-  late final TextEditingController _seedController;
-  late final TextEditingController _minPixelsController;
-  late final TextEditingController _maxPixelsController;
+  late final TextEditingController _userInstructionController;
   late List<CustomParam> _customParams;
   final Map<int, String?> _jsonErrors = {};
 
@@ -28,21 +27,10 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   double _temperature = 0.0;
   double _topP = 1.0;
 
-  // Detail level
-  String _detail = 'high';
-
-  // Response format ('text' | 'json_object')
-  String _responseFormat = 'text';
-
   // Toggle flags
   bool _enableTemperature = false;
   bool _enableTopP = false;
   bool _enableMaxTokens = false;
-  bool _enableDetail = false;
-  bool _enableSeed = false;
-  bool _enableResponseFormat = false;
-  bool _enableMinPixels = false;
-  bool _enableMaxPixels = false;
 
   bool _isSaving = false;
 
@@ -56,24 +44,13 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       if (_nameController.text.isNotEmpty) return true;
       if (_modelIdController.text.isNotEmpty) return true;
       if (_customParams.any((p) => p.paramName.isNotEmpty)) return true;
-      if (_enableTemperature ||
-          _enableTopP ||
-          _enableMaxTokens ||
-          _enableDetail ||
-          _enableSeed ||
-          _enableResponseFormat ||
-          _enableMinPixels ||
-          _enableMaxPixels) {
+      if (_enableTemperature || _enableTopP || _enableMaxTokens) {
         return true;
       }
       if (_maxTokensController.text.isNotEmpty) return true;
-      if (_seedController.text.isNotEmpty) return true;
-      if (_minPixelsController.text.isNotEmpty) return true;
-      if (_maxPixelsController.text.isNotEmpty) return true;
+      if (_userInstructionController.text.trim().isNotEmpty) return true;
       if (_temperature != 0.0) return true;
       if (_topP != 1.0) return true;
-      if (_detail != 'high') return true;
-      if (_responseFormat != 'text') return true;
       return false;
     }
     // Editing: compare against original model
@@ -88,13 +65,6 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     if (((m.typeConfig['topP'] as num?)?.toDouble() ?? 1.0) != _topP) {
       return true;
     }
-    if ((m.typeConfig['detail'] as String? ?? 'high') != _detail) {
-      return true;
-    }
-    if ((m.typeConfig['responseFormat'] as String? ?? 'text') !=
-        _responseFormat) {
-      return true;
-    }
     if ((m.typeConfig['enableTemperature'] as bool? ?? false) !=
         _enableTemperature) {
       return true;
@@ -106,39 +76,13 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         _enableMaxTokens) {
       return true;
     }
-    if ((m.typeConfig['enableDetail'] as bool? ?? false) != _enableDetail) {
-      return true;
-    }
-    if ((m.typeConfig['enableSeed'] as bool? ?? false) != _enableSeed) {
-      return true;
-    }
-    if ((m.typeConfig['enableResponseFormat'] as bool? ?? false) !=
-        _enableResponseFormat) {
-      return true;
-    }
-    if ((m.typeConfig['enableMinPixels'] as bool? ?? false) !=
-        _enableMinPixels) {
-      return true;
-    }
-    if ((m.typeConfig['enableMaxPixels'] as bool? ?? false) !=
-        _enableMaxPixels) {
-      return true;
-    }
     if ((m.typeConfig['maxTokens']?.toString() ?? '') !=
         _maxTokensController.text) {
       return true;
     }
-    if ((m.typeConfig['seed']?.toString() ?? '') != _seedController.text) {
-      return true;
-    }
-    // Compare trimmed text: save normalizes (trims) these fields, so a
-    // trailing-space-only edit is a no-op, not a real change.
-    if ((m.typeConfig['minPixels']?.toString() ?? '') !=
-        _minPixelsController.text.trim()) {
-      return true;
-    }
-    if ((m.typeConfig['maxPixels']?.toString() ?? '') !=
-        _maxPixelsController.text.trim()) {
+    // Save normalizes (trims) the instruction, so compare trimmed text.
+    if ((m.typeConfig['userInstruction']?.toString() ?? '') !=
+        _userInstructionController.text.trim()) {
       return true;
     }
     // Custom params (simple check via serialization)
@@ -158,38 +102,19 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     // Initialize OCR-specific params from typeConfig
     _temperature = (m?.typeConfig['temperature'] as num?)?.toDouble() ?? 0.0;
     _topP = (m?.typeConfig['topP'] as num?)?.toDouble() ?? 1.0;
-    _detail = (m?.typeConfig['detail'] as String?) ?? 'high';
-    _responseFormat = m?.typeConfig['responseFormat'] as String? ?? 'text';
 
     // Read enable flags from typeConfig
     _enableTemperature = m?.typeConfig['enableTemperature'] as bool? ?? false;
     _enableTopP = m?.typeConfig['enableTopP'] as bool? ?? false;
     _enableMaxTokens = m?.typeConfig['enableMaxTokens'] as bool? ?? false;
-    _enableDetail = m?.typeConfig['enableDetail'] as bool? ?? false;
-    _enableSeed = m?.typeConfig['enableSeed'] as bool? ?? false;
-    _enableResponseFormat =
-        m?.typeConfig['enableResponseFormat'] as bool? ?? false;
-    _enableMinPixels = m?.typeConfig['enableMinPixels'] as bool? ?? false;
-    _enableMaxPixels = m?.typeConfig['enableMaxPixels'] as bool? ?? false;
 
     final maxTokens = (m?.typeConfig['maxTokens'] as num?)?.toInt();
     _maxTokensController = TextEditingController(
       text: maxTokens != null ? maxTokens.toString() : '',
     );
 
-    final seed = m?.typeConfig['seed'];
-    _seedController = TextEditingController(
-      text: seed != null ? seed.toString() : '',
-    );
-
-    final minPixels = (m?.typeConfig['minPixels'] as num?)?.toInt();
-    _minPixelsController = TextEditingController(
-      text: minPixels != null ? minPixels.toString() : '',
-    );
-
-    final maxPixels = (m?.typeConfig['maxPixels'] as num?)?.toInt();
-    _maxPixelsController = TextEditingController(
-      text: maxPixels != null ? maxPixels.toString() : '',
+    _userInstructionController = TextEditingController(
+      text: m?.typeConfig['userInstruction']?.toString() ?? '',
     );
 
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
@@ -204,9 +129,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     _nameController.dispose();
     _modelIdController.dispose();
     _maxTokensController.dispose();
-    _seedController.dispose();
-    _minPixelsController.dispose();
-    _maxPixelsController.dispose();
+    _userInstructionController.dispose();
     super.dispose();
   }
 
@@ -593,21 +516,10 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     if (_enableTopP) {
       typeConfig['topP'] = _topP;
     }
-    if (_enableResponseFormat) {
-      typeConfig['responseFormat'] = _responseFormat;
-    }
-    if (_enableDetail) {
-      typeConfig['detail'] = _detail;
-    }
     // Always save toggle states so they persist
     typeConfig['enableTemperature'] = _enableTemperature;
     typeConfig['enableTopP'] = _enableTopP;
     typeConfig['enableMaxTokens'] = _enableMaxTokens;
-    typeConfig['enableDetail'] = _enableDetail;
-    typeConfig['enableSeed'] = _enableSeed;
-    typeConfig['enableResponseFormat'] = _enableResponseFormat;
-    typeConfig['enableMinPixels'] = _enableMinPixels;
-    typeConfig['enableMaxPixels'] = _enableMaxPixels;
 
     // Parse optional maxTokens
     final maxTokensStr = _maxTokensController.text.trim();
@@ -635,98 +547,10 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       return;
     }
 
-    // Parse optional seed
-    final seedStr = _seedController.text.trim();
-    if (seedStr.isNotEmpty) {
-      final seed = int.tryParse(seedStr);
-      if (seed == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('随机种子必须为整数'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        setState(() => _isSaving = false);
-        return;
-      }
-      typeConfig['seed'] = seed;
-    } else if (_enableSeed) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('随机种子已启用但未填写'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      setState(() => _isSaving = false);
-      return;
-    }
-
-    // Parse optional min_pixels / max_pixels (positive integers)
-    final minPixelsStr = _minPixelsController.text.trim();
-    if (minPixelsStr.isNotEmpty) {
-      final minPixels = int.tryParse(minPixelsStr);
-      if (minPixels == null || minPixels <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('最小像素必须为正整数'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        setState(() => _isSaving = false);
-        return;
-      }
-      typeConfig['minPixels'] = minPixels;
-    } else if (_enableMinPixels) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('最小像素已启用但未填写'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      setState(() => _isSaving = false);
-      return;
-    }
-
-    final maxPixelsStr = _maxPixelsController.text.trim();
-    if (maxPixelsStr.isNotEmpty) {
-      final maxPixels = int.tryParse(maxPixelsStr);
-      if (maxPixels == null || maxPixels <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('最大像素必须为正整数'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        setState(() => _isSaving = false);
-        return;
-      }
-      typeConfig['maxPixels'] = maxPixels;
-    } else if (_enableMaxPixels) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('最大像素已启用但未填写'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      setState(() => _isSaving = false);
-      return;
-    }
-
-    // Cross-check: min_pixels must not exceed max_pixels
-    if (typeConfig.containsKey('minPixels') &&
-        typeConfig.containsKey('maxPixels')) {
-      final minP = typeConfig['minPixels'] as int;
-      final maxP = typeConfig['maxPixels'] as int;
-      if (minP > maxP) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('最小像素不能大于最大像素'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        setState(() => _isSaving = false);
-        return;
-      }
+    // Optional user instruction (sent together with the images)
+    final userInstruction = _userInstructionController.text.trim();
+    if (userInstruction.isNotEmpty) {
+      typeConfig['userInstruction'] = userInstruction;
     }
 
     final result = ModelConfig(
@@ -820,7 +644,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             const SizedBox(height: 24),
 
             // ==========================================================
-            // OCR 参数设置（带开关）
+            // OCR 参数设置（全部可选）
             // ==========================================================
             Text(
               'OCR 参数',
@@ -832,13 +656,50 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             ),
             const SizedBox(height: 4),
             Text(
-              '基于 OpenAI 兼容的视觉 Chat Completions 格式，内置图片分辨率、'
-              '像素阈值、输出格式等 OCR 常用参数；开启的参数将作为默认值发送到 '
-              'API 请求中。其他供应商特有参数（需其接口支持）可在下方自定义参数中'
-              '添加。',
+              '基于 OpenAI 兼容的视觉 Chat Completions 格式（OCR 通常即调用此类'
+              '接口），以下参数均为可选，不填写/不开启则不发送。其他供应商特有'
+              '参数（需其接口支持）可在下方自定义参数中添加。',
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 12),
+
+            // User instruction (optional) — sent together with the images
+            Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '用户指令 (可选)',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: _userInstructionController,
+                      maxLines: 4,
+                      minLines: 2,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: '如：提取发票号码和金额，以 JSON 输出',
+                        isDense: true,
+                      ),
+                      onChanged: (v) => setState(() {}),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '可选填写。不填写时仅发送图片，使用默认识别行为；'
+                      '填写后随图片一起发送给模型，可指定提取内容、输出格式等。',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
             // Temperature
             LlmToggleSlider(
@@ -875,98 +736,6 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               hintText: '如 4096',
               keyboardType: TextInputType.number,
               description: '每次响应最多生成的 token 数',
-            ),
-
-            // Seed
-            LlmToggleTextField(
-              label: '随机种子 (Seed)',
-              controller: _seedController,
-              enabled: _enableSeed,
-              onToggle: (v) => setState(() => _enableSeed = v),
-              hintText: '如 42',
-              keyboardType: TextInputType.number,
-              description: '设置后可使输出结果可复现',
-            ),
-
-            // Response format
-            LlmToggleDropdownCard(
-              label: '输出格式 (Response Format)',
-              description: '要求模型以指定格式输出，如结构化 JSON',
-              enabled: _enableResponseFormat,
-              value: _responseFormat,
-              onChanged: (v) => setState(() => _responseFormat = v),
-              onToggle: (v) => setState(() => _enableResponseFormat = v),
-              items: const [
-                DropdownMenuItem(
-                  value: 'text',
-                  child: Text('text - 纯文本'),
-                ),
-                DropdownMenuItem(
-                  value: 'json_object',
-                  child: Text('json_object - 结构化 JSON'),
-                ),
-              ],
-              hintBuilder: (v) => v == 'json_object'
-                  ? '模型将输出合法 JSON 对象（需在提示词中说明 JSON 结构）'
-                  : '默认格式，模型输出普通文本',
-            ),
-
-            // Detail level
-            LlmToggleDropdownCard(
-              label: '图片细节级别 (Detail)',
-              description: '控制模型处理图片时的分辨率',
-              enabled: _enableDetail,
-              value: _detail,
-              onChanged: (v) => setState(() => _detail = v),
-              onToggle: (v) => setState(() => _enableDetail = v),
-              items: const [
-                DropdownMenuItem(
-                  value: 'auto',
-                  child: Text('auto - 自动选择'),
-                ),
-                DropdownMenuItem(
-                  value: 'low',
-                  child: Text('low - 低分辨率 (512x512)'),
-                ),
-                DropdownMenuItem(
-                  value: 'high',
-                  child: Text('high - 高分辨率 (分块处理)'),
-                ),
-                DropdownMenuItem(
-                  value: 'original',
-                  child: Text('original - 原图 (不缩放)'),
-                ),
-              ],
-              hintBuilder: (v) => v == 'auto'
-                  ? '模型根据图片大小自动选择细节级别'
-                  : v == 'low'
-                      ? '低分辨率模式，处理速度更快、消耗更少 Token'
-                      : v == 'high'
-                          ? '高分辨率模式，模型将图片分块处理以获取更多细节'
-                          : '原图模式，不缩放图片，适合密集文字/大图',
-            ),
-
-            // Min / Max pixels (qwen-vl-ocr OpenAI-compatible mode)
-            LlmToggleTextField(
-              label: '最小像素 (min_pixels)',
-              controller: _minPixelsController,
-              enabled: _enableMinPixels,
-              onToggle: (v) => setState(() => _enableMinPixels = v),
-              hintText: '如 3072',
-              keyboardType: TextInputType.number,
-              description: '图片小于该像素数时放大（qwen-vl-ocr 等模型支持，'
-                  '作用于 image_url）',
-            ),
-
-            LlmToggleTextField(
-              label: '最大像素 (max_pixels)',
-              controller: _maxPixelsController,
-              enabled: _enableMaxPixels,
-              onToggle: (v) => setState(() => _enableMaxPixels = v),
-              hintText: '如 8388608',
-              keyboardType: TextInputType.number,
-              description: '图片大于该像素数时缩小（qwen-vl-ocr 等模型支持，'
-                  '作用于 image_url）',
             ),
 
             const SizedBox(height: 24),
