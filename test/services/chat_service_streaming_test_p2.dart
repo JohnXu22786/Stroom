@@ -312,11 +312,11 @@ void chatServiceStreamingGroup2() {
 
     test('large image (>10MB) is auto-compressed and sent as image part',
         () async {
-      // 2800x2100 照片风格 PNG ≈ 11MB，超过 10MB 上限。
+      // 2800x2100 照片风格 PNG ≈ 11MB，超过通用压缩阈值（2MB）。
       // 修复前：readAttachmentBase64 直接返回 tooLarge，请求中出现
       // “[图片过大已跳过]”占位文本，API 只能收到后一张图。
-      // 修复后：用户已选择的图片必须发送 —— 发送前无损优先、JPEG
-      // 降级的自动压缩，payload 以 image_url 形式出现在请求中。
+      // 修复后：所有用户选择的图片都会在发送前压缩到 2MB 通用阈值
+      // 以内（无损优先、JPEG 降级），payload 以 image_url 形式出现。
       final rng = Random(11);
       final im = img.Image(width: 2800, height: 2100, numChannels: 3);
       for (final p in im) {
@@ -331,8 +331,8 @@ void chatServiceStreamingGroup2() {
               (150 + 60 * (p.y / 2100) + rng.nextInt(18)).round().clamp(0, 255);
       }
       final hugePng = img.encodePng(im, level: 6);
-      expect(hugePng.length, greaterThan(10 * 1024 * 1024),
-          reason: '夹具必须超过 10MB 上限才能触发压缩');
+      expect(hugePng.length, greaterThan(2 * 1024 * 1024),
+          reason: '夹具必须超过通用压缩阈值（2MB）才能触发压缩');
 
       final att = Attachment(
         fileName: 'big_image.png',
@@ -370,7 +370,8 @@ void chatServiceStreamingGroup2() {
       expect(url.startsWith('data:image/jpeg;base64,'), isTrue);
       final payload =
           base64Decode(url.substring('data:image/jpeg;base64,'.length));
-      expect(payload.length, lessThan(10 * 1024 * 1024));
+      expect(payload.length, lessThanOrEqualTo(2 * 1024 * 1024),
+          reason: '图片必须压缩到 2MB 通用阈值以内（各家 API 总量上限有限）');
       expect(payload.length, lessThan(hugePng.length));
     });
   });

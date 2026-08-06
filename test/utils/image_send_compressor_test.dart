@@ -119,6 +119,27 @@ void main() {
           reason: '带 alpha 的 PNG 降级为 JPEG 后必须可解码');
     });
 
+    test('q60 仍超阈值时继续降到 q50（高像素照片场景）', () async {
+      // 自校准：以 q60/q50 实测尺寸的中间值作为阈值，
+      // 保证 q60 超限而 q50 达标，验证质量阶梯会继续下探。
+      final decoded = img.decodeImage(bigPng)!;
+      final q60 =
+          img.encodeJpg(decoded, quality: 60, chroma: img.JpegChroma.yuv420);
+      final q50 =
+          img.encodeJpg(decoded, quality: 50, chroma: img.JpegChroma.yuv420);
+      expect(q60.length, greaterThan(q50.length),
+          reason: '夹具必须满足 q60 > q50 才有区分度');
+      final maxBytes = (q60.length + q50.length) ~/ 2;
+
+      final outcome = await compressImageForSend(bigPng, maxBytes: maxBytes);
+
+      expect(outcome.decodable, isTrue);
+      expect(outcome.compressed, isNotNull,
+          reason: 'q60 超限时质量阶梯必须继续降到 q50 而不是放弃');
+      expect(outcome.compressed!.bytes.length, lessThanOrEqualTo(maxBytes));
+      expect(img.decodeImage(outcome.compressed!.bytes), isNotNull);
+    });
+
     test('输入已在上限以内时返回 null（不做无谓重编码，字节原样保留）', () async {
       final tiny = img.encodePng(buildPhotoLikeImage(width: 64, height: 64));
       expect(tiny.length, lessThan(10 * 1024 * 1024));

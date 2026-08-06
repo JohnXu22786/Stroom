@@ -9,16 +9,20 @@ import 'package:image/image.dart' as img;
 // ============================================================================
 //
 // 背景：4MB 的照片在简单裁剪编辑后变成 12MB 的 PNG（dart:ui 只能输出
-// PNG），超过 10MB 发送上限后请求里出现“[图片过大已跳过]”，API 只能
-// 收到用户选择的部分图片。
+// PNG）。而各家 API 对请求体有严格的总量上限（Anthropic Messages API
+// 32MB、Gemini inline 20MB，base64 再膨胀 33%，多轮对话每轮还会重发
+// 历史图片），单图超过 ~5-10MB 的会被服务器直接 413/400 拒绝。
 //
-// 策略（只在该出手时才出手）：
-// 1. 输入未超过上限 → 不压缩（字节原样保留 = 真正无损，零 CPU 开销）。
-// 2. 输入超过上限 → 解码后：
+// 策略（只在该出手时才出手，通用阈值，不做逐供应商优化）：
+// 1. 输入未超过调用方给定的 [maxBytes]（通用阈值，见
+//    chat_protocol.dart 的 imageCompressThresholdBytes）→ 不压缩
+//    （字节原样保留 = 真正无损，零 CPU 开销）。
+// 2. 输入超过阈值 → 解码后：
 //    a. 无损优先：PNG 源（或带 alpha）先用 level 6 无损重编码
 //       （level 6 已获得 level 9 的绝大部分压缩收益，但耗时显著更少）；
-//    b. JPEG 降级：仍超限则按 90 → 75 → 60 质量递减编码（对照片视觉
-//       无损），JPEG 编码器会把 alpha 合成到背景色上；
+//    b. JPEG 降级：仍超限则按 90 → 75 → 60 → 50 质量递减编码
+//       （50 仅用于噪声大的高像素照片），JPEG 编码器会把 alpha 合成
+//       到背景色上；
 //    c. 每次只保留"确实比当前最小结果更小"的候选。
 // 3. 无法解码 → [ImageCompressionResult.decodable] = false，调用方据此
 //    决定跳过（发送必然被 API 拒绝）；可解码但压缩无收益 → null 压缩
@@ -54,7 +58,8 @@ class ImageCompressionResult {
 }
 
 /// JPEG 质量递减梯度：先视觉无损（90），再逐步让步。
-const List<int> _jpegQualitySteps = [90, 75, 60];
+/// 50 档仅在 60 档仍超阈值时触发（如噪声较大的高像素照片）。
+const List<int> _jpegQualitySteps = [90, 75, 60, 50];
 
 /// 将 [input] 压缩到不超过 [maxBytes]。
 ///

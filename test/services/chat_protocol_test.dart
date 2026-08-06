@@ -574,7 +574,7 @@ void main() {
       expect(img.decodeImage(payload), isNotNull);
     });
 
-    test('未超限图片原样返回（字节不变，无格式覆盖）', () async {
+    test('未超限图片原样返回（字节不变，格式按魔数检测）', () async {
       final tinyPng = img.encodePng(
         img.Image(width: 8, height: 8, numChannels: 3),
       );
@@ -591,10 +591,9 @@ void main() {
       final outcome = await readAttachmentBase64(att);
 
       expect(outcome.status, AttachmentReadStatus.ok);
-      expect(outcome.base64, b64);
-      expect(outcome.mimeType, isNull, reason: '未发生格式转换时不应覆盖 mimeType');
+      expect(outcome.base64, b64, reason: '阈值以内的图片字节必须原样保留');
+      expect(outcome.mimeType, 'image/png', reason: '载荷格式按魔数检测（与声明一致时结果相同）');
     });
-
     test('超限非图片（音频）仍返回 tooLarge（不读盘）', () async {
       final fakeAudio = Uint8List.fromList(List.filled(11 * 1024 * 1024, 0x55));
       final att = Attachment(
@@ -629,6 +628,96 @@ void main() {
 
       expect(outcome.status, AttachmentReadStatus.tooLarge);
       expect(outcome.base64, isNull);
+    });
+
+    test('2~10MB 之间的图片在默认通用阈值下也会被压缩（所有图片都压缩）', () async {
+      // 回归：旧行为只压缩 >10MB 的图片，3.6MB 的照片原样 base64
+      // （约 4.8MB）发送，多张图 + 多轮历史重发很容易顶爆
+      // Anthropic 32MB / Gemini 20MB 的请求体上限。
+      // 现在默认阈值 2MB：3.6MB 的图压缩到 2MB 以内。
+      final att = Attachment(
+        fileName: 'photo.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'h',
+        storagePath: 'attachments/h_photo.png',
+        fileSize: bigPng.length,
+      )..base64Data = base64Encode(bigPng);
+
+      final outcome = await readAttachmentBase64(att); // 默认 maxBytes=2MB
+
+      expect(outcome.status, AttachmentReadStatus.ok);
+      expect(outcome.base64, isNotNull);
+      final payload = base64Decode(outcome.base64!);
+      expect(payload.length, lessThanOrEqualTo(2 * 1024 * 1024),
+          reason: '超过通用阈值的图片必须压缩到阈值以内');
+      expect(payload.length, lessThan(bigPng.length));
+      expect(outcome.mimeType, 'image/jpeg');
+      expect(img.decodeImage(payload), isNotNull);
+    });
+
+    test('低于 2MB 通用阈值的图片原样保留（真正无损，零开销）', () async {
+      final rng = Random(21);
+      final im = img.Image(width: 1024, height: 768, numChannels: 3);
+      for (final p in im) {
+        final dx = p.x - 512;
+        final dy = p.y - 384;
+        final d = (dx * dx + dy * dy) / (1024 * 768);
+        p
+          ..r = (128 + 50 * (d % 1) + rng.nextInt(14)).round().clamp(0, 255)
+          ..g =
+              (100 + 80 * (p.x / 1024) + rng.nextInt(14)).round().clamp(0, 255)
+          ..b =
+              (150 + 60 * (p.y / 768) + rng.nextInt(14)).round().clamp(0, 255);
+      }
+      final midPng = img.encodePng(im, level: 6);
+      expect(midPng.length, lessThan(2 * 1024 * 1024));
+      expect(midPng.length, greaterThan(512 * 1024),
+          reason: '夹具应处于 0.5~2MB 之间才有区分度');
+      final b64 = base64Encode(midPng);
+      final att = Attachment(
+        fileName: 'mid.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'h',
+        storagePath: 'attachments/h_mid.png',
+        fileSize: midPng.length,
+      )..base64Data = b64;
+      final outcome = await readAttachmentBase64(att);
+
+      expect(outcome.status, AttachmentReadStatus.ok);
+      expect(outcome.base64, b64, reason: '阈值以内的图片必须字节原样保留（无损优先）');
+      expect(outcome.mimeType, 'image/png', reason: '载荷格式按魔数检测');
+    });
+
+    test('压缩结果缓存复用（下一轮发送）时格式覆盖不丢失', () async {
+      // 回归：第一轮把 PNG 压缩成 JPEG 并回写缓存后，第二轮命中缓存
+      // （压缩后载荷 ≤ 阈值，不再压缩）——若格式覆盖在此路径丢失，
+      // JPEG 载荷会被声明成 image/png，Anthropic 会整条 400。
+      final att = Attachment(
+        fileName: 'photo.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'h',
+        storagePath: 'attachments/h_photo.png',
+        fileSize: bigPng.length,
+      )..base64Data = base64Encode(bigPng);
+
+      final first = await readAttachmentBase64(att);
+      expect(first.status, AttachmentReadStatus.ok);
+      expect(first.mimeType, 'image/jpeg');
+      final firstPayload = base64Decode(first.base64!);
+      expect(firstPayload.length, lessThanOrEqualTo(2 * 1024 * 1024));
+
+      // 第二轮：命中缓存，载荷不变
+      final second = await readAttachmentBase64(att);
+      expect(second.status, AttachmentReadStatus.ok);
+      expect(second.base64, first.base64, reason: '缓存应直接复用压缩结果');
+      final secondPayload = base64Decode(second.base64!);
+      expect(secondPayload[0], 0xFF);
+      expect(secondPayload[1], 0xD8, reason: '载荷仍是 JPEG');
+      expect(second.mimeType, 'image/jpeg',
+          reason: '缓存复用路径不得丢失格式覆盖（否则 Anthropic 整条 400）');
     });
   });
 
