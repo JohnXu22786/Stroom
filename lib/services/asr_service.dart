@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -93,12 +94,16 @@ class AsrConfig {
   /// Chunking method: 'none', 'silence', 'fixedDuration', or 'fixedSize'.
   final String chunking;
 
-  /// Compression codec: 'none', 'adpcm', 'flac', 'opus', 'mp3'.
+  /// Compression codec: 'none', 'adpcm' (wrapped in a WAV container),
+  /// or 'flac'. 'opus'/'mp3' are not supported (experimental encoders
+  /// produce undecodable output).
   final String compression;
 
   /// Fallback strategy when file exceeds [maxFileSizeBytes]:
   /// - 'none': reject immediately
-  /// - 'specific': try base64/URL (whichever isn't the primary method)
+  /// - 'specific': try base64 JSON (bypasses multipart size caps on some
+  ///   providers; URL needs a public link, multipart doesn't help an
+  ///   over-limit file)
   /// - 'generic': apply preprocessing → compression → chunking → re-upload
   /// - 'all': try specific first, then generic
   final String fallbackMethod;
@@ -316,17 +321,21 @@ class AsrService {
 
     final fallback = config.fallbackMethod;
 
-    // Step 1: Try specific fallback (base64/URL) if configured
+    // Step 1: Try specific fallback (base64) if configured
     if (fallback == 'specific' || fallback == 'all') {
       final specificMethod = _getSpecificFallback(config.uploadMethod);
-      if (specificMethod != null) {
+      if (specificMethod == null) {
+        await AppLogService.info('AsrService',
+            '当前上传方式 (${config.uploadMethod.name}) 没有可用的特定兜底'
+            '（URL 需要公网链接，multipart 不缓解超限）');
+      } else {
         try {
           if (specificMethod == AudioUploadMethod.base64Json) {
-            return _sendViaBase64(workingBytes, fmt);
+            // NOTE: must await, not `return` — a bare `return future` would
+            // deliver the error to the caller without entering this catch,
+            // aborting the whole fallback chain.
+            return await _sendViaBase64(workingBytes, fmt);
           }
-          // URL method requires a URL, not bytes — skip for now
-          await AppLogService.info(
-              'AsrService', '特定兜底 (${specificMethod.name}) 不适用（需要 URL）');
         } catch (e) {
           await AppLogService.warning(
               'AsrService', '特定兜底 (${specificMethod.name}) 失败: $e');
@@ -345,11 +354,23 @@ class AsrService {
         actualFmt = result.$2;
       }
 
-      // Apply chunking if configured (only works on uncompressed WAV)
+      // Apply chunking if configured. Chunking operates on raw PCM WAV only:
+      // - compressed payloads (ADPCM-in-WAV, FLAC) must not be split at
+      //   arbitrary byte offsets (block alignment / frame boundaries);
+      // - non-WAV inputs (mp3 etc.) cannot be parsed by the chunker.
       if (config.chunking != 'none' &&
           workingBytes.length > config.maxFileSizeBytes &&
+          config.compression == 'none' &&
           actualFmt == 'wav') {
-        return _transcribeChunked(workingBytes, actualFmt);
+        try {
+          // await required: a bare `return future` would deliver the error to
+          // the caller without entering this catch.
+          return await _transcribeChunked(workingBytes, actualFmt);
+        } on FormatException catch (e) {
+          // Malformed/unparseable WAV — fall through to the rejection below.
+          // Other failures (e.g. '切块转写全部失败') propagate as-is.
+          unawaited(AppLogService.warning('AsrService', '切块失败: $e'));
+        }
       }
 
       // If compression/chunking brought it under limit, send via primary
@@ -359,39 +380,71 @@ class AsrService {
     }
 
     // ── All fallbacks exhausted — reject ────────────────────────────
+    if (fallback == 'none') {
+      throw Exception(
+        '文件大小超过限制: '
+        '${formatFileSize(workingBytes.length)} > '
+        '${formatFileSize(config.maxFileSizeBytes)}。'
+        '当前兜底策略为“无”，超限文件被直接拒绝。',
+      );
+    }
     throw Exception(
       '文件大小超过限制且兜底策略未能解决: '
       '${formatFileSize(workingBytes.length)} > '
       '${formatFileSize(config.maxFileSizeBytes)}。'
-      '请配置兜底策略（base64/URL/压缩/切块）或降低文件大小。',
+      '压缩仅对 WAV 生效且压缩后仍可能超限；切块仅支持未压缩 WAV。'
+      '请降低文件大小，或改用 Base64/URL 上传方式。',
     );
   }
 
   /// Apply compression to working bytes. Returns compressed bytes and the
   /// new audio format string (e.g., 'flac' instead of 'wav').
+  ///
+  /// Only codecs that produce a standalone decodable container are used:
+  /// - 'adpcm': wrapped in a WAV container (WAVE_FORMAT_IMA_ADPCM).
+  /// - 'flac': standalone FLAC file.
+  /// 'opus'/'mp3' are experimental pure-Dart encoders whose output cannot
+  /// be decoded by providers — they are skipped instead of uploading garbage.
   (Uint8List, String) _applyCompression(Uint8List workingBytes, String fmt) {
-    if (config.compression == 'none' || fmt != 'wav')
+    if (config.compression == 'none' || fmt != 'wav') {
       return (workingBytes, fmt);
+    }
+    if (config.compression != 'adpcm' && config.compression != 'flac') {
+      unawaited(AppLogService.warning(
+          'AsrService', '不支持的压缩方式: ${config.compression}，跳过压缩'));
+      return (workingBytes, fmt);
+    }
     try {
       final info = parseWavHeader(workingBytes);
-      final samples = readPcmSamplesFloat(workingBytes, info);
+      var samples = readPcmSamplesFloat(workingBytes, info);
+      // All built-in encoders are mono-only. Downmix multichannel audio
+      // first, otherwise interleaved channels would be encoded as mono
+      // and the audio would play back at Nx speed (garbage transcription).
+      if (info.numChannels > 1) {
+        final monoLen = samples.length ~/ info.numChannels;
+        final mono = Float64List(monoLen);
+        for (int i = 0; i < monoLen; i++) {
+          double sum = 0;
+          for (int ch = 0; ch < info.numChannels; ch++) {
+            sum += samples[i * info.numChannels + ch];
+          }
+          mono[i] = sum / info.numChannels;
+        }
+        samples = mono;
+      }
       final pcm = Int16List(samples.length);
       for (int i = 0; i < samples.length; i++) {
         pcm[i] = (samples[i] * 32767).round().clamp(-32768, 32767);
       }
-      final codec = switch (config.compression) {
-        'adpcm' => AudioCodec.adpcm,
-        'flac' => AudioCodec.flac,
-        'opus' => AudioCodec.opus,
-        'mp3' => AudioCodec.mp3,
-        _ => AudioCodec.none,
-      };
-      if (codec != AudioCodec.none) {
-        final compressed = compressPcm(pcm, codec, sampleRate: info.sampleRate);
-        return (compressed, config.compression);
+      if (config.compression == 'adpcm') {
+        final adpcm = encodeAdpcm(pcm, AdpcmConfig());
+        // Raw IMA ADPCM nibbles cannot be uploaded directly — wrap them in
+        // a WAV container so providers can decode them.
+        return (adpcmToWav(adpcm, sampleRate: info.sampleRate), 'wav');
       }
+      return (encodeFlac(pcm, sampleRate: info.sampleRate), 'flac');
     } catch (e) {
-      AppLogService.warning('AsrService', '压缩失败: $e');
+      unawaited(AppLogService.warning('AsrService', '压缩失败: $e'));
     }
     return (workingBytes, fmt);
   }
@@ -408,15 +461,21 @@ class AsrService {
     return _sendViaMethod(workingBytes, actualFmt, config.uploadMethod);
   }
 
-  /// Get the specific fallback method (base64 or URL) that differs from primary.
+  /// Get the specific fallback method that differs from primary.
+  ///
+  /// Only base64 is usable as a specific fallback:
+  /// - URL upload requires a public URL, which a local file does not have
+  ///   (use [transcribeFromUrl] instead).
+  /// - Multipart does not help an over-limit file (same size limit).
   AudioUploadMethod? _getSpecificFallback(AudioUploadMethod primary) {
     switch (primary) {
       case AudioUploadMethod.multipart:
-        return AudioUploadMethod.base64Json; // prefer base64 as fallback
-      case AudioUploadMethod.base64Json:
-        return AudioUploadMethod.multipart;
-      case AudioUploadMethod.url:
+        // base64 bypasses multipart size caps on some providers (e.g. OpenRouter).
         return AudioUploadMethod.base64Json;
+      case AudioUploadMethod.base64Json:
+        return null;
+      case AudioUploadMethod.url:
+        return null;
     }
   }
 
@@ -592,7 +651,13 @@ class AsrService {
 
     final chunker = AudioChunker(
       config: AudioChunkConfig(
-        maxChunkBytes: config.maxFileSizeBytes,
+        // Each chunk is re-wrapped with a 44-byte WAV header. The data cap
+        // reserves it so the full chunk file stays within maxFileSizeBytes.
+        // For base64 uploads the payload is additionally inflated by ~4/3:
+        // cap = floor(L/4)*3 - 44 guarantees 4*ceil(file/3) <= L for any L.
+        maxChunkBytes: config.uploadMethod == AudioUploadMethod.base64Json
+            ? config.maxFileSizeBytes ~/ 4 * 3 - 44
+            : config.maxFileSizeBytes - 44,
       ),
     );
     final chunks = chunker.chunk(wavBytes, chunkMethod);
@@ -630,63 +695,36 @@ class AsrService {
           fileName: fileName,
           mimeType: mimeType,
         );
+        _captureResponseDiagnostics(response);
         final text = _extractText(response.data);
         if (text.isNotEmpty) {
           texts.add(text);
         }
         await AppLogService.info('AsrService', '切块 $i/${chunks.length} 转写完成');
       } on Exception catch (e) {
+        // Keep response diagnostics for the last failed chunk so the error
+        // detail dialog shows the actual API response.
+        if (e is DioException) {
+          _captureDioExceptionDiagnostics(e);
+        }
         await AppLogService.warning(
             'AsrService', '切块 $i/${chunks.length} 转写失败: $e');
       }
     }
 
-    // ── Overlap deduplication ─────────────────────────────────────
-    final merged = _dedupOverlappingTexts(texts);
-
-    return AsrResult(
-      text: merged,
-      processingTimeMs: 0,
-    );
-  }
-
-  /// Merge consecutive texts with overlap deduplication.
-  ///
-  /// When audio chunks overlap, their transcriptions may have duplicate
-  /// text at boundaries. This finds the longest common suffix/prefix
-  /// between consecutive chunks and removes the duplicate.
-  static String _dedupOverlappingTexts(List<String> texts) {
-    if (texts.isEmpty) return '';
-    if (texts.length == 1) return texts.first;
-
-    final result = StringBuffer(texts.first);
-    for (int i = 1; i < texts.length; i++) {
-      final prev = texts[i - 1];
-      final curr = texts[i];
-
-      // Find overlap: longest suffix of prev that matches prefix of curr
-      int bestLen = 0;
-      final maxCheck = prev.length < curr.length ? prev.length : curr.length;
-      final minCheck = (maxCheck > 0) ? (maxCheck ~/ 10).clamp(1, 20) : 0;
-
-      for (int len = maxCheck; len >= minCheck; len--) {
-        final prevSuffix = prev.substring(prev.length - len);
-        final currPrefix = curr.substring(0, len);
-        if (prevSuffix == currPrefix) {
-          bestLen = len;
-          break;
-        }
-      }
-
-      // Append curr without the overlapping prefix
-      if (bestLen > 0) {
-        result.write(curr.substring(bestLen));
-      } else {
-        result.write(' $curr');
-      }
+    // Chunks are strictly non-overlapping (see AudioChunker), so results
+    // are concatenated directly. Overlap dedup would be wrong here: for
+    // non-overlapping audio it can remove legitimate repeated text at
+    // chunk boundaries.
+    if (texts.isEmpty) {
+      throw Exception(
+          '切块转写全部失败（${chunks.length} 个片段均未成功），请检查网络或 API 配置后重试');
     }
 
-    return result.toString();
+    return AsrResult(
+      text: texts.join(' '),
+      processingTimeMs: 0,
+    );
   }
 
   /// Send the transcription request using the specified [method].

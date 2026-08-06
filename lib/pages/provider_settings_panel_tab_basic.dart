@@ -293,7 +293,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       ),
       const SizedBox(height: 6),
       Text(
-        '当文件超过大小限制时的处理方式。特定兜底（Base64/URL）优先于通用兜底（压缩/切块）。',
+        '当文件超过大小限制时的处理方式。特定兜底（Base64）优先于通用兜底（压缩/切块）。',
         style: TextStyle(
           fontSize: 13,
           color: cs.onSurfaceVariant,
@@ -329,7 +329,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                   ),
                   DropdownMenuItem(
                     value: 'specific',
-                    child: Text('特定兜底（Base64/URL）',
+                    child: Text('特定兜底（Base64）',
                         style: TextStyle(fontSize: 13)),
                   ),
                   DropdownMenuItem(
@@ -354,7 +354,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       const SizedBox(height: 6),
       Text(
         _fallbackMethod == 'specific'
-            ? '优先尝试 Base64 JSON 或 URL 上传（取决于主方式）。'
+            ? '优先尝试 Base64 JSON 上传，绕过部分供应商的 multipart 大小限制。'
             : _fallbackMethod == 'generic'
                 ? '先应用压缩，再尝试切块，最后重新上传。'
                 : _fallbackMethod == 'all'

@@ -87,6 +87,10 @@ class SelectedAudio {
   final String format;
 
   SelectedAudio({required this.bytes, required this.name, this.format = 'wav'});
+
+  /// True when this entry is a public URL (URL upload mode). In that case
+  /// [name] holds the URL and [bytes] is empty.
+  bool get isUrl => format == 'url';
 }
 
 // ============================================================================
@@ -136,19 +140,28 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     final audiosData = data['audios'] as List<dynamic>?;
     if (audiosData != null) {
       for (final audioData in audiosData) {
-        if (audioData is Map) {
-          final bytesStr = audioData['bytes'] as String?;
-          if (bytesStr != null) {
-            try {
-              final bytes = base64Decode(bytesStr);
-              _selectedAudios.add(SelectedAudio(
-                bytes: bytes,
-                name: audioData['name'] as String? ?? 'audio',
-                format: audioData['format'] as String? ?? 'wav',
-              ));
-            } catch (e) {
-              debugPrint('Failed to decode retry audio: $e');
-            }
+        if (audioData is! Map) continue;
+        // URL-mode entry: restore the link (no bytes).
+        final url = audioData['url'];
+        if (url is String && url.isNotEmpty) {
+          _selectedAudios.add(SelectedAudio(
+            bytes: Uint8List(0),
+            name: url,
+            format: 'url',
+          ));
+          continue;
+        }
+        final bytesStr = audioData['bytes'] as String?;
+        if (bytesStr != null) {
+          try {
+            final bytes = base64Decode(bytesStr);
+            _selectedAudios.add(SelectedAudio(
+              bytes: bytes,
+              name: audioData['name'] as String? ?? 'audio',
+              format: audioData['format'] as String? ?? 'wav',
+            ));
+          } catch (e) {
+            debugPrint('Failed to decode retry audio: $e');
           }
         }
       }
@@ -380,6 +393,31 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   Widget _buildAudioSourceBar(ColorScheme cs) {
+    // URL upload mode: the provider downloads from a public link, so the
+    // local file pickers don't apply — offer a link input instead.
+    if (_getCurrentUploadMethod() == AudioUploadMethod.url) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        child: SizedBox(
+          height: 48,
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _isProcessing ? null : _showUrlInputDialog,
+            style: ElevatedButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            icon: const Icon(Icons.link, size: 20),
+            label: const Text(
+              '输入公网音频链接',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Row(
@@ -488,7 +526,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      onPressed: _isProcessing ? null : _showAudioSourceSheet,
+                      onPressed: _isProcessing
+                          ? null
+                          : _getCurrentUploadMethod() == AudioUploadMethod.url
+                              ? _showUrlInputDialog
+                              : _showAudioSourceSheet,
                       icon: const Icon(Icons.refresh, size: 18),
                       label: const Text('重新选择'),
                     ),
@@ -523,7 +565,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
-                        Icons.audiotrack,
+                        audio.isUrl ? Icons.link : Icons.audiotrack,
                         size: 18,
                         color: cs.primary,
                       ),
@@ -545,7 +587,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '${formatDisplayName(audio.format)}  |  ${_formatFileSize(audio.bytes.length)}',
+                            audio.isUrl
+                                ? 'URL  |  公网链接'
+                                : '${formatDisplayName(audio.format)}  |  ${_formatFileSize(audio.bytes.length)}',
                             style: TextStyle(
                               fontSize: 11,
                               color: cs.onSurfaceVariant,
@@ -804,6 +848,71 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   // Audio Source Methods
   // ==================================================================
 
+  /// Parse the upload method from a provider typeConfig (defaults to multipart).
+  static AudioUploadMethod _uploadMethodFor(Map<String, dynamic> typeConfig) {
+    final str = typeConfig['uploadMethod'] as String?;
+    if (str == null) return AudioUploadMethod.multipart;
+    return AudioUploadMethod.values.firstWhere(
+      (m) => m.name == str,
+      orElse: () => AudioUploadMethod.multipart,
+    );
+  }
+
+  /// The upload method of the currently selected ASR provider.
+  AudioUploadMethod _getCurrentUploadMethod() {
+    final modelOptions = _getAsrModelOptions(ref);
+    if (modelOptions.isEmpty) return AudioUploadMethod.multipart;
+    final idx = _selectedModelIndex.clamp(0, modelOptions.length - 1);
+    return _uploadMethodFor(modelOptions[idx].providerTypeConfig);
+  }
+
+  /// A short display name for a URL entry (last path segment, else host),
+  /// used for the task title and saved text-record name.
+  static String _urlDisplayName(String url) {
+    try {
+      final uri = Uri.parse(url);
+      final segments = uri.pathSegments
+          .where((s) => s.isNotEmpty)
+          .toList(growable: false);
+      final name = segments.isNotEmpty ? segments.last : uri.host;
+      return name.length <= 40 ? name : name.substring(0, 40);
+    } catch (_) {
+      return url;
+    }
+  }
+
+  /// Ask the user for a public audio URL (URL upload mode) and add it as
+  /// a URL entry. The provider downloads the file server-side, so no bytes
+  /// are read on the device.
+  Future<void> _showUrlInputDialog() async {
+    final url = await showDialog<String>(
+      context: context,
+      builder: (_) => const _UrlInputDialog(),
+    );
+    if (url == null || url.isEmpty) return;
+    // Skip duplicates (identical URL twice would create duplicate tasks and
+    // duplicate text records).
+    if (_selectedAudios.any((a) => a.isUrl && a.name == url)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('该链接已在列表中')),
+        );
+      }
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _selectedAudios.add(SelectedAudio(
+          bytes: Uint8List(0),
+          name: url,
+          format: 'url',
+        ));
+        _errorMessage = null;
+        _transcriptionResult = null;
+      });
+    }
+  }
+
   /// Show a bottom sheet with available audio source options as ChoiceCards.
   void _showAudioSourceSheet() {
     final cs = Theme.of(context).colorScheme;
@@ -1029,13 +1138,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
     // Upload settings come from provider typeConfig, not model typeConfig
     final ptc = selectedOption.providerTypeConfig;
-    final uploadMethodStr = ptc['uploadMethod'] as String?;
-    final uploadMethod = uploadMethodStr != null
-        ? AudioUploadMethod.values.firstWhere(
-            (m) => m.name == uploadMethodStr,
-            orElse: () => AudioUploadMethod.multipart,
-          )
-        : AudioUploadMethod.multipart;
+    final uploadMethod = _uploadMethodFor(ptc);
     final maxFileSizeMb = ptc['maxFileSizeMb'] as num?;
     final maxFileSizeBytes = maxFileSizeMb != null
         ? (maxFileSizeMb * 1024 * 1024).toInt()
@@ -1060,6 +1163,24 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       fallbackMethod: fallbackMethod,
     );
 
+    // Validate that the selected entries match the provider's upload method.
+    // URL-mode providers can only transcribe public links; file-based
+    // providers (multipart/base64) cannot transcribe links.
+    final hasFileEntries = _selectedAudios.any((a) => !a.isUrl);
+    final hasUrlEntries = _selectedAudios.any((a) => a.isUrl);
+    if (uploadMethod == AudioUploadMethod.url && hasFileEntries) {
+      setState(() {
+        _errorMessage = '当前供应商使用 URL 上传方式，请移除本地音频文件后重试';
+      });
+      return;
+    }
+    if (uploadMethod != AudioUploadMethod.url && hasUrlEntries) {
+      setState(() {
+        _errorMessage = '当前供应商使用文件上传方式，不支持链接转写，请移除链接后重试';
+      });
+      return;
+    }
+
     // Capture the list before pop
     final audiosToProcess = List<SelectedAudio>.from(_selectedAudios);
 
@@ -1080,7 +1201,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // asynchronously in the background (fire-and-forget below).
     final taskEntries = <_TaskEntry>[];
     for (final audio in audiosToProcess) {
-      final title = 'ASR_${audio.name}';
+      final title = audio.isUrl
+          ? 'ASR_${_urlDisplayName(audio.name)}'
+          : 'ASR_${audio.name}';
       final taskId = bgNotifier.addTask(
         type: BackgroundTaskType.asr,
         title: title,
@@ -1116,6 +1239,35 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     }
   }
 
+  /// Build the retry-data map for a single ASR task (URL or bytes entry).
+  /// Shared by the isolate and main-thread fallback paths so the format
+  /// cannot drift between them.
+  static Map<String, dynamic> _buildAsrRetryData(
+    SelectedAudio audio,
+    int modelIndex,
+    String? saveFolder,
+  ) {
+    return <String, dynamic>{
+      'type': 'asr',
+      'audios': [
+        if (audio.isUrl)
+          <String, dynamic>{
+            'url': audio.name,
+            'name': audio.name,
+            'format': 'url',
+          }
+        else
+          <String, dynamic>{
+            'bytes': base64Encode(audio.bytes),
+            'name': audio.name,
+            'format': audio.format,
+          },
+      ],
+      'modelIndex': modelIndex,
+      'saveFolder': saveFolder,
+    };
+  }
+
   /// Compute retryData for a single ASR task in a background isolate.
   /// Fire-and-forget — the task can execute without retryData.
   Future<void> _computeAsrRetryData(
@@ -1126,18 +1278,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   ) async {
     try {
       final retryData = await Isolate.run(() {
-        return <String, dynamic>{
-          'type': 'asr',
-          'audios': [
-            <String, dynamic>{
-              'bytes': base64Encode(entry.audio.bytes),
-              'name': entry.audio.name,
-              'format': entry.audio.format,
-            },
-          ],
-          'modelIndex': modelIndex,
-          'saveFolder': saveFolder,
-        };
+        return _buildAsrRetryData(entry.audio, modelIndex, saveFolder);
       });
       bgNotifier.setRetryData(entry.taskId, retryData);
     } catch (e) {
@@ -1145,18 +1286,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       // Fall back to main-thread computation.
       debugPrint('[ASR] Isolate.run failed, falling back to main thread: $e');
       try {
-        final retryData = <String, dynamic>{
-          'type': 'asr',
-          'audios': [
-            <String, dynamic>{
-              'bytes': base64Encode(entry.audio.bytes),
-              'name': entry.audio.name,
-              'format': entry.audio.format,
-            },
-          ],
-          'modelIndex': modelIndex,
-          'saveFolder': saveFolder,
-        };
+        final retryData =
+            _buildAsrRetryData(entry.audio, modelIndex, saveFolder);
         bgNotifier.setRetryData(entry.taskId, retryData);
       } catch (retryError) {
         debugPrint('[ASR] Failed to compute retryData: $retryError');
@@ -1188,10 +1319,12 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         // Step 1: 上传音频
         bgNotifier.updateStep(taskId, 1, running: true);
 
-        final result = await service.transcribe(
-          audioBytes: entry.audio.bytes,
-          audioFormat: entry.audio.format,
-        );
+        final result = entry.audio.isUrl
+            ? await service.transcribeFromUrl(entry.audio.name)
+            : await service.transcribe(
+                audioBytes: entry.audio.bytes,
+                audioFormat: entry.audio.format,
+              );
 
         // Step 1 complete
         bgNotifier.updateStep(taskId, 1, completed: true);
@@ -1433,4 +1566,74 @@ class _TaskEntry {
   final String title;
 
   const _TaskEntry(this.taskId, this.audio, this.title);
+}
+
+/// Dialog asking for a public audio URL (URL upload mode).
+///
+/// Owns its [TextEditingController] and error state so the controller is
+/// disposed reliably with the dialog's lifecycle.
+class _UrlInputDialog extends StatefulWidget {
+  const _UrlInputDialog();
+
+  @override
+  State<_UrlInputDialog> createState() => _UrlInputDialogState();
+}
+
+class _UrlInputDialogState extends State<_UrlInputDialog> {
+  final TextEditingController _controller = TextEditingController();
+  String? _errorText;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = _controller.text.trim();
+    if (!value.startsWith('http://') && !value.startsWith('https://')) {
+      setState(() => _errorText = '无效链接，必须以 http:// 或 https:// 开头');
+      return;
+    }
+    Navigator.pop(context, value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('输入音频链接'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            '当前供应商使用 URL 上传方式，请输入公网音频链接（http/https）。',
+            style: TextStyle(fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            keyboardType: TextInputType.url,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: 'https://example.com/audio.mp3',
+              border: const OutlineInputBorder(),
+              isDense: true,
+              errorText: _errorText,
+            ),
+            onSubmitted: (_) => _submit(),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('添加'),
+        ),
+      ],
+    );
+  }
 }
