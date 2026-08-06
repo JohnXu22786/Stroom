@@ -15,11 +15,20 @@ class OcrModelConfigPage extends StatefulWidget {
   State<OcrModelConfigPage> createState() => _OcrModelConfigPageState();
 }
 
+/// A named user instruction sent together with the images.
+/// [name] is optional and only used for display in the OCR page selector.
+class _UserInstruction {
+  String name;
+  String content;
+
+  _UserInstruction({this.name = '', this.content = ''});
+}
+
 class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _modelIdController;
   late final TextEditingController _maxTokensController;
-  late final TextEditingController _userInstructionController;
+  late List<_UserInstruction> _userInstructions;
   late List<CustomParam> _customParams;
   final Map<int, String?> _jsonErrors = {};
 
@@ -36,6 +45,36 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
 
   bool get _isEditing => widget.model != null;
 
+  /// Normalizes stored instructions (list or legacy single string) into a
+  /// comparable list of {name, content} maps, dropping blank contents.
+  /// Normalizes stored instructions (list or legacy single string) into a
+  /// comparable list of {name, content} maps. Entries with both name and
+  /// content blank are dropped.
+  static List<Map<String, String>> _normalizeStoredInstructions(
+    Map<String, dynamic> typeConfig,
+  ) {
+    final raw = typeConfig['userInstructions'];
+    if (raw is List && raw.isNotEmpty) {
+      return raw
+          .whereType<Map>()
+          .map((e) => {
+                'name': (e['name']?.toString() ?? '').trim(),
+                'content': (e['content']?.toString() ?? '').trim(),
+              })
+          .where((m) =>
+              (m['name'] as String).isNotEmpty ||
+              (m['content'] as String).isNotEmpty)
+          .toList();
+    }
+    // Legacy single-string format (pre multi-instruction feature).
+    final legacy = typeConfig['userInstruction']?.toString().trim() ?? '';
+    if (legacy.isNotEmpty)
+      return [
+        {'name': '', 'content': legacy}
+      ];
+    return [];
+  }
+
   /// Whether the user has made unsaved changes.
   bool get _hasUnsavedChanges {
     final m = widget.model;
@@ -44,11 +83,14 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       if (_nameController.text.isNotEmpty) return true;
       if (_modelIdController.text.isNotEmpty) return true;
       if (_customParams.any((p) => p.paramName.isNotEmpty)) return true;
+      if (_userInstructions.any(
+          (i) => i.name.trim().isNotEmpty || i.content.trim().isNotEmpty)) {
+        return true;
+      }
       if (_enableTemperature || _enableTopP || _enableMaxTokens) {
         return true;
       }
       if (_maxTokensController.text.isNotEmpty) return true;
-      if (_userInstructionController.text.trim().isNotEmpty) return true;
       if (_temperature != 0.0) return true;
       if (_topP != 1.0) return true;
       return false;
@@ -80,9 +122,18 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         _maxTokensController.text) {
       return true;
     }
-    // Save normalizes (trims) the instruction, so compare trimmed text.
-    if ((m.typeConfig['userInstruction']?.toString() ?? '') !=
-        _userInstructionController.text.trim()) {
+    // Instructions: compare normalized stored vs current editing state.
+    final storedInstructions = _normalizeStoredInstructions(m.typeConfig);
+    final currentInstructions = _userInstructions
+        .map((i) => {
+              'name': i.name.trim(),
+              'content': i.content.trim(),
+            })
+        .where((e) =>
+            (e['name'] as String).isNotEmpty ||
+            (e['content'] as String).isNotEmpty)
+        .toList();
+    if (storedInstructions.toString() != currentInstructions.toString()) {
       return true;
     }
     // Custom params (simple check via serialization)
@@ -113,9 +164,12 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       text: maxTokens != null ? maxTokens.toString() : '',
     );
 
-    _userInstructionController = TextEditingController(
-      text: m?.typeConfig['userInstruction']?.toString() ?? '',
-    );
+    _userInstructions = _normalizeStoredInstructions(m?.typeConfig ?? {})
+        .map(
+          (e) => _UserInstruction(
+              name: e['name'] ?? '', content: e['content'] ?? ''),
+        )
+        .toList();
 
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
     // Initialize JSON validation for existing params
@@ -129,8 +183,23 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     _nameController.dispose();
     _modelIdController.dispose();
     _maxTokensController.dispose();
-    _userInstructionController.dispose();
     super.dispose();
+  }
+
+  // ===================================================================
+  // 用户指令
+  // ===================================================================
+
+  void _addInstruction() {
+    setState(() {
+      _userInstructions.add(_UserInstruction());
+    });
+  }
+
+  void _removeInstruction(int index) {
+    setState(() {
+      _userInstructions.removeAt(index);
+    });
   }
 
   // ===================================================================
@@ -547,10 +616,14 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       return;
     }
 
-    // Optional user instruction (sent together with the images)
-    final userInstruction = _userInstructionController.text.trim();
-    if (userInstruction.isNotEmpty) {
-      typeConfig['userInstruction'] = userInstruction;
+    // Optional user instructions (sent together with the images;
+    // blank-content entries are dropped)
+    final instructions = _userInstructions
+        .map((i) => {'name': i.name.trim(), 'content': i.content.trim()})
+        .where((e) => (e['content'] as String).isNotEmpty)
+        .toList();
+    if (instructions.isNotEmpty) {
+      typeConfig['userInstructions'] = instructions;
     }
 
     final result = ModelConfig(
@@ -663,43 +736,86 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             ),
             const SizedBox(height: 12),
 
-            // User instruction (optional) — sent together with the images
-            Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '用户指令 (可选)',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: _userInstructionController,
-                      maxLines: 4,
-                      minLines: 2,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: '如：提取发票号码和金额，以 JSON 输出',
-                        isDense: true,
-                      ),
-                      onChanged: (v) => setState(() {}),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '可选填写。不填写时仅发送图片，使用默认识别行为；'
-                      '填写后随图片一起发送给模型，可指定提取内容、输出格式等。',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                      ),
-                    ),
-                  ],
+            // ==========================================================
+            // 用户指令（可选，多条）
+            // ==========================================================
+            Row(
+              children: [
+                const Text(
+                  '用户指令',
+                  style: TextStyle(fontWeight: FontWeight.w600),
                 ),
-              ),
+                const Spacer(),
+                TextButton.icon(
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('添加指令'),
+                  onPressed: _addInstruction,
+                ),
+              ],
             ),
+            const SizedBox(height: 4),
+            Text(
+              '可选。不添加时仅发送图片，可添加多条指令，'
+              '在文字识别页的模型选择下方选择使用哪条。',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 8),
+            if (_userInstructions.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: Text(
+                    '暂无指令',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+              )
+            else
+              ...List.generate(_userInstructions.length, (i) {
+                final item = _userInstructions[i];
+                return Card(
+                  key: ObjectKey(item),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextFormField(
+                          initialValue: item.name,
+                          decoration: const InputDecoration(
+                            labelText: '指令名称（可选）',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onChanged: (v) => setState(() => item.name = v),
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          initialValue: item.content,
+                          minLines: 2,
+                          maxLines: 4,
+                          decoration: const InputDecoration(
+                            labelText: '指令内容',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onChanged: (v) => setState(() => item.content = v),
+                        ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 20),
+                            tooltip: '删除指令',
+                            onPressed: () => _removeInstruction(i),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            const SizedBox(height: 12),
 
             // Temperature
             LlmToggleSlider(

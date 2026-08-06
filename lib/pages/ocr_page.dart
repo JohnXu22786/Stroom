@@ -73,6 +73,28 @@ String? _getFirstOcrEntryId(WidgetRef ref) {
   return null;
 }
 
+/// Writes the content of the instruction at [instructionIndex] into
+/// [typeConfig]['userInstruction'] — the key the OCR service sends as the
+/// user-message text part. Returns the (possibly unchanged) typeConfig.
+///
+/// Out-of-range or default (-1) selections leave the config untouched so
+/// the request stays images-only.
+@visibleForTesting
+Map<String, dynamic> applySelectedOcrInstruction(
+  Map<String, dynamic> typeConfig,
+  List<Map<String, dynamic>> instructions,
+  int instructionIndex,
+) {
+  if (instructionIndex >= 0 && instructionIndex < instructions.length) {
+    final content =
+        (instructions[instructionIndex]['content'] as String?)?.trim() ?? '';
+    if (content.isNotEmpty) {
+      typeConfig['userInstruction'] = content;
+    }
+  }
+  return typeConfig;
+}
+
 // ============================================================================
 // OCR Page
 // ============================================================================
@@ -98,6 +120,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   bool _isProcessing = false;
   String? _errorMessage;
   int _selectedModelIndex = 0;
+
+  /// Index into the selected model's user instructions, or -1 for the
+  /// default behavior (images only, no instruction).
+  int _selectedInstructionIndex = -1;
 
   /// Number of quick image edits still processing in the background.
   /// While non-zero, starting OCR is blocked — it would otherwise run
@@ -160,6 +186,47 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (data['modelIndex'] is int) {
       _selectedModelIndex = data['modelIndex'] as int;
     }
+    if (data['instructionIndex'] is int) {
+      _selectedInstructionIndex = data['instructionIndex'] as int;
+    }
+  }
+
+  /// Returns the user instructions of a model as a list of {name, content}
+  /// maps, normalized (trimmed, blank-content entries dropped — a blank
+  /// instruction has nothing to send). Falls back to the legacy
+  /// single-string 'userInstruction' key.
+  ///
+  /// The same normalization feeds both the selector and the injection in
+  /// [_startOcr], keeping indices aligned.
+  List<Map<String, dynamic>> _getModelInstructions(_ModelOption option) {
+    final raw = option.model.typeConfig['userInstructions'];
+    if (raw is List) {
+      return raw
+          .whereType<Map>()
+          .map((e) => {
+                'name': (e['name']?.toString() ?? '').trim(),
+                'content': (e['content']?.toString() ?? '').trim(),
+              })
+          .where((m) => (m['content'] as String).isNotEmpty)
+          .toList();
+    }
+    final legacy = option.model.typeConfig['userInstruction'];
+    if (legacy is String && legacy.trim().isNotEmpty) {
+      return [
+        {'name': '', 'content': legacy.trim()}
+      ];
+    }
+    return [];
+  }
+
+  /// Display label for an instruction: its name, or the first line of the
+  /// content when unnamed (truncated to 20 chars).
+  String _instructionLabel(Map<String, dynamic> instruction) {
+    final name = (instruction['name'] as String?)?.trim() ?? '';
+    if (name.isNotEmpty) return name;
+    final content = (instruction['content'] as String?)?.trim() ?? '';
+    final firstLine = content.split('\n').first.trim();
+    return firstLine.length > 20 ? '${firstLine.substring(0, 20)}…' : firstLine;
   }
 
   @override
@@ -200,6 +267,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         children: [
           // Model selector (nicely styled)
           _buildModelSelector(cs),
+
+          // Instruction selector (below the model selector)
+          _buildInstructionSelector(cs),
 
           // Photo source buttons
           _buildPhotoSourceBar(cs),
@@ -294,7 +364,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final clampedIndex = _selectedModelIndex.clamp(0, modelOptions.length - 1);
     if (clampedIndex != _selectedModelIndex) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _selectedModelIndex = clampedIndex);
+        if (mounted) {
+          setState(() {
+            _selectedModelIndex = clampedIndex;
+            _selectedInstructionIndex = -1;
+          });
+        }
       });
     }
 
@@ -363,7 +438,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     ),
                     onChanged: (idx) {
                       if (idx == null || idx >= modelOptions.length) return;
-                      setState(() => _selectedModelIndex = idx);
+                      setState(() {
+                        _selectedModelIndex = idx;
+                        // Instructions are per-model — reset the selection.
+                        _selectedInstructionIndex = -1;
+                      });
                     },
                     items: List.generate(modelOptions.length, (i) {
                       final opt = modelOptions[i];
@@ -381,6 +460,110 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                         ),
                       );
                     }),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Instruction selector shown below the model selector. Hidden when the
+  /// selected model has no user instructions.
+  Widget _buildInstructionSelector(ColorScheme cs) {
+    final modelOptions = _getOcrModelOptions(ref);
+    if (modelOptions.isEmpty || _selectedModelIndex >= modelOptions.length) {
+      return const SizedBox.shrink();
+    }
+    final instructions =
+        _getModelInstructions(modelOptions[_selectedModelIndex]);
+    if (instructions.isEmpty) return const SizedBox.shrink();
+
+    // Out-of-range selection (e.g. restored retry data whose instruction
+    // list changed) falls back to the default (images only) — never to a
+    // different instruction.
+    final clamped = (_selectedInstructionIndex >= 0 &&
+            _selectedInstructionIndex < instructions.length)
+        ? _selectedInstructionIndex
+        : -1;
+    if (clamped != _selectedInstructionIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _selectedInstructionIndex = clamped);
+      });
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surface.withValues(alpha: 0.7),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        child: Row(
+          children: [
+            Icon(Icons.edit_note, size: 16, color: cs.primary),
+            const SizedBox(width: 10),
+            Text(
+              '识别指令',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                height: 34,
+                decoration: BoxDecoration(
+                  color: cs.surface.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.3),
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: clamped,
+                    isDense: true,
+                    isExpanded: true,
+                    icon: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: cs.primary,
+                    ),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                    onChanged: (idx) {
+                      if (idx == null) return;
+                      setState(() => _selectedInstructionIndex = idx);
+                    },
+                    items: [
+                      const DropdownMenuItem<int>(
+                        value: -1,
+                        child: Text(
+                          '默认（仅发送图片）',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      ...List.generate(instructions.length, (i) {
+                        return DropdownMenuItem<int>(
+                          value: i,
+                          child: Text(
+                            _instructionLabel(instructions[i]),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }),
+                    ],
                   ),
                 ),
               ),
@@ -1421,6 +1604,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           selectedOption.model.customParams.map((p) => p.copy()).toList(),
     );
 
+    // Inject the selected instruction into the request (service reads
+    // typeConfig['userInstruction']); unselected = default images-only.
+    applySelectedOcrInstruction(
+      effectiveConfig.typeConfig,
+      _getModelInstructions(selectedOption),
+      _selectedInstructionIndex,
+    );
+
     // Step 1: Pop back to home page immediately — matching the original
     // working flow. This avoids any Riverpod rebuild delay from addTask().
     if (mounted) {
@@ -1452,7 +1643,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
     // Step 3: Fire-and-forget retryData computation (only needed for retry).
     unawaited(_computeOcrRetryData(taskId, imageBytesList, imageFormatList,
-        imageNameList, modelIndex, bgNotifier));
+        imageNameList, modelIndex, _selectedInstructionIndex, bgNotifier));
 
     // Step 4: Execute OCR immediately.
     try {
@@ -1471,6 +1662,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     List<String> imageFormatList,
     List<String?> imageNameList,
     int modelIndex,
+    int instructionIndex,
     BackgroundTaskNotifier bgNotifier,
   ) async {
     try {
@@ -1487,6 +1679,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           'type': 'ocr',
           'images': images,
           'modelIndex': modelIndex,
+          'instructionIndex': instructionIndex,
         };
       });
       bgNotifier.setRetryData(taskId, retryData);
@@ -1505,6 +1698,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           'type': 'ocr',
           'images': images,
           'modelIndex': modelIndex,
+          'instructionIndex': instructionIndex,
         };
         bgNotifier.setRetryData(taskId, retryData);
       } catch (retryError) {

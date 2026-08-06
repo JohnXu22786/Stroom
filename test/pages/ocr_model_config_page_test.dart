@@ -53,38 +53,55 @@ Future<void> _enterField(WidgetTester tester, int index, String text) async {
   await tester.pump();
 }
 
-/// Enters text into the TextField inside the card labeled [label].
-/// (TextField indices shift as toggles reveal/hide fields, so anchor on the
-/// card label instead.)
-Future<void> _enterFieldInCard(
+/// Finds the [i]-th instruction name field (labels are always rendered,
+/// even with a value, so indexing is stable).
+Finder _instructionNameField(int i) =>
+    find.widgetWithText(TextField, '指令名称（可选）').at(i);
+
+/// Finds the [i]-th instruction content field.
+Finder _instructionContentField(int i) =>
+    find.widgetWithText(TextField, '指令内容').at(i);
+
+/// Adds a new instruction entry via the 添加指令 button.
+Future<void> _addInstruction(WidgetTester tester) async {
+  await _scrollTo(tester, find.text('添加指令'));
+  await tester.tap(find.text('添加指令'));
+  await tester.pumpAndSettle();
+}
+
+/// Fills the [i]-th instruction entry (name and content).
+Future<void> _fillInstruction(
   WidgetTester tester,
-  String label,
-  String text,
-) async {
-  await _scrollTo(tester, find.text(label));
-  final card =
-      find.ancestor(of: find.text(label), matching: find.byType(Card)).first;
-  await tester.enterText(
-    find.descendant(of: card, matching: find.byType(TextField)),
-    text,
-  );
-  await tester.pump();
+  int i, {
+  String? name,
+  String content = '',
+}) async {
+  if (name != null) {
+    await tester.enterText(_instructionNameField(i), name);
+    await tester.pump();
+  }
+  if (content.isNotEmpty) {
+    await tester.enterText(_instructionContentField(i), content);
+    await tester.pump();
+  }
 }
 
 void main() {
   group('OcrModelConfigPage built-in OpenAI-compatible params', () {
     testWidgets(
-        'renders user instruction field, 3 universal params; removed '
-        'params absent', (tester) async {
+        'renders instruction section, add button and 3 universal params; '
+        'removed params absent', (tester) async {
       await _pumpConfigPage(tester);
 
-      await _scrollTo(tester, find.text('用户指令 (可选)'));
-      expect(find.text('用户指令 (可选)'), findsOneWidget);
+      await _scrollTo(tester, find.text('用户指令'));
+      expect(find.text('用户指令'), findsOneWidget);
+      expect(find.text('添加指令'), findsOneWidget);
       expect(
-        find.text('可选填写。不填写时仅发送图片，使用默认识别行为；'
-            '填写后随图片一起发送给模型，可指定提取内容、输出格式等。'),
+        find.text('可选。不添加时仅发送图片，可添加多条指令，'
+            '在文字识别页的模型选择下方选择使用哪条。'),
         findsOneWidget,
       );
+      expect(find.text('暂无指令'), findsOneWidget);
 
       await _scrollTo(tester, find.text('温度 (Temperature)'));
       expect(find.text('温度 (Temperature)'), findsOneWidget);
@@ -101,7 +118,7 @@ void main() {
       expect(find.text('频率惩罚 (Frequency Penalty)'), findsNothing);
     });
 
-    testWidgets('saving with user instruction writes it to typeConfig',
+    testWidgets('adding multiple instructions saves them to typeConfig',
         (tester) async {
       ModelConfig? saved;
       await _pumpConfigPage(tester, onSaved: (m) => saved = m);
@@ -109,16 +126,45 @@ void main() {
       // Model ID (index 1 = model ID, index 0 = model name)
       await _enterField(tester, 1, 'qwen-vl-ocr');
 
-      await _enterFieldInCard(tester, '用户指令 (可选)', '提取发票号码和金额，以 JSON 输出');
+      await _addInstruction(tester);
+      await _fillInstruction(tester, 0,
+          name: '发票', content: '提取发票号码和金额，以 JSON 输出');
+      await _addInstruction(tester);
+      await _fillInstruction(tester, 1, content: '提取表格内容并按行输出');
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
 
       expect(saved, isNotNull);
-      expect(saved!.typeConfig['userInstruction'], '提取发票号码和金额，以 JSON 输出');
+      expect(saved!.typeConfig['userInstructions'], [
+        {'name': '发票', 'content': '提取发票号码和金额，以 JSON 输出'},
+        {'name': '', 'content': '提取表格内容并按行输出'},
+      ]);
     });
 
-    testWidgets('saving without instruction excludes userInstruction key',
+    testWidgets('instruction entries with blank content are not saved',
+        (tester) async {
+      ModelConfig? saved;
+      await _pumpConfigPage(tester, onSaved: (m) => saved = m);
+
+      await _enterField(tester, 1, 'qwen-vl-ocr');
+
+      await _addInstruction(tester);
+      await _fillInstruction(tester, 0, content: '提取发票号码');
+      await _addInstruction(tester);
+      // Second entry left blank.
+      await _fillInstruction(tester, 1, name: '空指令', content: '   \n\n  ');
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.typeConfig['userInstructions'], [
+        {'name': '', 'content': '提取发票号码'},
+      ]);
+    });
+
+    testWidgets('saving without instructions excludes userInstructions key',
         (tester) async {
       ModelConfig? saved;
       await _pumpConfigPage(tester, onSaved: (m) => saved = m);
@@ -128,56 +174,91 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(saved, isNotNull);
+      expect(saved!.typeConfig.containsKey('userInstructions'), isFalse);
       expect(saved!.typeConfig.containsKey('userInstruction'), isFalse);
     });
 
-    testWidgets('whitespace-only instruction is not saved', (tester) async {
-      ModelConfig? saved;
-      await _pumpConfigPage(tester, onSaved: (m) => saved = m);
-
-      await _enterField(tester, 1, 'gpt-4o');
-      await _enterFieldInCard(tester, '用户指令 (可选)', '   \n\n  ');
-
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
-
-      expect(saved, isNotNull);
-      expect(saved!.typeConfig.containsKey('userInstruction'), isFalse);
-    });
-
-    testWidgets('clearing a pre-filled instruction removes the key on save',
-        (tester) async {
-      ModelConfig? saved;
-      final model = ModelConfig(
-        name: 'OCR模型',
-        modelId: 'qwen-vl-ocr',
-        typeConfig: {'userInstruction': '旧指令'},
-      );
-      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
-
-      await _enterFieldInCard(tester, '用户指令 (可选)', '');
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
-
-      expect(saved, isNotNull);
-      expect(saved!.typeConfig.containsKey('userInstruction'), isFalse);
-    });
-
-    testWidgets('editing an existing model pre-fills user instruction',
+    testWidgets('editing an existing model pre-fills instructions',
         (tester) async {
       final model = ModelConfig(
         name: 'OCR模型',
         modelId: 'qwen-vl-ocr',
         typeConfig: {
-          'userInstruction': '提取表格内容并按行输出',
-          'enableTemperature': true,
-          'temperature': 0.5,
+          'userInstructions': [
+            {'name': '发票', 'content': '提取发票号码和金额'},
+            {'name': '', 'content': '提取表格内容'},
+          ],
         },
       );
       await _pumpConfigPage(tester, model: model);
 
-      await _scrollTo(tester, find.text('用户指令 (可选)'));
-      expect(find.text('提取表格内容并按行输出'), findsOneWidget);
+      await _scrollTo(tester, find.text('用户指令'));
+      expect(find.text('提取发票号码和金额'), findsOneWidget);
+      expect(find.text('提取表格内容'), findsOneWidget);
+    });
+
+    testWidgets('legacy userInstruction string loads as one instruction',
+        (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        typeConfig: {'userInstruction': '旧指令内容'},
+      );
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+
+      await _scrollTo(tester, find.text('用户指令'));
+      expect(find.text('旧指令内容'), findsOneWidget);
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.typeConfig['userInstructions'], [
+        {'name': '', 'content': '旧指令内容'},
+      ]);
+    });
+
+    testWidgets('name-only instruction counts as an unsaved change',
+        (tester) async {
+      await _pumpConfigPage(tester);
+
+      await _addInstruction(tester);
+      await _fillInstruction(tester, 0, name: '只有名称');
+
+      // Back navigation must trigger the unsaved-changes dialog.
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+
+      expect(find.text('放弃修改？'), findsOneWidget);
+    });
+
+    testWidgets('removing an instruction drops it on save', (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        typeConfig: {
+          'userInstructions': [
+            {'name': '第一条', 'content': '内容一'},
+            {'name': '第二条', 'content': '内容二'},
+          ],
+        },
+      );
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+
+      await _scrollTo(tester, find.text('用户指令'));
+      // Delete the first instruction card.
+      await tester.tap(find.byIcon(Icons.delete_outline).first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.typeConfig['userInstructions'], [
+        {'name': '第二条', 'content': '内容二'},
+      ]);
     });
   });
 }
