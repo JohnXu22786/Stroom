@@ -277,6 +277,14 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
     );
   }
 
+  /// Builds the top-right toolbar row.
+  ///
+  /// Toolbar buttons are PURE ICONS (no text labels) — accessibility is
+  /// preserved through the icon [Icon.semanticLabel]. The built-in wrap
+  /// toggle sits on the left; additional action buttons (common buttons
+  /// like fullscreen / save / code toggle) are placed on the right in the
+  /// order given by the consumer, matching the mermaid render toolbar
+  /// convention (fullscreen → save → code).
   Widget _buildButtonRow() {
     final cs = Theme.of(context).colorScheme;
 
@@ -326,17 +334,7 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
             horizontal: 10,
             vertical: 16,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, semanticLabel: label),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: const TextStyle(fontSize: 12),
-              ),
-            ],
-          ),
+          child: Icon(icon, size: 18, semanticLabel: label),
         ),
       ),
     );

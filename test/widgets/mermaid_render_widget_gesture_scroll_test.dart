@@ -381,14 +381,14 @@ void main() {
   // ===========================================================================
   //
   // These tests verify that the fix does NOT break the HTML/JS template
-  // contract — the window.setZoom, window.setPan, and gesture handler JS
-  // functions remain intact.
+  // contract — the window.setZoom, window.setPanZoom, and gesture handler
+  // JS functions remain intact.
 
   group('Gesture fix - HTML template contract preserved', () {
-    test('buildMermaidHtml still has window.setZoom and window.setPan', () {
+    test('buildMermaidHtml still has window.setZoom and window.setPanZoom', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('window.setZoom'));
-      expect(html, contains('window.setPan'));
+      expect(html, contains('window.setPanZoom'));
     });
 
     test('buildMermaidHtml with withJsGestures=true has full gesture JS', () {
@@ -407,7 +407,7 @@ void main() {
       expect(html, isNot(contains('touchstart')));
       // Still has zoom and pan functions
       expect(html, contains('window.setZoom'));
-      expect(html, contains('window.setPan'));
+      expect(html, contains('window.setPanZoom'));
     });
 
     test('setZoom still clamps between 0.1 and 10', () {
@@ -415,9 +415,9 @@ void main() {
       expect(html, contains('Math.max(0.1, Math.min(10, level))'));
     });
 
-    test('setZoom still reports via onZoomChanged handler', () {
+    test('setZoom still reports via onTransformChanged handler', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(html, contains("callHandler('onZoomChanged'"));
+      expect(html, contains("callHandler('onTransformChanged'"));
     });
 
     test('setZoom still adjusts panX/panY when centerX/centerY provided', () {

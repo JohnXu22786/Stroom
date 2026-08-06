@@ -132,6 +132,57 @@ void main() {
       final imageIcon = tester.widget<Icon>(find.byIcon(Icons.image));
       expect(imageIcon.semanticLabel, isNotNull);
     });
+
+    testWidgets('source code mode toolbar is icon-only (no text labels)',
+        (tester) async {
+      // Regression: CodeBlock toolbars must be pure icons — no text.
+      const widget = MermaidRenderWidget(
+        mermaidCode: 'graph TD',
+        testOnlyShowSourceCode: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+
+      expect(find.text('查看图表'), findsNothing);
+      expect(find.text('保存'), findsNothing);
+      expect(find.byIcon(Icons.wrap_text), findsOneWidget);
+      expect(find.byIcon(Icons.save), findsOneWidget);
+      expect(find.byIcon(Icons.image), findsOneWidget);
+    });
+
+    testWidgets('source code mode toolbar order: wrap, save, view-chart',
+        (tester) async {
+      // Regression: the common buttons (save, view-chart) must sit on the
+      // RIGHT of the toolbar and keep the same relative order as the
+      // mermaid render toolbar (save before code toggle), so muscle memory
+      // carries over and mis-clicks are avoided.
+      const widget = MermaidRenderWidget(
+        mermaidCode: 'graph TD',
+        testOnlyShowSourceCode: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+
+      final wrapPos = tester.getCenter(find.byIcon(Icons.wrap_text));
+      final savePos = tester.getCenter(find.byIcon(Icons.save));
+      final imagePos = tester.getCenter(find.byIcon(Icons.image));
+
+      expect(wrapPos.dx, lessThan(savePos.dx),
+          reason: 'wrap toggle (block-specific) sits left of common buttons');
+      expect(savePos.dx, lessThan(imagePos.dx),
+          reason: 'save must come before the code/view-chart toggle, '
+              'matching the render toolbar order');
+    });
   });
 
   // ===========================================================================
@@ -304,9 +355,9 @@ void main() {
       expect(html, contains('Math.max(0.1, Math.min(10, level))'));
     });
 
-    test('setZoom reports new zoom level via onZoomChanged handler', () {
+    test('setZoom reports new zoom level via onTransformChanged handler', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(html, contains("callHandler('onZoomChanged'"));
+      expect(html, contains("callHandler('onTransformChanged'"));
     });
 
     test('setZoom adjusts panX and panY when centerX/centerY provided', () {
