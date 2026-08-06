@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
+import 'package:image/image.dart' as img;
 
 import '../utils/pop_animation.dart';
 
@@ -304,6 +305,7 @@ Future<void> runQuickEditProcessing({
       outputWidth: outputWidth,
       outputHeight: outputHeight,
       needsRotation: needsRotation,
+      isJpegSource: _isJpegPhotoSource(rawData),
     );
 
     if (output == null) {
@@ -324,6 +326,9 @@ Future<void> runQuickEditProcessing({
 /// Process the image: crop, rotate, and flip.
 ///
 /// Disposes [image] (and the intermediate result) on every path.
+///
+/// 输出格式：JPEG 照片源 → 质量 90 的 JPEG；其余源 → 无损 PNG
+/// （见 [runQuickEditProcessing] 的 [isJpegSource]）。
 Future<Uint8List?> _processImage({
   required ui.Image image,
   required Rect? cropRect,
@@ -333,6 +338,7 @@ Future<Uint8List?> _processImage({
   required int outputWidth,
   required int outputHeight,
   required bool needsRotation,
+  required bool isJpegSource,
 }) async {
   final srcW = cropRect?.width ?? image.width.toDouble();
   final srcH = cropRect?.height ?? image.height.toDouble();
@@ -377,13 +383,37 @@ Future<Uint8List?> _processImage({
   try {
     picture = recorder.endRecording();
     finalImage = await picture.toImage(outputWidth, outputHeight);
+
+    // ── 输出格式选择（修复 4MB → 12MB 体积暴涨）──
+    // dart:ui 只能输出 PNG/rawRgba。旧实现无条件输出 PNG：一张 4MB 的
+    // JPEG 照片编辑后变成 12MB PNG，超过发送阈值被请求跳过，API 只能
+    // 收到用户选择的部分图片。现在：JPEG 照片源 → 质量 90 的 JPEG
+    // （视觉无损，体积与源相当甚至更小）；其余源（PNG 截图/带透明
+    // 通道等）→ 保持无损 PNG 输出。
+    // 注意：rawStraightRgba（非预乘 alpha）—— 用 rawRgba 会把半透明
+    // 像素的预乘值当成直通值，重编码后出现发暗光晕。
     final byteData = await finalImage.toByteData(
-      format: ui.ImageByteFormat.png,
+      format: ui.ImageByteFormat.rawStraightRgba,
     );
-    return byteData?.buffer.asUint8List();
+    if (byteData == null) return null;
+    final frame = img.Image.fromBytes(
+      width: outputWidth,
+      height: outputHeight,
+      bytes: byteData.buffer,
+      bytesOffset: byteData.offsetInBytes,
+      numChannels: 4,
+    );
+    return isJpegSource
+        ? img.encodeJpg(frame, quality: 90, chroma: img.JpegChroma.yuv420)
+        : img.encodePng(frame);
   } finally {
     image.dispose();
     picture?.dispose();
     finalImage?.dispose();
   }
+}
+
+/// JPEG 源（FFD8FF 魔数）→ 输出 JPEG q90。
+bool _isJpegPhotoSource(Uint8List bytes) {
+  return bytes.length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8;
 }

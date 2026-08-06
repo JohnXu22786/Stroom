@@ -10,10 +10,12 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/models/chat_event.dart';
 import 'package:stroom/models/chat_message.dart';
@@ -149,9 +151,10 @@ class _MessageCaptureProvider extends BaseChatProvider {
     yield AIStreamEvent('');
   }
 
-  Future<void> waitForCall() => _streamCompleter.future.timeout(
-        const Duration(seconds: 5),
-        onTimeout: () => fail('chatStream was never called within 5s'),
+  Future<void> waitForCall({Duration timeout = const Duration(seconds: 5)}) =>
+      _streamCompleter.future.timeout(
+        timeout,
+        onTimeout: () => fail('chatStream was never called within $timeout'),
       );
 }
 

@@ -51,7 +51,9 @@ dependencies:
   pro_image_editor: ^13.0.0
 
   # Extended Image Viewer (replaces InteractiveViewer + custom Image.memory)
-  extended_image: ^10.0.1
+  extended_image: ^10.1.0
+  # Pure-Dart image codec for lossless(-ish) compression of chat attachments
+  image: ^4.9.1
 
   # SVG support
   flutter_svg: ^2.3.0
@@ -86,12 +88,12 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_background_service_platform_interface: ^5.1.2
   fake_async: ^1.3.3
+  # Used by tests to fake the app documents directory for AttachmentStorage tests
+  # (transitive via path_provider, but must be declared to import it).
+  path_provider_platform_interface: ^2.1.3
   # Used by tests to disable visibility_detector's debounce timer
   # (transitive via flutter_chat_ui, but must be declared to import it).
   visibility_detector: ^0.4.0+2
-  # Used by tests to fake path_provider directories (transitive via
-  # path_provider, but must be declared to import it).
-  path_provider_platform_interface: ^2.1.0
 
 flutter:
   config:
