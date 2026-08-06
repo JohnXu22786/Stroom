@@ -32,7 +32,7 @@ void main() {
       expect(find.text('<h1>Hello World</h1>'), findsOneWidget);
     });
 
-    testWidgets('shows fullscreen preview and wrap toggle buttons',
+    testWidgets('shows fullscreen preview and wrap toggle as pure icons',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -42,17 +42,17 @@ void main() {
         ),
       );
 
-      // The fullscreen button with "全屏预览" text should be present
-      expect(find.text('全屏预览'), findsOneWidget);
+      // Regression: toolbar buttons are icon-only — no text labels.
+      expect(find.text('全屏预览'), findsNothing);
+      expect(find.text('换行显示'), findsNothing);
+      expect(find.text('取消换行'), findsNothing);
       // The fullscreen icon should be present
       expect(find.byIcon(Icons.fullscreen), findsOneWidget);
-      // The wrap toggle button with "换行显示" text should be present
-      expect(find.text('换行显示'), findsOneWidget);
       // The wrap toggle icon should be present
       expect(find.byIcon(Icons.wrap_text), findsOneWidget);
     });
 
-    testWidgets('wrap toggle button is positioned left of fullscreen button',
+    testWidgets('wrap toggle icon is positioned left of fullscreen icon',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -62,13 +62,9 @@ void main() {
         ),
       );
 
-      // Find both buttons by their text
-      final wrapToggle = tester.widget<Text>(find.text('换行显示'));
-      final fullscreen = tester.widget<Text>(find.text('全屏预览'));
-
-      // Get their global positions
-      final wrapPos = tester.getCenter(find.text('换行显示'));
-      final fullscreenPos = tester.getCenter(find.text('全屏预览'));
+      // Find both buttons by their icons
+      final wrapPos = tester.getCenter(find.byIcon(Icons.wrap_text));
+      final fullscreenPos = tester.getCenter(find.byIcon(Icons.fullscreen));
 
       // Wrap toggle should be to the left of fullscreen button
       expect(wrapPos.dx, lessThan(fullscreenPos.dx),
@@ -85,25 +81,25 @@ void main() {
         ),
       );
 
-      // Initially shows '换行显示' (wrap toggle in OFF state)
-      expect(find.text('换行显示'), findsOneWidget);
-      expect(find.text('取消换行'), findsNothing);
+      // Initially wrap is OFF — semantic label '换行显示'
+      var wrapIcon = tester.widget<Icon>(find.byIcon(Icons.wrap_text));
+      expect(wrapIcon.semanticLabel, '换行显示');
 
-      // Tap the wrap toggle button
-      await tester.tap(find.text('换行显示'));
+      // Tap the wrap toggle icon
+      await tester.tap(find.byIcon(Icons.wrap_text));
       await tester.pumpAndSettle();
 
-      // After tap, should show '取消换行' (wrap toggle in ON state)
-      expect(find.text('取消换行'), findsOneWidget);
-      expect(find.text('换行显示'), findsNothing);
+      // After tap, wrap is ON — semantic label '取消换行'
+      wrapIcon = tester.widget<Icon>(find.byIcon(Icons.wrap_text));
+      expect(wrapIcon.semanticLabel, '取消换行');
 
-      // Tap the wrap toggle button again
-      await tester.tap(find.text('取消换行'));
+      // Tap the wrap toggle icon again
+      await tester.tap(find.byIcon(Icons.wrap_text));
       await tester.pumpAndSettle();
 
       // Should be back to '换行显示'
-      expect(find.text('换行显示'), findsOneWidget);
-      expect(find.text('取消换行'), findsNothing);
+      wrapIcon = tester.widget<Icon>(find.byIcon(Icons.wrap_text));
+      expect(wrapIcon.semanticLabel, '换行显示');
     });
 
     testWidgets('shows (empty) for empty HTML code', (tester) async {
@@ -151,7 +147,7 @@ void main() {
       );
 
       // Switch to wrap mode first
-      await tester.tap(find.text('换行显示'));
+      await tester.tap(find.byIcon(Icons.wrap_text));
       await tester.pumpAndSettle();
 
       // In wrap mode, each line is a separate SelectableText
@@ -194,10 +190,10 @@ void main() {
 
       // Widget should render without error in dark mode
       expect(find.byType(HtmlCodeBlockWidget), findsOneWidget);
-      // The fullscreen button should still be present
-      expect(find.text('全屏预览'), findsOneWidget);
-      // The wrap toggle should still be present
-      expect(find.text('换行显示'), findsOneWidget);
+      // The fullscreen icon should still be present
+      expect(find.byIcon(Icons.fullscreen), findsOneWidget);
+      // The wrap toggle icon should still be present
+      expect(find.byIcon(Icons.wrap_text), findsOneWidget);
     });
 
     testWidgets('shows multiline code with correct line numbers in wrap mode',
@@ -212,7 +208,7 @@ void main() {
       );
 
       // Switch to wrap mode
-      await tester.tap(find.text('换行显示'));
+      await tester.tap(find.byIcon(Icons.wrap_text));
       await tester.pumpAndSettle();
 
       // Verify the raw multi-line code is displayed as individual lines
@@ -237,13 +233,14 @@ void main() {
         ),
       );
 
-      // The fullscreen button should be present
-      expect(find.text('全屏预览'), findsOneWidget);
+      // The fullscreen icon should be present with an accessibility label
       expect(find.byIcon(Icons.fullscreen), findsOneWidget);
+      final fullscreenIcon = tester.widget<Icon>(find.byIcon(Icons.fullscreen));
+      expect(fullscreenIcon.semanticLabel, isNotNull);
 
       // Tapping should not throw (the dialog requires InAppWebView
       // which is a platform widget; we verify the gesture is wired)
-      await tester.tap(find.text('全屏预览'));
+      await tester.tap(find.byIcon(Icons.fullscreen));
       // Just pump once — dialog opening will be handled in integration tests
       // with real platform support
     });
@@ -257,15 +254,15 @@ void main() {
         ),
       );
 
-      // The wrap toggle button should be present
-      expect(find.text('换行显示'), findsOneWidget);
+      // The wrap toggle icon should be present
       expect(find.byIcon(Icons.wrap_text), findsOneWidget);
 
-      // Tapping should toggle to "取消换行" without throwing
-      await tester.tap(find.text('换行显示'));
+      // Tapping should toggle wrap state without throwing
+      await tester.tap(find.byIcon(Icons.wrap_text));
       await tester.pumpAndSettle();
 
-      expect(find.text('取消换行'), findsOneWidget);
+      final wrapIcon = tester.widget<Icon>(find.byIcon(Icons.wrap_text));
+      expect(wrapIcon.semanticLabel, '取消换行');
     });
 
     testWidgets('handles code with trailing newline', (tester) async {
@@ -304,7 +301,7 @@ void main() {
           reason: 'No-wrap mode should have horizontal scroll');
 
       // Switch to wrap mode
-      await tester.tap(find.text('换行显示'));
+      await tester.tap(find.byIcon(Icons.wrap_text));
       await tester.pumpAndSettle();
 
       // In wrap mode: no horizontal Scrollable should exist
