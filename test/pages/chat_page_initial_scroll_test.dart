@@ -116,8 +116,7 @@ class _TestChatStreamManager extends ChatStreamManager {
   bool isStreamingFor(String convId) => convId == _convId;
 
   @override
-  String? streamingMsgIdFor(String convId) =>
-      convId == _convId ? _msgId : null;
+  String? streamingMsgIdFor(String convId) => convId == _convId ? _msgId : null;
 
   @override
   String fullReplyFor(String convId) => convId == _convId ? _fullReply : '';
@@ -431,9 +430,7 @@ void main() {
           'title': 'Test Conversation',
           'createdAt': DateTime(2025, 1, 1).toIso8601String(),
           'updatedAt': DateTime(2025, 1, 1).toIso8601String(),
-          'messages': createTestMessages(30)
-              .map((m) => m.toMap())
-              .toList(),
+          'messages': createTestMessages(30).map((m) => m.toMap()).toList(),
           'isPinned': false,
           'sortOrder': 0,
         }),

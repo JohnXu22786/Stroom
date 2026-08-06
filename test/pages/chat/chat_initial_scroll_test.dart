@@ -4,8 +4,7 @@ import 'package:stroom/pages/chat/chat_initial_scroll.dart';
 
 void main() {
   group('resolveInitialChatScrollTarget', () {
-    test('long tail: returns the last user message top (top of viewport)',
-        () {
+    test('long tail: returns the last user message top (top of viewport)', () {
       // Last user message top at 1500, tail ends at 5000, viewport 500:
       // the tail (3500) does not fit one screen -> show the user message top.
       final target = resolveInitialChatScrollTarget(
@@ -17,8 +16,7 @@ void main() {
       expect(target, 1500);
     });
 
-    test('short tail: prefers the bottom when everything fits one screen',
-        () {
+    test('short tail: prefers the bottom when everything fits one screen', () {
       // Tail = 5000 - 4700 = 300 <= viewport 500 -> bottom.
       final target = resolveInitialChatScrollTarget(
         lastUserMessageTop: 4700,
@@ -39,8 +37,7 @@ void main() {
       expect(target, 5000);
     });
 
-    test('last message near the end (tail below one pixel) goes to bottom',
-        () {
+    test('last message near the end (tail below one pixel) goes to bottom', () {
       final target = resolveInitialChatScrollTarget(
         lastUserMessageTop: 4999,
         tailBottom: 5000,
