@@ -6,7 +6,6 @@ import 'package:file_picker/file_picker.dart';
 
 import '../services/backup_location_manager.dart';
 import '../services/backup_service.dart';
-import '../services/data_migration_service.dart';
 import '../startup/app_restart.dart';
 import '../anki/apkg/apkg_exporter.dart';
 import '../anki/apkg/apkg_importer.dart';
@@ -21,6 +20,7 @@ class BackupRestorePage extends ConsumerStatefulWidget {
 class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   bool _isExporting = false;
   bool _isImporting = false;
+  bool _isClearing = false;
   String? _externalBackupPath;
   Timer? _restartTimer;
   bool _isAnkiExporting = false;
@@ -236,7 +236,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 ),
               ),
             ),
-            if (restoreWarnings.length < 7) ...[
+            if (restoreWarnings.length < 9) ...[
               const SizedBox(height: 12),
               const Row(
                 children: [
@@ -244,7 +244,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '未勾选的类别将被清除。恢复后只保留勾选的类别数据。',
+                      '未勾选的类别将保持原样，不会被清除或覆盖。',
                       style: TextStyle(fontSize: 13, color: Colors.grey),
                     ),
                   ),
@@ -302,6 +302,173 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       }
     } finally {
       if (mounted) setState(() => _isImporting = false);
+    }
+  }
+
+  // ── 清除所选数据 ──────────────────────────────────────
+
+  Future<void> _onClearSelectedData() async {
+    if (_isClearing) return;
+    if (!_hasSelection) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('请至少选择一项要清除的数据类别'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    final selection = _selection;
+    final clearLabels = selection.selectedLabels;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认清除'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('将清除以下数据类别（不经过备份文件）：'),
+            const SizedBox(height: 12),
+            ...clearLabels.map(
+              (label) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline, color: Colors.red, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                        child: Text(label,
+                            style: const TextStyle(fontSize: 13))),
+                  ],
+                ),
+              ),
+            ),
+            if (clearLabels.length < 9) ...[
+              const SizedBox(height: 12),
+              const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '未勾选的类别将保持原样，不会被清除。',
+                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      color: Colors.red, size: 16),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '此操作不可撤销。清除完成后应用将自动重启。',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('确定清除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    setState(() => _isClearing = true);
+    var progressShown = false;
+    try {
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: const AlertDialog(
+            title: Text('正在清除数据'),
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                ),
+                SizedBox(width: 16),
+                Expanded(child: Text('正在删除所选类别的数据...')),
+              ],
+            ),
+          ),
+        ),
+      );
+      progressShown = true;
+
+      await Future<void>.delayed(Duration.zero);
+      if (!mounted) return;
+
+      await BackupService.clearSelectedData(selection);
+      // 先关闭进度弹窗，再展示重启倒计时弹窗，避免弹窗叠放
+      if (mounted && progressShown) {
+        Navigator.of(context, rootNavigator: true).pop();
+        progressShown = false;
+      }
+      if (mounted) {
+        await _showRestartCountdown(
+          title: '数据清除完成',
+          message: '所选数据已清除。应用将在倒计时后自动重启。',
+        );
+      }
+    } catch (e) {
+      // 先关闭进度弹窗，让失败提示可见
+      if (mounted && progressShown) {
+        Navigator.of(context, rootNavigator: true).pop();
+        progressShown = false;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('清除失败: $e'), backgroundColor: Colors.red),
+        );
+      }
+      // 清除可能已部分完成（磁盘数据与内存状态不一致，且 Anki 数据库连接
+      // 可能已被关闭），失败后同样重启，保证应用以干净状态重新加载。
+      if (mounted) {
+        await _showRestartCountdown(
+          title: '清除未完成',
+          message: '部分数据未能清除，应用将自动重启。重启后可重试清除操作。',
+        );
+      }
+    } finally {
+      if (mounted && progressShown) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      if (mounted) setState(() => _isClearing = false);
     }
   }
 
@@ -365,7 +532,10 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     }
   }
 
-  Future<void> _showRestartCountdown() async {
+  Future<void> _showRestartCountdown({
+    String title = '数据恢复成功',
+    String message = '数据已从备份中恢复。应用将在倒计时后自动重启。',
+  }) async {
     if (!mounted) return;
 
     final countdown = ValueNotifier<int>(5);
@@ -393,14 +563,14 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             children: [
               Icon(Icons.check_circle, color: Colors.green.shade600, size: 24),
               const SizedBox(width: 8),
-              const Text('数据恢复成功'),
+              Text(title),
             ],
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('数据已从备份中恢复。应用将在倒计时后自动重启。'),
+              Text(message),
               const SizedBox(height: 16),
               Center(
                 child: ValueListenableBuilder<int>(
@@ -446,7 +616,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      '手动导出时可选择要备份的数据类别；导入时也可选择性恢复部分数据。'
+                      '手动导出时可选择要备份的数据类别；导入时只恢复勾选的类别，未勾选的类别保持原样；也可直接清除勾选的类别数据。'
                       '自动备份始终为全量备份。',
                     ),
                   ),
@@ -493,6 +663,60 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                             )
                           : const Icon(Icons.restore),
                       label: Text(_isImporting ? '正在恢复...' : '选择备份文件并恢复'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // === 清除所选数据 ===
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.delete_outline,
+                          color: Colors.red.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        '清除所选数据',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          color: Colors.red.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '直接清除当前勾选的数据类别（不需要备份文件）。'
+                    '未勾选的类别将保持原样。此操作不可撤销。',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _isClearing ? null : _onClearSelectedData,
+                      icon: _isClearing
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.delete_forever_outlined),
+                      label: Text(_isClearing ? '正在清除...' : '清除所选数据'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                      ),
                     ),
                   ),
                 ],

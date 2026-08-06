@@ -24,6 +24,19 @@ class AnkiDatabase {
 
   final String? _overridePath;
 
+  /// 最近一次 [open] 的实例（供删除数据库文件前关闭连接，
+  /// 避免 Windows 等平台因文件被占用而删除失败）。
+  static AnkiDatabase? _openedInstance;
+
+  /// 关闭已打开的 Anki 数据库连接（若有）。
+  ///
+  /// 在删除 collection.anki2 文件前调用（如清除 Anki 数据场景）。
+  static Future<void> closeOpenedInstance() async {
+    final instance = _openedInstance;
+    _openedInstance = null;
+    await instance?.close();
+  }
+
   AnkiDatabase({String? basePath}) : _overridePath = basePath;
 
   /// Open (or create) the database.
@@ -43,6 +56,7 @@ class AnkiDatabase {
         await ColDao.seed(db);
       },
     );
+    _openedInstance = this;
     cards = CardDao(_db!);
     notes = NoteDao(_db!);
     revlog = RevlogDao(_db!);
@@ -53,6 +67,9 @@ class AnkiDatabase {
   Future<void> close() async {
     await _db?.close();
     _db = null;
+    if (identical(this, _openedInstance)) {
+      _openedInstance = null;
+    }
   }
 
   Database get db {

@@ -498,7 +498,7 @@ void main() {
 
   group('Selective restore only restores selected categories', () {
     testWidgets(
-        'pictures-only restore: images replaced, unselected records CLEARED',
+        'pictures-only restore: images replaced, unselected records PRESERVED',
         (WidgetTester t) async {
       // Add pre-existing data for multiple types
       await ManifestDatabase.insertImageRecord({
@@ -582,8 +582,8 @@ void main() {
       // Restore with pictures-only selection
       final sel = BackupSelection(
         pictures: true,
-        audio: false, // unselected → will be CLEARED
-        videos: false, // unselected → will be CLEARED
+        audio: false, // unselected → will be PRESERVED
+        videos: false, // unselected → will be PRESERVED
         texts: false,
         tasks: false,
         ankiData: false,
@@ -597,17 +597,21 @@ void main() {
       expect(imgRecords[0]['id'], equals('img_new'),
           reason: 'Selected image records should be restored from backup');
 
-      // Unselected: audio records CLEARED (not preserved)
+      // Unselected: audio records PRESERVED (not cleared)
       final audRecords = await ManifestDatabase.getAllAudioRecords();
-      expect(audRecords.length, equals(0),
+      expect(audRecords.length, equals(1),
           reason:
-              'Unselected audio records must be cleared (user did not select audio)');
+              'Unselected audio records must be preserved (user did not select audio)');
+      expect(audRecords[0]['id'], equals('aud_old'),
+          reason: 'Pre-existing audio record should remain unchanged');
 
-      // Unselected: video records CLEARED
+      // Unselected: video records PRESERVED
       final vidRecords = await ManifestDatabase.getAllVideoRecords();
-      expect(vidRecords.length, equals(0),
+      expect(vidRecords.length, equals(1),
           reason:
-              'Unselected video records must be cleared (user did not select video)');
+              'Unselected video records must be preserved (user did not select video)');
+      expect(vidRecords[0]['id'], equals('vid_old'),
+          reason: 'Pre-existing video record should remain unchanged');
     });
 
     testWidgets('full restore replaces all record types',
@@ -868,7 +872,7 @@ void main() {
     });
 
     testWidgets(
-        'video-only restore: videos replaced, unselected records CLEARED',
+        'video-only restore: videos replaced, unselected records PRESERVED',
         (WidgetTester t) async {
       // Add pre-existing data in multiple tables
       await ManifestDatabase.insertImageRecord({
@@ -945,17 +949,21 @@ void main() {
           reason: 'Video record should be restored');
       expect(videoRecords[0]['id'], equals('vid_restore_1'));
 
-      // Unselected: image records CLEARED
+      // Unselected: image records PRESERVED
       final imageRecords = await ManifestDatabase.getAllImageRecords();
-      expect(imageRecords.length, equals(0),
+      expect(imageRecords.length, equals(1),
           reason:
-              'Unselected image records must be cleared (user did not select pictures)');
+              'Unselected image records must be preserved (user did not select pictures)');
+      expect(imageRecords[0]['id'], equals('img_existing_vid'),
+          reason: 'Pre-existing image record should remain unchanged');
 
-      // Unselected: audio records CLEARED
+      // Unselected: audio records PRESERVED
       final audioRecords = await ManifestDatabase.getAllAudioRecords();
-      expect(audioRecords.length, equals(0),
+      expect(audioRecords.length, equals(1),
           reason:
-              'Unselected audio records must be cleared (user did not select audio)');
+              'Unselected audio records must be preserved (user did not select audio)');
+      expect(audioRecords[0]['id'], equals('aud_existing'),
+          reason: 'Pre-existing audio record should remain unchanged');
     });
   });
 
@@ -964,14 +972,14 @@ void main() {
   // ==================================================================
 
   // ==================================================================
-  // 选择性恢复 SharedPreferences：部分选择清除未选中的键，全不选则保留
+  // 选择性恢复 SharedPreferences：部分选择只替换选中的键，未选中的键保持原样
   // ==================================================================
   //
-  // 新行为：选择 chat 时不清除 settings；选择 settings 时清除 chat；
-  // 两者都不选（或 BackupSelection 全为 false）时保留所有偏好。
+  // 新行为：选择 chat 时只替换 chat 键（清除现有 chat 键后写入备份值），
+  // settings 键保持原样；选择 settings 时同理；两者都不选时保留所有偏好。
 
-  group('Selective SharedPreferences restore clears unselected keys', () {
-    testWidgets('v2 restore: chat-only selection clears settings',
+  group('Selective SharedPreferences restore preserves unselected keys', () {
+    testWidgets('v2 restore: chat-only selection preserves settings',
         (WidgetTester t) async {
       // Set up existing preferences with both chat and settings data
       SharedPreferences.setMockInitialValues({
@@ -1054,25 +1062,26 @@ void main() {
         reason: 'Active conversation ID should be restored from backup',
       );
 
-      // Settings keys should be CLEARED (not preserved)
-      // (settings was NOT selected for restore, so existing values must be cleared)
+      // Settings keys should be PRESERVED (not cleared)
+      // (settings was NOT selected for restore, so existing values must stay)
       final assistants = restoredPrefs.getString('assistants');
-      expect(assistants, isNull,
+      expect(assistants, contains('测试助手'),
           reason:
-              'Settings (assistants) must be cleared when only chat is restored');
+              'Settings (assistants) must be preserved when only chat is restored');
 
       final provEntries = restoredPrefs.getString('provider_entries');
-      expect(provEntries, isNull,
+      expect(provEntries, contains('p1'),
           reason:
-              'Settings (provider_entries) must be cleared when only chat is restored');
+              'Settings (provider_entries) must be preserved when only chat is restored');
 
-      expect(restoredPrefs.getString('per_model_chat_settings'), isNull,
-          reason: 'Settings (per_model_chat_settings) must be cleared');
-      expect(restoredPrefs.getInt('selected_model_index'), isNull,
-          reason: 'Settings (selected_model_index) must be cleared');
+      expect(restoredPrefs.getString('per_model_chat_settings'),
+          contains('gpt-4'),
+          reason: 'Settings (per_model_chat_settings) must be preserved');
+      expect(restoredPrefs.getInt('selected_model_index'), equals(0),
+          reason: 'Settings (selected_model_index) must be preserved');
     });
 
-    testWidgets('v2 restore: settings-only selection clears chat',
+    testWidgets('v2 restore: settings-only selection preserves chat',
         (WidgetTester t) async {
       // Set up existing preferences with both chat and settings data
       SharedPreferences.setMockInitialValues({
@@ -1158,15 +1167,16 @@ void main() {
         reason: 'Settings (provider_entries) should be restored from backup',
       );
 
-      // Chat keys should be CLEARED (not preserved)
-      // (chat was NOT selected for restore, so existing values must be cleared)
+      // Chat keys should be PRESERVED (not cleared)
+      // (chat was NOT selected for restore, so existing values must stay)
       final conversations = restoredPrefs.getString('conversations');
-      expect(conversations, isNull,
+      expect(conversations, contains('original_conv'),
           reason:
-              'Chat (conversations) must be cleared when only settings is restored');
+              'Chat (conversations) must be preserved when only settings is restored');
 
-      expect(restoredPrefs.getString('active_conversation_id'), isNull,
-          reason: 'Chat (active_conversation_id) must be cleared');
+      expect(restoredPrefs.getString('active_conversation_id'),
+          equals('original_conv'),
+          reason: 'Chat (active_conversation_id) must be preserved');
     });
 
     testWidgets(
@@ -1244,6 +1254,74 @@ void main() {
       expect(restoredPrefs.getString('provider_entries'), contains('p1'),
           reason:
               'Original provider_entries must be preserved when nothing is restored');
+    });
+
+    testWidgets(
+        'v2 restore: chat selected but backup has no chat_data.json → existing chat keys cleared',
+        (WidgetTester t) async {
+      // Existing chat + settings data
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"existing_conv"}]',
+        'active_conversation_id': 'existing_conv',
+        'assistants': '[{"id":"existing_a"}]',
+        'data_format_version': 2,
+      });
+
+      // Build a v2 backup WITHOUT chat_data.json (only settings.json)
+      final backupArchive = Archive();
+      backupArchive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 2,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      backupArchive.addFile(ArchiveFile(
+          'settings.json',
+          0,
+          utf8.encode(jsonEncode({
+            'assistants': '[{"id":"backup_a"}]',
+            'data_format_version': 2,
+          }))));
+
+      final encoded = ZipEncoder().encode(backupArchive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore with ONLY chat selected (settings NOT selected)
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: true, // <-- selected
+        settings: false, // <-- must be preserved
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      final restoredPrefs = await SharedPreferences.getInstance();
+      // Selected category with no backup data → cleared
+      expect(restoredPrefs.getString('conversations'), isNull,
+          reason:
+              'Selected chat category must be cleared even when the backup has no chat_data.json');
+      expect(restoredPrefs.getString('active_conversation_id'), isNull,
+          reason: 'Selected chat category must be cleared');
+      // Unselected settings → preserved
+      expect(restoredPrefs.getString('assistants'), contains('existing_a'),
+          reason: 'Unselected settings must be preserved');
     });
 
     testWidgets(
@@ -1332,7 +1410,7 @@ void main() {
     });
 
     testWidgets(
-        'v1 restore: chat-only selection also overwrites settings (v1 design limitation - merged prefs)',
+        'v1 restore: chat-only selection preserves settings (preferences.json split by key)',
         (WidgetTester t) async {
       SharedPreferences.setMockInitialValues({
         'conversations': '[{"id":"v1_orig_conv"}]',
@@ -1377,13 +1455,12 @@ void main() {
       final backupBytes = Uint8List.fromList(encoded);
 
       // Restore v1 with chat-only selection
-      // v1 merges chat+settings in preferences.json, so even chat-only
-      // will restore all preferences from the backup.
-      // This is a v1 format limitation: chat and settings cannot be
-      // separated, so unselected categories are also overwritten.
+      // v1 merges chat+settings in a single preferences.json, but the
+      // restore splits it back by key classification: chat-only restores
+      // only the chat keys and leaves settings keys untouched.
       final sel = BackupSelection(
         chatRecordsAndAttachments: true,
-        settings: false, // <-- not selected, but v1 can't separate
+        settings: false, // <-- not selected, must be preserved
         pictures: false,
         audio: false,
         videos: false,
@@ -1401,13 +1478,89 @@ void main() {
           restoredPrefs.getString('conversations'), contains('v1_backup_conv'),
           reason: 'v1 restore should restore chat from preferences.json');
 
-      // Settings also restored (v1 format limitation: cannot separate
-      // chat from settings in merged preferences.json).
-      // Original pre-restore data is overwritten by backup data for
-      // unselected categories. This is the best possible behavior for v1.
-      expect(restoredPrefs.getString('assistants'), contains('备份助手'),
+      // Settings preserved: the merged preferences.json is split by key
+      // classification, so settings keys keep their original values.
+      expect(restoredPrefs.getString('assistants'), contains('v1_orig_a'),
           reason:
-              'v1 format restores all preferences (merged), not just selected category');
+              'Settings must be preserved when only chat is restored (v1 split by key)');
+      expect(restoredPrefs.getString('provider_entries'), contains('v1_orig_p'),
+          reason: 'Settings must be preserved (v1 split by key)');
+    });
+
+    testWidgets(
+        'v1 restore: settings-only selection preserves chat (preferences.json split by key)',
+        (WidgetTester t) async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"v1_orig_conv2"}]',
+        'active_conversation_id': 'v1_orig_conv2',
+        'assistants': '[{"id":"v1_orig_a2","name":"原始助手2"}]',
+        'provider_entries': '[{"id":"v1_orig_p2","type":"llm"}]',
+        'data_format_version': 1,
+      });
+
+      // Build a v1 backup
+      final archive = Archive();
+      archive.addFile(ArchiveFile(
+          'manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'version': 1,
+            'createdAt': DateTime.now().toIso8601String(),
+            'appVersion': 'test',
+          }))));
+      archive.addFile(ArchiveFile(
+          'stroom_manifest.json',
+          0,
+          utf8.encode(jsonEncode({
+            'image_records': <Map<String, dynamic>>[],
+            'audio_records': <Map<String, dynamic>>[],
+            'video_records': <Map<String, dynamic>>[],
+            'text_records': <Map<String, dynamic>>[],
+            'folders': <String>[],
+          }))));
+      archive.addFile(ArchiveFile(
+          'preferences.json',
+          0,
+          utf8.encode(jsonEncode({
+            'conversations': '[{"id":"v1_backup_conv2"}]',
+            'active_conversation_id': 'v1_backup_conv2',
+            'assistants': '[{"id":"v1_backup_a2","name":"备份助手2"}]',
+            'provider_entries': '[{"id":"v1_backup_p2","type":"llm"}]',
+            'data_format_version': 1,
+          }))));
+
+      final encoded = ZipEncoder().encode(archive);
+      final backupBytes = Uint8List.fromList(encoded);
+
+      // Restore v1 with settings-only selection
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false, // <-- not selected, must be preserved
+        settings: true,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+
+      final restoredPrefs = await SharedPreferences.getInstance();
+
+      // Settings should be restored from backup
+      expect(restoredPrefs.getString('assistants'), contains('备份助手2'),
+          reason: 'Settings should be restored from v1 preferences.json');
+      expect(restoredPrefs.getString('provider_entries'), contains('v1_backup_p2'),
+          reason: 'Settings should be restored from v1 preferences.json');
+
+      // Chat preserved: only settings keys are restored from the merged file
+      expect(restoredPrefs.getString('conversations'), contains('v1_orig_conv2'),
+          reason:
+              'Chat must be preserved when only settings is restored (v1 split by key)');
+      expect(restoredPrefs.getString('active_conversation_id'),
+          equals('v1_orig_conv2'),
+          reason: 'Chat must be preserved (v1 split by key)');
     });
   });
 
@@ -1415,8 +1568,8 @@ void main() {
   // 全面检查：所有 9 个类别在选择性备份和恢复中的行为一致性
   // ==================================================================
   //
-  // 新行为：选中的类别恢复（清空后还原），未选中的类别清除，什么都没选则保留。
-  // 本 group 对所有 9 个类别逐一验证选择性备份和选择性恢复的正确性。
+  // 新行为：选中的类别恢复（清空后还原），未选中的类别保持原样，
+  // 什么都没选则全部保留。本 group 对所有 9 个类别逐一验证。
 
   group('Comprehensive selective backup/restore audit for all 9 categories',
       () {
@@ -1540,7 +1693,7 @@ void main() {
     });
 
     // ----------------------------------------------------------------
-    // 选择性恢复：验证未选择任何 DB 类别时保留所有数据，部分选择时清除未选类别
+    // 选择性恢复：验证未选择任何 DB 类别时保留所有数据，部分选择时未选类别保持原样
     // ----------------------------------------------------------------
 
     testWidgets(
@@ -1724,7 +1877,7 @@ void main() {
     // ----------------------------------------------------------------
 
     testWidgets(
-        'selective restore: only the selected category is restored, all others cleared',
+        'selective restore: only the selected category is restored, all others preserved',
         (WidgetTester t) async {
       // Insert pre-existing records for all 4 DB types
       await ManifestDatabase.insertImageRecord({
@@ -1851,23 +2004,29 @@ void main() {
       );
       await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
 
-      // Only videos should be replaced; all others CLEARED
+      // Only videos should be replaced; all others PRESERVED
       final videos = await ManifestDatabase.getAllVideoRecords();
       expect(videos.length, equals(1));
       expect(videos[0]['id'], equals('vid_new'),
           reason: 'Videos must be replaced from backup');
 
       final images = await ManifestDatabase.getAllImageRecords();
-      expect(images.length, equals(0),
-          reason: 'Images must be cleared (not selected)');
+      expect(images.length, equals(1),
+          reason: 'Images must be preserved (not selected)');
+      expect(images[0]['id'], equals('img_pre'),
+          reason: 'Pre-existing image records must remain unchanged');
 
       final audios = await ManifestDatabase.getAllAudioRecords();
-      expect(audios.length, equals(0),
-          reason: 'Audio must be cleared (not selected)');
+      expect(audios.length, equals(1),
+          reason: 'Audio must be preserved (not selected)');
+      expect(audios[0]['id'], equals('aud_pre'),
+          reason: 'Pre-existing audio records must remain unchanged');
 
       final texts = await ManifestDatabase.getAllTextRecords();
-      expect(texts.length, equals(0),
-          reason: 'Texts must be cleared (not selected)');
+      expect(texts.length, equals(1),
+          reason: 'Texts must be preserved (not selected)');
+      expect(texts[0]['id'], equals('txt_pre'),
+          reason: 'Pre-existing text records must remain unchanged');
     });
 
     // ----------------------------------------------------------------
@@ -1943,7 +2102,7 @@ void main() {
     // 选择性恢复：每个类别单独验证正确行为
     // ----------------------------------------------------------------
 
-    testWidgets('texts-only restore replaces text records, clears all others',
+    testWidgets('texts-only restore replaces text records, preserves others',
         (WidgetTester t) async {
       await ManifestDatabase.insertImageRecord({
         'id': 'img_keep',
@@ -2016,11 +2175,13 @@ void main() {
       expect(texts[0]['id'], equals('txt_new'));
 
       final images = await ManifestDatabase.getAllImageRecords();
-      expect(images.length, equals(0),
-          reason: 'Images cleared when only texts selected');
+      expect(images.length, equals(1),
+          reason: 'Images preserved when only texts selected');
+      expect(images[0]['id'], equals('img_keep'),
+          reason: 'Pre-existing image records must remain unchanged');
     });
 
-    testWidgets('audio-only restore replaces audio records, clears others',
+    testWidgets('audio-only restore replaces audio records, preserves others',
         (WidgetTester t) async {
       await ManifestDatabase.insertVideoRecord({
         'id': 'vid_keep',
@@ -2092,8 +2253,10 @@ void main() {
       expect(audios[0]['id'], equals('aud_new'));
 
       final videos = await ManifestDatabase.getAllVideoRecords();
-      expect(videos.length, equals(0),
-          reason: 'Videos cleared when only audio selected');
+      expect(videos.length, equals(1),
+          reason: 'Videos preserved when only audio selected');
+      expect(videos[0]['id'], equals('vid_keep'),
+          reason: 'Pre-existing video records must remain unchanged');
     });
 
     // ----------------------------------------------------------------
@@ -2101,7 +2264,7 @@ void main() {
     // ----------------------------------------------------------------
 
     testWidgets(
-        'browserCookies: true restores file with correct content, false clears pre-existing data',
+        'browserCookies: true restores file with correct content, false preserves pre-existing data',
         (WidgetTester t) async {
       final cookiesContent = 'mock_cookies_data';
       final backupArchive = Archive();
@@ -2156,7 +2319,7 @@ void main() {
           reason: 'Cleanup should remove browser_cookies.json before test 2');
 
       // Test 2: browserCookies deselected → backup file NOT restored,
-      // pre-existing data is cleared (not preserved)
+      // pre-existing data is preserved (not cleared)
       await WebFileStore.write('/browser_cookies.json',
           Uint8List.fromList(utf8.encode('pre_existing_cookies')));
       final selFalse = BackupSelection(
@@ -2173,16 +2336,18 @@ void main() {
       await BackupService.restoreFromBytesForTest(backupBytes,
           selection: selFalse);
       written = await WebFileStore.read('/browser_cookies.json');
-      expect(written, isNull,
+      expect(written, isNotNull,
           reason:
-              'Pre-existing browser_cookies.json should be cleared when browserCookies is false');
+              'Pre-existing browser_cookies.json should be preserved when browserCookies is false');
+      expect(String.fromCharCodes(written!), equals('pre_existing_cookies'),
+          reason: 'Pre-existing cookies content should be unchanged');
     });
 
     testWidgets(
-        'ankiData: true restores file, false preserves pre-existing anki data',
+        'ankiData: true restores file to live path, false preserves pre-existing anki data',
         (WidgetTester t) async {
-      // Seed pre-existing anki data on disk
-      await WebFileStore.write('anki/collection.anki2',
+      // Seed pre-existing anki data at the LIVE path (app data dir root)
+      await WebFileStore.write('/collection.anki2',
           Uint8List.fromList(utf8.encode('pre_existing_anki')));
       // Build backup with anki data
       final ankiContent = 'mock_anki_content_for_restore';
@@ -2225,7 +2390,7 @@ void main() {
       await BackupService.restoreFromBytesForTest(backupBytes,
           selection: selFalse);
 
-      var written = await WebFileStore.read('anki/collection.anki2');
+      var written = await WebFileStore.read('/collection.anki2');
       expect(written, isNotNull,
           reason:
               'Pre-existing anki data must be preserved when ankiData is false');
@@ -2234,9 +2399,9 @@ void main() {
               'Pre-existing anki content should be unchanged when ankiData is false');
 
       // Clean up for test 2
-      await WebFileStore.delete('anki/collection.anki2');
+      await WebFileStore.delete('/collection.anki2');
 
-      // Test 2: ankiData true → file restored with correct content
+      // Test 2: ankiData true → file restored to the LIVE path with correct content
       final selTrue = BackupSelection(
         chatRecordsAndAttachments: false,
         settings: false,
@@ -2251,10 +2416,10 @@ void main() {
       await BackupService.restoreFromBytesForTest(backupBytes,
           selection: selTrue);
 
-      written = await WebFileStore.read('anki/collection.anki2');
+      written = await WebFileStore.read('/collection.anki2');
       expect(written, isNotNull,
           reason:
-              'anki/collection.anki2 should be restored when ankiData is true');
+              'collection.anki2 should be restored to the live path when ankiData is true');
       expect(String.fromCharCodes(written!), equals(ankiContent),
           reason: 'Restored anki content should match backup');
     });
@@ -2467,12 +2632,12 @@ void main() {
       expect(imgFolders, isNot(contains('Folder_A')),
           reason: 'Pre-existing image folder should be replaced');
 
-      // Video folders: cleared (not selected for restore)
+      // Video folders: preserved (videos not selected for restore)
       final vidFolders = await ManifestDatabase.getAllFolders(
           recordTable: ManifestTables.videoRecords);
-      expect(vidFolders.length, equals(0),
+      expect(vidFolders, contains('Folder_B'),
           reason:
-              'Pre-existing video folder must be cleared (videos not selected)');
+              'Pre-existing video folder must be preserved (videos not selected)');
     });
   });
 
@@ -2535,7 +2700,7 @@ void main() {
       expect((dbJson['audio_records'] as List<dynamic>).length, equals(1));
     });
 
-    testWidgets('restore with ankiData:false skips anki/ directory files',
+    testWidgets('restore with ankiData:false skips anki data',
         (WidgetTester t) async {
       // Build a backup archive that includes an anki/ file
       final backupArchive = Archive();
@@ -2577,13 +2742,13 @@ void main() {
       await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
 
       // Verify anki file was NOT written to WebFileStore
-      final written = await WebFileStore.read('anki/collection.anki2');
+      final written = await WebFileStore.read('/collection.anki2');
       expect(written, isNull,
           reason:
-              'anki/collection.anki2 should NOT be restored when ankiData is false');
+              'collection.anki2 should NOT be restored when ankiData is false');
     });
 
-    testWidgets('restore with ankiData:true includes anki/ directory files',
+    testWidgets('restore with ankiData:true restores anki/ to live root path',
         (WidgetTester t) async {
       // Build a backup archive that includes an anki/ file
       final backupArchive = Archive();
@@ -2625,14 +2790,14 @@ void main() {
       );
       await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
 
-      // Verify anki file WAS written to WebFileStore
-      final written = await WebFileStore.read('anki/collection.anki2');
+      // Verify anki file WAS written to the LIVE root path in WebFileStore
+      final written = await WebFileStore.read('/collection.anki2');
       expect(written, isNotNull,
           reason:
-              'anki/collection.anki2 should be restored when ankiData is true');
+              'collection.anki2 should be restored to the live path when ankiData is true');
       final content = String.fromCharCodes(written!);
       expect(content, equals(ankiContent),
-          reason: 'anki/collection.anki2 content should match');
+          reason: 'collection.anki2 content should match');
     });
 
     testWidgets(
@@ -2693,6 +2858,295 @@ void main() {
       final records = await ManifestDatabase.getAllImageRecords();
       expect(records.length, equals(1));
       expect(records[0]['id'], equals('img_new_2'));
+    });
+  });
+
+  // ==================================================================
+  // clearSelectedData：只清除选中的类别，未选中的类别保持原样
+  // ==================================================================
+
+  group('clearSelectedData clears only selected categories', () {
+    testWidgets('chat-only clear removes chat keys, preserves settings keys',
+        (WidgetTester t) async {
+      // Seed a conversation with an attachment file (subdirectory path) and
+      // settings keys
+      SharedPreferences.setMockInitialValues({
+        'conversations':
+            '[{"id":"conv1","messages":[{"attachments":[{"storagePath":"attachments/sub/1.jpg"}]}]}]',
+        'active_conversation_id': 'conv1',
+        'assistants': '[{"id":"a1","name":"助手"}]',
+        'provider_entries': '[{"id":"p1","type":"llm"}]',
+        'data_format_version': 2,
+      });
+      await WebFileStore.write('attachments/sub/1.jpg',
+          Uint8List.fromList(utf8.encode('attachment_bytes')));
+
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: true,
+        settings: false, // <-- must be preserved
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.clearSelectedData(sel);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('conversations'), isNull,
+          reason: 'Chat conversations must be cleared');
+      expect(prefs.getString('active_conversation_id'), isNull,
+          reason: 'Active conversation ID must be cleared');
+      expect(prefs.getString('assistants'), contains('助手'),
+          reason: 'Settings keys must be preserved when only chat is cleared');
+      expect(prefs.getString('provider_entries'), contains('p1'),
+          reason: 'Settings keys must be preserved');
+
+      // Attachment file referenced by the cleared conversations must be deleted
+      final attachment = await WebFileStore.read('attachments/sub/1.jpg');
+      expect(attachment, isNull,
+          reason: 'Attachment file must be deleted when chat is cleared');
+    });
+
+    testWidgets('settings-only clear removes settings keys, preserves chat keys',
+        (WidgetTester t) async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"conv1"}]',
+        'active_conversation_id': 'conv1',
+        'assistants': '[{"id":"a1","name":"助手"}]',
+        'provider_entries': '[{"id":"p1","type":"llm"}]',
+        'data_format_version': 2,
+      });
+
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false, // <-- must be preserved
+        settings: true,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.clearSelectedData(sel);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('assistants'), isNull,
+          reason: 'Settings keys must be cleared');
+      expect(prefs.getString('provider_entries'), isNull,
+          reason: 'Settings keys must be cleared');
+      expect(prefs.getString('conversations'), contains('conv1'),
+          reason: 'Chat keys must be preserved when only settings is cleared');
+      expect(prefs.getString('active_conversation_id'), equals('conv1'),
+          reason: 'Chat keys must be preserved');
+    });
+
+    testWidgets('media clear removes selected DB records, preserves unselected',
+        (WidgetTester t) async {
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_keep_clear',
+        'name': 'keep_img',
+        'hash': 'keep_img_hash',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 10,
+        'folder': '',
+        'width': 10,
+        'height': 10,
+      });
+      await ManifestDatabase.insertAudioRecord({
+        'id': 'aud_clear',
+        'name': 'clear_aud',
+        'hash': 'clear_aud_hash',
+        'format': 'wav',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 10,
+        'folder': '',
+        'duration': 0.1,
+      });
+      await ManifestDatabase.insertFolder('Clear_Folder',
+          recordTable: ManifestTables.audioRecords);
+      await ManifestDatabase.insertFolder('Keep_Video_Folder',
+          recordTable: ManifestTables.videoRecords);
+      // 媒体文件（按记录 hash 命名，Web/测试模式同样会被逐文件删除）
+      await WebFileStore.write('tts_audio/clear_aud_hash.wav',
+          Uint8List.fromList(utf8.encode('audio_bytes')));
+      await WebFileStore.write('tts_audio/clear_aud_hash.txt',
+          Uint8List.fromList(utf8.encode('audio_txt')));
+      await WebFileStore.write('pictures/keep_img_hash.jpg',
+          Uint8List.fromList(utf8.encode('img_bytes')));
+
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: true, // <-- selected, must be cleared
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.clearSelectedData(sel);
+
+      final audios = await ManifestDatabase.getAllAudioRecords();
+      expect(audios.length, equals(0),
+          reason: 'Selected audio records must be cleared');
+      final audioFolders = await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.audioRecords);
+      expect(audioFolders.length, equals(0),
+          reason: 'Selected audio folders must be cleared');
+
+      // Selected category files must be deleted
+      expect(await WebFileStore.read('tts_audio/clear_aud_hash.wav'), isNull,
+          reason: 'Selected audio file must be deleted');
+      expect(await WebFileStore.read('tts_audio/clear_aud_hash.txt'), isNull,
+          reason: 'Selected audio text file must be deleted');
+
+      final images = await ManifestDatabase.getAllImageRecords();
+      expect(images.length, equals(1),
+          reason: 'Unselected image records must be preserved');
+      expect(images[0]['id'], equals('img_keep_clear'));
+
+      // Unselected category files must be preserved
+      expect(await WebFileStore.read('pictures/keep_img_hash.jpg'), isNotNull,
+          reason: 'Unselected image file must be preserved');
+
+      // Unselected video folders must be preserved
+      final videoFolders = await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.videoRecords);
+      expect(videoFolders, contains('Keep_Video_Folder'),
+          reason: 'Unselected video folders must be preserved');
+    });
+
+    testWidgets('tasks/anki/cookies clear deletes the files',
+        (WidgetTester t) async {
+      await WebFileStore.write('synthesis/tasks.json',
+          Uint8List.fromList(utf8.encode('["task_1"]')));
+      await WebFileStore.write('catcatch/tasks.json',
+          Uint8List.fromList(utf8.encode('["task_2"]')));
+      // 实际 Anki 数据库位于根目录（WebFileStore 根级文件带前导斜杠）；
+      // 历史恢复残留位于 anki/ 子目录
+      await WebFileStore.write('/collection.anki2',
+          Uint8List.fromList(utf8.encode('anki_db')));
+      await WebFileStore.write('anki/collection.anki2',
+          Uint8List.fromList(utf8.encode('anki_db_residue')));
+      await WebFileStore.write('/browser_cookies.json',
+          Uint8List.fromList(utf8.encode('cookies')));
+
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: true,
+        ankiData: true,
+        browserCookies: true,
+      );
+      await BackupService.clearSelectedData(sel);
+
+      expect(await WebFileStore.read('synthesis/tasks.json'), isNull,
+          reason: 'synthesis/tasks.json must be deleted when tasks is cleared');
+      expect(await WebFileStore.read('catcatch/tasks.json'), isNull,
+          reason: 'catcatch/tasks.json must be deleted when tasks is cleared');
+      expect(await WebFileStore.read('/collection.anki2'), isNull,
+          reason: 'collection.anki2 must be deleted when ankiData is cleared');
+      expect(await WebFileStore.read('anki/collection.anki2'), isNull,
+          reason:
+              'anki/collection.anki2 residue must be deleted when ankiData is cleared');
+      expect(await WebFileStore.read('/browser_cookies.json'), isNull,
+          reason:
+              'browser_cookies.json must be deleted when browserCookies is cleared');
+
+      // 阶段 2：只清除 browserCookies，任务和 Anki 文件必须保留
+      // （验证每个 flag 只删除自己对应的文件）
+      await WebFileStore.write('synthesis/tasks.json',
+          Uint8List.fromList(utf8.encode('["task_1"]')));
+      await WebFileStore.write('/collection.anki2',
+          Uint8List.fromList(utf8.encode('anki_db')));
+      await WebFileStore.write('/browser_cookies.json',
+          Uint8List.fromList(utf8.encode('cookies')));
+
+      final cookiesOnly = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: true,
+      );
+      await BackupService.clearSelectedData(cookiesOnly);
+
+      expect(await WebFileStore.read('/browser_cookies.json'), isNull,
+          reason: 'browser_cookies.json must be deleted');
+      expect(await WebFileStore.read('synthesis/tasks.json'), isNotNull,
+          reason: 'tasks.json must NOT be deleted when only cookies is cleared');
+      expect(await WebFileStore.read('/collection.anki2'), isNotNull,
+          reason:
+              'collection.anki2 must NOT be deleted when only cookies is cleared');
+    });
+
+    testWidgets('clearing with NOTHING selected preserves all data',
+        (WidgetTester t) async {
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_noop',
+        'name': 'noop_img',
+        'hash': 'noop_img_hash',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 10,
+        'folder': '',
+        'width': 10,
+        'height': 10,
+      });
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"conv1"}]',
+        'assistants': '[{"id":"a1"}]',
+      });
+      await WebFileStore.write('synthesis/tasks.json',
+          Uint8List.fromList(utf8.encode('["task_1"]')));
+      await WebFileStore.write('/collection.anki2',
+          Uint8List.fromList(utf8.encode('anki_db')));
+      await WebFileStore.write('/browser_cookies.json',
+          Uint8List.fromList(utf8.encode('cookies')));
+
+      final sel = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: false,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.clearSelectedData(sel);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('conversations'), contains('conv1'),
+          reason: 'Nothing selected → chat must be preserved');
+      expect(prefs.getString('assistants'), contains('a1'),
+          reason: 'Nothing selected → settings must be preserved');
+
+      final images = await ManifestDatabase.getAllImageRecords();
+      expect(images.length, equals(1),
+          reason: 'Nothing selected → image records must be preserved');
+
+      expect(await WebFileStore.read('synthesis/tasks.json'), isNotNull,
+          reason: 'Nothing selected → task files must be preserved');
+      expect(await WebFileStore.read('/collection.anki2'), isNotNull,
+          reason: 'Nothing selected → anki db must be preserved');
+      expect(await WebFileStore.read('/browser_cookies.json'), isNotNull,
+          reason: 'Nothing selected → cookies must be preserved');
     });
   });
 }

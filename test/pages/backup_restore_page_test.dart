@@ -127,4 +127,60 @@ void main() {
       expect(find.text('导入/导出 .apkg 格式的 Anki 牌组'), findsOneWidget);
     });
   });
+
+  group('BackupRestorePage - clear selected data', () {
+    testWidgets('clear selected data button exists', (tester) async {
+      await tester.pumpWidget(createTestApp());
+      await tester.pump();
+
+      await tester.scrollUntilVisible(
+        find.widgetWithText(OutlinedButton, '清除所选数据'),
+        200.0,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.pump();
+      expect(find.widgetWithText(OutlinedButton, '清除所选数据'), findsOneWidget);
+    });
+
+    testWidgets('clear button opens confirmation dialog with categories',
+        (tester) async {
+      await tester.pumpWidget(createTestApp());
+      await tester.pump();
+
+      await tester.scrollUntilVisible(
+        find.widgetWithText(OutlinedButton, '清除所选数据'),
+        200.0,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.pump();
+
+      await tester.tap(find.widgetWithText(OutlinedButton, '清除所选数据'));
+      await tester.pumpAndSettle();
+
+      // Confirmation dialog lists the selected categories
+      expect(find.text('确认清除'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('聊天记录和附件'),
+        ),
+        findsOneWidget,
+        reason: 'Confirmation dialog must list the selected category',
+      );
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('浏览器Cookies'),
+        ),
+        findsOneWidget,
+        reason: 'Confirmation dialog must list the selected category',
+      );
+      expect(find.text('确定清除'), findsOneWidget);
+
+      // Cancel closes the dialog without clearing
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.text('确认清除'), findsNothing);
+    });
+  });
 }
