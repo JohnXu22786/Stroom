@@ -492,6 +492,15 @@ WavInfo parseWavHeader(Uint8List bytes) {
   if (!gotFmt) throw FormatException('No fmt chunk found in WAV');
   if (dataOffset == null) throw FormatException('No data chunk found in WAV');
 
+  // Truncated file: the header claims more data than the file actually
+  // holds. Without this check, slicing the PCM data below would throw a
+  // RangeError instead of a catchable FormatException.
+  if (dataOffset + dataSize > bytes.length) {
+    throw FormatException(
+        'Truncated WAV: data chunk claims $dataSize bytes but only '
+        '${bytes.length - dataOffset} are present');
+  }
+
   if (audioFormat != 1) {
     throw FormatException(
         'Unsupported audio format: $audioFormat. Only PCM (1) is supported.');
