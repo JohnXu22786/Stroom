@@ -246,19 +246,13 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     // 1. 删除分段下载进度跟踪
     final progressPath =
         p.join(appDir, 'catcatch', '.progress', '${task.id}_dl_progress.json');
-    try {
-      final pf = File(progressPath);
-      if (await pf.exists()) await pf.delete();
-    } catch (_) {}
+    await _deleteFileBestEffort(File(progressPath));
 
     // 2. 对于未完成的任务，删除它已记录的 downloadedFilePath
     // （放在前面处理，与 selectedMedia 无关）
     if (task.downloadedFilePath != null &&
         task.status != TaskStatus.completed) {
-      try {
-        final f = File(task.downloadedFilePath!);
-        if (await f.exists()) await f.delete();
-      } catch (_) {}
+      await _deleteFileBestEffort(File(task.downloadedFilePath!));
     }
 
     // 3. 如果没有已选媒体资源，说明还没开始下载，无需进一步清理
@@ -272,43 +266,63 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     // DownloadManager.downloadFile 实际写入的是无前导点的文件名，
     // 但 task_executor 也传入了带前导点的路径用于断点续传检测，两者都清理。
     for (final prefix in ['', '.']) {
-      final tempFilePath =
-          p.join(downloadDir, '$prefix$fileName${DefaultRules.tempFileSuffix}');
-      try {
-        final f = File(tempFilePath);
-        if (await f.exists()) await f.delete();
-      } catch (_) {}
+      await _deleteFileBestEffort(File(p.join(
+          downloadDir, '$prefix$fileName${DefaultRules.tempFileSuffix}')));
     }
 
     // 5. 下载目录中的源文件（尚未保存到 completed 目录）
-    final downloadFilePath = p.join(downloadDir, fileName);
-    try {
-      final f = File(downloadFilePath);
-      if (await f.exists()) await f.delete();
-    } catch (_) {}
+    await _deleteFileBestEffort(File(p.join(downloadDir, fileName)));
 
     // 6. 播放列表合并后的文件 (playlist_merged.ts)
     final mergedName = '${p.basenameWithoutExtension(fileName)}_merged.ts';
-    final mergedPath = p.join(downloadDir, mergedName);
-    try {
-      final f = File(mergedPath);
-      if (await f.exists()) await f.delete();
-    } catch (_) {}
+    await _deleteFileBestEffort(File(p.join(downloadDir, mergedName)));
 
     // 7. 分段下载的临时目录 (.playlist_merged.ts_parts/)
     final partsDirName = '.${mergedName}_parts';
-    final partsDir = Directory(p.join(downloadDir, partsDirName));
-    try {
-      if (await partsDir.exists()) await partsDir.delete(recursive: true);
-    } catch (_) {}
+    await _deleteDirBestEffort(Directory(p.join(downloadDir, partsDirName)));
 
     // 8. 转换后的文件 (converted/ 目录)
-    final convertName = '${p.basenameWithoutExtension(fileName)}.mp4';
-    final convertPath = p.join(convertDir, convertName);
-    try {
-      final f = File(convertPath);
-      if (await f.exists()) await f.delete();
-    } catch (_) {}
+    // 播放列表的转换输入是合并后的文件 (xxx_merged.ts)，因此转换产物
+    // 名为 xxx_merged.mp4；普通文件的转换输入是下载文件本身。
+    final convertBase = task.selectedMedia!.isPlaylist
+        ? p.basenameWithoutExtension(mergedName)
+        : p.basenameWithoutExtension(fileName);
+    await _deleteFileBestEffort(File(p.join(convertDir, '$convertBase.mp4')));
+  }
+
+  /// 删除文件（尽力而为，失败时短暂重试）。
+  ///
+  /// 取消下载后写入句柄可能尚未释放（Windows 上打开的文件无法删除），
+  /// 因此重试几次直到句柄释放，避免残留半下载文件。
+  /// 重试间隔为 150ms × 尝试次数（锁定句柄的单元测试依赖该节奏）。
+  static Future<void> _deleteFileBestEffort(File file) async {
+    for (var attempt = 0; attempt < 4; attempt++) {
+      try {
+        if (await file.exists()) {
+          await file.delete();
+        }
+        return;
+      } catch (_) {
+        await Future.delayed(Duration(milliseconds: 150 * (attempt + 1)));
+      }
+    }
+    debugPrint('[CatCatchNotifier] Failed to delete file after retries: $file');
+  }
+
+  /// 删除目录（递归），失败时短暂重试（与 [_deleteFileBestEffort] 同理）。
+  static Future<void> _deleteDirBestEffort(Directory dir) async {
+    for (var attempt = 0; attempt < 4; attempt++) {
+      try {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+        return;
+      } catch (_) {
+        await Future.delayed(Duration(milliseconds: 150 * (attempt + 1)));
+      }
+    }
+    debugPrint(
+        '[CatCatchNotifier] Failed to delete directory after retries: $dir');
   }
 
   /// 用户确认继续处理特殊格式（在 converting 步骤前调用）
