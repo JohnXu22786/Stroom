@@ -50,9 +50,8 @@ Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
 /// [label] (cards are built from LlmToggleSlider / LlmToggleTextField /
 /// custom dropdown cards, each containing exactly one Switch).
 Finder _switchFor(String label) {
-  final card = find
-      .ancestor(of: find.text(label), matching: find.byType(Card))
-      .first;
+  final card =
+      find.ancestor(of: find.text(label), matching: find.byType(Card)).first;
   return find.descendant(of: card, matching: find.byType(Switch));
 }
 
@@ -78,9 +77,8 @@ Future<void> _selectDropdownOption(
   String optionText,
 ) async {
   await _scrollTo(tester, find.text(label));
-  final card = find
-      .ancestor(of: find.text(label), matching: find.byType(Card))
-      .first;
+  final card =
+      find.ancestor(of: find.text(label), matching: find.byType(Card)).first;
   await tester.tap(
     find.descendant(of: card, matching: find.byType(DropdownButton<String>)),
   );
@@ -105,9 +103,8 @@ Future<void> _enterFieldInCard(
   String text,
 ) async {
   await _scrollTo(tester, find.text(label));
-  final card = find
-      .ancestor(of: find.text(label), matching: find.byType(Card))
-      .first;
+  final card =
+      find.ancestor(of: find.text(label), matching: find.byType(Card)).first;
   await tester.enterText(
     find.descendant(of: card, matching: find.byType(TextField)),
     text,
@@ -117,7 +114,8 @@ Future<void> _enterFieldInCard(
 
 void main() {
   group('OcrModelConfigPage built-in OpenAI-compatible params', () {
-    testWidgets('renders frequency/presence penalty, stop, response format, '
+    testWidgets(
+        'renders frequency/presence penalty, stop, response format, '
         'min/max pixels sections', (tester) async {
       await _pumpConfigPage(tester);
 
