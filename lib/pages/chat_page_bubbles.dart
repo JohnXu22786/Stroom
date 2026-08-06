@@ -145,7 +145,6 @@ extension _ChatPageBubblesExt on _ChatPageState {
     required TextMessage message,
     required bool isDark,
     required bool isStreaming,
-    required MarkdownConfig markdownConfig,
     required String? activeId,
   }) {
     final reasoningSections = _reasoningContents[message.id];
@@ -162,6 +161,19 @@ extension _ChatPageBubblesExt on _ChatPageState {
         _searchMatches.any(
           (m) => m.messageId == message.id,
         );
+
+    // Per-message markdown config: only the message that is currently
+    // being generated uses the streaming config (mermaid blocks show the
+    // "正在生成..." placeholder). All other messages — including old
+    // messages while a NEW message streams — keep their regular config,
+    // so already-rendered mermaid diagrams are neither hidden behind the
+    // loading placeholder nor re-rendered.
+    final markdownConfig = buildMessageMarkdownConfig(
+      isDark: isDark,
+      conversationIsStreaming: isStreaming,
+      streamingMsgId: _streamingMsgId,
+      messageId: message.id,
+    );
 
     return Container(
       margin: const EdgeInsets.symmetric(

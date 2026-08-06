@@ -7,7 +7,6 @@ extension _ChatPageBuildersExt on _ChatPageState {
     required bool isStreaming,
     required String streamingFullReply,
     required String? streamingMsgId,
-    required MarkdownConfig markdownConfig,
     required String? activeId,
     required InMemoryChatController controller,
   }) {
@@ -47,7 +46,6 @@ extension _ChatPageBuildersExt on _ChatPageState {
           groupStatus: groupStatus,
           isDark: isDark,
           isStreaming: isStreaming,
-          markdownConfig: markdownConfig,
           activeId: activeId,
         ),
         textStreamMessageBuilder: (context, message, index,
@@ -61,7 +59,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
           isStreaming: isStreaming,
           streamingFullReply: streamingFullReply,
           streamingMsgId: streamingMsgId,
-          markdownConfig: markdownConfig,
+          isDark: isDark,
         ),
       ),
     );
@@ -92,7 +90,6 @@ extension _ChatPageBuildersExt on _ChatPageState {
     MessageGroupStatus? groupStatus,
     required bool isDark,
     required bool isStreaming,
-    required MarkdownConfig markdownConfig,
     required String? activeId,
   }) {
     final isAi = message.authorId == _aiUser.id;
@@ -112,7 +109,6 @@ extension _ChatPageBuildersExt on _ChatPageState {
           message: message,
           isDark: isDark,
           isStreaming: isStreaming,
-          markdownConfig: markdownConfig,
           activeId: activeId,
         );
       }
@@ -183,7 +179,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
     required bool isStreaming,
     required String streamingFullReply,
     required String? streamingMsgId,
-    required MarkdownConfig markdownConfig,
+    required bool isDark,
   }) {
     // If the message has accumulated content (e.g.,
     // after page restoration from background streaming),
@@ -191,6 +187,15 @@ extension _ChatPageBuildersExt on _ChatPageState {
     // Uses captured [streamingFullReply] from build()
     // which is updated reactively via ref.watch.
     if (streamingFullReply.isNotEmpty && message.id == streamingMsgId) {
+      // This is the message currently being generated, so the streaming
+      // markdown config applies (mermaid blocks show "正在生成..." while
+      // the reply is still being produced).
+      final config = buildMessageMarkdownConfig(
+        isDark: isDark,
+        conversationIsStreaming: isStreaming,
+        streamingMsgId: streamingMsgId,
+        messageId: message.id,
+      );
       return Padding(
         padding: const EdgeInsets.all(12),
         child: MarkdownWidget(
@@ -198,7 +203,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
           selectable: true,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          config: markdownConfig,
+          config: config,
           markdownGenerator: markdownGenerator,
         ),
       );

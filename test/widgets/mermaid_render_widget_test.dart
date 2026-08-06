@@ -100,14 +100,73 @@ void main() {
       expect(html, contains('window.setZoom'));
     });
 
-    test('HTML setZoom reports zoom level via onZoomChanged', () {
+    test('HTML setZoom reports transform changes via onTransformChanged', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(html, contains('onZoomChanged'));
+      expect(html, contains('onTransformChanged'));
     });
 
-    test('HTML includes window.setPan function', () {
+    test('HTML includes window.setPanZoom for Flutter-driven pan/zoom', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(html, contains('window.setPan'));
+      expect(
+          html,
+          contains('window.setPanZoom = function(x, y, level)'),
+          reason:
+              'the inline widget drives pan/zoom from Flutter via setPanZoom');
+    });
+
+    test('HTML includes fitToViewport for auto-fit after render', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      expect(html, contains('window.fitToViewport'));
+    });
+
+    test('fitToViewport is called after mermaid.run completes', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // The fit must be wired into the mermaid.run success path.
+      final runIdx = html.indexOf('mermaid.run');
+      final fitCallIdx = html.indexOf('fitToViewport()');
+      expect(runIdx, greaterThanOrEqualTo(0));
+      expect(fitCallIdx, greaterThan(runIdx),
+          reason: 'fitToViewport() must be invoked after mermaid.run finishes');
+    });
+
+    test('fitToViewport notifies Flutter of the fitted viewport', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // The fit reports zoom AND pan so the Flutter side can keep its
+      // gesture/button state in sync (no post-fit position jumps).
+      expect(html, contains('onTransformChanged'));
+      expect(html, contains('callHandler'));
+    });
+
+    test('JS gesture pan handlers report transform changes to Flutter', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // Regression: when the JS gesture handlers (mobile fallback, where
+      // the platform view receives events directly) pan the diagram, they
+      // must notify Flutter so the Flutter-side pan state does not go
+      // stale and snap back on the next gesture/button interaction.
+      // Mouse drag pan and touch pan must both report.
+      expect(html, contains('panX = panStartX + (e.clientX - dragStartX)'));
+      expect(html, contains('panX = touchPanStartX'));
+      // Exactly one notify per mutation path: setZoom, fitToViewport,
+      // mouse-drag pan, touch pan. This pins the notify calls to the
+      // pan handlers (not just to the zoom/fit paths).
+      expect('notifyTransform();'.allMatches(html).length, 4);
+    });
+
+    test('fitToViewport uses contain-fit (min ratio) and centers the diagram',
+        () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // Contain fit: zoom = min(vw/sw, vh/sh) — full diagram visible at the
+      // maximum zoom (not cover-fill).
+      expect(html, contains('Math.min(vw / sw, vh / sh)'));
+      // Centered: pan places the diagram in the middle of the viewport.
+      expect(html, contains('panX = (vw - sw * zoomLevel) / 2'));
+      expect(html, contains('panY = (vh - sh * zoomLevel) / 2'));
+    });
+
+    test('fitToViewport reads the diagram size from the rendered SVG', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      expect(html, contains("container.querySelector('svg')"));
+      expect(html, contains('getBBox'));
     });
 
     test('HTML includes updateTransform function', () {

@@ -56,19 +56,31 @@ class _MermaidPreviewDialogContentState
     return MermaidRenderWidget.buildMermaidHtml(code);
   }
 
+  /// Zoom is anchored at the CENTER of the preview area (not the top-left
+  /// corner): `window.setZoom` keeps the given viewport point fixed while
+  /// scaling, so passing the viewport center zooms towards the middle.
+  /// The center is computed in JS so it is exact at any display scaling.
   Future<void> _zoomIn() async {
-    final newZoom = (_zoomLevel + 0.1).clamp(0.1, 10.0);
-    setState(() => _zoomLevel = newZoom);
-    await _webViewController?.evaluateJavascript(
-      source: 'window.setZoom($newZoom)',
-    );
+    await _zoomAroundCenter(_zoomLevel + 0.1);
   }
 
   Future<void> _zoomOut() async {
-    final newZoom = (_zoomLevel - 0.1).clamp(0.1, 10.0);
-    setState(() => _zoomLevel = newZoom);
+    await _zoomAroundCenter(_zoomLevel - 0.1);
+  }
+
+  Future<void> _zoomAroundCenter(double newZoom) async {
+    final target = newZoom.clamp(0.1, 10.0);
+    if (target == _zoomLevel) return;
+    // No setState: _zoomLevel is not read in build() and the WebView
+    // reflects the transform visually (the JS round-trip confirms the
+    // value via onTransformChanged).
+    _zoomLevel = target;
+    // The null-safe controller call is safe: zoom controls only appear
+    // after onLoadStop, when the controller exists.
     await _webViewController?.evaluateJavascript(
-      source: 'window.setZoom($newZoom)',
+      source: 'window.setZoom($target, '
+          "document.getElementById('viewport').clientWidth / 2, "
+          "document.getElementById('viewport').clientHeight / 2)",
     );
   }
 
@@ -137,11 +149,15 @@ class _MermaidPreviewDialogContentState
                   },
                 );
                 ctrl.addJavaScriptHandler(
-                  handlerName: 'onZoomChanged',
+                  handlerName: 'onTransformChanged',
                   callback: (args) {
+                    // Mirrors the JS-side zoom level (the dialog does not
+                    // track pan; zoom buttons anchor in JS). No setState:
+                    // _zoomLevel is not read in build() and the WebView
+                    // reflects the transform visually.
                     if (mounted && args.isNotEmpty) {
-                      final level = double.tryParse(args[0].toString()) ?? 1.0;
-                      setState(() => _zoomLevel = level);
+                      _zoomLevel =
+                          double.tryParse(args[0].toString()) ?? 1.0;
                     }
                   },
                 );

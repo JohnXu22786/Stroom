@@ -288,10 +288,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
         activeId != null ? ref.watch(streamingFullReplyProvider(activeId)) : '';
     final streamingMsgId =
         activeId != null ? ref.watch(streamingMsgIdProvider(activeId)) : null;
-    final markdownConfig = buildMarkdownConfig(
-      isDark: isDark,
-      isStreaming: isStreaming,
-    );
 
     // ── Streaming listeners (per-conversation via family providers) ──
     // Each listener watches its conversation's family instance. When the
@@ -359,7 +355,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                             isStreaming: isStreaming,
                             streamingFullReply: streamingFullReply,
                             streamingMsgId: streamingMsgId,
-                            markdownConfig: markdownConfig,
                             activeId: activeId,
                             controller: controller,
                           ),

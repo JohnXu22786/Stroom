@@ -324,6 +324,73 @@ void main() {
     });
   });
 
+  group('buildMessageMarkdownConfig - per-message streaming', () {
+    // Regression: when a new message starts streaming, previously rendered
+    // mermaid diagrams in OLD messages must NOT show the "正在生成..."
+    // loading placeholder and must NOT re-render. Only the message that is
+    // currently being generated may use the streaming config.
+    test('old messages use non-streaming config while conversation streams',
+        () {
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: true,
+        streamingMsgId: 'new-message-id',
+        messageId: 'old-message-id',
+      );
+      final widget = config.pre.builder!('graph TD\nA-->B', 'mermaid');
+      expect(widget, isA<MermaidRenderWidget>(),
+          reason:
+              'an old message must render mermaid normally, not show the '
+              'streaming loading placeholder');
+    });
+
+    test('the message currently being generated uses the streaming config',
+        () {
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: true,
+        streamingMsgId: 'current-message-id',
+        messageId: 'current-message-id',
+      );
+      final widget = config.pre.builder!('graph TD\nA-->B', 'mermaid');
+      expect(widget, isNot(isA<MermaidRenderWidget>()));
+      expect(widget, isNot(isA<CodeBlockSourceView>()));
+    });
+
+    test('conversation not streaming: mermaid renders normally', () {
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: false,
+        streamingMsgId: 'current-message-id',
+        messageId: 'current-message-id',
+      );
+      final widget = config.pre.builder!('graph TD\nA-->B', 'mermaid');
+      expect(widget, isA<MermaidRenderWidget>());
+    });
+
+    test('streamingMsgId is null: mermaid renders normally', () {
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: true,
+        streamingMsgId: null,
+        messageId: 'any-message-id',
+      );
+      final widget = config.pre.builder!('graph TD\nA-->B', 'mermaid');
+      expect(widget, isA<MermaidRenderWidget>());
+    });
+
+    test('non-mermaid code renders normally with either config', () {
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: true,
+        streamingMsgId: 'current-message-id',
+        messageId: 'current-message-id',
+      );
+      final widget = config.pre.builder!('print("hi")', 'python');
+      expect(widget, isA<CodeBlockSourceView>());
+    });
+  });
+
   group('HTML code block builder', () {
     test('returns HtmlCodeBlockWidget for html language', () {
       final pre = codeBlockPreConfig(isDark: false);

@@ -321,3 +321,26 @@ MarkdownConfig buildMarkdownConfig(
     ],
   ]);
 }
+
+/// Builds the [MarkdownConfig] used to render a single chat message.
+///
+/// Only the message that is currently being generated
+/// ([messageId] == [streamingMsgId] while [conversationIsStreaming]) uses
+/// the streaming config, which shows a loading placeholder for mermaid
+/// code blocks. Every other message uses the regular config so that
+/// already-rendered mermaid diagrams keep their rendered state and are
+/// NOT rebuilt (or shown as "正在生成...") when a new message starts
+/// streaming.
+MarkdownConfig buildMessageMarkdownConfig({
+  required bool isDark,
+  required bool conversationIsStreaming,
+  required String? streamingMsgId,
+  required String messageId,
+}) {
+  final isThisMessageStreaming =
+      conversationIsStreaming && streamingMsgId == messageId;
+  return buildMarkdownConfig(
+    isDark: isDark,
+    isStreaming: isThisMessageStreaming,
+  );
+}
