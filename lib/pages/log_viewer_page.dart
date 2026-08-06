@@ -144,7 +144,7 @@ class _LogViewerPageState extends State<LogViewerPage>
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => _LogContentPage(fileName: fileName, content: content),
+          builder: (_) => LogContentPage(fileName: fileName, content: content),
         ),
       );
     } catch (e) {
@@ -382,32 +382,67 @@ class _LogViewerPageState extends State<LogViewerPage>
 }
 
 // ====================================================================
-// 日志内容查看子页面
+// 日志内容查看页面
 // ====================================================================
 
-class _LogContentPage extends StatefulWidget {
+/// 日志内容查看页面，提供两种阅读模式：
+/// - 结构化视图（渲染）：按行解析级别并着色、加图标。
+/// - 原始视图（纯文本）：整份日志的纯文本，边缘留白更大。
+///
+/// 进入页面时自动滚动到底部一次（最新日志位于文件末尾）；
+/// 切换两种模式时保持当前阅读位置，不会再次滚动到底部。
+class LogContentPage extends StatefulWidget {
   final String fileName;
   final String content;
 
-  const _LogContentPage({
+  const LogContentPage({
+    super.key,
     required this.fileName,
     required this.content,
   });
 
   @override
-  State<_LogContentPage> createState() => _LogContentPageState();
+  State<LogContentPage> createState() => _LogContentPageState();
 }
 
-class _LogContentPageState extends State<_LogContentPage> {
+/// 解析后的单行日志，样式信息只解析一次，滚动重建时直接复用。
+class _ParsedLogLine {
+  final String text;
+  final bool isEmpty;
+  final Color? color;
+  final IconData? icon;
+
+  const _ParsedLogLine({
+    required this.text,
+    required this.isEmpty,
+    this.color,
+    this.icon,
+  });
+}
+
+/// 匹配日志行中的级别标记，如 `[ERROR]`。
+final RegExp _levelPattern = RegExp(r'\[(DEBUG|INFO|WARN|ERROR)\]');
+
+class _LogContentPageState extends State<LogContentPage> {
   bool _showRaw = false;
   final ScrollController _rawScrollController = ScrollController();
   final ScrollController _structuredScrollController = ScrollController();
 
+  /// 各视图离开时保存的滚动位置，切换回来时恢复（而不是滚到底部）。
+  /// null 表示该视图还没有显示过。
+  double? _rawSavedOffset;
+  double? _structuredSavedOffset;
+
+  /// 预解析的日志行（样式/图标只计算一次，避免滚动时重复正则匹配）。
+  late final List<_ParsedLogLine> _lines;
+  late final int _lineCount;
+
   @override
   void initState() {
     super.initState();
-    // 在第一帧渲染完成后自动滚动到底部，
-    // 这样最新的日志（位于文件末尾）能直接展示给用户。
+    _lines = _parseLines(widget.content);
+    _lineCount = _countLines();
+    // 只在刚进入页面时自动滚动到底部一次。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToBottom();
     });
@@ -428,38 +463,146 @@ class _LogContentPageState extends State<_LogContentPage> {
     controller.jumpTo(controller.position.maxScrollExtent);
   }
 
+  /// 切换渲染/纯文本视图。
+  ///
+  /// 只保存当前视图的滚动位置并恢复另一个视图上次的位置，不会滚动到底部，
+  /// 避免打断阅读。第一次显示的视图按比例映射当前位置，保证切换后
+  /// 停留在同一段日志上（而不是跳到文件头或文件尾）。
+  void _toggleView() {
+    final wasRaw = _showRaw;
+    final current =
+        wasRaw ? _rawScrollController : _structuredScrollController;
+
+    // 当前视图的阅读比例，用于另一个视图首次显示时映射位置。
+    double? leavingFraction;
+    if (current.hasClients) {
+      if (wasRaw) {
+        _rawSavedOffset = current.offset;
+      } else {
+        _structuredSavedOffset = current.offset;
+      }
+      final maxExtent = current.position.maxScrollExtent;
+      if (maxExtent > 0) {
+        leavingFraction = current.offset / maxExtent;
+      }
+    }
+
+    setState(() => _showRaw = !wasRaw);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final nowRaw = _showRaw;
+      final target =
+          nowRaw ? _rawScrollController : _structuredScrollController;
+      if (!target.hasClients) return;
+
+      final double? saved = nowRaw ? _rawSavedOffset : _structuredSavedOffset;
+      final double offset = saved != null
+          ? saved.clamp(0.0, target.position.maxScrollExtent)
+          : (leavingFraction ?? 1.0) * target.position.maxScrollExtent;
+      target.jumpTo(offset);
+    });
+  }
+
+  Future<void> _copyAllContent() async {
+    try {
+      await Clipboard.setData(ClipboardData(text: widget.content));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('复制失败: $e')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('已复制全部日志内容'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// 统计日志总行数（文件末尾的换行符不算额外一行）。
+  int _countLines() {
+    if (widget.content.isEmpty) return 0;
+    var count = _lines.length;
+    if (widget.content.endsWith('\n')) count--;
+    return count;
+  }
+
+  static List<_ParsedLogLine> _parseLines(String content) {
+    return content.split('\n').map((line) {
+      if (line.trim().isEmpty) {
+        return _ParsedLogLine(text: line, isEmpty: true);
+      }
+      final match = _levelPattern.firstMatch(line);
+      if (match == null) {
+        return _ParsedLogLine(text: line, isEmpty: false);
+      }
+      final (Color?, IconData?) levelStyle = switch (match.group(1)!) {
+        'ERROR' => (Colors.red, Icons.error_outline),
+        'WARN' => (Colors.orange, Icons.warning_amber_rounded),
+        'INFO' => (Colors.blue, Icons.info_outline),
+        'DEBUG' => (Colors.grey, Icons.bug_report_outlined),
+        _ => (null, null),
+      };
+      return _ParsedLogLine(
+        text: line,
+        isEmpty: false,
+        color: levelStyle.$1,
+        icon: levelStyle.$2,
+      );
+    }).toList(growable: false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final lines = widget.content.split('\n');
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.fileName),
+        // FittedBox 防止大字体缩放下两行标题超出固定高度的工具栏。
+        title: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(widget.fileName,
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(
+                '共 $_lineCount 行',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
         centerTitle: true,
         actions: [
           IconButton(
+            icon: const Icon(Icons.copy_all),
+            tooltip: '复制全文',
+            onPressed: _copyAllContent,
+          ),
+          IconButton(
             icon: Icon(_showRaw ? Icons.format_list_bulleted : Icons.code),
             tooltip: _showRaw ? '结构化视图' : '原始视图',
-            onPressed: () {
-              setState(() => _showRaw = !_showRaw);
-              // 切换视图后保持滚到底部的行为
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _scrollToBottom();
-              });
-            },
+            onPressed: _toggleView,
           ),
         ],
       ),
       body:
-          _showRaw ? _buildRawView(theme) : _buildStructuredView(theme, lines),
+          _showRaw ? _buildRawView(theme) : _buildStructuredView(theme),
     );
   }
 
   Widget _buildRawView(ThemeData theme) {
     return SingleChildScrollView(
       controller: _rawScrollController,
-      padding: const EdgeInsets.all(12),
+      // 纯文本模式边缘留白更大，阅读更舒适。
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: SelectableText(
         widget.content,
         style: TextStyle(
@@ -471,58 +614,35 @@ class _LogContentPageState extends State<_LogContentPage> {
     );
   }
 
-  Widget _buildStructuredView(ThemeData theme, List<String> lines) {
+  Widget _buildStructuredView(ThemeData theme) {
     return ListView.builder(
       controller: _structuredScrollController,
-      padding: const EdgeInsets.all(8),
-      itemCount: lines.length,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      itemCount: _lines.length,
       itemBuilder: (context, index) {
-        final line = lines[index];
-        if (line.trim().isEmpty) return const SizedBox.shrink();
-
-        // 解析日志行格式: [timestamp] [LEVEL] [Source] message
-        final levelMatch =
-            RegExp(r'\[(DEBUG|INFO|WARN|ERROR)\]').firstMatch(line);
-        Color? levelColor;
-        IconData? levelIcon;
-        if (levelMatch != null) {
-          switch (levelMatch.group(1)!) {
-            case 'ERROR':
-              levelColor = Colors.red;
-              levelIcon = Icons.error_outline;
-              break;
-            case 'WARN':
-              levelColor = Colors.orange;
-              levelIcon = Icons.warning_amber_rounded;
-              break;
-            case 'INFO':
-              levelColor = Colors.blue;
-              levelIcon = Icons.info_outline;
-              break;
-            case 'DEBUG':
-              levelColor = Colors.grey;
-              levelIcon = Icons.bug_report_outlined;
-              break;
-          }
-        }
+        final line = _lines[index];
+        if (line.isEmpty) return const SizedBox.shrink();
 
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 1),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (levelIcon != null)
+              // 固定图标位宽，保证有/无级别标记的行文本列对齐。
+              if (line.icon != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 2, right: 6),
-                  child: Icon(levelIcon, size: 16, color: levelColor),
-                ),
+                  child: Icon(line.icon, size: 16, color: line.color),
+                )
+              else
+                const SizedBox(width: 22),
               Expanded(
                 child: SelectableText(
-                  line,
+                  line.text,
                   style: TextStyle(
                     fontFamily: 'monospace',
                     fontSize: 12,
-                    color: levelColor ?? theme.colorScheme.onSurface,
+                    color: line.color ?? theme.colorScheme.onSurface,
                     height: 1.4,
                   ),
                 ),
