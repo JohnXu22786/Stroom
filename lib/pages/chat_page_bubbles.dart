@@ -168,6 +168,11 @@ extension _ChatPageBubblesExt on _ChatPageState {
     // messages while a NEW message streams — keep their regular config,
     // so already-rendered mermaid diagrams are neither hidden behind the
     // loading placeholder nor re-rendered.
+    //
+    // While streaming, each text segment gets its OWN config carrying the
+    // segment's raw text as streamingText, so mermaid blocks whose fence
+    // has already closed render immediately; only the still-open trailing
+    // block keeps the loading placeholder (see isStreamingMermaidTail).
     final markdownConfig = buildMessageMarkdownConfig(
       isDark: isDark,
       conversationIsStreaming: isStreaming,
@@ -225,7 +230,17 @@ extension _ChatPageBubblesExt on _ChatPageState {
                             selectable: true,
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            config: markdownConfig,
+                            // Per-segment streaming config: each segment
+                            // is parsed by its OWN MarkdownWidget, so the
+                            // fence-completion check must run against that
+                            // segment's text.
+                            config: buildMessageMarkdownConfig(
+                              isDark: isDark,
+                              conversationIsStreaming: isStreaming,
+                              streamingMsgId: _streamingMsgId,
+                              messageId: message.id,
+                              streamingText: s.text,
+                            ),
                             markdownGenerator: markdownGenerator,
                           ),
                   ),

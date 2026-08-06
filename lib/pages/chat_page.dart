@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
@@ -13,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/markdown_extensions.dart';
 import '../widgets/message_attachment_preview.dart';
+import '../widgets/transform_stretch_overscroll.dart';
 import '../services/attachment_storage.dart';
 
 import '../models/chat_event.dart';

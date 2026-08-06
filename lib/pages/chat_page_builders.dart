@@ -66,11 +66,18 @@ extension _ChatPageBuildersExt on _ChatPageState {
   }
 
   /// Chat animated list with lazy pagination and auto-scroll control.
+  ///
+  /// On Android (Material 3) the default overscroll indicator is a
+  /// shader-based stretch that does NOT affect platform views (the mermaid
+  /// WebView stays rigid while the rest of the content stretches). The
+  /// default indicator is replaced with a matrix-based stretch
+  /// ([TransformStretchOverscroll]) so the mermaid area stretches together
+  /// with the rest of the message content.
   Widget _buildChatAnimatedList(
     BuildContext context,
     ChatItem itemBuilder,
   ) {
-    return ChatAnimatedList(
+    final list = ChatAnimatedList(
       itemBuilder: itemBuilder,
       onEndReached: _loadMoreMessages,
       scrollController: _chatScrollController,
@@ -78,6 +85,18 @@ extension _ChatPageBuildersExt on _ChatPageState {
       // tap the scroll-to-bottom button to enable.
       shouldScrollToEndWhenAtBottom: _autoScrollEnabled,
       shouldScrollToEndWhenSendingMessage: _autoScrollEnabled,
+    );
+    final useMatrixStretch = defaultTargetPlatform == TargetPlatform.android &&
+        Theme.of(context).useMaterial3;
+    if (!useMatrixStretch) return list;
+    return ScrollConfiguration(
+      // Disable the default (shader-based) stretch indicator so the
+      // matrix-based one below is the only stretch applied.
+      behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
+      child: TransformStretchOverscroll(
+        axisDirection: AxisDirection.down,
+        child: list,
+      ),
     );
   }
 
@@ -189,12 +208,14 @@ extension _ChatPageBuildersExt on _ChatPageState {
     if (streamingFullReply.isNotEmpty && message.id == streamingMsgId) {
       // This is the message currently being generated, so the streaming
       // markdown config applies (mermaid blocks show "正在生成..." while
-      // the reply is still being produced).
+      // the reply is still being produced — only while their fence is
+      // still open; closed blocks render immediately).
       final config = buildMessageMarkdownConfig(
         isDark: isDark,
         conversationIsStreaming: isStreaming,
         streamingMsgId: streamingMsgId,
         messageId: message.id,
+        streamingText: streamingFullReply,
       );
       return Padding(
         padding: const EdgeInsets.all(12),

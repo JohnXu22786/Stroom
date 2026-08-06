@@ -389,6 +389,185 @@ void main() {
     });
   });
 
+  group('unclosedFenceTail - fence completion detection', () {
+    // Regression: while a message streams, the "正在生成..." placeholder
+    // must only show while the mermaid code fence is STILL OPEN. A closed
+    // fence (even when the stream continues after it) must render
+    // immediately. The markdown parser swallows everything after an
+    // unclosed fence into one code block; unclosedFenceTail returns that
+    // swallowed tail so the builder can tell it apart from closed blocks.
+
+    test('markdown parser swallows an unclosed fence into one code block', () {
+      // Sanity check of the core assumption behind unclosedFenceTail:
+      // the parser hands the builder the whole tail as ONE code block.
+      // (encodeHtml: false matches markdown_widget's MarkdownGenerator.)
+      final doc =
+          m.Document(encodeHtml: false).parse('```mermaid\ngraph TD\nA-->B');
+      final pre =
+          doc.firstWhere((n) => n is m.Element && n.tag == 'pre') as m.Element;
+      final code = (pre.children!.first as m.Element).textContent;
+      expect(code.trim(), 'graph TD\nA-->B');
+    });
+
+    test('markdown parser keeps a closed fence separate from later text', () {
+      final doc =
+          m.Document(encodeHtml: false).parse('```mermaid\nA\n```\nmore text');
+      final pre =
+          doc.firstWhere((n) => n is m.Element && n.tag == 'pre') as m.Element;
+      final code = pre.children!.first as m.Element;
+      expect(code.tag, 'code');
+      expect(code.textContent.trim(), 'A');
+      // The text after the closed fence is NOT swallowed into the block.
+      expect(doc.whereType<m.Element>().where((n) => n.tag == 'code').length,
+          lessThan(2));
+    });
+
+    test('returns null when the last fence is closed', () {
+      expect(unclosedFenceTail('```mermaid\ngraph TD\nA-->B\n```\nmore text'),
+          isNull);
+      expect(unclosedFenceTail('text without fences'), isNull);
+      expect(unclosedFenceTail(''), isNull);
+    });
+
+    test('returns the tail when the last fence is still open', () {
+      expect(
+          unclosedFenceTail('```mermaid\ngraph TD\nA-->B'), 'graph TD\nA-->B');
+      // No trailing newline yet (mid-stream).
+      expect(unclosedFenceTail('```mermaid\ngraph TD\nA--'), 'graph TD\nA--');
+      // Opening fence with nothing after it yet.
+      expect(unclosedFenceTail('```mermaid'), '');
+    });
+
+    test('returns null when an open fence is closed by a later fence', () {
+      expect(
+          unclosedFenceTail('```mermaid\ngraph TD\n```\n```python\nx = 1\n```'),
+          isNull);
+    });
+
+    test('multiple blocks: only a still-open LAST fence yields a tail', () {
+      // First mermaid block closed, second still open → tail is the
+      // second block's partial content only.
+      expect(
+          unclosedFenceTail('```mermaid\nA\n```\n\n```mermaid\nB\nC'), 'B\nC');
+    });
+
+    test('tilde fences are detected too', () {
+      expect(unclosedFenceTail('~~~mermaid\ngraph TD'), 'graph TD');
+      expect(unclosedFenceTail('~~~mermaid\nA\n~~~\ntext'), isNull);
+    });
+
+    test('a fence line with an info string does not close an open fence', () {
+      // CommonMark: closing fences cannot carry an info string.
+      expect(unclosedFenceTail('```mermaid\n```python'), isNotNull);
+    });
+
+    test('trailing blank lines are part of the tail (trim-insensitive)', () {
+      expect(unclosedFenceTail('```mermaid\nA\n\n'), isNotNull);
+      // The parser drops a trailing blank line (spec 127/128) and appends
+      // a newline; the trim-insensitive equality must still match.
+      expect(isStreamingMermaidTail('A', '```mermaid\nA\n\n'), isTrue);
+    });
+
+    test('CRLF line endings are normalized like the parser does', () {
+      // markdown_widget splits on RegExp(r'(\r?\n)|(\r)'), so the parser's
+      // code never contains \r; the tail must match it.
+      expect(unclosedFenceTail('```mermaid\r\ngraph TD\r\nA-->B'),
+          'graph TD\nA-->B');
+      expect(
+          isStreamingMermaidTail(
+              'graph TD\nA-->B', '```mermaid\r\ngraph TD\r\nA-->B'),
+          isTrue);
+    });
+
+    test('CommonMark allows 1-3 leading spaces on fences', () {
+      expect(unclosedFenceTail(' ```mermaid\nA'), 'A');
+      expect(unclosedFenceTail('   ```mermaid\nA'), 'A');
+      // Indented closing fence closes too.
+      expect(unclosedFenceTail('```mermaid\nA\n ```'), isNull);
+      // 4 spaces is not a fence (indented code instead).
+      expect(unclosedFenceTail('    ```mermaid\nA'), isNull);
+    });
+
+    test('a longer closing run closes the fence', () {
+      expect(unclosedFenceTail('```mermaid\nA\n````'), isNull);
+    });
+
+    test('backticks inside a backtick fence info string do not open it', () {
+      // CommonMark: backtick fences cannot contain backticks in info.
+      expect(unclosedFenceTail('```foo`bar\nA'), isNull);
+    });
+  });
+
+  group('buildMessageMarkdownConfig - fence-aware streaming placeholder', () {
+    // Regression: during streaming only the mermaid block whose fence is
+    // still OPEN shows "正在生成..."; blocks whose fence has closed render
+    // immediately (and only once), even while the stream continues after
+    // them — including messages with MULTIPLE mermaid blocks.
+    test('open trailing mermaid block shows the streaming placeholder', () {
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: true,
+        streamingMsgId: 'current-message-id',
+        messageId: 'current-message-id',
+        streamingText: '```mermaid\ngraph TD\nA-->B',
+      );
+      final widget = config.pre.builder!('graph TD\nA-->B', 'mermaid');
+      expect(widget, isNot(isA<MermaidRenderWidget>()),
+          reason: 'an open fence must keep showing the generating state');
+    });
+
+    test('closed mermaid block renders while the stream continues', () {
+      // First block closed, second still open → first renders.
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: true,
+        streamingMsgId: 'current-message-id',
+        messageId: 'current-message-id',
+        streamingText: '```mermaid\nA\n```\n\n```mermaid\nB',
+      );
+      final widget = config.pre.builder!('A', 'mermaid');
+      expect(widget, isA<MermaidRenderWidget>(),
+          reason: 'a closed fence must render immediately, even mid-stream');
+    });
+
+    test('all mermaid blocks render once every fence is closed', () {
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: true,
+        streamingMsgId: 'current-message-id',
+        messageId: 'current-message-id',
+        streamingText: '```mermaid\nA\n```\n\n```mermaid\nB\n```',
+      );
+      expect(config.pre.builder!('A', 'mermaid'), isA<MermaidRenderWidget>());
+      expect(config.pre.builder!('B', 'mermaid'), isA<MermaidRenderWidget>());
+    });
+
+    test('mermaid code identical to the tail of a CLOSED fence renders', () {
+      // The tail comparison must only match the open fence's tail, not a
+      // closed block whose content happens to appear at the end.
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: true,
+        streamingMsgId: 'current-message-id',
+        messageId: 'current-message-id',
+        streamingText: '```mermaid\nA\n```',
+      );
+      final widget = config.pre.builder!('A', 'mermaid');
+      expect(widget, isA<MermaidRenderWidget>());
+    });
+
+    test('streamingText null keeps the legacy loading behavior', () {
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: true,
+        streamingMsgId: 'current-message-id',
+        messageId: 'current-message-id',
+      );
+      final widget = config.pre.builder!('A', 'mermaid');
+      expect(widget, isNot(isA<MermaidRenderWidget>()));
+    });
+  });
+
   group('HTML code block builder', () {
     test('returns HtmlCodeBlockWidget for html language', () {
       final pre = codeBlockPreConfig(isDark: false);
