@@ -19,12 +19,15 @@ extension _ChatStreamManagerProvidersExt on ChatStreamManager {
     _setProvider(streamingReasoningProvider(s.convId), s.reasoningBuffer);
     _setProvider(streamingReasoningSectionsProvider(s.convId),
         List<String>.from(s.reasoningSections));
-    _setProvider(streamingToolCallsProvider(s.convId),
-        List<ToolCallData>.from(s.toolCalls));
+    // roundStarts is set BEFORE toolCalls: the toolCalls listener rebuilds
+    // live segments synchronously (Riverpod fires listeners on state change)
+    // and must read the fresh round boundary.
     _setProvider(streamingTextSectionsProvider(s.convId),
         List<String>.from(s.textChunks));
     _setProvider(streamingToolCallRoundStartsProvider(s.convId),
         List<int>.from(s.toolCallRoundStarts));
+    _setProvider(streamingToolCallsProvider(s.convId),
+        List<ToolCallData>.from(s.toolCalls));
   }
 
   /// Clears streaming providers for a specific conversation.

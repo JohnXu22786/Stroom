@@ -14,10 +14,11 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!--
-        允许调度精确闹钟（Android 12+；被拒绝时看门狗自动降级为
-        setAndAllowWhileIdle）。精确闹钟是「后台启动前台服务」的官方
-        豁免条件之一，也是保活看门狗在 Doze 模式下准点触发的前提。
-        Android 14+ 默认拒绝，用户可在系统设置中授予。
+        允许调度精确闹钟（Android 12+）。
+        精确闹钟是「后台启动前台服务」的官方豁免条件之一，
+        也是保活看门狗在 Doze 模式下准点触发的前提。
+        Android 14+ 默认拒绝，用户可在系统设置中授予；
+        未授予时看门狗自动降级为 setAndAllowWhileIdle。
     -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 

@@ -716,6 +716,7 @@ void main() {
                       reasoningParamSelections: {},
                       reasoningParams: manyParams,
                       onReasoningParamChanged: (_, __) {},
+                      onCustomParamToggle: (_, __) {},
                     );
                   },
                   child: const Text('Open'),
@@ -777,6 +778,7 @@ void main() {
                         changedName = name;
                         changedValue = value;
                       },
+                      onCustomParamToggle: (_, __) {},
                     );
                   },
                   child: const Text('Open'),

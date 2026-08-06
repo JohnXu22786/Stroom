@@ -78,8 +78,9 @@ extension ChatServiceStreamingExt on ChatService {
             if (event.isReasoning) {
               _reasoningBuffer += event.text;
             } else if (event.usage != null) {
-              // usage 计量事件（provider 流末尾产出）
-              _accumulateFromMap(event.usage!, recordInput: true);
+              // usage 计量事件（provider 流末尾产出，per-request 隔离）
+              // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
+              onUsageEvent?.call(event.usage!, recordInput: true);
             } else if (!_controller!.isClosed) {
               _controller!.add(event.text);
             }
@@ -136,10 +137,6 @@ extension ChatServiceStreamingExt on ChatService {
     _contentBuffer = '';
     _lastReasoningLength = 0;
     _thinkingSignature = '';
-    // 注意：不重置 _accumulatedUsage —— 一次"用户发送"内的内部任务
-    // （压缩请求先于主请求执行）与主请求多轮共用同一个累计器；
-    // service 生命周期 = 一次发送（manager 每次流结束 cancelService），
-    // 重置在这里会清掉压缩请求已累计的 usage。
 
     final controller = StreamController<ChatEvent>(
       onCancel: () {
@@ -259,15 +256,19 @@ extension ChatServiceStreamingExt on ChatService {
           )
               .listen(
             (event) {
+              // usage 计量是 API 计费事实（per-request 隔离），必须
+              // 先于取消守卫处理：用户停止后仍要把已计量请求的
+              // cost/tokens 累加到对话（错误轮/流末尾的 usage 事件）。
+              if (event.usage != null) {
+                // usage 计量事件（provider 流末尾产出，per-request 隔离）
+                // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
+                onUsageEvent?.call(event.usage!, recordInput: true);
+              }
               if (_isCancelledByUser) return;
               // Anthropic extended thinking 签名（协议续接用，静默透传）
               if (event.thinkingSignature != null &&
                   event.thinkingSignature!.isNotEmpty) {
                 _thinkingSignature = event.thinkingSignature!;
-              }
-              // usage 计量事件（provider 流末尾产出，per-request 隔离）
-              if (event.usage != null) {
-                _accumulateFromMap(event.usage!, recordInput: true);
               }
               if (event.isReasoning) {
                 _reasoningBuffer += event.text;
@@ -308,7 +309,11 @@ extension ChatServiceStreamingExt on ChatService {
 
           await completer.future;
           _roundCompleter = null;
-          if (_isCancelledByUser) break;
+          // controller.isClosed covers the cancel→resend race here too:
+          // the resend resets _isCancelledByUser, so a cancelled round
+          // resuming on the closed controller would otherwise throw a
+          // silently-swallowed StateError on the next controller.add.
+          if (_isCancelledByUser || controller.isClosed) break;
           // 本轮流错误：工具结果已不可信，终止整个循环
           // （manager 已通过 addError 收到错误并走错误路径）。
           if (roundStreamError != null) break;
@@ -336,6 +341,16 @@ extension ChatServiceStreamingExt on ChatService {
           final neutralCalls = <NeutralToolCall>[];
           final results = <ToolCallResult>[];
 
+          // ── 并行工具执行 ──
+          // 同一轮内的多个工具（模型一次触发多个工具调用）同时运行，
+          // 而非依次执行。先同步发出全部 ToolCallStartEvent（所有工具
+          // 立即显示 running），再 Future.wait 并发执行，最后按**声明
+          // 顺序**补发 ToolCallCompleteEvent——tool_result 与 tool_use
+          // 块保持同序（协议层按 id 配对，声明序保证结果列表稳定可读）。
+          // 注意：并行后取消只能丢弃结果，不能取消已启动的工具——
+          // 已启动的工具副作用（文件写入/外部调用）会执行完毕。
+          final pendingResults = <Future<String>>[];
+
           for (final tc in toolCallRefs) {
             if (_isCancelledByUser) break;
             final neutral = normalizeToolCall(tc);
@@ -358,53 +373,53 @@ extension ChatServiceStreamingExt on ChatService {
             );
 
             controller.add(ToolCallStartEvent(toolCallData));
-
-            // Execute tool
-            String result;
-            try {
-              result = await _executeTool(name, parsedArgs);
-            } catch (e) {
-              result = 'Error: $e';
-            }
-            // 存储级截断：50KB 上限（opencode MAX_BYTES，按 **UTF-8 字节**
-            // 计——CJK 等多字节内容按字符计会实际超限约 3 倍）。
-            // 不强行截断小结果——完整结果保留给 UI 与历史重建。
-            if (utf8.encode(result).length > ChatService.maxToolResultBytes) {
-              result =
-                  '${truncateUtf8(result, ChatService.maxToolResultBytes)}$kToolOutputTruncatedSuffix';
-            }
-            // 执行期间被取消：跳过 complete 事件（controller 已关闭，
-            // 且避免把"恰在取消时完成"的工具误标为正常结果）
-            if (_isCancelledByUser) break;
-
-            controller.add(ToolCallCompleteEvent(neutral.id, result));
-
             neutralCalls.add(neutral);
-            results.add(ToolCallResult(toolCallId: neutral.id, result: result));
+            pendingResults.add(_runTool(name, parsedArgs));
+          }
+
+          // 执行期间被取消：跳过 complete 事件（controller 已关闭，
+          // 且避免把"恰在取消时完成"的工具误标为正常结果）。
+          // controller.isClosed 额外覆盖"取消后立即重发"竞态：重发会
+          // 重置 _isCancelledByUser，旧轮若只看该标志会往已关闭的
+          // controller 补发事件（StateError）并污染新轮的消息缓冲。
+          if (!_isCancelledByUser && !controller.isClosed) {
+            final executed = await Future.wait(pendingResults);
+            for (var i = 0; i < neutralCalls.length; i++) {
+              if (_isCancelledByUser || controller.isClosed) break;
+              controller
+                  .add(ToolCallCompleteEvent(neutralCalls[i].id, executed[i]));
+              results.add(ToolCallResult(
+                  toolCallId: neutralCalls[i].id, result: executed[i]));
+            }
           }
 
           // 注意：用户取消时（cancel() 已关闭 controller）无法再补发事件；
           // 中断工具标记由 ChatStreamManager 在 post-stream 阶段完成
           // （把 running/pending 工具标为 kToolInterruptedPlaceholder）。
+          //
+          // 取消/关闭后必须**终止本轮**而不是跳过继续循环：cancel() 后
+          // 立即重发会重置 _isCancelledByUser 并新建 controller，旧轮若
+          // 继续进入下一轮 while，会 cancel 掉新请求的
+          // _streamSubscription/_cancelToken（新请求被中止/永久挂起）、
+          // 覆盖 _roundCompleter、并发出一个幽灵请求（产生计费）。
+          if (_isCancelledByUser || controller.isClosed) break;
 
-          if (!_isCancelledByUser) {
-            // Build the assistant chain message + tool results via the
-            // protocol: OpenAI 为单条 assistant(tool_calls) + N 条 tool 消息；
-            // Anthropic 为 assistant(thinking/text/tool_use 块) + 单条
-            // user(tool_result 块)。历史保持中立，格式切换安全。
-            messages.addAll(_protocol.buildAssistantChainMessage(
-              content: _contentBuffer,
-              toolCalls: neutralCalls,
-              roundReasoning: roundReasoning,
-              thinkingSignature: _thinkingSignature,
-            ));
-            messages.addAll(_protocol.buildToolResultMessages(results));
+          // Build the assistant chain message + tool results via the
+          // protocol: OpenAI 为单条 assistant(tool_calls) + N 条 tool 消息；
+          // Anthropic 为 assistant(thinking/text/tool_use 块) + 单条
+          // user(tool_result 块)。历史保持中立，格式切换安全。
+          messages.addAll(_protocol.buildAssistantChainMessage(
+            content: _contentBuffer,
+            toolCalls: neutralCalls,
+            roundReasoning: roundReasoning,
+            thinkingSignature: _thinkingSignature,
+          ));
+          messages.addAll(_protocol.buildToolResultMessages(results));
 
-            // Reset per-round buffers for the next iteration
-            _contentBuffer = '';
-            _lastReasoningLength = _reasoningBuffer.length;
-            _thinkingSignature = '';
-          }
+          // Reset per-round buffers for the next iteration
+          _contentBuffer = '';
+          _lastReasoningLength = _reasoningBuffer.length;
+          _thinkingSignature = '';
         }
       } catch (e) {
         _lastResponseData = _provider?.lastResponseData;
@@ -423,6 +438,30 @@ extension ChatServiceStreamingExt on ChatService {
   }
 
   String get reasoningContent => _reasoningBuffer;
+
+  /// Executes a single tool for the parallel tool-call batch.
+  ///
+  /// Wraps [_executeTool] with the per-tool error fallback ('Error: …') and
+  /// the storage-level truncation (50KB UTF-8 bytes, opencode MAX_BYTES —
+  /// CJK multi-byte content counted per character would exceed the limit
+  /// ~3x). Small results are kept intact for the UI and history rebuild.
+  ///
+  /// Never throws: the returned future always completes with a result
+  /// string, so [Future.wait] on the batch can't fail as a whole and one
+  /// failing tool doesn't abort its siblings.
+  Future<String> _runTool(String name, Map<String, dynamic> args) async {
+    String result;
+    try {
+      result = await _executeTool(name, args);
+    } catch (e) {
+      result = 'Error: $e';
+    }
+    if (utf8.encode(result).length > ChatService.maxToolResultBytes) {
+      result =
+          '${truncateUtf8(result, ChatService.maxToolResultBytes)}$kToolOutputTruncatedSuffix';
+    }
+    return result;
+  }
 
   /// Cancel the current stream
   void cancel() {

@@ -305,6 +305,12 @@ class _StartupAppState extends State<StartupApp>
       // If migration was performed, show a restart prompt
       if (didMigration) {
         await _showRestartDialog();
+        // 无论用户选择「退出应用」「立即重启」，还是对话框被系统关闭
+        // （例如 Android 返回键、Web 无法退出），进程若仍然存活，
+        // 都继续进入主应用 —— 绝不停留在启动页。
+        // 桌面/移动端的退出按钮会直接结束进程，这里不会执行到。
+        if (!mounted) return;
+        _startFadeOut();
       } else {
         _startFadeOut();
       }
@@ -332,6 +338,9 @@ class _StartupAppState extends State<StartupApp>
   /// a buttery-smooth fade.
   void _startFadeOut() {
     if (!mounted || _isFadingOut) return;
+    // 通知 Application：启动页即将渐出，启动后任务（更新/备份检查）
+    // 的对话框现在可以显示了（不会被不透明的启动页遮住）。
+    startupReadyNotifier.value = true;
     setState(() {
       _isFadingOut = true;
     });
@@ -367,34 +376,39 @@ class _StartupAppState extends State<StartupApp>
     await showDialog<void>(
       context: navContext,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.green.shade600, size: 24),
-            const SizedBox(width: 8),
-            const Text('数据格式升级完成'),
+      builder: (dialogContext) => PopScope(
+        // 阻止 Android 系统返回键关闭对话框：迁移后必须重启/退出，
+        // 被返回键关掉会导致用户永远停留在启动页。
+        canPop: false,
+        child: AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green.shade600, size: 24),
+              const SizedBox(width: 8),
+              const Text('数据格式升级完成'),
+            ],
+          ),
+          content: const Text(
+            '数据已迁移到新版格式。'
+            '请重启应用以使用新版本。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _exitApp();
+              },
+              child: const Text('退出应用'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                restartApp();
+              },
+              child: const Text('立即重启'),
+            ),
           ],
         ),
-        content: const Text(
-          '数据已迁移到新版格式。'
-          '请重启应用以使用新版本。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _exitApp();
-            },
-            child: const Text('退出应用'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              restartApp();
-            },
-            child: const Text('立即重启'),
-          ),
-        ],
       ),
     );
   }
@@ -492,75 +506,103 @@ class _AppErrorBoundary extends StatefulWidget {
 class _AppErrorBoundaryState extends State<_AppErrorBoundary> {
   bool _hasError = false;
   String _errorMessage = '';
+  int _retryGeneration = 0;
 
   void _onRetry() {
+    // 增加 generation：给 child 换一个新 Key，强制重建失败子树。
+    // （ErrorWidget 占位符替换了失败的小部件后，同一个 const
+    // Application 实例会被 updateChild 短路复用，不换 Key 重试无效。）
+    // 同时复位启动后任务标记：首次启动构建失败时任务已在坏实例上
+    // 消耗过标记，重试后的健康实例必须重新执行更新/备份检查。
+    resetPostStartupTasksFlag();
     setState(() {
       _hasError = false;
       _errorMessage = '';
+      _retryGeneration++;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_hasError) {
-      // 兜底恢复界面，不会闪退
-      return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+    // 主应用（child）始终保留在 Widget 树中：错误恢复界面以覆盖层
+    // 形式显示在其上方，用户始终能看到恢复入口。
+    // 重试时通过 KeyedSubtree 换 Key 强制重新挂载 Application；
+    // 启动后任务（更新检查/备份检查）有进程级去重保护（见
+    // application.dart 的 _postStartupTasksStarted），不会重复执行。
+    return Stack(
+      textDirection: TextDirection.ltr,
+      children: [
+        _ErrorCatcher(
+          onError: (Object error, StackTrace stack) {
+            debugPrint('[_AppErrorBoundary] Caught build error: $error');
+            debugPrint('[_AppErrorBoundary] Stack: $stack');
+            if (mounted) {
+              setState(() {
+                _hasError = true;
+                _errorMessage = error.toString();
+              });
+            }
+            return _ErrorWidgetPlaceholder();
+          },
+          child: KeyedSubtree(
+            key: ValueKey('app_retry_$_retryGeneration'),
+            child: widget.child,
+          ),
         ),
-        home: Scaffold(
-          body: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 64, color: Colors.orange.shade400),
-                  const SizedBox(height: 16),
-                  Text(
-                    '应用启动异常',
-                    style: Theme.of(context).textTheme.headlineSmall,
+        if (_hasError)
+          Positioned.fill(
+            // 兜底恢复界面，不会闪退
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: ThemeData(
+                useMaterial3: true,
+                colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+              ),
+              home: Builder(
+                builder: (overlayContext) => Scaffold(
+                  body: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.error_outline,
+                              size: 64, color: Colors.orange.shade400),
+                          const SizedBox(height: 16),
+                          Text(
+                            '应用启动异常',
+                            style: Theme.of(overlayContext)
+                                .textTheme
+                                .headlineSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _errorMessage.isNotEmpty
+                                ? _errorMessage
+                                : '启动过程中遇到数据格式问题，已自动修复，请重试。',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(overlayContext)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: Colors.grey.shade600,
+                                ),
+                          ),
+                          const SizedBox(height: 24),
+                          FilledButton.icon(
+                            onPressed: _onRetry,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('重试'),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _errorMessage.isNotEmpty
-                        ? _errorMessage
-                        : '启动过程中遇到数据格式问题，已自动修复，请重试。',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey.shade600,
-                        ),
-                  ),
-                  const SizedBox(height: 24),
-                  FilledButton.icon(
-                    onPressed: _onRetry,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('重试'),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
-      );
-    }
-
-    return _ErrorCatcher(
-      onError: (Object error, StackTrace stack) {
-        debugPrint('[_AppErrorBoundary] Caught build error: $error');
-        debugPrint('[_AppErrorBoundary] Stack: $stack');
-        if (mounted) {
-          setState(() {
-            _hasError = true;
-            _errorMessage = error.toString();
-          });
-        }
-        return _ErrorWidgetPlaceholder();
-      },
-      child: widget.child,
+      ],
     );
   }
 }
@@ -592,9 +634,13 @@ class _ErrorCatcherState extends State<_ErrorCatcher> {
     // Replace the global ErrorWidget.builder so build errors are caught here
     _originalBuilder = ErrorWidget.builder;
     ErrorWidget.builder = (FlutterErrorDetails details) {
-      final result = widget.onError(
-          details.exception, details.stack ?? StackTrace.current);
-      return result;
+      // 注意：ErrorWidget.builder 在 build 阶段被同步调用，此时不能直接
+      // setState（会触发 "setState() or markNeedsBuild() called during
+      // build" 断言）。先把错误状态调度到帧后，再返回占位组件。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.onError(details.exception, details.stack ?? StackTrace.current);
+      });
+      return _ErrorWidgetPlaceholder();
     };
   }
 

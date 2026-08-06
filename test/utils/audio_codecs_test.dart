@@ -121,4 +121,71 @@ void main() {
       expect(mp3Out.length, greaterThan(4));
     });
   });
+
+  group('adpcmToWav', () {
+    test('wraps raw IMA ADPCM nibbles in a valid WAV container', () {
+      // Ramp with a nonzero first sample so the block header bytes are
+      // meaningful (a sine starting at sin(0)=0 would make them all zero).
+      final pcm = Int16List(8192);
+      for (int i = 0; i < pcm.length; i++) {
+        pcm[i] = 1000 + i; // 32 blocks of 256 samples
+      }
+      final adpcm = encodeAdpcm(pcm, AdpcmConfig());
+      // 32 blocks x 132 bytes per mono block.
+      expect(adpcm.length, 32 * 132);
+
+      final wav = adpcmToWav(adpcm, sampleRate: 16000);
+
+      // RIFF/WAVE header
+      expect(String.fromCharCodes(wav.sublist(0, 4)), 'RIFF');
+      expect(String.fromCharCodes(wav.sublist(8, 12)), 'WAVE');
+      // RIFF size = total file size - 8
+      final fmt = ByteData.view(wav.buffer);
+      expect(fmt.getUint32(4, Endian.little), wav.length - 8);
+      // fmt chunk (20-byte data: 16 standard + cbSize + samplesPerBlock):
+      // WAVE_FORMAT_IMA_ADPCM (0x11)
+      expect(fmt.getUint32(16, Endian.little), 20,
+          reason: 'declared fmt size must equal the 20 bytes written, '
+              'otherwise decoders seek to the wrong chunk offset');
+      expect(fmt.getUint16(20, Endian.little), 0x11);
+      expect(fmt.getUint16(22, Endian.little), 1); // mono
+      expect(fmt.getUint32(24, Endian.little), 16000);
+      // blockAlign = 4 + 256/2 = 132
+      expect(fmt.getUint16(32, Endian.little), 132);
+      // avgBytesPerSec = sampleRate * blockAlign / samplesPerBlock
+      expect(fmt.getUint32(28, Endian.little), 16000 * 132 ~/ 256);
+      // bits per sample = 4
+      expect(fmt.getUint16(34, Endian.little), 4);
+      // samples per block extension
+      expect(fmt.getUint16(38, Endian.little), 256);
+      // data chunk at offset 40 (after the 20-byte fmt data)
+      expect(String.fromCharCodes(wav.sublist(40, 44)), 'data');
+      final dataSize = fmt.getUint32(44, Endian.little);
+      expect(dataSize, adpcm.length);
+      // WAV IMA ADPCM decoders read the LOW nibble first; the raw encoder
+      // packs high-first, so the wrapper must have swapped the payload
+      // nibbles — but ONLY the payload, never the 4-byte per-block headers.
+      final dataStart = 48; // 12 + 8 + 20 + 8
+      for (int i = 0; i < adpcm.length; i++) {
+        final expected = i % 132 >= 4
+            ? ((adpcm[i] & 0x0F) << 4) | (adpcm[i] >> 4)
+            : adpcm[i];
+        expect(wav[dataStart + i], expected,
+            reason: 'byte $i: headers untouched, payload low-nibble-first');
+      }
+    });
+
+    test('pads a truncated final block to a full block boundary', () {
+      // Raw adpcm data whose length is not a multiple of blockAlign.
+      final adpcm = Uint8List(150);
+
+      final wav = adpcmToWav(adpcm, sampleRate: 8000);
+      final fmt = ByteData.view(wav.buffer);
+      final dataSize = fmt.getUint32(44, Endian.little);
+
+      // Partial block padded to a multiple of 132.
+      expect(dataSize % 132, 0);
+      expect(dataSize, greaterThan(adpcm.length));
+    });
+  });
 }

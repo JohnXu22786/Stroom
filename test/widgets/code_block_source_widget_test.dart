@@ -62,7 +62,8 @@ void main() {
       expect(find.text('1'), findsOneWidget);
     });
 
-    testWidgets('shows wrap toggle button', (tester) async {
+    testWidgets('shows wrap toggle as a pure icon (no text label)',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -71,9 +72,13 @@ void main() {
         ),
       );
 
-      // Should show "换行显示" (wrap toggle) in the button row
-      expect(find.text('换行显示'), findsOneWidget);
+      // Regression: toolbar buttons are icon-only — no text labels.
+      expect(find.text('换行显示'), findsNothing);
+      expect(find.text('取消换行'), findsNothing);
       expect(find.byIcon(Icons.wrap_text), findsOneWidget);
+      // Accessibility is preserved via the icon semantic label.
+      final wrapIcon = tester.widget<Icon>(find.byIcon(Icons.wrap_text));
+      expect(wrapIcon.semanticLabel, isNotNull);
     });
 
     testWidgets('wrap toggle switches between wrap and no-wrap state',
@@ -86,25 +91,25 @@ void main() {
         ),
       );
 
-      // Initially shows '换行显示' (wrap off)
-      expect(find.text('换行显示'), findsOneWidget);
-      expect(find.text('取消换行'), findsNothing);
+      // Initially shows '换行显示' semantic label (wrap off)
+      var wrapIcon = tester.widget<Icon>(find.byIcon(Icons.wrap_text));
+      expect(wrapIcon.semanticLabel, '换行显示');
 
-      // Tap the wrap toggle button
-      await tester.tap(find.text('换行显示'));
+      // Tap the wrap toggle icon
+      await tester.tap(find.byIcon(Icons.wrap_text));
       await tester.pumpAndSettle();
 
-      // After tap, should show '取消换行' (wrap on)
-      expect(find.text('取消换行'), findsOneWidget);
-      expect(find.text('换行显示'), findsNothing);
+      // After tap, semantic label becomes '取消换行' (wrap on)
+      wrapIcon = tester.widget<Icon>(find.byIcon(Icons.wrap_text));
+      expect(wrapIcon.semanticLabel, '取消换行');
 
       // Tap again to toggle back
-      await tester.tap(find.text('取消换行'));
+      await tester.tap(find.byIcon(Icons.wrap_text));
       await tester.pumpAndSettle();
 
       // Should be back to '换行显示'
-      expect(find.text('换行显示'), findsOneWidget);
-      expect(find.text('取消换行'), findsNothing);
+      wrapIcon = tester.widget<Icon>(find.byIcon(Icons.wrap_text));
+      expect(wrapIcon.semanticLabel, '换行显示');
     });
 
     testWidgets('shows (empty) for empty code', (tester) async {
@@ -161,8 +166,15 @@ void main() {
       );
 
       // Both the wrap toggle and the custom button should be visible
-      expect(find.text('换行显示'), findsOneWidget);
+      expect(find.byIcon(Icons.wrap_text), findsOneWidget);
       expect(find.text('ExtraBtn'), findsOneWidget);
+
+      // Wrap toggle must be positioned LEFT of the additional action
+      // buttons (common/shared buttons sit on the right).
+      final wrapPos = tester.getCenter(find.byIcon(Icons.wrap_text));
+      final extraPos = tester.getCenter(find.text('ExtraBtn'));
+      expect(wrapPos.dx, lessThan(extraPos.dx),
+          reason: 'wrap toggle should be left of additional action buttons');
     });
 
     testWidgets('adapts colors to dark mode', (tester) async {

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
@@ -13,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/markdown_extensions.dart';
 import '../widgets/message_attachment_preview.dart';
+import '../widgets/transform_stretch_overscroll.dart';
 import '../services/attachment_storage.dart';
 
 import '../models/chat_event.dart';
@@ -32,6 +34,7 @@ import 'message_search_page.dart';
 import 'provider_config_page.dart';
 
 import 'chat/chat_types.dart';
+import 'chat/chat_initial_scroll.dart';
 
 export 'chat/utils/format_chat_error.dart' show formatChatErrorMessage;
 import 'chat/widgets/action_button.dart';
@@ -161,9 +164,80 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// change, so [didChangeMetrics] can detect show/hide transitions.
   bool _wasKeyboardVisible = false;
 
+  /// Whether the chat list is currently being positioned so the top of the
+  /// last user message is at the top of the viewport after a conversation
+  /// load. While true, the message list is hidden (offstage) so the
+  /// positioning pass is never visible to the user.
+  bool _pendingInitialScrollAdjustment = false;
+
+  /// ID of the conversation whose messages are currently shown in
+  /// [_history]. Used to distinguish entry/conversation switches (which
+  /// reposition to the last user message) from same-conversation reloads
+  /// (which keep the built-in jump-to-bottom behavior).
+  String? _loadedConversationId;
+
+  /// Frame counter for the initial positioning pass — guards against
+  /// pathological layouts looping forever.
+  int _initialAdjustStepsTaken = 0;
+
+  /// Whether the next frame of the initial positioning pass is already
+  /// scheduled, so the pass advances at most one step per frame.
+  bool _initialAdjustStepScheduled = false;
+
+  /// Consecutive frames the pass has been chasing a growing bottom
+  /// (maxScrollExtent still moving); capped by the pass so a fast
+  /// background stream cannot keep the list hidden indefinitely.
+  int _initialAdjustChaseFrames = 0;
+
   /// Captured scroll position before the keyboard opened, so it can be
   /// restored when the keyboard is dismissed.
   double? _lastScrollPositionBeforeKeyboard;
+
+  /// Insets above which the soft keyboard is considered visible.
+  /// Below this the keyboard is treated as (almost) gone.
+  static const double _keyboardVisibleThreshold = 100;
+
+  /// Approximate duration of the soft-keyboard dismiss animation remaining
+  /// once the scroll restore kicks in (the keyboard is already mostly
+  /// closed when the transition fires). The restore animates over roughly
+  /// this so the list visibly follows the keyboard back down.
+  static const Duration _keyboardAnimationDuration =
+      Duration(milliseconds: 150);
+
+  /// While true, the chat list keeps its bottom edge pinned to the viewport
+  /// bottom: every viewport-height change (keyboard sliding up or down) is
+  /// compensated with an equal scroll adjustment. This makes the list shift
+  /// in lockstep with the keyboard animation instead of jumping late.
+  bool _anchorToBottomWhileKeyboard = false;
+
+  /// True while the user is touching/dragging the chat list. Used to keep
+  /// the bottom pinning (and its pin release) from fighting user scrolls.
+  bool _userIsDragging = false;
+
+  /// True while the keyboard-dismiss scroll restore animation is running.
+  /// The composer focus hook must not overwrite the saved pre-keyboard
+  /// position while the restore is in flight (a mid-restore re-tap would
+  /// otherwise capture a mid-animation offset as the new "saved" position).
+  bool _isRestoringKeyboardScroll = false;
+
+  /// True when the last keyboard-dismiss restore ran to completion (the
+  /// position reached its target). Once that happened, the saved position
+  /// is stale for the NEXT keyboard session: the open transition must
+  /// re-save the current offset even though the field still holds a
+  /// (non-null) saved value — e.g. after Android's back button hides the
+  /// IME without unfocusing the composer, a re-tap on the still-focused
+  /// field never fires the focus hook.
+  bool _restoreCompletedSinceLastSave = false;
+
+  /// Scroll offset reported by the previous [_onChatScroll] notification.
+  /// A decrease (moving away from the bottom) can only come from a user
+  /// drag/fling — the chat library's keyboard scrolls and the restore
+  /// animation only ever move toward the bottom — so it releases the pin.
+  double _lastReportedScrollPixels = 0;
+
+  /// Chat area height (logical px) from the previous build, used to compute
+  /// per-frame viewport-height deltas while the keyboard animation runs.
+  double? _lastChatAreaHeight;
 
   bool _isSearching = false;
   SearchMode _searchMode = SearchMode.current;
@@ -185,6 +259,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   /// The original attachments of the message being edited.
   List<Attachment>? _editingMessageAttachments;
+
+  /// Timer that auto-hides the edit data-loss warning overlay.
+  Timer? _editWarningTimer;
+
+  /// Whether the "editing will delete all messages below" warning overlay
+  /// is currently visible in the message display area.
+  bool _editWarningVisible = false;
 
   // ── Infinite Scroll / Lazy Load pagination state ──
   /// Number of messages to load per page.
@@ -244,6 +325,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _editWarningTimer?.cancel();
     // The ChatStreamManager owns the adapter lifecycle. We do NOT cancel
     // or dispose it here — if streaming is active, it continues in the
     // background and saves results when complete. The adapter is cleaned
@@ -260,19 +342,36 @@ class _ChatPageState extends ConsumerState<ChatPage>
     super.didChangeMetrics();
     if (!mounted) return;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final isNowVisible = bottomInset > 100;
+    final isNowVisible = bottomInset > _keyboardVisibleThreshold;
+    // While the initial positioning pass runs the list is hidden; keyboard /
+    // viewport changes must not fight the pass. Still track the keyboard
+    // visibility flag so the post-pass close transition is not missed.
+    if (_pendingInitialScrollAdjustment) {
+      _wasKeyboardVisible = isNowVisible;
+      return;
+    }
 
     if (isNowVisible && !_wasKeyboardVisible) {
-      // Keyboard just appeared — save scroll position and jump to bottom
-      // immediately so the input area and latest message are visible.
-      if (_chatScrollController.hasClients) {
+      // Keyboard just appeared — capture the pre-keyboard scroll position
+      // (unless the composer focus hook already captured it for this
+      // session, or a previous restore is still the source of truth),
+      // then jump to the bottom immediately so the input area and latest
+      // message are visible without waiting for the keyboard animation to
+      // finish. The per-frame pinning in _onChatAreaResized then keeps the
+      // list glued to the bottom while the keyboard keeps sliding up.
+      if ((_lastScrollPositionBeforeKeyboard == null ||
+              _restoreCompletedSinceLastSave) &&
+          _chatScrollController.hasClients) {
         _lastScrollPositionBeforeKeyboard =
             _chatScrollController.position.pixels;
+        _restoreCompletedSinceLastSave = false;
       }
       _scrollToBottom();
+      _anchorToBottomWhileKeyboard = true;
     } else if (!isNowVisible && _wasKeyboardVisible) {
-      // Keyboard just disappeared — restore the scroll position that was
-      // captured before the keyboard opened.
+      // Keyboard just disappeared — stop pinning and smoothly scroll back
+      // to the position captured before the keyboard opened.
+      _anchorToBottomWhileKeyboard = false;
       _restoreScrollPositionAfterKeyboard();
     }
     _wasKeyboardVisible = isNowVisible;
@@ -288,10 +387,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
         activeId != null ? ref.watch(streamingFullReplyProvider(activeId)) : '';
     final streamingMsgId =
         activeId != null ? ref.watch(streamingMsgIdProvider(activeId)) : null;
-    final markdownConfig = buildMarkdownConfig(
-      isDark: isDark,
-      isStreaming: isStreaming,
-    );
 
     // ── Streaming listeners (per-conversation via family providers) ──
     // Each listener watches its conversation's family instance. When the
@@ -352,21 +447,40 @@ class _ChatPageState extends ConsumerState<ChatPage>
               Expanded(
                 child: controller == null
                     ? const SizedBox.shrink()
-                    : Stack(
-                        children: [
-                          _buildChatWidget(
-                            isDark: isDark,
-                            isStreaming: isStreaming,
-                            streamingFullReply: streamingFullReply,
-                            streamingMsgId: streamingMsgId,
-                            markdownConfig: markdownConfig,
-                            activeId: activeId,
-                            controller: controller,
-                          ),
-                          // ── Scroll-to-bottom overlay button ──
-                          if (_showScrollToBottomButton)
-                            _buildScrollToBottomButton(isDark: isDark),
-                        ],
+                    : LayoutBuilder(
+                        builder: (context, constraints) {
+                          // Feed the chat area height into the
+                          // keyboard-follow pinning logic.
+                          _onChatAreaResized(constraints.maxHeight);
+                          // While the initial positioning pass runs the list
+                          // is kept mounted and laid out (message positions
+                          // are measured from render boxes) but hidden, so
+                          // the pass itself is never visible to the user.
+                          return Visibility(
+                            visible: !_pendingInitialScrollAdjustment,
+                            maintainState: true,
+                            child: Stack(
+                              children: [
+                                _buildChatWidget(
+                                  isDark: isDark,
+                                  isStreaming: isStreaming,
+                                  streamingFullReply: streamingFullReply,
+                                  streamingMsgId: streamingMsgId,
+                                  activeId: activeId,
+                                  controller: controller,
+                                ),
+                                // ── Scroll-to-bottom overlay button ──
+                                if (_showScrollToBottomButton)
+                                  _buildScrollToBottomButton(isDark: isDark),
+                                // ── Edit data-loss warning overlay ──
+                                // Centered in the message display area; auto-hides
+                                // after 2 seconds or on close-button tap.
+                                if (_editWarningVisible)
+                                  _buildEditWarningOverlay(context: context),
+                              ],
+                            ),
+                          );
+                        },
                       ),
               ),
               // ── Chat composer (below chat, in Column flow) ──

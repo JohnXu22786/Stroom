@@ -90,14 +90,18 @@ void chatAgentSemanticsGroup6() {
         tools: ChatService.getRegisteredToolDefinitions(),
       );
 
-      // 3 次请求（2 工具轮 + 1 收尾/文本轮）usage 全部累计
-      await _waitFor(() => provider.captures.length >= 4); // + 标题
+      // 3 次主请求（2 工具轮 + 1 收尾/文本轮）+ 标题请求：
+      // - cost 每轮累加（对话级累计，4 × 0.0001）
+      // - lastInputTokens = 最近一次请求的输入（工具循环中每轮请求的
+      //   输入已包含前一轮内容，累计求和会高估上下文；文档语义即
+      //   "最近一次请求的实际输入 token 数"）
+      await _waitFor(() => provider.captures.length >= 4); // 3 主轮 + 标题
       final conv = container
           .read(conversationsProvider)
           .where((c) => c.id == 'conv-multi')
           .first;
-      expect(conv.lastInputTokens, 300); // 3 × 100
-      expect(conv.totalCost, closeTo(0.0003, 1e-9)); // 3 × 0.0001
+      expect(conv.lastInputTokens, 100); // 最近一轮的输入（标题请求不写 tokens）
+      expect(conv.totalCost, closeTo(0.0004, 1e-9)); // 4 × 0.0001（含标题）
       container.dispose();
     });
   });

@@ -42,22 +42,23 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     final reasoningEffortEnabled = ref.watch(reasoningEffortEnabledProvider);
     final reasoningParamValues = ref.watch(reasoningParamValuesProvider);
 
-    // Find the effort param (isEffortParam=true) from widget.reasoningParams
-    final effortParam =
-        widget.reasoningParams.cast<ReasoningParam?>().firstWhere(
-              (p) => p?.isEffortParam ?? false,
-              orElse: () => null,
-            );
+    // Find the effort param (推理力度) from widget.reasoningParams.
+    // Legacy models without the isEffortParam flag fall back to the first
+    // non-toggle param (pre-flag semantics).
+    final effortParam = findEffortParam(widget.reasoningParams);
 
     // Determine reasoning chip label and color based on reasoning state.
-    // When reasoning is enabled AND effort toggle is on AND a value has been
-    // selected for the effort param: show that value (e.g. "high", "low").
-    // Otherwise: show "推理" (purple when enabled, grey when disabled).
+    // When reasoning is enabled AND effort toggle is on AND the effort param
+    // is enabled with a non-empty name AND a non-empty value has been
+    // selected: show that value (e.g. "high", "low"). Otherwise: show "推理"
+    // (purple when enabled, grey when disabled).
     final String reasoningLabel;
     if (reasoningEnabled &&
         reasoningEffortEnabled &&
         effortParam != null &&
-        reasoningParamValues.containsKey(effortParam.paramName)) {
+        effortParam.enabled &&
+        effortParam.paramName.trim().isNotEmpty &&
+        (reasoningParamValues[effortParam.paramName]?.isNotEmpty ?? false)) {
       reasoningLabel = reasoningParamValues[effortParam.paramName]!;
     } else {
       reasoningLabel = '推理';
@@ -74,17 +75,30 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
         noToolsEnabled ? null : widget.enabledTools.length;
 
     // ═══════════════════════════════════════════════════════════
-    // Custom params chip: independent of tool state
-    // Count model-level custom params with non-empty names.
-    // Shows accent color + badge when count > 0, grey when 0.
+    // Custom params chip: independent color state driven by the session.
+    // A custom param (non-toggle, non-effort) counts as ACTIVE when its
+    // switch is on (enabled), its name is non-empty, and a value has been
+    // selected for it — and reasoning is on (matching what the request
+    // actually sends). The chip shows the accent color + badge with the
+    // active count; otherwise grey with no badge.
     // ═══════════════════════════════════════════════════════════
-    final int customParamsBadgeCount =
-        widget.customParams.where((p) => p.paramName.trim().isNotEmpty).length;
-    final bool hasCustomParams = customParamsBadgeCount > 0;
+    final int activeCustomParamsCount = reasoningEnabled
+        ? widget.reasoningParams
+            .where(
+              (p) =>
+                  p != effortParam &&
+                  !p.isReasoningToggle &&
+                  p.paramName.trim().isNotEmpty &&
+                  p.enabled &&
+                  (reasoningParamValues[p.paramName]?.isNotEmpty ?? false),
+            )
+            .length
+        : 0;
+    final bool hasActiveCustomParams = activeCustomParamsCount > 0;
     final Color customParamsColor =
-        hasCustomParams ? toolAccentColor : Colors.grey;
+        hasActiveCustomParams ? toolAccentColor : Colors.grey;
     final int? customParamsBadgeCountOrNull =
-        hasCustomParams ? customParamsBadgeCount : null;
+        hasActiveCustomParams ? activeCustomParamsCount : null;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -205,6 +219,40 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     );
   }
 
+  /// ── Quick-edit processing banner ──
+  /// Shown above the input row while an edited image is still being
+  /// processed in the background; sending is blocked until it finishes.
+  Widget _buildProcessingBanner({required ColorScheme cs}) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: cs.primaryContainer.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: cs.primary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '图片处理中，完成后可发送',
+              style: TextStyle(fontSize: 12, color: cs.onPrimaryContainer),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// ── Input row ──
   Widget _buildInputRow({
     required ColorScheme cs,
@@ -281,9 +329,15 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
             )
           else
             IconButton(
-              icon: Icon(Icons.send_rounded, color: cs.primary),
+              icon: _editsInFlight > 0
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(Icons.send_rounded, color: cs.primary),
               tooltip: '发送',
-              onPressed: (hasText || hasAttachments)
+              onPressed: (hasText || hasAttachments) && _editsInFlight == 0
                   ? () => _handleSubmitted(_textController.text)
                   : null,
             ),

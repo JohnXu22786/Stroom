@@ -15,9 +15,10 @@ import id.flutter.flutter_background_service.BackgroundService
  * AlarmManager-based keep-alive watchdog for the foreground service.
  *
  * Android (especially Chinese ROMs) may kill the app process even when a
- * foreground service is active. This receiver schedules a periodic alarm
- * that, when fired, tries to restart the foreground service. If the process
- * is already running with the service active, the alarm is a no-op.
+ * foreground service is active. This receiver schedules a periodic
+ * keep-alive alarm that, when fired, tries to restart the foreground
+ * service. If the process is already running with the service active,
+ * the alarm is a no-op.
  *
  * Scheduling strategy:
  * - Prefer an **exact** alarm ([AlarmManager.setExactAndAllowWhileIdle])
@@ -41,9 +42,10 @@ import id.flutter.flutter_background_service.BackgroundService
  * Failure backoff: Android 15+ caps dataSync foreground services at 6h per
  * 24h; once exhausted every start throws. After 3 consecutive failures the
  * watchdog backs off to a 30-minute interval instead of waking the device
- * every 5 minutes forever. Any successful start, or an explicit
- * startKeepAlive from Dart (user start / cold-start restore / app resume),
- * resets the counter.
+ * every 5 minutes forever. A successful start resets the counter; only the
+ * explicit startKeepAlive from Dart (user start) resets it — cold-start
+ * restore / app resume use rearmKeepAlive, which re-arms WITHOUT resetting
+ * (so persistent-failure devices stay in backoff).
  *
  * Lifecycle:
  * 1. [scheduleAlarm] — called from Dart via MethodChannel when the
@@ -63,11 +65,15 @@ class KeepAliveReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "KeepAliveReceiver"
         private const val ALARM_REQUEST_CODE = 2001
-        private const val KEEP_ALIVE_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
+
+        // 默认看门狗间隔（MainActivity 的 rearmKeepAlive 需要读取）。
+        const val KEEP_ALIVE_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
 
         // 连续启动失败后的退避间隔（见类注释）。
-        private const val MAX_CONSECUTIVE_FAILURES = 3
-        private const val FAILURE_BACKOFF_INTERVAL_MS = 30 * 60 * 1000L
+        // MainActivity 的 rearmKeepAlive 需要读取，用于退避状态下
+        // 沿用 30 分钟间隔（而不是用 5 分钟间隔替换退避闹钟）。
+        const val MAX_CONSECUTIVE_FAILURES = 3
+        const val FAILURE_BACKOFF_INTERVAL_MS = 30 * 60 * 1000L
 
         const val ACTION_KEEP_ALIVE = "com.johntsui.stroom.KEEP_ALIVE"
 
@@ -76,20 +82,45 @@ class KeepAliveReceiver : BroadcastReceiver() {
         private const val PREF_NAME = "FlutterSharedPreferences"
         private const val KEY_SERVICE_ENABLED = "flutter.background_service_enabled"
         private const val KEY_KEEP_ALIVE_ACTIVE = "flutter.keep_alive_active"
-        private const val KEY_KEEP_ALIVE_FAILURES = "flutter.keep_alive_failures"
+        // 看门狗开关（Dart 侧 _watchdogEnabledKey）。
+        // 原生侧必须在触发/开机补武装时检查：Dart 侧关闭开关后若进程
+        // 在 channel 调用完成前被杀（或调用超时），闹钟可能残留，
+        // 只在「武装时刻」检查开关会留下一个永久运行的看门狗。
+        private const val KEY_WATCHDOG_ENABLED = "flutter.background_service_watchdog"
+
+        // MainActivity 的 rearmKeepAlive 需要读取失败计数。
+        const val KEY_KEEP_ALIVE_FAILURES = "flutter.keep_alive_failures"
 
         /**
          * Schedule the next keep-alive alarm (one-shot, self-rescheduling).
          * Safe to call multiple times; the existing alarm is replaced.
+         *
+         * Alarm strategy (strongest → fallback):
+         * 1. Android 12+ (S) with exact-alarm permission:
+         *    [AlarmManager.setExactAndAllowWhileIdle] — fires precisely
+         *    even in Doze; one-shot, re-scheduled by [onReceive] after
+         *    every fire. Exact alarms are exempt from the S+
+         *    background-start restriction, so the foreground service
+         *    can be restarted from the alarm even when the app process
+         *    is not running.
+         * 2. Android 6+ (M): [AlarmManager.setAndAllowWhileIdle] — fires
+         *    within ~10 minutes of the target even in Doze. NOTE: inexact
+         *    alarms are NOT exempt from the S+ background-start
+         *    restriction; on Android 12+ the service restart from this
+         *    alarm only works while the user has granted the battery
+         *    optimization exemption (the app requests it via
+         *    requestIgnoreBatteryOptimizations).
+         * 3. Older versions: [AlarmManager.setInexactRepeating].
          */
         fun scheduleAlarm(context: Context, intervalMs: Long = KEEP_ALIVE_INTERVAL_MS) {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val pendingIntent = createPendingIntent(context, PendingIntent.FLAG_UPDATE_CURRENT)
             val triggerAt = SystemClock.elapsedRealtime() + intervalMs
 
-            // 在调度之前先持久化「闹钟已激活」标记：无论走主路径还是
-            // 降级路径，设备重启后 BOOT_COMPLETED 都能恢复调度。
-            markActive(context, true)
+            // 先调度、成功后再持久化「闹钟已激活」标记：
+            // 若所有调度分支都失败（如权限竞态、系统异常），active 标记
+            // 保持旧值/清除，避免设备重启后重新武装一个不存在的闹钟。
+            var scheduled = false
 
             // Prefer exact alarms: on Android 12+ an exact alarm is an
             // exemption that permits starting a foreground service from the
@@ -103,31 +134,43 @@ class KeepAliveReceiver : BroadcastReceiver() {
                         triggerAt,
                         pendingIntent
                     )
+                    scheduled = true
                     Log.i(TAG, "Keep-alive exact alarm scheduled (interval=${intervalMs / 60000}min)")
-                    return
                 } catch (e: SecurityException) {
                     // canScheduleExactAlarms raced or permission revoked — fall through.
                     Log.w(TAG, "Exact alarm denied, falling back to inexact", e)
                 }
             }
-            // setAndAllowWhileIdle requires no permission; the system may
-            // defer the delivery a little to batch wake-ups.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    triggerAt,
-                    pendingIntent
-                )
-                Log.i(TAG, "Keep-alive inexact alarm scheduled (interval=${intervalMs / 60000}min)")
-            } else {
-                alarmManager.setInexactRepeating(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    triggerAt,
-                    KEEP_ALIVE_INTERVAL_MS,
-                    pendingIntent
-                )
-                Log.i(TAG, "Keep-alive repeating alarm scheduled (interval=${KEEP_ALIVE_INTERVAL_MS / 60000}min)")
+            if (!scheduled) {
+                // setAndAllowWhileIdle requires no permission; the system may
+                // defer the delivery a little to batch wake-ups.
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        alarmManager.setAndAllowWhileIdle(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerAt,
+                            pendingIntent
+                        )
+                        Log.i(TAG, "Keep-alive inexact alarm scheduled (interval=${intervalMs / 60000}min)")
+                    } else {
+                        alarmManager.setInexactRepeating(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerAt,
+                            // 退避间隔同样作用于重复周期：API < 23 上
+                            // 只有首触发间隔会被尊重，重复周期必须显式
+                            // 传 intervalMs，否则退避设备仍每 5 分钟
+                            // 被唤醒一次。
+                            intervalMs,
+                            pendingIntent
+                        )
+                        Log.i(TAG, "Keep-alive repeating alarm scheduled (interval=${intervalMs / 60000}min)")
+                    }
+                    scheduled = true
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to schedule keep-alive alarm", e)
+                }
             }
+            markActive(context, scheduled)
         }
 
         /**
@@ -151,8 +194,10 @@ class KeepAliveReceiver : BroadcastReceiver() {
 
         /**
          * Reset the consecutive-failure counter. Called when the Dart side
-         * explicitly (re)arms the watchdog (user start / cold-start restore),
+         * explicitly STARTS the watchdog (user start via startKeepAlive),
          * giving the watchdog a fresh chance at the normal interval.
+         * 注意：rearmKeepAlive（冷启动恢复/回到前台补武装）不调用本方法，
+         * 持久失败环境下必须保持退避状态。
          */
         fun resetFailureCount(context: Context) {
             context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -198,17 +243,39 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 // 豁免场景。
                 Log.i(TAG, "${intent.action} — checking if keep-alive should be re-scheduled")
                 val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-                if (prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false)) {
-                    scheduleAlarm(context)
+                // 同时要求服务仍处于启用状态：用户已停止服务时（例如
+                // 停止流程中途进程被杀，active 标记残留）绝不重新武装。
+                val serviceEnabled = prefs.getBoolean(KEY_SERVICE_ENABLED, false)
+                // 看门狗开关同样必须检查：用户关闭开关后若取消调用
+                // 未送达（进程被杀/超时），这里兜底取消闹钟。
+                val watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+                if (prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
+                    serviceEnabled && watchdogEnabled
+                ) {
+                    // 与 MainActivity.rearmKeepAlive 一致：已处于退避状态
+                    // 时沿用 30 分钟间隔，而不是用 5 分钟间隔替换掉
+                    // 退避闹钟（否则持久失败设备每次开机/更新都会被
+                    // 额外唤醒一次并失败一次）。
+                    val failures = prefs.getInt(KEY_KEEP_ALIVE_FAILURES, 0)
+                    val interval = if (failures >= MAX_CONSECUTIVE_FAILURES) {
+                        FAILURE_BACKOFF_INTERVAL_MS
+                    } else {
+                        KEEP_ALIVE_INTERVAL_MS
+                    }
+                    scheduleAlarm(context, interval)
                 }
             }
 
             ACTION_KEEP_ALIVE -> {
                 val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
                 val serviceEnabled = prefs.getBoolean(KEY_SERVICE_ENABLED, false)
-                if (!serviceEnabled) {
-                    // 用户已明确停止后台服务：取消闹钟，绝不复活服务。
-                    Log.i(TAG, "Keep-alive alarm fired but service disabled — cancelling watchdog")
+                // 看门狗开关同样是禁用条件：关闭开关后若取消调用未送达
+                // （进程被杀/超时），残留闹钟触发时必须在此兜底取消，
+                // 否则看门狗会永久运行且每次触发都自我续期。
+                val watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+                if (!serviceEnabled || !watchdogEnabled) {
+                    // 用户已明确停止后台服务/关闭看门狗：取消闹钟，绝不复活服务。
+                    Log.i(TAG, "Keep-alive alarm fired but service/watchdog disabled — cancelling watchdog")
                     cancelAlarm(context)
                     return
                 }

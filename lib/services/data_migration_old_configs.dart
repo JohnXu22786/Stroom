@@ -1,5 +1,35 @@
 part of 'data_migration_service.dart';
 
+/// 损坏备份上限（对齐 provider_config_persistence 的约定）。
+const int _kMaxCorruptBackups = 3;
+
+/// 隔离损坏数据：写入带时间戳的 key（如 `provider_entries_corrupt_123`），
+/// 只保留最近 [_kMaxCorruptBackups] 份。
+///
+/// 使用时间戳而非固定 key：固定 key 会被下一次隔离事件覆盖，丢失
+/// 前一份损坏证据（例如备份恢复重新引入损坏数据时）。
+Future<void> _quarantineCorruptData(
+  SharedPreferences prefs,
+  String keyPrefix,
+  String corruptJson,
+) async {
+  try {
+    final backupKey =
+        '${keyPrefix}_corrupt_${DateTime.now().millisecondsSinceEpoch}';
+    await prefs.setString(backupKey, corruptJson);
+    // 只保留最近的 N 份
+    final keys = prefs.getKeys().toList()
+      ..sort()
+      ..retainWhere((k) => k.startsWith('${keyPrefix}_corrupt_'));
+    while (keys.length > _kMaxCorruptBackups) {
+      await prefs.remove(keys.removeAt(0));
+    }
+    debugPrint('[DataMigrationService] 已隔离损坏数据到 $backupKey');
+  } catch (e) {
+    debugPrint('[DataMigrationService] 隔离损坏数据失败: $e');
+  }
+}
+
 // ====================================================================
 // 旧配置迁移（v0→v1 相关，从 DataMigrationService 拆出控制行数）
 // ====================================================================
@@ -13,20 +43,35 @@ class DataMigrationOldConfigs {
     if (oldJson == null || oldJson.isEmpty) return;
 
     try {
+      // 顶层也需防御：chat_configs 整体不是数组（对象/标量）时，
+      // `as List?` 强转抛 TypeError 会静默中断迁移（版本号仍被提升）。
+      final decoded = jsonDecode(oldJson);
+      if (decoded is! List) {
+        debugPrint('[DataMigrationService] chat_configs 不是合法数组，'
+            '跳过旧配置迁移');
+        await prefs.remove('chat_configs');
+        await prefs.remove('chat_selected_config_id');
+        return;
+      }
       // 兜底：使用 whereType 安全过滤非 Map 条目
-      final oldList = (jsonDecode(oldJson) as List?)
-              ?.whereType<Map<String, dynamic>>()
-              .toList() ??
-          [];
-      if (oldList.isEmpty) return;
+      final oldList = decoded.whereType<Map<String, dynamic>>().toList();
+      if (oldList.isEmpty) {
+        // 空/全损坏的旧数据：清理残留 key，避免每次启动重复解析。
+        await prefs.remove('chat_configs');
+        await prefs.remove('chat_selected_config_id');
+        return;
+      }
 
       final migratedConfigs = <Map<String, dynamic>>[];
       for (final oldItem in oldList) {
-        // 兜底：安全过滤 models 中的非 Map 条目
-        final oldModels = (oldItem['models'] as List?)
-                ?.whereType<Map<String, dynamic>>()
-                .toList() ??
-            [];
+        // 兜底：安全过滤 models 中的非 Map 条目。
+        // 注意：oldItem['models'] 本身可能是非 List（损坏数据），
+        // 用 `is! List` 判断而不是 `as List?` 强转（强转抛 TypeError
+        // 会中断整个迁移，版本号仍会被提升，损坏数据永远无法修复）。
+        final rawModels = oldItem['models'];
+        final oldModels = rawModels is List
+            ? rawModels.whereType<Map<String, dynamic>>().toList()
+            : <Map<String, dynamic>>[];
 
         final models = oldModels.map((m) {
           final typeConfig = <String, dynamic>{};
@@ -39,18 +84,23 @@ class DataMigrationOldConfigs {
           final context = m['maxTokens'] ?? m['context'];
           if (context != null) typeConfig['context'] = context;
 
+          // `is! String` 而非 `as String?`：损坏数据中字段值可能
+          // 是任意类型，强转会中断整个迁移。
+          final modelId = m['modelId'];
           return <String, dynamic>{
-            'name': m['modelId'] as String? ?? '',
-            'modelId': m['modelId'] as String? ?? '',
-            'supportStream': m['supportStream'] as bool? ?? true,
+            'name': modelId is String ? modelId : '',
+            'modelId': modelId is String ? modelId : '',
+            'supportStream':
+                m['supportStream'] is bool ? m['supportStream'] as bool : true,
             'typeConfig': typeConfig,
           };
         }).toList();
 
         migratedConfigs.add(<String, dynamic>{
-          'providerName': oldItem['providerName'] as String? ?? '',
-          'host': oldItem['host'] as String? ?? '',
-          'key': oldItem['key'] as String? ?? '',
+          'providerName':
+              oldItem['providerName'] is String ? oldItem['providerName'] : '',
+          'host': oldItem['host'] is String ? oldItem['host'] : '',
+          'key': oldItem['key'] is String ? oldItem['key'] : '',
           'models': models,
         });
       }
@@ -66,12 +116,26 @@ class DataMigrationOldConfigs {
       List<Map<String, dynamic>> existingEntries = [];
       if (existingJson != null && existingJson.isNotEmpty) {
         try {
-          // 兜底：使用 whereType 安全过滤非 Map 条目
-          existingEntries = (jsonDecode(existingJson) as List)
-              .whereType<Map<String, dynamic>>()
-              .toList();
+          final decoded = jsonDecode(existingJson);
+          if (decoded is! List) {
+            // 现有 provider_entries 整体损坏（非数组）：
+            // 必须先隔离原始数据再覆盖 —— 否则这里的写入会永久销毁
+            // 损坏现场（后面 fixNullIdsInProviderEntries 的隔离逻辑
+            // 就再也触发不到）。
+            debugPrint('[DataMigrationService] 现有 provider_entries 不是'
+                '合法数组，开始隔离');
+            await _quarantineCorruptData(
+                prefs, 'provider_entries', existingJson);
+            existingEntries = [];
+          } else {
+            // 兜底：使用 whereType 安全过滤非 Map 条目
+            existingEntries =
+                decoded.whereType<Map<String, dynamic>>().toList();
+          }
         } catch (_) {
-          // 现有数据损坏，忽略并用空列表重新开始
+          // JSON 无法解析：同样隔离（现有数据损坏，用空列表重新开始）
+          await _quarantineCorruptData(prefs, 'provider_entries', existingJson);
+          existingEntries = [];
         }
       }
 
@@ -110,38 +174,55 @@ class DataMigrationOldConfigs {
     if (json == null || json.isEmpty) return;
 
     try {
+      // 顶层也需防御：provider_entries 整体不是数组时，`as List` 强转
+      // 抛 TypeError 会静默中断修复（版本号仍被提升，而 ProviderEntry
+      // 解析继续闪退，错误边界的「重试」永远无法成功）。
+      final decoded = jsonDecode(json);
+      if (decoded is! List) {
+        // 隔离损坏数据到带时间戳的 key，置空列表让应用可以正常启动；
+        // 原始数据保留，用户可通过备份恢复功能找回。
+        debugPrint('[DataMigrationService] provider_entries 不是合法数组，'
+            '已隔离并重置为空列表');
+        await _quarantineCorruptData(prefs, 'provider_entries', json);
+        await prefs.setString('provider_entries', '[]');
+        return;
+      }
       // 兜底：使用 whereType 安全过滤非 Map 条目
-      final list =
-          (jsonDecode(json) as List).whereType<Map<String, dynamic>>().toList();
+      final list = decoded.whereType<Map<String, dynamic>>().toList();
       bool changed = false;
 
       for (int i = 0; i < list.length; i++) {
         final entry = list[i];
-        if (entry['id'] == null || (entry['id'] as String?)?.isEmpty == true) {
-          // 为 null id 的条目生成一个唯一 ID
-          final type = entry['type'] as String? ?? 'unknown';
-          entry['id'] = 'migrated_${type}_$i';
+        // `is! String` 而非 `as String?`：损坏数据中字段值可能
+        // 是任意类型，强转会中断整个修复循环（版本号仍被提升，
+        // 损坏数据永远无法修复）。
+        final id = entry['id'];
+        if (id is! String || id.isEmpty) {
+          // 为无效 id 的条目生成一个唯一 ID
+          final type = entry['type'];
+          final typeName = type is String ? type : 'unknown';
+          entry['id'] = 'migrated_${typeName}_$i';
           changed = true;
           debugPrint(
-              '[DataMigrationService] Fixed null id for provider entry at index $i (type: $type)');
+              '[DataMigrationService] Fixed null id for provider entry at index $i (type: $typeName)');
         }
 
         // 修复自定义参数中缺少 type 字段的旧格式
-        final configs = entry['configs'] as List?;
-        if (configs != null) {
-          for (final config in configs) {
+        final rawConfigs = entry['configs'];
+        if (rawConfigs is List) {
+          for (final config in rawConfigs) {
             // 兜底：跳过非 Map 的 config 条目
             if (config is! Map<String, dynamic>) continue;
             final configMap = config;
-            final models = configMap['models'] as List?;
-            if (models == null) continue;
-            for (final model in models) {
+            final rawModels = configMap['models'];
+            if (rawModels is! List) continue;
+            for (final model in rawModels) {
               // 兜底：跳过非 Map 的 model 条目
               if (model is! Map<String, dynamic>) continue;
               final modelMap = model;
-              final customParams = modelMap['customParams'] as List?;
-              if (customParams == null) continue;
-              for (final param in customParams) {
+              final rawCustomParams = modelMap['customParams'];
+              if (rawCustomParams is! List) continue;
+              for (final param in rawCustomParams) {
                 // 兜底：跳过非 Map 的 param 条目
                 if (param is! Map<String, dynamic>) continue;
                 final paramMap = param;
@@ -155,8 +236,8 @@ class DataMigrationOldConfigs {
         }
 
         // 确保每条记录都有 type 字段（旧版可能缺失）
-        if (entry['type'] == null ||
-            (entry['type'] as String?)?.isEmpty == true) {
+        final entryType = entry['type'];
+        if (entryType is! String || entryType.isEmpty) {
           entry['type'] = 'tts';
           changed = true;
           debugPrint(

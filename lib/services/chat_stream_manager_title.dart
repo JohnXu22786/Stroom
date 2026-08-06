@@ -45,6 +45,14 @@ extension _ChatStreamManagerTitleExt on ChatStreamManager {
       final svc = _adapter.createTransientService();
       if (svc == null) return;
 
+      // 标题请求是真实 API 请求（每次发送都会产生），其 cost 同样是
+      // 该对话的计费事实：usage 数据返回后立即累加（事件驱动、
+      // per-request 隔离，不会与主请求张冠李戴）。输入/输出计量不写入
+      // （标题输入仅一条消息，写入会污染上下文显示与压缩触发判断）。
+      svc.onUsageEvent = (usage, {required bool recordInput}) {
+        _commitUsage(convId, usage, recordInput: recordInput);
+      };
+
       String title;
       try {
         title = await svc.sendPrompt(
@@ -52,9 +60,11 @@ extension _ChatStreamManagerTitleExt on ChatStreamManager {
           // 标题任务只需最近一条用户消息文本，剥离附件避免重新读取大文件
           history: [lastUser.copyWith(attachments: [])],
           maxTokens: 200,
-          // fire-and-forget 可能与下一次主请求并发读取共享 usage 槽：
-          // 不计入累计（标题 token 极少，且避免张冠李戴/双计）
-          accumulateUsage: false,
+          // 事件驱动下并发读取共享 usage 槽的风险已不存在（per-request
+          // 隔离）；标题请求计费随 usage 事件立即累加（recordInputTokens:
+          // false → 只累计 cost，不写 tokens）
+          accumulateUsage: true,
+          recordInputTokens: false,
         );
       } catch (e) {
         debugPrint('[ChatStreamManager] 标题生成请求失败: $e');

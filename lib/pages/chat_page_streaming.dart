@@ -44,18 +44,20 @@ extension _ChatPageStreamingExt on _ChatPageState {
           .state = List<String>.from(reasoningSections);
       // Also restore the remaining segment providers to prevent
       // cross-contamination with stale data from another conversation.
+      // roundStarts is set BEFORE toolCalls so that the toolCalls listener's
+      // synchronous _rebuildLiveSegments reads the fresh round boundary.
       ref.read(streamingTextSectionsProvider(activeConvId).notifier).state =
           List<String>.from(
               ref.read(chatStreamManagerProvider).textChunksFor(activeConvId));
-      ref.read(streamingToolCallsProvider(activeConvId).notifier).state =
-          List<ToolCallData>.from(
-              ref.read(chatStreamManagerProvider).toolCallsFor(activeConvId));
       ref
               .read(streamingToolCallRoundStartsProvider(activeConvId).notifier)
               .state =
           List<int>.from(ref
               .read(chatStreamManagerProvider)
               .toolCallRoundStartsFor(activeConvId));
+      ref.read(streamingToolCallsProvider(activeConvId).notifier).state =
+          List<ToolCallData>.from(
+              ref.read(chatStreamManagerProvider).toolCallsFor(activeConvId));
       ref.read(streamingHasFirstTokenProvider(activeConvId).notifier).state =
           ref.read(chatStreamManagerProvider).hasFirstTokenFor(activeConvId);
       ref.read(streamingReasoningProvider(activeConvId).notifier).state =

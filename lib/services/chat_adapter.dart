@@ -76,6 +76,14 @@ class ChatAdapter {
   /// 缓存的 MCP 工具列表
   List<ToolDefinition> _mcpToolDefinitions = [];
 
+  /// 正在进行的 MCP 工具发现 future。
+  ///
+  /// 防并发重发现：页面 _initialize 与 provider-change listener 可能同时
+  /// 调用 initializeMcpServers（同一配置）。没有此守卫会并发执行两次
+  /// 发现，第二次的 addClient 会 dispose 第一次的 in-flight client，
+  /// 导致工具静默丢失。发现完成后置空，允许后续重发现。
+  Future<void>? _mcpInitFuture;
+
   /// 当前选中的配置索引（指向 llmEntry.configs）
   int currentConfigIndex = -1;
 
@@ -102,13 +110,6 @@ class ChatAdapter {
   /// Gets the reasoning parameters from the current model config.
   List<ReasoningParam> get reasoningParams {
     return _cachedModelConfig?.reasoningParams ?? [];
-  }
-
-  /// Gets the model-level custom parameters (模型页自定义参数)
-  /// from the current model config.
-  /// These are distinct from reasoning/inference parameters.
-  List<CustomParam> get customParams {
-    return _cachedModelConfig?.customParams ?? [];
   }
 
   /// 获取当前 MCP 工具定义列表

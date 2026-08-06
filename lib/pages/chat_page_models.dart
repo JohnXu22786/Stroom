@@ -295,6 +295,39 @@ extension _ChatPageModelsExt on _ChatPageState {
       ref.read(reasoningEffortProvider.notifier).state = 'medium';
       ref.read(reasoningParamValuesProvider.notifier).state = {};
     }
+
+    // Heal sessions where the effort toggle is on but no effort value was
+    // ever written to the map (the panel previously only saved explicitly
+    // tapped options). Without this, the reasoning chip keeps showing "推理"
+    // after restart even though the effort section looks configured.
+    // Symmetrically, a leftover effort value with the toggle off is pruned
+    // so the request stops sending it.
+    // NOTE: custom params are deliberately NOT auto-healed here — writing
+    // defaults for them would silently start sending params the user never
+    // engaged; the custom params panel writes values on switch interaction.
+    // The heal looks up the effort param from the adapter's CURRENT model;
+    // skip it when the adapter is not configured for the restored model
+    // (its cached reasoning params would belong to a different model).
+    final adapterModels = _adapter.availableModels(
+      ref.read(providerEntriesProvider),
+    );
+    final adapterMatchesRestoredModel = adapterModels.any(
+      (m) =>
+          m.configIndex == _adapter.currentConfigIndex &&
+          m.modelIndex == _adapter.currentModelIndex &&
+          m.displayName == modelName,
+    );
+    final restoredValues = ref.read(reasoningParamValuesProvider);
+    final normalized = adapterMatchesRestoredModel
+        ? ensureEffortValue(
+            _adapter.reasoningParams,
+            restoredValues,
+            effortEnabled: ref.read(reasoningEffortEnabledProvider),
+          )
+        : restoredValues;
+    if (normalized != restoredValues) {
+      ref.read(reasoningParamValuesProvider.notifier).state = normalized;
+    }
   }
 
   /// Loads the per-model settings map from SharedPreferences.
@@ -338,12 +371,12 @@ extension _ChatPageModelsExt on _ChatPageState {
       onModelSelected: _onModelSelected,
       onModelsReordered: _onModelsReordered,
       reasoningParams: _adapter.reasoningParams,
-      customParams: _adapter.customParams,
       editingMessageId: _editingMessageId,
       editingMessageText: _editingMessageText,
       editingMessageAttachments: _editingMessageAttachments,
       onEditSend: _handleEditSend,
       onEditCancel: _handleEditCancel,
+      onFocusChanged: _onComposerFocusChanged,
     );
   }
 }

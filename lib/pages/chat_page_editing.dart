@@ -52,6 +52,29 @@ extension _ChatPageEditingExt on _ChatPageState {
       _editingMessageText = msg.content;
       _editingMessageAttachments = msg.attachments;
     });
+    // Sending the edit deletes this message and every message below it —
+    // remind the user when there is actually anything to lose.
+    if (index < _history.length - 1) {
+      _showEditWarning();
+    }
+  }
+
+  /// Shows the centered data-loss warning for 2 seconds. Re-entry (e.g.
+  /// switching to edit another message) restarts the timer.
+  void _showEditWarning() {
+    _editWarningTimer?.cancel();
+    setState(() => _editWarningVisible = true);
+    _editWarningTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _editWarningVisible = false);
+    });
+  }
+
+  /// Hides the warning immediately (close button, edit cancel/send, or
+  /// conversation switch). No-op when the warning is not visible.
+  void _hideEditWarning() {
+    _editWarningTimer?.cancel();
+    if (!_editWarningVisible || !mounted) return;
+    setState(() => _editWarningVisible = false);
   }
 
   void _handleEditSend(
@@ -60,6 +83,9 @@ extension _ChatPageEditingExt on _ChatPageState {
     List<Attachment> attachments,
   ) {
     if (!mounted) return;
+    // The edit operation itself performs the deletion — warning no longer
+    // relevant once the user commits to it.
+    _hideEditWarning();
     // Clear edit state
     setState(() {
       _editingMessageId = null;
@@ -72,6 +98,8 @@ extension _ChatPageEditingExt on _ChatPageState {
 
   void _handleEditCancel() {
     if (!mounted) return;
+    // Edit aborted — no deletion will happen, hide the warning.
+    _hideEditWarning();
     setState(() {
       _editingMessageId = null;
       _editingMessageText = null;

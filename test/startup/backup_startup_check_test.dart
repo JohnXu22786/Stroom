@@ -13,16 +13,6 @@ void main() {
   });
 
   // ==================================================================
-  // Static flag tracking
-  // ==================================================================
-
-  group('static startupBackupPerformed flag', () {
-    test('initially false', () {
-      expect(BackupStartupCheck.startupBackupPerformed, isFalse);
-    });
-  });
-
-  // ==================================================================
   // runCheck — basic behavior
   // ==================================================================
 

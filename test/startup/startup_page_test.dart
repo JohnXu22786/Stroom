@@ -51,21 +51,23 @@ void main() {
       expect(find.byIcon(Icons.check_circle), findsOneWidget);
     });
 
-    testWidgets('page fades out via AnimatedOpacity when checks complete', (
+    testWidgets('renders without error in done state', (
       tester,
     ) async {
-      // Create a startup page that wraps in AnimatedOpacity via a parent controller
+      // 说明：渐出动画由 StartupApp._startFadeOut 驱动，StartupPage
+      // 本身只负责渲染；此测试验证 done 状态下的页面渲染无异常。
       await tester.pumpWidget(wrapStartupPage(isWorking: false));
       await tester.pump();
 
       // The page should be rendered without errors
       expect(tester.takeException(), isNull);
 
-      // Verify the page still shows content (AnimatedOpacity should be at opacity 1.0)
+      // Verify the page still shows content
       expect(find.text('Stroom'), findsOneWidget);
     });
 
-    testWidgets('fade animation completes without throwing', (tester) async {
+    testWidgets('transitions from working to done state without throwing',
+        (tester) async {
       // Simulate the transition: isWorking goes from true to false
       await tester.pumpWidget(wrapStartupPage(isWorking: true));
       await tester.pump();
@@ -101,6 +103,22 @@ void main() {
       await tester.pump();
 
       expect(find.text('1/3'), findsOneWidget);
+    });
+
+    testWidgets('long status message does not overflow the layout',
+        (tester) async {
+      // 启动检查发现多个问题时状态文案会非常长（所有问题拼接），
+      // 必须在受限高度内滚动而不是触发 RenderFlex overflow。
+      final longMessage = '启动完成（注意: 发现 3 个数据问题:\n'
+          '  • provider_entries[0]: id 字段缺失或为空\n'
+          '  • provider_entries[1]: type 字段缺失或为空\n'
+          '  • conversations[2]: messages 字段缺失\n'
+          '  • conversations[3]: id 字段缺失）';
+      await tester.pumpWidget(wrapStartupPage(statusMessage: longMessage));
+      await tester.pump();
+
+      expect(find.text(longMessage), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: '长状态文案必须可滚动而非溢出报错');
     });
   });
 

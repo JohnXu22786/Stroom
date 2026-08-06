@@ -19,7 +19,9 @@ void main() {
       expect(html, contains('touchend'));
       // Should have zoom and pan JS functions
       expect(html, contains('window.setZoom'));
-      expect(html, contains('window.setPan'));
+      expect(html, contains('window.setPanZoom'));
+      // Auto-fit on render completion
+      expect(html, contains('window.fitToViewport'));
     });
 
     testWidgets(
@@ -40,7 +42,7 @@ void main() {
       expect(html, isNot(contains('lastTouchDist')));
       // Should still have zoom and pan JS functions
       expect(html, contains('window.setZoom'));
-      expect(html, contains('window.setPan'));
+      expect(html, contains('window.setPanZoom'));
     });
 
     testWidgets('HTML has gesture-absorbing viewport container',
@@ -55,11 +57,11 @@ void main() {
     });
 
     testWidgets(
-        'HTML has window.setZoom and window.setPan for external gesture control',
+        'HTML has window.setZoom and window.setPanZoom for external gesture control',
         (tester) async {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('window.setZoom'));
-      expect(html, contains('window.setPan'));
+      expect(html, contains('window.setPanZoom'));
       // Should clamp zoom between 0.1 and 10
       expect(html, contains('Math.max(0.1, Math.min(10, level))'));
     });
@@ -89,7 +91,7 @@ void main() {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('flutter_inappwebview.callHandler'));
       expect(html, contains('onMermaidError'));
-      expect(html, contains('onZoomChanged'));
+      expect(html, contains('onTransformChanged'));
     });
 
     testWidgets('zoom is clamped between 0.1 and 10', (tester) async {
@@ -118,21 +120,19 @@ void main() {
       expect(html, contains('e.touches.length === 2'));
     });
 
-    testWidgets('_buildInlineMermaidHtml is separate from buildMermaidHtml',
+    testWidgets('inline rendering shares the fullscreen HTML template',
         (tester) async {
-      // _buildInlineMermaidHtml is private, but we can verify the HTML produced
-      // by buildMermaidHtml has the correct structure for external gesture control
-      // (window.setZoom and window.setPan are available)
+      // Regression: the chat inline mermaid preview must use the SAME HTML
+      // template as the fullscreen dialog (buildMermaidHtml with full
+      // gesture JS), so zoom anchoring and auto-fit behavior stay unified
+      // and there is only one template to maintain.
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD',
-          withJsGestures: false);
-      // The template has window.setZoom and window.setPan available for Flutter
-      // to call via evaluateJavascript, even with no gesture JS
+          withJsGestures: true);
+      expect(html, contains('mousedown'));
+      expect(html, contains('touchstart'));
       expect(html, contains('window.setZoom'));
-      expect(html, contains('window.setPan'));
-      // With withJsGestures=false, no gesture JS at all — Flutter handles
-      // all gestures and sends pan/zoom commands via evaluateJavascript
-      expect(html, isNot(contains('touchstart')));
-      expect(html, isNot(contains('mousedown')));
+      expect(html, contains('window.setPanZoom'));
+      expect(html, contains('window.fitToViewport'));
     });
 
     testWidgets('source code mode does not use gesture wrapper',

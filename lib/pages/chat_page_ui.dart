@@ -23,26 +23,148 @@ extension _ChatPageUiExt on _ChatPageState {
     }
   }
 
+  /// Current soft-keyboard inset in logical pixels, read from the VIEW
+  /// (fresh) instead of the inherited [MediaQuery] (which is one frame
+  /// behind, e.g. inside [didChangeMetrics] callbacks).
+  double _currentKeyboardInset() {
+    final view = View.of(context);
+    return view.viewInsets.bottom / view.devicePixelRatio;
+  }
+
   /// Restores the scroll position that was captured before the keyboard
-  /// opened, so the user returns to where they were reading.
+  /// opened, animating over roughly the remaining keyboard-dismiss
+  /// animation so the list visibly follows the keyboard back down instead
+  /// of jumping. The saved position is left in place until the next
+  /// keyboard session saves a fresh one, so a mid-restore re-tap reuses
+  /// the correct pre-keyboard offset.
   void _restoreScrollPositionAfterKeyboard() {
     final savedPos = _lastScrollPositionBeforeKeyboard;
-    _lastScrollPositionBeforeKeyboard = null;
     if (savedPos == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_chatScrollController.hasClients) {
-        final maxScroll = _chatScrollController.position.maxScrollExtent;
-        _chatScrollController.jumpTo(savedPos.clamp(0.0, maxScroll));
+      if (!_chatScrollController.hasClients) return;
+      // The user's finger is on the list — leave the position where they
+      // put it instead of animating under their finger.
+      if (_userIsDragging) return;
+      final pos = _chatScrollController.position;
+      final target = savedPos.clamp(0.0, pos.maxScrollExtent);
+      if ((pos.pixels - target).abs() < 1) return;
+      _isRestoringKeyboardScroll = true;
+      _chatScrollController
+          .animateTo(
+        target,
+        duration: _ChatPageState._keyboardAnimationDuration,
+        curve: Curves.easeOutCubic,
+      )
+          .whenComplete(() {
+        _isRestoringKeyboardScroll = false;
+        // Only a natural completion makes the saved position stale; an
+        // interruption (mid-restore re-tap, user scroll) leaves it valid.
+        if ((pos.pixels - target).abs() < 1) {
+          _restoreCompletedSinceLastSave = true;
+        }
+      });
+    });
+  }
+
+  /// Called when the composer input gains/loses focus on mobile. Reacts
+  /// instantly — before the soft-keyboard animation starts — so the
+  /// message list shifts up the moment the user taps the input, instead of
+  /// waiting for the keyboard's show animation to finish (the "shift up is
+  /// delayed" complaint). The keyboard session is then pinned to the
+  /// bottom by [_onChatAreaResized] for the rest of the animation.
+  void _onComposerFocusChanged(bool hasFocus) {
+    if (!mounted) return;
+    if (!hasFocus) {
+      // The input lost focus without the keyboard ever appearing (e.g. a
+      // hardware keyboard on a tablet): abandon the phantom pin session
+      // instead of letting it yank the list on a later resize. The view-
+      // inset read is fresh, so a keyboard that is still sliding up is
+      // never mistaken for a phantom. The saved position is deliberately
+      // KEPT: it is a real pre-tap position, the next real tap overwrites
+      // it, and keeping it means a keyboard that rises after all restores
+      // to the reading spot instead of the bottom.
+      if (_anchorToBottomWhileKeyboard &&
+          _currentKeyboardInset() <= _ChatPageState._keyboardVisibleThreshold) {
+        _anchorToBottomWhileKeyboard = false;
       }
+      return;
+    }
+    final platform = Theme.of(context).platform;
+    if (platform != TargetPlatform.android && platform != TargetPlatform.iOS) {
+      return;
+    }
+    // Keyboard already visible — do not restart the scroll session.
+    if (_currentKeyboardInset() > _ChatPageState._keyboardVisibleThreshold) {
+      return;
+    }
+    if (_chatScrollController.hasClients) {
+      // While the dismiss restore is still animating, keep the existing
+      // (correct) pre-keyboard position — the current pixels are
+      // mid-animation and would corrupt the next restore.
+      if (!_isRestoringKeyboardScroll) {
+        _lastScrollPositionBeforeKeyboard =
+            _chatScrollController.position.pixels;
+        _restoreCompletedSinceLastSave = false;
+      }
+    }
+    _scrollToBottom();
+    _anchorToBottomWhileKeyboard = true;
+  }
+
+  /// Tracks the chat area height on every build. While the keyboard session
+  /// is pinned ([_anchorToBottomWhileKeyboard]), every viewport-height
+  /// change — the keyboard sliding up OR down — is compensated with an equal
+  /// scroll adjustment so the bottom-most message stays visible above the
+  /// keyboard in lockstep with the animation. This also neutralizes the
+  /// chat library's own (debounced, coarse) keyboard scroll handler, which
+  /// becomes a no-op whenever the list is already exactly at the bottom.
+  ///
+  /// The adjustment is applied in a post-frame callback because jumpTo
+  /// notifies scroll listeners (which may call setState), and that is not
+  /// allowed during build. The one-frame lag is imperceptible.
+  void _onChatAreaResized(double height) {
+    final last = _lastChatAreaHeight;
+    _lastChatAreaHeight = height;
+    if (last == null) return;
+    if (!_anchorToBottomWhileKeyboard) return;
+    // Only keyboard-driven viewport changes may be compensated — a top
+    // shrink (search bar, compaction banner) must not shift the content.
+    if (MediaQuery.of(context).viewInsets.bottom <=
+        _ChatPageState._keyboardVisibleThreshold) {
+      return;
+    }
+    final delta = height - last;
+    if (delta == 0) return;
+    final target = _chatScrollController.hasClients
+        ? _chatScrollController.position.pixels + (last - height)
+        : null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_chatScrollController.hasClients || target == null) {
+        return;
+      }
+      final pos = _chatScrollController.position;
+      // Never fight an active user drag. Animations (the chat library's own
+      // keyboard scroll) are fine to override — they compute the same
+      // clamped bottom target anyway.
+      if (_userIsDragging) return;
+      final clamped = target.clamp(0.0, pos.maxScrollExtent);
+      if (clamped == pos.pixels) return;
+      _chatScrollController.jumpTo(clamped);
     });
   }
 
   /// Handles chat list scroll events to track auto-scroll state.
   void _onChatScroll() {
+    // While the initial positioning pass runs the list is hidden and all
+    // scroll events are programmatic — skip auto-scroll/button bookkeeping
+    // so the pass isn't disturbed.
+    if (_pendingInitialScrollAdjustment) return;
     if (!_chatScrollController.hasClients) return;
     final maxScroll = _chatScrollController.position.maxScrollExtent;
     final currentScroll = _chatScrollController.position.pixels;
+    final prevScroll = _lastReportedScrollPixels;
+    _lastReportedScrollPixels = currentScroll;
     final isAtBottom = (maxScroll - currentScroll) <= 80;
 
     if (isAtBottom) {
@@ -59,8 +181,17 @@ extension _ChatPageUiExt on _ChatPageState {
         });
       }
     } else {
-      // Scrolled up — disable auto-scroll and show button
+      // Scrolled up — disable auto-scroll, show button, and stop pinning
+      // the list to the bottom while the keyboard is open, so the pinning
+      // never yanks the list back from the user's reading position.
+      // Release the pin only for user-initiated movement: a drag
+      // (_userIsDragging) or any offset decrease (a fling still traveling
+      // away from the bottom — the chat library's keyboard scrolls and the
+      // restore animation only ever move toward the bottom).
       if (!_showScrollToBottomButton || _autoScrollEnabled) {
+        if (_userIsDragging || currentScroll < prevScroll) {
+          _anchorToBottomWhileKeyboard = false;
+        }
         setState(() {
           _autoScrollEnabled = false;
           _showScrollToBottomButton = true;
@@ -77,6 +208,228 @@ extension _ChatPageUiExt on _ChatPageState {
       _autoScrollEnabled = true;
       _showScrollToBottomButton = false;
     });
+  }
+
+  /// Maximum number of frames the initial positioning pass may consume
+  /// before giving up (defensive against pathological layouts).
+  static const int _maxInitialAdjustSteps = 120;
+
+  /// Consecutive frames the pass spends chasing a growing bottom
+  /// (maxScrollExtent moving) before giving up and stepping up anyway —
+  /// bounds how long a fast background stream can keep the list hidden.
+  static const int _maxInitialAdjustChaseFrames = 30;
+
+  /// Schedules the next frame of the initial positioning pass. At most one
+  /// step runs per frame.
+  void _scheduleInitialAdjustStep() {
+    if (!mounted || _initialAdjustStepScheduled) return;
+    _initialAdjustStepScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initialAdjustStepScheduled = false;
+      if (!mounted) return;
+      if (_pendingInitialScrollAdjustment) _initialAdjustStep();
+    });
+  }
+
+  /// One frame of the initial positioning pass, run while the list is
+  /// hidden (offstage).
+  ///
+  /// A freshly loaded list starts at the top, so the last user message is
+  /// usually not laid out yet. Each step jumps toward the bottom (where the
+  /// latest messages live) until the last user message has a render box,
+  /// then jumps to the resolved target — the top of that message, or the
+  /// bottom when the remaining content fits in one viewport.
+  ///
+  /// Wrapped in try/catch: if a step ever throws, the pass must still
+  /// terminate and reveal the list — a permanently hidden chat is worse
+  /// than any wrong landing position.
+  void _initialAdjustStep() {
+    try {
+      _initialAdjustStepInner();
+    } catch (e, s) {
+      debugPrint('[ChatPage] initial scroll adjustment failed: $e\n$s');
+      _finishInitialScrollAdjustment();
+    }
+  }
+
+  void _initialAdjustStepInner() {
+    final c = _chatScrollController;
+    if (!c.hasClients) {
+      // List not attached yet — retry on the next frame.
+      if (++_initialAdjustStepsTaken <= _maxInitialAdjustSteps) {
+        _scheduleInitialAdjustStep();
+      } else {
+        _finishInitialScrollAdjustment();
+      }
+      return;
+    }
+    final pos = c.position;
+    final maxExtent = pos.maxScrollExtent;
+    if (maxExtent <= 0) {
+      // Nothing scrollable — no positioning needed.
+      _finishInitialScrollAdjustment();
+      return;
+    }
+
+    final lastUserMsgId = _lastUserMessageId();
+    if (lastUserMsgId == null) {
+      // Conversation has no user message — settle at the true bottom.
+      _settleAtBottomAndFinish();
+      return;
+    }
+    // The target message must be in the chat controller (only the last
+    // _pageSize messages are loaded into it). If it isn't, it can never be
+    // laid out — settle at the true bottom.
+    final targetInController =
+        _controller?.messages.any((m) => m.id == lastUserMsgId) ?? false;
+    if (!targetInController) {
+      _settleAtBottomAndFinish();
+      return;
+    }
+    final box = _messageKeys[lastUserMsgId]?.currentContext?.findRenderObject()
+        as RenderBox?;
+    if (box == null || !box.attached) {
+      // Target message not laid out yet. First land at the bottom; while
+      // maxScrollExtent is still moving (the sliver estimates it from the
+      // built children, so jumping down grows it toward the true value —
+      // or a background stream is growing the content), keep re-jumping
+      // down. Once the bottom is stable, step UP one viewport per frame
+      // until the target message is built. The chase cap makes the pass
+      // give up on a fast-growing stream and step up anyway.
+      if (++_initialAdjustStepsTaken > _maxInitialAdjustSteps) {
+        _finishAtBottom();
+        return;
+      }
+      final double next;
+      if (pos.pixels < maxExtent - 1.0) {
+        if (++_initialAdjustChaseFrames > _maxInitialAdjustChaseFrames) {
+          _initialAdjustChaseFrames = 0;
+          next = (pos.pixels - pos.viewportDimension).clamp(0.0, maxExtent);
+          if (next >= pos.pixels - 1.0) {
+            _finishAtBottom();
+            return;
+          }
+        } else {
+          next = maxExtent;
+        }
+      } else {
+        _initialAdjustChaseFrames = 0;
+        next = (pos.pixels - pos.viewportDimension).clamp(0.0, maxExtent);
+        if (next >= pos.pixels - 1.0) {
+          // No progress possible (degenerate viewport) — settle at the
+          // bottom.
+          _finishAtBottom();
+          return;
+        }
+      }
+      c.jumpTo(next);
+      _scheduleInitialAdjustStep();
+      return;
+    }
+
+    // Target message is laid out — resolve the exact scroll offset.
+    final viewportBox =
+        pos.context.notificationContext?.findRenderObject() as RenderBox?;
+    if (viewportBox == null) {
+      _finishAtBottom();
+      return;
+    }
+    final targetTop = box.localToGlobal(Offset.zero).dy -
+        viewportBox.localToGlobal(Offset.zero).dy +
+        pos.pixels;
+    // Measure the tail from the LAST message's render box (when it is
+    // built, the geometry is exact — unlike maxScrollExtent, which the
+    // sliver can only estimate while its last child is unbuilt).
+    final lastMessageId = _controller?.messages.isNotEmpty == true
+        ? _controller!.messages.last.id
+        : null;
+    final lastBox = lastMessageId == null
+        ? null
+        : _messageKeys[lastMessageId]?.currentContext?.findRenderObject()
+            as RenderBox?;
+    if (lastBox == null || !lastBox.attached) {
+      // Tail not measurable (e.g. the last message is a streaming
+      // placeholder without a key) — assume it does not fit and show the
+      // last user message at the top. targetTop is measured from a built
+      // box, so it is in-range by construction; the viewport clamps at
+      // layout if the estimated maxScrollExtent ever disagrees.
+      c.jumpTo(targetTop);
+      _finishInitialScrollAdjustment();
+      return;
+    }
+    final tailBottom = lastBox.localToGlobal(Offset.zero).dy -
+        viewportBox.localToGlobal(Offset.zero).dy +
+        pos.pixels +
+        lastBox.size.height;
+    final target = resolveInitialChatScrollTarget(
+      lastUserMessageTop: targetTop,
+      tailBottom: tailBottom,
+      maxScrollExtent: maxExtent,
+      viewportDimension: pos.viewportDimension,
+    );
+    c.jumpTo(target);
+    _finishInitialScrollAdjustment();
+  }
+
+  /// Settles at the TRUE bottom: while maxScrollExtent is still moving
+  /// (the sliver estimates it from the built children — jumping down grows
+  /// it toward the true value), keep re-jumping down; once it stabilizes,
+  /// finish the pass at the exact bottom. Used when no meaningful target
+  /// can be positioned (no user message, or the target is older than the
+  /// loaded controller window).
+  void _settleAtBottomAndFinish() {
+    final c = _chatScrollController;
+    if (!c.hasClients) {
+      _finishInitialScrollAdjustment();
+      return;
+    }
+    final pos = c.position;
+    if (pos.maxScrollExtent <= 0) {
+      _finishInitialScrollAdjustment();
+      return;
+    }
+    if (pos.pixels < pos.maxScrollExtent - 1.0) {
+      if (++_initialAdjustStepsTaken > _maxInitialAdjustSteps) {
+        _finishInitialScrollAdjustment();
+        return;
+      }
+      c.jumpTo(pos.maxScrollExtent);
+      _scheduleInitialAdjustStep();
+      return;
+    }
+    _finishInitialScrollAdjustment();
+  }
+
+  /// Gives up the pass at the current bottom position and makes the list
+  /// visible.
+  void _finishAtBottom() {
+    final c = _chatScrollController;
+    if (c.hasClients && c.position.maxScrollExtent > 0) {
+      c.jumpTo(c.position.maxScrollExtent);
+    }
+    _finishInitialScrollAdjustment();
+  }
+
+  /// Completes the initial positioning pass and makes the list visible.
+  void _finishInitialScrollAdjustment() {
+    _pendingInitialScrollAdjustment = false;
+    _initialAdjustStepsTaken = 0;
+    _initialAdjustChaseFrames = 0;
+    _initialAdjustStepScheduled = false;
+    // Re-run the normal scroll bookkeeping once against the settled
+    // position: at the bottom it re-enables auto-scroll, elsewhere it
+    // surfaces the scroll-to-bottom button.
+    _onChatScroll();
+    if (mounted) setState(() {});
+  }
+
+  /// ID of the last user message in [_history], or null when the
+  /// conversation has no user messages.
+  String? _lastUserMessageId() {
+    for (var i = _history.length - 1; i >= 0; i--) {
+      if (_history[i].role == 'user') return _history[i].id;
+    }
+    return null;
   }
 
   void _showJsonInspection(String msgId) {
@@ -386,6 +739,63 @@ extension _ChatPageUiExt on _ChatPageState {
               Icons.arrow_downward,
               size: 20,
               color: isDark ? Colors.grey[200] : Colors.grey[700],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Centered floating warning shown while editing a user message:
+  /// re-sending the edit deletes this message and everything below it.
+  /// Fades in on entry; dismissal (2s auto-hide or close button) is handled
+  /// by [_ChatPageState] removing it from the Stack.
+  Widget _buildEditWarningOverlay({required BuildContext context}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Center(
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 150),
+        builder: (context, value, child) =>
+            Opacity(opacity: value, child: child),
+        child: Material(
+          elevation: 6,
+          borderRadius: BorderRadius.circular(12),
+          color: isDark ? Colors.grey[850] : Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 20,
+                  color: isDark ? Colors.amber[300] : Colors.orange[700],
+                ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    '重新编辑发送后下面所有的消息将丢失',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isDark ? Colors.grey[200] : Colors.grey[800],
+                    ),
+                  ),
+                ),
+                IconButton(
+                  key: const Key('editWarningCloseButton'),
+                  icon: Icon(Icons.close, size: 18, color: Colors.grey[500]),
+                  tooltip: '关闭',
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(28, 28),
+                    padding: const EdgeInsets.all(4),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: _hideEditWarning,
+                ),
+              ],
             ),
           ),
         ),

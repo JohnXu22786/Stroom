@@ -37,12 +37,33 @@ import 'data_migration_service.dart';
 // - 总数限制：最多保留 5 个（当天 3 个 + 前日 2 个），最少保留 3 个
 // ====================================================================
 
+/// 备份执行结果（区分「创建了快照」与「1 小时规则跳过」，
+/// 供迁移前备份判断是否需要自己再执行一次）。
+enum _BackupOutcome {
+  /// 实际创建了新备份文件。
+  created,
+
+  /// 最近 1 小时内有备份，按规则跳过（非错误）。
+  skippedOneHour,
+
+  /// 备份失败或被取消。
+  failed,
+}
+
 /// 自动后台备份服务。
 class AutoBackupService {
   AutoBackupService._();
 
   static bool _isRunning = false;
   static bool _cancelRequested = false;
+
+  /// 正在执行的备份 Future（防并发重入）。
+  ///
+  /// 与 [_isRunning] 的区别：并发调用方不是直接返回失败，而是等待
+  /// 同一个在途备份完成并共享其结果。这避免了「启动时自动备份」与
+  /// 「迁移前备份」并发时，一方被静默跳过 —— 例如迁移前备份被跳过
+  /// 会导致 checkAndMigrate 在没有安全快照的情况下迁移数据。
+  static Future<_BackupOutcome>? _inFlight;
 
   /// 最近一次备份失败的错误信息（用于调用方判断错误类型）。
   static String? lastError;
@@ -72,36 +93,81 @@ class AutoBackupService {
   /// 在 Android SAF 模式下，备份写入系统临时目录后通过 SAF
   /// 写入用户选择的 Documents 目录，确保文件持久化到公共位置。
   ///
-  /// [isPreMigration] 标记是否为迁移前备份（仅用于日志区分）。
+  /// [isPreMigration] 标记是否为迁移前备份：迁移会原地改写数据，
+  /// 因此迁移前备份会无视 1 小时规则，强制创建一份新快照。
   ///
-  /// 返回 `true` 表示备份成功，`false` 表示备份失败或被取消。
+  /// 返回 `true` 表示备份成功（或 1 小时规则跳过，非错误），
+  /// `false` 表示备份失败或被取消。
   static Future<bool> performAutoBackup({
     bool isPreMigration = false,
   }) async {
     if (kIsWeb) return false;
 
-    // 先设置运行标志，防止并发执行
-    if (_isRunning) {
-      debugPrint('[AutoBackupService] 备份已在运行中，跳过');
-      await AppLogService.warning('AutoBackupService', '备份已在运行中，跳过');
-      return false;
+    // 并发保护：已有备份在途时，等待同一个备份完成并返回相同结果，
+    // 而不是直接返回失败（避免「迁移前备份」被并发跳过导致迁移时
+    // 没有安全快照，或启动备份被误报为失败）。
+    //
+    // 迁移前备份的例外：仅当共享的备份是普通备份且因「1 小时规则」
+    // 跳过（未创建快照）时，才需要自己再跑一次强制新快照。
+    // 共享结果为失败/取消时直接共享该结果 —— 例如应用进入后台触发
+    // cancel() 后，绝不能无视取消再启动一次完整备份并继续迁移。
+    while (true) {
+      final inFlight = _inFlight;
+      if (inFlight == null) break;
+      debugPrint('[AutoBackupService] 备份已在运行中，等待其完成');
+      await AppLogService.warning('AutoBackupService', '备份已在运行中，等待其完成');
+      final shared = await inFlight;
+      if (!isPreMigration || shared != _BackupOutcome.skippedOneHour) {
+        return _outcomeToBool(shared);
+      }
+      // 迁移前备份 + 共享结果「1 小时规则跳过」：循环重试，
+      // 下一轮 _inFlight 已为 null，会真正执行备份（迁移前备份
+      // 自身无视 1 小时规则）。
     }
+
+    final future = _performAutoBackupInternal(isPreMigration: isPreMigration);
+    _inFlight = future;
+    try {
+      final outcome = await future;
+      return _outcomeToBool(outcome);
+    } finally {
+      // 只清理自己启动的备份：若期间已有新的备份启动，不能误清。
+      if (identical(_inFlight, future)) {
+        _inFlight = null;
+      }
+    }
+  }
+
+  static bool _outcomeToBool(_BackupOutcome outcome) {
+    // created / skippedOneHour 对调用方都是「成功」（跳过非错误）。
+    return outcome != _BackupOutcome.failed;
+  }
+
+  /// 备份的实际实现（由 [performAutoBackup] 保证单实例执行）。
+  static Future<_BackupOutcome> _performAutoBackupInternal({
+    required bool isPreMigration,
+  }) async {
     _isRunning = true;
 
     // ================================================================
     // 1 小时规则检查：如果最近 1 小时内有备份，则跳过本次备份
     // ================================================================
-    try {
-      final hasRecentBackup = await _hasBackupWithinLastHour();
-      if (hasRecentBackup) {
-        debugPrint('[AutoBackupService] 最近 1 小时内有备份，跳过本次自动备份');
-        await AppLogService.info('AutoBackupService', '最近 1 小时内有备份，跳过本次自动备份');
-        _isRunning = false;
-        return true; // 返回 true 表示无需备份（非错误）
+    // 注意：迁移前备份（isPreMigration=true）跳过该规则 —— 迁移会
+    // 原地改写数据（如 v2→v3 重写 conversations），必须使用刚刚创建
+    // 的新快照，1 小时前的旧备份可能缺少迁移前的最新会话数据。
+    if (!isPreMigration) {
+      try {
+        final hasRecentBackup = await _hasBackupWithinLastHour();
+        if (hasRecentBackup) {
+          debugPrint('[AutoBackupService] 最近 1 小时内有备份，跳过本次自动备份');
+          await AppLogService.info('AutoBackupService', '最近 1 小时内有备份，跳过本次自动备份');
+          _isRunning = false;
+          return _BackupOutcome.skippedOneHour; // 无需备份（非错误）
+        }
+      } catch (e) {
+        debugPrint('[AutoBackupService] 检查最近备份失败: $e');
+        // 检查失败不阻止备份
       }
-    } catch (e) {
-      debugPrint('[AutoBackupService] 检查最近备份失败: $e');
-      // 检查失败不阻止备份
     }
 
     await AppLogService.info(
@@ -112,7 +178,7 @@ class AutoBackupService {
       _cancelRequested = false;
       debugPrint('[AutoBackupService] 备份在开始前已被取消');
       await AppLogService.warning('AutoBackupService', '备份在开始前已被取消');
-      return false;
+      return _BackupOutcome.failed;
     }
     _cancelRequested = false;
 
@@ -142,7 +208,7 @@ class AutoBackupService {
 
         if (_cancelRequested) {
           debugPrint('[AutoBackupService] 备份被取消');
-          return false;
+          return _BackupOutcome.failed;
         }
 
         // 读取临时文件并通过 SAF 写入公共目录
@@ -155,7 +221,7 @@ class AutoBackupService {
         debugPrint('[AutoBackupService] $backupType 备份完成(SAF): $zipFileName');
         await AppLogService.info(
             'AutoBackupService', '$backupType 备份完成(SAF): $zipFileName');
-        return true;
+        return _BackupOutcome.created;
       } else {
         // ============================================================
         // 非 SAF 模式（Desktop/iOS/Test）：直接使用 dart:io
@@ -174,7 +240,7 @@ class AutoBackupService {
         final tmpPath = p.join(backupRoot, tmpFileName);
         final zipPath = p.join(backupRoot, zipFileName);
 
-        if (_cancelRequested) return false;
+        if (_cancelRequested) return _BackupOutcome.failed;
 
         debugPrint('[AutoBackupService] 开始 $backupType 备份到 $zipPath');
 
@@ -186,7 +252,7 @@ class AutoBackupService {
         if (_cancelRequested) {
           await _deleteSystemTempFile(tmpPath);
           debugPrint('[AutoBackupService] 备份被取消');
-          return false;
+          return _BackupOutcome.failed;
         }
 
         // 原子重命名：.tmp → .zip
@@ -201,18 +267,18 @@ class AutoBackupService {
         debugPrint('[AutoBackupService] $backupType 备份完成: $zipPath');
         await AppLogService.info(
             'AutoBackupService', '$backupType 备份完成: $zipPath');
-        return true;
+        return _BackupOutcome.created;
       }
     } on BackupCancelledException {
       debugPrint('[AutoBackupService] 备份被取消');
       await AppLogService.warning('AutoBackupService', '备份被取消');
       lastError = null;
-      return false;
+      return _BackupOutcome.failed;
     } catch (e) {
       debugPrint('[AutoBackupService] 备份失败: $e');
       await AppLogService.error('AutoBackupService', '备份失败', e);
       lastError = e.toString();
-      return false;
+      return _BackupOutcome.failed;
     } finally {
       // 清理 SAF 遗留的系统临时文件（无论成功失败）
       if (safTempPath != null) {
