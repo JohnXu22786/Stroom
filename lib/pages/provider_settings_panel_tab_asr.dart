@@ -144,16 +144,6 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
                     value: 'flac',
                     child: Text('FLAC（无损 ~2x）', style: TextStyle(fontSize: 13)),
                   ),
-                  DropdownMenuItem(
-                    value: 'opus',
-                    child:
-                        Text('Opus（需 ffmpeg）', style: TextStyle(fontSize: 13)),
-                  ),
-                  DropdownMenuItem(
-                    value: 'mp3',
-                    child:
-                        Text('MP3（需 ffmpeg）', style: TextStyle(fontSize: 13)),
-                  ),
                 ],
                 onChanged: (v) {
                   if (v != null) setState(() => _compression = v);
@@ -169,11 +159,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
             ? 'IMA ADPCM，4:1 有损压缩。纯 Dart 实现，音质适合语音转写。'
             : _compression == 'flac'
                 ? 'FLAC 无损压缩，纯 Dart 实现。体积缩小约一半。'
-                : _compression == 'opus'
-                    ? 'Opus 编码器，需系统 ffmpeg。最优语音压缩。'
-                    : _compression == 'mp3'
-                        ? 'MP3 编码器，需系统 ffmpeg。通用兼容性最好。'
-                        : '不压缩，以原始 WAV 格式发送。',
+                : '不压缩，以原始 WAV 格式发送。',
         style: TextStyle(
           fontSize: 12,
           color: cs.onSurfaceVariant.withAlpha(180),

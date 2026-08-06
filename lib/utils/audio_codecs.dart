@@ -129,6 +129,8 @@ const List<int> _imaIndexTable = [-1, -1, -1, -1, 2, 4, 6, 8];
 /// Encode PCM S16LE samples to IMA ADPCM.
 ///
 /// Returns ADPCM bytes (4-bit nibbles, packed high nibble first per IMA spec).
+/// Only whole blocks of [AdpcmConfig.blockSize] samples are encoded — a
+/// trailing partial block (fewer than 256 samples) is dropped.
 Uint8List encodeAdpcm(Int16List pcmSamples, AdpcmConfig config) {
   final numBlocks = pcmSamples.length ~/ config.blockSize;
   final nibblesPerBlock = config.blockSize;
@@ -214,6 +216,65 @@ Uint8List encodeAdpcm(Int16List pcmSamples, AdpcmConfig config) {
     sampleIdx += config.blockSize;
   }
 
+  return out.toBytes();
+}
+
+/// Wrap raw IMA ADPCM nibbles (as produced by [encodeAdpcm]) in a WAV
+/// container (WAVE_FORMAT_IMA_ADPCM, format tag 0x11) so standard decoders
+/// (e.g. ffmpeg on transcription providers) can parse them.
+///
+/// Providers cannot decode a raw ADPCM byte stream without a container.
+/// The final block is zero-padded to a full [samplesPerBlock] block so
+/// decoders don't reject a truncated last block.
+///
+/// [adpcmBytes] must come from [encodeAdpcm] with mono PCM.
+Uint8List adpcmToWav(
+  Uint8List adpcmBytes, {
+  required int sampleRate,
+  // Matches AdpcmConfig().blockSize (the default used by encodeAdpcm).
+  int samplesPerBlock = 256,
+}) {
+  // Mono IMA ADPCM block layout (per encodeAdpcm):
+  // 4-byte header + nibbles for (samplesPerBlock - 1) samples.
+  final blockAlign = 4 + ((samplesPerBlock - 1) + 1) ~/ 2;
+  final avgBytesPerSec = sampleRate * blockAlign ~/ samplesPerBlock;
+
+  // Pad trailing partial block with a silent block (zero header + nibbles).
+  final paddedLength = (adpcmBytes.length / blockAlign).ceil() * blockAlign;
+  final data = Uint8List(paddedLength);
+  // WAVE_FORMAT_IMA_ADPCM decoders (ffmpeg, dr_wav) read the LOW nibble of
+  // each payload byte first, while [encodeAdpcm] packs the first sample's
+  // nibble HIGH first (raw IMA stream convention). Swap the nibbles of the
+  // payload bytes so the WAV decodes back to the original sample order.
+  // The 4-byte per-block headers (predictor/index/reserved) are plain bytes
+  // and must NOT be swapped.
+  for (int i = 0; i < adpcmBytes.length; i++) {
+    data[i] = i % blockAlign >= 4
+        ? ((adpcmBytes[i] & 0x0F) << 4) | (adpcmBytes[i] >> 4)
+        : adpcmBytes[i];
+  }
+
+  final out = BytesOutput();
+  out.writeString('RIFF');
+  out.writeUint32LE(4 + (8 + 18 + 2) + (8 + data.length)); // file size - 8
+  out.writeString('WAVE');
+  out.writeString('fmt ');
+  // 20 bytes of fmt data: 16 base + cbSize (2) + samplesPerBlock (2).
+  // The declared chunk size MUST equal the bytes actually written — readers
+  // (ffmpeg/libsndfile) seek to `chunk offset + declared size` to find the
+  // next chunk, so an 18-vs-20 mismatch makes the file unparseable.
+  out.writeUint32LE(20); // fmt chunk size
+  out.writeUint16LE(0x11); // WAVE_FORMAT_IMA_ADPCM
+  out.writeUint16LE(1); // channels (mono)
+  out.writeUint32LE(sampleRate);
+  out.writeUint32LE(avgBytesPerSec);
+  out.writeUint16LE(blockAlign);
+  out.writeUint16LE(4); // bits per sample (4-bit nibbles)
+  out.writeUint16LE(2); // cbSize
+  out.writeUint16LE(samplesPerBlock); // samples per block (extension)
+  out.writeString('data');
+  out.writeUint32LE(data.length);
+  out.addBytes(data);
   return out.toBytes();
 }
 

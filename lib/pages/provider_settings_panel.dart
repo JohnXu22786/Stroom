@@ -172,7 +172,13 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       );
       _preprocessing = c.typeConfig['preprocessing'] as String? ?? 'none';
       _chunking = c.typeConfig['chunking'] as String? ?? 'none';
-      _compression = c.typeConfig['compression'] as String? ?? 'none';
+      // Only codecs with valid standalone output are supported
+      // ('opus'/'mp3' encoders are experimental and produce undecodable
+      // output — legacy saved values are normalized to 'none').
+      final savedCompression = c.typeConfig['compression'] as String? ?? 'none';
+      _compression = (savedCompression == 'adpcm' || savedCompression == 'flac')
+          ? savedCompression
+          : 'none';
       _fallbackMethod = c.typeConfig['fallbackMethod'] as String? ?? 'none';
     } else {
       _maxFileSizeController = TextEditingController(text: '25.0');
