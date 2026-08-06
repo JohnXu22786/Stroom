@@ -448,6 +448,101 @@ void chatStreamManagerGroup3() {
 
       manager.dispose();
     });
+
+    test(
+        'user trigger: 10 parallel tools with repeated names + reasoning-only round 2',
+        () async {
+      // User-reported reproduction of the original "thoughts at the bottom"
+      // bug: one API response fires ~10 tool calls at once, the SAME tool
+      // name is called repeatedly for different content, and the next round
+      // starts with reasoning only (no visible text) before more tools.
+      // With the fix, round 2 must record its own round boundary
+      // (roundStarts=[0,10]) so its reasoning renders between the two tool
+      // batches instead of at the bottom.
+      SharedPreferences.setMockInitialValues({});
+      final manager = ChatStreamManager();
+
+      final provider = _MockProvider([
+        // Round 1: reasoning + 10 parallel tool calls (web_search repeated
+        // for different queries, fetch_url repeated for different URLs)
+        [
+          AIStreamEvent('Planning the search...', isReasoning: true),
+          AIStreamEvent('', toolCalls: [
+            for (var i = 0; i < 10; i++)
+              {
+                'id': 'tc_batch1_$i',
+                'type': 'function',
+                'function': {
+                  'name': i.isEven ? 'web_search' : 'fetch_url',
+                  'arguments': '{"q": "query $i"}',
+                },
+              },
+          ]),
+        ],
+        // Round 2: reasoning only (no text) + 2 more parallel tools
+        [
+          AIStreamEvent('Analyzing the results...', isReasoning: true),
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'tc_batch2_0',
+              'type': 'function',
+              'function': {
+                'name': 'web_search',
+                'arguments': '{"q": "follow-up"}',
+              },
+            },
+            {
+              'id': 'tc_batch2_1',
+              'type': 'function',
+              'function': {
+                'name': 'fetch_url',
+                'arguments': '{"url": "https://example.com"}',
+              },
+            },
+          ]),
+        ],
+        // Round 3: final answer
+        [AIStreamEvent('Here is the summary.')],
+      ]);
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final result = await manager.startStreaming(
+        text: 'Search all these topics',
+        convId: 'conv-user-trigger-10-tools',
+        history: [_userMsg('Search all these topics', 'u1')],
+      );
+
+      // All 12 tool calls preserved in declaration order.
+      expect(result.toolCalls.length, 12);
+      expect(result.toolCalls.map((t) => t.id).toList(), [
+        for (var i = 0; i < 10; i++) 'tc_batch1_$i',
+        'tc_batch2_0',
+        'tc_batch2_1',
+      ]);
+      // Repeated tool names survive: 5+1 web_search, 5+1 fetch_url.
+      expect(result.toolCalls.where((t) => t.name == 'web_search').length, 6);
+      expect(result.toolCalls.where((t) => t.name == 'fetch_url').length, 6);
+      // Round 0 = tools 0..9, round 1 = tools 10..11. If this is [0],
+      // round 2's tools were merged into round 0 and its reasoning would
+      // render at the bottom — the exact user-reported symptom.
+      expect(result.toolCallRoundStarts, [0, 10],
+          reason: '10-tool round + reasoning-only round 2 must record a new '
+              'round start at index 10. If this is [0], the "thoughts at '
+              'the bottom" bug regressed for the user trigger.');
+      // Both reasoning sections + trailing placeholder, and per-round text
+      // chunks (rounds 1-2 have no visible text).
+      expect(result.reasoningSections,
+          ['Planning the search...', 'Analyzing the results...', '']);
+      expect(result.textSections, ['', '', 'Here is the summary.']);
+
+      // Persisted for reload with the corrected boundaries.
+      final assistant = result.assistantMessage;
+      expect(assistant, isNotNull);
+      expect(assistant!.toolCallRoundStarts, [0, 10]);
+      expect(assistant.toolCalls!.length, 12);
+
+      manager.dispose();
+    });
   });
 
   group('ChatStreamManager - streamingConversationsProvider tracking', () {

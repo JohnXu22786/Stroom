@@ -426,5 +426,57 @@ void chatTypesGroup2() {
       expect(segments[4], isA<TextSegment>());
       expect((segments[4] as TextSegment).text, 'final answer');
     });
+
+    test('10 parallel tools + reasoning-only round 2 renders in chain order',
+        () {
+      // Exact user-reported trigger data (manager output):
+      //   reasoningSections = ['Planning the search...', 'Analyzing the results...', '']
+      //   textChunks = ['', '', 'Here is the summary.']  (rounds 1-2 no text)
+      //   toolCalls = 10 tools (repeated names) + 2 tools, roundStarts = [0, 10]
+      // Expected chain order:
+      //   R0, TC(0..9), R1, TC(10..11), T(final) — 15 segments.
+      final tools = <ToolCallData>[
+        for (var i = 0; i < 12; i++)
+          ToolCallData(
+            id: 't$i',
+            name: i.isEven ? 'web_search' : 'fetch_url',
+            arguments: {'q': 'query $i'},
+            status: ToolCallStatus.completed,
+          ),
+      ];
+      final segments = buildAgentChainSegments(
+        reasoningSections: [
+          'Planning the search...',
+          'Analyzing the results...',
+          '',
+        ],
+        textChunks: ['', '', 'Here is the summary.'],
+        toolCalls: tools,
+        toolCallRoundStarts: [0, 10],
+      );
+
+      expect(segments.length, 15);
+      // R0 first.
+      expect(segments[0], isA<ReasoningSegment>());
+      expect((segments[0] as ReasoningSegment).sectionIndex, 0);
+      // 10 round-1 tools grouped in the middle.
+      for (var i = 0; i < 10; i++) {
+        expect(segments[1 + i], isA<ToolCallSegment>());
+        expect((segments[1 + i] as ToolCallSegment).data.id, 't$i');
+      }
+      // Round 2's reasoning must sit BETWEEN the two tool batches —
+      // NOT at the bottom after all 12 tools (the user-reported symptom).
+      expect(segments[11], isA<ReasoningSegment>(),
+          reason: 'Round-2 reasoning must render between tool batch 1 and '
+              'batch 2, not after all 12 tools.');
+      expect((segments[11] as ReasoningSegment).sectionIndex, 1);
+      // Round-2 tools then the final text.
+      expect(segments[12], isA<ToolCallSegment>());
+      expect((segments[12] as ToolCallSegment).data.id, 't10');
+      expect(segments[13], isA<ToolCallSegment>());
+      expect((segments[13] as ToolCallSegment).data.id, 't11');
+      expect(segments[14], isA<TextSegment>());
+      expect((segments[14] as TextSegment).text, 'Here is the summary.');
+    });
   });
 }
