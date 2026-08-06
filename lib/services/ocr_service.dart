@@ -361,6 +361,44 @@ class OcrService {
       body['seed'] = (tc['seed'] as num?)?.toInt();
     }
 
+    // frequency_penalty
+    if (tc['enableFrequencyPenalty'] == true &&
+        tc.containsKey('frequencyPenalty')) {
+      body['frequency_penalty'] = (tc['frequencyPenalty'] as num?)?.toDouble();
+    }
+
+    // presence_penalty
+    if (tc['enablePresencePenalty'] == true &&
+        tc.containsKey('presencePenalty')) {
+      body['presence_penalty'] = (tc['presencePenalty'] as num?)?.toDouble();
+    }
+
+    // stop — OpenAI accepts a string or an array of up to 4 strings.
+    // The settings page stores a comma-separated string; expand it into a
+    // list when it contains multiple values. Empty parts (e.g. ",,") are
+    // dropped; if nothing remains, omit stop entirely.
+    if (tc['enableStop'] == true && tc.containsKey('stop')) {
+      final raw = tc['stop']?.toString().trim() ?? '';
+      if (raw.isNotEmpty) {
+        final parts = raw
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        if (parts.isNotEmpty) {
+          body['stop'] = parts.length == 1 ? parts.first : parts;
+        }
+      }
+    }
+
+    // response_format — sent as {"type": "text" | "json_object"}
+    if (tc['enableResponseFormat'] == true &&
+        tc.containsKey('responseFormat')) {
+      body['response_format'] = {
+        'type': tc['responseFormat']?.toString() ?? 'text',
+      };
+    }
+
     // Apply custom parameters
     for (final param in config.customParams) {
       final name = param.paramName.trim();
@@ -405,6 +443,18 @@ class OcrService {
     if (config.typeConfig['enableDetail'] == true &&
         config.typeConfig.containsKey('detail')) {
       imageUrl['detail'] = config.effectiveDetail;
+    }
+    // qwen-vl-ocr (OpenAI-compatible mode) accepts min_pixels/max_pixels
+    // inside image_url to control the pixel threshold for scaling.
+    if (config.typeConfig['enableMinPixels'] == true &&
+        config.typeConfig.containsKey('minPixels')) {
+      imageUrl['min_pixels'] =
+          (config.typeConfig['minPixels'] as num?)?.toInt();
+    }
+    if (config.typeConfig['enableMaxPixels'] == true &&
+        config.typeConfig.containsKey('maxPixels')) {
+      imageUrl['max_pixels'] =
+          (config.typeConfig['maxPixels'] as num?)?.toInt();
     }
     return {
       'type': 'image_url',
