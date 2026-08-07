@@ -1071,46 +1071,35 @@ void main() {
     });
   });
 
-  group('HomePage — .select() guard', () {
-    // The home page was split into a main file + part files
-    // (home_page_*.dart); the background-tasks watch lives in
-    // home_page_home_content.dart. Scan all of them.
-    final homeSource = Directory('lib/pages')
-        .listSync()
-        .whereType<File>()
-        .where((f) =>
-            RegExp(r'^home_page.*\.dart$').hasMatch(f.uri.pathSegments.last))
-        .map((f) => f.readAsStringSync())
-        .join('\n');
+  group('HomePage — status-count rebuild guard', () {
+    // The home page derives its status counts from homeStatusCountsProvider
+    // (in home_page_home_content.dart), which returns a value-comparable
+    // record — the widget only rebuilds when a count actually changes,
+    // not on every intermediate step update.
+    final homeContent =
+        File('lib/pages/home_page_home_content.dart').readAsStringSync();
 
-    test('backgroundTasksProvider is watched with .select()', () {
-      // Verify the home page uses .select() so that intermediate
-      // step-state changes do not trigger a full rebuild.
+    test('home page watches the aggregated counts provider', () {
       expect(
-        homeSource.contains('backgroundTasksProvider.select'),
+        homeContent.contains('ref.watch(homeStatusCountsProvider)'),
         isTrue,
-        reason: 'HomePage must watch backgroundTasksProvider via .select() '
-            'to scope rebuilds to status-count changes only',
+        reason: 'HomePage must derive its status counts from '
+            'homeStatusCountsProvider so rebuilds are scoped to '
+            'count changes only',
       );
     });
 
-    test('the old full-list watch is removed', () {
-      // The pattern "backgroundTasks = ref.watch(backgroundTasksProvider);"
-      // WITHOUT .select should NOT appear in the home page anymore.
-      // A .select-less watch would cause a rebuild on every updateStep.
-      final lines = homeSource.split('\n');
-      for (int i = 0; i < lines.length; i++) {
-        final line = lines[i];
-        if (line.contains('ref.watch(backgroundTasksProvider') &&
-            !line.contains('.select')) {
-          // Allow comment lines
-          if (line.trimLeft().startsWith('//')) continue;
-          fail(
-            'HomePage must not use ref.watch(backgroundTasksProvider) '
-            'without .select(). Found at line ${i + 1}',
-          );
-        }
-      }
+    test('counts are aggregated into a value-comparable record', () {
+      // A projection returning a fresh collection (identity comparison)
+      // would fire the listener on every notification and defeat the
+      // rebuild guard; the provider must return a value-comparable record.
+      expect(
+        homeContent.contains(
+            'Provider<({int inProgress, int completed, int failed})>'),
+        isTrue,
+        reason: 'homeStatusCountsProvider must return a value-comparable '
+            'record so intermediate step changes do not rebuild the page',
+      );
     });
   });
 

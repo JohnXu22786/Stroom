@@ -40,7 +40,12 @@ class MediaPickerConfig<T> {
   final Future<Set<String>> Function() loadFolders;
 
   /// Reads the raw bytes of a given record.
-  final Future<Uint8List?> Function(T record) readFile;
+  ///
+  /// Optional: callers that only need the record identity (e.g. resolving
+  /// its storage path via [onRecordPicked]) can omit it — single-select
+  /// then works without buffering the whole file. Multi-select mode still
+  /// requires it (selection is byte-based).
+  final Future<Uint8List?> Function(T record)? readFile;
 
   /// Returns the display name for a record (shown as the primary text).
   final String Function(T record) displayName;
@@ -55,6 +60,12 @@ class MediaPickerConfig<T> {
   /// the default icon in the file item tile.
   final Widget Function(T record)? thumbnailBuilder;
 
+  /// Called with the selected record right before the dialog closes in
+  /// single-select mode (awaited before the pop). Lets callers resolve the
+  /// record's storage path or identity (the dialog's own result only
+  /// carries file name + bytes). Not invoked in multi-select mode.
+  final Future<void> Function(T record)? onRecordPicked;
+
   const MediaPickerConfig({
     required this.title,
     required this.emptyIcon,
@@ -64,10 +75,11 @@ class MediaPickerConfig<T> {
     this.multiSelect = false,
     required this.loadRecords,
     required this.loadFolders,
-    required this.readFile,
+    this.readFile,
     required this.displayName,
     required this.subtitleBuilder,
     this.thumbnailBuilder,
+    this.onRecordPicked,
   });
 }
 
@@ -198,12 +210,46 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
       return;
     }
 
-    // Read the file data
+    // Read the file data (skipped entirely in path-only mode — the caller
+    // provided no readFile, so single-select resolves via onRecordPicked).
     Uint8List? readData;
-    try {
-      readData = await widget.config.readFile(record);
-    } catch (_) {}
-    if (readData == null || readData.isEmpty) {
+    final readFile = widget.config.readFile;
+    if (readFile != null) {
+      try {
+        readData = await readFile(record);
+      } catch (_) {}
+      if (readData == null || readData.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('无法读取文件')),
+          );
+        }
+        return;
+      }
+    }
+
+    final fileName = widget.config.displayName(record);
+
+    if (!widget.config.multiSelect) {
+      // Single-select: close immediately with the result. The callback
+      // (e.g. path resolution) runs first; a throwing callback must not
+      // leave the dialog hanging open.
+      try {
+        await widget.config.onRecordPicked?.call(record);
+      } catch (e) {
+        debugPrint('[MediaPicker] onRecordPicked failed: $e');
+      }
+      if (mounted && !_resultDelivered) {
+        _resultDelivered = true;
+        Navigator.of(context).pop([
+          if (readData != null) MapEntry(fileName, readData),
+        ]);
+      }
+      return;
+    }
+
+    // Multi-select is byte-based — requires readFile.
+    if (readData == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('无法读取文件')),
@@ -211,19 +257,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
       }
       return;
     }
-
     final data = readData;
-    final fileName = widget.config.displayName(record);
-
-    if (!widget.config.multiSelect) {
-      // Single-select: close immediately with the result
-      if (mounted && !_resultDelivered) {
-        _resultDelivered = true;
-        Navigator.of(context).pop([MapEntry(fileName, data)]);
-      }
-      return;
-    }
-
     setState(() {
       _selectedItems[key] = MapEntry(fileName, data);
     });

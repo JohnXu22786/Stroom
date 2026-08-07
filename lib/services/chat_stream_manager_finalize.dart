@@ -62,7 +62,9 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
 
     // ── Post-stream processing ──
     ChatMessage? assistantMessage;
-    final hadStreamError = streamError is Exception || streamError is Error;
+    // Align with the catch clause in startStreaming, which folds the error
+    // text into fullReply for ANY thrown object (not just Exception/Error).
+    final hadStreamError = streamError != null;
 
     // 中断工具标记：取消或流错误时，把仍未完成的工具结果标记为中断占位，
     // 避免 UI 与持久化中工具永远停留在 running 状态。

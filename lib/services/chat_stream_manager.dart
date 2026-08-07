@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/legacy.dart'
     show StateProvider, StateProviderFamily;
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
+import '../models/assistant.dart' show Assistant;
 import '../models/message_block.dart';
 import '../models/tool_call.dart';
 import '../pages/chat/chat_types.dart';
@@ -14,6 +15,7 @@ import '../providers/context_management_provider.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/system_assistant_provider.dart';
 import '../providers/assistant_provider.dart';
+import '../providers/provider_config.dart';
 import 'app_log_service.dart';
 import 'chat_adapter.dart';
 import 'chat_protocol.dart' show rebuildToolResultText;
@@ -232,6 +234,7 @@ class ChatStreamManager {
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
     String? streamingMsgId,
+    Assistant? assistant,
   }) async {
     // If this conversation already has a stream running, return the
     // pending future so the caller awaits the same result.
@@ -319,7 +322,16 @@ class ChatStreamManager {
     // Snapshot this conversation's ChatService before any await.
     // The adapter creates a per-conversation service on demand, so
     // capture it here for raw data (lastRequestBody etc.) in finally.
-    final snappedChatService = _adapter.getOrCreateService(convId);
+    // The assistant (and entries) are passed so the snapshot itself
+    // resolves the assistant's model — otherwise the pre-stream snapshot
+    // would cache a global-config service and the send below would
+    // silently ignore the assistant binding (putIfAbsent first-writer
+    // wins).
+    final snappedChatService = _adapter.getOrCreateService(
+      convId,
+      assistant: assistant,
+      entriesState: _ref?.read(providerEntriesProvider),
+    );
 
     // ── 对话级计费累计（per-request 事件驱动） ──
     // 每次请求的完整 usage 数据返回时（流末尾/错误轮的 usage 事件）
@@ -405,6 +417,8 @@ class ChatStreamManager {
             reasoningParamValues: reasoningParamValues,
             tools: tools,
             convId: convId,
+            assistant: assistant,
+            entriesState: _ref?.read(providerEntriesProvider),
           );
 
     // Now safe to yield to event loop — all state is established and the

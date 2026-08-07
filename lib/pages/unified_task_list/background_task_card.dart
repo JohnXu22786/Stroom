@@ -8,6 +8,8 @@ import '../asr_page.dart';
 import '../ocr_page.dart';
 import '../audio_separation_page.dart';
 import 'task_utils.dart';
+import 'file_opener.dart';
+import '../../widgets/running_elapsed_label.dart';
 
 // =============================================================================
 // 后台任务卡片（OCR / ASR / 音频分离）
@@ -31,6 +33,25 @@ class BackgroundTaskCard extends ConsumerStatefulWidget {
 
 class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
   bool _expanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.task.status == TaskStatus.running;
+  }
+
+  @override
+  void didUpdateWidget(covariant BackgroundTaskCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Auto-expand when the task transitions into running so the step
+    // timeline is visible while the task executes.  Keeps behaviour
+    // consistent with CatCatchTaskCard and SynthesisTaskCard which
+    // also auto-expand on the waiting→running transition.
+    if (widget.task.status == TaskStatus.running &&
+        oldWidget.task.status != TaskStatus.running) {
+      setState(() => _expanded = true);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -99,7 +120,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            _buildStatusChip(widget.task.status),
+                            buildStatusChip(widget.task.status),
                             const SizedBox(width: 8),
                             Text(
                               formatRelativeTime(widget.task.createdAt),
@@ -108,6 +129,18 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                                 color: Colors.grey[500],
                               ),
                             ),
+                            if (widget.task.status == TaskStatus.running) ...[
+                              const SizedBox(width: 8),
+                              // Live elapsed time — lets the user see a
+                              // slow-but-working task is still alive.
+                              RunningElapsedLabel(
+                                startedAt: widget.task.createdAt,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ],
@@ -161,9 +194,9 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Type and time info
-        _buildInfoRow(cs, Icons.category_outlined, '任务类型', task.type.label),
+        buildInfoRow(cs, Icons.category_outlined, '任务类型', task.type.label),
         const SizedBox(height: 4),
-        _buildInfoRow(
+        buildInfoRow(
           cs,
           Icons.access_time,
           '创建时间',
@@ -171,7 +204,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         ),
         if (task.completedAt != null) ...[
           const SizedBox(height: 4),
-          _buildInfoRow(
+          buildInfoRow(
             cs,
             Icons.check_circle_outline,
             '完成时间',
@@ -388,42 +421,16 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     return colorScheme.outlineVariant;
   }
 
-  Widget _buildInfoRow(
-    ColorScheme cs,
-    IconData icon,
-    String label,
-    String value,
-  ) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 14, color: cs.onSurfaceVariant),
-        const SizedBox(width: 6),
-        Text(
-          '$label: ',
-          style: TextStyle(
-            fontSize: 12,
-            color: cs.onSurfaceVariant,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(fontSize: 12, color: cs.onSurface),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildActionButtons(
       BackgroundTask task, ColorScheme cs, WidgetRef ref) {
+    // Chat tasks have no standalone page (they run inside a flow) — the
+    // 立即开始/重试 buttons would be dead taps, so hide them.
+    final hasRetryPage = task.type != BackgroundTaskType.chat;
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         // "立即开始" button for waiting tasks
-        if (task.status == TaskStatus.waiting)
+        if (hasRetryPage && task.status == TaskStatus.waiting)
           _actionButton(
             icon: Icons.play_arrow,
             label: '立即开始',
@@ -440,7 +447,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             onPressed: () => openFile(task.downloadedFilePath!, context),
           ),
         // Retry button for failed tasks
-        if (task.status == TaskStatus.failed)
+        if (hasRetryPage && task.status == TaskStatus.failed)
           _actionButton(
             icon: Icons.refresh,
             label: '重试',
@@ -490,6 +497,9 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             builder: (_) => AudioSeparationPage(retryData: task.retryData),
           ),
         );
+        break;
+      case BackgroundTaskType.chat:
+        // Chat block: no standalone page — handled within flow execution.
         break;
     }
   }
@@ -591,71 +601,6 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     return Icon(_statusIcon(status), color: _statusColor(status), size: 24);
   }
 
-  static Widget _buildStatusChip(TaskStatus status) {
-    switch (status) {
-      case TaskStatus.running:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.blue.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '进行中',
-            style: TextStyle(fontSize: 11, color: Colors.blue),
-          ),
-        );
-      case TaskStatus.completed:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.green.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '已完成',
-            style: TextStyle(fontSize: 11, color: Colors.green),
-          ),
-        );
-      case TaskStatus.failed:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.red.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '失败',
-            style: TextStyle(fontSize: 11, color: Colors.red),
-          ),
-        );
-      case TaskStatus.paused:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.orange.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '已暂停',
-            style: TextStyle(fontSize: 11, color: Colors.orange),
-          ),
-        );
-      case TaskStatus.waiting:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.purple.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Text(
-            '等待中',
-            style: TextStyle(fontSize: 11, color: Colors.purple),
-          ),
-        );
-    }
-  }
-
   static IconData _taskTypeIcon(BackgroundTaskType type) {
     switch (type) {
       case BackgroundTaskType.ocr:
@@ -664,6 +609,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         return Icons.multitrack_audio;
       case BackgroundTaskType.audioSeparation:
         return Icons.music_note;
+      case BackgroundTaskType.chat:
+        return Icons.chat_bubble_outline;
     }
   }
 
@@ -675,6 +622,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         return Colors.deepPurple;
       case BackgroundTaskType.audioSeparation:
         return Colors.indigo;
+      case BackgroundTaskType.chat:
+        return Colors.blue;
     }
   }
 }

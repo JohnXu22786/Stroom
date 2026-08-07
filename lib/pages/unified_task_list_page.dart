@@ -5,33 +5,51 @@ import '../catcatch/models/catcatch_task.dart' as catcatch;
 import '../catcatch/providers/catcatch_provider.dart';
 import '../providers/task_provider.dart';
 import '../providers/background_task_provider.dart';
+import '../task_flow/models/task_flow_execution.dart';
+import '../task_flow/providers/task_flow_execution_provider.dart';
 import 'unified_task_list/catcatch_task_card.dart';
 import 'unified_task_list/synthesis_task_card.dart';
 import 'unified_task_list/background_task_card.dart';
+import 'unified_task_list/task_flow_card.dart';
 import 'unified_task_list/task_utils.dart';
+import 'unified_task_list/task_session_tracker.dart';
 
 // Re-export public APIs for backward compatibility
 export 'unified_task_list/media_preview_sheet.dart' show showMediaPreview;
 export 'unified_task_list/task_utils.dart'
     show
         formatSize,
-        openFile,
         truncateUrl,
         formatDurationSimple,
         parseDurationToSeconds,
         stepIcon,
         UnifiedTaskItem,
+        formatRelativeTime;
+export 'unified_task_list/file_opener.dart' show openFile;
+export 'unified_task_list/task_session_tracker.dart'
+    show
         taskListLastReadProvider,
         persistTaskListLastRead,
-        loadTaskListLastRead,
-        formatRelativeTime;
+        loadTaskListLastRead;
 
 /// Task tab categories.
 enum TaskTab { all, inProgress, completed, failed }
 
 /// Map a [UnifiedTaskItem] to its [TaskTab] category.
 TaskTab _taskTab(UnifiedTaskItem item) {
-  if (item.isCatCatch) {
+  if (item.isTaskFlow) {
+    final status = item.taskFlowExecution!.taskStatus;
+    switch (status) {
+      case TaskStatus.running:
+      case TaskStatus.paused:
+      case TaskStatus.waiting:
+        return TaskTab.inProgress;
+      case TaskStatus.completed:
+        return TaskTab.completed;
+      case TaskStatus.failed:
+        return TaskTab.failed;
+    }
+  } else if (item.isCatCatch) {
     final t = item.catCatchTask!;
     switch (t.status) {
       case catcatch.TaskStatus.running:
@@ -122,6 +140,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final synthesisTasks = ref.watch(taskListProvider);
     final backgroundTasks = ref.watch(backgroundTasksProvider);
+    final taskFlowExecutions = ref.watch(taskFlowExecutionsProvider);
 
     final allTasks = <UnifiedTaskItem>[
       for (final t in catcatchTasks)
@@ -148,10 +167,29 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           isBackground: true,
           backgroundTask: t,
         ),
+      for (final t in taskFlowExecutions)
+        UnifiedTaskItem(
+          id: t.id,
+          createdAt: t.createdAt,
+          isTaskFlow: true,
+          taskFlowExecution: t,
+        ),
     ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
+    // Filter out tasks that are already nested inside a task flow execution.
+    // These tasks were created by the flow and should only be visible when
+    // expanding the flow card, not as independent top-level items.
+    final flowSubTaskIds = <String>{
+      for (final exec in taskFlowExecutions)
+        for (final st in exec.subTasks) st.subTaskId,
+    };
+    final filteredByFlow = allTasks.where((item) {
+      if (item.isTaskFlow) return true; // always show flow cards
+      return !flowSubTaskIds.contains(item.id);
+    }).toList();
+
     // Filter tasks based on selected tab
-    final filteredTasks = _filteredTasks(allTasks, _tabController.index);
+    final filteredTasks = _filteredTasks(filteredByFlow, _tabController.index);
 
     return Scaffold(
       appBar: AppBar(
@@ -185,6 +223,13 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                 for (final t in backgroundTasks) {
                   if (t.status == TaskStatus.completed) {
                     ref.read(backgroundTasksProvider.notifier).removeTask(t.id);
+                  }
+                }
+                for (final e in taskFlowExecutions) {
+                  if (e.taskStatus == TaskStatus.completed) {
+                    ref
+                        .read(taskFlowExecutionsProvider.notifier)
+                        .removeExecution(e.id);
                   }
                 }
               } else if (value == 'clear_failed') {
@@ -222,6 +267,17 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                                   .removeTask(t.id);
                             }
                           }
+                          for (final e in taskFlowExecutions) {
+                            if (e.taskStatus == TaskStatus.failed) {
+                              // Remove the sub-task tasks too, so a
+                              // completed block of a failed flow does not
+                              // resurface as an orphaned standalone card.
+                              removeFlowSubTaskTasks(ref, e);
+                              ref
+                                  .read(taskFlowExecutionsProvider.notifier)
+                                  .removeExecution(e.id);
+                            }
+                          }
                         },
                         child: const Text('确定',
                             style: TextStyle(color: Colors.red)),
@@ -257,6 +313,16 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                             ref
                                 .read(backgroundTasksProvider.notifier)
                                 .removeTask(t.id);
+                          }
+                          for (final e in taskFlowExecutions) {
+                            // Running executions are also removed — their
+                            // sub-task tasks get cancelled via removeTask
+                            // (engine/HTTP tokens), so no orphaned work
+                            // keeps running after the record is gone.
+                            removeFlowSubTaskTasks(ref, e);
+                            ref
+                                .read(taskFlowExecutionsProvider.notifier)
+                                .removeExecution(e.id);
                           }
                         },
                         child: const Text('确定',
@@ -353,6 +419,14 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
       itemBuilder: (_, i) {
         final item = tasks[i];
         final lastRead = ref.watch(taskListLastReadProvider);
+        if (item.isTaskFlow) {
+          final exec = item.taskFlowExecution!;
+          return TaskFlowCard(
+            key: ValueKey(item.id),
+            execution: exec,
+            isUnread: exec.createdAt.isAfter(lastRead),
+          );
+        }
         if (item.isCatCatch) {
           final t = item.catCatchTask!;
           final isUnread = (t.statusChangedAt ?? t.createdAt).isAfter(lastRead);

@@ -216,4 +216,9 @@ class FileManifest {
     final allPaths = await _ops.getAllFolders();
     return FolderPathUtils.getAllDescendantFolderPaths(parentPath, allPaths);
   }
+
+  /// Storage directory path for audio files (Native only) — used to copy
+  /// large downloaded files into hash-addressed storage without
+  /// buffering them in memory.
+  static Future<String> get ttsAudioDir => _ops.storageDirPath;
 }

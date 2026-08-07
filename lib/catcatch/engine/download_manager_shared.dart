@@ -66,6 +66,11 @@ Future<void> downloadSingleSegment({
   CancelToken? cancelToken,
   required Map<int, String> errors,
   required void Function(int index) onSegmentComplete,
+
+  /// Byte-granularity progress: called with the chunk size after each
+  /// chunk is written. The caller aggregates this into a total so
+  /// stall detection sees progress even when percent stays flat.
+  void Function(int delta)? onBytesDelta,
   String taskId = '',
 }) async {
   await semaphore.acquire();
@@ -114,6 +119,7 @@ Future<void> downloadSingleSegment({
                   }
                 }
                 await raf.writeFrom(chunk);
+                onBytesDelta?.call(chunk.length);
               }
             } finally {
               await raf.close();

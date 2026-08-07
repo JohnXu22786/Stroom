@@ -1,13 +1,45 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
+
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
+import '../../services/app_log_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/video_manifest.dart';
 import '../../utils/file_manifest.dart';
 import '../models/catcatch_task.dart';
 import '../models/media_resource.dart';
 import 'executor_utils.dart';
+
+/// Computes the file's MD5 off the UI isolate — hashing a multi-GB video
+/// on the main isolate would freeze the GUI. Streams in chunks so neither
+/// the worker nor the main isolate ever holds the full file in memory.
+Future<String> _computeHashInIsolate(String filePath) {
+  return Isolate.run(() {
+    final file = File(filePath);
+    var digest = '';
+    final chunked = md5.startChunkedConversion(
+      ChunkedConversionSink<Digest>.withCallback((chunks) {
+        if (chunks.isNotEmpty) digest = chunks.last.toString();
+      }),
+    );
+    final raf = file.openSync();
+    try {
+      const chunkSize = 8 * 1024 * 1024;
+      while (true) {
+        final chunk = raf.readSync(chunkSize);
+        if (chunk.isEmpty) break;
+        chunked.add(chunk);
+      }
+    } finally {
+      raf.closeSync();
+    }
+    chunked.close();
+    return digest;
+  });
+}
 
 Future<String> executeSave({
   required CatCatchTask task,
@@ -60,25 +92,47 @@ Future<void> registerCompletedVideo(String filePath, CatCatchTask task) async {
   final file = File(filePath);
   if (!await file.exists()) return;
 
-  final fileBytes = await file.readAsBytes();
-  final hash = md5.convert(fileBytes).toString();
+  final hash = await _computeHashInIsolate(filePath);
+  final size = await file.length();
 
-  final existing = await VideoManifest.getRecordByHash(hash);
-  if (existing != null) return;
-
-  final recordName = p.basenameWithoutExtension(filePath);
+  // Build record name from the file path (uniqueExecutorPath already handles
+  // file-system dedup).  Still check the manifest for name+folder collisions
+  // as defense-in-depth against edge cases like manual file moves.
+  String recordName = p.basenameWithoutExtension(filePath);
   final videoFolder = task.metadata['videoFolder'] ?? '';
+
+  final records = await VideoManifest.loadRecords();
+  int dedupIdx = 2;
+  while (records.any((r) => r.name == recordName && r.folder == videoFolder) &&
+      dedupIdx <= 10000) {
+    recordName = '${p.basenameWithoutExtension(filePath)} ($dedupIdx)';
+    dedupIdx++;
+  }
+  if (dedupIdx > 10000) {
+    recordName =
+        '${p.basenameWithoutExtension(filePath)}_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  // Only write the physical file once — hash-addressed storage. Copy the
+  // file directly (streamed, no full-file buffer) into the storage dir.
+  final existing = await VideoManifest.getRecordByHash(hash);
+  if (existing == null) {
+    final storageDir = await VideoManifest.videoDir;
+    await file.copy(p.join(storageDir, '$hash.$ext'));
+  }
+
+  // Always register a record so every download appears in the gallery.
   final record = VideoRecord(
     name: recordName,
     hash: hash,
     format: ext,
     createdAt: DateTime.now(),
-    size: fileBytes.length,
+    size: size,
     duration: task.expectedDurationSec * 1000,
     folder: videoFolder,
   );
-  await VideoManifest.writeFile('$hash.$ext', fileBytes);
   await VideoManifest.addRecord(record);
+  AppLogService.info('CatCatch', '视频已保存: $recordName.$ext ($size bytes)');
   debugPrint(
       '[TaskExecutor] Registered video to gallery: $recordName.$ext (folder: $videoFolder)');
 }
@@ -91,25 +145,44 @@ Future<void> registerCompletedAudio(String filePath, CatCatchTask task) async {
   final file = File(filePath);
   if (!await file.exists()) return;
 
-  final fileBytes = await file.readAsBytes();
-  final hash = md5.convert(fileBytes).toString();
+  final hash = await _computeHashInIsolate(filePath);
+  final size = await file.length();
 
-  final existing = await FileManifest.getRecordByHash(hash);
-  if (existing != null) return;
-
-  final recordName = p.basenameWithoutExtension(filePath);
+  String recordName = p.basenameWithoutExtension(filePath);
   final audioFolder = task.metadata['audioFolder'] ?? '';
+
+  final records = await FileManifest.loadRecords();
+  int dedupIdx = 2;
+  while (records.any((r) => r.name == recordName && r.folder == audioFolder) &&
+      dedupIdx <= 10000) {
+    recordName = '${p.basenameWithoutExtension(filePath)} ($dedupIdx)';
+    dedupIdx++;
+  }
+  if (dedupIdx > 10000) {
+    recordName =
+        '${p.basenameWithoutExtension(filePath)}_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  // Only write the physical file once — hash-addressed storage. Copy the
+  // file directly (streamed, no full-file buffer) into the storage dir.
+  final existing = await FileManifest.getRecordByHash(hash);
+  if (existing == null) {
+    final storageDir = await FileManifest.ttsAudioDir;
+    await file.copy(p.join(storageDir, '$hash.$ext'));
+  }
+
+  // Always register a record so every download appears in the gallery.
   final record = AudioRecord(
     name: recordName,
     hash: hash,
     format: ext,
     createdAt: DateTime.now(),
-    size: fileBytes.length,
+    size: size,
     duration: task.expectedDurationSec,
     folder: audioFolder,
   );
-  await FileManifest.writeFile('$hash.$ext', fileBytes);
   await FileManifest.addRecord(record);
+  AppLogService.info('CatCatch', '音频已保存: $recordName.$ext ($size bytes)');
   debugPrint(
       '[TaskExecutor] Registered audio to gallery: $recordName.$ext (folder: $audioFolder)');
 }
