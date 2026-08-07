@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_service.dart';
+import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
@@ -791,8 +792,14 @@ void main() {
           reason: 'Chat key must survive full v2 restore (regression)');
       expect(restoredPrefs.getString('provider_entries'), isNotNull,
           reason: 'Settings key must survive full v2 restore (regression)');
-      expect(restoredPrefs.getInt('data_format_version'), isNotNull,
-          reason: 'Settings key must survive full v2 restore (regression)');
+      // 恢复后 migrateDataFormatIfNeeded 按恢复的数据重建版本记录：
+      // settings 类别恢复（含旧版 data_format_version=1）后展开迁移，
+      // settings 部分必须是当前版本。
+      final stored = await DataMigrationService.getStoredPartVersions();
+      expect(stored[DataMigrationService.partSettings], equals(1),
+          reason: 'Settings part version must be current after restore');
+      expect(restoredPrefs.containsKey('data_format_versions'), isTrue,
+          reason: 'Per-part version record must exist after restore');
     });
   });
 

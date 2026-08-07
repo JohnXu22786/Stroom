@@ -50,11 +50,15 @@ void main() {
       final migrationResult = await StartupCheckService.checkFormatVersion();
       expect(migrationResult.needsMigration, isTrue);
 
-      // After migration:
+      // After migration: per-part versions should all be current
       final prefs = await SharedPreferences.getInstance();
-      // Version should be updated
-      expect(prefs.getInt('data_format_version'),
-          equals(DataMigrationService.currentFormatVersion));
+      final stored = await DataMigrationService.getStoredPartVersions();
+      for (final entry in DataMigrationService.currentPartVersions.entries) {
+        expect(stored[entry.key], equals(entry.value),
+            reason: 'part ${entry.key}');
+      }
+      expect(prefs.containsKey('data_format_version'), isFalse,
+          reason: '旧全局 key 迁移后退役');
     });
 
     test('no migration needed when format version is current', () async {
