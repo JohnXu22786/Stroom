@@ -40,6 +40,8 @@ Widget wrapComposerInApp({
   void Function(String text, List<Attachment> attachments)? onSend,
   String? conversationId,
   Set<String> streamingConversations = const {},
+  bool showEditWarningOnEntry = false,
+  int editWarningArmCount = 0,
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -70,6 +72,8 @@ Widget wrapComposerInApp({
           editingMessageAttachments: editingMessageAttachments,
           onEditSend: onEditSend,
           onEditCancel: onEditCancel,
+          showEditWarningOnEntry: showEditWarningOnEntry,
+          editWarningArmCount: editWarningArmCount,
         ),
       ),
     ),
@@ -731,5 +735,198 @@ void main() {
       expect(find.byType(Dialog), findsNothing);
       expect(mainInputText(tester), 'round trip text');
     });
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // Edit data-loss warning (composer-owned state machine)
+  // ═══════════════════════════════════════════════════════════
+
+  group('Edit data-loss warning', () {
+    const warningText = '重新编辑发送后下面所有的消息将丢失';
+    const closeKey = Key('editWarningCloseButton');
+
+    /// Pumps a direct-mount composer in edit mode with the warning armed.
+    Future<void> pumpArmedComposer(
+      WidgetTester tester, {
+      String? editingMessageId = 'msg-1',
+      String conversationId = 'conv-a',
+      int editWarningArmCount = 1,
+    }) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(
+        wrapComposerInApp(
+          editingMessageId: editingMessageId,
+          editingMessageText: 'original text',
+          conversationId: conversationId,
+          showEditWarningOnEntry: true,
+          editWarningArmCount: editWarningArmCount,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      // Consume any pre-existing framework exceptions from flutter_chat_ui
+      // (same pattern as the other composer tests).
+      tester.takeException();
+    }
+
+    testWidgets(
+      'armed warning appears after the no-keyboard fallback and replaces '
+      'the capsule',
+      (tester) async {
+        await pumpArmedComposer(tester);
+
+        // Not visible immediately — waits for the soft keyboard (or the
+        // no-keyboard fallback, which is what fires in tests).
+        expect(find.text(warningText), findsNothing);
+        expect(find.text('编辑消息'), findsOneWidget);
+
+        await tester.pump(const Duration(milliseconds: 800));
+        expect(find.text(warningText), findsOneWidget);
+        expect(find.text('编辑消息'), findsNothing);
+
+        // Dismiss so no timers stay pending.
+        await tester.tap(find.byKey(closeKey));
+        await tester.pump();
+        expect(find.text(warningText), findsNothing);
+        expect(find.text('编辑消息'), findsOneWidget);
+      },
+    );
+
+    testWidgets('leaving edit mode disarms the warning', (tester) async {
+      await pumpArmedComposer(tester);
+      await tester.pump(const Duration(milliseconds: 800));
+      expect(find.text(warningText), findsOneWidget);
+
+      // Cancel edit mode (editingMessageId → null): the warning and the
+      // capsule both disappear and nothing reappears afterwards.
+      await tester.pumpWidget(
+        wrapComposerInApp(
+          editingMessageId: null,
+          showEditWarningOnEntry: true,
+        ),
+      );
+      await tester.pump();
+      expect(find.text(warningText), findsNothing);
+      expect(find.text('编辑消息'), findsNothing);
+
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text(warningText), findsNothing);
+    });
+
+    testWidgets('switching conversations disarms the warning', (tester) async {
+      await pumpArmedComposer(tester);
+      await tester.pump(const Duration(milliseconds: 800));
+      expect(find.text(warningText), findsOneWidget);
+
+      // Conversation switch while still in edit mode: the pill refers to
+      // the previous conversation's messages and must disappear.
+      await tester.pumpWidget(
+        wrapComposerInApp(
+          editingMessageId: 'msg-1',
+          editingMessageText: 'original text',
+          conversationId: 'conv-b',
+          showEditWarningOnEntry: true,
+          editWarningArmCount: 1,
+        ),
+      );
+      await tester.pump();
+      expect(find.text(warningText), findsNothing);
+
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text(warningText), findsNothing);
+    });
+
+    testWidgets(
+      're-entering edit on the same message (arm count bump) re-shows the '
+      'warning after a dismissal',
+      (tester) async {
+        await pumpArmedComposer(tester);
+        await tester.pump(const Duration(milliseconds: 800));
+        expect(find.text(warningText), findsOneWidget);
+
+        // Dismiss via the close button.
+        await tester.tap(find.byKey(closeKey));
+        await tester.pump();
+        expect(find.text(warningText), findsNothing);
+
+        // Same message id, but the page bumped the arm count (user tapped
+        // the edit button again): the warning re-arms and re-appears.
+        await tester.pumpWidget(
+          wrapComposerInApp(
+            editingMessageId: 'msg-1',
+            editingMessageText: 'original text',
+            conversationId: 'conv-a',
+            showEditWarningOnEntry: true,
+            editWarningArmCount: 2,
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 800));
+        expect(find.text(warningText), findsOneWidget);
+
+        await tester.tap(find.byKey(closeKey));
+        await tester.pump();
+        expect(find.text(warningText), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'a composer created directly in edit mode with the keyboard already '
+      'up reveals the warning immediately (post-frame arm)',
+      (tester) async {
+        addTearDown(tester.view.reset);
+        await tester.binding.setSurfaceSize(const Size(1200, 2000));
+        // Keyboard up before the composer is even mounted.
+        tester.view.viewInsets = const FakeViewPadding(bottom: 600);
+        await tester.pumpWidget(
+          wrapComposerInApp(
+            editingMessageId: 'msg-1',
+            editingMessageText: 'original text',
+            showEditWarningOnEntry: true,
+            editWarningArmCount: 1,
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        tester.takeException();
+
+        // Revealed via the post-frame arm (no fallback wait needed).
+        expect(find.text(warningText), findsOneWidget);
+        expect(find.text('编辑消息'), findsNothing);
+
+        await tester.tap(find.byKey(closeKey));
+        await tester.pump();
+        expect(find.text(warningText), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'a rebuild without any entry bump does not re-show the warning',
+      (tester) async {
+        await pumpArmedComposer(tester);
+        await tester.pump(const Duration(milliseconds: 800));
+        expect(find.text(warningText), findsOneWidget);
+
+        // Dismiss; the capsule returns.
+        await tester.tap(find.byKey(closeKey));
+        await tester.pump();
+        expect(find.text(warningText), findsNothing);
+
+        // Ordinary rebuild (e.g. a keystroke) with the same arm count:
+        // the warning stays dismissed.
+        await tester.pumpWidget(
+          wrapComposerInApp(
+            editingMessageId: 'msg-1',
+            editingMessageText: 'original text',
+            conversationId: 'conv-a',
+            showEditWarningOnEntry: true,
+            editWarningArmCount: 1,
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 800));
+        expect(find.text(warningText), findsNothing);
+      },
+    );
   });
 }

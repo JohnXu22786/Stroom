@@ -199,7 +199,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                 color: cs.primary,
               ),
             ),
-            const SizedBox(width: 24),
+            const SizedBox(width: 6),
             GestureDetector(
               onTap: widget.onEditCancel,
               // Add padding around the close icon for a larger
@@ -215,6 +215,88 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// ── Edit data-loss warning pill ──
+  /// Replaces the edit capsule in its row while visible: re-sending the
+  /// edit deletes this message and everything below it. Centered in the
+  /// capsule's row (same position and height); fades in on entry and is
+  /// dismissed by the 2s auto-hide or the close button.
+  Widget _buildEditWarningPill({required ColorScheme cs}) {
+    return Padding(
+      padding: const EdgeInsets.only(
+        left: 12,
+        right: 12,
+        top: 6,
+        bottom: 0,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 150),
+            builder: (context, value, child) =>
+                Opacity(opacity: value, child: child),
+            child: Container(
+              key: const Key('editWarningPill'),
+              decoration: BoxDecoration(
+                color: cs.errorContainer.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: cs.error.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 4,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 14,
+                    color: cs.error,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      '重新编辑发送后下面所有的消息将丢失',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: cs.onErrorContainer,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: '关闭',
+                    child: GestureDetector(
+                      onTap: _dismissEditWarning,
+                      // Same padding around the close icon as the capsule
+                      // for a larger touch target on mobile.
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.close,
+                          key: const Key('editWarningCloseButton'),
+                          size: 16,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
