@@ -370,22 +370,12 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                 Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.drag_indicator,
-                        size: 16,
-                        color: cs.onSurfaceVariant.withValues(alpha: 0.5),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '长按拖拽即可调整对话顺序',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: cs.onSurfaceVariant.withValues(alpha: 0.5),
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    '长按拖拽即可调整对话顺序',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                    ),
                   ),
                 ),
 
