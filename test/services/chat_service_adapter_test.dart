@@ -1208,18 +1208,16 @@ void main() {
     });
 
     test(
-        'placeholder tools are published synchronously before any network '
+        'placeholder tools are published synchronously without any network '
         'attempt (built-in remote SSE MCPs are visible immediately)', () async {
-      // The tool list must not wait for per-server connection attempts
-      // (real endpoints can take tens of seconds to fail). initializeMcpServers
-      // publishes the placeholders before its first await, so mcpToolDefinitions
-      // is already populated right after the call — without awaiting it.
+      // 进入对话页面不发起任何连接：initializeMcpServers 只同步发布
+      // 占位工具定义，mcpToolDefinitions 在调用返回后立即可见。
       final state = _vendorState();
       final future = adapter.initializeMcpServers(state);
 
       expect(adapter.mcpToolDefinitions, isNotEmpty,
-          reason: 'placeholders must be visible synchronously, before any '
-              'network round-trip completes');
+          reason: 'placeholders must be visible synchronously — no network '
+              'attempt happens on page entry (lazy MCP)');
       expect(
           adapter.mcpToolDefinitions.map((t) => t.name), contains('exa_mcp'));
 
@@ -1338,14 +1336,10 @@ void main() {
     });
 
     test(
-        'a same-config call after a failed discovery re-runs discovery '
-        '(temporarily-down servers can recover later)', () async {
-      // Placeholders keep the cache non-empty after any run, so a naive
-      // "cache non-empty → skip" guard would never retry a server that was
-      // down during the first discovery. The adapter must re-discover on a
-      // later same-state call when the previous run found no real tools —
-      // observable via fresh placeholder instances (a skipped guard would
-      // return the same ToolDefinition objects).
+        'a same-config re-entry is skipped (no placeholder/client churn)',
+        () async {
+      // 懒连接模式下同配置的页面重复进入不应重建任何东西：占位工具
+      // 保持同一实例（可观察：identical），客户端也保持未连接状态。
       final state = _vendorState();
       await adapter.initializeMcpServers(state);
       final firstDefs = adapter.mcpToolDefinitions;
@@ -1353,10 +1347,65 @@ void main() {
 
       await adapter.initializeMcpServers(state);
       final secondDefs = adapter.mcpToolDefinitions;
-      expect(identical(firstDefs.first, secondDefs.first), isFalse,
-          reason: 'a second same-state call must re-run discovery when the '
-              'last run only produced placeholders, so a server that came '
-              'back online is rediscovered');
+      expect(identical(firstDefs.first, secondDefs.first), isTrue,
+          reason: 'same-config re-entry must be a no-op (no re-publish, no '
+              'client recreation) — connections happen only on tool calls');
+    });
+
+    test('an MCP config change recreates the lazy clients (new URL/command)',
+        () async {
+      // 配置变化（如 URL 修改）后，旧客户端必须被释放并重建，否则按需
+      // 执行会命中旧配置的客户端。
+      final state = _vendorState();
+      adapter.initializeBuiltinTools(state);
+      await adapter.initializeMcpServers(state);
+      final manager = ChatService.mcpClientManager;
+      expect(manager, isNotNull);
+      final firstClient = manager!.clients['Exa'];
+      expect(firstClient, isNotNull,
+          reason: 'clients are pre-created (unconnected) at placeholder time');
+
+      // 同一 state 实例再次初始化（模拟页面重复进入）→ 客户端保持不变。
+      await adapter.initializeMcpServers(state);
+      expect(identical(manager.clients['Exa'], firstClient), isTrue,
+          reason: 'same-config re-entry must not recreate clients');
+
+      // 配置变化（同名的不同实例）→ 客户端重建。
+      final changedState = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'Exa',
+                host: 'https://mcp.new-host.com/mcp',
+                key: '',
+                models: [
+                  ModelConfig(
+                    name: 'Exa',
+                    modelId: 'sse',
+                    typeConfig: {
+                      'transport': 'sse',
+                      'url': 'https://mcp.new-host.com/mcp',
+                      'isVendor': true,
+                      'description': 'Exa MCP search tool',
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      await adapter.initializeMcpServers(changedState);
+      final secondClient = manager.clients['Exa'];
+      expect(secondClient, isNotNull);
+      expect(identical(secondClient, firstClient), isFalse,
+          reason: 'a config change must recreate the client so on-demand '
+              'execution uses the new URL/command');
+      expect(secondClient!.config.url, 'https://mcp.new-host.com/mcp');
     });
   });
 

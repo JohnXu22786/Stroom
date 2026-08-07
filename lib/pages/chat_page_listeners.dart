@@ -216,27 +216,21 @@ extension _ChatPageListenersExt on _ChatPageState {
           if (!mounted) return;
           _configureAdapter();
           // Re-initialize built-in and MCP tools with the updated provider
-          // data. initializeMcpServers serializes concurrent calls (joins an
-          // in-flight discovery) and only re-discovers when the config
-          // actually changed, so this is safe to call repeatedly.
+          // data. initializeMcpServers is lazy (publishes placeholders only,
+          // no network; connections happen on tool calls) and skips when the
+          // MCP entry instance is unchanged, so this is safe to call
+          // repeatedly.
           final entriesState = ref.read(providerEntriesProvider);
           _adapter.initializeBuiltinTools(entriesState);
-          // 占位工具定义同步发布（无网络等待）：立即重解析并重建，让
-          // 所有 MCP 供应商的工具立刻可见。
-          final mcpFuture = _adapter.initializeMcpServers(entriesState);
+          // initializeMcpServers 只同步发布占位工具定义（不做任何网络
+          // 连接，连接在工具被调用时按需建立）。
+          await _adapter.initializeMcpServers(entriesState);
           // MCP tools discovered on this late path (load() completed after the
           // initial _initialize snapshot) must be auto-enabled for
           // conversations without explicit prefs — same as the _initialize
           // path — so the tool badge/list shows the full count.
           if (mounted) _resolveEnabledToolsForActiveConversation();
           if (mounted) setState(() {});
-          // 真实工具替换占位符完成后在后台再次重解析并刷新，不阻塞
-          // 下方模型选择恢复逻辑。
-          mcpFuture.then((_) {
-            if (!mounted) return;
-            _resolveEnabledToolsForActiveConversation();
-            setState(() {});
-          });
           // _configureAdapter resets the adapter to model 0. Restore the
           // saved model selection so the adapter and reasoning params
           // stay in sync with the persisted choice. The conversation's
