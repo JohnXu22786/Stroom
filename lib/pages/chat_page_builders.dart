@@ -10,60 +10,70 @@ extension _ChatPageBuildersExt on _ChatPageState {
     required String? activeId,
     required InMemoryChatController controller,
   }) {
-    return NotificationListener<ScrollNotification>(
-      onNotification: _onChatScrollNotification,
-      child: Chat(
-        key: ValueKey(controller.hashCode),
-        currentUserId: _currentUser.id,
-        resolveUser: (id) async {
-          if (id == _currentUser.id) return _currentUser;
-          if (id == _aiUser.id) return _aiUser;
-          return null;
-        },
-        chatController: controller,
-        onMessageSend: (text) => _onMessageSend(text, []),
-        theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
-        timeFormat: DateFormat('yyyy-MM-dd HH:mm'),
-        builders: Builders(
-          chatAnimatedListBuilder: (context, itemBuilder) =>
-              _buildChatAnimatedList(context, itemBuilder),
-          // Suppress the built-in scroll-to-bottom
-          // button — we provide our own overlay below.
-          scrollToBottomBuilder: (context, animation, onPressed) =>
-              const SizedBox.shrink(),
-          // Empty composer builder — the actual composer is
-          // rendered below the Chat widget so it participates
-          // in the Column layout flow instead of overlaying
-          // the message list via the internal Stack. This
-          // ensures the scroll area auto-adjusts as the
-          // composer height changes (e.g. multi-line input).
-          composerBuilder: (_) => const SizedBox.shrink(),
-          textMessageBuilder: (context, message, index,
-                  {required bool isSentByMe,
-                  MessageGroupStatus? groupStatus}) =>
-              _buildTextMessage(
-            context,
-            message,
-            index,
-            isSentByMe: isSentByMe,
-            groupStatus: groupStatus,
-            isDark: isDark,
-            isStreaming: isStreaming,
-            activeId: activeId,
-          ),
-          textStreamMessageBuilder: (context, message, index,
-                  {required bool isSentByMe,
-                  MessageGroupStatus? groupStatus}) =>
-              _buildTextStreamMessage(
-            context,
-            message,
-            index,
-            isSentByMe: isSentByMe,
-            groupStatus: groupStatus,
-            isStreaming: isStreaming,
-            streamingFullReply: streamingFullReply,
-            streamingMsgId: streamingMsgId,
-            isDark: isDark,
+    return NotificationListener<ScrollMetricsNotification>(
+      // The metrics notification fires for every scroll frame AND when the
+      // content grows (streaming message, mermaid auto-fit, sliver extent
+      // estimate corrections); _followContentGrowth ignores the scrolling
+      // cases and only re-pins when auto-scroll is engaged.
+      onNotification: (_) {
+        _followContentGrowth();
+        return false;
+      },
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _onChatScrollNotification,
+        child: Chat(
+          key: ValueKey(controller.hashCode),
+          currentUserId: _currentUser.id,
+          resolveUser: (id) async {
+            if (id == _currentUser.id) return _currentUser;
+            if (id == _aiUser.id) return _aiUser;
+            return null;
+          },
+          chatController: controller,
+          onMessageSend: (text) => _onMessageSend(text, []),
+          theme: isDark ? ChatTheme.dark() : ChatTheme.light(),
+          timeFormat: DateFormat('yyyy-MM-dd HH:mm'),
+          builders: Builders(
+            chatAnimatedListBuilder: (context, itemBuilder) =>
+                _buildChatAnimatedList(context, itemBuilder),
+            // Suppress the built-in scroll-to-bottom
+            // button — we provide our own overlay below.
+            scrollToBottomBuilder: (context, animation, onPressed) =>
+                const SizedBox.shrink(),
+            // Empty composer builder — the actual composer is
+            // rendered below the Chat widget so it participates
+            // in the Column layout flow instead of overlaying
+            // the message list via the internal Stack. This
+            // ensures the scroll area auto-adjusts as the
+            // composer height changes (e.g. multi-line input).
+            composerBuilder: (_) => const SizedBox.shrink(),
+            textMessageBuilder: (context, message, index,
+                    {required bool isSentByMe,
+                    MessageGroupStatus? groupStatus}) =>
+                _buildTextMessage(
+              context,
+              message,
+              index,
+              isSentByMe: isSentByMe,
+              groupStatus: groupStatus,
+              isDark: isDark,
+              isStreaming: isStreaming,
+              activeId: activeId,
+            ),
+            textStreamMessageBuilder: (context, message, index,
+                    {required bool isSentByMe,
+                    MessageGroupStatus? groupStatus}) =>
+                _buildTextStreamMessage(
+              context,
+              message,
+              index,
+              isSentByMe: isSentByMe,
+              groupStatus: groupStatus,
+              isStreaming: isStreaming,
+              streamingFullReply: streamingFullReply,
+              streamingMsgId: streamingMsgId,
+              isDark: isDark,
+            ),
           ),
         ),
       ),
