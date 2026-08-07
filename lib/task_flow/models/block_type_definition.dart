@@ -271,13 +271,15 @@ class BlockTypeDefinition {
         key: 'assistantId',
         label: '助手',
         type: BlockParamType.assistantSelector,
-        hintText: '留空使用当前选中的助手',
+        // Default: the first built-in assistant, so a new chat block
+        // always has an explicit assistant.
+        defaultValue: 'builtin:prompt_0',
       ),
       BlockParamDefinition(
         key: 'promptPrefix',
-        label: '提示前缀',
+        label: '开头提示语',
         type: BlockParamType.string,
-        hintText: '在输入前添加的提示语（可选）',
+        hintText: '发送上一步的输出之前，先加上这段话（可选）',
       ),
     ],
   );
