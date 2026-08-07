@@ -13,17 +13,47 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Creates a new conversation with an empty title, adds it to the list,
   /// and sets it as the active conversation.
   ///
+  /// When [assistantId] points to an existing assistant, the NEW conversation
+  /// is seeded with the assistant's conversation defaults:
+  /// - [Assistant.defaultToolNames] (non-null = the user configured the
+  ///   defaults tab) becomes the conversation's explicit enabled-tool set,
+  ///   with [Conversation.hasExplicitEnabledMcpTools] set — so tools NOT in
+  ///   the default set stay OFF instead of being auto-enabled. An assistant
+  ///   whose defaults were never configured (null set) keeps the legacy
+  ///   behavior (new topics auto-enable all tools). A per-conversation
+  ///   override made later in the chat page persists independently and
+  ///   never affects other conversations.
+  /// - [Assistant.defaultModelName] is pre-recorded as the conversation's
+  ///   last-used model, so the chat page restores it on first entry (and the
+  ///   user's later model switches stay per-conversation).
+  ///
+  /// Conversations created WITHOUT an assistant keep the legacy behavior:
+  /// no explicit tool prefs (chat page auto-enables all tools) and no model
+  /// preset (global saved selection applies).
+  ///
   /// 立即持久化（_persistNow）：空对话在未发消息前被杀进程即永久丢失；
   /// _persistCore 的 _loadHasRun 守卫保证启动窗口内不覆写磁盘，
   /// _load 完成时会把内存新对话合并落盘。
   String createConversation({String? assistantId}) {
     final now = DateTime.now();
+    final assistant = assistantId == null
+        ? null
+        : _ref
+            .read(assistantProvider)
+            .where((a) => a.id == assistantId)
+            .firstOrNull;
+    final hasToolDefaults = assistant?.defaultToolNames != null;
     final conv = Conversation(
       title: '',
       createdAt: now,
       updatedAt: now,
       messages: [],
       assistantId: assistantId,
+      enabledMcpToolNames: hasToolDefaults
+          ? Set<String>.from(assistant!.defaultToolNames!)
+          : null,
+      hasExplicitEnabledMcpTools: hasToolDefaults,
+      lastUsedModelName: assistant?.defaultModelName,
     );
     state = [conv, ...state];
     _ref.read(activeConversationIdProvider.notifier).state = conv.id;

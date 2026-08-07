@@ -173,6 +173,24 @@ class Assistant {
   final String description;
   final AssistantSettings settings;
   final String? modelId;
+
+  /// 该助手新建话题（对话）时使用的默认模型显示名
+  /// （"modelName | providerName" 格式，与 [Conversation.lastUsedModelName]
+  /// 同一命名空间）。为 null 时新话题跟随全局保存的模型选择。
+  /// 用户在某条对话内切换模型后，以对话自身的记录为准，互不影响。
+  final String? defaultModelName;
+
+  /// 该助手新建话题（对话）时默认启用的工具名集合。
+  /// 未添加进此集合的工具在新话题中保持关闭。
+  /// 对话内用户手动开关工具后，以对话自身的记录为准。
+  ///
+  /// null 表示"从未配置过默认工具"——新话题保持原有行为
+  /// （自动启用全部可用工具）；非 null（含空集合）表示已配置，
+  /// 新话题严格使用该集合（未添加的工具保持关闭）。
+  /// 该三态区分需要跨序列化存活，因此 toMap 在非 null 时总是写出
+  /// 该字段（包括空集合）。
+  final Set<String>? defaultToolNames;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -184,6 +202,8 @@ class Assistant {
     this.description = '',
     AssistantSettings? settings,
     this.modelId,
+    this.defaultModelName,
+    this.defaultToolNames,
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : id = id ?? const Uuid().v4(),
@@ -199,6 +219,11 @@ class Assistant {
         'description': description,
         'settings': settings.toMap(),
         if (modelId != null) 'modelId': modelId,
+        if (defaultModelName != null && defaultModelName!.isNotEmpty)
+          'defaultModelName': defaultModelName,
+        // 非 null 时总是写出（含空集合）：区分"配置过但全关"与"从未配置"。
+        if (defaultToolNames != null)
+          'defaultToolNames': defaultToolNames!.toList(),
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
       };
@@ -209,6 +234,8 @@ class Assistant {
   /// those are ignored since emoji is the only avatar mode now.
   factory Assistant.fromMap(Map<String, dynamic> map) {
     final settingsMap = map['settings'] as Map<String, dynamic>?;
+    final defaultModelNameRaw = map['defaultModelName'];
+    final defaultToolsRaw = map['defaultToolNames'];
     return Assistant(
       id: map['id'] as String?,
       name: (map['name'] as String?) ?? '',
@@ -219,6 +246,16 @@ class Assistant {
           ? AssistantSettings.fromMap(settingsMap)
           : AssistantSettings.defaults(),
       modelId: map['modelId'] as String?,
+      defaultModelName:
+          defaultModelNameRaw is String && defaultModelNameRaw.isNotEmpty
+              ? defaultModelNameRaw
+              : null,
+      // 字段存在（含空列表）→ 已配置；缺失 → 从未配置（null）。
+      defaultToolNames: defaultToolsRaw != null
+          ? (defaultToolsRaw is List
+              ? defaultToolsRaw.map((e) => e.toString()).toSet()
+              : const <String>{})
+          : null,
       createdAt: map['createdAt'] != null
           ? DateTime.parse(map['createdAt'] as String)
           : null,
@@ -236,6 +273,8 @@ class Assistant {
     String? description,
     AssistantSettings? settings,
     String? modelId,
+    String? defaultModelName,
+    Set<String>? defaultToolNames,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) =>
@@ -247,6 +286,8 @@ class Assistant {
         description: description ?? this.description,
         settings: settings ?? this.settings,
         modelId: modelId ?? this.modelId,
+        defaultModelName: defaultModelName ?? this.defaultModelName,
+        defaultToolNames: defaultToolNames ?? this.defaultToolNames,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );

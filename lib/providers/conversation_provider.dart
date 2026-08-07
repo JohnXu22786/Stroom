@@ -138,7 +138,11 @@ class Conversation {
   /// The display name of the model that was last used to send a message
   /// in this conversation. When set, the chat page restores this model
   /// on re-entry, taking priority over the globally saved model index.
-  /// Null for conversations that haven't sent any messages yet.
+  /// Also pre-set at creation from the assistant's default model
+  /// ([Assistant.defaultModelName]) so new topics honor the assistant
+  /// defaults on first entry; the user's own switches afterwards always
+  /// win (see [updateLastUsedModel]).
+  /// Null for conversations that haven't used a specific model yet.
   String? lastUsedModelName;
 
   /// 最近一次请求的实际输入 token 数（来自 API 返回的 usage，非估算）。
