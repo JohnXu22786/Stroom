@@ -23,11 +23,133 @@ extension _ChatPageUiExt on _ChatPageState {
     }
   }
 
+  /// Current soft-keyboard inset in logical pixels, read from the VIEW
+  /// (fresh) instead of the inherited [MediaQuery] (which can be one frame
+  /// behind inside focus callbacks).
+  double _currentKeyboardInset() {
+    final view = View.of(context);
+    return view.viewInsets.bottom / view.devicePixelRatio;
+  }
+
+  /// Called when the composer input gains focus on mobile. Reacts instantly
+  /// — before the soft-keyboard show animation starts — so the message
+  /// list starts sliding up toward the bottom the moment the user taps the
+  /// input. The [didChangeMetrics] transition alone only fires once the
+  /// insets cross the threshold mid-animation, which looks like a delayed
+  /// shift.
+  ///
+  /// The scroll is a single [ScrollPosition.animateTo] (no per-frame
+  /// compensation), so it never fights the keyboard animation or drops
+  /// frames.
+  void _onComposerFocusChanged(bool hasFocus) {
+    if (!mounted || !hasFocus) return;
+    final platform = Theme.of(context).platform;
+    if (platform != TargetPlatform.android && platform != TargetPlatform.iOS) {
+      return;
+    }
+    // While the initial positioning pass runs the list is hidden; the pass
+    // positions the list itself, so the hook must not interfere.
+    if (_pendingInitialScrollAdjustment) return;
+    // Keyboard already visible — the session is already being handled.
+    if (_currentKeyboardInset() > _ChatPageState._keyboardVisibleThreshold) {
+      return;
+    }
+    // Session already handled (a position was saved) — e.g. a mid-restore
+    // re-tap must not overwrite the saved pre-keyboard position.
+    if (_lastScrollPositionBeforeKeyboard != null) return;
+    if (!_chatScrollController.hasClients) return;
+    // A new keyboard session starts with this tap.
+    _userDraggedDuringKeyboardSession = false;
+    _lastScrollPositionBeforeKeyboard = _chatScrollController.position.pixels;
+    // If the keyboard never shows up (physical keyboard, suppressed IME),
+    // the saved position would go stale; drop it after a grace period.
+    _staleKeyboardPositionTimer?.cancel();
+    _staleKeyboardPositionTimer =
+        Timer(_ChatPageState._staleKeyboardPositionDelay, () {
+      if (!mounted) return;
+      if (!_keyboardAppeared) _lastScrollPositionBeforeKeyboard = null;
+    });
+    _animateScrollToBottom();
+  }
+
+  /// Tracks user drags on the chat list via scroll notifications. Only the
+  /// drag-initiating [ScrollStartNotification] carries [dragDetails]; a
+  /// fling's ballistic phase and every programmatic scroll (animateTo /
+  /// jumpTo — the composer hook, the chat library's own keyboard handling,
+  /// this page's follow-up) carry null and are ignored. Marking the flags at
+  /// drag start covers both the drag itself and the fling that follows it:
+  /// [_userIsDragging] (instant, for the content-growth follow) stays true
+  /// until the scroll ends, and [_userDraggedDuringKeyboardSession] keeps
+  /// the keyboard follow-up from yanking the list back from a user who
+  /// took over.
+  bool _onChatScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollStartNotification) {
+      if (notification.dragDetails != null) {
+        _userIsDragging = true;
+        _userDraggedDuringKeyboardSession = true;
+      } else {
+        _userIsDragging = false;
+      }
+    } else if (notification is ScrollEndNotification) {
+      _userIsDragging = false;
+    }
+    return false;
+  }
+
+  /// Animates the chat list to the bottom over roughly the soft-keyboard
+  /// show animation, so the list visibly slides up in lockstep with the
+  /// keyboard instead of waiting for the metrics transition.
+  ///
+  /// The viewport keeps shrinking while the keyboard animation runs, which
+  /// grows [ScrollMetrics.maxScrollExtent] past the target captured here,
+  /// and the chat library's own debounced keyboard scroll may take over
+  /// the position mid-flight; [_tryKeyboardFollowUp] closes the remaining
+  /// gap once every scroll has settled.
+  void _animateScrollToBottom() {
+    final pos = _chatScrollController.position;
+    final target = pos.maxScrollExtent;
+    if ((pos.pixels - target).abs() < 1) return;
+    pos.animateTo(
+      target,
+      duration: _ChatPageState._keyboardOpenScrollDuration,
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  /// Runs once, [_keyboardFollowUpDelay] after the keyboard appeared, by
+  /// which time every scroll animation that can run during the show
+  /// transition has finished (the composer hook's 200ms scroll, the chat
+  /// library's debounced 250ms keyboard scroll). If the list is not yet at
+  /// the bottom of the final viewport — and the user has not taken over
+  /// the list — the remaining gap is closed with one short animation.
+  void _tryKeyboardFollowUp() {
+    if (!mounted) return;
+    if (!_keyboardAppeared) return;
+    if (_userDraggedDuringKeyboardSession) return;
+    if (_lastScrollPositionBeforeKeyboard == null) return;
+    if (!_chatScrollController.hasClients) return;
+    final pos = _chatScrollController.position;
+    if (pos.isScrollingNotifier.value) return;
+    final target = pos.maxScrollExtent;
+    if ((pos.pixels - target).abs() < 1) return;
+    pos.animateTo(
+      target,
+      duration: _ChatPageState._keyboardOpenScrollFollowUpDuration,
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   /// Restores the scroll position that was captured before the keyboard
-  /// opened, so the user returns to where they were reading.
+  /// opened, so the user returns to where they were reading. Also ends the
+  /// keyboard scroll session: the saved position is cleared and every
+  /// keyboard-session flag/timer is reset for the next session.
   void _restoreScrollPositionAfterKeyboard() {
     final savedPos = _lastScrollPositionBeforeKeyboard;
     _lastScrollPositionBeforeKeyboard = null;
+    _keyboardAppeared = false;
+    _userDraggedDuringKeyboardSession = false;
+    _staleKeyboardPositionTimer?.cancel();
+    _keyboardFollowUpTimer?.cancel();
     if (savedPos == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -106,22 +228,6 @@ extension _ChatPageUiExt on _ChatPageState {
       if ((pos.pixels - target).abs() < 1) return;
       _chatScrollController.jumpTo(target);
     });
-  }
-
-  /// Tracks user drags on the chat list via scroll notifications, feeding
-  /// [_userIsDragging] which the content-growth follow ([_followContentGrowth])
-  /// uses to avoid fighting a finger scroll. A drag — including the fling it
-  /// produces, whose ballistic phase carries null [dragDetails] after the
-  /// drag already set the flag — means the user is steering the list.
-  /// Programmatic scrolls (jumpTo / animateTo, e.g. the chat library's own
-  /// insert-follow) have null [dragDetails] and are ignored.
-  bool _onChatScrollNotification(ScrollNotification notification) {
-    if (notification is ScrollStartNotification) {
-      _userIsDragging = notification.dragDetails != null;
-    } else if (notification is ScrollEndNotification) {
-      _userIsDragging = false;
-    }
-    return false;
   }
 
   /// Handles chat list scroll events to track auto-scroll state.
