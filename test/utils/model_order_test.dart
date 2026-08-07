@@ -13,7 +13,8 @@ void main() {
       expect(applySavedOrder(names, null), isNot(same(names)));
     });
 
-    test('brings known names to the front in saved order, keeps the rest '
+    test(
+        'brings known names to the front in saved order, keeps the rest '
         'appended in their original order', () {
       const names = ['a', 'b', 'c', 'd'];
       expect(applySavedOrder(names, ['c', 'a']), ['c', 'a', 'b', 'd']);
@@ -31,7 +32,8 @@ void main() {
   });
 
   group('rebuildGlobalOrder', () {
-    test('replaces the provider subsequence in place, keeping other '
+    test(
+        'replaces the provider subsequence in place, keeping other '
         'providers in their exact positions', () {
       const global = ['A1 | A', 'B1 | B', 'A2 | A', 'B2 | B'];
       final result = rebuildGlobalOrder(
@@ -52,8 +54,7 @@ void main() {
       expect(result, ['A3 | A', 'A1 | A', 'A2 | A']);
     });
 
-    test('appends provider models missing from the global list at the end',
-        () {
+    test('appends provider models missing from the global list at the end', () {
       // 该供应商的模型此前从未出现在全局顺序中（如新建的模型），
       // 拖动后应追加到全局顺序末尾，而不是丢弃。
       const global = ['B1 | B'];

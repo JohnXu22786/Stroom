@@ -250,7 +250,8 @@ void main() {
       expect(find.text('voice-1'), findsOneWidget);
     });
 
-    testWidgets('dragging a model updates the combined order, keeping other '
+    testWidgets(
+        'dragging a model updates the combined order, keeping other '
         'providers in place', (tester) async {
       SharedPreferences.setMockInitialValues({
         'model_order': [

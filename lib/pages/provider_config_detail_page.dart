@@ -47,8 +47,7 @@ class _ProviderConfigDetailPageState
 
   /// 是否启用模型拖动排序（仅 LLM 已有配置：聊天面板的模型选择只展示
   /// LLM 模型，其它类型没有可同步的全局顺序，保持普通列表）。
-  bool get _enableModelReorder =>
-      _isExistingConfig && _entry?.type == 'llm';
+  bool get _enableModelReorder => _isExistingConfig && _entry?.type == 'llm';
 
   /// 模型列表的显示顺序：LLM 配置按全局保存顺序过滤出本配置的子序列，
   /// 未保存过顺序时与存储顺序一致。
@@ -58,16 +57,15 @@ class _ProviderConfigDetailPageState
     final config = _config;
     if (config == null) return models;
 
-    final names = models
-        .map((m) => _modelDisplayName(m, config.providerName))
-        .toList();
+    final names =
+        models.map((m) => _modelDisplayName(m, config.providerName)).toList();
     final orderedNames = applySavedOrder(names, _savedModelOrder);
     // 按名字逐个配对回模型对象（处理重名：每个名字按出现顺序消费）
     final remaining = List<ModelConfig>.of(models);
     final ordered = <ModelConfig>[];
     for (final name in orderedNames) {
-      final i =
-          remaining.indexWhere((m) => _modelDisplayName(m, config.providerName) == name);
+      final i = remaining
+          .indexWhere((m) => _modelDisplayName(m, config.providerName) == name);
       if (i >= 0) ordered.add(remaining.removeAt(i));
     }
     ordered.addAll(remaining);
@@ -815,7 +813,8 @@ class _ProviderConfigDetailPageState
 
     return ListTile(
       key: reorderable
-          ? ValueKey('model_${widget.entryId}_${widget.configIndex}_$displayIndex')
+          ? ValueKey(
+              'model_${widget.entryId}_${widget.configIndex}_$displayIndex')
           : null,
       leading: reorderable
           ? ReorderableDragStartListener(
