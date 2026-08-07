@@ -218,6 +218,13 @@ class McpServerConfig {
     this.isVendor = false,
   });
 
+  /// 生成 MCP 服务器的占位工具名（如 "Jina AI" → "jina_ai_mcp"）。
+  ///
+  /// 占位工具用于在工具列表中标识一个尚未连接/发现的 MCP 服务器；
+  /// 服务器被按需连接并列出真实工具后，真实工具名才是可调用的名称。
+  static String placeholderToolName(String serverName) =>
+      '${serverName.toLowerCase().replaceAll(' ', '_')}_mcp';
+
   /// 创建 stdio 模式的配置
   factory McpServerConfig.stdio({
     required String name,

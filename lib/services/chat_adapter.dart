@@ -72,30 +72,16 @@ class ChatAdapter {
   /// MCP 客户端管理器
   final McpClientManager _mcpClientManager = McpClientManager();
 
-  /// 缓存的 MCP 工具列表
+  /// 缓存的 MCP 工具列表（占位工具定义）
   List<ToolDefinition> _mcpToolDefinitions = [];
 
-  /// 正在进行的 MCP 工具发现 future。
+  /// 上一份已处理的 MCP 供应商条目实例。
   ///
-  /// 防并发重发现：页面 _initialize 与 provider-change listener 可能同时
-  /// 调用 initializeMcpServers（同一配置）。没有此守卫会并发执行两次
-  /// 发现，第二次的 addClient 会 dispose 第一次的 in-flight client，
-  /// 导致工具静默丢失。发现完成后置空，允许后续重发现。
-  Future<void>? _mcpInitFuture;
-
-  /// MCP 发现运行的代号：每轮发现开始时递增，disposeMcp 也会递增。
-  /// 旧运行完成时若代号已变化（已被 dispose 或新一轮发现取代），
-  /// 不得再写入工具列表——否则会在 dispose 之后复活旧工具，或让
-  /// 一轮旧发现的占位符覆盖新发现的真实工具。
-  int _mcpDiscoveryGeneration = 0;
-
-  /// 上一轮 MCP 发现是否找到真实工具。
-  ///
-  /// 占位符设计使缓存在任何发现运行后都非空，若只看缓存非空就跳过
-  /// 重发现，临时不可达的服务器（发现时未启动/断网）会永久停留在
-  /// 占位符上直到配置变更或重启。记录真实工具是否被找到：未找到时
-  /// 同配置的页面重新进入仍会重试发现，让服务器恢复后自动加载真实工具。
-  bool _lastMcpDiscoveryFoundTools = false;
+  /// 用于跳过重复初始化：页面重复进入、或其它供应商（TTS/OCR 等）配置
+  /// 变更时，entries state 会重建但 MCP 条目实例不变（ProviderEntriesNotifier
+  /// 的 update 只替换被更新的条目），此时占位符与客户端都无需重建。
+  /// MCP 条目本身被编辑时实例变化，触发重建。
+  ProviderEntry? _lastMcpEntry;
 
   /// 当前选中的配置索引（指向 llmEntry.configs）
   int currentConfigIndex = -1;
@@ -205,11 +191,6 @@ class ChatAdapter {
   String? _cachedAssistantPrompt;
   AssistantSettings? _cachedAssistantSettings;
   List<CustomParameter>? _cachedAssistantCustomParams;
-
-  /// Hash of the last entries state used for MCP initialization.
-  /// Prevents redundant re-discovery across page mounts, but allows
-  /// re-initialization when the provider config actually changes.
-  int? _lastMcpEntriesHash;
 
   /// Register HTTP tool handlers in ChatService (idempotent — uses static flag)
   static bool _httpToolsRegistered = false;
@@ -388,7 +369,6 @@ class ChatAdapter {
   /// 释放所有资源
   void dispose() {
     cancelAllServices();
-    _lastMcpEntriesHash = null;
     _cachedProvider = null;
     _cachedModelConfig = null;
     _cachedProviderConfig = null;
