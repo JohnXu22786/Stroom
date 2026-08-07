@@ -107,6 +107,7 @@ bool isSpecialFormat(String ext) {
     'flv',
     'f4v',
     'hlv',
+    'ev1',
     'mkv',
     'avi',
     'wmv',

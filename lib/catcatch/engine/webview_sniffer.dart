@@ -103,7 +103,7 @@ class WebViewSniffer {
               ext: ext,
               initiator: currentUrl,
               isPlayable:
-                  ext.isNotEmpty && !['m3u8', 'm3u', 'mpd', 'ts'].contains(ext),
+                  ext.isNotEmpty && !['m3u8', 'm3u', 'mpd', 'ts', 'ev1'].contains(ext),
               isPlaylist: ['m3u8', 'm3u', 'mpd'].contains(ext),
             );
           }).toList();
@@ -165,7 +165,7 @@ class WebViewSniffer {
               ext: ext,
               initiator: resolvedUrl,
               isPlayable:
-                  ext.isNotEmpty && !['m3u8', 'm3u', 'mpd', 'ts'].contains(ext),
+                  ext.isNotEmpty && !['m3u8', 'm3u', 'mpd', 'ts', 'ev1'].contains(ext),
               isPlaylist: ['m3u8', 'm3u', 'mpd'].contains(ext),
             );
           }).toList();
@@ -202,7 +202,7 @@ class WebViewSniffer {
   });
 
   // 2. Scan all elements with media extension URLs
-  const mediaExtRe = /\\.(mp4|m3u8|m3u|mpd|ts|webm|flv|f4v|mkv|avi|mov|wmv|ogg|ogv|aac|m4a|m4s|wav|mp3)(\\?|#|\$)/i;
+  const mediaExtRe = /\\.(mp4|m3u8|m3u|mpd|ts|webm|flv|f4v|ev1|mkv|avi|mov|wmv|ogg|ogv|aac|m4a|m4s|wav|mp3)(\\?|#|\$)/i;
   document.querySelectorAll('[href],[src],[data-src],[data-url],[data-original]').forEach(el => {
     const candidates = [el.href, el.src, el.dataset.src, el.dataset.url, el.dataset.original];
     candidates.forEach(val => {
@@ -283,6 +283,7 @@ class WebViewSniffer {
     'webm',
     'flv',
     'f4v',
+    'ev1',
     'mkv',
     'avi',
     'mov',

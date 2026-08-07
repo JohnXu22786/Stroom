@@ -328,7 +328,7 @@ class DartCatCatchSniffer {
     // Matches: http(s)://... with media extensions
     // Use triple-quoted raw strings to safely include both ' and " in regex
     final mediaUrlRe = RegExp(
-      r"""(https?://[^\s"'<>]+\.(mp4|m3u8|m3u|mpd|ts|webm|flv|f4v|mkv|avi|mov|wmv|ogg|ogv|aac|m4a|m4s|wav|mp3|opus|weba))"""
+      r"""(https?://[^\s"'<>]+\.(mp4|m3u8|m3u|mpd|ts|webm|flv|f4v|ev1|mkv|avi|mov|wmv|ogg|ogv|aac|m4a|m4s|wav|mp3|opus|weba))"""
       r"""(?:\?[^\s"'<>]*)?""",
       caseSensitive: false,
     );
@@ -340,7 +340,7 @@ class DartCatCatchSniffer {
 
     // Also match protocol-relative URLs (//cdn.example.com/video.mp4)
     final protocolRelativeRe = RegExp(
-      r"""(//[^\s"'<>]+\.(mp4|m3u8|m3u|mpd|ts|webm|flv|f4v|mkv|avi|mov|wmv|ogg|ogv|aac|m4a|m4s|wav|mp3|opus|weba))"""
+      r"""(//[^\s"'<>]+\.(mp4|m3u8|m3u|mpd|ts|webm|flv|f4v|ev1|mkv|avi|mov|wmv|ogg|ogv|aac|m4a|m4s|wav|mp3|opus|weba))"""
       r"""(?:\?[^\s"'<>]*)?""",
       caseSensitive: false,
     );

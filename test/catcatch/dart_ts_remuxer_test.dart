@@ -173,9 +173,12 @@ Uint8List _buildH264PesPayload() {
 ///   [8]: PES_header_data_length — 1 byte
 ///   [9..13]: PTS data (5 bytes) when PTS_DTS_flags = '10'
 ///   [14+]: elementary stream payload
-Uint8List _buildPesPacket(int streamId, Uint8List pesPayload, {int pts = 0}) {
-  const pesHeaderLen = 14; // 9 fixed + 5 (PTS) = 14
-  final totalLen = pesHeaderLen + pesPayload.length;
+Uint8List _buildPesPacket(int streamId, Uint8List pesPayload,
+    {int? pts, int? dts}) {
+  final hasPts = pts != null;
+  final hasDts = dts != null;
+  final headerLen = 9 + (hasDts ? 10 : (hasPts ? 5 : 0));
+  final totalLen = headerLen + pesPayload.length;
   final data = Uint8List(totalLen);
   data[0] = 0x00; // start_code_prefix[0]
   data[1] = 0x00; // start_code_prefix[1]
@@ -184,18 +187,186 @@ Uint8List _buildPesPacket(int streamId, Uint8List pesPayload, {int pts = 0}) {
   data[4] = ((totalLen - 6) >> 8) & 0xFF; // PES_packet_length high
   data[5] = (totalLen - 6) & 0xFF; // PES_packet_length low
   data[6] = 0x80; // '10' + zeros (scrambling/priority/alignment/copyright/copy)
-  data[7] = 0x80; // PTS_DTS_flags='10' (PTS only)
-  data[8] = 0x05; // PES_header_data_length = 5 (for PTS)
-  data[9] = 0x05; // PTS[32-30] + marker_bit
-  data[10] = 0x00; // PTS[29-22]
-  data[11] = 0x01; // PTS[21-14]
-  data[12] = 0x00; // PTS[13-7]
-  data[13] = 0x00; // PTS[6-0] + marker_bit
-  // Elementary stream payload starts at 14
+  data[7] = (hasDts ? 0xC0 : (hasPts ? 0x80 : 0x00)); // PTS_DTS_flags
+  data[8] = hasDts ? 10 : (hasPts ? 5 : 0); // PES_header_data_length
+  if (hasPts) {
+    _writePts(data, 9, pts);
+    if (hasDts) _writePts(data, 14, dts);
+  }
+  // Elementary stream payload starts after the header
   for (int i = 0; i < pesPayload.length; i++) {
-    data[14 + i] = pesPayload[i];
+    data[headerLen + i] = pesPayload[i];
   }
   return data;
+}
+
+/// Encode a 33-bit PTS/DTS into the 5-byte PES format at [offset].
+void _writePts(Uint8List data, int offset, int pts) {
+  data[offset] = 0x21 | (((pts >> 30) & 0x07) << 1); // '0010' + PTS[32..30]
+  data[offset + 1] = (pts >> 22) & 0xFF; // PTS[29..22]
+  data[offset + 2] = (((pts >> 15) & 0x7F) << 1) | 1; // PTS[21..15]
+  data[offset + 3] = (pts >> 7) & 0xFF; // PTS[14..7]
+  data[offset + 4] = ((pts & 0x7F) << 1) | 1; // PTS[6..0]
+}
+
+/// Decode a 5-byte PES PTS field at [offset].
+int _readPts(Uint8List data, int offset) {
+  return ((data[offset] >> 1) & 0x07) << 30 |
+      data[offset + 1] << 22 |
+      ((data[offset + 2] >> 1) & 0x7F) << 15 |
+      data[offset + 3] << 7 |
+      ((data[offset + 4] >> 1) & 0x7F);
+}
+
+/// Minimal bit writer for constructing test SPS data.
+class _BitWriter {
+  final List<int> _bits = [];
+
+  void writeBits(int value, int count) {
+    for (int i = count - 1; i >= 0; i--) {
+      _bits.add((value >> i) & 1);
+    }
+  }
+
+  void writeUe(int value) {
+    final codeNum = value + 1;
+    final binary = codeNum.toRadixString(2);
+    for (int i = 0; i < binary.length - 1; i++) {
+      _bits.add(0);
+    }
+    for (final c in binary.split('')) {
+      _bits.add(c == '1' ? 1 : 0);
+    }
+  }
+
+  Uint8List toBytes() {
+    while (_bits.length % 8 != 0) {
+      _bits.add(0);
+    }
+    final bytes = Uint8List(_bits.length ~/ 8);
+    for (int i = 0; i < _bits.length; i++) {
+      if (_bits[i] == 1) {
+        bytes[i ~/ 8] |= 1 << (7 - (i % 8));
+      }
+    }
+    return bytes;
+  }
+}
+
+/// Build a realistic H.264 SPS NAL for 640x360 @ 30fps (with cropping).
+///
+/// 360 不是 16 的倍数，因此使用 368 行 + 底部裁剪 8 像素（4 个裁剪单元）。
+Uint8List _buildSps640x360() {
+  final w = _BitWriter();
+  w.writeBits(0x42, 8); // profile_idc = 66 (baseline)
+  w.writeBits(0x00, 8); // constraint flags
+  w.writeBits(0x1E, 8); // level_idc = 30
+  w.writeUe(0); // seq_parameter_set_id
+  w.writeUe(0); // log2_max_frame_num_minus4
+  w.writeUe(0); // pic_order_cnt_type
+  w.writeUe(0); // log2_max_pic_order_cnt_lsb_minus4
+  w.writeUe(1); // max_num_ref_frames
+  w.writeBits(0, 1); // gaps_in_frame_num_value_allowed_flag
+  w.writeUe(39); // pic_width_in_mbs_minus1 (640/16-1)
+  w.writeUe(22); // pic_height_in_map_units_minus1 (368/16-1)
+  w.writeBits(1, 1); // frame_mbs_only_flag
+  w.writeBits(1, 1); // direct_8x8_inference_flag
+  w.writeBits(1, 1); // frame_cropping_flag
+  w.writeUe(0); // crop_left
+  w.writeUe(0); // crop_right
+  w.writeUe(0); // crop_top
+  w.writeUe(4); // crop_bottom (368-360)/2
+  w.writeBits(1, 1); // vui_parameters_present_flag
+  w.writeBits(0, 1); // aspect_ratio_info_present_flag
+  w.writeBits(0, 1); // overscan_info_present_flag
+  w.writeBits(0, 1); // video_signal_type_present_flag
+  w.writeBits(0, 1); // chroma_loc_info_present_flag
+  w.writeBits(1, 1); // timing_info_present_flag
+  w.writeBits(1500, 32); // num_units_in_tick
+  w.writeBits(90000, 32); // time_scale → 90000/(2*1500) = 30fps
+  w.writeBits(1, 1); // fixed_frame_rate_flag
+  return Uint8List.fromList([0x67, ...w.toBytes()]);
+}
+
+// --- MP4 box inspection helpers ---------------------------------------------
+
+List<(String, Uint8List)> _boxChildren(Uint8List payload) {
+  final children = <(String, Uint8List)>[];
+  var offset = 0;
+  while (offset + 8 <= payload.length) {
+    final size = _u32(payload, offset);
+    final type =
+        String.fromCharCodes(payload.sublist(offset + 4, offset + 8));
+    if (size < 8 || offset + size > payload.length) break;
+    children.add((type, payload.sublist(offset + 8, offset + size)));
+    offset += size;
+  }
+  return children;
+}
+
+(Uint8List?, List<(String, Uint8List)>) _findChild(List<(String, Uint8List)> children, String type) {
+  for (final (t, payload) in children) {
+    if (t == type) return (payload, children);
+  }
+  return (null, children);
+}
+
+int _u32(Uint8List data, int offset) =>
+    (data[offset] << 24) |
+    (data[offset + 1] << 16) |
+    (data[offset + 2] << 8) |
+    data[offset + 3];
+
+/// Find a box anywhere in the file (top-level search).
+Uint8List? _findBox(Uint8List data, String type) {
+  var offset = 0;
+  while (offset + 8 <= data.length) {
+    final size = _u32(data, offset);
+    final t = String.fromCharCodes(data.sublist(offset + 4, offset + 8));
+    if (size < 8 || offset + size > data.length) break;
+    if (t == type) return data.sublist(offset + 8, offset + size);
+    offset += size;
+  }
+  return null;
+}
+
+/// Extract stsz sample sizes from a trak box payload.
+List<int> _stszSizes(Uint8List trakPayload) {
+  final mdia = _findChild(_boxChildren(trakPayload), 'mdia').$1!;
+  final minf = _findChild(_boxChildren(mdia), 'minf').$1!;
+  final stbl = _findChild(_boxChildren(minf), 'stbl').$1!;
+  final stsz = _findChild(_boxChildren(stbl), 'stsz').$1!;
+  // stsz 载荷：version/flags(4) + sample_size(4) + sample_count(4) + sizes
+  final count = _u32(stsz, 8);
+  final sizes = <int>[];
+  for (int i = 0; i < count; i++) {
+    sizes.add(_u32(stsz, 12 + i * 4));
+  }
+  return sizes;
+}
+
+/// Extract stts (sample_count, duration) runs from a trak box payload.
+List<(int, int)> _sttsRuns(Uint8List trakPayload) {
+  final mdia = _findChild(_boxChildren(trakPayload), 'mdia').$1!;
+  final minf = _findChild(_boxChildren(mdia), 'minf').$1!;
+  final stbl = _findChild(_boxChildren(minf), 'stbl').$1!;
+  final stts = _findChild(_boxChildren(stbl), 'stts').$1!;
+  final count = _u32(stts, 4);
+  final runs = <(int, int)>[];
+  for (int i = 0; i < count; i++) {
+    runs.add((_u32(stts, 8 + i * 8), _u32(stts, 12 + i * 8)));
+  }
+  return runs;
+}
+
+int _co64Offset(Uint8List trakPayload) {
+  final mdia = _findChild(_boxChildren(trakPayload), 'mdia').$1!;
+  final minf = _findChild(_boxChildren(mdia), 'minf').$1!;
+  final stbl = _findChild(_boxChildren(minf), 'stbl').$1!;
+  final co64 = _findChild(_boxChildren(stbl), 'co64').$1!;
+  final bd = co64.buffer.asByteData(0);
+  // co64 payload: version/flags(4) entry_count(4) offset(8)
+  return bd.getUint64(8);
 }
 
 void main() {
@@ -476,6 +647,61 @@ void main() {
       expect(box[10], equals(0));
       expect(box[11], equals(0));
     });
+
+    test('buildMdatHeader writes 32-bit size for normal payloads', () {
+      final header = Mp4Muxer.buildMdatHeader(8 + 1000);
+      expect(header.length, equals(8));
+      expect(String.fromCharCodes(header.sublist(4, 8)), equals('mdat'));
+      expect(_u32(header, 0), equals(1008));
+    });
+
+    test('buildMdatHeader writes 64-bit largesize for >4GB payloads', () {
+      final boxSize = 0x100000008; // 4GB+16 字节头
+      final header = Mp4Muxer.buildMdatHeader(boxSize);
+      expect(header.length, equals(16));
+      expect(_u32(header, 0), equals(1)); // size=1 表示 64 位扩展
+      expect(String.fromCharCodes(header.sublist(4, 8)), equals('mdat'));
+      final largesize = header.buffer.asByteData(8).getUint64(0);
+      expect(largesize, equals(boxSize));
+    });
+  });
+
+  group('Mp4Muxer - output cleanup', () {
+    test('muxMp4 removes tmp output file on cancellation', () async {
+      final tempDir = Directory.systemTemp.createTempSync('mux_cancel_');
+      try {
+        final spoolPath = '${tempDir.path}\\spool.bin';
+        // 一个 7 字节样本（4 字节长度前缀 + 3 字节 NAL）
+        await File(spoolPath)
+            .writeAsBytes(Uint8List.fromList([0, 0, 0, 3, 1, 2, 3]));
+        final outputPath = '${tempDir.path}\\out.mp4';
+
+        await expectLater(
+          () => Mp4Muxer.muxMp4(
+            spoolPath: spoolPath,
+            videoSamples: [
+              Mp4Sample(spoolOffset: 0, size: 7, pts: 0, dts: 0, sync: true)
+            ],
+            audioSamples: const [],
+            video: VideoFormat(
+              sps: [Uint8List.fromList([0x67, 0x42, 0x00, 0x1E, 0x8D])],
+              pps: [Uint8List.fromList([0x68, 0xCE, 0x38, 0x80])],
+            ),
+            audio: null,
+            outputPath: outputPath,
+            isCancelled: () => true,
+          ),
+          throwsFormatException,
+        );
+
+        // 输出文件与临时文件都不应残留
+        expect(File(outputPath).existsSync(), isFalse);
+        expect(File('$outputPath.tmp').existsSync(), isFalse);
+        expect(File('$outputPath.spool.tmp').existsSync(), isFalse);
+      } finally {
+        tempDir.deleteSync(recursive: true);
+      }
+    }, timeout: const Timeout(Duration(seconds: 10)));
   });
 
   group('TsDemuxer - extractVideoBitstream', () {
@@ -685,5 +911,394 @@ void main() {
         throwsA(isA<FileSystemException>()),
       );
     });
+  });
+
+  group('TsDemuxer - PES PTS/DTS extraction', () {
+    test('extracts PTS from PES header', () {
+      final pes = _buildPesPacket(0xE0, Uint8List.fromList([1, 2, 3]),
+          pts: 90000);
+      final pesPackets =
+          TsDemuxer.extractPesPackets([TsPacket(pid: 0x101, payload: pes, payloadUnitStart: true)], 0x101);
+      expect(pesPackets.length, equals(1));
+      expect(pesPackets.first.pts, equals(90000));
+      expect(pesPackets.first.dts, isNull);
+      expect(pesPackets.first.data, equals(Uint8List.fromList([1, 2, 3])));
+    });
+
+    test('extracts both PTS and DTS', () {
+      final pes = _buildPesPacket(0xE0, Uint8List.fromList([1, 2, 3]),
+          pts: 180000, dts: 90000);
+      final pesPackets = TsDemuxer.extractPesPackets(
+          [TsPacket(pid: 0x101, payload: pes, payloadUnitStart: true)], 0x101);
+      expect(pesPackets.first.pts, equals(180000));
+      expect(pesPackets.first.dts, equals(90000));
+    });
+
+    test('PTS encoding round-trips', () {
+      for (final pts in [0, 1, 90000, 1234567, (1 << 33) - 1]) {
+        final buf = Uint8List(5);
+        _writePts(buf, 0, pts);
+        expect(_readPts(buf, 0), equals(pts));
+      }
+    });
+
+    test('handles PES spanning multiple TS packets', () {
+      final payload = Uint8List.fromList(
+          List.generate(400, (i) => i & 0xFF));
+      final pes = _buildPesPacket(0xE0, payload, pts: 90000);
+
+      // Split the PES across 3 TS packets
+      final packets = <TsPacket>[
+        TsPacket(
+            pid: 0x101,
+            payload: pes.sublist(0, 100),
+            payloadUnitStart: true),
+        TsPacket(pid: 0x101, payload: pes.sublist(100, 250)),
+        TsPacket(pid: 0x101, payload: pes.sublist(250)),
+      ];
+      final pesPackets = TsDemuxer.extractPesPackets(packets, 0x101);
+      expect(pesPackets.length, equals(1));
+      expect(pesPackets.first.pts, equals(90000));
+      expect(pesPackets.first.data, equals(payload));
+    });
+
+    test('separates consecutive PES packets', () {
+      final pes1 = _buildPesPacket(0xE0, Uint8List.fromList([1, 2, 3]),
+          pts: 90000);
+      final pes2 = _buildPesPacket(0xE0, Uint8List.fromList([4, 5, 6]),
+          pts: 180000);
+      final packets = <TsPacket>[
+        TsPacket(pid: 0x101, payload: pes1, payloadUnitStart: true),
+        TsPacket(pid: 0x101, payload: pes2, payloadUnitStart: true),
+      ];
+      final pesPackets = TsDemuxer.extractPesPackets(packets, 0x101);
+      expect(pesPackets.length, equals(2));
+      expect(pesPackets[0].pts, equals(90000));
+      expect(pesPackets[1].pts, equals(180000));
+    });
+  });
+
+  group('H264SpsParser', () {
+    test('parses 640x360 @ 30fps SPS with cropping', () {
+      final sps = _buildSps640x360();
+      final info = H264SpsParser.parse(sps);
+      expect(info, isNotNull);
+      expect(info!.width, equals(640));
+      expect(info.height, equals(360));
+      expect(info.frameRate, closeTo(30.0, 0.01));
+    });
+
+    test('parses minimal SPS without VUI', () {
+      final w = _BitWriter();
+      w.writeBits(0x42, 8); // profile_idc
+      w.writeBits(0x00, 8);
+      w.writeBits(0x1E, 8); // level_idc
+      w.writeUe(0); // seq_parameter_set_id
+      w.writeUe(0); // log2_max_frame_num_minus4
+      w.writeUe(0); // pic_order_cnt_type
+      w.writeUe(0); // log2_max_pic_order_cnt_lsb_minus4
+      w.writeUe(1); // max_num_ref_frames
+      w.writeBits(0, 1); // gaps flag
+      w.writeUe(0); // pic_width_in_mbs_minus1 → 16px
+      w.writeUe(0); // pic_height_in_map_units_minus1 → 16px
+      w.writeBits(1, 1); // frame_mbs_only_flag
+      w.writeBits(1, 1); // direct_8x8_inference_flag
+      w.writeBits(0, 1); // frame_cropping_flag
+      w.writeBits(0, 1); // vui_parameters_present_flag
+      final sps = Uint8List.fromList([0x67, ...w.toBytes()]);
+      final info = H264SpsParser.parse(sps);
+      expect(info, isNotNull);
+      expect(info!.width, equals(16));
+      expect(info.height, equals(16));
+      expect(info.frameRate, isNull);
+    });
+
+    test('returns null for garbage SPS', () {
+      expect(H264SpsParser.parse(Uint8List.fromList([0x67, 0x00])), isNull);
+    });
+  });
+
+  group('AacConfigParser', () {
+    test('parses ADTS header for 44.1kHz stereo LC-AAC', () {
+      // 0xFF 0xF1 0x50 ...: LC(1+1=2), sf_index=4 (44100), 2 channels
+      final header = Uint8List.fromList([0xFF, 0xF1, 0x50, 0x80, 0x03, 0xDF, 0xFC]);
+      final info = AacConfigParser.fromAdts(header);
+      expect(info, isNotNull);
+      expect(info!.objectType, equals(2)); // AAC LC
+      expect(info.sampleRate, equals(44100));
+      expect(info.channels, equals(2));
+      expect(info.asc, equals(Uint8List.fromList([0x12, 0x10])));
+    });
+
+    test('parses AudioSpecificConfig from FLV stream', () {
+      final info = AacConfigParser.fromAsc(Uint8List.fromList([0x12, 0x10]));
+      expect(info, isNotNull);
+      expect(info!.objectType, equals(2));
+      expect(info.sampleRate, equals(44100));
+      expect(info.channels, equals(2));
+    });
+
+    test('rejects reserved sampling frequency index', () {
+      // sf_index = 15 is reserved
+      expect(AacConfigParser.fromAsc(Uint8List.fromList([0x7F, 0x00])), isNull);
+    });
+  });
+
+  group('TsDemuxer - convertTsToMp4 with timestamps (integration)', () {
+    test('preserves PTS timing in MP4 stts and mvhd duration', () async {
+      final videoPid = 0x101;
+      final audioPid = 0x102;
+      final pmtPid = 0x100;
+
+      final patPacket = _buildTsPacket(
+          0x0000, 0, _buildPat(pmtPid), payloadUnitStart: true);
+      final pmtPacket = _buildTsPacket(
+          pmtPid, 0, _buildPmt(videoPid, audioPid), payloadUnitStart: true);
+
+      // 2 video PES packets with PTS 1s apart
+      final videoPes1 = _buildPesPacket(0xE0, _buildH264PesPayload(), pts: 90000);
+      final videoPes2 = _buildPesPacket(0xE0, _buildH264PesPayload(), pts: 180000);
+      final videoPacket1 =
+          _buildTsPacket(videoPid, 0, videoPes1, payloadUnitStart: true);
+      final videoPacket2 =
+          _buildTsPacket(videoPid, 1, videoPes2, payloadUnitStart: true);
+
+      final tempDir = Directory.systemTemp.createTempSync('ts_pts_test_');
+      try {
+        final tsPath = '${tempDir.path}\\input.ts';
+        final mp4Path = '${tempDir.path}\\output.mp4';
+        await File(tsPath).writeAsBytes(Uint8List.fromList([
+          ...patPacket,
+          ...pmtPacket,
+          ...videoPacket1,
+          ...videoPacket2,
+        ]));
+
+        await TsDemuxer.convertTsToMp4(
+          inputPath: tsPath,
+          outputPath: mp4Path,
+        );
+
+        final mp4 = await File(mp4Path).readAsBytes();
+        final moov = _findBox(mp4, 'moov');
+        expect(moov, isNotNull);
+
+        final traks = _boxChildren(moov!)
+            .where((c) => c.$1 == 'trak')
+            .map((c) => c.$2)
+            .toList();
+        expect(traks.length, equals(1)); // 无音频，仅视频轨
+
+        // 两个样本，间隔 1s（90k ticks）
+        expect(_stszSizes(traks.first).length, equals(2));
+        final stts = _sttsRuns(traks.first);
+        expect(stts, equals([(2, 90000)]));
+      } finally {
+        tempDir.deleteSync(recursive: true);
+      }
+    }, timeout: const Timeout(Duration(seconds: 10)));
+  });
+
+  group('Mp4Muxer - box layout (integration)', () {
+    test('audio chunk offset follows video data', () async {
+      final videoPid = 0x101;
+      final audioPid = 0x102;
+      final pmtPid = 0x100;
+
+      final patPacket = _buildTsPacket(
+          0x0000, 0, _buildPat(pmtPid), payloadUnitStart: true);
+      final pmtPacket = _buildTsPacket(
+          pmtPid, 0, _buildPmt(videoPid, audioPid), payloadUnitStart: true);
+
+      // 2 video PES + 2 audio PES
+      final videoPayload = _buildH264PesPayload();
+      final adtsHeader = Uint8List.fromList([0xFF, 0xF1, 0x4C, 0x80, 0x04, 0xBF, 0xFC]);
+      final aacFrame = Uint8List.fromList([...adtsHeader, ...Uint8List(30)]);
+
+      final packets = <int>[
+        ...patPacket,
+        ...pmtPacket,
+        ..._buildTsPacket(videoPid, 0,
+            _buildPesPacket(0xE0, videoPayload, pts: 90000),
+            payloadUnitStart: true),
+        ..._buildTsPacket(videoPid, 1,
+            _buildPesPacket(0xE0, videoPayload, pts: 180000),
+            payloadUnitStart: true),
+        // AAC 帧间隔 = 1024/44100s ≈ 2090 ticks @90kHz
+        ..._buildTsPacket(audioPid, 0,
+            _buildPesPacket(0xC0, aacFrame, pts: 90000),
+            payloadUnitStart: true),
+        ..._buildTsPacket(audioPid, 1,
+            _buildPesPacket(0xC0, aacFrame, pts: 92090),
+            payloadUnitStart: true),
+      ];
+
+      final tempDir = Directory.systemTemp.createTempSync('ts_audio_test_');
+      try {
+        final tsPath = '${tempDir.path}\\input.ts';
+        final mp4Path = '${tempDir.path}\\output.mp4';
+        await File(tsPath).writeAsBytes(Uint8List.fromList(packets));
+        await TsDemuxer.convertTsToMp4(
+          inputPath: tsPath,
+          outputPath: mp4Path,
+        );
+
+        final mp4 = await File(mp4Path).readAsBytes();
+        final moov = _findBox(mp4, 'moov')!;
+        final traks = _boxChildren(moov)
+            .where((c) => c.$1 == 'trak')
+            .map((c) => c.$2)
+            .toList();
+        expect(traks.length, equals(2));
+
+        // 视频：2 个样本；音频：2 个帧（每帧 1024 采样）
+        final videoSizes = _stszSizes(traks[0]);
+        final audioSizes = _stszSizes(traks[1]);
+        expect(videoSizes.length, equals(2));
+        expect(audioSizes.length, equals(2));
+        expect(audioSizes.every((s) => s == 30), isTrue);
+
+        // 音频块偏移 = ftyp(28) + mdat 头(8) + 视频数据量
+        final expectedAudioOffset =
+            28 + 8 + videoSizes.fold(0, (a, b) => a + b);
+        expect(_co64Offset(traks[1]), equals(expectedAudioOffset));
+
+        // 音频 stts：每帧 1024 采样
+        expect(_sttsRuns(traks[1]), equals([(2, 1024)]));
+      } finally {
+        tempDir.deleteSync(recursive: true);
+      }
+    }, timeout: const Timeout(Duration(seconds: 10)));
+  });
+
+  group('Mp4Muxer - A/V offset edit list (integration)', () {
+    test('writes elst empty edit on video track when audio starts earlier',
+        () async {
+      final videoPid = 0x101;
+      final audioPid = 0x102;
+      final pmtPid = 0x100;
+
+      final patPacket = _buildTsPacket(
+          0x0000, 0, _buildPat(pmtPid), payloadUnitStart: true);
+      final pmtPacket = _buildTsPacket(
+          pmtPid, 0, _buildPmt(videoPid, audioPid), payloadUnitStart: true);
+
+      final videoPayload = _buildH264PesPayload();
+      final adtsHeader =
+          Uint8List.fromList([0xFF, 0xF1, 0x50, 0x80, 0x04, 0xBF, 0xFC]);
+      final aacFrame = Uint8List.fromList([...adtsHeader, ...Uint8List(30)]);
+
+      // 视频从 180000 开始，音频从 90000 开始 → 音频早 1s，视频轨加空编辑
+      final packets = <int>[
+        ...patPacket,
+        ...pmtPacket,
+        ..._buildTsPacket(videoPid, 0,
+            _buildPesPacket(0xE0, videoPayload, pts: 180000),
+            payloadUnitStart: true),
+        ..._buildTsPacket(videoPid, 1,
+            _buildPesPacket(0xE0, videoPayload, pts: 270000),
+            payloadUnitStart: true),
+        ..._buildTsPacket(audioPid, 0,
+            _buildPesPacket(0xC0, aacFrame, pts: 90000),
+            payloadUnitStart: true),
+        ..._buildTsPacket(audioPid, 1,
+            _buildPesPacket(0xC0, aacFrame, pts: 92090),
+            payloadUnitStart: true),
+      ];
+
+      final tempDir = Directory.systemTemp.createTempSync('ts_elst_');
+      try {
+        final tsPath = '${tempDir.path}\\input.ts';
+        final mp4Path = '${tempDir.path}\\output.mp4';
+        await File(tsPath).writeAsBytes(Uint8List.fromList(packets));
+        await TsDemuxer.convertTsToMp4(
+          inputPath: tsPath,
+          outputPath: mp4Path,
+        );
+
+        final mp4 = await File(mp4Path).readAsBytes();
+        final moov = _findBox(mp4, 'moov')!;
+        final traks = _boxChildren(moov)
+            .where((c) => c.$1 == 'trak')
+            .map((c) => c.$2)
+            .toList();
+        expect(traks.length, equals(2));
+
+        // 视频轨（第 1 个）应含 edts > elst，segment_duration = 90000（1s）
+        final (edts, _) = _findChild(_boxChildren(traks[0]), 'edts');
+        expect(edts, isNotNull);
+        final (elst, _) = _findChild(_boxChildren(edts!), 'elst');
+        expect(elst, isNotNull);
+        expect(elst![0], equals(1)); // version 1
+        final entryCount = _u32(elst, 4);
+        expect(entryCount, equals(1));
+        // elst 载荷：version/flags(4) + entry_count(4) + segment_duration u64
+        final segDur = elst.buffer.asByteData(8).getUint64(0);
+        expect(segDur, equals(90000));
+        // media_time = -1（空编辑）
+        final mediaTime = elst.buffer.asByteData(16).getInt64(0);
+        expect(mediaTime, equals(-1));
+
+        // 音频轨不应有 edts
+        final (audioEdts, _) = _findChild(_boxChildren(traks[1]), 'edts');
+        expect(audioEdts, isNull);
+      } finally {
+        tempDir.deleteSync(recursive: true);
+      }
+    }, timeout: const Timeout(Duration(seconds: 10)));
+
+    test('skips edit list when video timestamps are synthesized', () async {
+      final videoPid = 0x101;
+      final audioPid = 0x102;
+      final pmtPid = 0x100;
+
+      final patPacket = _buildTsPacket(
+          0x0000, 0, _buildPat(pmtPid), payloadUnitStart: true);
+      final pmtPacket = _buildTsPacket(
+          pmtPid, 0, _buildPmt(videoPid, audioPid), payloadUnitStart: true);
+
+      // 视频 PES 不带时间戳（合成时间轴），音频带真实 PTS
+      final videoPayload = _buildH264PesPayload();
+      final adtsHeader =
+          Uint8List.fromList([0xFF, 0xF1, 0x50, 0x80, 0x04, 0xBF, 0xFC]);
+      final aacFrame = Uint8List.fromList([...adtsHeader, ...Uint8List(30)]);
+
+      final packets = <int>[
+        ...patPacket,
+        ...pmtPacket,
+        ..._buildTsPacket(videoPid, 0, _buildPesPacket(0xE0, videoPayload),
+            payloadUnitStart: true),
+        ..._buildTsPacket(audioPid, 0,
+            _buildPesPacket(0xC0, aacFrame, pts: 90000),
+            payloadUnitStart: true),
+      ];
+
+      final tempDir = Directory.systemTemp.createTempSync('ts_noelst_');
+      try {
+        final tsPath = '${tempDir.path}\\input.ts';
+        final mp4Path = '${tempDir.path}\\output.mp4';
+        await File(tsPath).writeAsBytes(Uint8List.fromList(packets));
+        await TsDemuxer.convertTsToMp4(
+          inputPath: tsPath,
+          outputPath: mp4Path,
+        );
+
+        final mp4 = await File(mp4Path).readAsBytes();
+        final moov = _findBox(mp4, 'moov')!;
+        final traks = _boxChildren(moov)
+            .where((c) => c.$1 == 'trak')
+            .map((c) => c.$2)
+            .toList();
+        expect(traks.length, equals(2));
+
+        // 视频时间轴为合成，无法比较 A/V 起始偏移 → 两个轨道都不应有 edts
+        for (final trak in traks) {
+          final (edts, _) = _findChild(_boxChildren(trak), 'edts');
+          expect(edts, isNull);
+        }
+      } finally {
+        tempDir.deleteSync(recursive: true);
+      }
+    }, timeout: const Timeout(Duration(seconds: 10)));
   });
 }
