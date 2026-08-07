@@ -139,6 +139,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
     _pendingInitialScrollAdjustment = false;
     _initialAdjustStepScheduled = false;
     _initialAdjustChaseFrames = 0;
+    // The list is gone — the follow logic's content extent tracker belongs
+    // to the previous list.
+    _lastFollowContentExtent = null;
     _loadedConversationId = null;
     if (mounted) setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -372,6 +375,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
       if (_pendingInitialScrollAdjustment) {
         _initialAdjustStepsTaken = 0;
         _initialAdjustChaseFrames = 0;
+        // The list is about to be replaced — the follow logic's content
+        // extent tracker belongs to the previous list.
+        _lastFollowContentExtent = null;
         // Kick the pass through the scheduler: if a step is already
         // scheduled (reload landing mid-pass), the kick is a no-op and the
         // running chain continues — never two pass frames per frame.
