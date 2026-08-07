@@ -144,7 +144,7 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
 
   void _onReorder(int oldIndex, int newIndex) {
     setState(() {
-      if (newIndex > oldIndex) newIndex--;
+      // onReorderItem 的 newIndex 已是移除后的索引，直接使用
       final v = _voices.removeAt(oldIndex);
       _voices.insert(newIndex, v);
       final nc = _nameCtrls.removeAt(oldIndex);

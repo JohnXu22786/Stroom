@@ -45,7 +45,19 @@ extension _ChatPageModelsExt on _ChatPageState {
           builder: (_) => ProviderConfigPage(entryId: llmEntry.id),
         ),
       )
-          .then((_) {
+          .then((_) async {
+        if (!mounted) return;
+        // 供应商页面的模型列表可能与这里共享拖动排序（model_order），
+        // 返回时必须先重新加载保存的顺序，再按新顺序重算选中索引。
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          if (!mounted) return;
+          setState(
+            () => _savedModelOrder = prefs.getStringList('model_order'),
+          );
+        } catch (e) {
+          debugPrint('_navigateToProviderConfig reload order failed: $e');
+        }
         if (mounted) _configureAdapter();
       });
     }
@@ -59,22 +71,9 @@ extension _ChatPageModelsExt on _ChatPageState {
         .availableModels(entriesState)
         .map((m) => m.displayName)
         .toList();
-
     // Apply saved order: bring known names to the front in saved order,
     // then append any new names not yet in the saved order.
-    if (_savedModelOrder != null && _savedModelOrder!.isNotEmpty) {
-      final ordered = <String>[];
-      final remaining = Set<String>.from(names);
-      for (final savedName in _savedModelOrder!) {
-        if (remaining.remove(savedName)) {
-          ordered.add(savedName);
-        }
-      }
-      // Append any models not yet in the saved order
-      ordered.addAll(remaining);
-      return ordered;
-    }
-    return names;
+    return applySavedOrder(names, _savedModelOrder);
   }
 
   /// Called when model is selected from the attachment panel.
