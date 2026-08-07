@@ -379,4 +379,116 @@ void main() {
       expect(result, isNull);
     });
   });
+
+  group('McpServerConfig.extractApiKeyFromTypeConfig', () {
+    test('returns empty for null/empty typeConfig', () {
+      expect(McpServerConfig.extractApiKeyFromTypeConfig(null), isEmpty);
+      expect(McpServerConfig.extractApiKeyFromTypeConfig({}), isEmpty);
+    });
+
+    test('returns empty for "Bearer " header placeholder', () {
+      expect(
+        McpServerConfig.extractApiKeyFromTypeConfig({
+          'headers': {'Authorization': 'Bearer '},
+        }),
+        isEmpty,
+        reason: 'the "Bearer " prefix placeholder must not be extracted as '
+            'the 6-char "Bearer" API key',
+      );
+    });
+
+    test('returns empty for corrupted legacy apiKey field "Bearer"', () {
+      expect(
+        McpServerConfig.extractApiKeyFromTypeConfig({
+          'apiKey': 'Bearer',
+        }),
+        isEmpty,
+        reason: 'the corrupted legacy apiKey value must self-heal to unset',
+      );
+    });
+
+    test('returns empty for corrupted legacy "Bearer Bearer" header', () {
+      expect(
+        McpServerConfig.extractApiKeyFromTypeConfig({
+          'headers': {'Authorization': 'Bearer Bearer'},
+        }),
+        isEmpty,
+        reason: 'the corrupted legacy double-prefixed header must self-heal '
+            'to unset',
+      );
+    });
+
+    test('returns empty for empty header and path-like env values', () {
+      expect(
+        McpServerConfig.extractApiKeyFromTypeConfig({
+          'headers': {'x-api-key': ''},
+        }),
+        isEmpty,
+      );
+      expect(
+        McpServerConfig.extractApiKeyFromTypeConfig({
+          'env': {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/root'},
+        }),
+        isEmpty,
+        reason: 'known non-API-key env vars must be skipped',
+      );
+      expect(
+        McpServerConfig.extractApiKeyFromTypeConfig({
+          'env': {'API_KEY': 'Bearer'},
+        }),
+        isEmpty,
+        reason: 'an env value that is only the "Bearer" placeholder must be '
+            'treated as unset',
+      );
+    });
+
+    test('env key survives when headers only hold a placeholder', () {
+      expect(
+        McpServerConfig.extractApiKeyFromTypeConfig({
+          'env': {'BRAVE_API_KEY': 'bsa-789'},
+          'headers': {'Authorization': 'Bearer '},
+        }),
+        'bsa-789',
+        reason: 'a real stdio env key must still be extracted when headers '
+            'carry only the "Bearer " placeholder',
+      );
+    });
+
+    test('extracts a real key from a "Bearer <key>" header', () {
+      expect(
+        McpServerConfig.extractApiKeyFromTypeConfig({
+          'headers': {'Authorization': 'Bearer sk-123'},
+        }),
+        'sk-123',
+      );
+    });
+
+    test('extracts a real key from the apiKey field', () {
+      expect(
+        McpServerConfig.extractApiKeyFromTypeConfig({
+          'apiKey': 'sk-456',
+        }),
+        'sk-456',
+      );
+    });
+
+    test('extracts a real key from env values', () {
+      expect(
+        McpServerConfig.extractApiKeyFromTypeConfig({
+          'env': {'BRAVE_API_KEY': 'bsa-789'},
+        }),
+        'bsa-789',
+      );
+    });
+
+    test('prefers the apiKey field over headers', () {
+      expect(
+        McpServerConfig.extractApiKeyFromTypeConfig({
+          'apiKey': 'sk-field',
+          'headers': {'Authorization': 'Bearer sk-header'},
+        }),
+        'sk-field',
+      );
+    });
+  });
 }
