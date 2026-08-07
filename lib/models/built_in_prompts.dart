@@ -138,3 +138,17 @@ const List<BuiltInPrompt> builtInPrompts = [
         '保持共情但不越界，支持但不替代决策。',
   ),
 ];
+
+/// Prefix of a built-in assistant id used by the task-flow chat block
+/// ('builtin:prompt_<index>'). Other built-in ids (system assistants)
+/// use their own prefixes.
+const String kBuiltInPromptIdPrefix = 'builtin:prompt_';
+
+/// Resolves a built-in prompt by its task-flow id
+/// ('builtin:prompt_<index>'); null for non-built-in or out-of-range ids.
+BuiltInPrompt? builtInPromptById(String id) {
+  if (!id.startsWith(kBuiltInPromptIdPrefix)) return null;
+  final idx = int.tryParse(id.substring(kBuiltInPromptIdPrefix.length));
+  if (idx == null || idx < 0 || idx >= builtInPrompts.length) return null;
+  return builtInPrompts[idx];
+}
