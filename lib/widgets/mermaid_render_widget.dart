@@ -320,6 +320,14 @@ MERMAID_CODE_PLACEHOLDER
         }
       }
       if (sw <= 0 || sh <= 0) return;
+      // Pin the SVG to its natural content size: mermaid v11 renders the
+      // root <svg> as `width="100%"` with only an inline `max-width` style
+      // (no width/height attributes), so without explicit pixel dimensions
+      // the SVG stretches to the container width while getBBox() still
+      // reports the natural size — the fit math below would then
+      // double-scale the diagram (shrunk and misplaced).
+      svg.setAttribute('width', sw);
+      svg.setAttribute('height', sh);
       zoomLevel = Math.max(0.1, Math.min(10, Math.min(vw / sw, vh / sh)));
       panX = (vw - sw * zoomLevel) / 2;
       panY = (vh - sh * zoomLevel) / 2;

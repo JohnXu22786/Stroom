@@ -164,7 +164,35 @@ void main() {
     test('fitToViewport reads the diagram size from the rendered SVG', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains("container.querySelector('svg')"));
-      expect(html, contains('getBBox'));
+      // 'svg.getBBox()' (with the svg. prefix) anchors the CODE call only —
+      // the fit comment in the template also mentions getBBox(), so the bare
+      // word would match the comment instead of the code.
+      expect(html, contains('svg.getBBox()'));
+    });
+
+    test('fitToViewport pins the SVG to its natural size before fitting', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // Regression: mermaid v11 renders <svg width="100%"> with only a
+      // max-width style and NO width/height attributes, so without explicit
+      // pixel size the SVG stretches to the container width while getBBox()
+      // still reports the natural content size. The fit math would then
+      // double-scale the diagram (shrunk AND misplaced). fitToViewport must
+      // pin the SVG to its measured content size before computing the fit.
+      expect(html, contains("svg.setAttribute('width', sw)"));
+      expect(html, contains("svg.setAttribute('height', sh)"));
+      // Order must be: measure (getBBox) -> pin -> fit math. The pin must
+      // use the MEASURED size (pinning before measuring would pin 0), and
+      // must happen before the zoom/pan math that consumes sw/sh.
+      // 'svg.getBBox()' anchors the code call only (the template comment
+      // also mentions getBBox without the svg. prefix).
+      final measureIdx = html.indexOf('svg.getBBox()');
+      final pinIdx = html.indexOf("svg.setAttribute('height', sh)");
+      final zoomIdx = html.indexOf('Math.min(vw / sw, vh / sh)');
+      expect(measureIdx, greaterThanOrEqualTo(0));
+      expect(pinIdx, greaterThan(measureIdx),
+          reason: 'SVG size must be measured before it is pinned');
+      expect(zoomIdx, greaterThan(pinIdx),
+          reason: 'SVG size must be pinned before the fit math reads sw/sh');
     });
 
     test('HTML includes updateTransform function', () {
