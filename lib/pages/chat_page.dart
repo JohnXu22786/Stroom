@@ -16,6 +16,7 @@ import '../widgets/markdown_extensions.dart';
 import '../widgets/message_attachment_preview.dart';
 import '../widgets/transform_stretch_overscroll.dart';
 import '../services/attachment_storage.dart';
+import '../utils/model_order.dart';
 
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';

@@ -259,11 +259,10 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   }
 
   /// Reorder handler for [ReorderableListView].
-  /// Adjusts indices per ReorderableListView convention:
-  /// when [newIndex] > [oldIndex], subtract 1 because the item is already
-  /// removed from its old position before being inserted at newIndex.
+  /// onReorderItem 的 newIndex 已是移除 oldIndex 项之后调整过的索引，
+  /// 不能再做 `if (newIndex > oldIndex) newIndex--;`（那是旧 onReorder
+  /// 回调的写法，双重调整会导致向下拖动一格无效）。
   void _onReorderPendingAttachment(int oldIndex, int newIndex) {
-    if (newIndex > oldIndex) newIndex--;
     final item = _pendingAttachments.removeAt(oldIndex);
     setState(() {
       _pendingAttachments.insert(newIndex, item);

@@ -85,8 +85,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final entry = _entry;
     if (entry == null) return;
 
-    if (oldIndex < newIndex) newIndex -= 1;
-
+    // onReorderItem 的 newIndex 已是移除后的索引，直接使用
     var configs = entry.configs.map((c) => c.copy()).toList();
     final item = configs.removeAt(oldIndex);
     configs.insert(newIndex, item);
