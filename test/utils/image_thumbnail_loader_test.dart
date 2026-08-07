@@ -48,7 +48,8 @@ void main() {
   });
 
   group('ImageThumbnailLoader', () {
-    testWidgets('returns persisted thumbnail bytes and serves them from '
+    testWidgets(
+        'returns persisted thumbnail bytes and serves them from '
         'memory cache on later calls (no repeated disk reads)', (tester) async {
       final record = _makeRecord(hash: 'cache_hit');
       final thumb = Uint8List.fromList([1, 2, 3, 4]);
@@ -68,7 +69,8 @@ void main() {
       expect(second, equals(thumb));
     });
 
-    testWidgets('generates and persists a thumbnail when the thumb file is '
+    testWidgets(
+        'generates and persists a thumbnail when the thumb file is '
         'missing (full-image fallback regression)', (tester) async {
       final record = _makeRecord(hash: 'gen_me');
       final png = await tester.runAsync(_createEnginePng);
@@ -95,7 +97,8 @@ void main() {
       });
     });
 
-    testWidgets('concurrent calls for the same hash share a single '
+    testWidgets(
+        'concurrent calls for the same hash share a single '
         'generation (no duplicate decode/write)', (tester) async {
       final record = _makeRecord(hash: 'dedup');
       final png = await tester.runAsync(_createEnginePng);
@@ -130,7 +133,8 @@ void main() {
       expect(result, isNull);
     });
 
-    testWidgets('invalidate(hash) drops the memory cache entry so the next '
+    testWidgets(
+        'invalidate(hash) drops the memory cache entry so the next '
         'call re-reads from disk', (tester) async {
       final record = _makeRecord(hash: 'invalidate');
       final thumb = Uint8List.fromList([9, 8, 7]);
@@ -149,7 +153,8 @@ void main() {
           reason: 'after invalidate the stale memory entry must not be used');
     });
 
-    testWidgets('generateThumbnail returns null for undecodable bytes instead '
+    testWidgets(
+        'generateThumbnail returns null for undecodable bytes instead '
         'of falling back to the original (avoids caching full images)',
         (tester) async {
       final result = await tester.runAsync(
@@ -184,7 +189,8 @@ void main() {
       expect(ImageThumbnailLoader.peek(record), equals(thumb));
     });
 
-    testWidgets('undecodable full image: returns null, writes no thumb file, '
+    testWidgets(
+        'undecodable full image: returns null, writes no thumb file, '
         'and the negative cache prevents repeated full-image reads',
         (tester) async {
       final record = _makeRecord(hash: 'undecodable');
@@ -212,8 +218,7 @@ void main() {
         () => ImageThumbnailLoader.loadThumbnail(record),
       );
       expect(second, isNull);
-      expect(ImageThumbnailLoader.generationCount, 1,
-          reason: '负缓存应阻止第二次解码尝试');
+      expect(ImageThumbnailLoader.generationCount, 1, reason: '负缓存应阻止第二次解码尝试');
 
       // invalidate 清除负缓存后允许重试
       ImageThumbnailLoader.invalidate(record.hash);

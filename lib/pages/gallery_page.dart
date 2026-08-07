@@ -173,7 +173,8 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       const format = 'jpg';
       final fileName = '$hash.$format';
       await ImageManifest.writeFile(fileName, bytes);
-      final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(bytes);
+      final thumbnailBytes =
+          await ImageThumbnailLoader.generateThumbnail(bytes);
       if (thumbnailBytes != null) {
         await ImageManifest.writeFile('${hash}_thumb.png', thumbnailBytes);
       }

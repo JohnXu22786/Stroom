@@ -130,7 +130,8 @@ void main() {
   });
 
   group('GalleryViewerPage - loading with real image files', () {
-    testWidgets('renders pages from disk and preloads/swipes to the next '
+    testWidgets(
+        'renders pages from disk and preloads/swipes to the next '
         'page without crashing', (tester) async {
       // 预加载/字节缓存/占位符路径需要真实的文件存在（无文件时只会
       // 走到错误占位，覆盖不到新逻辑）

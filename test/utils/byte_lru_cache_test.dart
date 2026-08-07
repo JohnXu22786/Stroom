@@ -58,8 +58,7 @@ void main() {
       final cache = ByteLruCache(maxBytes: 50);
       cache.put('huge', _bytes(200));
       expect(cache.length, 1);
-      expect(cache.get('huge'), isNotNull,
-          reason: '单张超大条目不能被自己挤出');
+      expect(cache.get('huge'), isNotNull, reason: '单张超大条目不能被自己挤出');
     });
 
     test('remove decrements byte accounting', () {

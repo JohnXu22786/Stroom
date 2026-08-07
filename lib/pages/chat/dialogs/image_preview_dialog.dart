@@ -110,9 +110,7 @@ class _ChatImagePreviewDialogState extends State<_ChatImagePreviewDialog> {
     // 直接传入的字节（或已加载完成的 loader 结果）
     final immediate = widget.data;
     if (immediate != null) {
-      return immediate.isEmpty
-          ? const _BrokenImage()
-          : _buildImage(immediate);
+      return immediate.isEmpty ? const _BrokenImage() : _buildImage(immediate);
     }
     return FutureBuilder<Uint8List?>(
       future: _dataFuture,

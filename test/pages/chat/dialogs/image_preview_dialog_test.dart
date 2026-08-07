@@ -141,7 +141,8 @@ void main() {
       expect(find.text('photo.png'), findsNothing);
     });
 
-    testWidgets('shows loading indicator then image when using dataLoader '
+    testWidgets(
+        'shows loading indicator then image when using dataLoader '
         '(no blocking disk read before the dialog opens)', (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Builder(
@@ -198,7 +199,8 @@ void main() {
       expect(find.text('无法加载图片'), findsOneWidget);
     });
 
-    testWidgets('synchronously-throwing dataLoader degrades to error state '
+    testWidgets(
+        'synchronously-throwing dataLoader degrades to error state '
         'instead of crashing the dialog', (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Builder(
