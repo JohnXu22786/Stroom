@@ -151,7 +151,8 @@ class AttachmentStorage {
   /// 图片压缩缓存目录：`<附件目录>/temp_compressed/<conversationId>/`
   static Future<Directory> _compressedCacheDir(String conversationId) async {
     final base = await _storageDir;
-    final dir = Directory(p.join(base, _compressedCacheDirName, conversationId));
+    final dir =
+        Directory(p.join(base, _compressedCacheDirName, conversationId));
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
@@ -273,11 +274,13 @@ class AttachmentStorage {
     await AppLogService.info(
         'AttachmentStorage', '删除对话图片压缩缓存: $conversationId');
     if (kIsWeb) {
-      await WebFileStore.deleteByPrefix('$_compressedCacheDirName/$conversationId/');
+      await WebFileStore.deleteByPrefix(
+          '$_compressedCacheDirName/$conversationId/');
       return;
     }
     final base = await _storageDir;
-    final dir = Directory(p.join(base, _compressedCacheDirName, conversationId));
+    final dir =
+        Directory(p.join(base, _compressedCacheDirName, conversationId));
     if (await dir.exists()) {
       await dir.delete(recursive: true);
     }

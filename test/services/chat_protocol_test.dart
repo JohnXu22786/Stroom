@@ -888,8 +888,7 @@ void main() {
       return AttachmentStorage.saveFile(fileName, bytes);
     }
 
-    test('preCompressImageForPendingAttachment：大图压缩并写入内存+磁盘缓存',
-        () async {
+    test('preCompressImageForPendingAttachment：大图压缩并写入内存+磁盘缓存', () async {
       const maxBytes = 500 * 1024;
       final att = Attachment(
         fileName: 'photo.png',
@@ -921,8 +920,7 @@ void main() {
       expect(att.compressedCachePersisted, isTrue);
     });
 
-    test('preCompressImageForPendingAttachment：阈值内/无法解码为 no-op',
-        () async {
+    test('preCompressImageForPendingAttachment：阈值内/无法解码为 no-op', () async {
       // 阈值内：不压缩，base64Data 保持 null
       final small = img.encodePng(
         img.Image(width: 8, height: 8, numChannels: 3),
@@ -945,7 +943,8 @@ void main() {
       expect(smallAtt.base64Data, isNull);
 
       // 无法解码：不写入任何缓存
-      final garbage = Uint8List.fromList(List.generate(256, (i) => i * 7 % 256));
+      final garbage =
+          Uint8List.fromList(List.generate(256, (i) => i * 7 % 256));
       final garbageAtt = Attachment(
         fileName: 'broken.png',
         mimeType: 'image/png',
@@ -968,8 +967,7 @@ void main() {
           isNull);
     });
 
-    test('preCompressImageForPendingAttachment：附件已失效（移除/编辑）时跳过写入',
-        () async {
+    test('preCompressImageForPendingAttachment：附件已失效（移除/编辑）时跳过写入', () async {
       // 回归：压缩耗时期间附件被移除/编辑（isStillRelevant 返回 false），
       // 不得写入任何缓存——否则会把已被清理的磁盘缓存"复活"
       // （对话已删除时成为永久孤儿目录）。
@@ -999,14 +997,13 @@ void main() {
           reason: '失效后不得写入磁盘缓存（否则复活已被清理的文件）');
     });
 
-    test('readAttachmentBase64：重启后（无 base64Data）命中磁盘缓存，零等待复用',
-        () async {
+    test('readAttachmentBase64：重启后（无 base64Data）命中磁盘缓存，零等待复用', () async {
       // 种子缓存故意用 q30（与压缩器 q90 输出不同）：若命中缓存则
       // 逐字节复用，若代码回退到重新压缩则会产出 q90 字节 → 断言失败，
       // 由此证明磁盘缓存路径没有重新压缩。
       final decoded = img.decodeImage(bigPng)!;
-      final seeded = img.encodeJpg(decoded,
-          quality: 30, chroma: img.JpegChroma.yuv420);
+      final seeded =
+          img.encodeJpg(decoded, quality: 30, chroma: img.JpegChroma.yuv420);
       expect(seeded.length, lessThan(500 * 1024));
       await AttachmentStorage.saveCompressedImage(
         conversationId: 'conv-1',
@@ -1072,15 +1069,14 @@ void main() {
 
       final second = await readAttachmentBase64(fresh, maxBytes: maxBytes);
       expect(second.status, AttachmentReadStatus.ok);
-      expect(second.base64, first.base64,
-          reason: '重启后应直接复用磁盘缓存，产出与首次发送相同的载荷');
+      expect(second.base64, first.base64, reason: '重启后应直接复用磁盘缓存，产出与首次发送相同的载荷');
     });
 
     test('缓存按对话隔离：convA 的缓存不泄露给 convB', () async {
       // 只为 convA 写入缓存
       final decoded = img.decodeImage(bigPng)!;
-      final seeded = img.encodeJpg(decoded,
-          quality: 30, chroma: img.JpegChroma.yuv420);
+      final seeded =
+          img.encodeJpg(decoded, quality: 30, chroma: img.JpegChroma.yuv420);
       await AttachmentStorage.saveCompressedImage(
         conversationId: 'conv-a',
         hash: 'shared-hash',
@@ -1103,8 +1099,7 @@ void main() {
 
       expect(outcome.status, AttachmentReadStatus.ok);
       final payload = base64Decode(outcome.base64!);
-      expect(payload, isNot(equals(seeded)),
-          reason: '对话 B 不得复用对话 A 的缓存，应重新压缩');
+      expect(payload, isNot(equals(seeded)), reason: '对话 B 不得复用对话 A 的缓存，应重新压缩');
       expect(payload.length, lessThanOrEqualTo(500 * 1024));
       // 对话 B 现在有自己的缓存（互不干扰）
       final cacheB = await AttachmentStorage.readCompressedImage(
@@ -1113,14 +1108,13 @@ void main() {
       expect(cacheB!.bytes, payload);
     });
 
-    test('readAttachmentBase64：内存缓存命中（选中时已预压缩）补齐磁盘缓存',
-        () async {
+    test('readAttachmentBase64：内存缓存命中（选中时已预压缩）补齐磁盘缓存', () async {
       // 场景：选中时对话尚未创建（conversationId=null），预压缩只写了
       // 内存缓存；发送时对话已解析，首次经过发送路径应把压缩产物落盘。
       const maxBytes = 500 * 1024;
       final decoded = img.decodeImage(bigPng)!;
-      final preCompressed = img.encodeJpg(decoded,
-          quality: 80, chroma: img.JpegChroma.yuv420);
+      final preCompressed =
+          img.encodeJpg(decoded, quality: 80, chroma: img.JpegChroma.yuv420);
       expect(preCompressed.length, lessThanOrEqualTo(maxBytes));
 
       final att = Attachment(
@@ -1143,8 +1137,7 @@ void main() {
       expect(outcome.mimeType, 'image/jpeg');
       final cached = await AttachmentStorage.readCompressedImage(
           conversationId: 'conv-1', hash: 'mem-hash');
-      expect(cached, isNotNull,
-          reason: '首次发送路径应补齐磁盘缓存（重启后不再等待）');
+      expect(cached, isNotNull, reason: '首次发送路径应补齐磁盘缓存（重启后不再等待）');
       expect(cached!.bytes, preCompressed);
     });
   });
