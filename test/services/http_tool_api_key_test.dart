@@ -14,8 +14,7 @@ import 'package:stroom/services/http_tool_service.dart';
 /// (HTTP 401) instead of reporting "API Key 未配置".
 void main() {
   group('built-in HTTP tool API key collection', () {
-    test(
-        'placeholder "Bearer " header is NOT collected as a real API key',
+    test('placeholder "Bearer " header is NOT collected as a real API key',
         () async {
       final adapter = ChatAdapter();
       addTearDown(adapter.dispose);

@@ -189,8 +189,7 @@ void main() {
 
       TextField apiKeyField() => tester.widget<TextField>(
             find.byWidgetPredicate((w) =>
-                w is TextField &&
-                w.decoration?.hintText == '输入 API Key（可选）'),
+                w is TextField && w.decoration?.hintText == '输入 API Key（可选）'),
           );
 
       // The "Bearer " placeholder must NOT be auto-filled as the API key

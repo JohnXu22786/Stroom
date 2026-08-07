@@ -147,8 +147,7 @@ void main() {
   });
 
   group('built-in config API key extraction', () {
-    test(
-        'migration does not treat "Bearer " header placeholder as an API key',
+    test('migration does not treat "Bearer " header placeholder as an API key',
         () async {
       // Old-format Bocha config (isRestApi era) whose Authorization header
       // only contains the "Bearer " prefix placeholder — no real key.
