@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/assistant.dart';
+import '../../models/built_in_prompts.dart';
 import '../../models/tts_models.dart';
 import '../../providers/assistant_provider.dart';
 import '../../providers/provider_config.dart';
@@ -478,60 +480,55 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
       case BlockParamType.assistantSelector:
         final assistants = ref.watch(assistantProvider);
         final currentId = value?.toString() ?? '';
-        final currentAssistant =
-            assistants.where((a) => a.id == currentId).firstOrNull;
-        // The dropdown has an enabled null-valued item, so the hint
-        // mechanism never shows (the framework selects the null item) —
-        // a deleted-assistant warning is rendered as a line below instead.
+        final display = _assistantDisplay(currentId, assistants);
+        final missing = currentId.isNotEmpty && display == null;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            DropdownButtonFormField<String?>(
-              // A persisted id whose assistant was deleted must not be
-              // passed as value (no matching item → debug assert crash).
-              value: currentId.isNotEmpty && currentAssistant != null
-                  ? currentId
-                  : null,
-              isDense: true,
-              decoration: InputDecoration(
-                isDense: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
+            // Picker field: shows the selected assistant's name; tapping
+            // opens the assistant picker panel (built-in + user-defined).
+            InkWell(
+              onTap: () => _showAssistantPicker(param.key, currentId),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
                   horizontal: 10,
-                  vertical: 8,
+                  vertical: 9,
                 ),
-              ),
-              style: TextStyle(fontSize: 13, color: cs.onSurface),
-              items: [
-                const DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('（使用当前选中的助手）'),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: cs.outlineVariant),
                 ),
-                ...assistants.map((a) {
-                  return DropdownMenuItem<String?>(
-                    value: a.id,
-                    child: Text(
-                      '${a.emoji} ${a.name}',
+                child: Row(
+                  children: [
+                    Text(
+                      display == null
+                          ? (currentId.isEmpty ? '未指定助手' : '助手不存在')
+                          : '${display.$1} ${display.$2}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: display == null
+                            ? cs.onSurfaceVariant
+                            : cs.onSurface,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
-                  );
-                }),
-              ],
-              onChanged: (v) {
-                setState(() => _params[param.key] = v ?? '');
-              },
+                    const Spacer(),
+                    Icon(
+                      Icons.expand_more,
+                      size: 18,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
             ),
-            if (currentId.isNotEmpty && currentAssistant == null)
+            if (missing)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
                   '配置的助手已删除，请重新选择',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: cs.error,
-                  ),
+                  style: TextStyle(fontSize: 11, color: cs.error),
                 ),
               ),
           ],
@@ -626,5 +623,187 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     if (result != null && mounted) {
       setState(() => _params[key] = result);
     }
+  }
+
+  /// Resolves the display (emoji, name) for an assistant id — a built-in
+  /// prompt id ('builtin:prompt_<index>') or a user-defined assistant.
+  /// Returns null when the id is empty or no longer resolvable.
+  (String, String)? _assistantDisplay(
+    String id,
+    List<Assistant> assistants,
+  ) {
+    if (id.isEmpty) return null;
+    const prefix = 'builtin:prompt_';
+    if (id.startsWith(prefix)) {
+      final idx = int.tryParse(id.substring(prefix.length));
+      if (idx != null && idx >= 0 && idx < builtInPrompts.length) {
+        final p = builtInPrompts[idx];
+        return (p.emoji, p.name);
+      }
+      return null;
+    }
+    final a = assistants.where((a) => a.id == id).firstOrNull;
+    return a == null ? null : (a.emoji, a.name);
+  }
+
+  /// Opens the assistant picker panel: built-in prompts first, then the
+  /// user's assistants. Selecting one stores its id in the param.
+  Future<void> _showAssistantPicker(String key, String currentId) async {
+    final cs = Theme.of(context).colorScheme;
+    final assistants = ref.read(assistantProvider);
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.65,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (scrollCtx, scrollController) => ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+          children: [
+            Center(
+              child: Text(
+                '选择助手',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Center(
+              child: Text(
+                '内置助手直接可用，我的助手为你的自定义配置',
+                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Built-in prompts
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '内置助手',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ),
+            for (var i = 0; i < builtInPrompts.length; i++)
+              _assistantTile(
+                emoji: builtInPrompts[i].emoji,
+                name: builtInPrompts[i].name,
+                subtitle: builtInPrompts[i].description,
+                selected: currentId == 'builtin:prompt_$i',
+                onTap: () => Navigator.pop(ctx, 'builtin:prompt_$i'),
+              ),
+            const SizedBox(height: 12),
+            // User-defined assistants
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '我的助手',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ),
+            if (assistants.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: Text(
+                    '还没有自定义助手，可在"聊天 → 助手"中创建',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              )
+            else
+              for (final a in assistants)
+                _assistantTile(
+                  emoji: a.emoji,
+                  name: a.name,
+                  subtitle: a.description,
+                  selected: currentId == a.id,
+                  onTap: () => Navigator.pop(ctx, a.id),
+                ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null && mounted) {
+      setState(() => _params[key] = selected);
+    }
+  }
+
+  Widget _assistantTile({
+    required String emoji,
+    required String name,
+    required String subtitle,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: selected
+            ? cs.primary.withValues(alpha: 0.08)
+            : cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Text(emoji, style: const TextStyle(fontSize: 20)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (subtitle.isNotEmpty)
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: cs.onSurfaceVariant,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+                if (selected)
+                  Icon(Icons.check_circle, size: 18, color: cs.primary),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

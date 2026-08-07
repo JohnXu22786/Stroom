@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../catcatch/providers/catcatch_provider.dart';
+import '../../models/assistant.dart';
+import '../../models/built_in_prompts.dart';
 import '../../providers/assistant_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/chat_manager_provider.dart';
@@ -48,6 +51,35 @@ String subTaskTypeFor(BlockType? typeKey) {
     default:
       return 'background';
   }
+}
+
+/// Resolves a chat block's assistantId to an [Assistant]:
+/// - empty → null (the currently selected assistant is used);
+/// - 'builtin:prompt_<index>' → an [Assistant] built from the built-in
+///   prompt preset (no bound model — the currently selected model is
+///   used with the preset's prompt);
+/// - any other id → the matching user-defined assistant;
+/// - unresolvable → null (callers fail loudly).
+@visibleForTesting
+Assistant? resolveChatAssistant(
+    String assistantId, List<Assistant> assistants) {
+  if (assistantId.isEmpty) return null;
+  const prefix = 'builtin:prompt_';
+  if (assistantId.startsWith(prefix)) {
+    final idx = int.tryParse(assistantId.substring(prefix.length));
+    if (idx != null && idx >= 0 && idx < builtInPrompts.length) {
+      final p = builtInPrompts[idx];
+      return Assistant(
+        id: assistantId,
+        name: p.name,
+        prompt: p.prompt,
+        emoji: p.emoji,
+        description: p.description,
+      );
+    }
+    return null;
+  }
+  return assistants.where((a) => a.id == assistantId).firstOrNull;
 }
 
 class TaskFlowExecutionService {
@@ -288,12 +320,14 @@ class TaskFlowExecutionService {
         );
       case BlockType.chat:
         // Resolve the block's assistantId (empty = use the currently
-        // selected assistant) to the assistant object for this run.
+        // selected assistant). Built-in prompt ids resolve to an Assistant
+        // built from the preset (no bound model → the currently selected
+        // model is used, with the preset's prompt).
         final assistantId = block.params['assistantId']?.toString() ?? '';
-        final assistants = _ref.read(assistantProvider);
-        final chatAssistant = assistantId.isNotEmpty
-            ? assistants.where((a) => a.id == assistantId).firstOrNull
-            : null;
+        final chatAssistant = resolveChatAssistant(
+          assistantId,
+          _ref.read(assistantProvider),
+        );
         // A configured assistant that no longer exists must fail loudly
         // (mirrors the ASR config resolution) — silently falling back to
         // whatever assistant the chat page last selected would produce

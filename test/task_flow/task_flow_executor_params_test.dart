@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:stroom/models/assistant.dart';
+import 'package:stroom/models/built_in_prompts.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/background_task_provider.dart';
@@ -94,6 +95,46 @@ void main() {
       expect(subTaskTypeFor(BlockType.ocr), 'background');
       expect(subTaskTypeFor(BlockType.audioSeparation), 'background');
       expect(subTaskTypeFor(BlockType.custom), 'background');
+    });
+  });
+
+  group('resolveChatAssistant', () {
+    final userAssistants = [
+      Assistant(id: 'u1', name: '翻译助手', prompt: '你是翻译'),
+    ];
+
+    test('empty id → null (use the currently selected assistant)', () {
+      expect(resolveChatAssistant('', userAssistants), isNull);
+    });
+
+    test(
+        'built-in prompt id resolves to an Assistant with the preset '
+        'prompt and no bound model', () {
+      final a = resolveChatAssistant('builtin:prompt_0', userAssistants);
+      expect(a, isNotNull);
+      expect(a!.id, 'builtin:prompt_0');
+      expect(a.name, builtInPrompts[0].name);
+      expect(a.prompt, builtInPrompts[0].prompt);
+      expect(a.modelId, isNull,
+          reason: 'built-in assistants use the currently selected model');
+    });
+
+    test('out-of-range built-in index → null (fail loud)', () {
+      expect(
+        resolveChatAssistant('builtin:prompt_999', userAssistants),
+        isNull,
+      );
+      expect(
+        resolveChatAssistant('builtin:prompt_abc', userAssistants),
+        isNull,
+      );
+    });
+
+    test('user-defined assistant id resolves; deleted id → null', () {
+      final a = resolveChatAssistant('u1', userAssistants);
+      expect(a, isNotNull);
+      expect(a!.name, '翻译助手');
+      expect(resolveChatAssistant('deleted-id', userAssistants), isNull);
     });
   });
 

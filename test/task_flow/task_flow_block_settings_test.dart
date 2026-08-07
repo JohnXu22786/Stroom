@@ -113,7 +113,7 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('chat block panel shows assistant dropdown and input note',
+  testWidgets('chat block panel shows assistant picker and input note',
       (tester) async {
     final assistants = [
       Assistant(
@@ -136,12 +136,21 @@ void main() {
     );
 
     // Input note about the user message being the previous step's output.
-    expect(find.textContaining('上一步的输出'), findsOneWidget);
-    // Assistant dropdown lists the user-defined assistants.
-    await tester.tap(
-      find.byType(DropdownButtonFormField<String?>),
-    );
+    expect(find.text('发送给助手的用户消息 = 上一步的输出'), findsOneWidget);
+    // The field shows the default built-in assistant by name.
+    expect(find.textContaining('通用助手'), findsOneWidget);
+    // Tapping the field opens the picker panel with built-in AND
+    // user-defined assistants.
+    await tester.tap(find.textContaining('通用助手'));
     await tester.pumpAndSettle();
+    expect(find.text('内置助手'), findsOneWidget);
+    expect(find.textContaining('通用助手'), findsWidgets);
+    // The user-defined section is below the fold — scroll to it.
+    await tester.scrollUntilVisible(
+      find.text('我的助手'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
     expect(find.textContaining('翻译助手'), findsOneWidget);
     expect(find.textContaining('代码助手'), findsOneWidget);
   });
@@ -160,11 +169,17 @@ void main() {
       ],
     );
 
-    // The stale id must not be passed as the dropdown value (no matching
-    // item → debug assert crash); the warning line guides re-selection.
+    // The stale id resolves to nothing — the warning line guides
+    // re-selection via the picker panel.
+    expect(find.text('助手不存在'), findsOneWidget);
     expect(find.text('配置的助手已删除，请重新选择'), findsOneWidget);
-    await tester.tap(find.byType(DropdownButtonFormField<String?>));
+    await tester.tap(find.text('助手不存在'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.textContaining('现存助手'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
     expect(find.textContaining('现存助手'), findsOneWidget);
 
     // Re-selecting a valid assistant clears the warning.
@@ -173,58 +188,18 @@ void main() {
     expect(find.text('配置的助手已删除，请重新选择'), findsNothing);
   });
 
-  testWidgets(
-      'selecting the null item resets the assistant to the current '
-      'one (assistantId = "")', (tester) async {
-    TaskFlowBlock? result;
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          providerEntriesProvider.overrideWith(
-            (ref) => _FakeEntriesNotifier(const ProviderEntriesState()),
-          ),
-          assistantProvider.overrideWith(
-            (ref) => _FakeAssistantsNotifier([
-              Assistant(id: 'a1', name: '翻译助手', prompt: 'p'),
-            ]),
-          ),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => Center(
-                child: ElevatedButton(
-                  onPressed: () async {
-                    result = await showBlockEditorDialog(
-                      context,
-                      block: TaskFlowBlock(
-                        typeKey: BlockType.chat,
-                        params: {'assistantId': 'a1'},
-                      ),
-                    );
-                  },
-                  child: const Text('打开设置'),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+  testWidgets('new chat block defaults to the first built-in assistant',
+      (tester) async {
+    await pumpPanel(
+      tester,
+      block: TaskFlowBlock(typeKey: BlockType.chat),
+      assistants: const [],
     );
-    await tester.tap(find.text('打开设置'));
-    await tester.pumpAndSettle();
 
-    // Select the null item ('（使用当前选中的助手）') — no assert, and
-    // confirming stores assistantId ''.
-    await tester.tap(find.byType(DropdownButtonFormField<String?>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('（使用当前选中的助手）').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('确认'));
-    await tester.pumpAndSettle();
-
-    expect(result, isNotNull);
-    expect(result!.params['assistantId'], '');
+    // The picker field shows the default built-in assistant by name
+    // (not a confusing placeholder).
+    expect(find.textContaining('通用助手'), findsOneWidget);
+    expect(find.text('（使用当前选中的助手）'), findsNothing);
   });
 
   testWidgets(
