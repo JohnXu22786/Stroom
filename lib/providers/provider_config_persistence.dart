@@ -477,31 +477,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
     final typeConfig = config.models.isNotEmpty
         ? config.models[0].typeConfig
         : <String, dynamic>{};
-    // Check apiKey field first
-    final apiKey = typeConfig['apiKey'] as String?;
-    if (apiKey != null && apiKey.isNotEmpty) return apiKey;
-    // Check env values
-    final envRaw = typeConfig['env'];
-    if (envRaw is Map) {
-      for (final val in envRaw.values) {
-        final s = val.toString();
-        if (s.isNotEmpty && !s.contains('/usr/') && !s.contains('/bin')) {
-          return s;
-        }
-      }
-    }
-    // Check header values
-    final headersRaw = typeConfig['headers'];
-    if (headersRaw is Map) {
-      for (final val in headersRaw.values) {
-        final s = val.toString().trim();
-        if (s.isNotEmpty && s.length > 3) {
-          if (s.startsWith('Bearer ')) return s.substring(7).trim();
-          return s;
-        }
-      }
-    }
-    return '';
+    // Placeholders ('Bearer ' 前缀等) are treated as unset so the migration
+    // never captures a fake key (or the corrupted 'Bearer Bearer' legacy form).
+    return McpServerConfig.extractApiKeyFromTypeConfig(typeConfig);
   }
 
   /// Apply an API key to a typeConfig (update headers/env placeholders)
