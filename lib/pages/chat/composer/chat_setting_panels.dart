@@ -21,7 +21,9 @@ void showModelPanel({
   var localModels = List<String>.from(models);
 
   void handleReorder(int oldIndex, int newIndex) {
-    if (newIndex > oldIndex) newIndex--;
+    // onReorderItem 的 newIndex 已是移除 oldIndex 项之后调整过的索引，
+    // 不能再做 `if (newIndex > oldIndex) newIndex--;`（那是旧 onReorder
+    // 回调的写法，双重调整会导致向下拖动一格无效）。
     final item = localModels.removeAt(oldIndex);
     localModels.insert(newIndex, item);
 

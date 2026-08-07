@@ -179,6 +179,47 @@ void main() {
       expect(find.byIcon(Icons.drag_indicator), findsNWidgets(3));
     });
 
+    testWidgets('model panel reorder uses the adjusted onReorderItem index',
+        (tester) async {
+      // 回归测试：onReorderItem 的 newIndex 已经是移除后的索引，
+      // 处理器不能再做 `if (newIndex > oldIndex) newIndex--`，
+      // 否则向下拖动一格会变成无效操作。
+      List<String>? reordered;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                return ElevatedButton(
+                  onPressed: () {
+                    showModelPanel(
+                      context: context,
+                      models: ['GPT-4o', 'Claude 3', 'Gemini'],
+                      selectedModelIndex: 0,
+                      onModelSelected: (_) {},
+                      onModelsReordered: (models) => reordered = models,
+                    );
+                  },
+                  child: const Text('Open'),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      await openPanel(tester);
+
+      final listView = tester.widget<ReorderableListView>(
+        find.byType(ReorderableListView),
+      );
+      // 把第一项拖到第三项之后：真实拖拽中框架会传 (0, 2)。
+      listView.onReorderItem?.call(0, 2);
+      await tester.pump();
+
+      expect(reordered, ['Claude 3', 'Gemini', 'GPT-4o']);
+    });
+
     testWidgets('selected model follow reorder logic is correct',
         (tester) async {
       await tester.pumpWidget(

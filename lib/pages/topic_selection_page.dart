@@ -393,14 +393,9 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                             final item = sorted[oldIndex];
                             final realOld =
                                 convs.indexWhere((c) => c.id == item.id);
-                            // Flutter's onReorder provides newIndex as the
-                            // position in the list before removal. When
-                            // dragging downward, decrement by 1 because
-                            // the item was removed from above, shifting
-                            // remaining items down.
-                            if (oldIndex < newIndex) {
-                              newIndex--;
-                            }
+                            // onReorderItem 的 newIndex 已是移除后的索引
+                            // （框架会先移除 oldIndex 再计算插入位置），
+                            // 不需要再手动减一。
                             final target = sorted[newIndex];
                             final realNew =
                                 convs.indexWhere((c) => c.id == target.id);
