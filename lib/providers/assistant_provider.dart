@@ -195,6 +195,47 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
     _persist();
   }
 
+  /// Updates an assistant's conversation defaults: the default model
+  /// (display name, applied to NEW conversations) and the default enabled
+  /// tool names (tools not in the set stay off in new conversations).
+  ///
+  /// Unlike [updateAssistant]'s copyWith semantics, a null [defaultModelName]
+  /// here explicitly CLEARS the default (new conversations fall back to the
+  /// global model selection), so the assistant is rebuilt directly instead of
+  /// via copyWith.
+  ///
+  /// ASYMMETRY: a null [defaultToolNames] KEEPS the assistant's previous
+  /// tool-default state (there is currently no way to return a configured
+  /// assistant to "never configured"). Pass a non-null set — including an
+  /// empty one, which means "configured, all tools off" — to set it.
+  void updateAssistantDefaults({
+    required String id,
+    String? defaultModelName,
+    Set<String>? defaultToolNames,
+  }) {
+    state = state.map((a) {
+      if (a.id != id) return a;
+      return Assistant(
+        id: a.id,
+        name: a.name,
+        prompt: a.prompt,
+        emoji: a.emoji,
+        description: a.description,
+        settings: a.settings,
+        modelId: a.modelId,
+        defaultModelName: defaultModelName,
+        // 拷贝一份：不持有调用方的可变 Set 实例（对话框保存后仍会复用）。
+        // 传入非 null（含空集合）即视为"已配置默认工具"。
+        defaultToolNames: defaultToolNames != null
+            ? Set<String>.from(defaultToolNames)
+            : a.defaultToolNames,
+        createdAt: a.createdAt,
+        updatedAt: DateTime.now(),
+      );
+    }).toList();
+    _persist();
+  }
+
   /// Deletes an assistant by [id].
   void deleteAssistant(String id) {
     state = state.where((a) => a.id != id).toList();

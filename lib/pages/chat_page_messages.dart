@@ -225,9 +225,11 @@ extension _ChatPageMessagesExt on _ChatPageState {
 
       if (!isCurrentLoad()) return;
 
-      // Restore per-conversation model selection if this conversation was
-      // previously used with a specific model. The conversation's last used
-      // model takes priority over the globally saved model index.
+      // Restore per-conversation model selection if this conversation has a
+      // model record: the conversation's last used model takes priority over
+      // the globally saved model index. The record may come from the user's
+      // own switch in this conversation OR from the assistant default model
+      // seeded at creation ([Assistant.defaultModelName]).
       if (conv != null &&
           conv.lastUsedModelName != null &&
           conv.lastUsedModelName!.isNotEmpty) {

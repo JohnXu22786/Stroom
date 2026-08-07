@@ -521,6 +521,50 @@ void main() {
       expect(updated.settings.maxTokens, 4096);
     });
 
+    test('updateAssistantDefaults updates only the target assistant', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final a1 = notifier.createAssistant(name: '助手1', prompt: 'P1');
+      final a2 = notifier.createAssistant(name: '助手2', prompt: 'P2');
+
+      notifier.updateAssistantDefaults(
+        id: a1.id,
+        defaultModelName: 'gpt-4o | OpenAI',
+        defaultToolNames: {'web_search'},
+      );
+
+      final updated = notifier.state.firstWhere((a) => a.id == a1.id);
+      expect(updated.defaultModelName, 'gpt-4o | OpenAI');
+      expect(updated.defaultToolNames, {'web_search'});
+
+      // The other assistant is untouched
+      final other = notifier.state.firstWhere((a) => a.id == a2.id);
+      expect(other.defaultModelName, isNull);
+      expect(other.defaultToolNames, isNull);
+    });
+
+    test('updateAssistantDefaults can clear model and tool defaults', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final a1 = notifier.createAssistant(name: '助手1', prompt: 'P1');
+      notifier.updateAssistantDefaults(
+        id: a1.id,
+        defaultModelName: 'gpt-4o | OpenAI',
+        defaultToolNames: {'web_search'},
+      );
+      notifier.updateAssistantDefaults(
+        id: a1.id,
+        defaultModelName: null,
+        defaultToolNames: {},
+      );
+
+      final updated = notifier.state.firstWhere((a) => a.id == a1.id);
+      expect(updated.defaultModelName, isNull);
+      expect(updated.defaultToolNames, isEmpty);
+    });
+
     test('deleteAssistant removes assistant from state', () {
       SharedPreferences.setMockInitialValues({});
       final notifier = AssistantsNotifier();
@@ -646,6 +690,91 @@ void main() {
       expect(updated.settings.customParameters[0].value, 40);
       expect(updated.settings.customParameters[1].name, 'verbose');
       expect(updated.settings.customParameters[1].value, true);
+    });
+  });
+
+  // ========================================================================
+  // 助手默认值：新建话题的默认模型 + 默认启用工具
+  // ========================================================================
+  group('Assistant conversation defaults', () {
+    test('defaults are null model and null (unconfigured) tool set', () {
+      final assistant = Assistant(name: '助手', prompt: '你好');
+      expect(assistant.defaultModelName, isNull);
+      expect(assistant.defaultToolNames, isNull,
+          reason: 'null 表示从未配置默认工具（新话题保持自动启用全部工具的旧行为）');
+    });
+
+    test('defaults survive toMap/fromMap round-trip', () {
+      final original = Assistant(
+        name: '助手',
+        prompt: '你好',
+        defaultModelName: 'gpt-4o | OpenAI',
+        defaultToolNames: {'web_search', 'todowrite'},
+      );
+
+      final map = original.toMap();
+      final restored = Assistant.fromMap(map);
+
+      expect(restored.defaultModelName, 'gpt-4o | OpenAI');
+      expect(restored.defaultToolNames, {'web_search', 'todowrite'});
+    });
+
+    test('configured-empty tool set round-trips as non-null empty', () {
+      final original = Assistant(
+        name: '助手',
+        prompt: '你好',
+        defaultModelName: null,
+        defaultToolNames: {},
+      );
+
+      final map = original.toMap();
+      final restored = Assistant.fromMap(map);
+
+      expect(restored.defaultModelName, isNull);
+      expect(restored.defaultToolNames, isNotNull,
+          reason: '配置过但全关（空集合）必须与"从未配置"（null）区分，'
+              '否则新话题会退回自动启用全部工具');
+      expect(restored.defaultToolNames, isEmpty);
+    });
+
+    test('unconfigured tool set round-trips as null', () {
+      final original = Assistant(name: '助手', prompt: '你好');
+
+      final map = original.toMap();
+      final restored = Assistant.fromMap(map);
+
+      expect(restored.defaultToolNames, isNull);
+    });
+
+    test('legacy assistant map without new fields parses with defaults', () {
+      final map = <String, dynamic>{
+        'id': 'legacy-1',
+        'name': '旧助手',
+        'prompt': '你好',
+      };
+
+      final assistant = Assistant.fromMap(map);
+      expect(assistant.defaultModelName, isNull);
+      expect(assistant.defaultToolNames, isNull);
+    });
+
+    test('copyWith updates defaults without touching other fields', () {
+      final original = Assistant(
+        name: '助手',
+        prompt: '你好',
+        defaultModelName: 'model-a',
+        defaultToolNames: {'t1'},
+      );
+
+      final updated = original.copyWith(
+        defaultModelName: 'model-b',
+        defaultToolNames: {'t1', 't2'},
+      );
+
+      expect(updated.defaultModelName, 'model-b');
+      expect(updated.defaultToolNames, {'t1', 't2'});
+      expect(updated.name, '助手');
+      expect(updated.prompt, '你好');
     });
   });
 
