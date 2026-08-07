@@ -194,11 +194,65 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// restored when the keyboard is dismissed.
   double? _lastScrollPositionBeforeKeyboard;
 
+  /// Insets above which the soft keyboard is considered visible.
+  /// Below this the keyboard is treated as (almost) gone.
+  static const double _keyboardVisibleThreshold = 100;
+
+  /// Duration of the scroll-to-bottom animation started when the composer
+  /// input gains focus — roughly matching the soft-keyboard show animation
+  /// so the list slides up in lockstep with the keyboard.
+  static const Duration _keyboardOpenScrollDuration =
+      Duration(milliseconds: 200);
+
+  /// Short follow-up animation covering the remaining scroll distance once
+  /// the keyboard show animation has finished (the viewport stopped
+  /// shrinking, so maxScrollExtent is stable).
+  static const Duration _keyboardOpenScrollFollowUpDuration =
+      Duration(milliseconds: 120);
+
+  /// Delay after the keyboard appears before the follow-up scroll runs.
+  /// Covers the show transition's scroll animations: the composer hook's
+  /// scroll (200ms) and the chat library's debounced keyboard scroll
+  /// (100ms debounce + 250ms animation). The only case that actually
+  /// leaves a gap is an immediate insets jump (the library's scroll then
+  /// cancels the hook's mid-flight and lands short of the bottom), and its
+  /// animation finishes well inside this window. With smoothly animated
+  /// insets the library's debounce trails the keyboard animation and its
+  /// target is clamped to the final bottom — the follow-up is then a no-op
+  /// even if it runs late. Either way 600ms leaves ~250ms of margin.
+  static const Duration _keyboardFollowUpDelay = Duration(milliseconds: 600);
+
+  /// Grace period after the composer hook saves the scroll position during
+  /// which the keyboard is expected to appear; after it, an unconfirmed
+  /// save is dropped as stale.
+  static const Duration _staleKeyboardPositionDelay =
+      Duration(milliseconds: 800);
+
+  /// True while the soft keyboard is visible in the current session. Used
+  /// to drop the composer hook's saved position when the keyboard never
+  /// actually appears (physical keyboard / suppressed IME).
+  bool _keyboardAppeared = false;
+
+  /// True once the user drags the chat list during the current keyboard
+  /// session. The follow-up scroll must not fight the user: once they take
+  /// over the list, the follow-up is skipped for this session.
+  bool _userDraggedDuringKeyboardSession = false;
+
   /// True while the user is touching/dragging the chat list. Used by the
   /// content-growth follow ([_followContentGrowth]) to keep it from
   /// fighting a finger scroll (the keyboard bottom-pinning that originally
   /// introduced this flag was reverted).
   bool _userIsDragging = false;
+
+  /// Runs [_tryKeyboardFollowUp] once, shortly after the keyboard appears,
+  /// when every scroll animation that can run during the show transition
+  /// has finished.
+  Timer? _keyboardFollowUpTimer;
+
+  /// Drops [_lastScrollPositionBeforeKeyboard] if the soft keyboard never
+  /// appeared within this delay after the composer hook saved it (the hook
+  /// fires on focus, which on a physical keyboard happens without an IME).
+  Timer? _staleKeyboardPositionTimer;
 
   /// Last OBSERVED content extent (maxScrollExtent + viewportDimension —
   /// the list's total content height) from [_followContentGrowth] metrics
@@ -303,6 +357,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _staleKeyboardPositionTimer?.cancel();
+    _keyboardFollowUpTimer?.cancel();
     // The ChatStreamManager owns the adapter lifecycle. We do NOT cancel
     // or dispose it here — if streaming is active, it continues in the
     // background and saves results when complete. The adapter is cleaned
@@ -319,7 +375,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     super.didChangeMetrics();
     if (!mounted) return;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final isNowVisible = bottomInset > 100;
+    final isNowVisible = bottomInset > _keyboardVisibleThreshold;
     // While the initial positioning pass runs the list is hidden; keyboard /
     // viewport changes must not fight the pass. Still track the keyboard
     // visibility flag so the post-pass close transition is not missed.
@@ -338,13 +394,29 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
 
     if (isNowVisible && !_wasKeyboardVisible) {
-      // Keyboard just appeared — save scroll position and jump to bottom
-      // immediately so the input area and latest message are visible.
-      if (_chatScrollController.hasClients) {
+      // Keyboard just appeared — capture the pre-keyboard scroll position
+      // (unless the composer focus hook already saved it for this session)
+      // and animate to the bottom immediately. The focus hook starts the
+      // animation at t=0, before the keyboard animation begins; this branch
+      // is the fallback for keyboards that appear without a focus event
+      // (e.g. re-tapping an already-focused field after Android's back
+      // button hid the IME). The null check keeps the fallback from
+      // overwriting the hook's saved position with a mid-animation offset.
+      // The drag flag is reset here too: this branch also starts a keyboard
+      // session, and a drag that happened while the keyboard was CLOSED
+      // (the user reading) must not cancel this session's follow-up.
+      _keyboardAppeared = true;
+      _userDraggedDuringKeyboardSession = false;
+      _staleKeyboardPositionTimer?.cancel();
+      _keyboardFollowUpTimer?.cancel();
+      _keyboardFollowUpTimer =
+          Timer(_keyboardFollowUpDelay, _tryKeyboardFollowUp);
+      if (_lastScrollPositionBeforeKeyboard == null &&
+          _chatScrollController.hasClients) {
         _lastScrollPositionBeforeKeyboard =
             _chatScrollController.position.pixels;
+        _animateScrollToBottom();
       }
-      _scrollToBottom();
     } else if (!isNowVisible && _wasKeyboardVisible) {
       // Keyboard just disappeared — restore the scroll position that was
       // captured before the keyboard opened.
