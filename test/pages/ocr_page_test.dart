@@ -57,6 +57,7 @@ Future<void> _pumpUntil(
 Widget _buildTestApp({
   List<ProviderEntry>? entries,
   List<SelectedImage>? testImages,
+  Map<String, dynamic>? retryData,
 }) {
   return ProviderScope(
     overrides: [
@@ -68,7 +69,7 @@ Widget _buildTestApp({
         }),
     ],
     child: MaterialApp(
-      home: OcrPage(testImages: testImages),
+      home: OcrPage(testImages: testImages, retryData: retryData),
       localizationsDelegates: const [
         DefaultMaterialLocalizations.delegate,
         DefaultWidgetsLocalizations.delegate,
@@ -81,7 +82,10 @@ Widget _buildTestApp({
 // Helper: Create a sample OCR provider entry with models
 // ============================================================================
 
-ProviderEntry _createOcrEntry({bool withModels = true}) {
+ProviderEntry _createOcrEntry({
+  bool withModels = true,
+  List<Map<String, dynamic>>? instructions,
+}) {
   return ProviderEntry(
     id: 'test_ocr',
     type: 'ocr',
@@ -93,7 +97,13 @@ ProviderEntry _createOcrEntry({bool withModels = true}) {
         key: 'test-key',
         models: withModels
             ? [
-                ModelConfig(name: 'GPT-4o', modelId: 'gpt-4o'),
+                ModelConfig(
+                  name: 'GPT-4o',
+                  modelId: 'gpt-4o',
+                  typeConfig: instructions != null
+                      ? {'userInstructions': instructions}
+                      : {},
+                ),
                 ModelConfig(name: 'GPT-4o Mini', modelId: 'gpt-4o-mini'),
                 ModelConfig(
                   name: 'GPT-4 Vision',
@@ -231,6 +241,178 @@ void main() {
 
       // Should have a model-related label
       expect(find.textContaining('识别模型'), findsWidgets);
+    });
+  });
+
+  group('OcrPage - instruction selector', () {
+    testWidgets('hidden when the selected model has no instructions', (
+      tester,
+    ) async {
+      final entry = _createOcrEntry(withModels: true);
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
+
+      expect(find.text('识别指令'), findsNothing);
+      expect(find.text('默认（仅发送图片）'), findsNothing);
+    });
+
+    testWidgets('shows instruction names below the model selector', (
+      tester,
+    ) async {
+      final entry = _createOcrEntry(
+        withModels: true,
+        instructions: [
+          {'name': '发票提取', 'content': '提取发票号码和金额'},
+          {'name': '表格提取', 'content': '提取表格内容'},
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
+
+      expect(find.text('识别指令'), findsOneWidget);
+      expect(find.text('默认（仅发送图片）'), findsOneWidget);
+    });
+
+    testWidgets('shows content snippet when instruction has no name', (
+      tester,
+    ) async {
+      final entry = _createOcrEntry(
+        withModels: true,
+        instructions: [
+          {'name': '', 'content': '提取图片中的全部文字并翻译'},
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
+
+      // Open the dropdown — the unnamed instruction is labeled by its
+      // content snippet.
+      await tester.tap(find.text('默认（仅发送图片）'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('提取图片中的全部文字并翻译'), findsWidgets);
+    });
+
+    testWidgets('selecting an instruction updates the dropdown display', (
+      tester,
+    ) async {
+      final entry = _createOcrEntry(
+        withModels: true,
+        instructions: [
+          {'name': '发票提取', 'content': '提取发票号码和金额'},
+          {'name': '表格提取', 'content': '提取表格内容'},
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
+
+      // Open the instruction dropdown and pick the second instruction.
+      await tester.tap(find.text('默认（仅发送图片）'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('表格提取').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('表格提取'), findsOneWidget);
+    });
+
+    testWidgets('switching model resets the instruction selection', (
+      tester,
+    ) async {
+      final entry = _createOcrEntry(
+        withModels: true,
+        instructions: [
+          {'name': '发票提取', 'content': '提取发票号码和金额'},
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
+
+      // Select the instruction.
+      await tester.tap(find.text('默认（仅发送图片）'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('发票提取').last);
+      await tester.pumpAndSettle();
+      expect(find.text('发票提取'), findsOneWidget);
+
+      // Switch model (GPT-4o Mini has no instructions).
+      await tester.tap(find.text('GPT-4o | OpenAI').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('GPT-4o Mini | OpenAI').last);
+      await tester.pumpAndSettle();
+
+      // Selector disappears (new model has no instructions)...
+      expect(find.text('识别指令'), findsNothing);
+    });
+
+    testWidgets('retry data restores the instruction selection', (
+      tester,
+    ) async {
+      final entry = _createOcrEntry(
+        withModels: true,
+        instructions: [
+          {'name': '发票提取', 'content': '提取发票号码和金额'},
+          {'name': '表格提取', 'content': '提取表格内容'},
+        ],
+      );
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [entry],
+          retryData: {
+            'type': 'ocr',
+            'images': <Map<String, dynamic>>[],
+            'modelIndex': 0,
+            'instructionIndex': 1,
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('表格提取'), findsOneWidget);
+    });
+  });
+
+  group('OcrPage - instruction injection', () {
+    const instructions = [
+      {'name': '发票', 'content': '提取发票号码和金额'},
+      {'name': '', 'content': '提取表格内容'},
+    ];
+
+    test('selected instruction content is written to typeConfig', () {
+      final tc = applySelectedOcrInstruction(
+        {'maxTokens': 4096},
+        instructions,
+        1,
+      );
+      expect(tc['userInstruction'], '提取表格内容');
+    });
+
+    test('default selection (-1) leaves typeConfig untouched', () {
+      final tc = applySelectedOcrInstruction(
+        {'maxTokens': 4096},
+        instructions,
+        -1,
+      );
+      expect(tc.containsKey('userInstruction'), isFalse);
+    });
+
+    test('out-of-range index leaves typeConfig untouched', () {
+      final tc = applySelectedOcrInstruction(
+        {'maxTokens': 4096},
+        instructions,
+        5,
+      );
+      expect(tc.containsKey('userInstruction'), isFalse);
+    });
+
+    test('blank-content instruction is not injected', () {
+      final tc = applySelectedOcrInstruction(
+        {'maxTokens': 4096},
+        [
+          {'name': '空白', 'content': '   \n\n  '},
+        ],
+        0,
+      );
+      expect(tc.containsKey('userInstruction'), isFalse);
     });
   });
 
