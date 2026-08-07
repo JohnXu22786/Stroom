@@ -63,44 +63,58 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final sections = _sections;
 
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          constraints: BoxConstraints(
-            maxWidth: 600,
-            maxHeight: MediaQuery.of(context).size.height * 0.8,
-          ),
-          color: isDark ? Colors.grey[850] : Colors.white,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header
-              _buildHeader(context, isDark),
-              // Body
-              Flexible(
-                child: sections.isEmpty
-                    ? _buildEmptyState()
-                    : _selectedSectionId != null
-                        ? _buildDetailView(sections, isDark)
-                        : _buildListView(sections, isDark),
-              ),
-              // Close button
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('关闭'),
+    // The system back key (Android back / desktop Esc / barrier tap) follows
+    // the panel level:
+    // - Level 1 (section list): acts like the top-right X — closes the panel.
+    // - Level 2 (detail view): acts like the top-left back arrow — returns to
+    //   the section list instead of exiting the whole panel.
+    return PopScope(
+      canPop: _selectedSectionId == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        setState(() {
+          _selectedSectionId = null;
+        });
+      },
+      child: Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: 600,
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+            ),
+            color: isDark ? Colors.grey[850] : Colors.white,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                _buildHeader(context, isDark),
+                // Body
+                Flexible(
+                  child: sections.isEmpty
+                      ? _buildEmptyState()
+                      : _selectedSectionId != null
+                          ? _buildDetailView(sections, isDark)
+                          : _buildListView(sections, isDark),
+                ),
+                // Close button
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('关闭'),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
