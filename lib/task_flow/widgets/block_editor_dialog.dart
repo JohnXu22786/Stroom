@@ -501,19 +501,21 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 ),
                 child: Row(
                   children: [
-                    Text(
-                      display == null
-                          ? (currentId.isEmpty ? '未指定助手' : '助手不存在')
-                          : '${display.$1} ${display.$2}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: display == null
-                            ? cs.onSurfaceVariant
-                            : cs.onSurface,
+                    Expanded(
+                      child: Text(
+                        display == null
+                            ? (currentId.isEmpty ? '未指定助手' : '助手不存在')
+                            : '${display.$1} ${display.$2}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: display == null
+                              ? cs.onSurfaceVariant
+                              : cs.onSurface,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 4),
                     Icon(
                       Icons.expand_more,
                       size: 18,
@@ -633,15 +635,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     List<Assistant> assistants,
   ) {
     if (id.isEmpty) return null;
-    const prefix = 'builtin:prompt_';
-    if (id.startsWith(prefix)) {
-      final idx = int.tryParse(id.substring(prefix.length));
-      if (idx != null && idx >= 0 && idx < builtInPrompts.length) {
-        final p = builtInPrompts[idx];
-        return (p.emoji, p.name);
-      }
-      return null;
-    }
+    final builtIn = builtInPromptById(id);
+    if (builtIn != null) return (builtIn.emoji, builtIn.name);
+    if (id.startsWith(kBuiltInPromptIdPrefix)) return null;
     final a = assistants.where((a) => a.id == id).firstOrNull;
     return a == null ? null : (a.emoji, a.name);
   }
@@ -653,6 +649,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     final assistants = ref.read(assistantProvider);
     final selected = await showModalBottomSheet<String>(
       context: context,
+      // Without isScrollControlled the sheet is capped at 9/16 of the
+      // screen height — the fractions below would resolve to ~37%.
+      isScrollControlled: true,
       useSafeArea: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),

@@ -64,21 +64,17 @@ String subTaskTypeFor(BlockType? typeKey) {
 Assistant? resolveChatAssistant(
     String assistantId, List<Assistant> assistants) {
   if (assistantId.isEmpty) return null;
-  const prefix = 'builtin:prompt_';
-  if (assistantId.startsWith(prefix)) {
-    final idx = int.tryParse(assistantId.substring(prefix.length));
-    if (idx != null && idx >= 0 && idx < builtInPrompts.length) {
-      final p = builtInPrompts[idx];
-      return Assistant(
-        id: assistantId,
-        name: p.name,
-        prompt: p.prompt,
-        emoji: p.emoji,
-        description: p.description,
-      );
-    }
-    return null;
+  final builtIn = builtInPromptById(assistantId);
+  if (builtIn != null) {
+    return Assistant(
+      id: assistantId,
+      name: builtIn.name,
+      prompt: builtIn.prompt,
+      emoji: builtIn.emoji,
+      description: builtIn.description,
+    );
   }
+  if (assistantId.startsWith(kBuiltInPromptIdPrefix)) return null;
   return assistants.where((a) => a.id == assistantId).firstOrNull;
 }
 
