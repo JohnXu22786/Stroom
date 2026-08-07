@@ -141,6 +141,114 @@ void main() {
       expect(find.text('photo.png'), findsNothing);
     });
 
+    testWidgets('shows loading indicator then image when using dataLoader '
+        '(no blocking disk read before the dialog opens)', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () {
+              showImagePreviewDialog(
+                context: context,
+                fileName: 'loaded.png',
+                dataLoader: () async => validPng,
+              );
+            },
+            child: const Text('Open Preview'),
+          ),
+        ),
+      ));
+
+      await tester.tap(find.text('Open Preview'));
+      await tester.pump();
+
+      // Dialog opens immediately with a loading indicator
+      expect(find.text('loaded.png'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      // Let the loader future complete and the image decode
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('loaded.png'), findsOneWidget);
+    });
+
+    testWidgets('shows error state when dataLoader returns null', (
+      tester,
+    ) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () {
+              showImagePreviewDialog(
+                context: context,
+                fileName: 'failed.png',
+                dataLoader: () async => null,
+              );
+            },
+            child: const Text('Open Preview'),
+          ),
+        ),
+      ));
+
+      await tester.tap(find.text('Open Preview'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byIcon(Icons.broken_image), findsOneWidget);
+      expect(find.text('无法加载图片'), findsOneWidget);
+    });
+
+    testWidgets('synchronously-throwing dataLoader degrades to error state '
+        'instead of crashing the dialog', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () {
+              showImagePreviewDialog(
+                context: context,
+                fileName: 'throw.png',
+                dataLoader: () => throw Exception('loader boom'),
+              );
+            },
+            child: const Text('Open Preview'),
+          ),
+        ),
+      ));
+
+      await tester.tap(find.text('Open Preview'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byIcon(Icons.broken_image), findsOneWidget);
+      expect(find.text('无法加载图片'), findsOneWidget);
+    });
+
+    testWidgets('rejected dataLoader future degrades to error state', (
+      tester,
+    ) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () {
+              showImagePreviewDialog(
+                context: context,
+                fileName: 'reject.png',
+                dataLoader: () => Future.error(Exception('read failed')),
+              );
+            },
+            child: const Text('Open Preview'),
+          ),
+        ),
+      ));
+
+      await tester.tap(find.text('Open Preview'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byIcon(Icons.broken_image), findsOneWidget);
+      expect(find.text('无法加载图片'), findsOneWidget);
+    });
+
     testWidgets('shows error state for empty data', (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Builder(

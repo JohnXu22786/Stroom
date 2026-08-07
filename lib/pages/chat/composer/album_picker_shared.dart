@@ -2,7 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
-import 'package:stroom/utils/image_manifest.dart';
+import 'package:stroom/utils/image_manifest.dart' show ImageRecord;
+import 'package:stroom/utils/image_thumbnail_loader.dart';
 
 // ====================================================================
 // Album Image Thumbnail
@@ -23,24 +24,15 @@ class AlbumImageThumbnailState extends State<AlbumImageThumbnail> {
   @override
   void initState() {
     super.initState();
-    _imageDataFuture = _loadImageData();
+    _imageDataFuture = ImageThumbnailLoader.loadThumbnail(widget.record);
   }
 
   @override
   void didUpdateWidget(covariant AlbumImageThumbnail oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.record.hash != oldWidget.record.hash) {
-      _imageDataFuture = _loadImageData();
+      _imageDataFuture = ImageThumbnailLoader.loadThumbnail(widget.record);
     }
-  }
-
-  Future<Uint8List?> _loadImageData() async {
-    // Try reading thumbnail file from disk first
-    final thumb =
-        await ImageManifest.readFile('${widget.record.hash}_thumb.png');
-    if (thumb != null && thumb.isNotEmpty) return thumb;
-    // Fall back to full image
-    return ImageManifest.readFile(widget.record.storagePath);
   }
 
   @override
@@ -62,6 +54,9 @@ class AlbumImageThumbnailState extends State<AlbumImageThumbnail> {
           fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,
+          // 按 ≤256px 解码，避免回退路径以全分辨率解码原图
+          cacheWidth: 256,
+          cacheHeight: 256,
           loadStateChanged: (state) {
             if (state.extendedImageLoadState == LoadState.failed) {
               return Container(

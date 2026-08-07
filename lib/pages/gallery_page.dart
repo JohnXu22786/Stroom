@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -13,6 +12,7 @@ import 'package:extended_image/extended_image.dart';
 
 import '../providers/image_provider.dart';
 import '../utils/image_manifest.dart';
+import '../utils/image_thumbnail_loader.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
@@ -64,28 +64,8 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   /// Guards against re-entrant image preview (double-tap while loading).
   bool _isPreviewing = false;
 
-  /// 生成缩略图（最大 256x256，保持宽高比）
-  Future<Uint8List> generateThumbnail(
-    Uint8List imageData, {
-    int maxDimension = 256,
-  }) async {
-    try {
-      final codec = await ui.instantiateImageCodec(
-        imageData,
-        targetWidth: maxDimension,
-        targetHeight: maxDimension,
-      );
-      final frame = await codec.getNextFrame();
-      final byteData = await frame.image.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
-      if (byteData == null) return imageData;
-      return byteData.buffer.asUint8List();
-    } catch (e) {
-      // 缩略图生成失败时回退使用原图
-      return imageData;
-    }
-  }
+  /// 缩略图解码目标尺寸（与生成尺寸一致：≤256px，宽高比保持）
+  static const int _thumbDecodeSize = 256;
 
   /// Sanitize a filename: strip path separators, truncate, keep extension.
   String _uniqueImageName(
@@ -107,6 +87,13 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   // ====================================================================
   // Image preview (full-screen gallery viewer)
   // ====================================================================
+
+  /// 记录被删除后丢弃其缩略图内存缓存（hash 键控，防陈旧字节驻留）。
+  void _invalidateThumbnails(Iterable<ImageRecord> recs) {
+    for (final r in recs) {
+      ImageThumbnailLoader.invalidate(r.hash);
+    }
+  }
 
   Future<void> _showImagePreview(ImageRecord file) async {
     if (_isPreviewing) return;
@@ -186,9 +173,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       const format = 'jpg';
       final fileName = '$hash.$format';
       await ImageManifest.writeFile(fileName, bytes);
-      final thumbnailBytes = await generateThumbnail(bytes);
-      final thumbFileName = '${hash}_thumb.png';
-      await ImageManifest.writeFile(thumbFileName, thumbnailBytes);
+      final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(bytes);
+      if (thumbnailBytes != null) {
+        await ImageManifest.writeFile('${hash}_thumb.png', thumbnailBytes);
+      }
       final now = DateTime.now();
       final timestamp =
           '${now.year}${padInt(now.month)}${padInt(now.day)}_${padInt(now.hour)}${padInt(now.minute)}${padInt(now.second)}';
@@ -287,9 +275,12 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         usedInBatch.add(displayName);
 
         await ImageManifest.writeFile(storageFileName, bytes);
-        final thumbnailBytes = await generateThumbnail(bytes);
-        final thumbFileName = '${hash}_thumb.png';
-        await ImageManifest.writeFile(thumbFileName, thumbnailBytes);
+        final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(
+          bytes,
+        );
+        if (thumbnailBytes != null) {
+          await ImageManifest.writeFile('${hash}_thumb.png', thumbnailBytes);
+        }
         await ImageManifest.addRecord(
           ImageRecord(
             name: displayName,
@@ -687,15 +678,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           );
         }
         return FutureBuilder<Uint8List?>(
-          future: () async {
-            // Try reading thumbnail file from disk first
-            final thumb = await ImageManifest.readFile(
-              '${file.hash}_thumb.png',
-            );
-            if (thumb != null && thumb.isNotEmpty) return thumb;
-            // Fall back to full image
-            return ImageManifest.readFile(file.storagePath);
-          }(),
+          // 统一走 ImageThumbnailLoader：内存 LRU 缓存避免网格反复读盘，
+          // 缩略图缺失时按需生成并持久化，不再回退整张原图
+          future: ImageThumbnailLoader.loadThumbnail(file),
           builder: (context, snapshot) {
             final data = snapshot.data;
             if (data == null || data.isEmpty) {
@@ -706,6 +691,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
               fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,
+              // 缩略图按 ≤256px 解码，即使生成失败回退到原图路径
+              // 也不会以全分辨率解码多 MB 图片
+              cacheWidth: _thumbDecodeSize,
+              cacheHeight: _thumbDecodeSize,
               loadStateChanged: (state) {
                 if (state.extendedImageLoadState == LoadState.failed) {
                   return buildFormatIcon(file.format);
@@ -809,15 +798,23 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         }
       },
       onDeleteFile: (id) async {
+        _invalidateThumbnails(records.where((r) => r.id == id));
         await ref.read(imageRecordsProvider.notifier).deleteRecord(id);
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onDeleteFiles: (ids) async {
+        final idSet = ids.toSet();
+        _invalidateThumbnails(records.where((r) => idSet.contains(r.id)));
         await ref.read(imageRecordsProvider.notifier).deleteRecords(ids);
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onDeleteFolders: (names) async {
         for (final name in names) {
+          _invalidateThumbnails(
+            records.where(
+              (r) => r.folder == name || r.folder.startsWith('$name/'),
+            ),
+          );
           await ref.read(imageRecordsProvider.notifier).deleteFolder(name);
         }
         await ref.read(imageFolderListProvider.notifier).loadFolders();
@@ -863,6 +860,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onDeleteFolder: (name) async {
+        _invalidateThumbnails(
+          records.where(
+            (r) => r.folder == name || r.folder.startsWith('$name/'),
+          ),
+        );
         await ref.read(imageRecordsProvider.notifier).deleteFolder(name);
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
