@@ -4,7 +4,8 @@ import '../providers/provider_config.dart';
 import 'llm_model_config_shared.dart';
 
 /// OCR 模型配置编辑页面
-/// 包含基本设置和 OCR 专有参数（temperature、detail 等）
+/// 包含基本设置、可选用户指令、OCR 参数（temperature/topP/maxTokens）
+/// 和自定义参数；所有参数均为可选，未开启/未填写则不发送。
 class OcrModelConfigPage extends StatefulWidget {
   final ModelConfig? model; // null = 新建, non-null = 编辑
 
@@ -14,11 +15,20 @@ class OcrModelConfigPage extends StatefulWidget {
   State<OcrModelConfigPage> createState() => _OcrModelConfigPageState();
 }
 
+/// A named user instruction sent together with the images.
+/// [name] is optional and only used for display in the OCR page selector.
+class _UserInstruction {
+  String name;
+  String content;
+
+  _UserInstruction({this.name = '', this.content = ''});
+}
+
 class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _modelIdController;
   late final TextEditingController _maxTokensController;
-  late final TextEditingController _seedController;
+  late List<_UserInstruction> _userInstructions;
   late List<CustomParam> _customParams;
   final Map<int, String?> _jsonErrors = {};
 
@@ -26,19 +36,44 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   double _temperature = 0.0;
   double _topP = 1.0;
 
-  // Detail level
-  String _detail = 'high';
-
   // Toggle flags
   bool _enableTemperature = false;
   bool _enableTopP = false;
   bool _enableMaxTokens = false;
-  bool _enableDetail = false;
-  bool _enableSeed = false;
 
   bool _isSaving = false;
 
   bool get _isEditing => widget.model != null;
+
+  /// Normalizes stored instructions (list or legacy single string) into a
+  /// comparable list of {name, content} maps, dropping blank contents.
+  /// Normalizes stored instructions (list or legacy single string) into a
+  /// comparable list of {name, content} maps. Entries with both name and
+  /// content blank are dropped.
+  static List<Map<String, String>> _normalizeStoredInstructions(
+    Map<String, dynamic> typeConfig,
+  ) {
+    final raw = typeConfig['userInstructions'];
+    if (raw is List && raw.isNotEmpty) {
+      return raw
+          .whereType<Map>()
+          .map((e) => {
+                'name': (e['name']?.toString() ?? '').trim(),
+                'content': (e['content']?.toString() ?? '').trim(),
+              })
+          .where((m) =>
+              (m['name'] as String).isNotEmpty ||
+              (m['content'] as String).isNotEmpty)
+          .toList();
+    }
+    // Legacy single-string format (pre multi-instruction feature).
+    final legacy = typeConfig['userInstruction']?.toString().trim() ?? '';
+    if (legacy.isNotEmpty)
+      return [
+        {'name': '', 'content': legacy}
+      ];
+    return [];
+  }
 
   /// Whether the user has made unsaved changes.
   bool get _hasUnsavedChanges {
@@ -48,18 +83,16 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       if (_nameController.text.isNotEmpty) return true;
       if (_modelIdController.text.isNotEmpty) return true;
       if (_customParams.any((p) => p.paramName.isNotEmpty)) return true;
-      if (_enableTemperature ||
-          _enableTopP ||
-          _enableMaxTokens ||
-          _enableDetail ||
-          _enableSeed) {
+      if (_userInstructions.any(
+          (i) => i.name.trim().isNotEmpty || i.content.trim().isNotEmpty)) {
+        return true;
+      }
+      if (_enableTemperature || _enableTopP || _enableMaxTokens) {
         return true;
       }
       if (_maxTokensController.text.isNotEmpty) return true;
-      if (_seedController.text.isNotEmpty) return true;
       if (_temperature != 0.0) return true;
       if (_topP != 1.0) return true;
-      if (_detail != 'high') return true;
       return false;
     }
     // Editing: compare against original model
@@ -74,9 +107,6 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     if (((m.typeConfig['topP'] as num?)?.toDouble() ?? 1.0) != _topP) {
       return true;
     }
-    if ((m.typeConfig['detail'] as String? ?? 'high') != _detail) {
-      return true;
-    }
     if ((m.typeConfig['enableTemperature'] as bool? ?? false) !=
         _enableTemperature) {
       return true;
@@ -88,17 +118,22 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         _enableMaxTokens) {
       return true;
     }
-    if ((m.typeConfig['enableDetail'] as bool? ?? false) != _enableDetail) {
-      return true;
-    }
-    if ((m.typeConfig['enableSeed'] as bool? ?? false) != _enableSeed) {
-      return true;
-    }
     if ((m.typeConfig['maxTokens']?.toString() ?? '') !=
         _maxTokensController.text) {
       return true;
     }
-    if ((m.typeConfig['seed']?.toString() ?? '') != _seedController.text) {
+    // Instructions: compare normalized stored vs current editing state.
+    final storedInstructions = _normalizeStoredInstructions(m.typeConfig);
+    final currentInstructions = _userInstructions
+        .map((i) => {
+              'name': i.name.trim(),
+              'content': i.content.trim(),
+            })
+        .where((e) =>
+            (e['name'] as String).isNotEmpty ||
+            (e['content'] as String).isNotEmpty)
+        .toList();
+    if (storedInstructions.toString() != currentInstructions.toString()) {
       return true;
     }
     // Custom params (simple check via serialization)
@@ -118,24 +153,23 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     // Initialize OCR-specific params from typeConfig
     _temperature = (m?.typeConfig['temperature'] as num?)?.toDouble() ?? 0.0;
     _topP = (m?.typeConfig['topP'] as num?)?.toDouble() ?? 1.0;
-    _detail = (m?.typeConfig['detail'] as String?) ?? 'high';
 
     // Read enable flags from typeConfig
     _enableTemperature = m?.typeConfig['enableTemperature'] as bool? ?? false;
     _enableTopP = m?.typeConfig['enableTopP'] as bool? ?? false;
     _enableMaxTokens = m?.typeConfig['enableMaxTokens'] as bool? ?? false;
-    _enableDetail = m?.typeConfig['enableDetail'] as bool? ?? false;
-    _enableSeed = m?.typeConfig['enableSeed'] as bool? ?? false;
 
     final maxTokens = (m?.typeConfig['maxTokens'] as num?)?.toInt();
     _maxTokensController = TextEditingController(
       text: maxTokens != null ? maxTokens.toString() : '',
     );
 
-    final seed = m?.typeConfig['seed'];
-    _seedController = TextEditingController(
-      text: seed != null ? seed.toString() : '',
-    );
+    _userInstructions = _normalizeStoredInstructions(m?.typeConfig ?? {})
+        .map(
+          (e) => _UserInstruction(
+              name: e['name'] ?? '', content: e['content'] ?? ''),
+        )
+        .toList();
 
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
     // Initialize JSON validation for existing params
@@ -149,8 +183,23 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     _nameController.dispose();
     _modelIdController.dispose();
     _maxTokensController.dispose();
-    _seedController.dispose();
     super.dispose();
+  }
+
+  // ===================================================================
+  // 用户指令
+  // ===================================================================
+
+  void _addInstruction() {
+    setState(() {
+      _userInstructions.add(_UserInstruction());
+    });
+  }
+
+  void _removeInstruction(int index) {
+    setState(() {
+      _userInstructions.removeAt(index);
+    });
   }
 
   // ===================================================================
@@ -536,15 +585,10 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     if (_enableTopP) {
       typeConfig['topP'] = _topP;
     }
-    if (_enableDetail) {
-      typeConfig['detail'] = _detail;
-    }
     // Always save toggle states so they persist
     typeConfig['enableTemperature'] = _enableTemperature;
     typeConfig['enableTopP'] = _enableTopP;
     typeConfig['enableMaxTokens'] = _enableMaxTokens;
-    typeConfig['enableDetail'] = _enableDetail;
-    typeConfig['enableSeed'] = _enableSeed;
 
     // Parse optional maxTokens
     final maxTokensStr = _maxTokensController.text.trim();
@@ -572,30 +616,14 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       return;
     }
 
-    // Parse optional seed
-    final seedStr = _seedController.text.trim();
-    if (seedStr.isNotEmpty) {
-      final seed = int.tryParse(seedStr);
-      if (seed == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('随机种子必须为整数'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        setState(() => _isSaving = false);
-        return;
-      }
-      typeConfig['seed'] = seed;
-    } else if (_enableSeed) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('随机种子已启用但未填写'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      setState(() => _isSaving = false);
-      return;
+    // Optional user instructions (sent together with the images;
+    // blank-content entries are dropped)
+    final instructions = _userInstructions
+        .map((i) => {'name': i.name.trim(), 'content': i.content.trim()})
+        .where((e) => (e['content'] as String).isNotEmpty)
+        .toList();
+    if (instructions.isNotEmpty) {
+      typeConfig['userInstructions'] = instructions;
     }
 
     final result = ModelConfig(
@@ -689,7 +717,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             const SizedBox(height: 24),
 
             // ==========================================================
-            // OCR 参数设置（带开关）
+            // OCR 参数设置（全部可选）
             // ==========================================================
             Text(
               'OCR 参数',
@@ -701,9 +729,92 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             ),
             const SizedBox(height: 4),
             Text(
-              '开启的参数将作为默认值发送到 API 请求中',
+              '基于 OpenAI 兼容的视觉 Chat Completions 格式（OCR 通常即调用此类'
+              '接口），以下参数均为可选，不填写/不开启则不发送。其他供应商特有'
+              '参数（需其接口支持）可在下方自定义参数中添加。',
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
+            const SizedBox(height: 12),
+
+            // ==========================================================
+            // 用户指令（可选，多条）
+            // ==========================================================
+            Row(
+              children: [
+                const Text(
+                  '用户指令',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('添加指令'),
+                  onPressed: _addInstruction,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '可选。不添加时仅发送图片，可添加多条指令，'
+              '在文字识别页的模型选择下方选择使用哪条。',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 8),
+            if (_userInstructions.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: Text(
+                    '暂无指令',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+              )
+            else
+              ...List.generate(_userInstructions.length, (i) {
+                final item = _userInstructions[i];
+                return Card(
+                  key: ObjectKey(item),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextFormField(
+                          initialValue: item.name,
+                          decoration: const InputDecoration(
+                            labelText: '指令名称（可选）',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onChanged: (v) => setState(() => item.name = v),
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          initialValue: item.content,
+                          minLines: 2,
+                          maxLines: 4,
+                          decoration: const InputDecoration(
+                            labelText: '指令内容',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onChanged: (v) => setState(() => item.content = v),
+                        ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 20),
+                            tooltip: '删除指令',
+                            onPressed: () => _removeInstruction(i),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
             const SizedBox(height: 12),
 
             // Temperature
@@ -742,20 +853,6 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               keyboardType: TextInputType.number,
               description: '每次响应最多生成的 token 数',
             ),
-
-            // Seed
-            LlmToggleTextField(
-              label: '随机种子 (Seed)',
-              controller: _seedController,
-              enabled: _enableSeed,
-              onToggle: (v) => setState(() => _enableSeed = v),
-              hintText: '如 42',
-              keyboardType: TextInputType.number,
-              description: '设置后可使输出结果可复现',
-            ),
-
-            // Detail level
-            _buildDetailSection(cs),
 
             const SizedBox(height: 24),
 
@@ -929,93 +1026,6 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                 );
               }),
             const SizedBox(height: 32),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Build the Detail level card with dropdown.
-  Widget _buildDetailSection(ColorScheme cs) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Expanded(
-                  child: Text('图片细节级别 (Detail)',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                ),
-                Switch(
-                  value: _enableDetail,
-                  onChanged: (v) => setState(() => _enableDetail = v),
-                ),
-              ],
-            ),
-            if (_enableDetail)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 4),
-                  Text(
-                    '控制模型处理图片时的分辨率',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: cs.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade400),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _detail,
-                        isDense: true,
-                        isExpanded: true,
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'auto',
-                            child: Text('auto - 自动选择'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'low',
-                            child: Text('low - 低分辨率 (512x512)'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'high',
-                            child: Text('high - 高分辨率 (分块处理)'),
-                          ),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) {
-                            setState(() => _detail = v);
-                          }
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _detail == 'auto'
-                        ? '模型根据图片大小自动选择细节级别'
-                        : _detail == 'low'
-                            ? '低分辨率模式，处理速度更快、消耗更少 Token'
-                            : '高分辨率模式，模型将图片分块处理以获取更多细节',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                    ),
-                  ),
-                ],
-              ),
           ],
         ),
       ),

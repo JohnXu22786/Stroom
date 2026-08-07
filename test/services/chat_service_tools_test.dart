@@ -14,6 +14,7 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_service.dart';
 part 'chat_service_tools_test_p1.dart';
 part 'chat_service_tools_test_p2.dart';
@@ -107,6 +108,10 @@ ModelConfig _createMockModelConfig() {
 }
 
 void main() {
+  // 初始化测试绑定：让 flutter_test 的 mock HttpClient 接管所有 HTTP
+  // 请求（立即返回 400），懒连接测试里的按需连接才会快速失败而非
+  // 依赖真实网络/超时。
+  TestWidgetsFlutterBinding.ensureInitialized();
   chatServiceToolsGroup1();
   chatServiceToolsGroup2();
   chatServiceToolsGroup3();

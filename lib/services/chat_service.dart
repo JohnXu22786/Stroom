@@ -8,6 +8,7 @@ import '../models/assistant.dart' show AssistantSettings, CustomParameter;
 import '../models/ai_stream_event.dart';
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
+import '../models/mcp.dart' show McpServerConfig;
 import '../models/tool_call.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';

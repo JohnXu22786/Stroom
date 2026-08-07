@@ -216,11 +216,14 @@ extension _ChatPageListenersExt on _ChatPageState {
           if (!mounted) return;
           _configureAdapter();
           // Re-initialize built-in and MCP tools with the updated provider
-          // data. initializeMcpServers serializes concurrent calls (joins an
-          // in-flight discovery) and only re-discovers when the config
-          // actually changed, so this is safe to call repeatedly.
+          // data. initializeMcpServers is lazy (publishes placeholders only,
+          // no network; connections happen on tool calls) and skips when the
+          // MCP entry instance is unchanged, so this is safe to call
+          // repeatedly.
           final entriesState = ref.read(providerEntriesProvider);
           _adapter.initializeBuiltinTools(entriesState);
+          // initializeMcpServers 只同步发布占位工具定义（不做任何网络
+          // 连接，连接在工具被调用时按需建立）。
           await _adapter.initializeMcpServers(entriesState);
           // MCP tools discovered on this late path (load() completed after the
           // initial _initialize snapshot) must be auto-enabled for

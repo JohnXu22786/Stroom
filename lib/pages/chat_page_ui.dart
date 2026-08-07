@@ -154,6 +154,74 @@ extension _ChatPageUiExt on _ChatPageState {
     });
   }
 
+  /// Follows content growth while auto-scroll is engaged, mirroring the
+  /// reasoning panel's button behavior: once the user is following (at the
+  /// bottom, or just tapped the scroll-to-bottom button), the list must
+  /// keep its bottom edge pinned to the newest content.
+  ///
+  /// [ScrollMetricsNotification] is dispatched — via a microtask, after the
+  /// frame in which the metrics changed — whenever ANY scroll metric moves,
+  /// pixels included. Three cases reach this hook:
+  ///  1. Content growth (streaming message, mermaid auto-fit, image load):
+  ///     `controller.updateMessage` never triggers the library's
+  ///     insert-follow, so growth silently strands the viewport above the
+  ///     true bottom unless something re-scrolls.
+  ///  2. The sliver correcting its unbuilt-tail extent estimate after a
+  ///     jump: the scroll-to-bottom button's `jumpTo(maxScrollExtent)`
+  ///     lands short when the tail is unbuilt, and only the estimate
+  ///     corrections converge it to the true bottom.
+  ///  3. Anything else — ordinary scrolls (pixels moving), viewport-only
+  ///     changes (composer growing, window resize): ignored. A user
+  ///     scrolling up, even one stopping within the 80px at-bottom window,
+  ///     must never be yanked back.
+  ///
+  /// The cases are told apart by the CONTENT extent (maxScrollExtent +
+  /// viewportDimension — the list's total content height): cases 1 and 2
+  /// strictly grow it, case 3 leaves it unchanged. Scrolling states are
+  /// additionally ignored — a drag or ballistic animation means the user
+  /// (or the chat library's own insert-follow / keyboard scrolls, which
+  /// target the bottom themselves) is steering the list; a short landing
+  /// from those self-corrects on the next content growth.
+  ///
+  /// The extent record is updated on every notification — it tracks the
+  /// LAST OBSERVED extent, so a content shrink (message removed, a reload
+  /// landing on a shorter list, an estimate correction down) re-arms the
+  /// gate instead of permanently suppressing the follow — while the strict
+  /// growth comparison keeps pixels-only and viewport-only notifications
+  /// inert. Updating before the state checks also means a growth consumed
+  /// by a bail cannot re-fire on a later pixels-only notification.
+  ///
+  /// The jump runs in a post-frame callback so it targets the final
+  /// post-layout extent and coalesces to at most one jump per frame. Within
+  /// the 80px "at bottom" window used by [_onChatScroll] a growth snaps to
+  /// the exact bottom — the same semantics as the reasoning panel's 50px
+  /// window.
+  void _followContentGrowth() {
+    if (_pendingInitialScrollAdjustment) return;
+    if (!_chatScrollController.hasClients) return;
+    final pos = _chatScrollController.position;
+    final contentExtent = pos.maxScrollExtent + pos.viewportDimension;
+    final previous = _lastFollowContentExtent;
+    _lastFollowContentExtent = contentExtent;
+    if (previous != null && contentExtent <= previous) return;
+    if (!_autoScrollEnabled) return;
+    if (_userIsDragging) return;
+    if (_isRestoringKeyboardScroll) return;
+    if (pos.isScrollingNotifier.value) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_autoScrollEnabled || _userIsDragging) return;
+      if (_isRestoringKeyboardScroll || _pendingInitialScrollAdjustment) {
+        return;
+      }
+      if (!_chatScrollController.hasClients) return;
+      final pos = _chatScrollController.position;
+      if (pos.isScrollingNotifier.value) return;
+      final target = pos.maxScrollExtent;
+      if ((pos.pixels - target).abs() < 1) return;
+      _chatScrollController.jumpTo(target);
+    });
+  }
+
   /// Handles chat list scroll events to track auto-scroll state.
   void _onChatScroll() {
     // While the initial positioning pass runs the list is hidden and all

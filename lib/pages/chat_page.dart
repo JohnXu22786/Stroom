@@ -235,6 +235,19 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// animation only ever move toward the bottom — so it releases the pin.
   double _lastReportedScrollPixels = 0;
 
+  /// Last OBSERVED content extent (maxScrollExtent + viewportDimension —
+  /// the list's total content height) from [_followContentGrowth] metrics
+  /// notifications. The metrics notification fires for every metric change
+  /// (pixels during ordinary scrolls, and maxScrollExtent when the viewport
+  /// shrinks too), so the follow only acts when the observed content extent
+  /// strictly grows — i.e. the content grew or the sliver corrected its
+  /// extent estimate. A pure pixel change (a user scroll, even one stopping
+  /// within the at-bottom window) or a viewport-only change (composer
+  /// growing, window resize) never re-pins; a content shrink re-arms the
+  /// gate for the next growth. Reset when the list is replaced (conversation
+  /// switch, view clear) — the extent belongs to the previous list.
+  double? _lastFollowContentExtent;
+
   /// Chat area height (logical px) from the previous build, used to compute
   /// per-frame viewport-height deltas while the keyboard animation runs.
   double? _lastChatAreaHeight;

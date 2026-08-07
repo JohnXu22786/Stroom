@@ -22,7 +22,7 @@ class JsHookScript {
   // Configuration
   // =========================================================================
   var seenUrls = {};
-  var MEDIA_EXT_RE = /\\.(mp4|m3u8|m3u|mpd|ts|webm|flv|f4v|mkv|avi|mov|wmv|ogg|ogv|aac|m4a|m4s|wav|mp3|opus|weba)(\\?|#|\$)/i;
+  var MEDIA_EXT_RE = /\\.(mp4|m3u8|m3u|mpd|ts|webm|flv|f4v|ev1|mkv|avi|mov|wmv|ogg|ogv|aac|m4a|m4s|wav|mp3|opus|weba)(\\?|#|\$)/i;
   var PAGE_URL = window.location.href;
 
   // =========================================================================

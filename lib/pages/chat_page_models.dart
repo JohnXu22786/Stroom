@@ -116,9 +116,32 @@ extension _ChatPageModelsExt on _ChatPageState {
     final model = models[modelIdx];
     _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
     setState(() => _selectedModelIndex = idx);
+    // Persist the choice for THIS conversation so the user's switch survives
+    // re-entry (takes priority over the global saved index) without
+    // affecting other conversations.
+    final convId = ref.read(activeConversationIdProvider);
+    var hadPerConversationModel = false;
+    if (convId != null) {
+      final conv = ref
+          .read(conversationsProvider)
+          .where((c) => c.id == convId)
+          .firstOrNull;
+      hadPerConversationModel = conv != null &&
+          conv.lastUsedModelName != null &&
+          conv.lastUsedModelName!.isNotEmpty;
+      ref.read(conversationsProvider.notifier).updateLastUsedModel(
+            convId,
+            selectedName,
+          );
+    }
     SharedPreferences.getInstance().then((prefs) {
       try {
-        prefs.setInt('selected_model_index', idx);
+        // Only update the GLOBAL fallback when this conversation was not
+        // overriding it with its own model — an override must not leak its
+        // choice into other conversations that follow the global default.
+        if (!hadPerConversationModel) {
+          prefs.setInt('selected_model_index', idx);
+        }
         // Restore the new model's per-model settings
         _restorePerModelSettings(prefs, idx);
       } catch (e) {
@@ -214,6 +237,30 @@ extension _ChatPageModelsExt on _ChatPageState {
       setState(() {
         _savedModelOrder = savedOrder;
       });
+    }
+
+    // Per-conversation model takes priority over the global saved index:
+    // the conversation's last used model (or its assistant default, seeded
+    // at creation) was already restored by _selectModelByName during
+    // message load. Applying the global index here would clobber it, so
+    // re-apply the conversation's own choice (idempotent) and skip the
+    // global restore entirely.
+    final convId = ref.read(activeConversationIdProvider);
+    final conv = convId != null
+        ? ref
+            .read(conversationsProvider)
+            .where((c) => c.id == convId)
+            .firstOrNull
+        : null;
+    final perConvName = perConversationModelToRestore(
+      lastUsedModelName: conv?.lastUsedModelName,
+      availableModels: _adapter.availableModels(
+        ref.read(providerEntriesProvider),
+      ),
+    );
+    if (perConvName != null) {
+      _selectModelByName(perConvName);
+      return;
     }
 
     // Restore saved model selection — clear stale index if out of range

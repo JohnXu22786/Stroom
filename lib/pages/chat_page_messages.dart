@@ -32,8 +32,10 @@ extension _ChatPageMessagesExt on _ChatPageState {
     // snapshot instead of briefly replacing it with stale data.
     await _loadConversationMessages();
 
-    // Then discover MCP server tools (SSE / stdio) dynamically.
-    // MCP discovery failures don't affect already-registered built-in tools.
+    // Then initialize MCP server placeholders (SSE / stdio) without any
+    // network connection — MCP servers are lazy: they connect only when a
+    // tool is actually called. Invalid MCP configs don't affect
+    // already-registered built-in tools.
     // Re-read the entries state here: the snapshot taken at the top of
     // _initialize may predate ProviderEntriesNotifier.load() completing
     // (async SharedPreferences + migrations). Passing the stale (possibly
@@ -45,6 +47,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
       await AppLogService.info('ChatPage',
           '开始初始化 MCP 服务器，当前有 ${freshEntriesState?.entries.length ?? 0} 个供应商配置');
       if (freshEntriesState != null) {
+        // initializeMcpServers 只同步发布占位工具定义（不做任何网络连接，
+        // 连接在工具被调用时按需建立），立即重解析启用集并重建 UI，让
+        // 所有 MCP 供应商的工具马上出现在工具列表中。
         await _adapter.initializeMcpServers(freshEntriesState);
         // MCP tools may have been discovered AFTER _loadConversationMessages
         // resolved the enabled set. Re-resolve so newly discovered MCP tools
@@ -139,6 +144,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
     _pendingInitialScrollAdjustment = false;
     _initialAdjustStepScheduled = false;
     _initialAdjustChaseFrames = 0;
+    // The list is gone — the follow logic's content extent tracker belongs
+    // to the previous list.
+    _lastFollowContentExtent = null;
     _loadedConversationId = null;
     if (mounted) setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -225,9 +233,11 @@ extension _ChatPageMessagesExt on _ChatPageState {
 
       if (!isCurrentLoad()) return;
 
-      // Restore per-conversation model selection if this conversation was
-      // previously used with a specific model. The conversation's last used
-      // model takes priority over the globally saved model index.
+      // Restore per-conversation model selection if this conversation has a
+      // model record: the conversation's last used model takes priority over
+      // the globally saved model index. The record may come from the user's
+      // own switch in this conversation OR from the assistant default model
+      // seeded at creation ([Assistant.defaultModelName]).
       if (conv != null &&
           conv.lastUsedModelName != null &&
           conv.lastUsedModelName!.isNotEmpty) {
@@ -372,6 +382,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
       if (_pendingInitialScrollAdjustment) {
         _initialAdjustStepsTaken = 0;
         _initialAdjustChaseFrames = 0;
+        // The list is about to be replaced — the follow logic's content
+        // extent tracker belongs to the previous list.
+        _lastFollowContentExtent = null;
         // Kick the pass through the scheduler: if a step is already
         // scheduled (reload landing mid-pass), the kick is a no-op and the
         // running chain continues — never two pass frames per frame.

@@ -39,18 +39,37 @@ void main() {
       await tester.pumpWidget(createTestApp());
       await tester.pump();
 
+      // Scroll to the unified selection card (it sits below the Anki section)
+      await tester.scrollUntilVisible(
+        find.text('选择要备份或恢复的数据类别'),
+        200.0,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.pump();
+
       // Should find the unified selection section header
       expect(find.text('选择要备份或恢复的数据类别'), findsOneWidget);
 
-      // New category labels should be present
-      expect(find.text('聊天记录和附件'), findsAtLeast(1));
-      expect(find.text('设置'), findsAtLeast(1));
-      expect(find.text('图片'), findsAtLeast(1));
-      expect(find.text('音频'), findsAtLeast(1));
-      expect(find.text('视频'), findsAtLeast(1));
-      expect(find.text('文本'), findsAtLeast(1));
-      expect(find.text('任务'), findsAtLeast(1));
-      expect(find.text('浏览器Cookies'), findsAtLeast(1));
+      // New category labels should be present (ListView is lazy-loaded,
+      // so scroll to each label as needed)
+      for (final label in [
+        '聊天记录和附件',
+        '设置',
+        '图片',
+        '音频',
+        '视频',
+        '文本',
+        '任务',
+        '浏览器Cookies',
+      ]) {
+        await tester.scrollUntilVisible(
+          find.text(label),
+          100.0,
+          scrollable: find.byType(Scrollable),
+        );
+        await tester.pump();
+        expect(find.text(label), findsAtLeast(1));
+      }
     });
 
     testWidgets('export and import buttons both exist', (tester) async {

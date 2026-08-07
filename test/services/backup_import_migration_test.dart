@@ -116,11 +116,14 @@ void main() {
       expect(migratedPrefs.containsKey('chat_configs'), isFalse,
           reason: 'After import+migration, chat_configs should be removed');
 
-      // data_format_version should be updated
-      expect(migratedPrefs.getInt('data_format_version'),
-          equals(DataMigrationService.currentFormatVersion),
-          reason:
-              'data_format_version should be updated after import+migration');
+      // Per-part versions should all be current after import+migration
+      final stored = await DataMigrationService.getStoredPartVersions();
+      for (final entry in DataMigrationService.currentPartVersions.entries) {
+        expect(stored[entry.key], equals(entry.value),
+            reason: 'part ${entry.key}');
+      }
+      expect(migratedPrefs.containsKey('data_format_version'), isFalse,
+          reason: '旧全局 key 迁移后退役');
 
       // provider_entries should have valid content
       final providerEntriesJson = migratedPrefs.getString('provider_entries');
@@ -242,9 +245,12 @@ void main() {
           reason: 'Null type should be auto-fixed after import');
       expect((entry1['type'] as String).isNotEmpty, isTrue);
 
-      // Version should be updated
-      expect(migratedPrefs.getInt('data_format_version'),
-          equals(DataMigrationService.currentFormatVersion));
+      // Per-part versions should all be current after import+migration
+      final stored = await DataMigrationService.getStoredPartVersions();
+      for (final entry in DataMigrationService.currentPartVersions.entries) {
+        expect(stored[entry.key], equals(entry.value),
+            reason: 'part ${entry.key}');
+      }
     });
 
     test('modern-format backup skips migration after import', () async {
@@ -320,8 +326,13 @@ void main() {
 
       // Verify data still in modern format (migration didn't change anything)
       final postPrefs = await SharedPreferences.getInstance();
-      expect(postPrefs.getInt('data_format_version'),
-          equals(DataMigrationService.currentFormatVersion));
+      final stored = await DataMigrationService.getStoredPartVersions();
+      for (final entry in DataMigrationService.currentPartVersions.entries) {
+        expect(stored[entry.key], equals(entry.value),
+            reason: 'part ${entry.key}');
+      }
+      expect(postPrefs.containsKey('data_format_version'), isFalse,
+          reason: '旧全局 key 迁移后退役');
       expect(postPrefs.getString('provider_entries'), isNotNull);
     });
 
@@ -363,10 +374,15 @@ void main() {
       });
       await BackupService.restoreFromBytesForTest(backupBytes);
 
-      // Should not throw and version should remain current
+      // Should not throw and per-part versions should remain current
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getInt('data_format_version'),
-          equals(DataMigrationService.currentFormatVersion));
+      final stored = await DataMigrationService.getStoredPartVersions();
+      for (final entry in DataMigrationService.currentPartVersions.entries) {
+        expect(stored[entry.key], equals(entry.value),
+            reason: 'part ${entry.key}');
+      }
+      expect(prefs.containsKey('data_format_version'), isFalse,
+          reason: '旧全局 key 迁移后退役');
     });
 
     test('v1 backup with preferences.json still imports correctly', () async {
