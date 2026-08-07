@@ -55,7 +55,7 @@ String subTaskTypeFor(BlockType? typeKey) {
 
 /// Resolves a chat block's assistantId to an [Assistant]:
 /// - empty → null (the currently selected assistant is used);
-/// - 'builtin:prompt_<index>' → an [Assistant] built from the built-in
+/// - `builtin:prompt_<index>` → an [Assistant] built from the built-in
 ///   prompt preset (no bound model — the currently selected model is
 ///   used with the preset's prompt);
 /// - any other id → the matching user-defined assistant;
