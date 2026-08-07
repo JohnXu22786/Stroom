@@ -66,28 +66,10 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
   ) {
     if (typeConfig == null) return;
 
-    // Try apiKey field first, then headers, then env
+    // 占位符（'Bearer ' 前缀等）视为未设置，避免默认工具自动填入假 Key
     String? extractKey() {
-      final apiKey = typeConfig['apiKey'] as String?;
-      if (apiKey != null && apiKey.isNotEmpty) return apiKey;
-      final headersRaw = typeConfig['headers'];
-      if (headersRaw is Map) {
-        for (final val in headersRaw.values) {
-          final s = val.toString().trim();
-          if (s.isNotEmpty && s.length > 3) {
-            if (s.startsWith('Bearer ')) return s.substring(7).trim();
-            return s;
-          }
-        }
-      }
-      final envRaw = typeConfig['env'];
-      if (envRaw is Map) {
-        for (final val in envRaw.values) {
-          final s = val.toString();
-          if (s.isNotEmpty) return s;
-        }
-      }
-      return null;
+      final key = McpServerConfig.extractApiKeyFromTypeConfig(typeConfig);
+      return key.isNotEmpty ? key : null;
     }
 
     switch (name) {
