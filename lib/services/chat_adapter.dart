@@ -508,3 +508,25 @@ Set<String> resolveEnabledToolNames({
   }
   return allTools.map((t) => t.name).toSet();
 }
+
+/// Resolves which model the chat page should restore for the active
+/// conversation, when the conversation has a per-conversation record
+/// ([Conversation.lastUsedModelName] — set by an assistant default at
+/// creation or by the user's own switch inside that conversation).
+///
+/// Returns the model display name when it still exists among
+/// [availableModels]; returns null when the conversation has no record or
+/// the recorded model was removed from the provider configs — in both
+/// cases the global saved model index applies (the fallback).
+///
+/// Pure so the priority policy is unit-testable; the side effects (adapter
+/// select + per-model settings restore) live in the chat page.
+String? perConversationModelToRestore({
+  required String? lastUsedModelName,
+  required List<AvailableModel> availableModels,
+}) {
+  final name = lastUsedModelName;
+  if (name == null || name.isEmpty) return null;
+  if (!availableModels.any((m) => m.displayName == name)) return null;
+  return name;
+}

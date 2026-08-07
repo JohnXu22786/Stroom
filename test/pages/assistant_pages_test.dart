@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -711,6 +713,203 @@ void main() {
       // Should NOT have '图片' segment button or image URL field
       expect(find.text('图片'), findsNothing);
       expect(find.text('头像图片URL'), findsNothing);
+    });
+
+    testWidgets(
+        'edit dialog shows three centered tabs with label-sized indicator',
+        (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '助手编辑', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Long-press to open menu
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+
+      // Tap 编辑
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // All three tab labels are visible
+      expect(find.text('基本设置'), findsOneWidget);
+      expect(find.text('参数设置'), findsOneWidget);
+      expect(find.text('默认设置'), findsOneWidget);
+
+      // The dialog's TabBar (first in tree; the emoji picker's scrollable
+      // category TabBar is a descendant) must be scrollable and centered so
+      // the tab group is centered — not left-aligned — with the highlight
+      // (label-sized indicator) aligned to the selected tab label.
+      final dialogTabBar = tester.widget<TabBar>(find.byType(TabBar).first);
+      expect(dialogTabBar.isScrollable, isTrue,
+          reason: 'scrollable TabBar is required for TabAlignment.center');
+      expect(dialogTabBar.tabAlignment, TabAlignment.center);
+      expect(dialogTabBar.indicatorSize, TabBarIndicatorSize.label,
+          reason: 'indicator hugs the label so the highlight stays aligned');
+      expect(dialogTabBar.tabs.length, 3);
+
+      // Geometry: the tab group must actually be CENTERED in the dialog
+      // (the regression was the shrink-wrapped group pinned to the left).
+      final firstLabel = tester.getCenter(find.text('基本设置'));
+      final lastLabel = tester.getCenter(find.text('默认设置'));
+      final groupCenterX = (firstLabel.dx + lastLabel.dx) / 2;
+      final dialogCenterX = tester.getCenter(find.byType(AlertDialog)).dx;
+      expect(
+        (groupCenterX - dialogCenterX).abs(),
+        lessThan(5),
+        reason: 'Tab group should be centered in the dialog, not left-aligned',
+      );
+    });
+
+    testWidgets('默认设置 tab shows default model selector and tool switches',
+        (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '助手编辑', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open edit dialog
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // Switch to 默认设置 tab
+      await tester.tap(find.text('默认设置'));
+      await tester.pumpAndSettle();
+
+      // Model section + empty state (no LLM config in test env) — the
+      // follow-global option is still shown and is the effective selection
+      expect(find.text('默认模型'), findsOneWidget);
+      expect(find.textContaining('暂无可用模型'), findsOneWidget);
+      expect(find.text('跟随全局设置'), findsOneWidget);
+
+      // Tool section lists the built-in tools with switches
+      expect(find.text('默认启用工具'), findsOneWidget);
+      expect(find.text('web_search'), findsOneWidget);
+      expect(find.text('todowrite'), findsOneWidget);
+      expect(find.text('brave_web_search'), findsOneWidget);
+
+      // Hint that un-added tools stay off in new topics
+      expect(find.textContaining('未添加'), findsOneWidget);
+    });
+
+    testWidgets('默认设置 tab saves default model and default tools', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'test_llm',
+            'type': 'llm',
+            'name': 'LLM供应商',
+            'configs': [
+              {
+                'providerName': 'OpenAI',
+                'host': 'https://api.openai.com/v1',
+                'key': 'test-key',
+                'models': [
+                  {'name': 'gpt-4o', 'modelId': 'gpt-4o'},
+                  {'name': 'claude-3.5-sonnet', 'modelId': 'claude-3.5-sonnet'},
+                ],
+              },
+            ],
+          },
+        ]),
+      });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            assistantProvider.overrideWith((ref) {
+              final notifier = AssistantsNotifier();
+              notifier.createAssistant(name: '助手编辑', prompt: 'P1');
+              return notifier;
+            }),
+          ],
+          child: const MaterialApp(home: AssistantSelectionPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open edit dialog
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // Switch to 默认设置 tab
+      await tester.tap(find.text('默认设置'));
+      await tester.pumpAndSettle();
+
+      // Model selector lists the available models
+      expect(find.text('跟随全局设置'), findsOneWidget);
+      expect(find.text('gpt-4o | OpenAI'), findsOneWidget);
+      expect(find.text('claude-3.5-sonnet | OpenAI'), findsOneWidget);
+
+      // Select a default model and enable one tool
+      await tester.tap(find.text('gpt-4o | OpenAI'));
+      await tester.pumpAndSettle();
+      final webSearchSwitch = find.widgetWithText(SwitchListTile, 'web_search');
+      await tester.ensureVisible(webSearchSwitch);
+      await tester.pumpAndSettle();
+      await tester.tap(webSearchSwitch);
+      await tester.pumpAndSettle();
+
+      // Save
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      // The assistant now carries the defaults
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AssistantSelectionPage)),
+      );
+      final assistant = container.read(assistantProvider).single;
+      expect(assistant.defaultModelName, 'gpt-4o | OpenAI');
+      expect(assistant.defaultToolNames, contains('web_search'));
+    });
+
+    testWidgets(
+        'saving the dialog without touching 默认设置 keeps defaults '
+        'unconfigured', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            assistantProvider.overrideWith((ref) {
+              final notifier = AssistantsNotifier();
+              notifier.createAssistant(name: '助手编辑', prompt: 'P1');
+              return notifier;
+            }),
+          ],
+          child: const MaterialApp(home: AssistantSelectionPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open edit dialog and change ONLY the name (默认设置 tab untouched)
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).first, '新名称');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AssistantSelectionPage)),
+      );
+      final assistant = container.read(assistantProvider).single;
+      expect(assistant.name, '新名称');
+      expect(assistant.defaultModelName, isNull);
+      expect(assistant.defaultToolNames, isNull,
+          reason: '未触碰默认设置 tab 的保存（如仅改名）不得把助手标记为'
+              '"已配置默认工具"——否则新话题会从自动启用全部工具变成全部关闭');
     });
 
     testWidgets('long press menu 删除 shows confirmation dialog', (tester) async {

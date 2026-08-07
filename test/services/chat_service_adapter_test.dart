@@ -1597,6 +1597,60 @@ void main() {
               'should NOT be auto-enabled — they must be explicitly toggled.');
     });
   });
+
+  group('perConversationModelToRestore priority policy', () {
+    const available = [
+      AvailableModel(
+        displayName: 'gpt-4o | OpenAI',
+        configIndex: 0,
+        modelIndex: 0,
+      ),
+      AvailableModel(
+        displayName: 'claude-3.5 | Anthropic',
+        configIndex: 0,
+        modelIndex: 1,
+      ),
+    ];
+
+    test('returns the conversation model when it exists', () {
+      expect(
+        perConversationModelToRestore(
+          lastUsedModelName: 'gpt-4o | OpenAI',
+          availableModels: available,
+        ),
+        'gpt-4o | OpenAI',
+      );
+    });
+
+    test('returns null when the conversation has no model record', () {
+      expect(
+        perConversationModelToRestore(
+          lastUsedModelName: null,
+          availableModels: available,
+        ),
+        isNull,
+      );
+      expect(
+        perConversationModelToRestore(
+          lastUsedModelName: '',
+          availableModels: available,
+        ),
+        isNull,
+      );
+    });
+
+    test('returns null for a stale name (model removed from configs)', () {
+      expect(
+        perConversationModelToRestore(
+          lastUsedModelName: 'deleted-model | OpenAI',
+          availableModels: available,
+        ),
+        isNull,
+        reason: 'a stale per-conversation model must fall back to the '
+            'global saved index, not crash or select the wrong model',
+      );
+    });
+  });
 }
 
 /// Builds a provider entries state containing a single vendor SSE MCP config
