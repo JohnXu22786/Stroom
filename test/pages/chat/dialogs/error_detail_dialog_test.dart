@@ -714,4 +714,117 @@ void main() {
       },
     );
   });
+
+  group('Back key navigation (level-aware)', () {
+    /// Opens the dialog with a full 6-section dataset.
+    Future<void> openDialog(WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'url': 'https://api.example.com/chat',
+                  'headers': {'Authorization': 'Bearer sk-test'},
+                  'body': {'model': 'gpt-4'},
+                },
+                rawResponse: {
+                  'statusCode': 401,
+                  'headers': {
+                    'content-type': ['application/json']
+                  },
+                  'data': {
+                    'error': {'message': 'Unauthorized'}
+                  },
+                },
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      'back key at detail level returns to section list instead of closing the panel',
+      (tester) async {
+        await openDialog(tester);
+
+        // Enter level 2 (detail view).
+        await tester.tap(find.text('Request URL'));
+        await tester.pumpAndSettle();
+        expect(find.text('https://api.example.com/chat'), findsOneWidget);
+
+        // System back key: must NOT close the panel — return to level 1,
+        // same effect as the top-left back arrow.
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+
+        expect(find.text('数据详情'), findsOneWidget);
+        expect(find.text('Request URL'), findsOneWidget);
+        expect(find.text('Status Code'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'back key at section list closes the panel like the X button',
+      (tester) async {
+        await openDialog(tester);
+
+        expect(find.text('数据详情'), findsOneWidget);
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+
+        expect(find.text('数据详情'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'back key twice: detail level → section list → close',
+      (tester) async {
+        await openDialog(tester);
+
+        await tester.tap(find.text('Request URL'));
+        await tester.pumpAndSettle();
+        expect(find.text('https://api.example.com/chat'), findsOneWidget);
+
+        // First back: level 2 → level 1.
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.text('数据详情'), findsOneWidget);
+        expect(find.text('Status Code'), findsOneWidget);
+
+        // Second back: level 1 → close (same as X button).
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.text('数据详情'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'barrier tap at detail level also returns to section list '
+      '(consistent with back key)',
+      (tester) async {
+        await openDialog(tester);
+
+        // Enter level 2 (detail view).
+        await tester.tap(find.text('Request URL'));
+        await tester.pumpAndSettle();
+        expect(find.text('https://api.example.com/chat'), findsOneWidget);
+
+        // Tap outside the dialog (barrier). PopScope intercepts it the same
+        // way as the back key: return to level 1, not close the panel.
+        await tester.tapAt(const Offset(5, 5));
+        await tester.pumpAndSettle();
+
+        expect(find.text('数据详情'), findsOneWidget);
+        expect(find.text('Request URL'), findsOneWidget);
+        expect(find.text('Status Code'), findsOneWidget);
+      },
+    );
+  });
 }
