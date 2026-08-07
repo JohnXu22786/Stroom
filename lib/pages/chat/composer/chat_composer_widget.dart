@@ -20,6 +20,7 @@ import 'package:stroom/widgets/image_preview_dialog.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/conversation_provider.dart';
+import 'package:stroom/services/chat_protocol.dart';
 import 'chat_setting_panels.dart';
 import 'chat_file_picker_dialog.dart';
 import 'composer_shared.dart';
@@ -145,6 +146,13 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
 
   /// How long the warning stays visible before auto-hiding.
   static const Duration _editWarningAutoHideDelay = Duration(seconds: 2);
+
+  /// 在途的图片后台预压缩任务（按附件 hash 追踪）。
+  ///
+  /// 移除/编辑清理磁盘缓存时必须先等对应的预压缩完成，否则会出现
+  /// "清理先执行、压缩后写盘"的竞态——缓存文件被删除后又被重新
+  /// 创建（对话已删除时还会留下永久孤儿目录）。
+  final Map<String, Future<void>> _preCompressFutures = {};
 
   Timer? _draftTimer;
 

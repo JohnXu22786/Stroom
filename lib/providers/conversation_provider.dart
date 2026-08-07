@@ -248,6 +248,18 @@ class Conversation {
       }
     }
 
+    // 回填附件所属对话 ID（功能上线前的旧数据没有该字段）：
+    // 图片压缩磁盘缓存按（对话, 哈希）定位，回填后旧对话的图片也能
+    // 在发送时/选中后写入缓存，避免"重启后每次发送都重新压缩"。
+    final backfillConvId = map['id'];
+    if (backfillConvId is String && backfillConvId.isNotEmpty) {
+      for (final m in messages) {
+        for (final a in m.attachments) {
+          a.conversationId ??= backfillConvId;
+        }
+      }
+    }
+
     // Defensive enabledMcpToolNames parsing
     Set<String> enabledMcpToolNames = {};
     final toolsRaw = map['enabledMcpToolNames'];

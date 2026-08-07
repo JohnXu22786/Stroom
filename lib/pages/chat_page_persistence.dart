@@ -174,6 +174,17 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       if (_pendingSendConvIds.contains(convId)) return;
       _pendingSendConvIds.add(convId);
 
+      // 附件归属当前对话：图片压缩磁盘缓存按（对话, 哈希）隔离存储，
+      // 发送前必须登记（选中时对话可能尚未创建）。若归属发生变化
+      // （切换活跃对话后发送），清除"已落盘"标记——旧对话目录下的
+      // 缓存作废，发送路径会在新对话下重新落盘（零等待保证不失效）。
+      for (final att in attachments) {
+        if (att.conversationId != convId) {
+          att.conversationId = convId;
+          att.compressedCachePersisted = false;
+        }
+      }
+
       await _ensureHistoryLoaded(convId);
       if (!mounted || ref.read(activeConversationIdProvider) != convId) return;
 

@@ -209,6 +209,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     );
     if (fileType == 'image') {
       _pendingImageBytes[att.id] = bytes;
+      // 选中即后台预压缩：发送时不再等待（isolate 中执行，不阻塞 UI）
+      unawaited(_preCompressPendingImage(att, bytes));
     }
     setState(() {
       _pendingAttachments.add(att);
@@ -231,6 +233,88 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     }
   }
 
+  /// 图片选中后立即后台预压缩（isolate 执行，不占用前台资源）。
+  ///
+  /// 结果写入 [Attachment.base64Data]（内存）与磁盘缓存
+  /// （`temp_compressed/<conversationId>/<hash>`，按对话隔离），发送路径
+  /// 直接复用、发送时零压缩等待；用户未发出即移除时由
+  /// [_removePendingAttachment] 清理缓存文件。压缩结果只作用于"选中
+  /// 时的那一份字节"：附件随后被编辑（hash 变化）时旧结果自然失效，
+  /// 编辑产物会由 [_updatePendingAttachmentAfterEdit] 重新触发预压缩。
+  /// 失败静默忽略（发送路径会按需重新压缩兜底）。
+  ///
+  /// 同名 hash 的多次调用（重复选中同一张图）会被串成链条：地图里的
+  /// 条目永远代表"该 hash 最后一次写入"之前的全部任务，清理路径
+  /// await 它即保证先于所有在途写入执行。
+  Future<void> _preCompressPendingImage(Attachment att, Uint8List bytes) async {
+    final convIdAtStart = widget.conversationId;
+    final task = _preCompressImage(att, bytes, convIdAtStart);
+    final prev = _preCompressFutures[att.hash];
+    final chained = (prev ?? Future<void>.value()).then((_) => task);
+    _preCompressFutures[att.hash] = chained;
+    try {
+      await chained;
+    } finally {
+      // 仅当仍指向本次链条时移除，避免清除后续同名 hash 的任务
+      if (identical(_preCompressFutures[att.hash], chained)) {
+        _preCompressFutures.remove(att.hash);
+      }
+    }
+  }
+
+  Future<void> _preCompressImage(
+      Attachment att, Uint8List bytes, String? convIdAtStart) async {
+    try {
+      await preCompressImageForPendingAttachment(
+        att,
+        bytes,
+        maxBytes: imageCompressThresholdBytes,
+        conversationId: convIdAtStart,
+        // 压缩耗时期间附件可能已被移除/编辑/对话已切换/对话已删除：
+        // 写入磁盘缓存前再次确认，避免复活已被清理的缓存。
+        isStillRelevant: () =>
+            mounted &&
+            _pendingAttachments.contains(att) &&
+            widget.conversationId == convIdAtStart &&
+            // 对话已不存在（删除对话时缓存目录整目录清理）→ 不再写盘
+            (convIdAtStart == null ||
+                ref
+                    .read(conversationsProvider)
+                    .any((c) => c.id == convIdAtStart)),
+      );
+    } catch (e) {
+      debugPrint('[ChatComposer] 图片后台预压缩失败: $e');
+    }
+  }
+
+  /// 等该 hash 的在途预压缩完成后删除其磁盘压缩缓存。
+  ///
+  /// 防止竞态：移除/编辑触发的清理若先于在途压缩执行，缓存文件会被
+  /// 压缩任务重新创建（在对话已删除时成为永久孤儿）。
+  Future<void> _deleteCompressedCacheAfterPreCompress(Attachment att) async {
+    final inflight = _preCompressFutures[att.hash];
+    if (inflight != null) {
+      try {
+        await inflight;
+      } catch (_) {
+        // 预压缩失败也会完成（内部已兜底），这里仅需等待时序
+      }
+    }
+    await _deleteCompressedCache(att);
+  }
+
+  /// Best-effort 删除附件的磁盘压缩缓存（派生缓存，删除永远安全）。
+  Future<void> _deleteCompressedCache(Attachment att) async {
+    try {
+      await AttachmentStorage.deleteCompressedImage(
+        conversationId: att.conversationId ?? widget.conversationId,
+        hash: att.hash,
+      );
+    } catch (_) {
+      // 非关键清理
+    }
+  }
+
   void _removePendingAttachment(int index) {
     final att = _pendingAttachments[index];
     _pendingImageBytes.remove(att.id);
@@ -243,6 +327,13 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     if (widget.editingMessageId == null &&
         att.storagePath.startsWith('temp_edited/')) {
       _deleteTempFile(att.storagePath);
+    }
+    // 磁盘压缩缓存同样仅普通模式清理：编辑模式下附件仍被原消息
+    // 引用，缓存随消息继续复用；孤儿缓存由删除对话时整目录清理兜底
+    // （与 temp_edited 文件语义一致）。清理须等该 hash 在途的预压缩
+    // 完成，避免"先删后写"复活缓存。
+    if (widget.editingMessageId == null) {
+      unawaited(_deleteCompressedCacheAfterPreCompress(att));
     }
     setState(() {
       _pendingAttachments.removeAt(index);
@@ -416,6 +507,9 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
             // Non-fatal cleanup
           }
         }
+        // 旧字节的压缩缓存一并清理（hash 已变，旧缓存成为孤儿）。
+        // 等旧 hash 在途的预压缩完成后删除，防止它复活旧缓存。
+        await _deleteCompressedCacheAfterPreCompress(oldAtt);
       }
 
       // Re-validate after the delete await — the list may have changed
@@ -430,6 +524,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         _pendingAttachments[index] = updatedAtt;
         _pendingImageBytes[updatedAtt.id] = editedBytes;
       });
+      // 编辑后的图片同样立即后台预压缩（发送时零等待）
+      unawaited(_preCompressPendingImage(updatedAtt, editedBytes));
     } catch (e) {
       debugPrint('[ChatComposer] _updatePendingAttachmentAfterEdit error: $e');
       if (mounted) {
