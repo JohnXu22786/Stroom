@@ -80,19 +80,6 @@ extension _ChatPageBuildersExt on _ChatPageState {
     );
   }
 
-  /// Tracks user drags on the chat list via scroll notifications, so the
-  /// keyboard bottom-pinning never fights a finger scroll. Programmatic
-  /// scrolls (jumpTo / animateTo — e.g. the chat library's own keyboard
-  /// handling) have null [ScrollNotification.dragDetails] and are ignored.
-  bool _onChatScrollNotification(ScrollNotification notification) {
-    if (notification is ScrollStartNotification) {
-      _userIsDragging = notification.dragDetails != null;
-    } else if (notification is ScrollEndNotification) {
-      _userIsDragging = false;
-    }
-    return false;
-  }
-
   /// Chat animated list with lazy pagination and auto-scroll control.
   ///
   /// On Android (Material 3) the default overscroll indicator is a
