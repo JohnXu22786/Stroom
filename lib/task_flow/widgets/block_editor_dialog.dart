@@ -628,7 +628,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
   }
 
   /// Resolves the display (emoji, name) for an assistant id — a built-in
-  /// prompt id ('builtin:prompt_<index>') or a user-defined assistant.
+  /// prompt id (`builtin:prompt_<index>`) or a user-defined assistant.
   /// Returns null when the id is empty or no longer resolvable.
   (String, String)? _assistantDisplay(
     String id,
