@@ -102,8 +102,8 @@ class WebViewSniffer {
               name: name,
               ext: ext,
               initiator: currentUrl,
-              isPlayable:
-                  ext.isNotEmpty && !['m3u8', 'm3u', 'mpd', 'ts', 'ev1'].contains(ext),
+              isPlayable: ext.isNotEmpty &&
+                  !['m3u8', 'm3u', 'mpd', 'ts', 'ev1'].contains(ext),
               isPlaylist: ['m3u8', 'm3u', 'mpd'].contains(ext),
             );
           }).toList();
@@ -164,8 +164,8 @@ class WebViewSniffer {
               name: name,
               ext: ext,
               initiator: resolvedUrl,
-              isPlayable:
-                  ext.isNotEmpty && !['m3u8', 'm3u', 'mpd', 'ts', 'ev1'].contains(ext),
+              isPlayable: ext.isNotEmpty &&
+                  !['m3u8', 'm3u', 'mpd', 'ts', 'ev1'].contains(ext),
               isPlaylist: ['m3u8', 'm3u', 'mpd'].contains(ext),
             );
           }).toList();

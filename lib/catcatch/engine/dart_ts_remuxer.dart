@@ -235,7 +235,19 @@ class H264SpsParser {
   H264SpsParser._();
 
   static const _highProfiles = {
-    100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135,
+    100,
+    110,
+    122,
+    244,
+    44,
+    83,
+    86,
+    118,
+    128,
+    138,
+    139,
+    134,
+    135,
   };
 
   /// 解析 H.264 SPS NAL 单元（数据含 NAL 头字节）。
@@ -250,7 +262,9 @@ class H264SpsParser {
 
     if (_highProfiles.contains(profileIdc)) {
       final chromaFormatIdc = reader.readUe();
-      if (chromaFormatIdc == 3) reader.skipBits(1); // separate_colour_plane_flag
+      if (chromaFormatIdc == 3) {
+        reader.skipBits(1); // separate_colour_plane_flag
+      }
       reader.readUe(); // bit_depth_luma_minus8
       reader.readUe(); // bit_depth_chroma_minus8
       reader.skipBits(1); // qpprime_y_zero_transform_bypass_flag
@@ -353,8 +367,22 @@ class AacConfigParser {
   AacConfigParser._();
 
   static const List<int?> _sampleRates = [
-    96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050,
-    16000, 12000, 11025, 8000, 7350, null, null, null,
+    96000,
+    88200,
+    64000,
+    48000,
+    44100,
+    32000,
+    24000,
+    22050,
+    16000,
+    12000,
+    11025,
+    8000,
+    7350,
+    null,
+    null,
+    null,
   ];
 
   /// 从 ADTS 帧头（至少 7 字节）解析 AAC 参数。
@@ -370,7 +398,8 @@ class AacConfigParser {
       objectType: objectType,
       sampleRate: sampleRate,
       channels: channelConfig,
-      asc: buildAsc(objectType: objectType, sfIndex: sfIndex, channels: channelConfig),
+      asc: buildAsc(
+          objectType: objectType, sfIndex: sfIndex, channels: channelConfig),
     );
   }
 
@@ -555,7 +584,8 @@ class TsDemuxer {
     // section_number(1) last_section_number(1) PCR_PID(2) → 共 10 字节
     int offset = 10;
     if (offset + 2 > sectionEnd) return null;
-    final programInfoLength = ((section[offset] & 0x0F) << 8) | section[offset + 1];
+    final programInfoLength =
+        ((section[offset] & 0x0F) << 8) | section[offset + 1];
     offset += 2 + programInfoLength;
 
     int? videoPid;
@@ -815,7 +845,8 @@ class TsDemuxer {
       const chunkSize = 4 * 1024 * 1024;
 
       void handleVideoPes(PesPacket pes) {
-        final nalus = extractNalus(pes.data, hevc: pids!.videoStreamType == 0x24);
+        final nalus =
+            extractNalus(pes.data, hevc: pids!.videoStreamType == 0x24);
         if (nalus.isEmpty) return;
 
         // 收集 SPS/PPS/VPS（用于 avcC/hvcC）
@@ -836,8 +867,8 @@ class TsDemuxer {
 
         // 仅包含参数集/SEI 的 PES 不构成样本
         final isHevc = pids!.videoStreamType == 0x24;
-        final hasVcl = nalus.any((n) =>
-            isHevc ? n.type <= 31 : (n.type == 1 || n.type == 5));
+        final hasVcl = nalus
+            .any((n) => isHevc ? n.type <= 31 : (n.type == 1 || n.type == 5));
         if (!hasVcl) return;
 
         // 样本数据 = 4 字节长度前缀的 NAL 串联（MP4 mdat 格式）
@@ -850,23 +881,22 @@ class TsDemuxer {
         spool.writeFromSync(bytes);
 
         // 时间轴真实标志：任一样本时间戳为合成则整条时间轴不可信
-        videoTimelineReal = videoTimelineReal && (pes.pts != null || pes.dts != null);
+        videoTimelineReal =
+            videoTimelineReal && (pes.pts != null || pes.dts != null);
         var pts = pes.pts;
         var dts = pes.dts;
         dts ??= pts;
         if (dts == null) {
           // PES 无时间戳：按帧率估算
           final fr = frameRate;
-          final dur = fr != null && fr > 0
-              ? (90000 / fr).round()
-              : 3000;
+          final dur = fr != null && fr > 0 ? (90000 / fr).round() : 3000;
           dts = (lastVideoDts ?? 0) + dur;
           pts = dts;
         }
         lastVideoDts = dts;
 
-        final sync = nalus.any((n) =>
-            isHevc ? (n.type >= 16 && n.type <= 21) : n.type == 5);
+        final sync = nalus
+            .any((n) => isHevc ? (n.type >= 16 && n.type <= 21) : n.type == 5);
         videoSamples.add(Mp4Sample(
           spoolOffset: spoolOffset,
           size: bytes.length,
@@ -883,8 +913,7 @@ class TsDemuxer {
         if (audioFormat == null) {
           // 解析 AAC 参数失败时放弃音频（无法封装为 MP4 音轨）
           final header = findFirstAdtsHeader(pes.data);
-          final info =
-              header == null ? null : AacConfigParser.fromAdts(header);
+          final info = header == null ? null : AacConfigParser.fromAdts(header);
           if (info == null) {
             debugPrint('[TsDemuxer] 无法解析 ADTS 头，音频将被丢弃');
             return;
@@ -897,7 +926,8 @@ class TsDemuxer {
           );
         }
         // PES 内多帧时按 1024 采样/帧分摊 PTS（90kHz）
-        final frameDur90k = audioFormat!.samplesPerFrame * Mp4Muxer.kTimescale ~/
+        final frameDur90k = audioFormat!.samplesPerFrame *
+            Mp4Muxer.kTimescale ~/
             audioFormat!.sampleRate;
         audioTimelineReal = audioTimelineReal && pes.pts != null;
         final pesPts = pes.pts;
@@ -949,7 +979,8 @@ class TsDemuxer {
           }
           // 保留末尾不足 188 字节的部分，下一轮继续
           final usable = packets.length * 188;
-          carry = usable < buffer.length ? buffer.sublist(usable) : Uint8List(0);
+          carry =
+              usable < buffer.length ? buffer.sublist(usable) : Uint8List(0);
 
           if (pids == null) {
             for (final pkt in packets) {
@@ -971,11 +1002,11 @@ class TsDemuxer {
           if (pids != null) {
             for (final pkt in packets) {
               if (pkt.pid == pids!.videoPid) {
-                videoAssembler.feed(pkt.payload, pkt.payloadUnitStart,
-                    handleVideoPes);
+                videoAssembler.feed(
+                    pkt.payload, pkt.payloadUnitStart, handleVideoPes);
               } else if (pids!.audioPid != null && pkt.pid == pids!.audioPid) {
-                audioAssembler.feed(pkt.payload, pkt.payloadUnitStart,
-                    handleAudioPes);
+                audioAssembler.feed(
+                    pkt.payload, pkt.payloadUnitStart, handleAudioPes);
               }
             }
           }
@@ -1313,8 +1344,7 @@ class Mp4Muxer {
 
     if (v.isNotEmpty) {
       final minDts = v.map((s) => s.dts).reduce((x, y) => x < y ? x : y);
-      videoMinPts90k =
-          v.map((s) => s.pts).reduce((x, y) => x < y ? x : y);
+      videoMinPts90k = v.map((s) => s.pts).reduce((x, y) => x < y ? x : y);
       final shift = -minDts; // 任意平移，不影响 stts 增量
       // ctts = pts - dts 允许为负（B 帧重排）：ctts 盒子使用 version 1（有符号）
       var prevDts = 0;
@@ -1369,11 +1399,12 @@ class Mp4Muxer {
 
     // ---- 音视频起始偏移（通过 edit list 表达）----
     // 任一轨道的时间轴为合成（源 PES 无时间戳）时无法比较，跳过 edit list
-    final avOffset90k =
-        (audioMinPts90k != null && videoMinPts90k != null &&
-                videoTimelineReal && audioTimelineReal)
-            ? audioMinPts90k - videoMinPts90k
-            : 0;
+    final avOffset90k = (audioMinPts90k != null &&
+            videoMinPts90k != null &&
+            videoTimelineReal &&
+            audioTimelineReal)
+        ? audioMinPts90k - videoMinPts90k
+        : 0;
 
     // ---- 计算 mdat 布局 ----
     final ftyp = buildFtypBox();
@@ -1392,8 +1423,9 @@ class Mp4Muxer {
     final audioEdit90k = avOffset90k > 0 ? avOffset90k : 0;
     final videoMovieDuration = videoDuration90k + videoEdit90k;
     final audioMovieDuration = audioEnd90k + audioEdit90k;
-    final mvhdDuration90k =
-        videoMovieDuration > audioMovieDuration ? videoMovieDuration : audioMovieDuration;
+    final mvhdDuration90k = videoMovieDuration > audioMovieDuration
+        ? videoMovieDuration
+        : audioMovieDuration;
 
     // ---- moov ----
     final moov = buildMoovBox(
@@ -1430,8 +1462,7 @@ class Mp4Muxer {
       await out.writeFrom(ftyp);
 
       // mdat 头（支持 >4GB 的 64 位大尺寸）
-      final mdatHeader =
-          buildMdatHeader(mdatPayloadSize + mdatHeaderSize);
+      final mdatHeader = buildMdatHeader(mdatPayloadSize + mdatHeaderSize);
       await out.writeFrom(mdatHeader);
 
       var expectedSpool = 0;
@@ -1478,8 +1509,8 @@ class Mp4Muxer {
   }
 
   /// 从 spool 拷贝一个样本到输出，返回 spool 中下一个期望偏移。
-  static Future<int> _copySample(RandomAccessFile spool,
-      RandomAccessFile out, Mp4Sample s, int expected) async {
+  static Future<int> _copySample(RandomAccessFile spool, RandomAccessFile out,
+      Mp4Sample s, int expected) async {
     if (s.spoolOffset != expected) {
       await spool.setPosition(s.spoolOffset);
     }
@@ -1626,12 +1657,13 @@ class Mp4Muxer {
     }
 
     final mdiaContent = BytesBuilder();
-    mdiaContent.add(
-        buildMdhdBox(timescale: timescale, duration: mediaDuration));
+    mdiaContent
+        .add(buildMdhdBox(timescale: timescale, duration: mediaDuration));
     mdiaContent.add(buildHdlrBox('vide', 'VideoHandler'));
 
     final minfContent = BytesBuilder();
-    minfContent.add(buildFullBox('vmhd', Uint8List.fromList([0, 0, 0, 0, 0, 0, 0, 0]),
+    minfContent.add(buildFullBox(
+        'vmhd', Uint8List.fromList([0, 0, 0, 0, 0, 0, 0, 0]),
         flags: 0x01));
     minfContent.add(buildDinfBox());
     minfContent.add(buildVideoStblBox(
@@ -1667,8 +1699,8 @@ class Mp4Muxer {
     }
 
     final mdiaContent = BytesBuilder();
-    mdiaContent.add(
-        buildMdhdBox(timescale: timescale, duration: mediaDuration));
+    mdiaContent
+        .add(buildMdhdBox(timescale: timescale, duration: mediaDuration));
     mdiaContent.add(buildHdlrBox('soun', 'SoundHandler'));
 
     final minfContent = BytesBuilder();
@@ -1691,10 +1723,11 @@ class Mp4Muxer {
     final elstContent = BytesBuilder();
     elstContent.add(_u32(1)); // entry_count
     elstContent.add(_u64(emptyEdit90k)); // segment_duration（电影时基）
-    elstContent.add(Uint8List.fromList(
-        List.filled(8, 0xFF))); // media_time = -1（空编辑）
+    elstContent
+        .add(Uint8List.fromList(List.filled(8, 0xFF))); // media_time = -1（空编辑）
     elstContent.add([0x00, 0x01, 0x00, 0x00]); // media_rate = 1.0
-    return buildBox('edts', buildFullBox('elst', elstContent.toBytes(), version: 1));
+    return buildBox(
+        'edts', buildFullBox('elst', elstContent.toBytes(), version: 1));
   }
 
   /// tkhd（轨道头）盒子（version 1）。
@@ -1718,8 +1751,7 @@ class Mp4Muxer {
     content.add(_matrix());
     content.add(_u32(width << 16)); // width (16.16)
     content.add(_u32(height << 16)); // height (16.16)
-    return buildFullBox('tkhd', content.toBytes(),
-        version: 1, flags: 0x07);
+    return buildFullBox('tkhd', content.toBytes(), version: 1, flags: 0x07);
   }
 
   /// mdhd（媒体头）盒子（version 1）。
@@ -1818,7 +1850,8 @@ class Mp4Muxer {
     entryContent.add(_u32(0x00480000)); // vertresolution
     entryContent.add(_u32(0)); // reserved
     entryContent.add(_u16(1)); // frame_count
-    entryContent.add(_fixedStringBytes(isHevc ? 'HEVC Coding' : 'AVC Coding', 32));
+    entryContent
+        .add(_fixedStringBytes(isHevc ? 'HEVC Coding' : 'AVC Coding', 32));
     entryContent.add([0x00, 0x18]); // depth
     entryContent.add([0xFF, 0xFF]); // pre_defined
 
@@ -1931,7 +1964,9 @@ class Mp4Muxer {
     content.add([0xF8]); // bit_depth_luma_minus8=0
     content.add([0xF8]); // bit_depth_chroma_minus8=0
     content.add([0x00, 0x00]); // avgFrameRate=0
-    content.add([0x0F]); // constantFrameRate=0, temporalLayers=1, nested=1, lengthSizeMinusOne=3
+    content.add([
+      0x0F
+    ]); // constantFrameRate=0, temporalLayers=1, nested=1, lengthSizeMinusOne=3
 
     // 参数集数组：VPS(32)、SPS(33)、PPS(34)
     final arrays = <(int, List<Uint8List>)>[
@@ -2083,10 +2118,12 @@ class Mp4Muxer {
     final data = Uint8List(totalSize);
     final bd = data.buffer.asByteData();
     bd.setUint32(0, totalSize);
-    bd.setUint32(4, (type.codeUnitAt(0) << 24) |
-        (type.codeUnitAt(1) << 16) |
-        (type.codeUnitAt(2) << 8) |
-        type.codeUnitAt(3));
+    bd.setUint32(
+        4,
+        (type.codeUnitAt(0) << 24) |
+            (type.codeUnitAt(1) << 16) |
+            (type.codeUnitAt(2) << 8) |
+            type.codeUnitAt(3));
     data.setRange(8, totalSize, content);
     return data;
   }
@@ -2105,9 +2142,42 @@ class Mp4Muxer {
 
   /// 单位矩阵（36 字节）。
   static Uint8List _matrix() => Uint8List.fromList([
-        0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x40,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
       ]);
 
   static Uint8List _u16(int value) => Uint8List.fromList([

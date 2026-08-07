@@ -125,7 +125,10 @@ List<int> _stszSizes(Uint8List trakPayload) {
 List<(int, int)> _sttsRuns(Uint8List trakPayload) {
   final stts = _child(_boxChildren(_stblOf(trakPayload)!), 'stts').$1!;
   final count = _u32At(stts, 4);
-  return [for (int i = 0; i < count; i++) (_u32At(stts, 8 + i * 8), _u32At(stts, 12 + i * 8))];
+  return [
+    for (int i = 0; i < count; i++)
+      (_u32At(stts, 8 + i * 8), _u32At(stts, 12 + i * 8))
+  ];
 }
 
 List<(int, int)> _cttsRuns(Uint8List trakPayload) {
@@ -201,60 +204,72 @@ Uint8List _buildFlv({
     avcC.add([0x01]);
     avcC.add([(pps.length >> 8) & 0xFF, pps.length & 0xFF]);
     avcC.add(pps);
-    addTag(9, 0, Uint8List.fromList([
-      0x10 | videoCodecId,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      ...avcC.toBytes(),
-    ]));
+    addTag(
+        9,
+        0,
+        Uint8List.fromList([
+          0x10 | videoCodecId,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          ...avcC.toBytes(),
+        ]));
 
     // Video NALU tag 1: keyframe @1000ms, cts=0
     final nal1 = Uint8List.fromList([0x65, 0x88, 0x84, 0xAF]);
-    addTag(9, 1000, Uint8List.fromList([
-      0x10 | videoCodecId,
-      0x01,
-      0x00,
-      0x00,
-      0x00,
-      (nal1.length >> 24) & 0xFF,
-      (nal1.length >> 16) & 0xFF,
-      (nal1.length >> 8) & 0xFF,
-      nal1.length & 0xFF,
-      ...nal1,
-    ]));
+    addTag(
+        9,
+        1000,
+        Uint8List.fromList([
+          0x10 | videoCodecId,
+          0x01,
+          0x00,
+          0x00,
+          0x00,
+          (nal1.length >> 24) & 0xFF,
+          (nal1.length >> 16) & 0xFF,
+          (nal1.length >> 8) & 0xFF,
+          nal1.length & 0xFF,
+          ...nal1,
+        ]));
 
     // Video NALU tag 2: non-keyframe @2000ms, cts=+1ms
     final nal2 = Uint8List.fromList([0x41, 0x9A, 0x22]);
-    addTag(9, 2000, Uint8List.fromList([
-      0x20 | videoCodecId,
-      0x01,
-      0x00,
-      0x00,
-      0x01,
-      (nal2.length >> 24) & 0xFF,
-      (nal2.length >> 16) & 0xFF,
-      (nal2.length >> 8) & 0xFF,
-      nal2.length & 0xFF,
-      ...nal2,
-    ]));
+    addTag(
+        9,
+        2000,
+        Uint8List.fromList([
+          0x20 | videoCodecId,
+          0x01,
+          0x00,
+          0x00,
+          0x01,
+          (nal2.length >> 24) & 0xFF,
+          (nal2.length >> 16) & 0xFF,
+          (nal2.length >> 8) & 0xFF,
+          nal2.length & 0xFF,
+          ...nal2,
+        ]));
 
     // Video NALU tag 3: non-keyframe @3000ms, cts=-2ms（有符号 24 位：0xFFFFFE）
     // 负合成偏移用于验证 muxer 的有符号 version-1 ctts 输出
     final nal3 = Uint8List.fromList([0x41, 0x9B, 0x33]);
-    addTag(9, 3000, Uint8List.fromList([
-      0x20 | videoCodecId,
-      0x01,
-      0xFF,
-      0xFF,
-      0xFE,
-      (nal3.length >> 24) & 0xFF,
-      (nal3.length >> 16) & 0xFF,
-      (nal3.length >> 8) & 0xFF,
-      nal3.length & 0xFF,
-      ...nal3,
-    ]));
+    addTag(
+        9,
+        3000,
+        Uint8List.fromList([
+          0x20 | videoCodecId,
+          0x01,
+          0xFF,
+          0xFF,
+          0xFE,
+          (nal3.length >> 24) & 0xFF,
+          (nal3.length >> 16) & 0xFF,
+          (nal3.length >> 8) & 0xFF,
+          nal3.length & 0xFF,
+          ...nal3,
+        ]));
   }
 
   if (withAudio) {
@@ -366,8 +381,7 @@ void main() {
       try {
         final flvPath = '${tempDir.path}\\input.flv';
         final mp4Path = '${tempDir.path}\\output.mp4';
-        await File(flvPath)
-            .writeAsBytes(_buildFlv(withAudio: false));
+        await File(flvPath).writeAsBytes(_buildFlv(withAudio: false));
 
         await FlvDemuxer.convertFlvToMp4(
           inputPath: flvPath,
@@ -376,9 +390,7 @@ void main() {
 
         final mp4 = await File(mp4Path).readAsBytes();
         final moov = _findBox(mp4, 'moov')!;
-        final traks = _boxChildren(moov)
-            .where((c) => c.$1 == 'trak')
-            .toList();
+        final traks = _boxChildren(moov).where((c) => c.$1 == 'trak').toList();
         expect(traks.length, equals(1));
       } finally {
         tempDir.deleteSync(recursive: true);
@@ -390,8 +402,7 @@ void main() {
       try {
         final flvPath = '${tempDir.path}\\input.flv';
         final mp4Path = '${tempDir.path}\\output.mp4';
-        await File(flvPath)
-            .writeAsBytes(_buildFlv(audioSoundFormat: 2));
+        await File(flvPath).writeAsBytes(_buildFlv(audioSoundFormat: 2));
 
         await FlvDemuxer.convertFlvToMp4(
           inputPath: flvPath,
@@ -400,9 +411,7 @@ void main() {
 
         final mp4 = await File(mp4Path).readAsBytes();
         final moov = _findBox(mp4, 'moov')!;
-        final traks = _boxChildren(moov)
-            .where((c) => c.$1 == 'trak')
-            .toList();
+        final traks = _boxChildren(moov).where((c) => c.$1 == 'trak').toList();
         expect(traks.length, equals(1));
       } finally {
         tempDir.deleteSync(recursive: true);
@@ -433,7 +442,8 @@ void main() {
       try {
         final flvPath = '${tempDir.path}\\input.flv';
         final mp4Path = '${tempDir.path}\\output.mp4';
-        await File(flvPath).writeAsBytes(Uint8List.fromList([1, 2, 3, 4, 5, 6]));
+        await File(flvPath)
+            .writeAsBytes(Uint8List.fromList([1, 2, 3, 4, 5, 6]));
 
         await expectLater(
           () => FlvDemuxer.convertFlvToMp4(

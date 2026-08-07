@@ -46,33 +46,40 @@ Uint8List _buildMinimalFlv() {
     buf.add(_u32(11 + data.length));
   }
 
-  addTag(9, 0, Uint8List.fromList([0x17, 0x00, 0x00, 0x00, 0x00, ...avcC.toBytes()]));
+  addTag(9, 0,
+      Uint8List.fromList([0x17, 0x00, 0x00, 0x00, 0x00, ...avcC.toBytes()]));
   final nal = Uint8List.fromList([0x65, 0x88, 0x84]);
-  addTag(9, 1000, Uint8List.fromList([
-    0x17,
-    0x01,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    nal.length,
-    ...nal,
-  ]));
+  addTag(
+      9,
+      1000,
+      Uint8List.fromList([
+        0x17,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        nal.length,
+        ...nal,
+      ]));
   // 第二个视频样本：确保文件总长超过 100 字节混淆窗口
-  addTag(9, 2000, Uint8List.fromList([
-    0x27,
-    0x01,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    nal.length,
-    ...nal,
-  ]));
+  addTag(
+      9,
+      2000,
+      Uint8List.fromList([
+        0x27,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        nal.length,
+        ...nal,
+      ]));
   return buf.toBytes();
 }
 
@@ -121,8 +128,7 @@ void main() {
 
     test('only the first 100 bytes are obfuscated (fixture > 100 bytes)', () {
       final flv = _buildMinimalFlv();
-      expect(flv.length, greaterThan(100),
-          reason: '测试夹具必须大于 100 字节混淆窗口');
+      expect(flv.length, greaterThan(100), reason: '测试夹具必须大于 100 字节混淆窗口');
       final ev1 = _obfuscate(flv);
       // 前 100 字节被混淆，其余保持原样
       final n = flv.length < 100 ? flv.length : 100;
@@ -136,7 +142,8 @@ void main() {
   });
 
   group('Ev1Decoder - convertEv1ToMp4 (integration)', () {
-    test('decodes obfuscated EV1 to valid MP4 and cleans up temp files', () async {
+    test('decodes obfuscated EV1 to valid MP4 and cleans up temp files',
+        () async {
       final tempDir = Directory.systemTemp.createTempSync('ev1_test_');
       try {
         final ev1Path = '${tempDir.path}\\video.ev1';

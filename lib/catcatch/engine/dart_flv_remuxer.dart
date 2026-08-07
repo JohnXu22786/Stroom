@@ -89,7 +89,8 @@ class _MemorySource implements _ByteSource {
   @override
   Future<Uint8List> readAt(int offset, int length) async {
     if (offset >= _data.length) return Uint8List(0);
-    final end = (offset + length) > _data.length ? _data.length : offset + length;
+    final end =
+        (offset + length) > _data.length ? _data.length : offset + length;
     return _data.sublist(offset, end);
   }
 }
@@ -391,8 +392,14 @@ class FlvDemuxer {
   // ---------------------------------------------------------------------------
 
   /// 视频标签解析结果。
-  static ({Uint8List? avcC, Uint8List? hvcC, Uint8List? sample, int pts, int dts, bool sync})?
-      _parseVideoTag(Uint8List data, int timestampMs) {
+  static ({
+    Uint8List? avcC,
+    Uint8List? hvcC,
+    Uint8List? sample,
+    int pts,
+    int dts,
+    bool sync
+  })? _parseVideoTag(Uint8List data, int timestampMs) {
     if (data.length < 5) return null;
     final frameType = data[0] >> 4; // 1=关键帧
     final codecId = data[0] & 0x0F;
@@ -406,7 +413,14 @@ class FlvDemuxer {
 
       if (packetType == 0) {
         // AVCDecoderConfigurationRecord（avcC 载荷）
-        return (avcC: payload, hvcC: null, sample: null, pts: 0, dts: 0, sync: false);
+        return (
+          avcC: payload,
+          hvcC: null,
+          sample: null,
+          pts: 0,
+          dts: 0,
+          sync: false
+        );
       }
       if (packetType == 2) return null; // end of sequence
       if (packetType != 1) return null;
@@ -437,7 +451,14 @@ class FlvDemuxer {
         final payload = data.sublist(9);
 
         if (packetType == 0) {
-          return (avcC: null, hvcC: payload, sample: null, pts: 0, dts: 0, sync: false);
+          return (
+            avcC: null,
+            hvcC: payload,
+            sample: null,
+            pts: 0,
+            dts: 0,
+            sync: false
+          );
         }
         if (packetType == 1) {
           final dts = timestampMs * 90;
@@ -461,7 +482,14 @@ class FlvDemuxer {
 
       if (packetType == 0) {
         // HEVCDecoderConfigurationRecord（hvcC 载荷）
-        return (avcC: null, hvcC: payload, sample: null, pts: 0, dts: 0, sync: false);
+        return (
+          avcC: null,
+          hvcC: payload,
+          sample: null,
+          pts: 0,
+          dts: 0,
+          sync: false
+        );
       }
       if (packetType == 1) {
         final dts = timestampMs * 90;
@@ -509,7 +537,14 @@ class FlvDemuxer {
 
   /// 从序列头构建视频配置。
   static VideoFormat _buildVideoFormat(
-      ({Uint8List? avcC, Uint8List? hvcC, Uint8List? sample, int pts, int dts, bool sync}) parsed) {
+      ({
+        Uint8List? avcC,
+        Uint8List? hvcC,
+        Uint8List? sample,
+        int pts,
+        int dts,
+        bool sync
+      }) parsed) {
     if (parsed.hvcC != null) {
       return VideoFormat(isHevc: true, rawConfig: parsed.hvcC);
     }

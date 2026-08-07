@@ -93,7 +93,8 @@ class FFmpegConverter {
 
     // TS 流：纯 Dart 转封装（H.264/H.265 + AAC → MP4）
     if (inputExt == '.ts') {
-      debugPrint('[FFmpegConverter] 使用纯 Dart TS 转封装: $inputPath -> $outputPath');
+      debugPrint(
+          '[FFmpegConverter] 使用纯 Dart TS 转封装: $inputPath -> $outputPath');
       return await TsDemuxer.convertTsToMp4(
         inputPath: inputPath,
         outputPath: outputPath,
@@ -147,8 +148,7 @@ class FFmpegConverter {
       );
     } on FormatException catch (e) {
       if (isCancelled()) rethrow;
-      debugPrint(
-          '[FFmpegConverter] 纯 Dart FLV 转封装失败（${e.message}），回退到 fvp');
+      debugPrint('[FFmpegConverter] 纯 Dart FLV 转封装失败（${e.message}），回退到 fvp');
       return await _convertWithFvp(
         inputPath: inputPath,
         outputPath: outputPath,

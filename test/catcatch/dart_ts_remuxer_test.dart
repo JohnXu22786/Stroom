@@ -295,8 +295,7 @@ List<(String, Uint8List)> _boxChildren(Uint8List payload) {
   var offset = 0;
   while (offset + 8 <= payload.length) {
     final size = _u32(payload, offset);
-    final type =
-        String.fromCharCodes(payload.sublist(offset + 4, offset + 8));
+    final type = String.fromCharCodes(payload.sublist(offset + 4, offset + 8));
     if (size < 8 || offset + size > payload.length) break;
     children.add((type, payload.sublist(offset + 8, offset + size)));
     offset += size;
@@ -304,7 +303,8 @@ List<(String, Uint8List)> _boxChildren(Uint8List payload) {
   return children;
 }
 
-(Uint8List?, List<(String, Uint8List)>) _findChild(List<(String, Uint8List)> children, String type) {
+(Uint8List?, List<(String, Uint8List)>) _findChild(
+    List<(String, Uint8List)> children, String type) {
   for (final (t, payload) in children) {
     if (t == type) return (payload, children);
   }
@@ -684,8 +684,12 @@ void main() {
             ],
             audioSamples: const [],
             video: VideoFormat(
-              sps: [Uint8List.fromList([0x67, 0x42, 0x00, 0x1E, 0x8D])],
-              pps: [Uint8List.fromList([0x68, 0xCE, 0x38, 0x80])],
+              sps: [
+                Uint8List.fromList([0x67, 0x42, 0x00, 0x1E, 0x8D])
+              ],
+              pps: [
+                Uint8List.fromList([0x68, 0xCE, 0x38, 0x80])
+              ],
             ),
             audio: null,
             outputPath: outputPath,
@@ -915,10 +919,10 @@ void main() {
 
   group('TsDemuxer - PES PTS/DTS extraction', () {
     test('extracts PTS from PES header', () {
-      final pes = _buildPesPacket(0xE0, Uint8List.fromList([1, 2, 3]),
-          pts: 90000);
-      final pesPackets =
-          TsDemuxer.extractPesPackets([TsPacket(pid: 0x101, payload: pes, payloadUnitStart: true)], 0x101);
+      final pes =
+          _buildPesPacket(0xE0, Uint8List.fromList([1, 2, 3]), pts: 90000);
+      final pesPackets = TsDemuxer.extractPesPackets(
+          [TsPacket(pid: 0x101, payload: pes, payloadUnitStart: true)], 0x101);
       expect(pesPackets.length, equals(1));
       expect(pesPackets.first.pts, equals(90000));
       expect(pesPackets.first.dts, isNull);
@@ -943,16 +947,13 @@ void main() {
     });
 
     test('handles PES spanning multiple TS packets', () {
-      final payload = Uint8List.fromList(
-          List.generate(400, (i) => i & 0xFF));
+      final payload = Uint8List.fromList(List.generate(400, (i) => i & 0xFF));
       final pes = _buildPesPacket(0xE0, payload, pts: 90000);
 
       // Split the PES across 3 TS packets
       final packets = <TsPacket>[
         TsPacket(
-            pid: 0x101,
-            payload: pes.sublist(0, 100),
-            payloadUnitStart: true),
+            pid: 0x101, payload: pes.sublist(0, 100), payloadUnitStart: true),
         TsPacket(pid: 0x101, payload: pes.sublist(100, 250)),
         TsPacket(pid: 0x101, payload: pes.sublist(250)),
       ];
@@ -963,10 +964,10 @@ void main() {
     });
 
     test('separates consecutive PES packets', () {
-      final pes1 = _buildPesPacket(0xE0, Uint8List.fromList([1, 2, 3]),
-          pts: 90000);
-      final pes2 = _buildPesPacket(0xE0, Uint8List.fromList([4, 5, 6]),
-          pts: 180000);
+      final pes1 =
+          _buildPesPacket(0xE0, Uint8List.fromList([1, 2, 3]), pts: 90000);
+      final pes2 =
+          _buildPesPacket(0xE0, Uint8List.fromList([4, 5, 6]), pts: 180000);
       final packets = <TsPacket>[
         TsPacket(pid: 0x101, payload: pes1, payloadUnitStart: true),
         TsPacket(pid: 0x101, payload: pes2, payloadUnitStart: true),
@@ -1021,7 +1022,8 @@ void main() {
   group('AacConfigParser', () {
     test('parses ADTS header for 44.1kHz stereo LC-AAC', () {
       // 0xFF 0xF1 0x50 ...: LC(1+1=2), sf_index=4 (44100), 2 channels
-      final header = Uint8List.fromList([0xFF, 0xF1, 0x50, 0x80, 0x03, 0xDF, 0xFC]);
+      final header =
+          Uint8List.fromList([0xFF, 0xF1, 0x50, 0x80, 0x03, 0xDF, 0xFC]);
       final info = AacConfigParser.fromAdts(header);
       expect(info, isNotNull);
       expect(info!.objectType, equals(2)); // AAC LC
@@ -1050,14 +1052,16 @@ void main() {
       final audioPid = 0x102;
       final pmtPid = 0x100;
 
-      final patPacket = _buildTsPacket(
-          0x0000, 0, _buildPat(pmtPid), payloadUnitStart: true);
-      final pmtPacket = _buildTsPacket(
-          pmtPid, 0, _buildPmt(videoPid, audioPid), payloadUnitStart: true);
+      final patPacket =
+          _buildTsPacket(0x0000, 0, _buildPat(pmtPid), payloadUnitStart: true);
+      final pmtPacket = _buildTsPacket(pmtPid, 0, _buildPmt(videoPid, audioPid),
+          payloadUnitStart: true);
 
       // 2 video PES packets with PTS 1s apart
-      final videoPes1 = _buildPesPacket(0xE0, _buildH264PesPayload(), pts: 90000);
-      final videoPes2 = _buildPesPacket(0xE0, _buildH264PesPayload(), pts: 180000);
+      final videoPes1 =
+          _buildPesPacket(0xE0, _buildH264PesPayload(), pts: 90000);
+      final videoPes2 =
+          _buildPesPacket(0xE0, _buildH264PesPayload(), pts: 180000);
       final videoPacket1 =
           _buildTsPacket(videoPid, 0, videoPes1, payloadUnitStart: true);
       final videoPacket2 =
@@ -1105,31 +1109,32 @@ void main() {
       final audioPid = 0x102;
       final pmtPid = 0x100;
 
-      final patPacket = _buildTsPacket(
-          0x0000, 0, _buildPat(pmtPid), payloadUnitStart: true);
-      final pmtPacket = _buildTsPacket(
-          pmtPid, 0, _buildPmt(videoPid, audioPid), payloadUnitStart: true);
+      final patPacket =
+          _buildTsPacket(0x0000, 0, _buildPat(pmtPid), payloadUnitStart: true);
+      final pmtPacket = _buildTsPacket(pmtPid, 0, _buildPmt(videoPid, audioPid),
+          payloadUnitStart: true);
 
       // 2 video PES + 2 audio PES
       final videoPayload = _buildH264PesPayload();
-      final adtsHeader = Uint8List.fromList([0xFF, 0xF1, 0x4C, 0x80, 0x04, 0xBF, 0xFC]);
+      final adtsHeader =
+          Uint8List.fromList([0xFF, 0xF1, 0x4C, 0x80, 0x04, 0xBF, 0xFC]);
       final aacFrame = Uint8List.fromList([...adtsHeader, ...Uint8List(30)]);
 
       final packets = <int>[
         ...patPacket,
         ...pmtPacket,
-        ..._buildTsPacket(videoPid, 0,
-            _buildPesPacket(0xE0, videoPayload, pts: 90000),
+        ..._buildTsPacket(
+            videoPid, 0, _buildPesPacket(0xE0, videoPayload, pts: 90000),
             payloadUnitStart: true),
-        ..._buildTsPacket(videoPid, 1,
-            _buildPesPacket(0xE0, videoPayload, pts: 180000),
+        ..._buildTsPacket(
+            videoPid, 1, _buildPesPacket(0xE0, videoPayload, pts: 180000),
             payloadUnitStart: true),
         // AAC 帧间隔 = 1024/44100s ≈ 2090 ticks @90kHz
-        ..._buildTsPacket(audioPid, 0,
-            _buildPesPacket(0xC0, aacFrame, pts: 90000),
+        ..._buildTsPacket(
+            audioPid, 0, _buildPesPacket(0xC0, aacFrame, pts: 90000),
             payloadUnitStart: true),
-        ..._buildTsPacket(audioPid, 1,
-            _buildPesPacket(0xC0, aacFrame, pts: 92090),
+        ..._buildTsPacket(
+            audioPid, 1, _buildPesPacket(0xC0, aacFrame, pts: 92090),
             payloadUnitStart: true),
       ];
 
@@ -1178,10 +1183,10 @@ void main() {
       final audioPid = 0x102;
       final pmtPid = 0x100;
 
-      final patPacket = _buildTsPacket(
-          0x0000, 0, _buildPat(pmtPid), payloadUnitStart: true);
-      final pmtPacket = _buildTsPacket(
-          pmtPid, 0, _buildPmt(videoPid, audioPid), payloadUnitStart: true);
+      final patPacket =
+          _buildTsPacket(0x0000, 0, _buildPat(pmtPid), payloadUnitStart: true);
+      final pmtPacket = _buildTsPacket(pmtPid, 0, _buildPmt(videoPid, audioPid),
+          payloadUnitStart: true);
 
       final videoPayload = _buildH264PesPayload();
       final adtsHeader =
@@ -1192,17 +1197,17 @@ void main() {
       final packets = <int>[
         ...patPacket,
         ...pmtPacket,
-        ..._buildTsPacket(videoPid, 0,
-            _buildPesPacket(0xE0, videoPayload, pts: 180000),
+        ..._buildTsPacket(
+            videoPid, 0, _buildPesPacket(0xE0, videoPayload, pts: 180000),
             payloadUnitStart: true),
-        ..._buildTsPacket(videoPid, 1,
-            _buildPesPacket(0xE0, videoPayload, pts: 270000),
+        ..._buildTsPacket(
+            videoPid, 1, _buildPesPacket(0xE0, videoPayload, pts: 270000),
             payloadUnitStart: true),
-        ..._buildTsPacket(audioPid, 0,
-            _buildPesPacket(0xC0, aacFrame, pts: 90000),
+        ..._buildTsPacket(
+            audioPid, 0, _buildPesPacket(0xC0, aacFrame, pts: 90000),
             payloadUnitStart: true),
-        ..._buildTsPacket(audioPid, 1,
-            _buildPesPacket(0xC0, aacFrame, pts: 92090),
+        ..._buildTsPacket(
+            audioPid, 1, _buildPesPacket(0xC0, aacFrame, pts: 92090),
             payloadUnitStart: true),
       ];
 
@@ -1252,10 +1257,10 @@ void main() {
       final audioPid = 0x102;
       final pmtPid = 0x100;
 
-      final patPacket = _buildTsPacket(
-          0x0000, 0, _buildPat(pmtPid), payloadUnitStart: true);
-      final pmtPacket = _buildTsPacket(
-          pmtPid, 0, _buildPmt(videoPid, audioPid), payloadUnitStart: true);
+      final patPacket =
+          _buildTsPacket(0x0000, 0, _buildPat(pmtPid), payloadUnitStart: true);
+      final pmtPacket = _buildTsPacket(pmtPid, 0, _buildPmt(videoPid, audioPid),
+          payloadUnitStart: true);
 
       // 视频 PES 不带时间戳（合成时间轴），音频带真实 PTS
       final videoPayload = _buildH264PesPayload();
@@ -1268,8 +1273,8 @@ void main() {
         ...pmtPacket,
         ..._buildTsPacket(videoPid, 0, _buildPesPacket(0xE0, videoPayload),
             payloadUnitStart: true),
-        ..._buildTsPacket(audioPid, 0,
-            _buildPesPacket(0xC0, aacFrame, pts: 90000),
+        ..._buildTsPacket(
+            audioPid, 0, _buildPesPacket(0xC0, aacFrame, pts: 90000),
             payloadUnitStart: true),
       ];
 
