@@ -114,12 +114,10 @@ void main() {
       );
 
       // 物理布局：<附件目录>/temp_compressed/<convId>/<hash>.<ext>
-      final jpegFile = File(p.join(
-          tmpRoot.path, 'attachments', 'temp_compressed', 'conv-1',
-          'hash-jpeg.jpg'));
-      final pngFile = File(p.join(
-          tmpRoot.path, 'attachments', 'temp_compressed', 'conv-1',
-          'hash-png.png'));
+      final jpegFile = File(p.join(tmpRoot.path, 'attachments',
+          'temp_compressed', 'conv-1', 'hash-jpeg.jpg'));
+      final pngFile = File(p.join(tmpRoot.path, 'attachments',
+          'temp_compressed', 'conv-1', 'hash-png.png'));
       expect(await jpegFile.exists(), isTrue, reason: 'JPEG 缓存按 .jpg 落盘');
       expect(await pngFile.exists(), isTrue, reason: 'PNG 缓存按 .png 落盘');
 
@@ -214,8 +212,8 @@ void main() {
               conversationId: 'conv-b', hash: 'h1'),
           isNotNull,
           reason: '其他对话的缓存不受影响（缓存按对话隔离）');
-      final convADir = Directory(p.join(
-          tmpRoot.path, 'attachments', 'temp_compressed', 'conv-a'));
+      final convADir = Directory(
+          p.join(tmpRoot.path, 'attachments', 'temp_compressed', 'conv-a'));
       expect(await convADir.exists(), isFalse, reason: '对话目录整体删除');
     });
 
