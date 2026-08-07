@@ -1401,7 +1401,7 @@ void main() {
       expect(find.text('长按拖拽即可调整对话顺序'), findsOneWidget);
     });
 
-    testWidgets('shows drag indicator icon in the hint', (tester) async {
+    testWidgets('drag indicator icon is NOT shown in the hint', (tester) async {
       await tester.pumpWidget(
         createMergedTopicTestApp(
           assistants: [
@@ -1419,8 +1419,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Drag indicator icon should be present
-      expect(find.byIcon(Icons.drag_indicator), findsOneWidget);
+      // Drag indicator icon should be removed from the hint
+      expect(find.byIcon(Icons.drag_indicator), findsNothing);
     });
 
     testWidgets('hint is NOT shown when no assistant selected', (tester) async {

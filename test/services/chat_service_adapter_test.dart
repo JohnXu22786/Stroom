@@ -1207,6 +1207,206 @@ void main() {
       expect(exaTools.first.description, contains('Exa MCP'),
           reason: 'Description should be preserved from config');
     });
+
+    test(
+        'placeholder tools are published synchronously without any network '
+        'attempt (built-in remote SSE MCPs are visible immediately)', () async {
+      // 进入对话页面不发起任何连接：initializeMcpServers 只同步发布
+      // 占位工具定义，mcpToolDefinitions 在调用返回后立即可见。
+      final state = _vendorState();
+      final future = adapter.initializeMcpServers(state);
+
+      expect(adapter.mcpToolDefinitions, isNotEmpty,
+          reason: 'placeholders must be visible synchronously — no network '
+              'attempt happens on page entry (lazy MCP)');
+      expect(
+          adapter.mcpToolDefinitions.map((t) => t.name), contains('exa_mcp'));
+
+      await future;
+      expect(adapter.mcpToolDefinitions, isNotEmpty);
+    });
+
+    test(
+        'user-added (non-vendor) MCP servers also get placeholder tools — '
+        'no vendor/description distinction', () async {
+      // A user-added stdio server without isVendor and without a description
+      // must still appear in the tool list ("只要是 MCP 就都要显示").
+      // The command is guaranteed to fail to spawn, so the placeholder path
+      // is deterministic (no real npx/network dependency).
+      final state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'My Files',
+                host: '',
+                key: '',
+                models: [
+                  ModelConfig(
+                    name: 'My Files',
+                    modelId: 'stdio',
+                    typeConfig: {
+                      'transport': 'stdio',
+                      'command': 'definitely-not-a-real-mcp-command',
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await adapter.initializeMcpServers(state);
+
+      final names = adapter.mcpToolDefinitions.map((t) => t.name).toSet();
+      expect(names, contains('my_files_mcp'),
+          reason: 'user-added stdio MCP server must get a placeholder tool '
+              'even without isVendor/description');
+      final placeholder = adapter.mcpToolDefinitions
+          .firstWhere((t) => t.name == 'my_files_mcp');
+      expect(placeholder.description, isNotEmpty,
+          reason: 'placeholder falls back to a generic description so the '
+              'tool list entry is meaningful');
+    });
+
+    test('vendor MCP servers without a description still get placeholder tools',
+        () async {
+      final state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'Exa',
+                host: 'https://mcp.example.com/mcp',
+                key: '',
+                models: [
+                  ModelConfig(
+                    name: 'Exa',
+                    modelId: 'sse',
+                    typeConfig: {
+                      'transport': 'sse',
+                      'url': 'https://mcp.example.com/mcp',
+                      'isVendor': true,
+                      // Note: no 'description' key.
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await adapter.initializeMcpServers(state);
+
+      final names = adapter.mcpToolDefinitions.map((t) => t.name).toSet();
+      expect(names, contains('exa_mcp'),
+          reason: 'a vendor server without a description must still appear '
+              'in the tool list');
+    });
+
+    test(
+        'initializeMcpServers with no MCP configs clears previously cached '
+        'tools', () async {
+      await adapter.initializeMcpServers(_vendorState());
+      expect(adapter.mcpToolDefinitions, isNotEmpty);
+
+      // The MCP entry still exists but has no configs (all deleted).
+      final emptyConfigsState = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: [],
+          ),
+        ],
+      );
+      await adapter.initializeMcpServers(emptyConfigsState);
+
+      expect(adapter.mcpToolDefinitions, isEmpty,
+          reason: 'tools from a removed MCP config must not leak into the '
+              'tool list');
+    });
+
+    test('a same-config re-entry is skipped (no placeholder/client churn)',
+        () async {
+      // 懒连接模式下同配置的页面重复进入不应重建任何东西：占位工具
+      // 保持同一实例（可观察：identical），客户端也保持未连接状态。
+      final state = _vendorState();
+      await adapter.initializeMcpServers(state);
+      final firstDefs = adapter.mcpToolDefinitions;
+      expect(firstDefs, isNotEmpty);
+
+      await adapter.initializeMcpServers(state);
+      final secondDefs = adapter.mcpToolDefinitions;
+      expect(identical(firstDefs.first, secondDefs.first), isTrue,
+          reason: 'same-config re-entry must be a no-op (no re-publish, no '
+              'client recreation) — connections happen only on tool calls');
+    });
+
+    test('an MCP config change recreates the lazy clients (new URL/command)',
+        () async {
+      // 配置变化（如 URL 修改）后，旧客户端必须被释放并重建，否则按需
+      // 执行会命中旧配置的客户端。
+      final state = _vendorState();
+      adapter.initializeBuiltinTools(state);
+      await adapter.initializeMcpServers(state);
+      final manager = ChatService.mcpClientManager;
+      expect(manager, isNotNull);
+      final firstClient = manager!.clients['Exa'];
+      expect(firstClient, isNotNull,
+          reason: 'clients are pre-created (unconnected) at placeholder time');
+
+      // 同一 state 实例再次初始化（模拟页面重复进入）→ 客户端保持不变。
+      await adapter.initializeMcpServers(state);
+      expect(identical(manager.clients['Exa'], firstClient), isTrue,
+          reason: 'same-config re-entry must not recreate clients');
+
+      // 配置变化（同名的不同实例）→ 客户端重建。
+      final changedState = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'Exa',
+                host: 'https://mcp.new-host.com/mcp',
+                key: '',
+                models: [
+                  ModelConfig(
+                    name: 'Exa',
+                    modelId: 'sse',
+                    typeConfig: {
+                      'transport': 'sse',
+                      'url': 'https://mcp.new-host.com/mcp',
+                      'isVendor': true,
+                      'description': 'Exa MCP search tool',
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      await adapter.initializeMcpServers(changedState);
+      final secondClient = manager.clients['Exa'];
+      expect(secondClient, isNotNull);
+      expect(identical(secondClient, firstClient), isFalse,
+          reason: 'a config change must recreate the client so on-demand '
+              'execution uses the new URL/command');
+      expect(secondClient!.config.url, 'https://mcp.new-host.com/mcp');
+    });
   });
 
   // ====================================================================
@@ -1501,6 +1701,60 @@ void main() {
       expect(svc, isNull,
           reason: 'without a global cache AND an unresolvable assistant '
               'model there is nothing to build the service from');
+    });
+  });
+
+  group('perConversationModelToRestore priority policy', () {
+    const available = [
+      AvailableModel(
+        displayName: 'gpt-4o | OpenAI',
+        configIndex: 0,
+        modelIndex: 0,
+      ),
+      AvailableModel(
+        displayName: 'claude-3.5 | Anthropic',
+        configIndex: 0,
+        modelIndex: 1,
+      ),
+    ];
+
+    test('returns the conversation model when it exists', () {
+      expect(
+        perConversationModelToRestore(
+          lastUsedModelName: 'gpt-4o | OpenAI',
+          availableModels: available,
+        ),
+        'gpt-4o | OpenAI',
+      );
+    });
+
+    test('returns null when the conversation has no model record', () {
+      expect(
+        perConversationModelToRestore(
+          lastUsedModelName: null,
+          availableModels: available,
+        ),
+        isNull,
+      );
+      expect(
+        perConversationModelToRestore(
+          lastUsedModelName: '',
+          availableModels: available,
+        ),
+        isNull,
+      );
+    });
+
+    test('returns null for a stale name (model removed from configs)', () {
+      expect(
+        perConversationModelToRestore(
+          lastUsedModelName: 'deleted-model | OpenAI',
+          availableModels: available,
+        ),
+        isNull,
+        reason: 'a stale per-conversation model must fall back to the '
+            'global saved index, not crash or select the wrong model',
+      );
     });
   });
 }

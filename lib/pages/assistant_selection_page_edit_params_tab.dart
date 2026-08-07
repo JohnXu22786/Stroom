@@ -21,6 +21,8 @@ class _EditDialogVars {
     required this.seed,
     required this.enableSeed,
     required this.customParameters,
+    this.defaultModelName,
+    this.defaultToolNames = const {},
   });
 
   double temperature;
@@ -40,6 +42,22 @@ class _EditDialogVars {
   int? seed;
   bool enableSeed;
   List<CustomParameter> customParameters;
+
+  /// 默认模型显示名（新建话题时应用；null = 跟随全局选择）。
+  String? defaultModelName;
+
+  /// 默认启用工具集合（新建话题时应用；未添加的工具保持关闭）。
+  Set<String> defaultToolNames;
+
+  /// 用户是否在"默认设置"tab 中改过默认模型。仅当为 true 时才把
+  /// [defaultModelName] 写回助手——否则（如只改了名称/提示词就保存）
+  /// 保持助手原有的默认模型不变。
+  bool defaultsModelEngaged = false;
+
+  /// 用户是否在"默认设置"tab 中改过默认工具。仅当为 true 时才把
+  /// [defaultToolNames] 写回助手——否则保持"从未配置"（null）的
+  /// 原始状态，新话题继续自动启用全部工具。
+  bool defaultsToolsEngaged = false;
 }
 
 /// Builds the "参数设置" tab of the assistant edit dialog.

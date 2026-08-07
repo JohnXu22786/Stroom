@@ -18,55 +18,33 @@ class _McpConfigEntry {
 
 /// MCP 服务器初始化逻辑（SSE / stdio 连接与工具发现）。
 extension ChatAdapterMcpExt on ChatAdapter {
-  /// 初始化 MCP 客户端（SSE / stdio）并发现工具。
+  /// 初始化 MCP 客户端（SSE / stdio）。
   ///
   /// 仅处理非 HTTP 工具的 MCP 服务器配置。HTTP 工具由 [ChatAdapter.initializeBuiltinTools] 独立处理。
-  /// MCP 服务器连接失败不会影响已注册的内置工具。
   ///
-  /// 对内置供应商（isVendor=true）的 MCP 服务器，即使连接失败也会创建占位工具定义，
-  /// 确保所有 MCP 供应商的工具都在工具列表中可见，不会区分"纯 Dart HTTP 工具"和
-  /// "SSE MCP 工具"。
+  /// 进入对话页面时**不会**发起任何网络连接：只同步发布每个 MCP 服务器
+  /// （内置供应商或用户添加、SSE 或 stdio、有无描述）的占位工具定义，
+  /// 并预先创建未连接的 [McpClient] 实例。连接与工具发现延迟到工具被
+  /// 实际调用时按需进行（见 chat_service_tools.dart 的 _executeTool），
+  /// 避免页面进入时对每个服务器发起连接尝试（真实端点可能数十秒超时）。
   Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
-    // Skip if config hasn't changed since last init (prevents redundant
-    // network discovery on every page mount after IndexedStack removal).
-    // Only skip when tools were actually discovered: if the cache is empty
-    // (first run, a previously failed run, or disposeMcp cleared it), always
-    // re-discover so the tool list never gets stuck at built-in-only.
-    final hash = Object.hashAll(entriesState.entries.map((e) => e.hashCode));
-    if (_lastMcpEntriesHash == hash && _mcpToolDefinitions.isNotEmpty) return;
-
-    // Serialize concurrent discovery: a second call (e.g. page _initialize +
-    // provider-change listener, or a config edit landing during a slow
-    // discovery) must wait for the in-flight run instead of racing it.
-    // Otherwise the second call's addClient would dispose the first call's
-    // in-flight client, silently losing that server's tools. After the
-    // in-flight run finishes, re-check the guard — if it already covered
-    // this config and populated the cache, nothing more to do.
-    final inFlight = _mcpInitFuture;
-    if (inFlight != null) {
-      await inFlight;
-      if (_lastMcpEntriesHash == hash && _mcpToolDefinitions.isNotEmpty) {
-        return;
-      }
-    }
-
-    _lastMcpEntriesHash = hash;
-    final future = _discoverMcpTools(entriesState);
-    _mcpInitFuture = future;
-    try {
-      await future;
-    } finally {
-      if (identical(_mcpInitFuture, future)) _mcpInitFuture = null;
-    }
-  }
-
-  Future<void> _discoverMcpTools(ProviderEntriesState entriesState) async {
     final mcpEntry =
         entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
-    if (mcpEntry == null || mcpEntry.configs.isEmpty) return;
+    // MCP 配置未变（同一实例）：占位符与客户端都无需重建。页面重复进入、
+    // 或其它供应商（TTS/OCR 等）配置变更时，MCP 条目实例不变，跳过。
+    if (identical(_lastMcpEntry, mcpEntry)) return;
+    _lastMcpEntry = mcpEntry;
+
+    if (mcpEntry == null || mcpEntry.configs.isEmpty) {
+      // 没有配置任何 MCP 服务器：发布空列表并释放旧客户端，避免上一份
+      // 配置的工具/连接残留在工具列表与客户端管理器中。
+      _mcpToolDefinitions = [];
+      _mcpClientManager.disposeAll();
+      return;
+    }
 
     // Build MCP server configs (skip HTTP tools — handled by initializeBuiltinTools)
-    // and capture vendor descriptions for placeholder tool creation.
+    // and capture descriptions for placeholder tool creation.
     final mcpConfigs = <_McpConfigEntry>[];
 
     for (final config in mcpEntry.configs) {
@@ -90,67 +68,60 @@ extension ChatAdapterMcpExt on ChatAdapter {
       }
     }
 
-    // Create clients and discover tools from MCP servers
-    final allTools = <ToolDefinition>[];
-
-    // First pass: add placeholder tool definitions for vendor MCP providers
-    // so they always appear in the tool list even if servers are unreachable.
-    // This ensures no distinction between "pure Dart" HTTP tools and SSE MCP tools.
-    for (final entry in mcpConfigs) {
-      if (entry.config.isVendor && entry.description.isNotEmpty) {
-        allTools.add(ToolDefinition(
-          name: '${entry.config.name.toLowerCase().replaceAll(' ', '_')}_mcp',
-          description: entry.description,
-          parameters: const {
-            'type': 'object',
-            'properties': {},
-            'required': <String>[],
-          },
-        ));
-      }
+    if (mcpConfigs.isEmpty) {
+      // 只剩 HTTP 工具等非 MCP 配置：清空并释放旧客户端。
+      _mcpToolDefinitions = [];
+      _mcpClientManager.disposeAll();
+      return;
     }
 
-    // Second pass: connect to MCP servers and discover actual tools.
-    // When a server connects successfully, replace its placeholder with
-    // the actual tool definitions returned by the server.
-    // Only remove the placeholder when actual tools are discovered;
-    // otherwise keep the placeholder so the provider remains visible.
+    // 配置变化：旧客户端（旧 URL/命令）作废。按需执行时这些客户端
+    // 尚未连接，dispose 只是释放句柄，不影响任何进行中的工具调用。
+    _mcpClientManager.disposeAll();
+
+    // 为每个 MCP 服务器创建客户端但**不连接**：连接延迟到工具被调用时。
+    // 无效配置（缺 URL/命令，McpClient 构造会抛 ArgumentError）跳过其
+    // 客户端但仍保留占位符，避免单条损坏配置让整个工具列表消失。
     for (final entry in mcpConfigs) {
       try {
-        final client = McpClient(config: entry.config);
-        _mcpClientManager.addClient(entry.config.name, client);
-
-        // Try to connect and list tools
-        final tools = await client.listTools();
-        final toolDefs = tools.map((t) => t.toToolDefinition()).toList();
-
-        if (toolDefs.isNotEmpty) {
-          // Actual tools were discovered — remove the placeholder
-          // and use the server-provided definitions instead.
-          if (entry.config.isVendor && entry.description.isNotEmpty) {
-            allTools.removeWhere(
-              (t) =>
-                  t.name ==
-                  '${entry.config.name.toLowerCase().replaceAll(' ', '_')}_mcp',
-            );
-          }
-          allTools.addAll(toolDefs);
-        }
-
-        debugPrint(
-          'MCP[${entry.config.name}]: discovered ${toolDefs.length} tools',
+        _mcpClientManager.addClient(
+          entry.config.name,
+          McpClient(config: entry.config),
         );
       } catch (e) {
-        debugPrint('MCP[${entry.config.name}]: init error: $e');
+        debugPrint('MCP[${entry.config.name}]: 无效配置，跳过客户端: $e');
       }
     }
-    _mcpToolDefinitions = allTools;
+
+    // 同步发布占位工具定义（不做任何网络等待）：每个配置的 MCP 服务器
+    // 都先以一个占位工具出现在工具列表中。占位工具不是真实工具——模型
+    // 调用占位符时 _executeTool 会按需连接该服务器、列出真实工具并把
+    // 可用工具名告知模型。同名服务器只保留第一份占位符，避免重复工具名
+    // 被 API 拒绝。
+    final seenNames = <String>{};
+    _mcpToolDefinitions = [
+      for (final entry in mcpConfigs)
+        if (seenNames.add(
+          McpServerConfig.placeholderToolName(entry.config.name),
+        ))
+          ToolDefinition(
+            name: McpServerConfig.placeholderToolName(entry.config.name),
+            description: entry.description.isNotEmpty
+                ? entry.description
+                : 'MCP 服务器工具：${entry.config.name}',
+            parameters: const {
+              'type': 'object',
+              'properties': {},
+              'required': <String>[],
+            },
+          ),
+    ];
   }
 
   /// 释放 MCP 资源
   void disposeMcp() {
     _mcpClientManager.disposeAll();
     _mcpToolDefinitions = [];
-    _mcpInitFuture = null;
+    _lastMcpEntry = null;
   }
 }

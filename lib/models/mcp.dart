@@ -218,6 +218,13 @@ class McpServerConfig {
     this.isVendor = false,
   });
 
+  /// 生成 MCP 服务器的占位工具名（如 "Jina AI" → "jina_ai_mcp"）。
+  ///
+  /// 占位工具用于在工具列表中标识一个尚未连接/发现的 MCP 服务器；
+  /// 服务器被按需连接并列出真实工具后，真实工具名才是可调用的名称。
+  static String placeholderToolName(String serverName) =>
+      '${serverName.toLowerCase().replaceAll(' ', '_')}_mcp';
+
   /// 创建 stdio 模式的配置
   factory McpServerConfig.stdio({
     required String name,
@@ -322,6 +329,68 @@ class McpServerConfig {
           isVendor: isVendor,
         );
     }
+  }
+
+  /// 从 typeConfig 中提取真实 API Key；占位符视为未设置。
+  ///
+  /// 内置 MCP 配置的请求头只带前缀占位符（如 `'Authorization': 'Bearer '`），
+  /// 旧版本误把 trim 后的 `"Bearer"`（6 字符）当成真实 Key 收集并持久化
+  /// （`apiKey: 'Bearer'` 或 `'Bearer Bearer'`）。此处统一把以下形态视为
+  /// **未设置**，既避免默认工具自动填入假 Key，也自动治愈旧版本已损坏的
+  /// 持久化数据：
+  /// - `apiKey` 字段为 `'Bearer'`
+  /// - 请求头值为空 / `'Bearer'` / 纯 `'Bearer '` 前缀
+  /// - 环境变量值为空 / `'Bearer'` / 已知非 Key 变量（PATH/HOME 等）/ 路径值
+  ///
+  /// 真实的 `'Bearer <key>'`（如 `'Bearer sk-123'`）仍会正确提取出 `<key>`。
+  ///
+  /// 提取顺序：apiKey 字段 → 请求头 → 环境变量（内置配置三者互斥，
+  /// 仅占位符时会被跳过，stdio 配置的环境变量 Key 不受影响）。
+  static String extractApiKeyFromTypeConfig(Map<String, dynamic>? typeConfig) {
+    if (typeConfig == null || typeConfig.isEmpty) return '';
+
+    // 1. 显式 apiKey 字段（旧版本曾把 'Bearer' 持久化到这里）
+    final apiKey = typeConfig['apiKey'] as String?;
+    final trimmedApiKey = apiKey?.trim() ?? '';
+    if (trimmedApiKey.isNotEmpty && trimmedApiKey != 'Bearer') {
+      return trimmedApiKey;
+    }
+
+    // 2. 请求头（SSE / HTTP 工具）
+    final headersRaw = typeConfig['headers'];
+    if (headersRaw is Map) {
+      for (final val in headersRaw.values) {
+        final s = val.toString().trim();
+        if (s.isEmpty || s.length <= 3) continue;
+        // 'Bearer ' 前缀占位符（无实际 Key）
+        if (s == 'Bearer') continue;
+        if (s.startsWith('Bearer ')) {
+          final afterBearer = s.substring(7).trim();
+          // 旧版本损坏数据 'Bearer Bearer'：剥掉前缀后只剩占位符
+          if (afterBearer.isNotEmpty && afterBearer != 'Bearer') {
+            return afterBearer;
+          }
+          continue;
+        }
+        return s;
+      }
+    }
+
+    // 3. 环境变量（stdio）
+    final envRaw = typeConfig['env'];
+    if (envRaw is Map) {
+      const knownNonApiKeys = {'PATH', 'HOME', 'USER', 'SHELL', 'TERM'};
+      for (final entry in envRaw.entries) {
+        final s = entry.value.toString().trim();
+        if (s.isEmpty || s == 'Bearer') continue;
+        if (knownNonApiKeys.contains(entry.key)) continue;
+        if (s.contains('/usr/') || s.contains('/bin') || s.contains('/local')) {
+          continue;
+        }
+        return s;
+      }
+    }
+    return '';
   }
 
   /// 序列化到 Map（用于存储到 ProviderConfigItem.typeConfig）

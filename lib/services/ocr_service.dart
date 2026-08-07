@@ -19,7 +19,7 @@ class OcrConfig {
   final String host;
   final String? systemPrompt;
 
-  /// Type-specific config (temperature, topP, detail, maxTokens, etc.)
+  /// Type-specific config (temperature, topP, maxTokens, userInstruction, etc.)
   final Map<String, dynamic> typeConfig;
 
   /// Custom parameters that the user defined
@@ -47,8 +47,10 @@ class OcrConfig {
   String get effectiveSystemPrompt =>
       systemPrompt ?? '请提取图片中的所有文字内容，保持原始格式和排版。只返回提取的文字，不要添加额外说明。';
 
-  /// Get the image detail level from typeConfig (default: 'high').
-  String get effectiveDetail => (typeConfig['detail'] as String?) ?? 'high';
+  /// Optional user instruction sent together with the image(s).
+  /// Empty when not configured — the request then carries images only.
+  String get effectiveUserInstruction =>
+      (typeConfig['userInstruction'] as String?)?.trim() ?? '';
 
   /// Get max_tokens from typeConfig, or default 4096.
   int get effectiveMaxTokens {
@@ -186,9 +188,17 @@ class OcrService {
     final base64Image = base64Encode(imageBytes);
     final dataUri = 'data:image/$imageFormat;base64,$base64Image';
 
-    final body = _buildRequestBody([
+    // Images first, optional instruction text after them — matches the
+    // official qwen-vl-ocr / DeepSeek-OCR request examples.
+    final contents = <Map<String, dynamic>>[
       _buildImageContent(dataUri),
-    ]);
+    ];
+    final instruction = config.effectiveUserInstruction;
+    if (instruction.isNotEmpty) {
+      contents.add({'type': 'text', 'text': instruction});
+    }
+
+    final body = _buildRequestBody(contents);
 
     // Capture request diagnostics
     lastRequestBody = body;
@@ -248,17 +258,15 @@ class OcrService {
 
     final stopwatch = Stopwatch()..start();
 
-    final contents = <Map<String, dynamic>>[];
-
-    // Add a text instruction for each image
-    for (var i = 0; i < imageBytesList.length; i++) {
-      final (bytes, format) = imageBytesList[i];
-      final base64Image = base64Encode(bytes);
-      final dataUri = 'data:image/$format;base64,$base64Image';
-      contents.addAll([
-        {'type': 'text', 'text': '图片 ${i + 1}：'},
-        _buildImageContent(dataUri),
-      ]);
+    // Consecutive image parts (image identity is conveyed by array order,
+    // per official docs), then the optional instruction text last.
+    final contents = <Map<String, dynamic>>[
+      for (final (bytes, format) in imageBytesList)
+        _buildImageContent('data:image/$format;base64,${base64Encode(bytes)}'),
+    ];
+    final instruction = config.effectiveUserInstruction;
+    if (instruction.isNotEmpty) {
+      contents.add({'type': 'text', 'text': instruction});
     }
 
     final body = _buildRequestBody(contents);
@@ -356,11 +364,6 @@ class OcrService {
       body['top_p'] = (tc['topP'] as num?)?.toDouble();
     }
 
-    // seed
-    if (tc['enableSeed'] == true && tc.containsKey('seed')) {
-      body['seed'] = (tc['seed'] as num?)?.toInt();
-    }
-
     // Apply custom parameters
     for (final param in config.customParams) {
       final name = param.paramName.trim();
@@ -397,18 +400,11 @@ class OcrService {
 
   /// Build an image content block for the chat API.
   Map<String, dynamic> _buildImageContent(String dataUri) {
-    final imageUrl = <String, dynamic>{
-      'url': dataUri,
-    };
-    // Only set detail when enableDetail is true, honoring the toggle.
-    // When disabled, omit detail so the API uses its default.
-    if (config.typeConfig['enableDetail'] == true &&
-        config.typeConfig.containsKey('detail')) {
-      imageUrl['detail'] = config.effectiveDetail;
-    }
     return {
       'type': 'image_url',
-      'image_url': imageUrl,
+      'image_url': {
+        'url': dataUri,
+      },
     };
   }
 

@@ -17,13 +17,14 @@ import 'package:stroom/providers/provider_config.dart';
 /// reload, making the count nondeterministic per page entry.
 ///
 /// FIX: `_initialize` re-reads the fresh entries state right before MCP
-/// discovery and re-resolves the enabled tool set after discovery completes
-/// (also in the provider-change listener), so newly discovered MCP tools are
-/// auto-enabled immediately.
+/// initialization and re-resolves the enabled tool set afterwards (also in
+/// the provider-change listener), so MCP placeholder tools are auto-enabled
+/// immediately. MCP servers are lazy: placeholders are published without
+/// any network connection (connections happen only when a tool is called).
 void main() {
   /// Provider entries with a single vendor SSE MCP config (Exa) whose server
-  /// is unreachable — discovery fails fast in the test environment and the
-  /// vendor placeholder tool ('exa_mcp') is created.
+  /// is unreachable — MCP servers are lazy (no connection at page entry),
+  /// so the vendor placeholder tool ('exa_mcp') is published synchronously.
   ProviderEntriesState vendorMcpState() {
     return ProviderEntriesState(
       entries: [
@@ -73,8 +74,8 @@ void main() {
       child: const MaterialApp(home: ChatPage()),
     ));
 
-    // Let _initialize + MCP discovery (fails fast on unreachable URL in the
-    // test environment) complete.
+    // Let _initialize + MCP initialization (synchronous placeholder
+    // publication, no network) complete.
     for (var i = 0; i < 20; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }

@@ -35,6 +35,8 @@ void showAssistantFullEditDialog(
     seed: assistant.settings.seed,
     enableSeed: assistant.settings.enableSeed,
     customParameters: List.from(assistant.settings.customParameters),
+    defaultModelName: assistant.defaultModelName,
+    defaultToolNames: Set<String>.from(assistant.defaultToolNames ?? const {}),
   );
   final seedController =
       TextEditingController(text: vars.seed?.toString() ?? '');
@@ -47,17 +49,22 @@ void showAssistantFullEditDialog(
         content: SizedBox(
           width: double.maxFinite,
           child: DefaultTabController(
-            length: 2,
+            length: 3,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Tab bar
+                // Tab bar — scrollable + centered so the tab group is
+                // centered (not left-aligned) and the label-sized indicator
+                // stays aligned with the selected tab's label.
                 TabBar(
+                  isScrollable: true,
                   tabAlignment: TabAlignment.center,
                   labelPadding: const EdgeInsets.symmetric(horizontal: 24),
+                  indicatorSize: TabBarIndicatorSize.label,
                   tabs: const [
                     Tab(text: '基本设置'),
                     Tab(text: '参数设置'),
+                    Tab(text: '默认设置'),
                   ],
                 ),
                 // Tab content area - expands to fill remaining space
@@ -130,6 +137,25 @@ void showAssistantFullEditDialog(
                         vars: vars,
                         seedController: seedController,
                       ),
+
+                      // ============ Tab 3: 默认设置 ============
+                      AssistantDefaultsTab(
+                        defaultModelName: vars.defaultModelName,
+                        defaultToolNames: vars.defaultToolNames,
+                        onDefaultModelChanged: (name) => setDlgState(() {
+                          vars.defaultModelName = name;
+                          vars.defaultsModelEngaged = true;
+                        }),
+                        onDefaultToolToggled: (toolName, enabled) =>
+                            setDlgState(() {
+                          if (enabled) {
+                            vars.defaultToolNames.add(toolName);
+                          } else {
+                            vars.defaultToolNames.remove(toolName);
+                          }
+                          vars.defaultsToolsEngaged = true;
+                        }),
+                      ),
                     ],
                   ),
                 ),
@@ -176,6 +202,22 @@ void showAssistantFullEditDialog(
                     seed: vars.seed,
                     enableSeed: vars.enableSeed,
                     customParameters: vars.customParameters,
+                  );
+
+              // Update conversation defaults (default model + default tools).
+              // Only parts the user actually engaged in the 默认设置 tab are
+              // written back: a save that never touched that tab (e.g. a
+              // rename) must not silently convert an unconfigured assistant
+              // into "configured-empty" (which would switch new topics from
+              // auto-enable-all to all-tools-OFF).
+              ref.read(assistantProvider.notifier).updateAssistantDefaults(
+                    id: assistant.id,
+                    defaultModelName: vars.defaultsModelEngaged
+                        ? vars.defaultModelName
+                        : assistant.defaultModelName,
+                    defaultToolNames: vars.defaultsToolsEngaged
+                        ? vars.defaultToolNames
+                        : assistant.defaultToolNames,
                   );
 
               Navigator.pop(ctx);

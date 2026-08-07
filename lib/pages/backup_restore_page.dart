@@ -640,6 +640,56 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           // 自动备份位置信息卡片
           _buildBackupLocationCard(),
           const SizedBox(height: 24),
+          // === Anki 闪卡 .apkg 导出/导入 ===
+          _buildSectionHeader('Anki闪卡牌组'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('导入/导出 .apkg 格式的 Anki 牌组',
+                      style: TextStyle(
+                          fontSize: 13,
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _isAnkiExporting ? null : _onAnkiExport,
+                          icon: _isAnkiExporting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.file_upload_outlined),
+                          label: Text(_isAnkiExporting ? '导出中...' : '导出 .apkg'),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _isAnkiImporting ? null : _onAnkiImport,
+                          icon: _isAnkiImporting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.file_download_outlined),
+                          label: Text(_isAnkiImporting ? '导入中...' : '导入 .apkg'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
           // === 统一选择卡片（导入和导出共用） ===
           _buildSectionHeader('选择要备份或恢复的数据类别'),
           _buildUnifiedSelectionCard(),
@@ -730,56 +780,6 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                         foregroundColor: Colors.red,
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          // === Anki 闪卡 .apkg 导出/导入 ===
-          _buildSectionHeader('Anki闪卡牌组'),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('导入/导出 .apkg 格式的 Anki 牌组',
-                      style: TextStyle(
-                          fontSize: 13,
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant)),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _isAnkiExporting ? null : _onAnkiExport,
-                          icon: _isAnkiExporting
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2))
-                              : const Icon(Icons.file_upload_outlined),
-                          label: Text(_isAnkiExporting ? '导出中...' : '导出 .apkg'),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _isAnkiImporting ? null : _onAnkiImport,
-                          icon: _isAnkiImporting
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2))
-                              : const Icon(Icons.file_download_outlined),
-                          label: Text(_isAnkiImporting ? '导入中...' : '导入 .apkg'),
-                        ),
-                      ),
-                    ],
                   ),
                 ],
               ),

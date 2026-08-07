@@ -77,6 +77,7 @@ class MediaResource {
         'mkv',
         'avi',
         'flv',
+        'ev1',
         'mpeg',
         'mpg'
       ].contains(ext);

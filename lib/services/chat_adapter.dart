@@ -73,16 +73,16 @@ class ChatAdapter {
   /// MCP 客户端管理器
   final McpClientManager _mcpClientManager = McpClientManager();
 
-  /// 缓存的 MCP 工具列表
+  /// 缓存的 MCP 工具列表（占位工具定义）
   List<ToolDefinition> _mcpToolDefinitions = [];
 
-  /// 正在进行的 MCP 工具发现 future。
+  /// 上一份已处理的 MCP 供应商条目实例。
   ///
-  /// 防并发重发现：页面 _initialize 与 provider-change listener 可能同时
-  /// 调用 initializeMcpServers（同一配置）。没有此守卫会并发执行两次
-  /// 发现，第二次的 addClient 会 dispose 第一次的 in-flight client，
-  /// 导致工具静默丢失。发现完成后置空，允许后续重发现。
-  Future<void>? _mcpInitFuture;
+  /// 用于跳过重复初始化：页面重复进入、或其它供应商（TTS/OCR 等）配置
+  /// 变更时，entries state 会重建但 MCP 条目实例不变（ProviderEntriesNotifier
+  /// 的 update 只替换被更新的条目），此时占位符与客户端都无需重建。
+  /// MCP 条目本身被编辑时实例变化，触发重建。
+  ProviderEntry? _lastMcpEntry;
 
   /// 当前选中的配置索引（指向 llmEntry.configs）
   int currentConfigIndex = -1;
@@ -281,11 +281,6 @@ class ChatAdapter {
   AssistantSettings? _cachedAssistantSettings;
   List<CustomParameter>? _cachedAssistantCustomParams;
 
-  /// Hash of the last entries state used for MCP initialization.
-  /// Prevents redundant re-discovery across page mounts, but allows
-  /// re-initialization when the provider config actually changes.
-  int? _lastMcpEntriesHash;
-
   /// Register HTTP tool handlers in ChatService (idempotent — uses static flag)
   static bool _httpToolsRegistered = false;
 
@@ -463,7 +458,6 @@ class ChatAdapter {
   /// 释放所有资源
   void dispose() {
     cancelAllServices();
-    _lastMcpEntriesHash = null;
     _cachedProvider = null;
     _cachedModelConfig = null;
     _cachedProviderConfig = null;
@@ -606,4 +600,26 @@ Set<String> resolveEnabledToolNames({
     return Set<String>.from(savedEnabledNames);
   }
   return allTools.map((t) => t.name).toSet();
+}
+
+/// Resolves which model the chat page should restore for the active
+/// conversation, when the conversation has a per-conversation record
+/// ([Conversation.lastUsedModelName] — set by an assistant default at
+/// creation or by the user's own switch inside that conversation).
+///
+/// Returns the model display name when it still exists among
+/// [availableModels]; returns null when the conversation has no record or
+/// the recorded model was removed from the provider configs — in both
+/// cases the global saved model index applies (the fallback).
+///
+/// Pure so the priority policy is unit-testable; the side effects (adapter
+/// select + per-model settings restore) live in the chat page.
+String? perConversationModelToRestore({
+  required String? lastUsedModelName,
+  required List<AvailableModel> availableModels,
+}) {
+  final name = lastUsedModelName;
+  if (name == null || name.isEmpty) return null;
+  if (!availableModels.any((m) => m.displayName == name)) return null;
+  return name;
 }

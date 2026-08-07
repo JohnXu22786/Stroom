@@ -334,11 +334,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 // ====================================================================
 // _McpConfigCard — MCP / provider entry card.
 //
-// 卡片样式与 LLM 供应商页 (`provider_config_detail_page.dart` 中
-// 的"参照选择对话页面的顶部card样式") 保持一致：
-// - 使用 Container + BoxDecoration，统一圆角 (12) 与 0.5 边框；
-// - 背景使用 primaryContainer.withValues(alpha: 0.3)（内置 MCP）
-//   或 surfaceContainerHigh/Low（用户添加的 MCP），使深浅色模式下都清晰可辨。
+// 卡片样式与 LLM 供应商页等其它设置条目的卡片保持一致：所有卡片
+// （内置/用户添加、stdio/SSE/HTTP）统一使用主题自适应的中性背景
+// （浅色模式 surfaceContainerLow / 深色模式 surfaceContainerHigh）
+// 与柔和的 outlineVariant 描边，不再区分内置供应商配色——深浅色
+// 模式下都清晰可辨，页面整体观感一致。
 // ====================================================================
 
 class _McpConfigCard extends StatelessWidget {
@@ -373,13 +373,10 @@ class _McpConfigCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // 内置：使用 primaryContainer 突出；用户添加：根据主题选择中性背景
-    final Color backgroundColor = isVendor
-        ? cs.primaryContainer.withValues(alpha: 0.3)
-        : (isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow);
-    final Color borderColor = isVendor
-        ? cs.primaryContainer
-        : cs.outlineVariant.withValues(alpha: 0.5);
+    // 统一卡片配色（对齐 LLM 供应商页）：中性背景 + 柔和描边。
+    final Color backgroundColor =
+        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
+    final Color borderColor = cs.outlineVariant.withValues(alpha: 0.5);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -388,7 +385,7 @@ class _McpConfigCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: borderColor,
-          width: isVendor ? 1.0 : 0.5,
+          width: 0.5,
         ),
       ),
       child: Material(
@@ -407,9 +404,7 @@ class _McpConfigCard extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: isVendor
-                        ? cs.primaryContainer.withValues(alpha: 0.5)
-                        : cs.primaryContainer.withValues(alpha: 0.3),
+                    color: cs.primaryContainer.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(leadIcon, color: iconColor, size: 22),

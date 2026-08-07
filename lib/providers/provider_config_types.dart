@@ -15,7 +15,7 @@ enum ModelConfigStyle {
   /// 简洁样式：模型ID、自定义参数（无上下文长度要求），用于 ASR
   simple,
 
-  /// OCR 样式：模型ID、自定义参数、OCR 专有参数（temperature、detail 等）
+  /// OCR 样式：模型ID、可选用户指令、OCR 参数（temperature 等）、自定义参数
   ocr,
 
   /// ASR 样式：模型ID、自定义参数、ASR 专有参数（language、response_format 等）

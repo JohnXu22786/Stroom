@@ -33,6 +33,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
   bool _isSaving = false;
   bool _isEditMode = false;
   bool _hasUnsavedChanges = false;
+  bool _obscureApiKey = true;
 
   String _originalName = '';
   String _originalDescription = '';
@@ -92,11 +93,8 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
       _descriptionController.text = desc;
 
       // Extract API key from apiKey field, env, or headers
-      final apiKey = serverConfig.apiKey?.isNotEmpty == true
-          ? serverConfig.apiKey!
-          : _extractApiKeyFromEnvOrHeaders(serverConfig);
-
-      _apiKeyController.text = apiKey;
+      // （'Bearer ' 占位符视为未设置，不自动填入假 Key）
+      _apiKeyController.text = _extractApiKeyFromEnvOrHeaders(serverConfig);
 
       _originalName = serverConfig.name;
       _originalDescription = _descriptionController.text;
@@ -114,43 +112,18 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
     }
   }
 
-  /// Extract API key from env or headers if apiKey field is empty.
+  /// Extract API key from apiKey field, env, or headers.
   /// This handles legacy configs and provides a better editing experience.
+  /// Placeholders ('Bearer ' 前缀等) are treated as unset so the field is
+  /// never auto-filled with a fake key.
   String _extractApiKeyFromEnvOrHeaders(McpServerConfig config) {
-    // Prefer the explicit apiKey field if set
-    if (config.apiKey != null && config.apiKey!.isNotEmpty)
-      return config.apiKey!;
-
-    // Check env vars for non-empty, non-default values (stdio configs)
-    const knownNonApiKeys = {'PATH', 'HOME', 'USER', 'SHELL', 'TERM'};
-    for (final entry in config.env.entries) {
-      final val = entry.value;
-      if (val.isNotEmpty && !knownNonApiKeys.contains(entry.key)) {
-        // Skip common path-like values
-        if (val.contains('/usr/') ||
-            val.contains('/bin') ||
-            val.contains('/local')) {
-          continue;
-        }
-        return val;
-      }
-    }
-    // Check headers for non-empty values (sse configs)
-    for (final val in config.headers.values) {
-      final trimmed = val.trim();
-      if (trimmed.isNotEmpty) {
-        // Strip Bearer prefix if present
-        if (trimmed.startsWith('Bearer ')) {
-          final afterBearer = trimmed.substring(7).trim();
-          if (afterBearer.isNotEmpty) return afterBearer;
-          continue;
-        }
-        // If value is just whitespace or the header key name, skip
-        if (trimmed.length < 3) continue;
-        return trimmed;
-      }
-    }
-    return '';
+    final typeConfig = <String, dynamic>{
+      if (config.apiKey != null && config.apiKey!.isNotEmpty)
+        'apiKey': config.apiKey!,
+      if (config.env.isNotEmpty) 'env': config.env,
+      if (config.headers.isNotEmpty) 'headers': config.headers,
+    };
+    return McpServerConfig.extractApiKeyFromTypeConfig(typeConfig);
   }
 
   @override
@@ -552,12 +525,22 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
             const SizedBox(height: 8),
             TextField(
               controller: _apiKeyController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: '输入 API Key（可选）',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.vpn_key, color: Colors.amber),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.vpn_key, color: Colors.amber),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscureApiKey ? Icons.visibility_off : Icons.visibility,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  tooltip: _obscureApiKey ? '显示密钥' : '隐藏密钥',
+                  onPressed: () =>
+                      setState(() => _obscureApiKey = !_obscureApiKey),
+                ),
               ),
-              obscureText: true,
+              obscureText: _obscureApiKey,
               onChanged: (_) => _checkUnsavedChanges(),
             ),
 
