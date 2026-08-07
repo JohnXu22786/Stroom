@@ -26,10 +26,8 @@ const _checkKey = ValueKey('reasoning-corner-check');
 /// from the matrix instead of [Matrix4.getMaxScaleOnAxis], which can never
 /// report a value below 1.0 (the z-axis stays 1.0) and would therefore
 /// mask a shrunken checkmark.
-double _checkScale(WidgetTester tester) => tester
-    .widget<Transform>(find.byKey(_checkKey))
-    .transform
-    .storage[0];
+double _checkScale(WidgetTester tester) =>
+    tester.widget<Transform>(find.byKey(_checkKey)).transform.storage[0];
 
 /// Pumps the app, seeds the streaming providers, opens the reasoning panel
 /// dialog and returns the provider container used to flip stream state.
@@ -59,9 +57,8 @@ Future<ProviderContainer> _openPanel(
   final container =
       ProviderScope.containerOf(tester.element(find.byType(ReasoningSection)));
   container.read(activeConversationIdProvider.notifier).state = _convId;
-  container
-      .read(streamingReasoningSectionsProvider(_convId).notifier)
-      .state = const ['思考内容'];
+  container.read(streamingReasoningSectionsProvider(_convId).notifier).state =
+      const ['思考内容'];
   container.read(streamingHasFirstTokenProvider(_convId).notifier).state =
       hasFirstToken;
   container.read(isStreamingProvider(_convId).notifier).state = streaming;
