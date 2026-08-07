@@ -213,6 +213,111 @@ void main() {
     });
   });
 
+  group('LatexNode - mhchem \\ce support', () {
+    // Regression: $\ce{...}$ used to hit "Undefined control sequence: \ce"
+    // in flutter_math_fork and fall back to the raw red text. The
+    // preprocessor must make it render real math instead.
+
+    testWidgets('renders \\ce{H2O} without the error fallback',
+        (WidgetTester tester) async {
+      final config = MarkdownConfig.defaultConfig;
+      final node = LatexNode(
+        {'content': r'\ce{H2O}', 'isInline': 'true'},
+        r'$\ce{H2O}$',
+        config,
+      );
+      node.style = const TextStyle(fontSize: 16, color: Colors.black);
+
+      final span = node.build() as WidgetSpan;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Text.rich(TextSpan(children: [span])),
+          ),
+        ),
+      ));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text(r'$\ce{H2O}$'), findsNothing,
+          reason: 'the raw-text error fallback must not appear');
+    });
+
+    testWidgets('renders a reaction equation without the error fallback',
+        (WidgetTester tester) async {
+      final config = MarkdownConfig.defaultConfig;
+      final node = LatexNode(
+        {'content': r'\ce{2H2 + O2 -> 2H2O}', 'isInline': 'false'},
+        r'$$\ce{2H2 + O2 -> 2H2O}$$',
+        config,
+      );
+      node.style = const TextStyle(fontSize: 16, color: Colors.black);
+
+      final span = node.build() as WidgetSpan;
+      final child = (span.child as Container).child!;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Text.rich(TextSpan(children: [WidgetSpan(child: child)])),
+          ),
+        ),
+      ));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text(r'$$\ce{2H2 + O2 -> 2H2O}$$'), findsNothing,
+          reason: 'the raw-text error fallback must not appear');
+    });
+
+    testWidgets('renders \\pu units without the error fallback',
+        (WidgetTester tester) async {
+      final config = MarkdownConfig.defaultConfig;
+      final node = LatexNode(
+        {'content': r'\pu{123 kJ/mol}', 'isInline': 'true'},
+        r'$\pu{123 kJ/mol}$',
+        config,
+      );
+      node.style = const TextStyle(fontSize: 16, color: Colors.black);
+
+      final span = node.build() as WidgetSpan;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Text.rich(TextSpan(children: [span])),
+          ),
+        ),
+      ));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text(r'$\pu{123 kJ/mol}$'), findsNothing);
+    });
+
+    testWidgets('malformed \\ce falls back to the raw error text, no crash',
+        (WidgetTester tester) async {
+      // The preprocessor promises malformed input cannot crash rendering:
+      // it is passed through unchanged and the existing error fallback
+      // (raw red text) takes over.
+      final config = MarkdownConfig.defaultConfig;
+      final node = LatexNode(
+        {'content': r'\ce{H2O', 'isInline': 'true'},
+        r'$\ce{H2O$',
+        config,
+      );
+      node.style = const TextStyle(fontSize: 16, color: Colors.black);
+
+      final span = node.build() as WidgetSpan;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Text.rich(TextSpan(children: [span])),
+          ),
+        ),
+      ));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text(r'$\ce{H2O$'), findsOneWidget,
+          reason: 'malformed input must keep the legacy error fallback');
+    });
+  });
+
   group('MarkdownConfig helpers', () {
     test('markdownGenerator is a MarkdownGenerator with LaTeX support', () {
       expect(markdownGenerator, isA<MarkdownGenerator>());

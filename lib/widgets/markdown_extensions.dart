@@ -3,6 +3,7 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:markdown/markdown.dart' as m;
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:flutter_highlight/themes/dracula.dart';
+import '../utils/mhchem_syntax.dart';
 import 'code_block_source_widget.dart';
 import 'html_code_block_widget.dart';
 import 'mermaid_render_widget.dart';
@@ -87,8 +88,10 @@ class LatexNode extends SpanNode {
       return TextSpan(style: style, text: textContent);
     }
 
+    // mhchem (`\ce{...}`, `\pu{...}`) is expanded to plain KaTeX first;
+    // flutter_math_fork does not load the mhchem extension.
     final latex = Math.tex(
-      content,
+      preprocessMhchem(content),
       textStyle: style,
       textScaleFactor: 1,
       mathStyle: MathStyle.text,
