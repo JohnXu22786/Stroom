@@ -3,10 +3,25 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show debugPrint;
 
 // ============================================================================
-// Data structures
+// 纯 Dart MPEG-TS → MP4 转封装（Remux）实现
+//
+// 设计目标（参照 FFmpeg 中 libavformat 的 mpegts.c / movenc.c 最刚需部分）：
+//   1. 解析 TS 包（PAT/PMT 获取 PID，PES 重组并提取 PTS/DTS）
+//   2. 从 SPS 解析分辨率/帧率，从 ADTS 头解析 AAC 参数
+//   3. 两遍式处理：第一遍解复用并将样本写入临时 spool 文件（内存有界），
+//      第二遍封装 MP4（mdat + moov），保证 stts/ctts/stss/stco/stsz 正确
+//   4. 仅支持免重编码的编码格式：H.264 / H.265 视频 + AAC 音频
+//      （与 MP4 容器兼容，可直接转封装；其他编码格式给出明确错误）
+//
+// 转封装（remux）不是转码：不修改任何视频/音频帧数据，
+// 只改变容器（MPEG-TS → ISO BMFF / MP4）。
 // ============================================================================
 
-/// A single MPEG-TS packet (188 bytes).
+// ============================================================================
+// 数据结构
+// ============================================================================
+
+/// 单个 MPEG-TS 包（188 字节）。
 class TsPacket {
   final int pid;
   final Uint8List payload;
@@ -19,12 +34,12 @@ class TsPacket {
   });
 }
 
-/// Program stream PIDs found via PAT/PMT.
+/// 通过 PAT/PMT 得到的节目流 PID。
 class ProgramPids {
   final int videoPid;
   final int? audioPid;
 
-  /// Stream type from PMT: 0x1B = H.264, 0x24 = H.265, 0x02 = MPEG-2
+  /// PMT 中的 stream_type：0x1B = H.264，0x24 = H.265，0x0F = AAC
   final int videoStreamType;
   final int? audioStreamType;
 
@@ -36,35 +51,403 @@ class ProgramPids {
   });
 }
 
-/// A parsed H.264 NAL unit.
+/// 一个已解析的 H.264/H.265 NAL 单元（不含起始码）。
 class H264NalUnit {
-  /// NAL unit type (1-31, or 32-63 for HEVC).
   final int type;
-
-  /// Raw NAL unit data (including the NAL header byte).
   final Uint8List data;
 
   const H264NalUnit({required this.type, required this.data});
 }
 
-/// A parsed AAC frame (raw data without ADTS header).
+/// 一个原始 AAC 帧（不含 ADTS 头）。
 class AacFrame {
   final Uint8List data;
 
   const AacFrame({required this.data});
 }
 
+/// 一个完整的 PES 包（已剥离 PES 头，PTS/DTS 为 90kHz 时钟）。
+class PesPacket {
+  final int? pts;
+  final int? dts;
+  final Uint8List data;
+
+  const PesPacket({required this.pts, required this.dts, required this.data});
+}
+
+/// 一个待写入 MP4 的样本（数据位于 spool 文件中）。
+class Mp4Sample {
+  /// 样本数据在 spool 文件中的偏移
+  final int spoolOffset;
+
+  /// 样本数据长度（字节）
+  final int size;
+
+  /// 展示时间戳（90kHz）
+  final int pts;
+
+  /// 解码时间戳（90kHz）
+  final int dts;
+
+  /// 是否为关键帧（视频）
+  final bool sync;
+
+  const Mp4Sample({
+    required this.spoolOffset,
+    required this.size,
+    required this.pts,
+    required this.dts,
+    required this.sync,
+  });
+}
+
+/// 视频编码配置（用于 MP4 的 stsd / avcC / hvcC）。
+class VideoFormat {
+  final bool isHevc;
+
+  /// H.264: SPS/PPS 原始 NAL 数据（含 NAL 头，不含起始码）
+  final List<Uint8List> sps;
+  final List<Uint8List> pps;
+
+  /// H.265: VPS 原始 NAL 数据
+  final List<Uint8List> vps;
+
+  /// 直接使用现成的配置记录（如 FLV 流中的 avcC/hvcC 原样拷贝）
+  final Uint8List? rawConfig;
+
+  final int width;
+  final int height;
+
+  /// 估算帧率（可选，来自 SPS VUI）
+  final double? frameRate;
+
+  const VideoFormat({
+    this.isHevc = false,
+    this.sps = const [],
+    this.pps = const [],
+    this.vps = const [],
+    this.rawConfig,
+    this.width = 0,
+    this.height = 0,
+    this.frameRate,
+  });
+}
+
+/// 音频编码配置（用于 MP4 的 mp4a / esds）。
+class AudioFormat {
+  /// AudioSpecificConfig（2~5 字节）
+  final Uint8List asc;
+
+  /// MPEG-4 Audio Object Type（AAC LC = 2）
+  final int objectType;
+
+  final int sampleRate;
+  final int channels;
+
+  /// 每帧采样数（AAC 固定 1024）
+  final int samplesPerFrame;
+
+  const AudioFormat({
+    required this.asc,
+    required this.objectType,
+    required this.sampleRate,
+    required this.channels,
+    this.samplesPerFrame = 1024,
+  });
+}
+
+/// 从 H.264 SPS 解析出的信息。
+class H264SpsInfo {
+  final int width;
+  final int height;
+  final double? frameRate;
+
+  const H264SpsInfo({
+    required this.width,
+    required this.height,
+    this.frameRate,
+  });
+}
+
+/// 从 ADTS/ASC 解析出的 AAC 参数。
+class AacStreamInfo {
+  final int objectType;
+  final int sampleRate;
+  final int channels;
+  final Uint8List asc;
+
+  const AacStreamInfo({
+    required this.objectType,
+    required this.sampleRate,
+    required this.channels,
+    required this.asc,
+  });
+}
+
 // ============================================================================
-// TS Demuxer — pure Dart MPEG-TS parser
+// 位读取器（用于 SPS 解析）
+// ============================================================================
+
+class _BitReader {
+  final Uint8List data;
+  int _bitPos = 0;
+
+  _BitReader(this.data);
+
+  int readBits(int n) {
+    int value = 0;
+    for (int i = 0; i < n; i++) {
+      final byteIdx = _bitPos >> 3;
+      if (byteIdx >= data.length) break;
+      final bit = (data[byteIdx] >> (7 - (_bitPos & 7))) & 1;
+      value = (value << 1) | bit;
+      _bitPos++;
+    }
+    return value;
+  }
+
+  void skipBits(int n) => _bitPos += n;
+
+  /// 无符号指数哥伦布编码（ue(v)）
+  int readUe() {
+    int zeros = 0;
+    while (readBits(1) == 0) {
+      zeros++;
+      if (zeros > 31) break;
+    }
+    if (zeros == 0) return 0;
+    return (1 << zeros) - 1 + readBits(zeros);
+  }
+
+  /// 有符号指数哥伦布编码（se(v)）
+  int readSe() {
+    final ue = readUe();
+    final k = ue >> 1;
+    return (ue & 1) == 0 ? -k : k + 1;
+  }
+}
+
+// ============================================================================
+// H.264 SPS 解析（分辨率 + VUI 帧率）
+// ============================================================================
+
+class H264SpsParser {
+  H264SpsParser._();
+
+  static const _highProfiles = {
+    100,
+    110,
+    122,
+    244,
+    44,
+    83,
+    86,
+    118,
+    128,
+    138,
+    139,
+    134,
+    135,
+  };
+
+  /// 解析 H.264 SPS NAL 单元（数据含 NAL 头字节）。
+  static H264SpsInfo? parse(Uint8List sps) {
+    if (sps.length < 4) return null;
+    final reader = _BitReader(sps);
+    reader.skipBits(8); // NAL 头
+    final profileIdc = reader.readBits(8);
+    reader.skipBits(8); // constraint flags
+    reader.readBits(8); // level_idc
+    reader.readUe(); // seq_parameter_set_id
+
+    if (_highProfiles.contains(profileIdc)) {
+      final chromaFormatIdc = reader.readUe();
+      if (chromaFormatIdc == 3) {
+        reader.skipBits(1); // separate_colour_plane_flag
+      }
+      reader.readUe(); // bit_depth_luma_minus8
+      reader.readUe(); // bit_depth_chroma_minus8
+      reader.skipBits(1); // qpprime_y_zero_transform_bypass_flag
+      if (reader.readBits(1) == 1) {
+        // seq_scaling_matrix_present_flag —— 带缩放矩阵的 SPS 极少见，放弃解析
+        return null;
+      }
+    }
+
+    reader.readUe(); // log2_max_frame_num_minus4
+    final pocType = reader.readUe();
+    if (pocType == 0) {
+      reader.readUe(); // log2_max_pic_order_cnt_lsb_minus4
+    } else if (pocType == 1) {
+      reader.skipBits(1); // delta_pic_order_always_zero_flag
+      reader.readSe(); // offset_for_non_ref_pic
+      reader.readSe(); // offset_for_top_to_bottom_field
+      final n = reader.readUe(); // num_ref_frames_in_pic_order_cnt_cycle
+      for (int i = 0; i < n; i++) {
+        reader.readSe();
+      }
+    }
+    reader.readUe(); // max_num_ref_frames
+    reader.skipBits(1); // gaps_in_frame_num_value_allowed_flag
+    final picWidthInMbsMinus1 = reader.readUe();
+    final picHeightInMapUnitsMinus1 = reader.readUe();
+    final frameMbsOnlyFlag = reader.readBits(1);
+    if (frameMbsOnlyFlag == 0) {
+      reader.skipBits(1); // mb_adaptive_frame_field_flag
+    }
+    reader.skipBits(1); // direct_8x8_inference_flag
+
+    var cropLeft = 0, cropRight = 0, cropTop = 0, cropBottom = 0;
+    if (reader.readBits(1) == 1) {
+      // frame_cropping_flag
+      cropLeft = reader.readUe();
+      cropRight = reader.readUe();
+      cropTop = reader.readUe();
+      cropBottom = reader.readUe();
+    }
+
+    double? frameRate;
+    if (reader.readBits(1) == 1) {
+      // vui_parameters_present_flag
+      frameRate = _parseVuiTiming(reader);
+    }
+
+    // 4:2:0 裁剪单位为 2
+    final width = (picWidthInMbsMinus1 + 1) * 16 - (cropLeft + cropRight) * 2;
+    final heightUnit = 2 - frameMbsOnlyFlag;
+    final height = (picHeightInMapUnitsMinus1 + 1) * 16 * heightUnit -
+        (cropTop + cropBottom) * heightUnit * 2;
+    if (width <= 0 || height <= 0) return null;
+    return H264SpsInfo(width: width, height: height, frameRate: frameRate);
+  }
+
+  /// 跳过 VUI 中 timing_info 之前的字段，读取帧率。
+  static double? _parseVuiTiming(_BitReader reader) {
+    if (reader.readBits(1) == 1) {
+      // aspect_ratio_info_present_flag
+      final aspectIdc = reader.readBits(8);
+      if (aspectIdc == 255) {
+        reader.skipBits(32); // sar_width + sar_height
+      }
+    }
+    if (reader.readBits(1) == 1) {
+      reader.skipBits(1); // overscan_appropriate_flag
+    }
+    if (reader.readBits(1) == 1) {
+      // video_signal_type_present_flag
+      reader.skipBits(3); // video_format
+      reader.skipBits(1); // video_full_range_flag
+      if (reader.readBits(1) == 1) {
+        // colour_description_present_flag
+        reader.skipBits(24);
+      }
+    }
+    if (reader.readBits(1) == 1) {
+      // chroma_loc_info_present_flag
+      reader.readUe(); // chroma_sample_loc_type_top_field
+      reader.readUe(); // chroma_sample_loc_type_bottom_field
+    }
+    if (reader.readBits(1) != 1) {
+      // timing_info_present_flag
+      return null;
+    }
+    final numUnitsInTick = reader.readBits(32);
+    final timeScale = reader.readBits(32);
+    reader.skipBits(1); // fixed_frame_rate_flag
+    if (numUnitsInTick == 0 || timeScale == 0) return null;
+    return timeScale / (2 * numUnitsInTick);
+  }
+}
+
+// ============================================================================
+// AAC：ADTS 头 / AudioSpecificConfig 解析
+// ============================================================================
+
+class AacConfigParser {
+  AacConfigParser._();
+
+  static const List<int?> _sampleRates = [
+    96000,
+    88200,
+    64000,
+    48000,
+    44100,
+    32000,
+    24000,
+    22050,
+    16000,
+    12000,
+    11025,
+    8000,
+    7350,
+    null,
+    null,
+    null,
+  ];
+
+  /// 从 ADTS 帧头（至少 7 字节）解析 AAC 参数。
+  static AacStreamInfo? fromAdts(Uint8List data) {
+    if (data.length < 7) return null;
+    if (data[0] != 0xFF || (data[1] & 0xF0) != 0xF0) return null;
+    final objectType = ((data[2] >> 6) & 0x03) + 1;
+    final sfIndex = (data[2] >> 2) & 0x0F;
+    final channelConfig = ((data[2] & 0x01) << 2) | (data[3] >> 6);
+    final sampleRate = _sampleRates[sfIndex];
+    if (sfIndex == 15 || sampleRate == null) return null;
+    return AacStreamInfo(
+      objectType: objectType,
+      sampleRate: sampleRate,
+      channels: channelConfig,
+      asc: buildAsc(
+          objectType: objectType, sfIndex: sfIndex, channels: channelConfig),
+    );
+  }
+
+  /// 从 FLV 流中的 AudioSpecificConfig（2 字节）解析 AAC 参数。
+  static AacStreamInfo? fromAsc(Uint8List asc) {
+    if (asc.length < 2) return null;
+    final objectType = (asc[0] >> 3) & 0x1F;
+    final sfIndex = ((asc[0] & 0x07) << 1) | (asc[1] >> 7);
+    final channelConfig = (asc[1] >> 3) & 0x0F;
+    final sampleRate = _sampleRates[sfIndex];
+    if (sfIndex == 15 || sampleRate == null) return null;
+    return AacStreamInfo(
+      objectType: objectType,
+      sampleRate: sampleRate,
+      channels: channelConfig,
+      asc: Uint8List.fromList(asc.sublist(0, 2)),
+    );
+  }
+
+  /// 构造 2 字节 AudioSpecificConfig。
+  static Uint8List buildAsc({
+    required int objectType,
+    required int sfIndex,
+    required int channels,
+  }) {
+    return Uint8List.fromList([
+      (objectType << 3) | ((sfIndex >> 1) & 0x07),
+      ((sfIndex & 0x01) << 7) | (channels << 3),
+    ]);
+  }
+}
+
+// ============================================================================
+// TS 解复用器
 // ============================================================================
 
 class TsDemuxer {
   TsDemuxer._();
 
-  /// Parse raw bytes into a list of [TsPacket]s.
+  // ---------------------------------------------------------------------------
+  // TS 包解析
+  // ---------------------------------------------------------------------------
+
+  /// 解析原始字节为 [TsPacket] 列表（每个包 188 字节）。
   ///
-  /// Each packet is exactly 188 bytes. Throws if the data is not a multiple
-  /// of 188 bytes or if sync bytes are missing.
+  /// 带容错：自动跳过开头的垃圾字节，遇到丢失的同步字节会重新同步。
+  /// 数据不足 188 字节时抛出 [ArgumentError]；完全找不到同步字节时抛出
+  /// [FormatException]。
   static List<TsPacket> parseTsPackets(Uint8List data) {
     if (data.isEmpty) {
       throw ArgumentError('TS data is empty');
@@ -73,38 +456,39 @@ class TsDemuxer {
       throw ArgumentError(
           'TS data too short: ${data.length} bytes (minimum 188)');
     }
-    if (data.length % 188 != 0) {
-      debugPrint(
-          '[TsDemuxer] Warning: TS data length ${data.length} is not a multiple of 188');
-    }
 
     final packets = <TsPacket>[];
-    for (int offset = 0; offset + 188 <= data.length; offset += 188) {
+    int offset = _findSync(data, 0);
+    if (offset < 0) {
+      throw FormatException('Missing TS sync byte');
+    }
+
+    while (offset + 188 <= data.length) {
       if (data[offset] != 0x47) {
-        throw FormatException(
-            'Missing TS sync byte at offset $offset (got 0x${data[offset].toRadixString(16).padLeft(2, '0')})');
+        // 包损坏，重新同步
+        final next = _findSync(data, offset + 1);
+        if (next < 0) break;
+        offset = next;
+        continue;
       }
 
       final pid = ((data[offset + 1] & 0x1F) << 8) | data[offset + 2];
       final payloadUnitStart = (data[offset + 1] & 0x40) != 0;
 
-      // Adaptation field control: 2 low bits
+      // Adaptation field control：低 2 位
       final adaptFieldCtrl = data[offset + 3] & 0x30;
       int payloadStart = 4;
       if (adaptFieldCtrl == 0x20 || adaptFieldCtrl == 0x30) {
-        // Has adaptation field
         final adaptLen = data[offset + 4];
-        payloadStart = 4 + 1 + adaptLen; // +1 for the length byte itself
+        payloadStart = 4 + 1 + adaptLen;
       }
 
-      // Payload starts at payloadStart within the current packet
       final absolutePayloadStart = offset + payloadStart;
       final absolutePayloadEnd = offset + 188;
       if (absolutePayloadStart < absolutePayloadEnd) {
-        final payload = data.sublist(absolutePayloadStart, absolutePayloadEnd);
         packets.add(TsPacket(
           pid: pid,
-          payload: payload,
+          payload: data.sublist(absolutePayloadStart, absolutePayloadEnd),
           payloadUnitStart: payloadUnitStart,
         ));
       } else {
@@ -114,144 +498,120 @@ class TsDemuxer {
           payloadUnitStart: payloadUnitStart,
         ));
       }
+      offset += 188;
     }
     return packets;
   }
 
-  /// Find video and audio PIDs from PAT and PMT tables.
-  ///
-  /// Returns null if no program found.
-  static ProgramPids? findProgramMap(List<TsPacket> packets) {
-    int? pmtPid;
-
-    // Step 1: Find PAT (PID 0x0000) to get PMT PID
-    for (final pkt in packets) {
-      if (pkt.pid == 0x0000 && pkt.payloadUnitStart && pkt.payload.length > 8) {
-        final payload = pkt.payload;
-        int offset = 1; // skip pointer_field
-        if (offset >= payload.length) continue;
-
-        // Parse section
-        // table_id at payload[offset]
-        if (payload[offset] != 0x00) continue; // not PAT
-        offset++;
-        if (offset + 2 > payload.length) continue;
-        final sectionLength =
-            ((payload[offset] & 0x0F) << 8) | payload[offset + 1];
-        offset += 2;
-        if (offset + 2 > payload.length) continue;
-        // Skip transport_stream_id (2 bytes)
-        offset += 2;
-        if (offset >= payload.length) continue;
-        // Skip version/section info (1 byte)
-        offset += 1;
-        if (offset >= payload.length) continue;
-        // Skip section_number (1)
-        offset += 1;
-        if (offset >= payload.length) continue;
-        // Skip last_section_number (1)
-        offset += 1;
-
-        // Parse programs
-        final sectionEnd =
-            offset + sectionLength - 9; // minus CRC (4) and header (5)
-        while (offset + 4 <= sectionEnd && offset + 4 <= payload.length) {
-          // program_number (2 bytes)
-          final progNum = (payload[offset] << 8) | payload[offset + 1];
-          offset += 2;
-          // program_map_PID (2 bytes)
-          final pid = ((payload[offset] & 0x1F) << 8) | payload[offset + 1];
-          offset += 2;
-
-          if (progNum != 0) {
-            pmtPid = pid;
-            break;
-          }
+  /// 从 [start] 开始查找下一个合理的同步字节位置。
+  static int _findSync(Uint8List data, int start) {
+    for (int i = start; i + 188 <= data.length; i++) {
+      if (data[i] == 0x47) {
+        // 候选：其后 188 字节处也是同步字节（或已到末尾）
+        if (i + 376 <= data.length && data[i + 188] == 0x47) {
+          return i;
         }
-        if (pmtPid != null) break;
+        if (i + 188 >= data.length) return i;
+        if (i + 376 > data.length) {
+          // 只有一个包的空间，检查是否所有字节都是对齐的包
+          var aligned = true;
+          for (int j = i + 188; j < data.length; j += 188) {
+            if (data[j] != 0x47) {
+              aligned = false;
+              break;
+            }
+          }
+          if (aligned) return i;
+        }
       }
     }
+    return -1;
+  }
 
-    if (pmtPid == null) return null;
+  // ---------------------------------------------------------------------------
+  // PAT / PMT 解析（PSI section 重组，支持跨包）
+  // ---------------------------------------------------------------------------
 
-    // Step 2: Find PMT to get video/audio PIDs
-    int? videoPid;
-    int? audioPid;
-    int videoStreamType = 0x1B;
-    int? audioStreamType;
+  /// 找到视频/音频 PID（通过 PAT + PMT）。
+  static ProgramPids? findProgramMap(List<TsPacket> packets) {
+    int? pmtPid;
+    final pat = _PsiAssembler();
+    final pmt = _PsiAssembler();
+    ProgramPids? result;
 
     for (final pkt in packets) {
-      if (pkt.pid == pmtPid && pkt.payloadUnitStart) {
-        final payload = pkt.payload;
-        int offset = 1; // skip pointer_field
+      if (result != null) break;
+      if (pkt.pid == 0x0000) {
+        pat.feed(pkt.payload, pkt.payloadUnitStart, (section) {
+          pmtPid ??= _parsePat(section);
+        });
+      } else if (pmtPid != null && pkt.pid == pmtPid) {
+        pmt.feed(pkt.payload, pkt.payloadUnitStart, (section) {
+          result ??= _parsePmt(section);
+        });
+      }
+    }
+    return result;
+  }
 
-        if (offset >= payload.length) continue;
-        if (payload[offset] != 0x02) continue; // table_id = PMT
-        offset++;
-        if (offset + 2 > payload.length) continue;
-        final sectionLength =
-            ((payload[offset] & 0x0F) << 8) | payload[offset + 1];
-        offset += 2;
-        // Skip program_number (2)
-        offset += 2;
-        if (offset >= payload.length) continue;
-        // Skip version (1)
-        offset += 1;
-        // Skip section_number (1)
-        offset += 1;
-        // Skip last_section_number (1)
-        offset += 1;
-        // PCR_PID (2)
-        offset += 2;
-        if (offset + 2 > payload.length) continue;
-        // program_info_length
-        final infoLen = ((payload[offset] & 0x0F) << 8) | payload[offset + 1];
-        offset += 2;
-        // Skip program descriptors
-        offset += infoLen;
+  /// 解析 PAT section，返回 PMT PID；无效则返回 null。
+  static int? _parsePat(Uint8List section) {
+    if (section.length < 12) return null;
+    if (section[0] != 0x00) return null; // table_id = PAT
+    final sectionLength = ((section[1] & 0x0F) << 8) | section[2];
+    final sectionEnd = 3 + sectionLength - 4; // 去掉 CRC
+    if (sectionEnd > section.length) return null;
 
-        // Parse streams
-        final streamsEnd = offset + sectionLength - 9 - infoLen;
-        while (offset + 5 <= streamsEnd && offset + 5 <= payload.length) {
-          final streamType = payload[offset];
-          offset++;
-          final pid = ((payload[offset] & 0x1F) << 8) | payload[offset + 1];
-          offset += 2;
-          final esInfoLen =
-              ((payload[offset] & 0x0F) << 8) | payload[offset + 1];
-          offset += 2;
-          // Skip ES descriptors
-          offset += esInfoLen;
+    int offset = 8; // 跳过 ts_id(2) version(1) section(1) last_section(1)
+    while (offset + 4 <= sectionEnd) {
+      final programNumber = (section[offset] << 8) | section[offset + 1];
+      final pid = ((section[offset + 2] & 0x1F) << 8) | section[offset + 3];
+      offset += 4;
+      if (programNumber != 0) return pid;
+    }
+    return null;
+  }
 
-          // H.264 (0x1B), H.265 (0x24), MPEG-2 Video (0x02)
-          if (streamType == 0x1B ||
-              streamType == 0x24 ||
-              streamType == 0x02 ||
-              streamType == 0x01 ||
-              streamType == 0x10) {
-            if (videoPid == null) {
-              videoPid = pid;
-              videoStreamType = streamType;
-            }
-          }
-          // AAC (0x0F), MPEG-2 Audio (0x03/0x04), AC-3 (0x81/0x06)
-          if (streamType == 0x0F ||
-              streamType == 0x03 ||
-              streamType == 0x04 ||
-              streamType == 0x06 ||
-              streamType == 0x81) {
-            if (audioPid == null) {
-              audioPid = pid;
-              audioStreamType = streamType;
-            }
-          }
-        }
-        break;
+  /// 解析 PMT section，返回节目流 PID 信息；无效则返回 null。
+  static ProgramPids? _parsePmt(Uint8List section) {
+    if (section.length < 16) return null;
+    if (section[0] != 0x02) return null; // table_id = PMT
+    final sectionLength = ((section[1] & 0x0F) << 8) | section[2];
+    final sectionEnd = 3 + sectionLength - 4; // 去掉 CRC
+    if (sectionEnd > section.length) return null;
+
+    // 跳过 table_id(1) section_length(2) program_number(2) version(1)
+    // section_number(1) last_section_number(1) PCR_PID(2) → 共 10 字节
+    int offset = 10;
+    if (offset + 2 > sectionEnd) return null;
+    final programInfoLength =
+        ((section[offset] & 0x0F) << 8) | section[offset + 1];
+    offset += 2 + programInfoLength;
+
+    int? videoPid;
+    int? audioPid;
+    var videoStreamType = 0x1B;
+    int? audioStreamType;
+
+    while (offset + 5 <= sectionEnd) {
+      final streamType = section[offset];
+      final pid = ((section[offset + 1] & 0x1F) << 8) | section[offset + 2];
+      final esInfoLength =
+          ((section[offset + 3] & 0x0F) << 8) | section[offset + 4];
+      offset += 5 + esInfoLength;
+
+      switch (streamType) {
+        case 0x1B: // H.264
+        case 0x24: // H.265
+          videoPid ??= pid;
+          if (videoPid == pid) videoStreamType = streamType;
+        case 0x0F: // AAC
+          audioPid ??= pid;
+          if (audioPid == pid) audioStreamType = streamType;
       }
     }
 
     if (videoPid == null) return null;
-
     return ProgramPids(
       videoPid: videoPid,
       audioPid: audioPid,
@@ -260,16 +620,67 @@ class TsDemuxer {
     );
   }
 
-  /// Extract H.264/H.265 NAL units from raw data (annex B format).
+  // ---------------------------------------------------------------------------
+  // PES 重组
+  // ---------------------------------------------------------------------------
+
+  /// 按 PID 重组 TS 包为 PES 包列表。
+  static List<PesPacket> extractPesPackets(List<TsPacket> packets, int pid) {
+    final result = <PesPacket>[];
+    final assembler = _PesAssembler();
+    for (final pkt in packets) {
+      if (pkt.pid != pid) continue;
+      assembler.feed(pkt.payload, pkt.payloadUnitStart, result.add);
+    }
+    assembler.flush(result.add);
+    return result;
+  }
+
+  /// 提取视频 PID 的连续码流（PES 载荷拼接，annex B 格式）。
+  static Uint8List extractVideoBitstream(
+      List<TsPacket> packets, ProgramPids pids) {
+    final builder = BytesBuilder();
+    final assembler = _PesAssembler();
+    for (final pkt in packets) {
+      if (pkt.pid != pids.videoPid) continue;
+      assembler.feed(pkt.payload, pkt.payloadUnitStart, (pes) {
+        builder.add(pes.data);
+      });
+    }
+    assembler.flush((pes) => builder.add(pes.data));
+    return builder.toBytes();
+  }
+
+  /// 提取音频 PID 的连续码流（PES 载荷拼接，ADTS 格式）。
+  static Uint8List extractAudioBitstream(
+      List<TsPacket> packets, ProgramPids pids) {
+    if (pids.audioPid == null) return Uint8List(0);
+    final builder = BytesBuilder();
+    final assembler = _PesAssembler();
+    for (final pkt in packets) {
+      if (pkt.pid != pids.audioPid) continue;
+      assembler.feed(pkt.payload, pkt.payloadUnitStart, (pes) {
+        builder.add(pes.data);
+      });
+    }
+    assembler.flush((pes) => builder.add(pes.data));
+    return builder.toBytes();
+  }
+
+  // ---------------------------------------------------------------------------
+  // NAL / AAC 帧提取
+  // ---------------------------------------------------------------------------
+
+  /// 从 annex B 格式数据中提取 NAL 单元。
   ///
-  /// Searches for 0x00000001 or 0x000001 start code prefixes.
-  static List<H264NalUnit> extractH264Nalus(Uint8List data) {
+  /// [hevc] 为 true 时按 H.265 的 NAL 头（2 字节）解析类型。
+  static List<H264NalUnit> extractNalus(Uint8List data, {bool hevc = false}) {
     final nalus = <H264NalUnit>[];
     if (data.length < 4) return nalus;
 
     int i = 0;
     while (i < data.length - 3) {
-      // Find start code
+      // 查找起始码
       int startLen = 0;
       if (data[i] == 0x00 && data[i + 1] == 0x00) {
         if (data[i + 2] == 0x01) {
@@ -284,10 +695,9 @@ class TsDemuxer {
       if (startLen > 0) {
         final naluStart = i + startLen;
 
-        // Find end of this NAL unit (next start code)
+        // 找到本 NAL 单元的结束位置（下一个起始码）
         int naluEnd = naluStart;
         while (naluEnd < data.length) {
-          // Check if we found next start code
           if (naluEnd + 3 < data.length &&
               data[naluEnd] == 0x00 &&
               data[naluEnd + 1] == 0x00 &&
@@ -306,7 +716,7 @@ class TsDemuxer {
 
         if (naluEnd > naluStart) {
           final naluData = data.sublist(naluStart, naluEnd);
-          final nalType = naluData[0] & 0x1F;
+          final nalType = hevc ? (naluData[0] >> 1) & 0x3F : naluData[0] & 0x1F;
           nalus.add(H264NalUnit(type: nalType, data: naluData));
         }
         i = naluEnd;
@@ -317,17 +727,17 @@ class TsDemuxer {
     return nalus;
   }
 
-  /// Extract AAC frames from ADTS-encapsulated audio data.
-  ///
-  /// Returns list of raw AAC frames (without ADTS headers).
+  /// 提取 H.264 NAL 单元（兼容旧 API）。
+  static List<H264NalUnit> extractH264Nalus(Uint8List data) =>
+      extractNalus(data, hevc: false);
+
+  /// 从 ADTS 封装的数据中提取 AAC 帧（去掉 ADTS 头）。
   static List<AacFrame> extractAacFrames(Uint8List data) {
     final frames = <AacFrame>[];
     int i = 0;
 
     while (i + 6 < data.length) {
-      // Check for ADTS sync word (0xFFF)
       if (data[i] == 0xFF && (data[i + 1] & 0xF0) == 0xF0) {
-        // Parse ADTS frame length (13 bits)
         final frameLength = ((data[i + 3] & 0x03) << 11) |
             (data[i + 4] << 3) |
             ((data[i + 5] >> 5) & 0x07);
@@ -337,9 +747,7 @@ class TsDemuxer {
           continue;
         }
 
-        // Extract raw AAC data (without ADTS header)
-        final rawData = data.sublist(i + 7, i + frameLength);
-        frames.add(AacFrame(data: rawData));
+        frames.add(AacFrame(data: data.sublist(i + 7, i + frameLength)));
         i += frameLength;
       } else {
         i++;
@@ -349,1072 +757,1464 @@ class TsDemuxer {
     return frames;
   }
 
-  /// Extract the video bitstream from TS packets.
-  ///
-  /// Reassembles PES packets from the video PID and returns the
-  /// concatenated payload (H.264 annex B format).
-  static Uint8List extractVideoBitstream(
-      List<TsPacket> packets, ProgramPids pids) {
-    final videoPesPayload = _reassemblePes(packets, pids.videoPid);
-    return videoPesPayload;
-  }
-
-  /// Extract the audio bitstream from TS packets.
-  ///
-  /// Reassembles PES packets from the audio PID and returns the
-  /// concatenated payload (ADTS-encapsulated AAC or raw audio).
-  static Uint8List extractAudioBitstream(
-      List<TsPacket> packets, ProgramPids pids) {
-    if (pids.audioPid == null) return Uint8List(0);
-    return _reassemblePes(packets, pids.audioPid!);
-  }
-
-  /// Reassemble PES packet payloads for a given PID.
-  ///
-  /// Strips PES headers and concatenates the elementary stream data.
-  static Uint8List _reassemblePes(List<TsPacket> packets, int pid) {
-    final allPayload = BytesBuilder();
-    bool inPes = false;
-    int pesHeaderRemaining = 0;
-
-    for (final pkt in packets) {
-      if (pkt.pid != pid) continue;
-      if (pkt.payload.isEmpty) continue;
-
-      if (pkt.payloadUnitStart && !inPes) {
-        // New PES packet starts here
-        inPes = true;
-        final payload = pkt.payload;
-
-        // PES header starts after TS header
-        // Packet start code prefix: 0x00 0x00 0x01
-        if (payload.length >= 4 &&
-            payload[0] == 0x00 &&
-            payload[1] == 0x00 &&
-            payload[2] == 0x01) {
-          // Stream ID at payload[3]
-          // PES header data length at payload[8] per ISO 13818-1
-          if (payload.length < 9) {
-            inPes = false;
-            continue;
-          }
-          final headerDataLen = payload[8];
-          pesHeaderRemaining = 9 + headerDataLen; // total header size
-
-          // If payload contains data after header, add it
-          if (payload.length > pesHeaderRemaining) {
-            allPayload.add(payload.sublist(pesHeaderRemaining));
-          }
-          pesHeaderRemaining = 0;
-          inPes = false;
-        } else {
-          // PES header already in progress from previous packet
-          allPayload.add(payload);
+  /// 找到第一段 ADTS 帧头（用于解析 AAC 参数）。
+  static Uint8List? findFirstAdtsHeader(Uint8List data) {
+    for (int i = 0; i + 6 < data.length; i++) {
+      if (data[i] == 0xFF && (data[i + 1] & 0xF0) == 0xF0) {
+        final frameLength = ((data[i + 3] & 0x03) << 11) |
+            (data[i + 4] << 3) |
+            ((data[i + 5] >> 5) & 0x07);
+        if (frameLength >= 7 && i + frameLength <= data.length) {
+          return data.sublist(i, i + 7);
         }
-      } else if (inPes) {
-        // Continuation of a PES packet
-        if (pesHeaderRemaining > 0) {
-          // Still in PES header bytes
-          if (pkt.payload.length <= pesHeaderRemaining) {
-            pesHeaderRemaining -= pkt.payload.length;
-          } else {
-            final dataStart = pesHeaderRemaining;
-            allPayload.add(pkt.payload.sublist(dataStart));
-            pesHeaderRemaining = 0;
-            inPes = false;
-          }
-        } else {
-          allPayload.add(pkt.payload);
-        }
-      } else if (pkt.payloadUnitStart) {
-        // New PES starts (but we're not tracking previous one)
-        inPes = true;
-        final payload = pkt.payload;
-        if (payload.length >= 4 &&
-            payload[0] == 0x00 &&
-            payload[1] == 0x00 &&
-            payload[2] == 0x01) {
-          if (payload.length < 9) {
-            inPes = false;
-            continue;
-          }
-          final headerDataLen = payload[8];
-          pesHeaderRemaining = 9 + headerDataLen;
-          if (payload.length > pesHeaderRemaining) {
-            allPayload.add(payload.sublist(pesHeaderRemaining));
-          }
-          pesHeaderRemaining = 0;
-          inPes = false;
-        } else {
-          allPayload.add(payload);
-        }
-      } else {
-        // Continuation without a known PES start — best effort
-        allPayload.add(pkt.payload);
       }
     }
-
-    return allPayload.toBytes();
+    return null;
   }
 
-  /// Main entry point: convert a TS file to MP4.
+  // ---------------------------------------------------------------------------
+  // 主入口：TS → MP4
+  // ---------------------------------------------------------------------------
+
+  /// 将 TS 文件转封装为 MP4 文件。
   ///
-  /// [inputPath] path to the input .ts file
-  /// [outputPath] path for the output .mp4 file
+  /// 两遍式处理：
+  ///   - 第一遍：流式读取 TS，重组 PES，提取 H.264/H.265 与 AAC 样本，
+  ///     将样本数据写入临时 spool 文件（内存占用有界）；
+  ///   - 第二遍：由 [Mp4Muxer] 将 spool 中的样本封装为 MP4。
   ///
-  /// Returns the output path on success.
+  /// [isCancelled] 每次读取后检查，返回 true 时停止转换并抛出
+  /// [FormatException]。
+  ///
+  /// 返回输出路径。
   static Future<String> convertTsToMp4({
     required String inputPath,
     required String outputPath,
     void Function(int progress)? onProgress,
+    bool Function()? isCancelled,
   }) async {
     final inputFile = File(inputPath);
     if (!await inputFile.exists()) {
       throw FileSystemException('TS file not found', inputPath);
     }
 
-    // Ensure output directory exists
     final outDir = Directory(File(outputPath).parent.path);
     if (!await outDir.exists()) {
       await outDir.create(recursive: true);
     }
-
     onProgress?.call(5);
 
-    // Read entire TS file
-    final tsBytes = await inputFile.readAsBytes();
-    onProgress?.call(10);
-
-    // Parse packets
-    final packets = parseTsPackets(tsBytes);
-    onProgress?.call(20);
-
-    // Find program map
-    final pids = findProgramMap(packets);
-    if (pids == null) {
-      throw FormatException('Could not find program map in TS file');
-    }
-    onProgress?.call(30);
-
-    debugPrint(
-        '[TsDemuxer] Found video PID: 0x${pids.videoPid.toRadixString(16)}'
-        '${pids.audioPid != null ? ", audio PID: 0x${pids.audioPid!.toRadixString(16)}" : ""}');
-
-    // Extract video NAL units
-    final videoBitstream = extractVideoBitstream(packets, pids);
-    final nalus = extractH264Nalus(videoBitstream);
-    onProgress?.call(50);
-
-    if (nalus.isEmpty) {
-      throw FormatException('No video NAL units found in TS file');
+    final fileSize = await inputFile.length();
+    if (fileSize < 188) {
+      throw FormatException('TS 文件太小，不是有效的 TS 流');
     }
 
-    debugPrint('[TsDemuxer] Extracted ${nalus.length} NAL units');
+    final spoolPath = '$outputPath.spool.tmp';
+    final spoolFile = File(spoolPath);
+    if (await spoolFile.exists()) {
+      await spoolFile.delete();
+    }
+    final spool = await spoolFile.open(mode: FileMode.write);
 
-    // Extract AAC frames
-    final audioBitstream = extractAudioBitstream(packets, pids);
-    final aacFrames = audioBitstream.isNotEmpty
-        ? extractAacFrames(audioBitstream)
-        : <AacFrame>[];
-    onProgress?.call(60);
+    final videoSamples = <Mp4Sample>[];
+    final audioSamples = <Mp4Sample>[];
+    final spsList = <Uint8List>[];
+    final ppsList = <Uint8List>[];
+    final vpsList = <Uint8List>[];
+    AudioFormat? audioFormat;
+    VideoFormat? videoFormat;
+    int? lastVideoDts;
+    int? audioLastPts90k;
+    double? frameRate;
+    // 时间轴真实标志：初始为 true，任一样本时间戳为合成时置 false
+    var videoTimelineReal = true;
+    var audioTimelineReal = true;
+    var spoolOffset = 0;
 
-    debugPrint('[TsDemuxer] Extracted ${aacFrames.length} AAC frames');
+    try {
+      // ---- 第一遍：解复用 ----
+      final raf = await inputFile.open();
+      final patAssembler = _PsiAssembler();
+      final pmtAssembler = _PsiAssembler();
+      ProgramPids? pids;
+      int? pmtPid;
+      final videoAssembler = _PesAssembler();
+      final audioAssembler = _PesAssembler();
+      var carry = Uint8List(0);
+      var readBytes = 0;
+      const chunkSize = 4 * 1024 * 1024;
 
-    // Separate SPS, PPS, and other NAL units
-    final spsNalus = <H264NalUnit>[];
-    final ppsNalus = <H264NalUnit>[];
-    for (final nalu in nalus) {
-      if (nalu.type == 7) {
-        spsNalus.add(nalu);
-      } else if (nalu.type == 8) {
-        ppsNalus.add(nalu);
+      void handleVideoPes(PesPacket pes) {
+        final nalus =
+            extractNalus(pes.data, hevc: pids!.videoStreamType == 0x24);
+        if (nalus.isEmpty) return;
+
+        // 收集 SPS/PPS/VPS（用于 avcC/hvcC）
+        for (final n in nalus) {
+          if (pids!.videoStreamType == 0x24) {
+            if (n.type == 32) vpsList.add(n.data);
+            if (n.type == 33 && !spsList.contains(n.data)) spsList.add(n.data);
+            if (n.type == 34 && !ppsList.contains(n.data)) ppsList.add(n.data);
+          } else {
+            if (n.type == 7 && !spsList.contains(n.data)) {
+              spsList.add(n.data);
+              // 尽早解析 SPS 帧率（PES 缺时间戳时用于合成时间轴）
+              frameRate ??= H264SpsParser.parse(n.data)?.frameRate;
+            }
+            if (n.type == 8 && !ppsList.contains(n.data)) ppsList.add(n.data);
+          }
+        }
+
+        // 仅包含参数集/SEI 的 PES 不构成样本
+        final isHevc = pids!.videoStreamType == 0x24;
+        final hasVcl = nalus
+            .any((n) => isHevc ? n.type <= 31 : (n.type == 1 || n.type == 5));
+        if (!hasVcl) return;
+
+        // 样本数据 = 4 字节长度前缀的 NAL 串联（MP4 mdat 格式）
+        final sampleData = BytesBuilder();
+        for (final n in nalus) {
+          _writeU32(sampleData, n.data.length);
+          sampleData.add(n.data);
+        }
+        final bytes = sampleData.toBytes();
+        spool.writeFromSync(bytes);
+
+        // 时间轴真实标志：任一样本时间戳为合成则整条时间轴不可信
+        videoTimelineReal =
+            videoTimelineReal && (pes.pts != null || pes.dts != null);
+        var pts = pes.pts;
+        var dts = pes.dts;
+        dts ??= pts;
+        if (dts == null) {
+          // PES 无时间戳：按帧率估算
+          final fr = frameRate;
+          final dur = fr != null && fr > 0 ? (90000 / fr).round() : 3000;
+          dts = (lastVideoDts ?? 0) + dur;
+          pts = dts;
+        }
+        lastVideoDts = dts;
+
+        final sync = nalus
+            .any((n) => isHevc ? (n.type >= 16 && n.type <= 21) : n.type == 5);
+        videoSamples.add(Mp4Sample(
+          spoolOffset: spoolOffset,
+          size: bytes.length,
+          pts: pts ?? dts,
+          dts: dts,
+          sync: sync,
+        ));
+        spoolOffset += bytes.length;
       }
+
+      void handleAudioPes(PesPacket pes) {
+        final frames = extractAacFrames(pes.data);
+        if (frames.isEmpty) return;
+        if (audioFormat == null) {
+          // 解析 AAC 参数失败时放弃音频（无法封装为 MP4 音轨）
+          final header = findFirstAdtsHeader(pes.data);
+          final info = header == null ? null : AacConfigParser.fromAdts(header);
+          if (info == null) {
+            debugPrint('[TsDemuxer] 无法解析 ADTS 头，音频将被丢弃');
+            return;
+          }
+          audioFormat = AudioFormat(
+            asc: info.asc,
+            objectType: info.objectType,
+            sampleRate: info.sampleRate,
+            channels: info.channels,
+          );
+        }
+        // PES 内多帧时按 1024 采样/帧分摊 PTS（90kHz）
+        final frameDur90k = audioFormat!.samplesPerFrame *
+            Mp4Muxer.kTimescale ~/
+            audioFormat!.sampleRate;
+        audioTimelineReal = audioTimelineReal && pes.pts != null;
+        final pesPts = pes.pts;
+        for (int i = 0; i < frames.length; i++) {
+          final frame = frames[i];
+          spool.writeFromSync(frame.data);
+          final int pts90k;
+          if (pesPts != null) {
+            pts90k = pesPts + i * frameDur90k;
+          } else if (audioLastPts90k != null) {
+            // 本 PES 无时间戳：接续上一 PES 的时间轴
+            pts90k = audioLastPts90k! + (i + 1) * frameDur90k;
+          } else {
+            pts90k = i * frameDur90k;
+          }
+          audioLastPts90k = pts90k;
+          audioSamples.add(Mp4Sample(
+            spoolOffset: spoolOffset,
+            size: frame.data.length,
+            pts: pts90k,
+            dts: pts90k,
+            sync: true,
+          ));
+          spoolOffset += frame.data.length;
+        }
+      }
+
+      try {
+        while (true) {
+          if (isCancelled?.call() ?? false) {
+            throw FormatException('转换已取消');
+          }
+          final chunk = await raf.read(chunkSize);
+          if (chunk.isEmpty) break;
+          readBytes += chunk.length;
+
+          final buffer =
+              carry.isEmpty ? chunk : Uint8List.fromList([...carry, ...chunk]);
+          if (buffer.length < 188) {
+            carry = buffer;
+            continue;
+          }
+          late final List<TsPacket> packets;
+          try {
+            packets = parseTsPackets(buffer);
+          } on FormatException {
+            // 后续全是垃圾字节（文件尾部损坏），停止解析
+            break;
+          }
+          // 保留末尾不足 188 字节的部分，下一轮继续
+          final usable = packets.length * 188;
+          carry =
+              usable < buffer.length ? buffer.sublist(usable) : Uint8List(0);
+
+          if (pids == null) {
+            for (final pkt in packets) {
+              if (pkt.pid == 0x0000) {
+                patAssembler.feed(pkt.payload, pkt.payloadUnitStart, (s) {
+                  pmtPid ??= _parsePat(s);
+                });
+              } else if (pmtPid != null && pkt.pid == pmtPid) {
+                pmtAssembler.feed(pkt.payload, pkt.payloadUnitStart, (s) {
+                  pids ??= _parsePmt(s);
+                });
+              }
+            }
+            if (pids != null) {
+              _validatePids(pids!);
+            }
+          }
+
+          if (pids != null) {
+            for (final pkt in packets) {
+              if (pkt.pid == pids!.videoPid) {
+                videoAssembler.feed(
+                    pkt.payload, pkt.payloadUnitStart, handleVideoPes);
+              } else if (pids!.audioPid != null && pkt.pid == pids!.audioPid) {
+                audioAssembler.feed(
+                    pkt.payload, pkt.payloadUnitStart, handleAudioPes);
+              }
+            }
+          }
+
+          if (fileSize > 0) {
+            final progress = 10 + (readBytes * 45 ~/ fileSize);
+            onProgress?.call(progress.clamp(10, 55));
+          }
+        }
+      } finally {
+        await raf.close();
+      }
+
+      if (pids == null) {
+        throw FormatException('未在 TS 流中找到节目映射（PAT/PMT），无法转换');
+      }
+
+      // EOF：冲刷残留 PES
+      videoAssembler.flush(handleVideoPes);
+      audioAssembler.flush(handleAudioPes);
+
+      // 构建视频配置
+      final isHevc = pids!.videoStreamType == 0x24;
+      if (isHevc) {
+        if (spsList.isEmpty && ppsList.isEmpty) {
+          throw FormatException('TS 流中未找到 H.265 参数集（VPS/SPS/PPS），无法封装 MP4');
+        }
+      } else {
+        if (spsList.isEmpty || ppsList.isEmpty) {
+          throw FormatException('TS 流中未找到 H.264 参数集（SPS/PPS），无法封装 MP4');
+        }
+      }
+
+      var width = 0, height = 0;
+      if (spsList.isNotEmpty) {
+        final info = H264SpsParser.parse(spsList.first);
+        if (info != null) {
+          width = info.width;
+          height = info.height;
+          frameRate ??= info.frameRate;
+        }
+      }
+
+      videoFormat = VideoFormat(
+        isHevc: isHevc,
+        sps: spsList,
+        pps: ppsList,
+        vps: vpsList,
+        width: width,
+        height: height,
+        frameRate: frameRate,
+      );
+
+      onProgress?.call(55);
+      debugPrint(
+        '[TsDemuxer] Demuxed: ${videoSamples.length} video samples, '
+        '${audioSamples.length} audio samples'
+        '${audioFormat != null ? " (AAC ${audioFormat!.sampleRate}Hz/${audioFormat!.channels}ch)" : ""}',
+      );
+
+      // ---- 第二遍：封装 MP4 ----
+      if (videoSamples.isEmpty && audioSamples.isEmpty) {
+        throw FormatException('TS 流中没有提取到任何可用的音视频样本');
+      }
+      await spool.flush();
+      await Mp4Muxer.muxMp4(
+        spoolPath: spoolPath,
+        videoSamples: videoSamples,
+        audioSamples: audioSamples,
+        video: videoFormat,
+        audio: audioFormat,
+        outputPath: outputPath,
+        isCancelled: isCancelled,
+        videoTimelineReal: videoTimelineReal,
+        audioTimelineReal: audioTimelineReal,
+        onProgress: (p) => onProgress?.call(60 + p * 40 ~/ 100),
+      );
+    } finally {
+      try {
+        await spool.close();
+      } catch (_) {}
+      try {
+        if (await spoolFile.exists()) {
+          await spoolFile.delete();
+        }
+      } catch (_) {}
     }
-    onProgress?.call(70);
 
-    if (spsNalus.isEmpty) {
-      throw FormatException('No SPS NAL unit found (required for MP4)');
-    }
-
-    // Write MP4
-    final mp4Data = Mp4Muxer.buildMp4(
-      spsNalus: spsNalus,
-      ppsNalus: ppsNalus,
-      videoSamples: nalus.where((n) => n.type == 5 || n.type == 1).toList(),
-      allNalus: nalus,
-      aacFrames: aacFrames,
-      videoStreamType: pids.videoStreamType,
-    );
-    onProgress?.call(85);
-
-    await File(outputPath).writeAsBytes(mp4Data);
-    onProgress?.call(100);
-
-    debugPrint(
-        '[TsDemuxer] MP4 written to $outputPath (${mp4Data.length} bytes)');
+    debugPrint('[TsDemuxer] MP4 written to $outputPath');
     return outputPath;
+  }
+
+  /// 校验 PID/编码支持情况。
+  static void _validatePids(ProgramPids pids) {
+    final vType = pids.videoStreamType;
+    if (vType != 0x1B && vType != 0x24) {
+      throw FormatException(
+          '不支持的 TS 视频编码（stream_type=0x${vType.toRadixString(16)}），'
+          '仅支持 H.264/H.265');
+    }
+  }
+
+  /// 4 字节大端写入（样本数据长度前缀）。
+  static void _writeU32(BytesBuilder builder, int value) {
+    builder.add(Uint8List.fromList([
+      (value >> 24) & 0xFF,
+      (value >> 16) & 0xFF,
+      (value >> 8) & 0xFF,
+      value & 0xFF,
+    ]));
   }
 }
 
 // ============================================================================
-// MP4 Muxer — pure Dart minimal MP4 container builder
+// PSI（PAT/PMT）section 重组器
+// ============================================================================
+
+class _PsiAssembler {
+  final BytesBuilder _buf = BytesBuilder();
+  final List<int> _prefix = [];
+  bool _inSection = false;
+  int _sectionLen = 0;
+
+  void feed(Uint8List payload, bool pusi, void Function(Uint8List) onSection) {
+    if (pusi) {
+      _reset();
+      if (payload.length < 2) return;
+      final pointer = payload[0];
+      final start = 1 + pointer;
+      if (start >= payload.length) return;
+      _append(payload, start);
+    } else {
+      if (!_inSection && _buf.length == 0) return;
+      _append(payload, 0);
+    }
+    if (_sectionLen > 0 && _buf.length >= _sectionLen) {
+      final section = _buf.toBytes();
+      _reset();
+      onSection(section);
+    }
+  }
+
+  void _append(Uint8List bytes, int start) {
+    for (int i = start; i < bytes.length; i++) {
+      if (_prefix.length < 3) _prefix.add(bytes[i]);
+      _buf.addByte(bytes[i]);
+    }
+    if (_prefix.length >= 3) {
+      // section_length 字段 = 其后字节数（不含 table_id 和 section_length 自身）
+      _sectionLen = ((_prefix[1] & 0x0F) << 8) | _prefix[2] + 3;
+      _inSection = true;
+    }
+  }
+
+  void _reset() {
+    _buf.clear();
+    _prefix.clear();
+    _inSection = false;
+    _sectionLen = 0;
+  }
+
+  void flush(void Function(Uint8List) onSection) {
+    if (_sectionLen > 0 && _buf.length >= _sectionLen) {
+      final section = _buf.toBytes();
+      _reset();
+      onSection(section);
+    }
+  }
+}
+
+// ============================================================================
+// PES 重组器（按帧累积，PES_packet_length 决定帧边界）
+// ============================================================================
+
+class _PesAssembler {
+  BytesBuilder? _frame;
+  final List<int> _first6 = [];
+  int _frameBytes = 0;
+  int? _expectedTotal; // 帧总字节数（6 + pes_packet_length），null = 直到下一个 PUSI
+  bool _drop = false;
+
+  void feed(Uint8List payload, bool pusi, void Function(PesPacket) onPes) {
+    if (pusi) {
+      // 新 PES 开始：冲刷上一个（PES_packet_length == 0 的帧在此结束）
+      if (_frame != null && !_drop) _flush(onPes);
+      _frame = BytesBuilder();
+      _first6.clear();
+      _frameBytes = 0;
+      _expectedTotal = null;
+      _drop = false;
+      _append(payload, 0, onPes);
+    } else {
+      if (_frame == null) {
+        // 流中段的孤儿数据，忽略
+        _drop = true;
+        return;
+      }
+      if (_drop) return;
+      _append(payload, 0, onPes);
+    }
+  }
+
+  void _append(Uint8List payload, int start, void Function(PesPacket) onPes) {
+    for (int i = start; i < payload.length && _first6.length < 6; i++) {
+      _first6.add(payload[i]);
+    }
+    if (_drop) return;
+
+    if (_expectedTotal == null && _first6.length >= 6) {
+      if (_first6[0] == 0x00 && _first6[1] == 0x00 && _first6[2] == 0x01) {
+        final pesLen = (_first6[4] << 8) | _first6[5];
+        _expectedTotal = pesLen == 0 ? null : 6 + pesLen;
+      } else {
+        // 不是 PES 起始码，丢弃到下一个 PUSI
+        _drop = true;
+        return;
+      }
+    }
+
+    if (_expectedTotal != null) {
+      final remaining = _expectedTotal! - _frameBytes;
+      if (remaining <= payload.length - start) {
+        _frame!.add(payload.sublist(start, start + remaining));
+        _frameBytes += remaining;
+        _flush(onPes);
+        // 超出帧长度的字节为填充数据，忽略
+        return;
+      }
+    }
+
+    _frame!.add(payload.sublist(start));
+    _frameBytes += payload.length - start;
+  }
+
+  void _flush(void Function(PesPacket) onPes) {
+    final bytes = _frame!.toBytes();
+    _reset();
+    if (bytes.length < 9) return;
+    if (!(bytes[0] == 0x00 && bytes[1] == 0x00 && bytes[2] == 0x01)) return;
+
+    final flags2 = bytes[7];
+    final headerDataLen = bytes[8];
+    final headerTotal = 9 + headerDataLen;
+    if (bytes.length < headerTotal) return;
+
+    int? pts;
+    int? dts;
+    if ((flags2 & 0x80) != 0 && headerTotal >= 14) {
+      pts = _parsePts(bytes, 9);
+      if ((flags2 & 0x40) != 0 && headerTotal >= 19) {
+        dts = _parsePts(bytes, 14);
+      }
+    }
+
+    final data = bytes.sublist(headerTotal);
+    if (data.isEmpty) return;
+    onPes(PesPacket(pts: pts, dts: dts, data: data));
+  }
+
+  static int _parsePts(Uint8List b, int o) {
+    return ((b[o] >> 1) & 0x07) << 30 |
+        b[o + 1] << 22 |
+        ((b[o + 2] >> 1) & 0x7F) << 15 |
+        b[o + 3] << 7 |
+        ((b[o + 4] >> 1) & 0x7F);
+  }
+
+  void _reset() {
+    _frame = null;
+    _first6.clear();
+    _frameBytes = 0;
+    _expectedTotal = null;
+    _drop = false;
+  }
+
+  void flush(void Function(PesPacket) onPes) {
+    if (_frame != null && !_drop) _flush(onPes);
+    _reset();
+  }
+}
+
+// ============================================================================
+// MP4 封装器（ISO BMFF 最小实现）
 // ============================================================================
 
 class Mp4Muxer {
   Mp4Muxer._();
 
-  /// Build a complete MP4 file.
-  static Uint8List buildMp4({
-    required List<H264NalUnit> spsNalus,
-    required List<H264NalUnit> ppsNalus,
-    required List<H264NalUnit> videoSamples,
-    required List<H264NalUnit> allNalus,
-    required List<AacFrame> aacFrames,
-    int videoStreamType = 0x1B,
-  }) {
-    // Build mdat data first to know actual sample sizes
-    final mdatData = buildMdatData(
-      allNalus: allNalus,
-      aacFrames: aacFrames,
+  /// 时间戳时基（90kHz，与 PES PTS 一致）
+  static const int kTimescale = 90000;
+
+  // ---------------------------------------------------------------------------
+  // 主入口
+  // ---------------------------------------------------------------------------
+
+  /// 将 spool 文件中的样本封装为 MP4。
+  ///
+  /// [videoSamples] / [audioSamples] 的 [Mp4Sample.spoolOffset] 指向
+  /// [spoolPath] 中样本数据的位置（视频样本为 4 字节长度前缀的 NAL 串联，
+  /// 音频样本为原始 AAC 帧）。
+  ///
+  /// 写入期间检查 [isCancelled]，取消时抛出 [FormatException]；
+  /// 失败或取消时不会留下半成品输出文件（先写临时文件，成功后改名）。
+  ///
+  /// 返回输出路径。
+  static Future<String> muxMp4({
+    required String spoolPath,
+    required List<Mp4Sample> videoSamples,
+    required List<Mp4Sample> audioSamples,
+    required VideoFormat? video,
+    AudioFormat? audio,
+    required String outputPath,
+    void Function(int progress)? onProgress,
+    bool Function()? isCancelled,
+    bool videoTimelineReal = true,
+    bool audioTimelineReal = true,
+  }) async {
+    if (videoSamples.isEmpty && audioSamples.isEmpty) {
+      throw FormatException('没有可写入的样本');
+    }
+
+    final v = List<Mp4Sample>.from(videoSamples)
+      ..sort((a, b) {
+        final c = a.dts.compareTo(b.dts);
+        return c != 0 ? c : a.pts.compareTo(b.pts);
+      });
+    final a = List<Mp4Sample>.from(audioSamples);
+
+    // ---- 视频时间轴（90kHz）----
+    final videoStts = <int>[]; // 每样本时长
+    final videoCtts = <int>[]; // 每样本合成偏移
+    final syncSamples = <int>[]; // 关键帧序号（1 起）
+    var videoDuration90k = 0;
+    int? videoMinPts90k;
+
+    if (v.isNotEmpty) {
+      final minDts = v.map((s) => s.dts).reduce((x, y) => x < y ? x : y);
+      videoMinPts90k = v.map((s) => s.pts).reduce((x, y) => x < y ? x : y);
+      final shift = -minDts; // 任意平移，不影响 stts 增量
+      // ctts = pts - dts 允许为负（B 帧重排）：ctts 盒子使用 version 1（有符号）
+      var prevDts = 0;
+      for (int i = 0; i < v.length; i++) {
+        final s = v[i];
+        final dts = s.dts + shift;
+        final pts = s.pts + shift;
+        if (i == 0) {
+          prevDts = dts;
+        } else {
+          var dur = dts - prevDts;
+          if (dur < 0) dur = 0;
+          videoStts.add(dur);
+          prevDts = dts;
+        }
+        videoCtts.add(pts - dts);
+        if (s.sync) syncSamples.add(i + 1);
+      }
+      // 最后一帧时长：用中位数估算
+      final sortedDurs = List<int>.from(videoStts)..sort();
+      var lastDur = 3000; // 默认 ~33ms@90k
+      if (video?.frameRate != null && video!.frameRate! > 0) {
+        lastDur = (kTimescale / video.frameRate!).round();
+      } else if (sortedDurs.isNotEmpty) {
+        lastDur = sortedDurs[sortedDurs.length ~/ 2];
+        if (lastDur <= 0) lastDur = 3000;
+      }
+      videoStts.add(lastDur);
+
+      // 时长 = 最后一个展示时间 + 其时长（B 帧时 PTS 可能晚于 DTS）
+      var videoEnd = 0;
+      for (int i = 0; i < v.length; i++) {
+        final pts = v[i].pts + shift;
+        final end = pts + videoStts[i];
+        if (end > videoEnd) videoEnd = end;
+      }
+      videoDuration90k = videoEnd;
+    }
+
+    // ---- 音频时间轴（采样率时基）----
+    // AAC 每帧固定 samplesPerFrame 个采样，帧间时序恒定；
+    // 音频 PTS 仅用于计算音视频起始偏移（通过 edit list 表达）
+    var audioDuration = 0;
+    int? audioMinPts90k;
+    List<(int, int)> audioSttsRuns = const [(1, 1024)];
+    final audioTimescale = audio?.sampleRate ?? 44100;
+    if (a.isNotEmpty && audio != null) {
+      audioMinPts90k = a.map((s) => s.pts).reduce((x, y) => x < y ? x : y);
+      audioDuration = a.length * audio.samplesPerFrame;
+      audioSttsRuns = [(a.length, audio.samplesPerFrame)];
+    }
+
+    // ---- 音视频起始偏移（通过 edit list 表达）----
+    // 任一轨道的时间轴为合成（源 PES 无时间戳）时无法比较，跳过 edit list
+    final avOffset90k = (audioMinPts90k != null &&
+            videoMinPts90k != null &&
+            videoTimelineReal &&
+            audioTimelineReal)
+        ? audioMinPts90k - videoMinPts90k
+        : 0;
+
+    // ---- 计算 mdat 布局 ----
+    final ftyp = buildFtypBox();
+    final videoDataSize = v.fold(0, (sum, s) => sum + s.size);
+    final audioDataSize = a.fold(0, (sum, s) => sum + s.size);
+    final mdatPayloadSize = videoDataSize + audioDataSize;
+    // 超过 4GB 时 mdat 使用 16 字节头（size=1 + largesize）
+    final useLargeMdat = mdatPayloadSize + 8 > 0xFFFFFFFF;
+    final mdatHeaderSize = useLargeMdat ? 16 : 8;
+    final videoChunkOffset = ftyp.length + mdatHeaderSize;
+    final audioChunkOffset = videoChunkOffset + videoDataSize;
+
+    final audioEnd90k = audioDuration * kTimescale ~/ audioTimescale;
+    // 空编辑（音视频起始偏移）也计入电影时长与轨道时长
+    final videoEdit90k = avOffset90k < 0 ? -avOffset90k : 0;
+    final audioEdit90k = avOffset90k > 0 ? avOffset90k : 0;
+    final videoMovieDuration = videoDuration90k + videoEdit90k;
+    final audioMovieDuration = audioEnd90k + audioEdit90k;
+    final mvhdDuration90k = videoMovieDuration > audioMovieDuration
+        ? videoMovieDuration
+        : audioMovieDuration;
+
+    // ---- moov ----
+    final moov = buildMoovBox(
+      videoSamples: v,
+      audioSamples: a,
+      video: video,
+      audio: audio,
+      videoTimescale: kTimescale,
+      audioTimescale: audioTimescale,
+      videoDuration: videoDuration90k,
+      videoMovieDuration: videoMovieDuration,
+      audioDuration: audioDuration,
+      audioMovieDuration: audioMovieDuration,
+      mvhdDuration: mvhdDuration90k,
+      videoChunkOffset: videoChunkOffset,
+      audioChunkOffset: audioChunkOffset,
+      videoStts: videoStts,
+      videoCtts: videoCtts,
+      syncSamples: syncSamples,
+      audioSttsRuns: audioSttsRuns,
+      avOffset90k: avOffset90k,
     );
 
-    // Compute per-sample sizes for video NAL units
-    final videoSampleSizes = <int>[];
-    for (final nalu in allNalus) {
-      // Each NAL unit is prefixed with 4-byte length in mdat
-      videoSampleSizes.add(4 + nalu.data.length);
+    // ---- 写文件：ftyp + mdat + moov（先写临时文件，成功后再改名）----
+    final tmpPath = '$outputPath.tmp';
+    final tmpFile = File(tmpPath);
+    if (await tmpFile.exists()) {
+      await tmpFile.delete();
     }
-    // Compute per-sample sizes for AAC frames
-    final audioSampleSizes = <int>[];
-    for (final frame in aacFrames) {
-      audioSampleSizes.add(4 + frame.data.length);
+    var success = false;
+    final out = await tmpFile.open(mode: FileMode.write);
+    final spool = await File(spoolPath).open();
+    try {
+      await out.writeFrom(ftyp);
+
+      // mdat 头（支持 >4GB 的 64 位大尺寸）
+      final mdatHeader = buildMdatHeader(mdatPayloadSize + mdatHeaderSize);
+      await out.writeFrom(mdatHeader);
+
+      var expectedSpool = 0;
+      for (final s in v) {
+        _checkCancelled(isCancelled);
+        expectedSpool = await _copySample(spool, out, s, expectedSpool);
+      }
+      for (final s in a) {
+        _checkCancelled(isCancelled);
+        expectedSpool = await _copySample(spool, out, s, expectedSpool);
+      }
+
+      await out.writeFrom(moov);
+      await out.flush();
+      success = true;
+    } finally {
+      await spool.close();
+      await out.close();
+      if (!success) {
+        // 失败/取消：不留下半成品输出文件
+        try {
+          if (await tmpFile.exists()) {
+            await tmpFile.delete();
+          }
+        } catch (_) {}
+      }
     }
 
-    final hasAudio = aacFrames.isNotEmpty;
+    // 成功：临时文件改名为最终输出
+    final finalFile = File(outputPath);
+    if (await finalFile.exists()) {
+      await finalFile.delete();
+    }
+    await tmpFile.rename(outputPath);
 
-    // Calculate offsets
-    final ftypBox = buildFtypBox();
-    final mdatBox = buildBox('mdat', mdatData);
-    final mdatOffset = ftypBox.length + 8; // 8 = mdat box header
-
-    // Build moov box with correct sample sizes and offsets
-    final moovBox = buildMoovBox(
-      spsNalus: spsNalus,
-      ppsNalus: ppsNalus,
-      mdatSize: mdatData.length,
-      mdatOffset: mdatOffset,
-      videoSampleCount: allNalus.length,
-      totalNaluCount: allNalus.length,
-      videoSampleSizes: videoSampleSizes,
-      hasAudio: hasAudio,
-      aacFrameCount: aacFrames.length,
-      audioSampleSizes: audioSampleSizes,
-      videoStreamType: videoStreamType,
-    );
-
-    // Concatenate ftyp + mdat + moov
-    final result = BytesBuilder();
-    result.add(ftypBox);
-    result.add(mdatBox);
-    result.add(moovBox);
-    return result.toBytes();
+    onProgress?.call(100);
+    return outputPath;
   }
 
-  /// Build the ftyp (file type) box.
+  static void _checkCancelled(bool Function()? isCancelled) {
+    if (isCancelled?.call() ?? false) {
+      throw FormatException('转换已取消');
+    }
+  }
+
+  /// 从 spool 拷贝一个样本到输出，返回 spool 中下一个期望偏移。
+  static Future<int> _copySample(RandomAccessFile spool, RandomAccessFile out,
+      Mp4Sample s, int expected) async {
+    if (s.spoolOffset != expected) {
+      await spool.setPosition(s.spoolOffset);
+    }
+    final buf = Uint8List(s.size);
+    var read = 0;
+    while (read < s.size) {
+      final n = await spool.readInto(buf, read, s.size);
+      if (n <= 0) {
+        throw FormatException('spool 文件读取异常（样本数据不完整）');
+      }
+      read += n;
+    }
+    await out.writeFrom(buf, 0, s.size);
+    return s.spoolOffset + s.size;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 顶层盒子
+  // ---------------------------------------------------------------------------
+
+  /// ftyp（文件类型）盒子。
   static Uint8List buildFtypBox() {
     final content = BytesBuilder();
-    // major_brand: 'isom'
     content.add(iso639Code('isom'));
-    // minor_version: 0x0200
     content.add([0x02, 0x00, 0x00, 0x00]);
-    // compatible_brands: 'isom', 'mp42', 'avc1'
     content.add(iso639Code('isom'));
     content.add(iso639Code('mp42'));
     content.add(iso639Code('avc1'));
     return buildBox('ftyp', content.toBytes());
   }
 
-  /// Build the moov (movie) box.
+  /// mdat 头（payloadSize 含 8 字节头自身）。
+  static Uint8List buildMdatHeader(int payloadSize) {
+    if (payloadSize <= 0xFFFFFFFF) {
+      return buildBox('mdat', Uint8List(0))
+        ..buffer.asByteData().setUint32(0, payloadSize);
+    }
+    // 64 位大尺寸：size=1 + largesize
+    final data = Uint8List(16);
+    data[3] = 1;
+    data[4] = 0x6D; // 'm'
+    data[5] = 0x64; // 'd'
+    data[6] = 0x61; // 'a'
+    data[7] = 0x74; // 't'
+    final bd = data.buffer.asByteData(8);
+    bd.setUint64(0, payloadSize);
+    return data;
+  }
+
+  /// moov（电影）盒子。
   static Uint8List buildMoovBox({
-    required List<H264NalUnit> spsNalus,
-    required List<H264NalUnit> ppsNalus,
-    required int mdatSize,
-    required int mdatOffset,
-    required int videoSampleCount,
-    required int totalNaluCount,
-    required List<int> videoSampleSizes,
-    required bool hasAudio,
-    required int aacFrameCount,
-    required List<int> audioSampleSizes,
-    int videoStreamType = 0x1B,
+    required List<Mp4Sample> videoSamples,
+    required List<Mp4Sample> audioSamples,
+    required VideoFormat? video,
+    required AudioFormat? audio,
+    required int videoTimescale,
+    required int audioTimescale,
+    required int videoDuration,
+    required int videoMovieDuration,
+    required int audioDuration,
+    required int audioMovieDuration,
+    required int mvhdDuration,
+    required int videoChunkOffset,
+    required int audioChunkOffset,
+    required List<int> videoStts,
+    required List<int> videoCtts,
+    required List<int> syncSamples,
+    List<(int, int)> audioSttsRuns = const [(1, 1024)],
+    int avOffset90k = 0,
   }) {
     final moovContent = BytesBuilder();
+    moovContent.add(buildMvhdBox(duration: mvhdDuration));
 
-    // mvhd
-    moovContent.add(buildMvhdBox());
+    if (videoSamples.isNotEmpty && video != null) {
+      moovContent.add(buildVideoTrackBox(
+        video: video,
+        samples: videoSamples,
+        timescale: videoTimescale,
+        mediaDuration: videoDuration,
+        movieDuration: videoMovieDuration,
+        chunkOffset: videoChunkOffset,
+        stts: videoStts,
+        ctts: videoCtts,
+        syncSamples: syncSamples,
+        // 音频早于视频开始时，视频轨加空编辑
+        emptyEdit90k: avOffset90k < 0 ? -avOffset90k : 0,
+      ));
+    }
 
-    // Video track
-    moovContent.add(buildVideoTrackBox(
-      spsNalus: spsNalus,
-      ppsNalus: ppsNalus,
-      mdatSize: mdatSize,
-      mdatOffset: mdatOffset,
-      sampleCount: videoSampleCount,
-      totalNaluCount: totalNaluCount,
-      sampleSizes: videoSampleSizes,
-      videoStreamType: videoStreamType,
-    ));
-
-    // Audio track (if present)
-    if (hasAudio) {
+    if (audioSamples.isNotEmpty && audio != null) {
       moovContent.add(buildAudioTrackBox(
-        aacFrameCount: aacFrameCount,
-        mdatOffset: mdatOffset,
-        totalMdatSize: mdatSize,
-        sampleSizes: audioSampleSizes,
+        audio: audio,
+        samples: audioSamples,
+        timescale: audioTimescale,
+        mediaDuration: audioDuration,
+        movieDuration: audioMovieDuration,
+        chunkOffset: audioChunkOffset,
+        sttsRuns: audioSttsRuns,
+        // 视频早于音频开始时，音频轨加空编辑
+        emptyEdit90k: avOffset90k > 0 ? avOffset90k : 0,
       ));
     }
 
     return buildBox('moov', moovContent.toBytes());
   }
 
-  /// Build mvhd (movie header) full box.
-  static Uint8List buildMvhdBox() {
-    // Version 0, 8 bytes per timestamp
+  /// mvhd（电影头）盒子（version 1，64 位时间戳）。
+  static Uint8List buildMvhdBox({required int duration}) {
     final content = BytesBuilder();
-    // creation_time, modification_time
-    content.add(Uint8List(8)); // 0
-    content.add(Uint8List(8)); // 0
-    // timescale: 1000
-    content.add([0x00, 0x00, 0x03, 0xE8]);
-    // duration: 0 (unknown)
-    content.add(Uint8List(8));
-    // rate: 1.0 (0x00010000)
-    content.add([0x00, 0x01, 0x00, 0x00]);
-    // volume: 1.0 (0x0100)
-    content.add([0x01, 0x00]);
-    // reserved (10 bytes)
-    content.add(Uint8List(10));
-    // matrix (36 bytes) — identity
-    content.add([
-      0x00,
-      0x01,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x01,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x40,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-    ]);
-    // pre-defined (24 bytes) — 6 zeros
-    content.add(Uint8List(24));
-    // next_track_id: 3
-    content.add([0x00, 0x00, 0x00, 0x03]);
-
+    content.add(_u64(0)); // creation_time
+    content.add(_u64(0)); // modification_time
+    content.add(_u32(kTimescale));
+    content.add(_u64(duration));
+    content.add([0x00, 0x01, 0x00, 0x00]); // rate 1.0
+    content.add([0x01, 0x00]); // volume 1.0
+    content.add(Uint8List(10)); // reserved
+    content.add(_matrix());
+    content.add(Uint8List(24)); // pre_defined
+    content.add(_u32(3)); // next_track_id
     return buildFullBox('mvhd', content.toBytes(), version: 1);
   }
 
-  /// Build a video track box (trak).
+  /// 视频轨道（trak）。
   static Uint8List buildVideoTrackBox({
-    required List<H264NalUnit> spsNalus,
-    required List<H264NalUnit> ppsNalus,
-    required int mdatSize,
-    required int mdatOffset,
-    required int sampleCount,
-    required int totalNaluCount,
-    required List<int> sampleSizes,
-    int videoStreamType = 0x1B,
+    required VideoFormat video,
+    required List<Mp4Sample> samples,
+    required int timescale,
+    required int mediaDuration,
+    required int movieDuration,
+    required int chunkOffset,
+    required List<int> stts,
+    required List<int> ctts,
+    required List<int> syncSamples,
+    int emptyEdit90k = 0,
   }) {
     final trakContent = BytesBuilder();
+    trakContent.add(buildTkhdBox(
+        trackId: 1,
+        duration: movieDuration,
+        width: video.width,
+        height: video.height));
+    if (emptyEdit90k > 0) {
+      trakContent.add(buildEdtsBox(emptyEdit90k));
+    }
 
-    // tkhd (track header)
-    trakContent.add(buildVideoTkhdBox());
-
-    // mdia
     final mdiaContent = BytesBuilder();
-    // mdhd
-    mdiaContent.add(buildMdhdBox());
-    // hdlr
-    mdiaContent.add(buildHdlrBox('vide', 'Video Track'));
-    // minf
+    mdiaContent
+        .add(buildMdhdBox(timescale: timescale, duration: mediaDuration));
+    mdiaContent.add(buildHdlrBox('vide', 'VideoHandler'));
+
     final minfContent = BytesBuilder();
-    // vmhd
-    minfContent.add(buildVmhdBox());
-    // dinf
+    minfContent.add(buildFullBox(
+        'vmhd', Uint8List.fromList([0, 0, 0, 0, 0, 0, 0, 0]),
+        flags: 0x01));
     minfContent.add(buildDinfBox());
-    // stbl
     minfContent.add(buildVideoStblBox(
-      spsNalus: spsNalus,
-      ppsNalus: ppsNalus,
-      sampleCount: sampleCount,
-      mdatSize: mdatSize,
-      mdatOffset: mdatOffset,
-      totalNaluCount: totalNaluCount,
-      sampleSizes: sampleSizes,
-      videoStreamType: videoStreamType,
+      video: video,
+      samples: samples,
+      chunkOffset: chunkOffset,
+      stts: stts,
+      ctts: ctts,
+      syncSamples: syncSamples,
     ));
     mdiaContent.add(buildBox('minf', minfContent.toBytes()));
 
     trakContent.add(buildBox('mdia', mdiaContent.toBytes()));
-
     return buildBox('trak', trakContent.toBytes());
   }
 
-  /// Build an audio track box (trak).
+  /// 音频轨道（trak）。
   static Uint8List buildAudioTrackBox({
-    required int aacFrameCount,
-    required int mdatOffset,
-    required int totalMdatSize,
-    required List<int> sampleSizes,
+    required AudioFormat audio,
+    required List<Mp4Sample> samples,
+    required int timescale,
+    required int mediaDuration,
+    required int movieDuration,
+    required int chunkOffset,
+    List<(int, int)> sttsRuns = const [(1, 1024)],
+    int emptyEdit90k = 0,
   }) {
     final trakContent = BytesBuilder();
+    // tkhd 时长为电影时基（90kHz），需将媒体时长换算
+    trakContent.add(buildTkhdBox(trackId: 2, duration: movieDuration));
+    if (emptyEdit90k > 0) {
+      trakContent.add(buildEdtsBox(emptyEdit90k));
+    }
 
-    // tkhd
-    trakContent.add(buildAudioTkhdBox());
-
-    // mdia
     final mdiaContent = BytesBuilder();
-    // mdhd
-    mdiaContent.add(buildMdhdBox());
-    // hdlr
-    mdiaContent.add(buildHdlrBox('soun', 'Audio Track'));
-    // minf
+    mdiaContent
+        .add(buildMdhdBox(timescale: timescale, duration: mediaDuration));
+    mdiaContent.add(buildHdlrBox('soun', 'SoundHandler'));
+
     final minfContent = BytesBuilder();
-    // smhd
-    minfContent.add(buildSmhdBox());
-    // dinf
+    minfContent.add(buildFullBox('smhd', Uint8List.fromList([0, 0, 0, 0])));
     minfContent.add(buildDinfBox());
-    // stbl
     minfContent.add(buildAudioStblBox(
-      aacFrameCount: aacFrameCount,
-      mdatOffset: mdatOffset,
-      totalMdatSize: totalMdatSize,
-      sampleSizes: sampleSizes,
+      audio: audio,
+      samples: samples,
+      chunkOffset: chunkOffset,
+      sttsRuns: sttsRuns,
     ));
     mdiaContent.add(buildBox('minf', minfContent.toBytes()));
 
     trakContent.add(buildBox('mdia', mdiaContent.toBytes()));
-
     return buildBox('trak', trakContent.toBytes());
   }
 
-  /// Build tkhd for video track.
-  static Uint8List buildVideoTkhdBox() {
-    // Version 1 (64-bit timestamps)
-    final content = BytesBuilder();
-    // creation_time, modification_time
-    content.add(Uint8List(8));
-    content.add(Uint8List(8));
-    // track_ID: 1
-    content.add([0x00, 0x00, 0x00, 0x01]);
-    // reserved
-    content.add([0x00, 0x00, 0x00, 0x00]);
-    // duration: 0
-    content.add(Uint8List(8));
-    // reserved (8 bytes)
-    content.add(Uint8List(8));
-    // layer: 0, alternate_group: 0
-    content.add([0x00, 0x00, 0x00, 0x00]);
-    // volume: 0, reserved
-    content.add([0x00, 0x00]);
-    // matrix (36 bytes)
-    content.add([
-      0x00,
-      0x01,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x01,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x40,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-    ]);
-    // width, height (fixed-point 16.16)
-    content.add([0x00, 0x00, 0x00, 0x00]); // 0
-    content.add([0x00, 0x00, 0x00, 0x00]); // 0
-
-    return buildFullBox('tkhd', content.toBytes(),
-        version: 1,
-        flags: 0x07); // track_enabled | track_in_movie | track_in_preview
+  /// edts + elst（编辑列表）盒子：用空编辑表达轨道起始延迟（电影时基）。
+  static Uint8List buildEdtsBox(int emptyEdit90k) {
+    final elstContent = BytesBuilder();
+    elstContent.add(_u32(1)); // entry_count
+    elstContent.add(_u64(emptyEdit90k)); // segment_duration（电影时基）
+    elstContent
+        .add(Uint8List.fromList(List.filled(8, 0xFF))); // media_time = -1（空编辑）
+    elstContent.add([0x00, 0x01, 0x00, 0x00]); // media_rate = 1.0
+    return buildBox(
+        'edts', buildFullBox('elst', elstContent.toBytes(), version: 1));
   }
 
-  /// Build tkhd for audio track.
-  static Uint8List buildAudioTkhdBox() {
+  /// tkhd（轨道头）盒子（version 1）。
+  static Uint8List buildTkhdBox({
+    required int trackId,
+    required int duration,
+    int width = 0,
+    int height = 0,
+  }) {
     final content = BytesBuilder();
-    content.add(Uint8List(8)); // creation_time
-    content.add(Uint8List(8)); // modification_time
-    content.add([0x00, 0x00, 0x00, 0x02]); // track_ID: 2
-    content.add([0x00, 0x00, 0x00, 0x00]); // reserved
-    content.add(Uint8List(8)); // duration
+    content.add(_u64(0)); // creation_time
+    content.add(_u64(0)); // modification_time
+    content.add(_u32(trackId));
+    content.add(_u32(0)); // reserved
+    content.add(_u64(duration));
     content.add(Uint8List(8)); // reserved
-    content.add([0x00, 0x00, 0x00, 0x00]); // layer, alternate_group
-    content.add([0x01, 0x00]); // volume: 1.0
-    content.add([
-      0x00,
-      0x01,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x01,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x40,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-    ]);
-    content.add([0x00, 0x00, 0x00, 0x00]); // width
-    content.add([0x00, 0x00, 0x00, 0x00]); // height
-
+    content.add([0x00, 0x00]); // layer
+    content.add([0x00, 0x00]); // alternate_group
+    content.add([0x00, 0x00]); // volume
+    content.add([0x00, 0x00]); // reserved
+    content.add(_matrix());
+    content.add(_u32(width << 16)); // width (16.16)
+    content.add(_u32(height << 16)); // height (16.16)
     return buildFullBox('tkhd', content.toBytes(), version: 1, flags: 0x07);
   }
 
-  /// Build mdhd (media header) box.
-  static Uint8List buildMdhdBox() {
-    // Version 1
+  /// mdhd（媒体头）盒子（version 1）。
+  static Uint8List buildMdhdBox({
+    required int timescale,
+    required int duration,
+  }) {
     final content = BytesBuilder();
-    content.add(Uint8List(8)); // creation_time
-    content.add(Uint8List(8)); // modification_time
-    content.add([0x00, 0x00, 0x03, 0xE8]); // timescale: 1000
-    content.add(Uint8List(8)); // duration: 0
-    content.add([0x55, 0xC4]); // language: und (0x55C4)
-    content.add([0x00, 0x00]); // quality
-
+    content.add(_u64(0)); // creation_time
+    content.add(_u64(0)); // modification_time
+    content.add(_u32(timescale));
+    content.add(_u64(duration));
+    content.add([0x55, 0xC4]); // language: und
+    content.add([0x00, 0x00]); // pre_defined
     return buildFullBox('mdhd', content.toBytes(), version: 1);
   }
 
-  /// Build hdlr (handler) box.
+  /// hdlr（处理器）盒子。
   static Uint8List buildHdlrBox(String handlerType, String name) {
     final content = BytesBuilder();
-    content.add([0x00, 0x00, 0x00, 0x00]); // pre-defined
-    content.add(iso639Code(handlerType)); // handler_type: 'vide' or 'soun'
-    content.add([0x00, 0x00, 0x00, 0x00]); // reserved
-    content.add([0x00, 0x00, 0x00, 0x00]); // reserved
-    content.add([0x00, 0x00, 0x00, 0x00]); // reserved
-    content.add(codeUnits(name)); // name (null-terminated)
+    content.add(_u32(0)); // pre_defined
+    content.add(iso639Code(handlerType));
+    content.add(_u32(0)); // reserved
+    content.add(_u32(0));
+    content.add(_u32(0));
+    content.add(_codeUnits(name));
     content.add([0x00]); // null terminator
-
     return buildFullBox('hdlr', content.toBytes());
   }
 
-  /// Build vmhd (video media header) box.
-  static Uint8List buildVmhdBox() {
-    // Version 0, flags 1 (fullframe)
-    final content = BytesBuilder();
-    content.add([0x00, 0x00, 0x00, 0x00]); // mode: copy
-    content.add([0x00, 0x00, 0x00, 0x00]); // reserved
-
-    return buildFullBox('vmhd', content.toBytes(), flags: 0x01);
-  }
-
-  /// Build smhd (sound media header) box.
-  static Uint8List buildSmhdBox() {
-    final content = BytesBuilder();
-    content.add([0x00, 0x00]); // balance: 0
-    content.add([0x00, 0x00]); // reserved
-
-    return buildFullBox('smhd', content.toBytes());
-  }
-
-  /// Build dinf (data information) box.
+  /// dinf（数据信息）盒子。
   static Uint8List buildDinfBox() {
-    // dref with a single url entry
     final drefContent = BytesBuilder();
-    drefContent.add([0x00, 0x00, 0x00, 0x00]); // version, flags
-    drefContent.add([0x00, 0x00, 0x00, 0x01]); // entry_count: 1
-
-    // url box: data reference, self-contained (flags 1)
-    final urlBox = buildFullBox('url ', Uint8List(0), flags: 0x01);
-    drefContent.add(urlBox);
-
-    return buildBox('dref', drefContent.toBytes());
+    drefContent.add(_u32(0)); // version + flags
+    drefContent.add(_u32(1)); // entry_count
+    drefContent.add(buildFullBox('url ', Uint8List(0), flags: 0x01));
+    return buildBox('dinf', buildBox('dref', drefContent.toBytes()));
   }
 
-  /// Build stbl (sample table) box for video.
+  /// 视频 stbl（样本表）盒子。
   static Uint8List buildVideoStblBox({
-    required List<H264NalUnit> spsNalus,
-    required List<H264NalUnit> ppsNalus,
-    required int sampleCount,
-    required int mdatSize,
-    required int mdatOffset,
-    required int totalNaluCount,
-    required List<int> sampleSizes,
-    int videoStreamType = 0x1B,
+    required VideoFormat video,
+    required List<Mp4Sample> samples,
+    required int chunkOffset,
+    required List<int> stts,
+    required List<int> ctts,
+    required List<int> syncSamples,
   }) {
     final stblContent = BytesBuilder();
-
-    // stsd (sample description)
-    stblContent.add(buildVideoStsdBox(
-      spsNalus: spsNalus,
-      ppsNalus: ppsNalus,
-    ));
-
-    // stts (time-to-sample) — all at once
-    stblContent.add(buildSttsBox(sampleCount));
-
-    // stsc (sample-to-chunk) — all in one chunk
-    stblContent.add(buildStscBox(1, 1, sampleCount));
-
-    // stsz (sample sizes) — variable sizes
-    stblContent.add(buildStszBox(sampleCount, sampleSizes: sampleSizes));
-
-    // stco (chunk offset) — 64-bit (co64)
-    stblContent.add(buildCo64Box(mdatOffset + 8)); // +8 for mdat box header
-
-    // stss (sync sample) — key frames (IDR) only
-    // (allNalus passed as null here; the actual NAL units are used
-    //  via the stss method directly when available)
-    stblContent.add(buildStssBox(sampleCount));
-
+    stblContent.add(buildVideoStsdBox(video));
+    stblContent.add(buildSttsBox(stts));
+    if (ctts.any((c) => c != 0)) {
+      stblContent.add(buildCttsBox(ctts));
+    }
+    if (syncSamples.isNotEmpty) {
+      stblContent.add(buildStssBox(syncSamples));
+    }
+    stblContent.add(buildStscBox(samples.length));
+    stblContent.add(buildStszBox(samples));
+    stblContent.add(buildCo64Box(chunkOffset));
     return buildBox('stbl', stblContent.toBytes());
   }
 
-  /// Build stbl box for audio.
+  /// 音频 stbl（样本表）盒子。
   static Uint8List buildAudioStblBox({
-    required int aacFrameCount,
-    required int mdatOffset,
-    required int totalMdatSize,
-    required List<int> sampleSizes,
+    required AudioFormat audio,
+    required List<Mp4Sample> samples,
+    required int chunkOffset,
+    List<(int, int)> sttsRuns = const [(1, 1024)],
   }) {
     final stblContent = BytesBuilder();
-
-    // stsd
-    stblContent.add(buildAudioStsdBox());
-
-    // stts
-    stblContent.add(buildSttsBox(aacFrameCount));
-
-    // stsc
-    stblContent.add(buildStscBox(1, 1, aacFrameCount));
-
-    // stsz
-    stblContent.add(buildStszBox(aacFrameCount, sampleSizes: sampleSizes));
-
-    // stco
-    stblContent.add(buildCo64Box(mdatOffset + 8));
-
-    // Audio has no stss (all samples are sync)
-
+    stblContent.add(buildAudioStsdBox(audio));
+    stblContent.add(buildSttsBoxFromRuns(sttsRuns));
+    stblContent.add(buildStscBox(samples.length));
+    stblContent.add(buildStszBox(samples));
+    stblContent.add(buildCo64Box(chunkOffset));
     return buildBox('stbl', stblContent.toBytes());
   }
 
-  /// Build stsd (sample description) box for H.264 video.
-  static Uint8List buildVideoStsdBox({
-    required List<H264NalUnit> spsNalus,
-    required List<H264NalUnit> ppsNalus,
-  }) {
-    // avc1 sample entry
-    final avc1Content = BytesBuilder();
+  /// 视频 stsd（样本描述）盒子（avc1 / hvc1）。
+  static Uint8List buildVideoStsdBox(VideoFormat video) {
+    final isHevc = video.isHevc;
+    final entryContent = BytesBuilder();
+    entryContent.add(Uint8List(6)); // reserved
+    entryContent.add([0x00, 0x01]); // data_reference_index
 
-    // reserved (6 bytes)
-    avc1Content.add(Uint8List(6));
-    // data_reference_index: 1
-    avc1Content.add([0x00, 0x01]);
+    // VisualSampleEntry 固定字段
+    entryContent.add([0x00, 0x00]); // pre_defined
+    entryContent.add([0x00, 0x00]); // reserved
+    entryContent.add(_u32(0)); // pre_defined[0]
+    entryContent.add(_u32(0)); // pre_defined[1]
+    entryContent.add(_u32(0)); // pre_defined[2]
+    entryContent.add(_u16(video.width));
+    entryContent.add(_u16(video.height));
+    entryContent.add(_u32(0x00480000)); // horizresolution (72dpi)
+    entryContent.add(_u32(0x00480000)); // vertresolution
+    entryContent.add(_u32(0)); // reserved
+    entryContent.add(_u16(1)); // frame_count
+    entryContent
+        .add(_fixedStringBytes(isHevc ? 'HEVC Coding' : 'AVC Coding', 32));
+    entryContent.add([0x00, 0x18]); // depth
+    entryContent.add([0xFF, 0xFF]); // pre_defined
 
-    // Pre-defined (16 bytes)
-    avc1Content.add([0x00, 0x00]); // version
-    avc1Content.add([0x00, 0x00]); // revision
-    avc1Content.add([0x00, 0x00, 0x00, 0x00]); // vendor
-    avc1Content.add([0x00, 0x00, 0x00, 0x00]); // temporal_quality
-    avc1Content.add([0x00, 0x00, 0x00, 0x00]); // spatial_quality
+    // 配置记录：优先使用流中现成的 avcC/hvcC，否则由参数集构建
+    if (video.rawConfig != null) {
+      entryContent.add(buildBox(isHevc ? 'hvcC' : 'avcC', video.rawConfig!));
+    } else if (isHevc) {
+      entryContent.add(buildHvcCBox(video));
+    } else {
+      entryContent.add(buildAvccBox(
+        video.sps.map((d) => H264NalUnit(type: 7, data: d)).toList(),
+        video.pps.map((d) => H264NalUnit(type: 8, data: d)).toList(),
+      ));
+    }
 
-    // width, height (can extract from SPS, but default to 0)
-    avc1Content.add([0x00, 0x00]); // width
-    avc1Content.add([0x00, 0x00]); // height
-
-    // horizontal, vertical resolution (72 dpi = 0x00480000)
-    avc1Content.add([0x00, 0x48, 0x00, 0x00]);
-    avc1Content.add([0x00, 0x48, 0x00, 0x00]);
-
-    // data_size (0)
-    avc1Content.add([0x00, 0x00, 0x00, 0x00]);
-    // frame_count (1)
-    avc1Content.add([0x00, 0x01]);
-
-    // compressorname (32 bytes)
-    avc1Content.add(_fixedStringBytes('AVC Coding', 32));
-
-    // depth (24)
-    avc1Content.add([0x00, 0x18]);
-    // pre-defined (-1)
-    avc1Content.add([0xFF, 0xFF]);
-
-    // avcC box
-    avc1Content.add(buildAvccBox(spsNalus, ppsNalus));
-
-    final stsdEntry = buildBox('avc1', avc1Content.toBytes());
-
-    // stsd box wraps the entry
     final stsdContent = BytesBuilder();
-    stsdContent.add([0x00, 0x00, 0x00, 0x00]); // version, flags
-    stsdContent.add([0x00, 0x00, 0x00, 0x01]); // entry_count: 1
-    stsdContent.add(stsdEntry);
-
+    stsdContent.add(_u32(1)); // entry_count
+    stsdContent.add(buildBox(isHevc ? 'hvc1' : 'avc1', entryContent.toBytes()));
     return buildFullBox('stsd', stsdContent.toBytes());
   }
 
-  /// Build stsd box for AAC audio.
-  static Uint8List buildAudioStsdBox() {
-    // mp4a sample entry
-    final mp4aContent = BytesBuilder();
+  /// 音频 stsd（样本描述）盒子（mp4a）。
+  static Uint8List buildAudioStsdBox(AudioFormat audio) {
+    final entryContent = BytesBuilder();
+    entryContent.add(Uint8List(6)); // reserved
+    entryContent.add([0x00, 0x01]); // data_reference_index
 
-    // reserved (6 bytes)
-    mp4aContent.add(Uint8List(6));
-    // data_reference_index: 1
-    mp4aContent.add([0x00, 0x01]);
+    // AudioSampleEntry 固定字段
+    entryContent.add([0x00, 0x00]); // version
+    entryContent.add([0x00, 0x00]); // revision
+    entryContent.add(_u32(0)); // vendor
+    entryContent.add(_u16(audio.channels));
+    entryContent.add(_u16(16)); // sample_size
+    entryContent.add(_u16(0)); // compression_id
+    entryContent.add(_u16(0)); // packet_size
+    entryContent.add(_u32(audio.sampleRate << 16)); // sample_rate (16.16)
 
-    // Sound description fields
-    mp4aContent.add([0x00, 0x00]); // version
-    mp4aContent.add([0x00, 0x00]); // revision
-    mp4aContent.add([0x00, 0x00, 0x00, 0x00]); // vendor
-    mp4aContent.add([0x00, 0x02]); // channel_count: 2
-    mp4aContent.add([0x00, 0x10]); // sample_size: 16
-    mp4aContent.add([0x00, 0x00]); // compression_id
-    mp4aContent.add([0x00, 0x00]); // packet_size: 0
-    mp4aContent.add([0xAC, 0x44, 0x00, 0x00]); // sample_rate: 44100 (0xAC44)
-
-    // esds box (minimal)
-    final esdsContent = BytesBuilder();
-    esdsContent.add([0x00, 0x00, 0x00, 0x00]); // version, flags
-    // ES_Descriptor tag (0x03)
-    esdsContent.add([0x03]); // tag
-    esdsContent.add([0x19]); // length (25)
-    esdsContent.add([0x00, 0x01]); // ES_ID
-    esdsContent.add([0x00]); // stream_priority
-
-    // DecoderConfigDescriptor tag (0x04)
-    esdsContent.add([0x04]); // tag
-    esdsContent.add([0x15]); // length (21)
-    esdsContent.add([0x40]); // object_type: AAC (0x40)
-    esdsContent.add([0x15]); // stream_type: Audio (0x05) << 2 | 1
-    esdsContent.add([0x00, 0x00, 0x00]); // buffer_size (24 bits)
-    esdsContent.add([0x00, 0x00, 0xBB, 0x80]); // max_bitrate: 48000
-    esdsContent.add([0x00, 0x00, 0xBB, 0x80]); // avg_bitrate: 48000
-
-    // DecoderSpecificInfo tag (0x05)
-    esdsContent.add([0x05]); // tag
-    esdsContent.add([0x02]); // length (2)
-    // AAC audio specific config: 2 channels, 44100 Hz, LC profile
-    esdsContent.add([
-      0x12,
-      0x10
-    ]); // 0x12 = LC(2)<<3 | srate(4)>>1, 0x10 = srate(4)<<7 | 2ch
-
-    final esdsBox = buildBox('esds', esdsContent.toBytes());
-    mp4aContent.add(esdsBox);
-
-    final stsdEntry = buildBox('mp4a', mp4aContent.toBytes());
+    entryContent.add(buildEsdsBox(audio));
 
     final stsdContent = BytesBuilder();
-    stsdContent.add([0x00, 0x00, 0x00, 0x00]); // version, flags
-    stsdContent.add([0x00, 0x00, 0x00, 0x01]); // entry_count: 1
-    stsdContent.add(stsdEntry);
-
+    stsdContent.add(_u32(1)); // entry_count
+    stsdContent.add(buildBox('mp4a', entryContent.toBytes()));
     return buildFullBox('stsd', stsdContent.toBytes());
   }
 
-  /// Build avcC (AVC configuration) box.
+  // ---------------------------------------------------------------------------
+  // 配置记录
+  // ---------------------------------------------------------------------------
+
+  /// avcC（AVC 配置）盒子。
   static Uint8List buildAvccBox(
       List<H264NalUnit> spsNalus, List<H264NalUnit> ppsNalus) {
     final content = BytesBuilder();
-
-    // AVCConfigurationRecord version
     content.add([0x01]); // configurationVersion
 
     if (spsNalus.isNotEmpty) {
       final sps = spsNalus.first.data;
-      // AVCProfileIndication (byte 1 of SPS NAL data)
-      content.add(sps.length > 1 ? [sps[1]] : [0x42]);
-      // profile_compatibility (byte 2)
-      content.add(sps.length > 2 ? [sps[2]] : [0x00]);
-      // AVCLevelIndication (byte 3)
-      content.add(sps.length > 3 ? [sps[3]] : [0x1E]);
+      content.add(sps.length > 1 ? [sps[1]] : [0x42]); // profile
+      content.add(sps.length > 2 ? [sps[2]] : [0x00]); // compatibility
+      content.add(sps.length > 3 ? [sps[3]] : [0x1E]); // level
     } else {
-      content.add([0x42, 0x00, 0x1E]); // Baseline, level 30
+      content.add([0x42, 0x00, 0x1E]);
     }
 
-    // 6 bits reserved + 2 bits lengthSizeMinusOne (3 = 4-byte length)
-    content.add([0xFF]); // 0b111111 | 0b11
+    content.add([0xFF]); // 6 位保留 + lengthSizeMinusOne=3
+    content.add([0xE0 | (spsNalus.length.clamp(0, 31))]); // 保留位 + SPS 数量
 
-    // 3 bits reserved + 5 bits numOfSequenceParameterSets
-    content.add([0xE1]); // 0b111 | 0b00001
-
-    // SPS (avcC uses 2-byte length prefix, not 4-byte)
     for (final sps in spsNalus) {
-      _writeLength16Prefixed(content, sps.data);
+      _writeU16(content, sps.data.length);
+      content.add(sps.data);
     }
 
-    // numOfPictureParameterSets
     content.add([ppsNalus.length]);
     for (final pps in ppsNalus) {
-      _writeLength16Prefixed(content, pps.data);
+      _writeU16(content, pps.data.length);
+      content.add(pps.data);
     }
 
     return buildBox('avcC', content.toBytes());
   }
 
-  /// Build stts (time-to-sample) box.
-  static Uint8List buildSttsBox(int sampleCount) {
+  /// hvcC（HEVC 配置）盒子：由 VPS/SPS/PPS 参数集构建。
+  static Uint8List buildHvcCBox(VideoFormat video) {
     final content = BytesBuilder();
-    content.add([0x00, 0x00, 0x00, 0x00]); // version, flags
-    content.add([0x00, 0x00, 0x00, 0x01]); // entry_count: 1
-    // All samples have the same duration (arbitrary: 1 tick)
-    content.add(_u32(sampleCount)); // sample_count
-    content.add([0x00, 0x00, 0x03, 0xE8]); // sample_duration: 1000ms
 
+    // profile_tier_level（12 字节）从 SPS 提取：
+    // SPS NAL 头(2) + vps_id/sub_layers/nesting(1) 之后即为 PTL
+    var profileSpace = 0, tier = 0, profileIdc = 1, levelIdc = 0;
+    var compatFlags = Uint8List(4);
+    var constraintFlags = Uint8List(6);
+    if (video.sps.isNotEmpty && video.sps.first.length >= 15) {
+      final sps = video.sps.first;
+      const p = 3;
+      profileSpace = (sps[p] >> 6) & 0x03;
+      tier = (sps[p] >> 5) & 0x01;
+      profileIdc = sps[p] & 0x1F;
+      compatFlags = Uint8List.fromList(sps.sublist(p + 1, p + 5));
+      constraintFlags = Uint8List.fromList(sps.sublist(p + 5, p + 11));
+      levelIdc = sps[p + 11];
+    }
+
+    content.add([0x01]); // configurationVersion
+    content.add([(profileSpace << 6) | (tier << 5) | profileIdc]);
+    content.add(compatFlags);
+    content.add(constraintFlags);
+    content.add([levelIdc]);
+    content.add([0xF0, 0x00]); // min_spatial_segmentation_idc=0
+    content.add([0xFC]); // parallelismType=0
+    content.add([0xFC | 0x01]); // chroma_format_idc=1 (4:2:0)
+    content.add([0xF8]); // bit_depth_luma_minus8=0
+    content.add([0xF8]); // bit_depth_chroma_minus8=0
+    content.add([0x00, 0x00]); // avgFrameRate=0
+    content.add([
+      0x0F
+    ]); // constantFrameRate=0, temporalLayers=1, nested=1, lengthSizeMinusOne=3
+
+    // 参数集数组：VPS(32)、SPS(33)、PPS(34)
+    final arrays = <(int, List<Uint8List>)>[
+      if (video.vps.isNotEmpty) (32, video.vps),
+      if (video.sps.isNotEmpty) (33, video.sps),
+      if (video.pps.isNotEmpty) (34, video.pps),
+    ];
+    content.add([arrays.length]);
+    for (final (nalType, nalus) in arrays) {
+      content.add([0x80 | nalType]); // array_completeness=1
+      content.add(_u16(nalus.length));
+      for (final nalu in nalus) {
+        _writeU16(content, nalu.length);
+        content.add(nalu);
+      }
+    }
+
+    return buildBox('hvcC', content.toBytes());
+  }
+
+  /// esds（元素流描述）盒子。
+  static Uint8List buildEsdsBox(AudioFormat audio) {
+    final content = BytesBuilder();
+    content.add(_u32(0)); // version + flags
+
+    // DecoderConfigDescriptor 内部（含 DecoderSpecificInfo）
+    final decInner = BytesBuilder();
+    decInner.add([0x40]); // objectTypeIndication: MPEG-4 Audio
+    decInner.add([0x15]); // streamType: audio (0x05 << 2 | 1)
+    decInner.add([0x00, 0x00, 0x00]); // bufferSizeDB
+    decInner.add([0x00, 0x00, 0xBB, 0x80]); // maxBitrate
+    decInner.add([0x00, 0x00, 0xBB, 0x80]); // avgBitrate
+    decInner.add([0x05, audio.asc.length]); // DecoderSpecificInfo tag
+    decInner.add(audio.asc);
+
+    final esInner = BytesBuilder();
+    esInner.add([0x00, 0x01]); // ES_ID
+    esInner.add([0x00]); // streamPriority
+    esInner.add([0x04, decInner.length]);
+    esInner.add(decInner.toBytes());
+    esInner.add([0x06, 0x01, 0x02]); // SLConfigDescriptor
+
+    content.add([0x03, esInner.length]); // ES_Descriptor tag
+    content.add(esInner.toBytes());
+
+    return buildBox('esds', content.toBytes());
+  }
+
+  // ---------------------------------------------------------------------------
+  // 样本表盒子
+  // ---------------------------------------------------------------------------
+
+  /// stts（时间到样本）盒子：输入每样本时长，按连续相同值压缩。
+  static Uint8List buildSttsBox(List<int> durations) {
+    return buildSttsBoxFromRuns(buildSttsRuns(durations));
+  }
+
+  /// 将每样本时长列表压缩为 (count, duration) 游程。
+  static List<(int, int)> buildSttsRuns(List<int> durations) {
+    final runs = <(int, int)>[];
+    for (final d in durations) {
+      if (runs.isNotEmpty && runs.last.$2 == d) {
+        runs[runs.length - 1] = (runs.last.$1 + 1, d);
+      } else {
+        runs.add((1, d));
+      }
+    }
+    return runs;
+  }
+
+  /// stts 盒子：直接输入游程。
+  static Uint8List buildSttsBoxFromRuns(List<(int, int)> runs) {
+    final content = BytesBuilder();
+    content.add(_u32(runs.length));
+    for (final (count, dur) in runs) {
+      content.add(_u32(count));
+      content.add(_u32(dur));
+    }
     return buildFullBox('stts', content.toBytes());
   }
 
-  /// Build stsc (sample-to-chunk) box.
-  static Uint8List buildStscBox(
-      int firstChunk, int samplesPerChunk, int sampleDescriptionIndex) {
-    final content = BytesBuilder();
-    content.add([0x00, 0x00, 0x00, 0x00]); // version, flags
-    content.add([0x00, 0x00, 0x00, 0x01]); // entry_count: 1
-    content.add(_u32(firstChunk)); // first_chunk
-    content.add(_u32(samplesPerChunk)); // samples_per_chunk
-    content.add(_u32(sampleDescriptionIndex)); // sample_description_index
-
-    return buildFullBox('stsc', content.toBytes());
-  }
-
-  /// Build stsz (sample size) box.
+  /// ctts（合成时间偏移）盒子：输入每样本偏移，按连续相同值压缩。
   ///
-  /// If [sampleSizes] is provided, uses variable sizes; otherwise constant.
-  static Uint8List buildStszBox(int sampleCount, {List<int>? sampleSizes}) {
-    final content = BytesBuilder();
-    content.add([0x00, 0x00, 0x00, 0x00]); // version, flags
-
-    if (sampleSizes != null) {
-      // Variable sample sizes
-      content.add([0x00, 0x00, 0x00, 0x00]); // sample_size = 0 (variable)
-      content.add(_u32(sampleCount)); // sample_count
-      for (final size in sampleSizes) {
-        content.add(_u32(size));
+  /// version 1：偏移为有符号 32 位（B 帧重排会产生负偏移）。
+  static Uint8List buildCttsBox(List<int> offsets) {
+    final runs = <(int, int)>[];
+    for (final o in offsets) {
+      if (runs.isNotEmpty && runs.last.$2 == o) {
+        runs[runs.length - 1] = (runs.last.$1 + 1, o);
+      } else {
+        runs.add((1, o));
       }
-    } else {
-      // Constant sample size
-      const sampleSize = 1; // default placeholder
-      content.add(_u32(sampleSize));
-      content.add(_u32(sampleCount));
     }
-
-    return buildFullBox('stsz', content.toBytes());
+    final content = BytesBuilder();
+    content.add(_u32(runs.length));
+    for (final (count, offset) in runs) {
+      content.add(_u32(count));
+      content.add(_u32(offset));
+    }
+    return buildFullBox('ctts', content.toBytes(), version: 1);
   }
 
-  /// Build co64 (64-bit chunk offset) box.
-  static Uint8List buildCo64Box(int chunkOffset) {
+  /// stss（同步样本）盒子：关键帧序号（1 起）。
+  static Uint8List buildStssBox(List<int> syncSamples) {
     final content = BytesBuilder();
-    content.add([0x00, 0x00, 0x00, 0x00]); // version, flags
-    content.add([0x00, 0x00, 0x00, 0x01]); // entry_count: 1
-    // 64-bit offset
-    content.add([
-      (chunkOffset >> 56) & 0xFF,
-      (chunkOffset >> 48) & 0xFF,
-      (chunkOffset >> 40) & 0xFF,
-      (chunkOffset >> 32) & 0xFF,
-      (chunkOffset >> 24) & 0xFF,
-      (chunkOffset >> 16) & 0xFF,
-      (chunkOffset >> 8) & 0xFF,
-      chunkOffset & 0xFF,
-    ]);
-
-    return buildFullBox('co64', content.toBytes());
-  }
-
-  /// Build stss (sync sample) box — marks all samples as sync.
-  ///
-  /// In a minimal remuxer, marking all samples as sync is sufficient
-  /// for basic playability. A full implementation would only mark
-  /// IDR frames (NAL type 5).
-  static Uint8List buildStssBox(int sampleCount) {
-    final content = BytesBuilder();
-    content.add([0x00, 0x00, 0x00, 0x00]); // version, flags
-    content.add(_u32(sampleCount));
-    for (int i = 0; i < sampleCount; i++) {
-      content.add(_u32(i + 1)); // 1-based sample numbers
+    content.add(_u32(syncSamples.length));
+    for (final n in syncSamples) {
+      content.add(_u32(n));
     }
     return buildFullBox('stss', content.toBytes());
   }
 
-  /// Build mdat box data from NAL units and AAC frames.
-  static Uint8List buildMdatData({
-    required List<H264NalUnit> allNalus,
-    required List<AacFrame> aacFrames,
-  }) {
-    final data = BytesBuilder();
-
-    // Write video samples (NAL units with 4-byte length prefix)
-    for (final nalu in allNalus) {
-      _writeLengthPrefixed(data, nalu.data);
-    }
-
-    // Write AAC frames (raw data without ADTS header)
-    for (final frame in aacFrames) {
-      _writeLengthPrefixed(data, frame.data);
-    }
-
-    return data.toBytes();
+  /// stsc（样本到块）盒子：所有样本在同一个块中。
+  static Uint8List buildStscBox(int sampleCount) {
+    final content = BytesBuilder();
+    content.add(_u32(1)); // entry_count
+    content.add(_u32(1)); // first_chunk
+    content.add(_u32(sampleCount)); // samples_per_chunk
+    content.add(_u32(1)); // sample_description_index
+    return buildFullBox('stsc', content.toBytes());
   }
 
-  // ===========================================================================
-  // Box building helpers
-  // ===========================================================================
-
-  /// Build a basic ISO base media file format box.
-  static Uint8List buildBox(String type, Uint8List content) {
-    final totalSize = 8 + content.length; // size(4) + type(4) + content
-    final data = Uint8List(totalSize);
-    data[0] = (totalSize >> 24) & 0xFF;
-    data[1] = (totalSize >> 16) & 0xFF;
-    data[2] = (totalSize >> 8) & 0xFF;
-    data[3] = totalSize & 0xFF;
-    // Type
-    data[4] = type.codeUnitAt(0);
-    data[5] = type.codeUnitAt(1);
-    data[6] = type.codeUnitAt(2);
-    data[7] = type.codeUnitAt(3);
-    // Content
-    for (int i = 0; i < content.length; i++) {
-      data[8 + i] = content[i];
+  /// stsz（样本大小）盒子。
+  static Uint8List buildStszBox(List<Mp4Sample> samples) {
+    final content = BytesBuilder();
+    content.add(_u32(0)); // sample_size = 0（变长）
+    content.add(_u32(samples.length));
+    for (final s in samples) {
+      content.add(_u32(s.size));
     }
+    return buildFullBox('stsz', content.toBytes());
+  }
+
+  /// co64（块偏移）盒子（64 位）。
+  static Uint8List buildCo64Box(int chunkOffset) {
+    final content = BytesBuilder();
+    content.add(_u32(1)); // entry_count
+    content.add(_u64(chunkOffset));
+    return buildFullBox('co64', content.toBytes());
+  }
+
+  // ---------------------------------------------------------------------------
+  // 通用盒子辅助
+  // ---------------------------------------------------------------------------
+
+  /// 构建基础 ISO BMFF 盒子。
+  static Uint8List buildBox(String type, Uint8List content) {
+    final totalSize = 8 + content.length;
+    final data = Uint8List(totalSize);
+    final bd = data.buffer.asByteData();
+    bd.setUint32(0, totalSize);
+    bd.setUint32(
+        4,
+        (type.codeUnitAt(0) << 24) |
+            (type.codeUnitAt(1) << 16) |
+            (type.codeUnitAt(2) << 8) |
+            type.codeUnitAt(3));
+    data.setRange(8, totalSize, content);
     return data;
   }
 
-  /// Build a full box (with version and flags).
+  /// 构建 full box（带 version + flags）。
   static Uint8List buildFullBox(String type, Uint8List content,
       {int version = 0, int flags = 0}) {
-    final header = Uint8List(4);
-    header[0] = version;
-    header[1] = (flags >> 16) & 0xFF;
-    header[2] = (flags >> 8) & 0xFF;
-    header[3] = flags & 0xFF;
+    final header = Uint8List.fromList([
+      version,
+      (flags >> 16) & 0xFF,
+      (flags >> 8) & 0xFF,
+      flags & 0xFF,
+    ]);
     return buildBox(type, Uint8List.fromList([...header, ...content]));
   }
 
-  /// Write data with a 4-byte length prefix.
-  static void _writeLengthPrefixed(BytesBuilder builder, Uint8List data) {
-    builder.add([
-      (data.length >> 24) & 0xFF,
-      (data.length >> 16) & 0xFF,
-      (data.length >> 8) & 0xFF,
-      data.length & 0xFF,
-    ]);
-    builder.add(data);
+  /// 单位矩阵（36 字节）。
+  static Uint8List _matrix() => Uint8List.fromList([
+        0x00,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x40,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+      ]);
+
+  static Uint8List _u16(int value) => Uint8List.fromList([
+        (value >> 8) & 0xFF,
+        value & 0xFF,
+      ]);
+
+  static Uint8List _u32(int value) => Uint8List.fromList([
+        (value >> 24) & 0xFF,
+        (value >> 16) & 0xFF,
+        (value >> 8) & 0xFF,
+        value & 0xFF,
+      ]);
+
+  static Uint8List _u64(int value) {
+    final data = Uint8List(8);
+    data.buffer.asByteData().setUint64(0, value);
+    return data;
   }
 
-  /// Write data with a 2-byte length prefix (for avcC box).
-  static void _writeLength16Prefixed(BytesBuilder builder, Uint8List data) {
-    builder.add([
-      (data.length >> 8) & 0xFF,
-      data.length & 0xFF,
-    ]);
-    builder.add(data);
+  static void _writeU16(BytesBuilder builder, int value) {
+    builder.add(_u16(value));
   }
 
-  /// Convert to unsigned 32-bit big-endian bytes.
-  static Uint8List _u32(int value) {
-    return Uint8List.fromList([
-      (value >> 24) & 0xFF,
-      (value >> 16) & 0xFF,
-      (value >> 8) & 0xFF,
-      value & 0xFF,
-    ]);
-  }
-
-  /// Convert a string to ISO 639 code (4 bytes, space-padded).
+  /// 4 字节 ISO 639 码（不足补空格）。
   static Uint8List iso639Code(String code) {
     final bytes = Uint8List(4);
     for (int i = 0; i < 4 && i < code.length; i++) {
       bytes[i] = code.codeUnitAt(i);
     }
     for (int i = code.length; i < 4; i++) {
-      bytes[i] = 0x20; // space
+      bytes[i] = 0x20;
     }
     return bytes;
   }
 
-  /// Convert string to code units.
-  static Uint8List codeUnits(String str) {
+  static Uint8List _codeUnits(String str) {
     final bytes = Uint8List(str.length);
     for (int i = 0; i < str.length; i++) {
       bytes[i] = str.codeUnitAt(i);
@@ -1422,7 +2222,6 @@ class Mp4Muxer {
     return bytes;
   }
 
-  /// Create a fixed-size byte array from a string, padding with nulls.
   static Uint8List _fixedStringBytes(String str, int length) {
     final bytes = Uint8List(length);
     for (int i = 0; i < length; i++) {

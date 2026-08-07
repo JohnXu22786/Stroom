@@ -29,6 +29,7 @@ class DefaultRules {
     'm3u8',
     'm3u',
     'mpd',
+    'ev1',
     'opus',
     'weba',
   };

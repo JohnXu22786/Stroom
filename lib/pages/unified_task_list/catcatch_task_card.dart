@@ -999,7 +999,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
             Text(
               isPlaylist
                   ? '该资源是一个播放列表（$format），需要自动解析并下载所有分段后合并为可播放的视频文件。'
-                  : '下载的文件格式为 $format，并不是标准的 MP4 格式。需要使用 FFmpeg 自动转换为 MP4。',
+                  : '下载的文件格式为 $format，并不是标准的 MP4 格式。将使用内置的纯 Dart 转封装引擎转换为 MP4（TS/FLV/EV1 免外部依赖）。',
               style: TextStyle(
                 fontSize: 13,
                 color: colorScheme.onSurfaceVariant,
