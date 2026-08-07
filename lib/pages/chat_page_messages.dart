@@ -45,7 +45,11 @@ extension _ChatPageMessagesExt on _ChatPageState {
       await AppLogService.info('ChatPage',
           '开始初始化 MCP 服务器，当前有 ${freshEntriesState?.entries.length ?? 0} 个供应商配置');
       if (freshEntriesState != null) {
-        await _adapter.initializeMcpServers(freshEntriesState);
+        // initializeMcpServers 会同步发布所有 MCP 服务器的占位工具定义
+        // （不做任何网络等待），再在后台连接并发现真实工具。先立即重解析
+        // 启用集并重建 UI，让所有 MCP 供应商的工具马上出现在工具列表中，
+        // 而不是等全部服务器连接完成（最坏情况需数十秒）。
+        final mcpFuture = _adapter.initializeMcpServers(freshEntriesState);
         // MCP tools may have been discovered AFTER _loadConversationMessages
         // resolved the enabled set. Re-resolve so newly discovered MCP tools
         // are auto-enabled for conversations without explicit prefs — this
@@ -53,6 +57,14 @@ extension _ChatPageMessagesExt on _ChatPageState {
         // enable all available tools") and keeps the badge/list at the full
         // count (12) instead of 7 on first entry.
         if (mounted) _resolveEnabledToolsForActiveConversation();
+        if (mounted) setState(() {});
+        // 发现完成后（连接成功的服务器已用真实工具替换占位符）在后台
+        // 刷新启用集与 UI，不阻塞页面其余初始化。
+        mcpFuture.then((_) {
+          if (!mounted) return;
+          _resolveEnabledToolsForActiveConversation();
+          setState(() {});
+        });
       }
       await AppLogService.info('ChatPage', 'MCP 服务器初始化完成');
     } finally {

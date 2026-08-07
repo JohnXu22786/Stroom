@@ -1206,6 +1206,158 @@ void main() {
       expect(exaTools.first.description, contains('Exa MCP'),
           reason: 'Description should be preserved from config');
     });
+
+    test(
+        'placeholder tools are published synchronously before any network '
+        'attempt (built-in remote SSE MCPs are visible immediately)', () async {
+      // The tool list must not wait for per-server connection attempts
+      // (real endpoints can take tens of seconds to fail). initializeMcpServers
+      // publishes the placeholders before its first await, so mcpToolDefinitions
+      // is already populated right after the call — without awaiting it.
+      final state = _vendorState();
+      final future = adapter.initializeMcpServers(state);
+
+      expect(adapter.mcpToolDefinitions, isNotEmpty,
+          reason: 'placeholders must be visible synchronously, before any '
+              'network round-trip completes');
+      expect(
+          adapter.mcpToolDefinitions.map((t) => t.name), contains('exa_mcp'));
+
+      await future;
+      expect(adapter.mcpToolDefinitions, isNotEmpty);
+    });
+
+    test(
+        'user-added (non-vendor) MCP servers also get placeholder tools — '
+        'no vendor/description distinction', () async {
+      // A user-added stdio server without isVendor and without a description
+      // must still appear in the tool list ("只要是 MCP 就都要显示").
+      // The command is guaranteed to fail to spawn, so the placeholder path
+      // is deterministic (no real npx/network dependency).
+      final state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'My Files',
+                host: '',
+                key: '',
+                models: [
+                  ModelConfig(
+                    name: 'My Files',
+                    modelId: 'stdio',
+                    typeConfig: {
+                      'transport': 'stdio',
+                      'command': 'definitely-not-a-real-mcp-command',
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await adapter.initializeMcpServers(state);
+
+      final names = adapter.mcpToolDefinitions.map((t) => t.name).toSet();
+      expect(names, contains('my_files_mcp'),
+          reason: 'user-added stdio MCP server must get a placeholder tool '
+              'even without isVendor/description');
+      final placeholder = adapter.mcpToolDefinitions
+          .firstWhere((t) => t.name == 'my_files_mcp');
+      expect(placeholder.description, isNotEmpty,
+          reason: 'placeholder falls back to a generic description so the '
+              'tool list entry is meaningful');
+    });
+
+    test('vendor MCP servers without a description still get placeholder tools',
+        () async {
+      final state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'Exa',
+                host: 'https://mcp.example.com/mcp',
+                key: '',
+                models: [
+                  ModelConfig(
+                    name: 'Exa',
+                    modelId: 'sse',
+                    typeConfig: {
+                      'transport': 'sse',
+                      'url': 'https://mcp.example.com/mcp',
+                      'isVendor': true,
+                      // Note: no 'description' key.
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await adapter.initializeMcpServers(state);
+
+      final names = adapter.mcpToolDefinitions.map((t) => t.name).toSet();
+      expect(names, contains('exa_mcp'),
+          reason: 'a vendor server without a description must still appear '
+              'in the tool list');
+    });
+
+    test(
+        'initializeMcpServers with no MCP configs clears previously cached '
+        'tools', () async {
+      await adapter.initializeMcpServers(_vendorState());
+      expect(adapter.mcpToolDefinitions, isNotEmpty);
+
+      // The MCP entry still exists but has no configs (all deleted).
+      final emptyConfigsState = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            configs: [],
+          ),
+        ],
+      );
+      await adapter.initializeMcpServers(emptyConfigsState);
+
+      expect(adapter.mcpToolDefinitions, isEmpty,
+          reason: 'tools from a removed MCP config must not leak into the '
+              'tool list');
+    });
+
+    test(
+        'a same-config call after a failed discovery re-runs discovery '
+        '(temporarily-down servers can recover later)', () async {
+      // Placeholders keep the cache non-empty after any run, so a naive
+      // "cache non-empty → skip" guard would never retry a server that was
+      // down during the first discovery. The adapter must re-discover on a
+      // later same-state call when the previous run found no real tools —
+      // observable via fresh placeholder instances (a skipped guard would
+      // return the same ToolDefinition objects).
+      final state = _vendorState();
+      await adapter.initializeMcpServers(state);
+      final firstDefs = adapter.mcpToolDefinitions;
+      expect(firstDefs, isNotEmpty);
+
+      await adapter.initializeMcpServers(state);
+      final secondDefs = adapter.mcpToolDefinitions;
+      expect(identical(firstDefs.first, secondDefs.first), isFalse,
+          reason: 'a second same-state call must re-run discovery when the '
+              'last run only produced placeholders, so a server that came '
+              'back online is rediscovered');
+    });
   });
 
   // ====================================================================

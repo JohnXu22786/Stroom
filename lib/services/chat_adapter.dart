@@ -83,6 +83,20 @@ class ChatAdapter {
   /// 导致工具静默丢失。发现完成后置空，允许后续重发现。
   Future<void>? _mcpInitFuture;
 
+  /// MCP 发现运行的代号：每轮发现开始时递增，disposeMcp 也会递增。
+  /// 旧运行完成时若代号已变化（已被 dispose 或新一轮发现取代），
+  /// 不得再写入工具列表——否则会在 dispose 之后复活旧工具，或让
+  /// 一轮旧发现的占位符覆盖新发现的真实工具。
+  int _mcpDiscoveryGeneration = 0;
+
+  /// 上一轮 MCP 发现是否找到真实工具。
+  ///
+  /// 占位符设计使缓存在任何发现运行后都非空，若只看缓存非空就跳过
+  /// 重发现，临时不可达的服务器（发现时未启动/断网）会永久停留在
+  /// 占位符上直到配置变更或重启。记录真实工具是否被找到：未找到时
+  /// 同配置的页面重新进入仍会重试发现，让服务器恢复后自动加载真实工具。
+  bool _lastMcpDiscoveryFoundTools = false;
+
   /// 当前选中的配置索引（指向 llmEntry.configs）
   int currentConfigIndex = -1;
 
