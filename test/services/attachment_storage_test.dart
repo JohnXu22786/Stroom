@@ -92,4 +92,149 @@ void main() {
       expect(result, isNull);
     });
   });
+
+  group('AttachmentStorage 图片压缩缓存', () {
+    test('saveCompressedImage/readCompressedImage 往返（JPEG 与 PNG 扩展名）',
+        () async {
+      final jpegBytes = Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3]);
+      final pngBytes =
+          Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+
+      await AttachmentStorage.saveCompressedImage(
+        conversationId: 'conv-1',
+        hash: 'hash-jpeg',
+        bytes: jpegBytes,
+        mimeType: 'image/jpeg',
+      );
+      await AttachmentStorage.saveCompressedImage(
+        conversationId: 'conv-1',
+        hash: 'hash-png',
+        bytes: pngBytes,
+        mimeType: 'image/png',
+      );
+
+      // 物理布局：<附件目录>/temp_compressed/<convId>/<hash>.<ext>
+      final jpegFile = File(p.join(
+          tmpRoot.path, 'attachments', 'temp_compressed', 'conv-1',
+          'hash-jpeg.jpg'));
+      final pngFile = File(p.join(
+          tmpRoot.path, 'attachments', 'temp_compressed', 'conv-1',
+          'hash-png.png'));
+      expect(await jpegFile.exists(), isTrue, reason: 'JPEG 缓存按 .jpg 落盘');
+      expect(await pngFile.exists(), isTrue, reason: 'PNG 缓存按 .png 落盘');
+
+      final jpegBack = await AttachmentStorage.readCompressedImage(
+          conversationId: 'conv-1', hash: 'hash-jpeg');
+      expect(jpegBack, isNotNull);
+      expect(jpegBack!.bytes, jpegBytes);
+      expect(jpegBack.mimeType, 'image/jpeg');
+
+      final pngBack = await AttachmentStorage.readCompressedImage(
+          conversationId: 'conv-1', hash: 'hash-png');
+      expect(pngBack, isNotNull);
+      expect(pngBack!.bytes, pngBytes);
+      expect(pngBack.mimeType, 'image/png');
+    });
+
+    test('读取不存在的缓存 / 魔数与扩展名不符的损坏缓存返回 null', () async {
+      final missing = await AttachmentStorage.readCompressedImage(
+          conversationId: 'conv-1', hash: 'ghost');
+      expect(missing, isNull);
+
+      // 扩展名 .jpg 但内容不是 JPEG 魔数 → 视为损坏跳过
+      await AttachmentStorage.saveCompressedImage(
+        conversationId: 'conv-1',
+        hash: 'corrupt',
+        bytes: Uint8List.fromList([0x89, 0x50, 1, 2, 3]),
+        mimeType: 'image/jpeg',
+      );
+      final corrupt = await AttachmentStorage.readCompressedImage(
+          conversationId: 'conv-1', hash: 'corrupt');
+      expect(corrupt, isNull, reason: '魔数与扩展名不一致的缓存必须视为未命中');
+    });
+
+    test('deleteCompressedImage 清理两种扩展名', () async {
+      await AttachmentStorage.saveCompressedImage(
+        conversationId: 'conv-1',
+        hash: 'both',
+        bytes: Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0]),
+        mimeType: 'image/jpeg',
+      );
+      // 完整 8 字节 PNG 魔数：确保 .png 变体是"有效缓存"而非损坏文件，
+      // 否则删除前/后的读取都会因魔数校验失败而返回 null，
+      // .png 删除分支的回归将无法被测试捕获。
+      await AttachmentStorage.saveCompressedImage(
+        conversationId: 'conv-1',
+        hash: 'both',
+        bytes: Uint8List.fromList(
+            [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x01]),
+        mimeType: 'image/png',
+      );
+
+      // 删除前两个变体都真实可读（证明都是有效缓存）
+      expect(
+          await AttachmentStorage.readCompressedImage(
+              conversationId: 'conv-1', hash: 'both'),
+          isNotNull);
+
+      final deleted = await AttachmentStorage.deleteCompressedImage(
+          conversationId: 'conv-1', hash: 'both');
+
+      expect(deleted, isTrue);
+      expect(
+          await AttachmentStorage.readCompressedImage(
+              conversationId: 'conv-1', hash: 'both'),
+          isNull,
+          reason: '同一 hash 的 .jpg 与 .png 缓存都应被删除');
+    });
+
+    test('deleteConversationCompressedImages 只清理指定对话的缓存目录', () async {
+      await AttachmentStorage.saveCompressedImage(
+        conversationId: 'conv-a',
+        hash: 'h1',
+        bytes: Uint8List.fromList([0xFF, 0xD8, 0xFF]),
+        mimeType: 'image/jpeg',
+      );
+      await AttachmentStorage.saveCompressedImage(
+        conversationId: 'conv-b',
+        hash: 'h1',
+        bytes: Uint8List.fromList([0xFF, 0xD8, 0xFF]),
+        mimeType: 'image/jpeg',
+      );
+
+      await AttachmentStorage.deleteConversationCompressedImages('conv-a');
+
+      expect(
+          await AttachmentStorage.readCompressedImage(
+              conversationId: 'conv-a', hash: 'h1'),
+          isNull,
+          reason: '被删除对话的缓存必须清空');
+      expect(
+          await AttachmentStorage.readCompressedImage(
+              conversationId: 'conv-b', hash: 'h1'),
+          isNotNull,
+          reason: '其他对话的缓存不受影响（缓存按对话隔离）');
+      final convADir = Directory(p.join(
+          tmpRoot.path, 'attachments', 'temp_compressed', 'conv-a'));
+      expect(await convADir.exists(), isFalse, reason: '对话目录整体删除');
+    });
+
+    test('conversationId / hash 缺失时保存与删除均为 no-op', () async {
+      final path = await AttachmentStorage.saveCompressedImage(
+        conversationId: null,
+        hash: 'h',
+        bytes: Uint8List.fromList([1, 2, 3]),
+        mimeType: 'image/jpeg',
+      );
+      expect(path, isNull);
+      expect(
+          await AttachmentStorage.readCompressedImage(
+              conversationId: null, hash: 'h'),
+          isNull);
+      expect(
+          await AttachmentStorage.deleteCompressedImage(
+              conversationId: null, hash: 'h'),
+          isFalse);
+    });
+  });
 }
