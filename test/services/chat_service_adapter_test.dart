@@ -1335,8 +1335,7 @@ void main() {
               'tool list');
     });
 
-    test(
-        'a same-config re-entry is skipped (no placeholder/client churn)',
+    test('a same-config re-entry is skipped (no placeholder/client churn)',
         () async {
       // 懒连接模式下同配置的页面重复进入不应重建任何东西：占位工具
       // 保持同一实例（可观察：identical），客户端也保持未连接状态。
