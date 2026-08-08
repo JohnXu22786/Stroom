@@ -96,6 +96,17 @@ extension _ChatPageBuildersExt on _ChatPageState {
       itemBuilder: itemBuilder,
       onEndReached: _loadMoreMessages,
       scrollController: _chatScrollController,
+      // Scrolling the list must NOT dismiss the soft keyboard — the
+      // keyboard stays up while the user reads/scrolls; it is dismissed
+      // via the keyboard's own close key or the page's dismiss button.
+      // (The library defaults to onDrag, which hides the keyboard on any
+      // drag — exactly what the user reported as unwanted.)
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
+      // The library's own debounced keyboard scroll would otherwise run a
+      // 250ms animation that cancels this page's keyboard scroll and
+      // delays the final landing; with Duration.zero it becomes an
+      // instant jump that never fights the page's animation.
+      scrollToEndAnimationDuration: Duration.zero,
       // While the initial positioning pass runs (entry / conversation
       // switch), suppress the built-in jump-to-bottom — the page positions
       // the list at the last user message itself. Same-conversation reloads

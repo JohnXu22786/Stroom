@@ -102,26 +102,33 @@ extension _ChatPageUiExt on _ChatPageState {
   ///
   /// The viewport keeps shrinking while the keyboard animation runs, which
   /// grows [ScrollMetrics.maxScrollExtent] past the target captured here,
-  /// and the chat library's own debounced keyboard scroll may take over
-  /// the position mid-flight; [_tryKeyboardFollowUp] closes the remaining
-  /// gap once every scroll has settled.
+  /// so the animation ends short of the true bottom; [_tryKeyboardFollowUp]
+  /// is re-evaluated as soon as it finishes (and again by the follow-up
+  /// timer) to close the remaining gap without a long wait.
   void _animateScrollToBottom() {
     final pos = _chatScrollController.position;
     final target = pos.maxScrollExtent;
     if ((pos.pixels - target).abs() < 1) return;
-    pos.animateTo(
+    pos
+        .animateTo(
       target,
       duration: _ChatPageState._keyboardOpenScrollDuration,
       curve: Curves.easeOutCubic,
-    );
+    )
+        .whenComplete(() {
+      if (!mounted) return;
+      // Close the gap as soon as this animation lands (the follow-up
+      // timer is the last-resort backstop for interrupted animations).
+      _tryKeyboardFollowUp();
+    });
   }
 
   /// Runs once, [_keyboardFollowUpDelay] after the keyboard appeared, by
-  /// which time every scroll animation that can run during the show
-  /// transition has finished (the keyboard-appear scroll, the chat
-  /// library's debounced 250ms keyboard scroll). If the list is not yet at
-  /// the bottom of the final viewport — and the user has not taken over
-  /// the list — the remaining gap is closed with one short animation.
+  /// which time every scroll that can run during the show transition has
+  /// finished (the keyboard-appear scroll, the chat library's instant
+  /// keyboard jump). If the list is not yet at the bottom of the final
+  /// viewport — and the user has not taken over the list — the remaining
+  /// gap is closed with one short animation.
   void _tryKeyboardFollowUp() {
     if (!mounted) return;
     if (!_keyboardAppeared) return;
@@ -802,6 +809,41 @@ extension _ChatPageUiExt on _ChatPageState {
             alignment: Alignment.center,
             child: Icon(
               Icons.arrow_downward,
+              size: 20,
+              color: isDark ? Colors.grey[200] : Colors.grey[700],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Dismisses the soft keyboard, to the left of the scroll-to-bottom
+  /// button, visible while the keyboard is open. The keyboard otherwise
+  /// stays up while the user reads/scrolls (the list's
+  /// [ScrollViewKeyboardDismissBehavior.manual]): it is closed either via
+  /// the keyboard's own close key or this button.
+  Widget _buildKeyboardDismissButton({required bool isDark}) {
+    return Positioned(
+      right: 16 + 36 + 8,
+      bottom: 16,
+      child: Material(
+        elevation: 4,
+        shape: const CircleBorder(),
+        color: isDark ? Colors.grey[700] : Colors.grey[300],
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () {
+            // Hide the soft keyboard; the keyboard-close transition in
+            // didChangeMetrics restores the reading position.
+            FocusScope.of(context).unfocus();
+          },
+          child: Container(
+            width: 36,
+            height: 36,
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.keyboard_hide,
               size: 20,
               color: isDark ? Colors.grey[200] : Colors.grey[700],
             ),
