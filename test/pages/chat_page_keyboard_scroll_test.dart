@@ -15,6 +15,11 @@
 //  5. The bottom-pinning never yanks the list back when the user scrolls
 //     up manually while the keyboard is open.
 //  6. An empty conversation survives input tap + keyboard open/close.
+//  7. With HomePage's IndexedStack keep-alive, the page stays mounted while
+//     another main page is shown: a keyboard that opens on ANOTHER tab must
+//     not hijack the hidden chat list (the open transition is gated by
+//     Visibility.of), while a keyboard dismissed while hidden must still
+//     restore the reading position.
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -41,45 +46,44 @@ List<ChatMessage> _testMessages(int count) {
   });
 }
 
-/// Pumps a ChatPage with a conversation pre-populated with [messages].
-Future<void> pumpChat(
-  WidgetTester tester, {
-  int messageCount = 60,
-}) async {
-  final messages = _testMessages(messageCount);
-  SharedPreferences.setMockInitialValues({
-    'conversations': jsonEncode([
-      {
-        'id': 'test-conv-id',
-        'title': 'Test Conversation',
-        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
-        'updatedAt': DateTime(2025, 1, 1).toIso8601String(),
-        'messages': messages.map((m) => m.toMap()).toList(),
-        'isPinned': false,
-        'sortOrder': 0,
-      }
-    ]),
-  });
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        // NOTE: conversationsProvider is intentionally NOT overridden —
-        // the real provider triggers the async _load() that reads the
-        // mock SharedPreferences; overriding it with a raw notifier
-        // would leave the conversation unloaded and the list empty.
-        activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
-        providerEntriesProvider.overrideWith((ref) {
-          return ProviderEntriesNotifier();
-        }),
-      ],
-      child: const MaterialApp(home: ChatPage()),
-    ),
+/// Builds the chat-page app (ProviderScope + MaterialApp + ChatPage).
+Widget _buildChatApp() {
+  return ProviderScope(
+    overrides: [
+      // NOTE: conversationsProvider is intentionally NOT overridden —
+      // the real provider triggers the async _load() that reads the
+      // mock SharedPreferences; overriding it with a raw notifier
+      // would leave the conversation unloaded and the list empty.
+      activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
+      providerEntriesProvider.overrideWith((ref) {
+        return ProviderEntriesNotifier();
+      }),
+    ],
+    child: const MaterialApp(home: ChatPage()),
   );
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 50));
-  // Let the chat list fully initialize (delayed insert/scroll timers from
-  // flutter_chat_ui) so scroll positions are stable for the assertions.
-  await settle(tester);
+}
+
+/// Wraps [app] in a `Visibility` that mirrors how HomePage's IndexedStack
+/// hides the chat tab while another main page is selected: the subtree
+/// stays mounted, laid out and animated, but reports itself hidden to
+/// `Visibility.of(context)` and is not painted. The wrapper is ALWAYS
+/// present (also for `visible: true`) so flipping the flag keeps the same
+/// widget tree shape and all State.
+Widget _wrapTabVisibility(Widget app, {required bool visible}) {
+  return Visibility(
+    visible: visible,
+    maintainState: true,
+    maintainSize: true,
+    maintainAnimation: true,
+    maintainInteractivity: true,
+    child: app,
+  );
+}
+
+/// Post-pump common setup: consume flutter_chat_ui's pre-existing framework
+/// exceptions and neutralize the visibility_detector polling interval so no
+/// timers are left pending at the end of the test.
+void _postPumpSetup(WidgetTester tester) {
   // Consume pre-existing framework exceptions from flutter_chat_ui.
   tester.takeException();
   // The chat library's visibility_detector schedules a 500ms re-check timer
@@ -95,18 +99,55 @@ Future<void> pumpChat(
   addTearDown(tester.view.reset);
 }
 
+/// Pumps a ChatPage with a conversation pre-populated with [messages].
+/// When [visible] is false the page is kept alive but hidden, as it would
+/// be while another main page is selected (IndexedStack keep-alive).
+Future<void> pumpChat(
+  WidgetTester tester, {
+  int messageCount = 60,
+  bool visible = true,
+}) async {
+  final messages = _testMessages(messageCount);
+  SharedPreferences.setMockInitialValues({
+    'conversations': jsonEncode([
+      {
+        'id': 'test-conv-id',
+        'title': 'Test Conversation',
+        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        'updatedAt': DateTime(2025, 1, 1).toIso8601String(),
+        'messages': messages.map((m) => m.toMap()).toList(),
+        'isPinned': false,
+        'sortOrder': 0,
+      }
+    ]),
+  });
+  await tester
+      .pumpWidget(_wrapTabVisibility(_buildChatApp(), visible: visible));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 50));
+  // Let the chat list fully initialize (delayed insert/scroll timers from
+  // flutter_chat_ui) so scroll positions are stable for the assertions.
+  await settle(tester);
+  _postPumpSetup(tester);
+}
+
 /// The chat list's scrollable (inside the ChatAnimatedList).
-Finder _chatScrollable() {
+Finder _chatScrollable({bool skipOffstage = true}) {
   return find
       .descendant(
-        of: find.byType(ChatAnimatedList),
-        matching: find.byType(Scrollable),
+        of: find.byType(ChatAnimatedList, skipOffstage: skipOffstage),
+        matching: find.byType(Scrollable, skipOffstage: skipOffstage),
       )
       .first;
 }
 
-ScrollPosition _scrollPosition(WidgetTester tester) {
-  return tester.state<ScrollableState>(_chatScrollable()).position;
+ScrollPosition _scrollPosition(
+  WidgetTester tester, {
+  bool skipOffstage = true,
+}) {
+  return tester
+      .state<ScrollableState>(_chatScrollable(skipOffstage: skipOffstage))
+      .position;
 }
 
 /// Scrolls the chat list to the bottom. Uses the scroll position directly
@@ -502,6 +543,90 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'keyboard opening while the chat tab is hidden does not move '
+        'the chat list (IndexedStack keep-alive)', (tester) async {
+      // Chat tab hidden — as when another main page is selected.
+      await pumpChat(tester, visible: false);
+
+      // Scroll the hidden list to a reading position (not the bottom).
+      final pos = _scrollPosition(tester, skipOffstage: false);
+      pos.jumpTo(pos.maxScrollExtent);
+      await tester.pump();
+      pos.jumpTo((pos.pixels - 400).clamp(0.0, pos.maxScrollExtent));
+      await tester.pump();
+      final savedPos = pos.pixels;
+      expect(savedPos, greaterThan(0));
+      expect(savedPos, lessThan(pos.maxScrollExtent - 200));
+
+      // A keyboard opens on ANOTHER tab: view insets change app-globally.
+      // didChangeMetrics must ignore the open transition while the page is
+      // hidden — otherwise the hidden list jumps to the bottom and a bogus
+      // keyboard session corrupts the next real one. (The chat library's
+      // own debounced keyboard handler is not under test here — the
+      // assertion runs within the metrics-dispatch window, like the
+      // visible-page tests.)
+      await setKeyboardInset(tester, 300);
+      expect(
+        _scrollPosition(tester, skipOffstage: false).pixels,
+        closeTo(savedPos, 1.0),
+        reason: 'a keyboard opening on another tab must not move the '
+            'hidden chat list',
+      );
+
+      await setKeyboardInset(tester, 0);
+      await settle(tester);
+    });
+
+    testWidgets(
+        'keyboard dismissed while the chat tab is hidden still restores '
+        'the reading position', (tester) async {
+      // Session starts while the chat tab is visible.
+      await pumpChat(tester);
+      await scrollToBottom(tester);
+      await scrollUp(tester);
+      final savedPos = _scrollPosition(tester).pixels;
+      expect(savedPos, greaterThan(0));
+
+      await setKeyboardInset(tester, 300);
+      expect(
+        _scrollPosition(tester).pixels,
+        closeTo(_scrollPosition(tester).maxScrollExtent, 5.0),
+        reason: 'precondition: keyboard open on the visible chat tab '
+            'pins the list to the bottom',
+      );
+
+      // Switch to another tab while the keyboard is still open (the same
+      // widget tree is re-pumped with the Visibility flag flipped, keeping
+      // all State).
+      await tester
+          .pumpWidget(_wrapTabVisibility(_buildChatApp(), visible: false));
+      await tester.pump();
+
+      // The keyboard dismisses while the chat tab is hidden — only the
+      // OPEN transition is gated; the close must still restore the saved
+      // reading position.
+      tester.view.devicePixelRatio = 3.0;
+      tester.view.physicalSize = const Size(2400, 1800);
+      tester.view.viewInsets = FakeViewPadding.zero;
+      await _dispatchMetrics(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Return to the chat tab — the list is back at the reading position.
+      await tester
+          .pumpWidget(_wrapTabVisibility(_buildChatApp(), visible: true));
+      await tester.pump();
+
+      expect(
+        _scrollPosition(tester).pixels,
+        closeTo(savedPos, 5.0),
+        reason: 'dismissing the keyboard while hidden must still restore '
+            'the reading position captured before the session',
+      );
+      await settle(tester);
     });
   });
 }

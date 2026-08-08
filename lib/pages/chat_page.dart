@@ -368,6 +368,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
       _wasKeyboardVisible = isNowVisible;
       return;
     }
+    // The page stays mounted (IndexedStack keep-alive) while other main
+    // pages are shown. Keyboard insets are app-global, so a keyboard that
+    // opens on another tab must not hijack the chat scroll session (it would
+    // scroll the hidden list to the bottom and corrupt the saved reading
+    // position). Only the closing transition is still honored while hidden,
+    // so switching away mid-keyboard still restores the reading spot.
+    if (!Visibility.of(context) && isNowVisible && !_wasKeyboardVisible) {
+      return;
+    }
 
     if (isNowVisible && !_wasKeyboardVisible) {
       // Keyboard just appeared — capture the pre-keyboard scroll position

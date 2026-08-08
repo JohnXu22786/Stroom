@@ -135,9 +135,11 @@ extension _HomePageNavigationExt on _HomePageState {
     );
   }
 
-  /// 聊天标签页内容：嵌套导航器，始终以助手选择页为根路由。
+  /// 聊天标签页内容：嵌套导航器，以助手选择页为根路由。
   /// 用户流程：选择助手 → 选择话题 → 聊天页面。
-  /// 每次进入聊天标签页时导航器会被重置到根路由（助手选择页）。
+  /// 切换其他标签页时该嵌套导航器及其中间路由栈保持不变（状态保留）；
+  /// 再次点击对话标签（双击）时由 [_HomePageState._resetChatNavigator]
+  /// 重置到根路由（助手选择页）。
   Widget _buildChatOrAssistantPage() {
     return Navigator(
       key: _chatNavigatorKey,
