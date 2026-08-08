@@ -19,30 +19,52 @@ extension _SettingsPageAboutExt on _SettingsPageState {
 
   Widget _buildAboutHeader(ThemeData theme) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-        child: Column(
-          children: [
-            Icon(
-              Icons.auto_awesome,
-              size: 56,
-              color: theme.colorScheme.primary,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Stroom',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: _showVersionInfoDialog,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          child: Column(
+            children: [
+              Icon(
+                Icons.auto_awesome,
+                size: 56,
+                color: theme.colorScheme.primary,
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '版本 $appVersion',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+              const SizedBox(height: 12),
+              Text(
+                'Stroom',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                '版本 $appVersion',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 14,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '点击查看版本信息',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -197,6 +219,14 @@ extension _SettingsPageAboutExt on _SettingsPageState {
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
+  }
+
+  void _showVersionInfoDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => const VersionInfoDialog(),
     );
   }
 

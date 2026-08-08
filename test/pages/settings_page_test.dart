@@ -413,4 +413,65 @@ void main() {
       expect(find.byType(TextFormField), findsNothing);
     });
   });
+  // ─────────────────────────────────────────────────────────────────────
+  // From settings_page_about.dart — 版本信息面板
+  // ─────────────────────────────────────────────────────────────────────
+
+  group('SettingsPage - 版本信息面板', () {
+    testWidgets('tapping the version card opens the version info dialog', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      SharedPreferences.setMockInitialValues({});
+
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
+
+      // The about header shows the app name; tapping it must open the dialog.
+      // Scroll it into view first (last section of a long ListView).
+      await tester.ensureVisible(find.text('Stroom'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Stroom'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('版本信息'), findsOneWidget);
+      expect(find.text('版本号'), findsOneWidget);
+      expect(find.text('发布时间'), findsOneWidget);
+      // Tests run without CD dart-defines → fallback text.
+      expect(find.text('本地构建'), findsOneWidget);
+      // No release notes baked into the test build → section hidden.
+      expect(find.text('更新内容'), findsNothing);
+    });
+
+    testWidgets('version info dialog closes via 关闭 button', (tester) async {
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      SharedPreferences.setMockInitialValues({});
+
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Stroom'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Stroom'));
+      await tester.pumpAndSettle();
+      expect(find.text('版本信息'), findsOneWidget);
+
+      await tester.tap(find.text('关闭'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('版本信息'), findsNothing);
+    });
+  });
 }
