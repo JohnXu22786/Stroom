@@ -144,7 +144,8 @@ void main() {
       expect(settingsChip.badgeCount, isNull);
     });
 
-    testWidgets('active + badge when a value is selected even if the param '
+    testWidgets(
+        'active + badge when a value is selected even if the param '
         'was created disabled', (tester) async {
       // 已选值即运行时开关状态（面板切换通过写入/移除参数值生效），
       // 配置里的 enabled 只是新建参数的默认状态。

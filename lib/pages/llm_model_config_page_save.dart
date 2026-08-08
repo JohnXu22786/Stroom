@@ -87,9 +87,8 @@ extension _SaveExt on _LlmModelConfigPageState {
     // 仅验证模型自有（非继承）参数：继承自供应商的参数由供应商保存时
     // 校验，未修改的继承参数不写入模型。开关完备性检查基于合并视图
     // （推理开关可来自供应商），与请求构建时的行为一致。
-    final modelOwnedParams = _reasoningParams
-        .where((p) => !p.inheritedFromProvider)
-        .toList();
+    final modelOwnedParams =
+        _reasoningParams.where((p) => !p.inheritedFromProvider).toList();
 
     // Check 1: If the model owns any reasoning params, the toggle must
     // exist (model-owned or inherited from provider) and be filled.

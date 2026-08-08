@@ -53,8 +53,7 @@ ProviderConfigItem _baseConfig() => ProviderConfigItem(
     );
 
 void main() {
-  group('ProviderSettingsPanel reasoning section (ported from model page)',
-      () {
+  group('ProviderSettingsPanel reasoning section (ported from model page)', () {
     testWidgets('shows toggle, effort and additional param sections',
         (tester) async {
       await _openAndSave(tester, config: _baseConfig(), tapSave: false);
@@ -75,8 +74,7 @@ void main() {
           matching: find.byType(TextButton),
         ),
       );
-      expect(addEffortButton.onPressed, isNull,
-          reason: '无推理开关时不可添加推理力度');
+      expect(addEffortButton.onPressed, isNull, reason: '无推理开关时不可添加推理力度');
     });
 
     testWidgets('provider-level effort param with name only is persisted',

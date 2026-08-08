@@ -149,9 +149,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                       isDense: true,
                     ),
                     onChanged: (v) {
-                toggle.onValue = v;
-                _claimReasoningParam(toggle);
-                setState(() {});
+                      toggle.onValue = v;
+                      _claimReasoningParam(toggle);
+                      setState(() {});
                     },
                   ),
                 ),
@@ -166,9 +166,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                       isDense: true,
                     ),
                     onChanged: (v) {
-                toggle.offValue = v;
-                _claimReasoningParam(toggle);
-                setState(() {});
+                      toggle.offValue = v;
+                      _claimReasoningParam(toggle);
+                      setState(() {});
                     },
                   ),
                 ),
@@ -312,9 +312,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                           isDense: true,
                         ),
                         onChanged: (v) {
-                effort.options[j] = v;
-                _claimReasoningParam(effort);
-                setState(() {});
+                          effort.options[j] = v;
+                          _claimReasoningParam(effort);
+                          setState(() {});
                         },
                       ),
                     ),
@@ -434,9 +434,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                       errorStyle: const TextStyle(fontSize: 11),
                     ),
                     onChanged: (v) {
-                param.paramName = v;
-                _claimReasoningParam(param);
-                setState(() {});
+                      param.paramName = v;
+                      _claimReasoningParam(param);
+                      setState(() {});
                     },
                   ),
                 ),
@@ -488,9 +488,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                           isDense: true,
                         ),
                         onChanged: (v) {
-                param.options[j] = v;
-                _claimReasoningParam(param);
-                setState(() {});
+                          param.options[j] = v;
+                          _claimReasoningParam(param);
+                          setState(() {});
                         },
                       ),
                     ),

@@ -138,8 +138,9 @@ class ChatAdapter {
     return mergeReasoningParams(providerParams, config.reasoningParams)
         .map((p) {
       final name = p.paramName.trim();
-      final isProviderOrigin =
-          name.isNotEmpty && providerNames.contains(name) && !modelNames.contains(name);
+      final isProviderOrigin = name.isNotEmpty &&
+          providerNames.contains(name) &&
+          !modelNames.contains(name);
       return isProviderOrigin ? p.copy() : p;
     }).toList();
   }

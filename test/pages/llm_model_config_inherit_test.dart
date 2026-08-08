@@ -171,8 +171,7 @@ void main() {
 
       // 编辑后：回到开关区域，开关仍继承自供应商（徽章保留 1 个），
       // 被认领的力度参数徽章已消失
-      await _scrollToReasoning(tester, find.text('thinking.type'),
-          delta: -200);
+      await _scrollToReasoning(tester, find.text('thinking.type'), delta: -200);
       expect(find.text('来自供应商'), findsOneWidget,
           reason: '开关仍继承自供应商，力度参数已变为模型独立');
 
@@ -215,7 +214,8 @@ void main() {
         ],
       );
 
-      await _pumpAndSave(tester, model: model, provider: provider, tapSave: false);
+      await _pumpAndSave(tester,
+          model: model, provider: provider, tapSave: false);
 
       // 同名模型参数覆盖供应商参数：只显示一张力度卡片，且不是继承态
       await _scrollToReasoning(tester, find.text('reasoning_effort'));
@@ -225,7 +225,8 @@ void main() {
       expect(find.text('low'), findsOneWidget);
     });
 
-    testWidgets('back navigation without changes does not warn when only '
+    testWidgets(
+        'back navigation without changes does not warn when only '
         'inherited params exist', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -258,11 +259,11 @@ void main() {
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(find.text('放弃修改？'), findsNothing);
-      expect(find.text('打开模型配置'), findsOneWidget,
-          reason: '页面应已正常返回');
+      expect(find.text('打开模型配置'), findsOneWidget, reason: '页面应已正常返回');
     });
 
-    testWidgets('delete button hidden for provider-originated params '
+    testWidgets(
+        'delete button hidden for provider-originated params '
         '(including claimed ones)', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -301,7 +302,8 @@ void main() {
       expect(find.byIcon(Icons.delete), findsNothing);
     });
 
-    testWidgets('delete button visible for model-owned params even when the '
+    testWidgets(
+        'delete button visible for model-owned params even when the '
         'name collides with a provider param', (tester) async {
       final provider = ProviderConfigItem(
         providerName: 'Test Provider',
@@ -411,8 +413,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(saved, isNotNull);
-      expect(saved!.reasoningParams, isEmpty,
-          reason: '还原后的参数不写入模型，保持跟随供应商');
+      expect(saved!.reasoningParams, isEmpty, reason: '还原后的参数不写入模型，保持跟随供应商');
     });
 
     testWidgets(
@@ -447,8 +448,7 @@ void main() {
 
       await _pumpAndSave(tester, model: model, provider: provider);
 
-      expect(find.text('推理参数与自定义参数存在重名: reasoning_effort'),
-          findsOneWidget);
+      expect(find.text('推理参数与自定义参数存在重名: reasoning_effort'), findsOneWidget);
     });
 
     testWidgets(
@@ -532,8 +532,7 @@ void main() {
 
       // 新建参数是模型自有：保存进模型（而非被当作继承丢弃）
       expect(saved, isNotNull);
-      expect(saved!.reasoningParams.map((p) => p.paramName),
-          ['budget_tokens']);
+      expect(saved!.reasoningParams.map((p) => p.paramName), ['budget_tokens']);
     });
 
     testWidgets(

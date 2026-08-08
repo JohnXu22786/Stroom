@@ -588,7 +588,6 @@ void showReasoningPanel({
                                 }).toList(),
                               ),
                           ],
-                          ],
                           // No non-toggle params state (when reasoning is enabled
                           // but there are no additional params configured)
                           if (localEnabled &&
@@ -769,53 +768,55 @@ void showCustomReasoningParamsPanel({
                                         )
                                       else
                                         Switch(
-                                        // 开关状态以已选值是否存在为准（运行时
-                                        // 状态存于 reasoningParamSelections）：
-                                        // 面板切换通过写入/移除参数值生效，
-                                        // 不依赖参数对象上可变的 enabled 标记。
-                                        value: (localSelections[param.paramName]
-                                                    ?.isNotEmpty ??
-                                                false) &&
-                                            localReasoningEnabled,
-                                        activeThumbColor: cs.primary,
-                                        onChanged: localReasoningEnabled
-                                            ? (value) {
-                                                setState(() {
-                                                  // 同步本地已选值，开关显示
-                                                  // 与运行状态保持一致
-                                                  // （与 onCustomParamToggle
-                                                  // 的 putIfAbsent 语义一致）
-                                                  if (value) {
-                                                    if (param.options
-                                                        .isNotEmpty) {
-                                                      localSelections.putIfAbsent(
-                                                          param.paramName,
-                                                          () => param
-                                                              .options
-                                                              .first);
+                                          // 开关状态以已选值是否存在为准（运行时
+                                          // 状态存于 reasoningParamSelections）：
+                                          // 面板切换通过写入/移除参数值生效，
+                                          // 不依赖参数对象上可变的 enabled 标记。
+                                          value:
+                                              (localSelections[param.paramName]
+                                                          ?.isNotEmpty ??
+                                                      false) &&
+                                                  localReasoningEnabled,
+                                          activeThumbColor: cs.primary,
+                                          onChanged: localReasoningEnabled
+                                              ? (value) {
+                                                  setState(() {
+                                                    // 同步本地已选值，开关显示
+                                                    // 与运行状态保持一致
+                                                    // （与 onCustomParamToggle
+                                                    // 的 putIfAbsent 语义一致）
+                                                    if (value) {
+                                                      if (param
+                                                          .options.isNotEmpty) {
+                                                        localSelections
+                                                            .putIfAbsent(
+                                                                param.paramName,
+                                                                () => param
+                                                                    .options
+                                                                    .first);
+                                                      }
+                                                    } else {
+                                                      localSelections.remove(
+                                                          param.paramName);
                                                     }
-                                                  } else {
-                                                    localSelections.remove(
-                                                        param.paramName);
-                                                  }
-                                                });
-                                                // Sync the selected-value map
-                                                // so the chip color and the
-                                                // API request follow the
-                                                // switch state.
-                                                onCustomParamToggle(
-                                                    param, value);
-                                              }
-                                            : null,
-                                      ),
+                                                  });
+                                                  // Sync the selected-value map
+                                                  // so the chip color and the
+                                                  // API request follow the
+                                                  // switch state.
+                                                  onCustomParamToggle(
+                                                      param, value);
+                                                }
+                                              : null,
+                                        ),
                                     ],
                                   ),
                                 ),
                                 // Options (only shown when the param is
                                 // active — 与开关同一判定：已选值存在)
                                 if ((localSelections[param.paramName]
-                                                ?.isNotEmpty ??
-                                            false) &&
+                                            ?.isNotEmpty ??
+                                        false) &&
                                     localReasoningEnabled &&
                                     param.options.isNotEmpty) ...[
                                   const SizedBox(height: 8),

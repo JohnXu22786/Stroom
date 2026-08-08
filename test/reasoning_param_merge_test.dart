@@ -34,8 +34,10 @@ void main() {
     });
 
     test('model param with the same name replaces the provider param', () {
-      final provider = providerParam('reasoning_effort',
-          effort: true, );
+      final provider = providerParam(
+        'reasoning_effort',
+        effort: true,
+      );
       final model = ReasoningParam(
         paramName: 'reasoning_effort',
         isEffortParam: true,
@@ -191,8 +193,7 @@ void main() {
       ]);
     });
 
-    test('model param with provider-shared name replaces the provider one',
-        () {
+    test('model param with provider-shared name replaces the provider one', () {
       // Model overrides the effort param name: the merged list must contain
       // the model's version only (no duplicate of the provider's).
       entriesState = ProviderEntriesState(
@@ -279,25 +280,23 @@ void main() {
       expect(adapter.reasoningParams.length, 1);
     });
 
-    test('provider-origin params are copies; model params are live refs',
-        () {
+    test('provider-origin params are copies; model params are live refs', () {
       // 聊天面板会就地修改 param.enabled；供应商参数必须返回副本，
       // 防止污染共享的供应商配置（影响该供应商下所有模型）。
       adapter.configure(entriesState);
       final params = adapter.reasoningParams;
 
       // 'budget_tokens' 来自模型 → 引用原对象（保留既有行为）
-      final modelParam = params.firstWhere((p) => p.paramName == 'budget_tokens');
+      final modelParam =
+          params.firstWhere((p) => p.paramName == 'budget_tokens');
       final cachedModel = adapter.modelConfig!;
       expect(identical(modelParam, cachedModel.reasoningParams.first), isTrue);
 
       // 'thinking.type' / 'reasoning_effort' 来自供应商 → 副本
       final providerToggle =
           params.firstWhere((p) => p.paramName == 'thinking.type');
-      final cachedProvider = entriesState.entries
-          .firstWhere((e) => e.type == 'llm')
-          .configs
-          .first;
+      final cachedProvider =
+          entriesState.entries.firstWhere((e) => e.type == 'llm').configs.first;
       expect(
         identical(providerToggle, cachedProvider.reasoningParams.first),
         isFalse,

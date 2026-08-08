@@ -142,7 +142,8 @@ void main() {
       expect(body!['thinking']['type'], 'enabled');
     });
 
-    test('provider additional params sent with selected value when reasoning ON',
+    test(
+        'provider additional params sent with selected value when reasoning ON',
         () async {
       final service = ChatService(
         provider: provider,
