@@ -422,9 +422,9 @@ extension _ChatPageModelsExt on _ChatPageState {
       editingMessageAttachments: _editingMessageAttachments,
       onEditSend: _handleEditSend,
       onEditCancel: _handleEditCancel,
-      onFocusChanged: _onComposerFocusChanged,
       showEditWarningOnEntry: _showEditWarningOnEntry,
       editWarningArmCount: _editWarningArmCount,
+      onFocusChanged: _onComposerFocusChanged,
     );
   }
 }

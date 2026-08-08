@@ -64,12 +64,6 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   /// Called when user taps X on the edit capsule to cancel editing.
   final VoidCallback? onEditCancel;
 
-  /// Called when the input field gains/loses focus. The chat page uses the
-  /// gain event to react to the tap immediately — before the soft-keyboard
-  /// animation starts — so the message list shifts up without the usual
-  /// delay.
-  final ValueChanged<bool>? onFocusChanged;
-
   /// Whether the data-loss warning should be armed when entering edit mode.
   /// The chat page sets this when the edited message has newer messages
   /// below it (re-sending the edit would delete them). The warning is then
@@ -82,6 +76,11 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   /// the count changes even for the same message id, so re-tapping edit on
   /// the message being edited re-shows the warning after a dismissal.
   final int editWarningArmCount;
+
+  /// Called when the input field gains/loses focus. The chat page uses the
+  /// gain event to start the scroll-to-bottom animation immediately —
+  /// before the soft-keyboard show animation begins.
+  final ValueChanged<bool>? onFocusChanged;
 
   const ChatComposerWidget({
     super.key,
@@ -103,9 +102,9 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.editingMessageAttachments,
     this.onEditSend,
     this.onEditCancel,
-    this.onFocusChanged,
     this.showEditWarningOnEntry = false,
     this.editWarningArmCount = 0,
+    this.onFocusChanged,
   });
 
   @override
@@ -190,7 +189,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     WidgetsBinding.instance.addObserver(this);
 
     // Notify the chat page the moment the input gains/loses focus so it can
-    // react to the tap before the soft-keyboard animation starts.
+    // start the scroll-to-bottom animation before the soft-keyboard
+    // animation begins.
     _focusNode.addListener(_onFocusChanged);
 
     // Restore draft text for the current conversation, if any
@@ -320,11 +320,6 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     }
   }
 
-  /// Forwards focus changes (with the current focus state) to the page.
-  void _onFocusChanged() {
-    widget.onFocusChanged?.call(_focusNode.hasFocus);
-  }
-
   /// Arms the edit data-loss warning for the current edit session.
   ///
   /// The warning only matters when re-sending the edit can delete messages
@@ -420,6 +415,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   void didChangeMetrics() {
     super.didChangeMetrics();
     _revealEditWarningIfKeyboardUp();
+  }
+
+  /// Forwards focus changes (with the current focus state) to the page.
+  void _onFocusChanged() {
+    widget.onFocusChanged?.call(_focusNode.hasFocus);
   }
 
   @override

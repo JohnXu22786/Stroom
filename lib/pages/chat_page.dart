@@ -198,43 +198,61 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Below this the keyboard is treated as (almost) gone.
   static const double _keyboardVisibleThreshold = 100;
 
-  /// Approximate duration of the soft-keyboard dismiss animation remaining
-  /// once the scroll restore kicks in (the keyboard is already mostly
-  /// closed when the transition fires). The restore animates over roughly
-  /// this so the list visibly follows the keyboard back down.
-  static const Duration _keyboardAnimationDuration =
-      Duration(milliseconds: 150);
+  /// Duration of the scroll-to-bottom animation started when the composer
+  /// input gains focus — roughly matching the soft-keyboard show animation
+  /// so the list slides up in lockstep with the keyboard.
+  static const Duration _keyboardOpenScrollDuration =
+      Duration(milliseconds: 200);
 
-  /// While true, the chat list keeps its bottom edge pinned to the viewport
-  /// bottom: every viewport-height change (keyboard sliding up or down) is
-  /// compensated with an equal scroll adjustment. This makes the list shift
-  /// in lockstep with the keyboard animation instead of jumping late.
-  bool _anchorToBottomWhileKeyboard = false;
+  /// Short follow-up animation covering the remaining scroll distance once
+  /// the keyboard show animation has finished (the viewport stopped
+  /// shrinking, so maxScrollExtent is stable).
+  static const Duration _keyboardOpenScrollFollowUpDuration =
+      Duration(milliseconds: 120);
 
-  /// True while the user is touching/dragging the chat list. Used to keep
-  /// the bottom pinning (and its pin release) from fighting user scrolls.
+  /// Delay after the keyboard appears before the follow-up scroll runs.
+  /// Covers the show transition's scroll animations: the composer hook's
+  /// scroll (200ms) and the chat library's debounced keyboard scroll
+  /// (100ms debounce + 250ms animation). The only case that actually
+  /// leaves a gap is an immediate insets jump (the library's scroll then
+  /// cancels the hook's mid-flight and lands short of the bottom), and its
+  /// animation finishes well inside this window. With smoothly animated
+  /// insets the library's debounce trails the keyboard animation and its
+  /// target is clamped to the final bottom — the follow-up is then a no-op
+  /// even if it runs late. Either way 600ms leaves ~250ms of margin.
+  static const Duration _keyboardFollowUpDelay = Duration(milliseconds: 600);
+
+  /// Grace period after the composer hook saves the scroll position during
+  /// which the keyboard is expected to appear; after it, an unconfirmed
+  /// save is dropped as stale.
+  static const Duration _staleKeyboardPositionDelay =
+      Duration(milliseconds: 800);
+
+  /// True while the soft keyboard is visible in the current session. Used
+  /// to drop the composer hook's saved position when the keyboard never
+  /// actually appears (physical keyboard / suppressed IME).
+  bool _keyboardAppeared = false;
+
+  /// True once the user drags the chat list during the current keyboard
+  /// session. The follow-up scroll must not fight the user: once they take
+  /// over the list, the follow-up is skipped for this session.
+  bool _userDraggedDuringKeyboardSession = false;
+
+  /// True while the user is touching/dragging the chat list. Used by the
+  /// content-growth follow ([_followContentGrowth]) to keep it from
+  /// fighting a finger scroll (the keyboard bottom-pinning that originally
+  /// introduced this flag was reverted).
   bool _userIsDragging = false;
 
-  /// True while the keyboard-dismiss scroll restore animation is running.
-  /// The composer focus hook must not overwrite the saved pre-keyboard
-  /// position while the restore is in flight (a mid-restore re-tap would
-  /// otherwise capture a mid-animation offset as the new "saved" position).
-  bool _isRestoringKeyboardScroll = false;
+  /// Runs [_tryKeyboardFollowUp] once, shortly after the keyboard appears,
+  /// when every scroll animation that can run during the show transition
+  /// has finished.
+  Timer? _keyboardFollowUpTimer;
 
-  /// True when the last keyboard-dismiss restore ran to completion (the
-  /// position reached its target). Once that happened, the saved position
-  /// is stale for the NEXT keyboard session: the open transition must
-  /// re-save the current offset even though the field still holds a
-  /// (non-null) saved value — e.g. after Android's back button hides the
-  /// IME without unfocusing the composer, a re-tap on the still-focused
-  /// field never fires the focus hook.
-  bool _restoreCompletedSinceLastSave = false;
-
-  /// Scroll offset reported by the previous [_onChatScroll] notification.
-  /// A decrease (moving away from the bottom) can only come from a user
-  /// drag/fling — the chat library's keyboard scrolls and the restore
-  /// animation only ever move toward the bottom — so it releases the pin.
-  double _lastReportedScrollPixels = 0;
+  /// Drops [_lastScrollPositionBeforeKeyboard] if the soft keyboard never
+  /// appeared within this delay after the composer hook saved it (the hook
+  /// fires on focus, which on a physical keyboard happens without an IME).
+  Timer? _staleKeyboardPositionTimer;
 
   /// Last OBSERVED content extent (maxScrollExtent + viewportDimension —
   /// the list's total content height) from [_followContentGrowth] metrics
@@ -248,11 +266,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// gate for the next growth. Reset when the list is replaced (conversation
   /// switch, view clear) — the extent belongs to the previous list.
   double? _lastFollowContentExtent;
-
-  /// Chat area height (logical px) from the previous build, used to compute
-  /// per-frame viewport-height deltas while the keyboard animation runs.
-  double? _lastChatAreaHeight;
-
   bool _isSearching = false;
   SearchMode _searchMode = SearchMode.current;
   String _searchQuery = '';
@@ -344,6 +357,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _staleKeyboardPositionTimer?.cancel();
+    _keyboardFollowUpTimer?.cancel();
     // The ChatStreamManager owns the adapter lifecycle. We do NOT cancel
     // or dispose it here — if streaming is active, it continues in the
     // background and saves results when complete. The adapter is cleaned
@@ -380,28 +395,39 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     if (isNowVisible && !_wasKeyboardVisible) {
       // Keyboard just appeared — capture the pre-keyboard scroll position
-      // (unless the composer focus hook already captured it for this
-      // session, or a previous restore is still the source of truth),
-      // then jump to the bottom immediately so the input area and latest
-      // message are visible without waiting for the keyboard animation to
-      // finish. The per-frame pinning in _onChatAreaResized then keeps the
-      // list glued to the bottom while the keyboard keeps sliding up.
-      if ((_lastScrollPositionBeforeKeyboard == null ||
-              _restoreCompletedSinceLastSave) &&
-          _chatScrollController.hasClients) {
-        _lastScrollPositionBeforeKeyboard =
+      // (unless the composer focus hook already saved it for this session)
+      // and START the scroll-to-bottom animation now, roughly 0.2-0.5s
+      // before the final viewport settles (the keyboard show animation is
+      // about a third in when the insets cross the threshold). The list
+      // scroll is NOT started at the tap itself — that visibly yanked the
+      // list a large distance before the keyboard had even begun rising
+      // (see [_onComposerFocusChanged]).
+      // The null check keeps this branch from overwriting the hook's saved
+      // position with a mid-animation offset. The drag flag is reset here
+      // too: this branch also starts a keyboard session, and a drag that
+      // happened while the keyboard was CLOSED (the user reading) must not
+      // cancel this session's follow-up.
+      _keyboardAppeared = true;
+      _userDraggedDuringKeyboardSession = false;
+      _staleKeyboardPositionTimer?.cancel();
+      _keyboardFollowUpTimer?.cancel();
+      _keyboardFollowUpTimer =
+          Timer(_keyboardFollowUpDelay, _tryKeyboardFollowUp);
+      if (_chatScrollController.hasClients) {
+        _lastScrollPositionBeforeKeyboard ??=
             _chatScrollController.position.pixels;
-        _restoreCompletedSinceLastSave = false;
+        _animateScrollToBottom();
       }
-      _scrollToBottom();
-      _anchorToBottomWhileKeyboard = true;
     } else if (!isNowVisible && _wasKeyboardVisible) {
-      // Keyboard just disappeared — stop pinning and smoothly scroll back
-      // to the position captured before the keyboard opened.
-      _anchorToBottomWhileKeyboard = false;
+      // Keyboard just disappeared — restore the scroll position that was
+      // captured before the keyboard opened.
       _restoreScrollPositionAfterKeyboard();
     }
-    _wasKeyboardVisible = isNowVisible;
+    // Rebuild so the keyboard-dismiss overlay button follows the keyboard
+    // state (it is shown while the keyboard is open).
+    if (_wasKeyboardVisible != isNowVisible) {
+      setState(() => _wasKeyboardVisible = isNowVisible);
+    }
   }
 
   @override
@@ -474,35 +500,35 @@ class _ChatPageState extends ConsumerState<ChatPage>
               Expanded(
                 child: controller == null
                     ? const SizedBox.shrink()
-                    : LayoutBuilder(
-                        builder: (context, constraints) {
-                          // Feed the chat area height into the
-                          // keyboard-follow pinning logic.
-                          _onChatAreaResized(constraints.maxHeight);
-                          // While the initial positioning pass runs the list
-                          // is kept mounted and laid out (message positions
-                          // are measured from render boxes) but hidden, so
-                          // the pass itself is never visible to the user.
-                          return Visibility(
-                            visible: !_pendingInitialScrollAdjustment,
-                            maintainState: true,
-                            child: Stack(
-                              children: [
-                                _buildChatWidget(
-                                  isDark: isDark,
-                                  isStreaming: isStreaming,
-                                  streamingFullReply: streamingFullReply,
-                                  streamingMsgId: streamingMsgId,
-                                  activeId: activeId,
-                                  controller: controller,
-                                ),
-                                // ── Scroll-to-bottom overlay button ──
-                                if (_showScrollToBottomButton)
-                                  _buildScrollToBottomButton(isDark: isDark),
-                              ],
+                    : Visibility(
+                        // While the initial positioning pass runs the list is
+                        // kept mounted and laid out (message positions are
+                        // measured from render boxes) but hidden, so the
+                        // pass itself is never visible to the user.
+                        visible: !_pendingInitialScrollAdjustment,
+                        maintainState: true,
+                        child: Stack(
+                          children: [
+                            _buildChatWidget(
+                              isDark: isDark,
+                              isStreaming: isStreaming,
+                              streamingFullReply: streamingFullReply,
+                              streamingMsgId: streamingMsgId,
+                              activeId: activeId,
+                              controller: controller,
                             ),
-                          );
-                        },
+                            // ── Scroll-to-bottom overlay button ──
+                            if (_showScrollToBottomButton)
+                              _buildScrollToBottomButton(isDark: isDark),
+                            // ── Keyboard-dismiss overlay button ──
+                            // Shown while the soft keyboard is open (the
+                            // list itself never dismisses it — manual
+                            // behavior), so the user can close the
+                            // keyboard without hunting for its close key.
+                            if (_wasKeyboardVisible)
+                              _buildKeyboardDismissButton(isDark: isDark),
+                          ],
+                        ),
                       ),
               ),
               // ── Chat composer (below chat, in Column flow) ──
