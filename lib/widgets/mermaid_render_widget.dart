@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -513,6 +514,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// Whether the source code view is shown instead of the rendered diagram.
   bool _showSourceCode = false;
 
+  /// Fallback timer that force-ends the loading state if [onLoadStop] never
+  /// fires (e.g. the web platform's iframe load event or its JS bridge is
+  /// unavailable). Without it the loading overlay could spin forever while
+  /// the WebView actually rendered (or failed to render) underneath.
+  Timer? _readyFallbackTimer;
+
   /// Guard flag to prevent concurrent save operations.
   bool _isSaving = false;
 
@@ -563,8 +570,25 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
   @override
   void dispose() {
+    _readyFallbackTimer?.cancel();
     _webViewController = null;
     super.dispose();
+  }
+
+  /// Arms a fallback timer that force-ends the loading state after 8s if
+  /// [onLoadStop] has not fired yet. The loading overlay must never spin
+  /// forever: whatever the WebView does (rendered, blank, or errored), the
+  /// overlay is removed so the user sees the actual iframe content (which
+  /// shows its own loading hint or error message from the HTML template).
+  void _armReadyFallback() {
+    _readyFallbackTimer?.cancel();
+    _readyFallbackTimer = Timer(const Duration(seconds: 8), () {
+      if (mounted && !_isReady && _errorMessage == null) {
+        debugPrint('[MermaidRenderWidget] onLoadStop did not fire within 8s, '
+            'force-ending the loading state');
+        setState(() => _isReady = true);
+      }
+    });
   }
 
   void _loadMermaidCode() {
@@ -588,6 +612,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // the platform view receives events directly). Sharing one template
     // keeps zoom anchoring and auto-fit behavior identical everywhere.
     final html = MermaidRenderWidget.buildMermaidHtml(code);
+    _armReadyFallback();
     ctrl.loadData(
       data: html,
       mimeType: 'text/html',
@@ -1079,6 +1104,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               ),
               onWebViewCreated: (ctrl) {
                 _webViewController = ctrl;
+                // The initial page (initialData) loads outside
+                // [_loadMermaidCode], so arm the ready fallback here too.
+                _armReadyFallback();
                 // Register the JS→Flutter message bridge (error reporting
                 // and transform sync). flutter_inappwebview's WEB platform
                 // does not implement addJavaScriptHandler and throws
@@ -1127,8 +1155,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 if (mounted && !_isReady) {
                   setState(() => _isReady = true);
                 }
+                _readyFallbackTimer?.cancel();
               },
               onReceivedError: (controller, request, error) {
+                _readyFallbackTimer?.cancel();
                 if (mounted && !_isReady) {
                   setState(() {
                     _isReady = true;

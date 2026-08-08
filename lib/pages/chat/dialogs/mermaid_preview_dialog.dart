@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
@@ -42,10 +44,38 @@ class _MermaidPreviewDialogContentState
   bool _hasError = false;
   double _zoomLevel = 1.0;
 
+  /// Fallback timer that force-ends the loading state if [onLoadStop] never
+  /// fires (e.g. the web platform's iframe load event or its JS bridge is
+  /// unavailable). Without it the loading overlay could spin forever while
+  /// the WebView actually rendered (or failed to render) underneath.
+  Timer? _readyFallbackTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _armReadyFallback();
+  }
+
   @override
   void dispose() {
+    _readyFallbackTimer?.cancel();
     _webViewController = null;
     super.dispose();
+  }
+
+  /// Arms a fallback timer that force-ends the loading state after 8s if
+  /// [onLoadStop] has not fired yet, so the loading overlay can never spin
+  /// forever: the user then sees the actual iframe content (which shows its
+  /// own loading hint or error message from the HTML template).
+  void _armReadyFallback() {
+    _readyFallbackTimer?.cancel();
+    _readyFallbackTimer = Timer(const Duration(seconds: 8), () {
+      if (mounted && _isLoading) {
+        debugPrint('[MermaidPreviewDialog] onLoadStop did not fire within '
+            '8s, force-ending the loading state');
+        setState(() => _isLoading = false);
+      }
+    });
   }
 
   String _buildHtml() {
@@ -171,11 +201,13 @@ class _MermaidPreviewDialogContentState
                 }
               },
               onLoadStop: (ctrl, url) {
+                _readyFallbackTimer?.cancel();
                 if (mounted) {
                   setState(() => _isLoading = false);
                 }
               },
               onReceivedError: (controller, request, error) {
+                _readyFallbackTimer?.cancel();
                 if (mounted) {
                   setState(() {
                     _isLoading = false;
