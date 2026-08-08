@@ -515,11 +515,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                             // ── Scroll-to-bottom overlay button ──
                             if (_showScrollToBottomButton)
                               _buildScrollToBottomButton(isDark: isDark),
-                            // ── Edit data-loss warning overlay ──
-                            // Centered in the message display area; auto-hides
-                            // after 2 seconds or on close-button tap.
-                            if (_editWarningVisible)
-                              _buildEditWarningOverlay(context: context),
                           ],
                         ),
                       ),

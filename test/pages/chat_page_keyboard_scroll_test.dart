@@ -47,13 +47,33 @@ List<ChatMessage> _testMessages(int count) {
   });
 }
 
+/// Wraps [app] in a `Visibility` that mirrors how HomePage's IndexedStack
+/// hides the chat tab while another main page is selected: the subtree
+/// stays mounted, laid out and animated, but reports itself hidden to
+/// `Visibility.of(context)` and is not painted. The wrapper is ALWAYS
+/// present (also for `visible: true`) so flipping the flag keeps the same
+/// widget tree shape and all State.
+Widget _wrapTabVisibility(Widget app, {required bool visible}) {
+  return Visibility(
+    visible: visible,
+    maintainState: true,
+    maintainSize: true,
+    maintainAnimation: true,
+    maintainInteractivity: true,
+    child: app,
+  );
+}
+
 /// Pumps a ChatPage with a conversation pre-populated with [messages].
 /// [platform] overrides the theme platform (used to simulate a desktop
-/// environment where no soft keyboard exists).
+/// environment where no soft keyboard exists). When [visible] is false the
+/// page is kept alive but hidden, as it would be while another main page
+/// is selected (IndexedStack keep-alive).
 Future<void> pumpChat(
   WidgetTester tester, {
   int messageCount = 60,
   TargetPlatform? platform,
+  bool visible = true,
 }) async {
   final messages = _testMessages(messageCount);
   SharedPreferences.setMockInitialValues({
@@ -70,23 +90,26 @@ Future<void> pumpChat(
     ]),
   });
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        // NOTE: conversationsProvider is intentionally NOT overridden —
-        // the real provider triggers the async _load() that reads the
-        // mock SharedPreferences; overriding it with a raw notifier
-        // would leave the conversation unloaded and the list empty.
-        activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
-        providerEntriesProvider.overrideWith((ref) {
-          return ProviderEntriesNotifier();
-        }),
-      ],
-      child: MaterialApp(
-        theme: platform == null
-            ? null
-            : ThemeData(platform: platform, useMaterial3: true),
-        home: const ChatPage(),
+    _wrapTabVisibility(
+      ProviderScope(
+        overrides: [
+          // NOTE: conversationsProvider is intentionally NOT overridden —
+          // the real provider triggers the async _load() that reads the
+          // mock SharedPreferences; overriding it with a raw notifier
+          // would leave the conversation unloaded and the list empty.
+          activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
+          providerEntriesProvider.overrideWith((ref) {
+            return ProviderEntriesNotifier();
+          }),
+        ],
+        child: MaterialApp(
+          theme: platform == null
+              ? null
+              : ThemeData(platform: platform, useMaterial3: true),
+          home: const ChatPage(),
+        ),
       ),
+      visible: visible,
     ),
   );
   await tester.pump();
@@ -111,17 +134,20 @@ Future<void> pumpChat(
 }
 
 /// The chat list's scrollable (inside the ChatAnimatedList).
-Finder _chatScrollable() {
+/// [skipOffstage] is false when the page is kept alive but hidden.
+Finder _chatScrollable({bool skipOffstage = true}) {
   return find
       .descendant(
-        of: find.byType(ChatAnimatedList),
-        matching: find.byType(Scrollable),
+        of: find.byType(ChatAnimatedList, skipOffstage: skipOffstage),
+        matching: find.byType(Scrollable, skipOffstage: skipOffstage),
       )
       .first;
 }
 
-ScrollPosition _scrollPosition(WidgetTester tester) {
-  return tester.state<ScrollableState>(_chatScrollable()).position;
+ScrollPosition _scrollPosition(WidgetTester tester, {bool skipOffstage = true}) {
+  return tester
+      .state<ScrollableState>(_chatScrollable(skipOffstage: skipOffstage))
+      .position;
 }
 
 /// Scrolls the chat list to the bottom. Uses the scroll position directly
@@ -484,6 +510,117 @@ void main() {
       await closeKeyboard(tester);
       await settle(tester);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'keyboard opening while the chat tab is hidden does not move '
+        'the chat list (IndexedStack keep-alive)', (tester) async {
+      // Chat tab hidden — as when another main page is selected.
+      await pumpChat(tester, visible: false);
+
+      // Scroll the hidden list to a reading position (not the bottom).
+      final pos = _scrollPosition(tester, skipOffstage: false);
+      pos.jumpTo(pos.maxScrollExtent);
+      await tester.pump();
+      pos.jumpTo((pos.pixels - 400).clamp(0.0, pos.maxScrollExtent));
+      await tester.pump();
+      final savedPos = pos.pixels;
+      expect(savedPos, greaterThan(0));
+      expect(savedPos, lessThan(pos.maxScrollExtent - 200));
+
+      // A keyboard opens on ANOTHER tab: view insets change app-globally.
+      // didChangeMetrics must ignore the open transition while the page is
+      // hidden — otherwise the hidden list scrolls to the bottom and a
+      // bogus keyboard session corrupts the next real one. (The chat
+      // library's own debounced keyboard handler is not under test here —
+      // the assertion runs within the metrics-dispatch window, like the
+      // visible-page tests.)
+      await setKeyboardInset(tester, 300);
+      expect(
+        _scrollPosition(tester, skipOffstage: false).pixels,
+        closeTo(savedPos, 1.0),
+        reason: 'a keyboard opening on another tab must not move the '
+            'hidden chat list',
+      );
+
+      await closeKeyboard(tester);
+      await settle(tester);
+    });
+
+    testWidgets(
+        'keyboard dismissed while the chat tab is hidden still restores '
+        'the reading position', (tester) async {
+      // Session starts while the chat tab is visible.
+      await pumpChat(tester);
+      await scrollToBottom(tester);
+      await scrollUp(tester);
+      final savedPos = _scrollPosition(tester).pixels;
+      expect(savedPos, greaterThan(0));
+
+      await setKeyboardInset(tester, 300);
+      // The keyboard-open scroll is a 200ms animation plus a 600ms
+      // follow-up; let it land.
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(
+        _scrollPosition(tester).pixels,
+        closeTo(_scrollPosition(tester).maxScrollExtent, 10.0),
+        reason: 'precondition: keyboard open on the visible chat tab '
+            'lands at the bottom',
+      );
+
+      // Switch to another tab while the keyboard is still open (the same
+      // widget tree is re-pumped with the Visibility flag flipped, keeping
+      // all State).
+      await tester.pumpWidget(
+        _wrapTabVisibility(
+          ProviderScope(
+            overrides: [
+              activeConversationIdProvider
+                  .overrideWith((ref) => 'test-conv-id'),
+              providerEntriesProvider.overrideWith((ref) {
+                return ProviderEntriesNotifier();
+              }),
+            ],
+            child: const MaterialApp(home: ChatPage()),
+          ),
+          visible: false,
+        ),
+      );
+      await tester.pump();
+
+      // The keyboard dismisses while the chat tab is hidden — only the
+      // OPEN transition is gated; the close must still restore the saved
+      // reading position.
+      await closeKeyboard(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Return to the chat tab — the list is back at the reading position.
+      await tester.pumpWidget(
+        _wrapTabVisibility(
+          ProviderScope(
+            overrides: [
+              activeConversationIdProvider
+                  .overrideWith((ref) => 'test-conv-id'),
+              providerEntriesProvider.overrideWith((ref) {
+                return ProviderEntriesNotifier();
+              }),
+            ],
+            child: const MaterialApp(home: ChatPage()),
+          ),
+          visible: true,
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        _scrollPosition(tester).pixels,
+        closeTo(savedPos, 5.0),
+        reason: 'dismissing the keyboard while hidden must still restore '
+            'the reading position captured before the session',
+      );
+      await settle(tester);
     });
   });
 }
