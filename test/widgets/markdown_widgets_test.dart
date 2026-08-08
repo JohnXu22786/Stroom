@@ -21,6 +21,20 @@ List<m.Node> _parseWithLatex(String text) {
   return doc.parseLines(text.split('\n'));
 }
 
+/// Helper: creates a [m.Document] with the same settings as
+/// `markdown_widget`'s [MarkdownGenerator] (gitHubFlavored + encodeHtml:
+/// false) plus the app's custom [LatexSyntax] and [BrSyntax], and parses
+/// [text] so tests can inspect the AST of tables (which need the
+/// gitHubFlavored [m.TableSyntax]).
+List<m.Node> _parseLikeMarkdownGenerator(String text) {
+  final doc = m.Document(
+    extensionSet: m.ExtensionSet.gitHubFlavored,
+    encodeHtml: false,
+    inlineSyntaxes: [LatexSyntax(), BrSyntax()],
+  );
+  return doc.parse(text);
+}
+
 /// Recursively searches the AST for an [m.Element] whose tag matches [tag].
 /// Returns the first match or null.
 m.Element? _findElement(List<m.Node> nodes, String tag) {
@@ -775,6 +789,107 @@ void main() {
       final builder = pre.builder!;
       final widget = builder('<h1>Hello</h1>', 'html');
       expect(widget, isA<HtmlCodeBlockWidget>());
+    });
+  });
+
+  group('BrSyntax - HTML <br> line breaks', () {
+    // Regression: models often emit `<br>` inside table cells to force a
+    // line break. The markdown package's InlineHtmlSyntax passes inline
+    // HTML through as literal text, so `<br>` used to render as the
+    // characters "<br>" instead of a line break.
+
+    test('table cell <br> becomes a br element, not literal text', () {
+      const md = '| 属性 | 值 |\n| --- | --- |\n| 名称 | 张三<br>李四 |';
+      final nodes = _parseLikeMarkdownGenerator(md);
+
+      // Find the cell that contains "张三" (the first td is the "名称" cell).
+      m.Element? cellWithBr;
+      void findCell(List<m.Node> list) {
+        for (final n in list) {
+          if (n is m.Element && n.tag == 'td' && n.textContent.contains('张三')) {
+            cellWithBr = n;
+          }
+          if (n is m.Element) findCell(n.children ?? []);
+        }
+      }
+
+      findCell(nodes);
+      expect(cellWithBr, isNotNull);
+      final cell = cellWithBr!;
+
+      // The cell must contain a real br element...
+      expect(_findElement([cell], 'br'), isNotNull);
+      // ...and NO literal "<br>" text anywhere in the cell.
+      final texts = <String>[];
+      void collectText(List<m.Node> list) {
+        for (final n in list) {
+          if (n is m.Text) texts.add(n.text);
+          if (n is m.Element) collectText(n.children ?? []);
+        }
+      }
+
+      collectText(cell.children ?? []);
+      expect(texts.any((t) => t.contains('<br>')), isFalse,
+          reason: '<br> must be parsed as a br element, not literal text');
+    });
+
+    test('common <br> variants all become br elements', () {
+      for (final br in ['<br>', '<br/>', '<br />', '</br>', '<BR>']) {
+        final nodes = _parseLikeMarkdownGenerator('x $br y');
+        expect(_findElement(nodes, 'br'), isNotNull,
+            reason: '"$br" must be parsed as a line break');
+      }
+    });
+
+    test('escaped \\<br> stays literal text', () {
+      final nodes = _parseLikeMarkdownGenerator(r'a \<br> b');
+      expect(_findElement(nodes, 'br'), isNull,
+          reason: 'an escaped <br> must render as literal text');
+    });
+
+    test('similar tags (<break>, <brx>) are not treated as line breaks', () {
+      final nodes = _parseLikeMarkdownGenerator('a <break> b <brx> c');
+      expect(_findElement(nodes, 'br'), isNull);
+    });
+
+    test('a <br> inside an inline code span stays literal', () {
+      final nodes = _parseLikeMarkdownGenerator(r'`a<br>b`');
+      expect(_findElement(nodes, 'br'), isNull);
+      final code = _findElement(nodes, 'code');
+      expect(code, isNotNull);
+      expect(code!.textContent, 'a<br>b');
+    });
+
+    testWidgets('table cell <br> renders as an in-cell line break',
+        (WidgetTester tester) async {
+      const md =
+          '| 名称 | 值 |\n| --- | --- |\n| 张三<br>李四 | 1 |\n| 王五 | 2 |';
+      final config = buildMarkdownConfig(isDark: false);
+      final widgets = markdownGenerator.buildWidgets(md, config: config);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Column(children: widgets),
+        ),
+      ));
+
+      expect(find.text('张三\n李四', findRichText: true), findsOneWidget,
+          reason: 'the cell must render as two lines, not literal <br>');
+      expect(find.textContaining('<br>', findRichText: true), findsNothing);
+    });
+
+    testWidgets('<br> in a paragraph also renders as a line break',
+        (WidgetTester tester) async {
+      const md = '第一行<br>第二行';
+      final config = buildMarkdownConfig(isDark: false);
+      final widgets = markdownGenerator.buildWidgets(md, config: config);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Column(children: widgets),
+        ),
+      ));
+
+      expect(find.text('第一行\n第二行', findRichText: true), findsOneWidget);
+      expect(find.textContaining('<br>', findRichText: true), findsNothing);
     });
   });
 
