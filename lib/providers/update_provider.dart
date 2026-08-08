@@ -307,6 +307,13 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   @visibleForTesting
   static String? debugAppVersionOverride;
 
+  /// 测试用：覆盖 CD 构建写入的发布时间（[appReleaseTime]）。
+  ///
+  /// [appReleaseTime] 是编译期常量（String.fromEnvironment），测试中
+  /// 无法改变，通过此字段模拟 CD 构建写入的发布时间。
+  @visibleForTesting
+  static String? debugAppReleaseTimeOverride;
+
   /// 解析当前安装版本号。
   ///
   /// [Version.parse] 是宽松解析：无法解析的输入得到 0.0.0 且从不抛
@@ -375,7 +382,12 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   }
 
   /// Fetches ALL releases from GitHub (up to 100), filters those newer
-  /// than the current installed version, and populates [availableVersions].
+  /// than the current build, and populates [availableVersions].
+  ///
+  /// 新旧判断优先使用 CD 构建时写入的发布时间（[appReleaseTime]）：
+  /// 直接与 release 页面的 `published_at` 比对，晚于它的发布都算新版本，
+  /// 全部进入 [availableVersions] 供用户在更新面板中选择。本地构建
+  /// （未写入时间）时回退到「在列表中查找当前版本号」的旧逻辑。
   ///
   /// When [acceptPreRelease] is `false`, pre-release versions (marked by
   /// GitHub's `prerelease` field) are excluded from the list.
@@ -420,86 +432,101 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     final prefs = await SharedPreferences.getInstance();
     final skippedVersion = prefs.getString(_kSkippedVersionKey);
 
-    // Find the current version's release in the GitHub list to get its
-    // published_at date. This enables date-based comparison: only releases
-    // published AFTER the current version's release date are shown, regardless
-    // of version number. This way, a hotfix published after a major version
-    // won't re-prompt the user about that older major version.
+    // 优先使用 CD 构建时写入的发布时间（appReleaseTime）作为比较基准：
+    // 该时间就是当前二进制对应的 release 发布时间，直接与 release 页面
+    // 比对，晚于它的发布都算新版本 —— 无需在列表中匹配当前版本号，
+    // 同 base 的 hotfix 等后续构建同样会出现在候选里。
+    // 本地构建（未写入时间）时回退到旧逻辑：在 release 列表中查找
+    // 当前版本号对应的发布时间。
+    final bakedReleaseTime = debugAppReleaseTimeOverride ?? appReleaseTime;
+    final bakedCutoff = DateTime.tryParse(bakedReleaseTime);
+
     DateTime? cutoffDate;
     Version? currentVersion;
-    for (final release in releases) {
-      // 防御：列表元素可能是非 Map（异常响应数据），跳过而非崩溃。
-      if (release is! Map) continue;
-      final tagName = release['tag_name'];
-      // 防御：字段值类型错误（如 int）同样跳过。
-      if (tagName is! String) continue;
-      final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
-      if (versionStr == currentVersionStr) {
-        final publishedAtStr = release['published_at'];
-        if (publishedAtStr is String) {
-          cutoffDate = DateTime.tryParse(publishedAtStr);
-        }
-        // 该分支仅在发布 tag 与安装版本号完全一致时可达（意味着
-        // 版本号是合法 semver），宽松解析即可。
-        currentVersion = Version.parse(versionStr);
-        break;
-      }
-    }
-    // If the exact tag match failed, try to find a release with the same
-    // base version (major.minor.patch). This handles cases where the current
-    // installed version has a pre-release/hotfix suffix (e.g. "0.2.13-hotfix")
-    // while the GitHub tag is "v0.2.13" (without suffix). Using the same-base
-    // release's published_at ensures correct date-based comparison.
-    if (cutoffDate == null) {
-      // 防御：当前安装版本号可能是非 semver 的自定义构建（如 "dev"）。
-      // Version.parse 是宽松解析（从不抛异常，非法输入得到 0.0.0），
-      // 必须显式校验格式，否则 0.0.0 会让所有发布版都被当作新版本。
-      final parsedCurrent = _parseInstalledVersion(currentVersionStr);
-      if (parsedCurrent != null) {
-        for (final release in releases) {
-          if (release is! Map) continue;
-          final tagName = release['tag_name'];
-          if (tagName is! String) continue;
-          final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
-          Version parsed;
-          try {
-            parsed = Version.parse(versionStr);
-          } catch (_) {
-            continue; // 无法解析的版本号（异常数据）跳过
+    if (bakedCutoff != null) {
+      cutoffDate = bakedCutoff;
+      // 仅用于个别 release 缺少 published_at 时的版本号回退比较。
+      currentVersion = _parseInstalledVersion(currentVersionStr);
+    } else {
+      // Find the current version's release in the GitHub list to get its
+      // published_at date. This enables date-based comparison: only releases
+      // published AFTER the current version's release date are shown, regardless
+      // of version number. This way, a hotfix published after a major version
+      // won't re-prompt the user about that older major version.
+      for (final release in releases) {
+        // 防御：列表元素可能是非 Map（异常响应数据），跳过而非崩溃。
+        if (release is! Map) continue;
+        final tagName = release['tag_name'];
+        // 防御：字段值类型错误（如 int）同样跳过。
+        if (tagName is! String) continue;
+        final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
+        if (versionStr == currentVersionStr) {
+          final publishedAtStr = release['published_at'];
+          if (publishedAtStr is String) {
+            cutoffDate = DateTime.tryParse(publishedAtStr);
           }
-          if (parsed.major == parsedCurrent.major &&
-              parsed.minor == parsedCurrent.minor &&
-              parsed.patch == parsedCurrent.patch) {
-            final publishedAtStr = release['published_at'];
-            if (publishedAtStr is String) {
-              cutoffDate = DateTime.tryParse(publishedAtStr);
+          // 该分支仅在发布 tag 与安装版本号完全一致时可达（意味着
+          // 版本号是合法 semver），宽松解析即可。
+          currentVersion = Version.parse(versionStr);
+          break;
+        }
+      }
+      // If the exact tag match failed, try to find a release with the same
+      // base version (major.minor.patch). This handles cases where the current
+      // installed version has a pre-release/hotfix suffix (e.g. "0.2.13-hotfix")
+      // while the GitHub tag is "v0.2.13" (without suffix). Using the same-base
+      // release's published_at ensures correct date-based comparison.
+      if (cutoffDate == null) {
+        // 防御：当前安装版本号可能是非 semver 的自定义构建（如 "dev"）。
+        // Version.parse 是宽松解析（从不抛异常，非法输入得到 0.0.0），
+        // 必须显式校验格式，否则 0.0.0 会让所有发布版都被当作新版本。
+        final parsedCurrent = _parseInstalledVersion(currentVersionStr);
+        if (parsedCurrent != null) {
+          for (final release in releases) {
+            if (release is! Map) continue;
+            final tagName = release['tag_name'];
+            if (tagName is! String) continue;
+            final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
+            Version parsed;
+            try {
+              parsed = Version.parse(versionStr);
+            } catch (_) {
+              continue; // 无法解析的版本号（异常数据）跳过
             }
-            break;
+            if (parsed.major == parsedCurrent.major &&
+                parsed.minor == parsedCurrent.minor &&
+                parsed.patch == parsedCurrent.patch) {
+              final publishedAtStr = release['published_at'];
+              if (publishedAtStr is String) {
+                cutoffDate = DateTime.tryParse(publishedAtStr);
+              }
+              break;
+            }
           }
         }
       }
-    }
-    // Fall back to version-based comparison when the current version is not
-    // found in the releases list (e.g., very old version or custom build).
-    // 同样防御非 semver 版本号：格式不合法则跳过本次检查（记录日志），
-    // 而不是把 0.0.0 当作当前版本导致所有发布版都弹更新提示。
-    if (currentVersion == null) {
-      final parsedCurrent = _parseInstalledVersion(currentVersionStr);
-      if (parsedCurrent == null) {
-        debugPrint('[UpdateNotifier] 当前版本号不是合法 semver'
-            '（$currentVersionStr），跳过本次更新检查');
-        if (!silent) {
-          state = state.copyWith(
-            isChecking: false,
-            updateAvailable: false,
-            error: null,
-          );
-        } else {
-          state = _resetState();
+      // Fall back to version-based comparison when the current version is not
+      // found in the releases list (e.g., very old version or custom build).
+      // 同样防御非 semver 版本号：格式不合法则跳过本次检查（记录日志），
+      // 而不是把 0.0.0 当作当前版本导致所有发布版都弹更新提示。
+      if (currentVersion == null) {
+        final parsedCurrent = _parseInstalledVersion(currentVersionStr);
+        if (parsedCurrent == null) {
+          debugPrint('[UpdateNotifier] 当前版本号不是合法 semver'
+              '（$currentVersionStr），跳过本次更新检查');
+          if (!silent) {
+            state = state.copyWith(
+              isChecking: false,
+              updateAvailable: false,
+              error: null,
+            );
+          } else {
+            state = _resetState();
+          }
+          return;
         }
-        return;
+        currentVersion = parsedCurrent;
       }
-      currentVersion = parsedCurrent;
     }
 
     // Collect all available updates newer than current version.
@@ -520,33 +547,45 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         final versionStr = tagName.replaceAll(RegExp(r'^v'), '');
         final parsed = Version.parse(versionStr);
 
-        // Skip the current version itself: either exact string match or
-        // same base version (major.minor.patch). The base version check
-        // handles pre-release/hotfix suffixes so that e.g., "39-hotfix"
-        // does NOT re-prompt about "v39.0.0" (same base).
-        if (versionStr == currentVersionStr ||
+        // 始终跳过当前版本号本身（版本号完全一致）：同 tag 被删除后
+        // 重建的 release（GitHub 会更新 published_at）不会作为「更新」
+        // 再次提示用户。
+        if (versionStr == currentVersionStr) continue;
+
+        // 回退模式（无内置发布时间）额外跳过同 base 版本
+        // （如 "0.2.13-hotfix" 与 "0.2.13"），避免向用户重复提示
+        // 同一版本；有内置发布时间时，晚于该时间的同 base hotfix
+        // 同样算新版本，交给用户在更新面板中选择。
+        if (bakedCutoff == null &&
+            currentVersion != null &&
             (parsed.major == currentVersion.major &&
                 parsed.minor == currentVersion.minor &&
-                parsed.patch == currentVersion.patch)) continue;
+                parsed.patch == currentVersion.patch)) {
+          continue;
+        }
 
-        // Date-based comparison (when we found the current version's publish date)
+        // Date-based comparison（有比较基准时：内置发布时间或列表中匹配
+        // 到的当前版本发布时间）
         if (cutoffDate != null) {
           final publishedAtStr = release['published_at'];
-          if (publishedAtStr is String) {
-            final publishedAt = DateTime.tryParse(publishedAtStr);
-            if (publishedAt != null) {
-              if (!publishedAt.isAfter(cutoffDate)) continue;
-            } else {
-              // published_at string is unparseable, fall back to version comparison
-              if (!(parsed > currentVersion)) continue;
-            }
+          final publishedAt = publishedAtStr is String
+              ? DateTime.tryParse(publishedAtStr)
+              : null;
+          if (publishedAt != null) {
+            if (!publishedAt.isAfter(cutoffDate)) continue;
           } else {
-            // No published_at available, fall back to version comparison
+            // published_at 缺失或无法解析：有版本号时回退版本比较，
+            // 否则跳过该条目。注意：回退比较基于 semver，同 base 的
+            // hotfix（0.2.13-hotfix < 0.2.13）可能被丢弃 —— GitHub
+            // 对已发布 release 总是提供 published_at，此分支仅在数据
+            // 异常时触发，属有意的防御性取舍。
+            if (currentVersion == null) continue;
             if (!(parsed > currentVersion)) continue;
           }
         } else {
           // Fall back to version-based comparison when the current version
           // is not in the releases list or has no published_at field.
+          if (currentVersion == null) continue;
           if (!(parsed > currentVersion)) continue;
         }
 

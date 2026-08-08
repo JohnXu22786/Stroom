@@ -1922,6 +1922,146 @@ void main() {
     });
   });
 
+  group('UpdateNotifier - CD-baked release time cutoff', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    tearDown(() {
+      UpdateNotifier.debugAppVersionOverride = null;
+      UpdateNotifier.debugAppReleaseTimeOverride = null;
+    });
+
+    test(
+        'uses the CD-baked release time as cutoff even when the installed '
+        'version is absent from the releases list', () async {
+      // CD 构建把发布时间写进应用（appReleaseTime）。当前安装版本号
+      // 0.2.13 甚至不在 release 列表中 —— 内置时间基准仍然有效。
+      UpdateNotifier.debugAppReleaseTimeOverride = '2024-06-15T10:00:00Z';
+      final releases = _githubReleases([
+        ('v0.2.14', false, 'Version 0.2.14', '2024-06-20T10:00:00Z'),
+        ('v39.0.0', false, 'Version 39', '2024-06-10T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // v39.0.0 发布于 cutoff 之前 → 排除；v0.2.14 发布于之后 → 包含
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 1);
+      expect(notifier.state.availableVersions![0].version, '0.2.14');
+    });
+
+    test(
+        'everything published after the baked time counts, including same-base hotfixes',
+        () async {
+      // 核心行为变化：有内置发布时间时，晚于该时间的同 base 版本
+      // （hotfix）同样算新版本，由用户在更新面板中选择。
+      UpdateNotifier.debugAppReleaseTimeOverride = '2024-06-15T10:00:00Z';
+      final releases = _githubReleases([
+        ('v0.2.14', false, 'Version 0.2.14', '2024-07-20T10:00:00Z'),
+        ('v0.2.13-hotfix', true, 'Hotfix', '2024-07-10T10:00:00Z'),
+        ('v0.2.13', false, 'Current', '2024-06-15T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // 自身（v0.2.13，发布时间 == cutoff）排除；hotfix 与 0.2.14 包含
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 2);
+      // 按版本号降序：0.2.14 在前
+      expect(notifier.state.availableVersions![0].version, '0.2.14');
+      expect(notifier.state.availableVersions![1].version, '0.2.13-hotfix');
+    });
+
+    test('non-semver installed version still checks when a baked time exists',
+        () async {
+      // 回归：自定义构建版本（非 semver）原本会直接跳过检查；
+      // 有内置发布时间时，时间基准足以判断新旧，检查应照常进行。
+      UpdateNotifier.debugAppVersionOverride = 'dev';
+      UpdateNotifier.debugAppReleaseTimeOverride = '2024-06-15T10:00:00Z';
+      final releases = _githubReleases([
+        ('v0.2.14', false, 'Version 0.2.14', '2024-06-20T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 1);
+      expect(notifier.state.availableVersions![0].version, '0.2.14');
+    });
+
+    test('invalid baked time falls back to the release-list matching logic',
+        () async {
+      UpdateNotifier.debugAppReleaseTimeOverride = 'not-a-date';
+      final releases = _githubReleases([
+        ('v0.2.14', false, 'Version 0.2.14', '2024-07-20T10:00:00Z'),
+        ('v0.2.13', false, 'Current', '2024-06-15T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      // 回退到列表匹配：v0.2.13 提供 cutoff → v0.2.14 包含，自身排除
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 1);
+      expect(notifier.state.availableVersions![0].version, '0.2.14');
+    });
+
+    test(
+        're-created release on the current tag is not offered as an update',
+        () async {
+      // 回归：同 tag 被删除后重建（GitHub 更新 published_at，晚于内置
+      // 时间）时，版本号完全一致的 release 不得当作「更新」再次提示。
+      // 只有真正的更新版本 v0.2.14 被包含。显式固定当前版本号，
+      // 不依赖 appVersion 的编译期默认值。
+      UpdateNotifier.debugAppVersionOverride = '0.2.13';
+      UpdateNotifier.debugAppReleaseTimeOverride = '2024-06-15T10:00:00Z';
+      final releases = _githubReleases([
+        ('v0.2.13', false, 'Re-created current tag', '2024-07-25T10:00:00Z'),
+        ('v0.2.14', false, 'Version 0.2.14', '2024-07-26T10:00:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 1);
+      expect(notifier.state.availableVersions![0].version, '0.2.14');
+    });
+
+    test(
+        'baked mode falls back to version comparison for releases without published_at',
+        () async {
+      // 内置时间存在时，个别 release 缺 published_at 走版本号回退：
+      // 版本号更高 → 包含；更低 → 排除。GitHub 对已发布 release
+      // 总是提供 published_at，此分支仅防御异常数据。
+      UpdateNotifier.debugAppReleaseTimeOverride = '2024-06-15T10:00:00Z';
+      final releases = _githubReleases([
+        ('v0.2.14', false, 'Version 0.2.14', '2024-06-20T10:00:00Z'),
+        ('v0.2.15', false, 'No date', ''),
+        ('v0.2.12', false, 'Older no date', ''),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 2);
+      // 版本号降序：0.2.15（无日期，版本回退包含）在前，0.2.14（日期包含）在后
+      expect(notifier.state.availableVersions![0].version, '0.2.15');
+      expect(notifier.state.availableVersions![1].version, '0.2.14');
+    });
+  });
+
   group('UpdateNotifier - Cleanup downloaded file', () {
     late String tempDir;
 

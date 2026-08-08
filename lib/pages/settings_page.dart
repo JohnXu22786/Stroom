@@ -13,6 +13,7 @@ import '../providers/provider_config.dart';
 import '../providers/update_provider.dart';
 import '../utils/app_version.dart';
 import '../widgets/update_dialog.dart';
+import '../widgets/version_info_dialog.dart';
 import 'provider_config_page.dart';
 import 'backup_restore_page.dart';
 import 'background_optimization_page.dart';
