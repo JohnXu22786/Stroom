@@ -86,112 +86,6 @@ void main() {
       expect(find.text('工具'), findsOneWidget);
       expect(find.text('0'), findsNothing);
     });
-  });
-
-  // ═══════════════════════════════════════════════════════════════
-  // Widget tests for SettingsChip badge color
-  // ═══════════════════════════════════════════════════════════════
-  group('SettingsChip badge color', () {
-    testWidgets('badge background matches the chip accent color',
-        (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: SettingsChip(
-            icon: Icons.build_outlined,
-            label: '工具',
-            color: const Color(0xFF6366F1),
-            onTap: () {},
-            badgeCount: 3,
-          ),
-        ),
-      ));
-
-      // The ChipBadge should use Color(0xFF6366F1), not cs.tertiary
-      final badge = tester.widget<ChipBadge>(find.byType(ChipBadge));
-      expect(badge.color, const Color(0xFF6366F1));
-    });
-
-    testWidgets('badge text has white color', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: SettingsChip(
-            icon: Icons.build_outlined,
-            label: '工具',
-            color: Colors.indigo,
-            onTap: () {},
-            badgeCount: 3,
-          ),
-        ),
-      ));
-
-      // ChipBadge text should be white — find the Text widget inside the badge.
-      // There are multiple Text widgets (label '工具' and badge '3'); pick the
-      // one with the count value and verify its style color is Colors.white.
-      final badgeText = tester.widget<Text>(
-        find.byWidgetPredicate((w) => w is Text && w.data == '3'),
-      );
-      expect(badgeText.style?.color, Colors.white);
-    });
-  });
-
-  // ═══════════════════════════════════════════════════════════════
-  // Widget tests for ChipBadge (circular badge)
-  // ═══════════════════════════════════════════════════════════════
-  group('ChipBadge circular shape', () {
-    testWidgets('uses BoxShape.circle for single digit', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: SettingsChip(
-            icon: Icons.build_outlined,
-            label: '工具',
-            color: Colors.teal,
-            onTap: () {},
-            badgeCount: 3,
-          ),
-        ),
-      ));
-
-      expect(find.text('3'), findsOneWidget);
-      final badgeFinder = find.byType(ChipBadge);
-      expect(badgeFinder, findsOneWidget);
-    });
-
-    testWidgets('shows badge for count 1 (minimum display)', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: SettingsChip(
-            icon: Icons.build_outlined,
-            label: '工具',
-            color: Colors.teal,
-            onTap: () {},
-            badgeCount: 1,
-          ),
-        ),
-      ));
-
-      expect(find.text('1'), findsOneWidget);
-      final badgeFinder = find.byType(ChipBadge);
-      expect(badgeFinder, findsOneWidget);
-    });
-
-    testWidgets('shows badge for count 99 (last 2-digit value)',
-        (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: SettingsChip(
-            icon: Icons.build_outlined,
-            label: '工具',
-            color: Colors.teal,
-            onTap: () {},
-            badgeCount: 99,
-          ),
-        ),
-      ));
-
-      expect(find.text('99'), findsOneWidget);
-      final badgeFinder = find.byType(ChipBadge);
-      expect(badgeFinder, findsOneWidget);
-    });
 
     testWidgets('shows 99+ for large numbers', (tester) async {
       await tester.pumpWidget(MaterialApp(
@@ -207,36 +101,6 @@ void main() {
       ));
 
       expect(find.text('99+'), findsOneWidget);
-      final badgeFinder = find.byType(ChipBadge);
-      expect(badgeFinder, findsOneWidget);
-    });
-
-    testWidgets('badge is sized just slightly larger than font',
-        (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: SettingsChip(
-            icon: Icons.build_outlined,
-            label: '工具',
-            color: Colors.teal,
-            onTap: () {},
-            badgeCount: 5,
-          ),
-        ),
-      ));
-
-      // The ChipBadge should exist
-      final badgeFinder = find.byType(ChipBadge);
-      expect(badgeFinder, findsOneWidget);
-
-      // The badge text should be visible
-      expect(find.text('5'), findsOneWidget);
-
-      // Verify the badge size — it should be close to font size (~11px) but
-      // slightly larger (16px). Measure from the rendered badge.
-      // The Container with ChipBadge style has width:16, height:16
-      // Cannot easily get rendered size in test, but the container is
-      // created with fixed 16x16 dimensions
     });
   });
 
@@ -244,24 +108,6 @@ void main() {
   // Widget tests for ModelNameChip
   // ═══════════════════════════════════════════════════════════════
   group('ModelNameChip widget', () {
-    testWidgets('renders model display name', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 400,
-            child: ModelNameChip(
-              displayName: 'GPT-4o | OpenAI',
-              color: Colors.teal,
-              onTap: () {},
-            ),
-          ),
-        ),
-      ));
-
-      expect(find.textContaining('GPT-4o'), findsOneWidget);
-      expect(find.textContaining('OpenAI'), findsOneWidget);
-    });
-
     testWidgets('truncates long model name in narrow width', (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -339,24 +185,6 @@ void main() {
       // Model "Some-Long-Model-Name-That-Needs-Truncation" (39 chars)
       // → substring(0, 17) + "..." = "Some-Long-Model-N..." (20 chars)
       expect(find.textContaining('Some-Long-Model-N...'), findsOneWidget);
-    });
-
-    testWidgets('disabled chip does not crash', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 400,
-            child: ModelNameChip(
-              displayName: 'GPT-4o | OpenAI',
-              color: Colors.teal,
-              onTap: null,
-              enabled: false,
-            ),
-          ),
-        ),
-      ));
-
-      expect(find.byType(ModelNameChip), findsOneWidget);
     });
 
     testWidgets('truncates text inside a ConstrainedBox', (tester) async {

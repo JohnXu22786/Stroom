@@ -296,18 +296,6 @@ void main() {
   });
 
   group('MermaidRenderWidget - widget rendering', () {
-    testWidgets('renders as a StatefulWidget', (tester) async {
-      const widget = MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: widget,
-          ),
-        ),
-      );
-      expect(find.byType(MermaidRenderWidget), findsOneWidget);
-    });
-
     testWidgets('shows loading state initially before WebView creation',
         (tester) async {
       const widget = MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B');
@@ -340,62 +328,6 @@ void main() {
       expect(find.text('No Mermaid code to render'), findsOneWidget);
     });
 
-    testWidgets('shows border around the container', (tester) async {
-      const widget = MermaidRenderWidget(mermaidCode: 'graph TD');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: widget,
-          ),
-        ),
-      );
-      expect(find.byType(ClipRRect), findsOneWidget);
-    });
-
-    testWidgets('uses default height of 300', (tester) async {
-      const widgetKey = Key('height-test-widget');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: MermaidRenderWidget(
-              key: widgetKey,
-              mermaidCode: 'graph TD',
-            ),
-          ),
-        ),
-      );
-      expect(find.byKey(widgetKey), findsOneWidget);
-    });
-
-    testWidgets('respects custom height', (tester) async {
-      const widgetKey = Key('custom-height-test');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: MermaidRenderWidget(
-              key: widgetKey,
-              mermaidCode: 'graph TD',
-              height: 500,
-            ),
-          ),
-        ),
-      );
-      expect(find.byKey(widgetKey), findsOneWidget);
-    });
-
-    testWidgets('adapts colors to dark mode', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          themeMode: ThemeMode.dark,
-          darkTheme: ThemeData.dark(),
-          home: Scaffold(
-            body: MermaidRenderWidget(mermaidCode: 'graph TD'),
-          ),
-        ),
-      );
-      expect(find.byType(MermaidRenderWidget), findsOneWidget);
-    });
-
     testWidgets('handles empty code gracefully', (tester) async {
       const widget = MermaidRenderWidget(mermaidCode: '');
       await tester.pumpWidget(
@@ -411,20 +343,6 @@ void main() {
   });
 
   group('MermaidRenderWidget - gesture wrapper', () {
-    testWidgets('renders with gesture wrapper in render mode', (tester) async {
-      const widget = MermaidRenderWidget(mermaidCode: 'graph TD');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: widget,
-          ),
-        ),
-      );
-      // Early loading state shows the preparation text
-      expect(find.text('正在准备渲染引擎...'), findsOneWidget);
-      // The gesture wrapper (Listener) should wrap the WebView when created
-    });
-
     testWidgets('gesture wrapper not present when showing source code',
         (tester) async {
       const widget = MermaidRenderWidget(

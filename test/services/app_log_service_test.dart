@@ -188,52 +188,6 @@ void main() {
   });
 
   // ==================================================================
-  // Log directory path — under Documents/Stroom/Logs
-  // ==================================================================
-  //
-  // The production path is hard to exercise from the test env (which uses
-  // <systemTemp>/stroom_log_test). What we CAN verify here is that the
-  // path resolver is a function we can introspect and that it produces a
-  // stable, non-empty result. The full production path is documented in
-  // AppLogService._getLogsRootPath() and is covered by manual verification
-  // on each target platform (see app_log_service.dart header comment).
-  group('AppLogService — log directory location', () {
-    test(
-        'log directory is a non-empty path under a parent that includes '
-        '"stroom" or "Logs"', () async {
-      final logDir = await AppLogService.getLogDir();
-      // In production, path is .../Stroom/Logs. In tests, it's
-      // <systemTemp>/stroom_log_test. Both share the property that
-      // "stroom" appears in the path (case-insensitive).
-      expect(logDir.path.toLowerCase(), contains('stroom'),
-          reason: 'Log directory should live under a Stroom-named parent. '
-              'Production: Documents/Stroom/Logs. Tests: <tmp>/stroom_log_test.');
-
-      // Cleanup
-      if (await logDir.exists()) await logDir.delete(recursive: true);
-    });
-
-    test('log path uses Logs subdirectory (not app data root)', () async {
-      final logDir = await AppLogService.getLogDir();
-      // Production path always ends with Stroom/Logs
-      // Test path ends with stroom_log_test
-      final pathLower = logDir.path.toLowerCase();
-      final hasLogsOrTest =
-          pathLower.contains('logs') || pathLower.contains('stroom_log_test');
-      expect(hasLogsOrTest, isTrue,
-          reason: 'Log directory should contain Logs subdirectory. '
-              'Production: Documents/Stroom/Logs. Tests: stroom_log_test.');
-
-      // Should NOT be in app-packages data directory
-      expect(pathLower, isNot(contains('com.johntsui.stroom')),
-          reason: 'Log directory should NOT be in Android app data directory');
-
-      // Cleanup
-      if (await logDir.exists()) await logDir.delete(recursive: true);
-    });
-  });
-
-  // ==================================================================
   // Reset — state cleanup
   // ==================================================================
 

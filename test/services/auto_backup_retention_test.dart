@@ -545,17 +545,6 @@ void main() {
       await dir.delete(recursive: true);
     });
   });
-
-  // ==================================================================
-  // DataMigrationService delegation (uses new retention)
-  // ==================================================================
-
-  group('DataMigrationService delegation — new retention', () {
-    test('cleanOldBackups delegates to AutoBackupService with new policy',
-        () async {
-      await DataMigrationService.cleanOldBackups();
-    });
-  });
 }
 
 String _pad(int n) => n.toString().padLeft(2, '0');

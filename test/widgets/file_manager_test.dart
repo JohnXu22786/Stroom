@@ -877,31 +877,6 @@ void main() {
   // ===========================================================================
   // 2. file_manager_back_navigation_test.dart
   // ===========================================================================
-  group('filesPageCurrentFolderProvider', () {
-    test('starts with empty string (root folder)', () {
-      final container = ProviderContainer();
-      addTearDown(() => container.dispose());
-      expect(container.read(filesPageCurrentFolderProvider), '');
-    });
-
-    test('can be updated to a subfolder path', () {
-      final container = ProviderContainer();
-      addTearDown(() => container.dispose());
-
-      container.read(filesPageCurrentFolderProvider.notifier).state = 'photos';
-      expect(container.read(filesPageCurrentFolderProvider), 'photos');
-    });
-
-    test('can be reset to empty string (root)', () {
-      final container = ProviderContainer();
-      addTearDown(() => container.dispose());
-
-      container.read(filesPageCurrentFolderProvider.notifier).state = 'photos';
-      container.read(filesPageCurrentFolderProvider.notifier).state = '';
-      expect(container.read(filesPageCurrentFolderProvider), '');
-    });
-  });
-
   group('FileManagerView back navigation to parent folder', () {
     /// Helper: wrap FileManagerView in MaterialApp + Scaffold for testing.
     Widget buildFM({

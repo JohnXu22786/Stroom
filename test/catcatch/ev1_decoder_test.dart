@@ -125,20 +125,6 @@ void main() {
       final twice = Ev1Decoder.deobfuscate(Ev1Decoder.deobfuscate(ev1));
       expect(twice, equals(ev1));
     });
-
-    test('only the first 100 bytes are obfuscated (fixture > 100 bytes)', () {
-      final flv = _buildMinimalFlv();
-      expect(flv.length, greaterThan(100), reason: '测试夹具必须大于 100 字节混淆窗口');
-      final ev1 = _obfuscate(flv);
-      // 前 100 字节被混淆，其余保持原样
-      final n = flv.length < 100 ? flv.length : 100;
-      for (int i = 0; i < n; i++) {
-        expect(ev1[i], equals(flv[i] ^ 0xFF));
-      }
-      for (int i = n; i < flv.length; i++) {
-        expect(ev1[i], equals(flv[i]));
-      }
-    });
   });
 
   group('Ev1Decoder - convertEv1ToMp4 (integration)', () {

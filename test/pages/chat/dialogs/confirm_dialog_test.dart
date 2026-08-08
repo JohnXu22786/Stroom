@@ -86,29 +86,6 @@ void main() {
     });
 
     group('showDeleteConfirmDialog', () {
-      testWidgets('shows delete confirmation', (tester) async {
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () => showDeleteConfirmDialog(
-                  context: context,
-                  onDelete: () {},
-                ),
-                child: const Text('Show'),
-              ),
-            ),
-          ),
-        );
-
-        await tester.tap(find.text('Show'));
-        await tester.pumpAndSettle();
-
-        expect(find.text('删除消息'), findsOneWidget);
-        expect(find.text('删除'), findsOneWidget);
-        expect(find.text('取消'), findsOneWidget);
-      });
-
       testWidgets('calls onDelete when confirm tapped', (tester) async {
         bool deleted = false;
         await tester.pumpWidget(

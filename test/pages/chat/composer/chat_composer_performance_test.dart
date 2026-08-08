@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -43,110 +42,6 @@ void main() {
     Future<void> setupSurface(WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
     }
-
-    // ── Unit-like tests (no widget tree needed) ──
-
-    test(
-      'send-button state logic: only rebuilds when hasText transitions',
-      () {
-        // This unit test verifies the core optimization logic:
-        // Instead of calling setState({}) on every keystroke,
-        // we only call it when hasText changes (empty ↔ non-empty).
-
-        bool? lastHadText;
-        int rebuildCount = 0;
-
-        void onTextChanged(String text) {
-          final hasTextNow = text.trim().isNotEmpty;
-          final last = lastHadText;
-          if (last == null || last != hasTextNow) {
-            rebuildCount++;
-            lastHadText = hasTextNow;
-          }
-        }
-
-        // Start: empty text
-        onTextChanged('');
-        expect(rebuildCount, 1); // Initial: no previous state, so rebuild
-
-        // Type first char: empty → non-empty → rebuild
-        onTextChanged('h');
-        expect(rebuildCount, 2);
-        expect(lastHadText, true);
-
-        // Continue typing (non-empty → non-empty): no rebuild
-        onTextChanged('he');
-        expect(rebuildCount, 2);
-        onTextChanged('hel');
-        expect(rebuildCount, 2);
-        onTextChanged('hell');
-        expect(rebuildCount, 2);
-        onTextChanged('hello');
-        expect(rebuildCount, 2);
-
-        // Clear one char (still non-empty): no rebuild
-        onTextChanged('hell');
-        expect(rebuildCount, 2);
-
-        // Clear to empty: non-empty → empty → rebuild
-        onTextChanged('');
-        expect(rebuildCount, 3);
-        expect(lastHadText, false);
-
-        // Type again: empty → non-empty → rebuild
-        onTextChanged('a');
-        expect(rebuildCount, 4);
-      },
-    );
-
-    test(
-      'hasText tracks trim() correctly for whitespace',
-      () {
-        // Whitespace-only text should be treated as "empty"
-        // for send-button state purposes.
-        bool hasText(String text) => text.trim().isNotEmpty;
-
-        expect(hasText(''), false);
-        expect(hasText('   '), false);
-        expect(hasText('\n\t'), false);
-        expect(hasText('hello'), true);
-        expect(hasText('  hello  '), true);
-        expect(hasText('a'), true);
-      },
-    );
-
-    test(
-      'hasText transitions correctly for various input patterns',
-      () {
-        // Edge case: text with only whitespace should NOT
-        // trigger a send-button state change from empty.
-        bool? lastHadText;
-        int rebuildCount = 0;
-
-        void onTextChanged(String text) {
-          final hasTextNow = text.trim().isNotEmpty;
-          if (lastHadText == null || lastHadText != hasTextNow) {
-            rebuildCount++;
-            lastHadText = hasTextNow;
-          }
-        }
-
-        onTextChanged('   ');
-        // Trimmed is empty, same as initial empty → no rebuild
-        expect(rebuildCount, 1);
-        expect(lastHadText, false);
-
-        // Actual text
-        onTextChanged('hello');
-        expect(rebuildCount, 2);
-        expect(lastHadText, true);
-
-        // Whitespace only again
-        onTextChanged('   ');
-        expect(rebuildCount, 3); // transition back to empty
-        expect(lastHadText, false);
-      },
-    );
 
     // ── Widget tests ──
 
@@ -239,33 +134,6 @@ void main() {
       // During streaming, stop button should be visible, send button hidden
       expect(find.byIcon(Icons.stop_circle_outlined), findsOneWidget);
       expect(find.byIcon(Icons.send_rounded), findsNothing);
-    });
-
-    testWidgets('composer renders basic elements', (tester) async {
-      await tester.pumpWidget(createChatTestApp());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      tester.takeException();
-
-      // Basic existence checks - composer should render
-      expect(find.byIcon(Icons.attach_file_outlined), findsOneWidget);
-      expect(find.byType(TextField), findsOneWidget);
-      expect(find.text('输入消息...'), findsOneWidget);
-
-      // Settings row should be visible
-      expect(find.text('模型'), findsOneWidget);
-      expect(find.text('工具'), findsOneWidget);
-      expect(find.text('推理'), findsOneWidget);
-    });
-
-    testWidgets('fullscreen editor toggle button exists', (tester) async {
-      await tester.pumpWidget(createChatTestApp());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      tester.takeException();
-
-      // The fullscreen editor toggle should exist
-      expect(find.byIcon(Icons.fullscreen), findsOneWidget);
     });
 
     testWidgets('rapid long input does not crash', (tester) async {

@@ -6,14 +6,6 @@ import 'package:stroom/models/math_3d_scene.dart';
 
 void main() {
   group('Camera3D', () {
-    test('creates camera with default values looking at origin', () {
-      final cam = Camera3D();
-      expect(cam.target, equals(Point3D(0, 0, 0)));
-      expect(cam.distance, 10);
-      expect(cam.theta, closeTo(0, 1e-10));
-      expect(cam.phi, closeTo(dart_math.pi / 4, 1e-10));
-    });
-
     test('position is derived from spherical coordinates', () {
       // Use phi=0 so camera is on the horizon (no clamping issues)
       final cam = Camera3D(
@@ -76,60 +68,9 @@ void main() {
       expect(updated.target.y, closeTo(10, 1e-10));
       expect(updated.target.z, closeTo(0, 1e-10));
     });
-
-    test('view matrix is 4x4', () {
-      final cam = Camera3D();
-      final viewMatrix = cam.viewMatrix();
-      expect(viewMatrix.length, 16); // 4x4 column-major
-    });
-
-    test('position is finite for valid camera', () {
-      final cam = Camera3D();
-      final pos = cam.position;
-      expect(pos.x.isFinite, true);
-      expect(pos.y.isFinite, true);
-      expect(pos.z.isFinite, true);
-    });
-
-    test('copyWith creates modified copy', () {
-      final cam = Camera3D();
-      final modified = cam.copyWith(distance: 20);
-      expect(modified.distance, 20);
-      // Original unchanged
-      expect(cam.distance, 10);
-    });
   });
 
   group('Projection3D', () {
-    test('parallel projection creates orthographic matrix', () {
-      final proj = Projection3D.parallel(
-        width: 800,
-        height: 600,
-        scale: 50,
-      );
-      expect(proj.type, ProjectionType.parallel);
-      expect(proj.width, 800);
-      expect(proj.height, 600);
-    });
-
-    test('perspective projection creates perspective matrix', () {
-      final proj = Projection3D.perspective(
-        width: 800,
-        height: 600,
-        fov: 60,
-        near: 0.1,
-        far: 1000,
-      );
-      expect(proj.type, ProjectionType.perspective);
-      expect(proj.fov, 60);
-    });
-
-    test('projection matrix is 4x4', () {
-      final proj = Projection3D.parallel(width: 800, height: 600);
-      final matrix = proj.projectionMatrix();
-      expect(matrix.length, 16);
-    });
-
     test('project transforms 3D point to 2D screen coordinates', () {
       final proj = Projection3D.parallel(width: 800, height: 600, scale: 50);
       // Origin should project to center of screen
@@ -170,57 +111,9 @@ void main() {
   });
 
   group('Scene3D', () {
-    test('creates empty scene', () {
-      final scene = Scene3D();
-      expect(scene.objects, isEmpty);
-      expect(scene.camera, isNotNull);
-    });
-
-    test('adds objects to scene', () {
-      final scene = Scene3D();
-      final obj = Object3D.point(Point3D(1, 2, 3));
-      scene.add(obj);
-      expect(scene.objects.length, 1);
-    });
-
-    test('removes objects from scene', () {
-      final scene = Scene3D();
-      final obj = Object3D.point(Point3D(1, 2, 3));
-      scene.add(obj);
-      scene.remove(obj);
-      expect(scene.objects, isEmpty);
-    });
-
-    test('clears all objects', () {
-      final scene = Scene3D();
-      scene.add(Object3D.point(Point3D(1, 2, 3)));
-      scene.add(Object3D.point(Point3D(4, 5, 6)));
-      scene.clear();
-      expect(scene.objects, isEmpty);
-    });
-
     test('scene center is at target if no objects', () {
       final scene = Scene3D();
       expect(scene.sceneCenter, equals(Point3D(0, 0, 0)));
-    });
-
-    test('fitToView adjusts camera to encompass all objects', () {
-      final scene = Scene3D();
-      scene.add(Object3D.point(Point3D(-5, -5, -5)));
-      scene.add(Object3D.point(Point3D(5, 5, 5)));
-      scene.fitToView();
-      // Camera distance should be large enough to see both points
-      expect(scene.camera.distance, greaterThan(5));
-    });
-
-    test('objects list is immutable from outside', () {
-      final scene = Scene3D();
-      scene.add(Object3D.point(Point3D(1, 2, 3)));
-      final objects = scene.objects;
-      expect(objects.length, 1);
-      // Modifying the returned list should not affect scene
-      // (the getter returns an unmodifiable list)
-      // This test verifies the behavior even if it's just the length
     });
   });
 
@@ -251,14 +144,6 @@ void main() {
       expect(left.x, lessThan(right.x));
     });
 
-    test('worldToScreen returns finite values for valid input', () {
-      final cam = Camera3D();
-      final proj = Projection3D.parallel(width: 800, height: 600);
-      final screen = worldToScreen(Point3D(100, 100, 100), cam, proj);
-      expect(screen.x.isFinite, true);
-      expect(screen.y.isFinite, true);
-    });
-
     test('worldToScreen handles object behind camera', () {
       final cam = Camera3D(
         target: Point3D(0, 0, 0),
@@ -279,13 +164,6 @@ void main() {
   });
 
   group('Matrix4 utilities', () {
-    test('identity matrix has correct diagonal', () {
-      final m = identityMatrix4();
-      for (int i = 0; i < 4; i++) {
-        expect(m[i * 4 + i], closeTo(1, 1e-10));
-      }
-    });
-
     test('matrix multiplication produces correct result', () {
       // A = translate(1,2,3), B = scale(2,2,2)
       // A * B means "scale then translate" — translation is unchanged

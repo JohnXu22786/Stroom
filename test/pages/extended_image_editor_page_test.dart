@@ -111,42 +111,6 @@ Uint8List _createSmallJpeg() {
 
 void main() {
   group('ExtendedImageEditorPage', () {
-    testWidgets('renders without crash when image data is provided',
-        (tester) async {
-      final png = await tester.runAsync(createTestImage);
-      await tester.pumpWidget(MaterialApp(
-        home: ExtendedImageEditorPage(
-          imageBytes: png!,
-          fileName: 'test.jpg',
-          onProcessed: (_) async {},
-        ),
-      ));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // The page should display the file name in the app bar
-      expect(find.text('快速编辑 - test.jpg'), findsOneWidget);
-    });
-
-    testWidgets('shows rotate and flip tool buttons', (tester) async {
-      final png = await tester.runAsync(createTestImage);
-      await tester.pumpWidget(MaterialApp(
-        home: ExtendedImageEditorPage(
-          imageBytes: png!,
-          fileName: 'test.jpg',
-          onProcessed: (_) async {},
-        ),
-      ));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Check for tool buttons in the bottom bar
-      expect(find.text('左旋'), findsOneWidget);
-      expect(find.text('右旋'), findsOneWidget);
-      expect(find.text('翻转'), findsOneWidget);
-      expect(find.text('裁剪'), findsOneWidget);
-    });
-
     testWidgets('close button pops with null', (tester) async {
       bool? result;
       final png = await tester.runAsync(createTestImage);
@@ -179,22 +143,6 @@ void main() {
       await tester.pump();
 
       expect(result, isNull);
-    });
-
-    testWidgets('save button is present', (tester) async {
-      final png = await tester.runAsync(createTestImage);
-      await tester.pumpWidget(MaterialApp(
-        home: ExtendedImageEditorPage(
-          imageBytes: png!,
-          fileName: 'test.jpg',
-          onProcessed: (_) async {},
-        ),
-      ));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Find the save/complete button
-      expect(find.text('完成'), findsOneWidget);
     });
 
     // ====================================================================

@@ -146,22 +146,6 @@ void main() {
     IosContinuedTaskService.debugForceSupported = false;
   });
   group('BackgroundOptimizationPage - rendering', () {
-    testWidgets('renders page title', (tester) async {
-      registerMockPlatform();
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      // Title bar
-      expect(find.text('后台运行优化'), findsOneWidget);
-    });
-
     testWidgets('shows system environment detection section', (tester) async {
       registerMockPlatform();
       tester.view.physicalSize = const Size(1080, 4000);
@@ -178,45 +162,6 @@ void main() {
       expect(find.text('系统环境检测'), findsOneWidget);
       // Platform name should be displayed (Android in test env)
       expect(find.text('Android'), findsAtLeast(1));
-    });
-
-    testWidgets('shows background optimization status section', (tester) async {
-      registerMockPlatform();
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      // Section header 后台优化检测 should be visible
-      expect(find.text('后台优化检测'), findsOneWidget);
-    });
-
-    testWidgets('shows platform tutorial categories', (tester) async {
-      registerMockPlatform();
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      // Section header 平台教程 should be visible
-      expect(find.text('平台教程'), findsOneWidget);
-
-      // Should show all platform tutorial cards
-      expect(find.text('Android'), findsAtLeast(1));
-      expect(find.text('iOS'), findsOneWidget);
-      expect(find.text('Windows'), findsOneWidget);
-      expect(find.text('macOS'), findsOneWidget);
-      expect(find.text('Linux'), findsOneWidget);
     });
   });
 

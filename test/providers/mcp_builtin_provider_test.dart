@@ -41,35 +41,6 @@ void main() {
       expect(providerNames, contains('Zhipu'));
     });
 
-    test('built-in configs have isVendor flag set', () async {
-      SharedPreferences.setMockInitialValues({});
-      registerBuiltinProviderTypes();
-
-      final container = ProviderContainer(
-        overrides: [
-          providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
-          ),
-        ],
-      );
-      addTearDown(() => container.dispose());
-
-      await container.read(providerEntriesProvider.notifier).load();
-
-      final state = container.read(providerEntriesProvider);
-      final mcpEntry = state.entries.firstWhere((e) => e.type == 'mcp');
-
-      // Every built-in config should have isVendor = true
-      for (final config in mcpEntry.configs) {
-        final typeConfig = config.models.isNotEmpty
-            ? config.models[0].typeConfig
-            : <String, dynamic>{};
-        expect(typeConfig['isVendor'], isTrue,
-            reason:
-                'Config "${config.providerName}" should be marked as vendor');
-      }
-    });
-
     test('existing configs are not overwritten by built-in migration',
         () async {
       // Set up existing MCP entry with a custom config

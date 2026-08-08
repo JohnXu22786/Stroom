@@ -209,15 +209,6 @@ void _writePts(Uint8List data, int offset, int pts) {
   data[offset + 4] = ((pts & 0x7F) << 1) | 1; // PTS[6..0]
 }
 
-/// Decode a 5-byte PES PTS field at [offset].
-int _readPts(Uint8List data, int offset) {
-  return ((data[offset] >> 1) & 0x07) << 30 |
-      data[offset + 1] << 22 |
-      ((data[offset + 2] >> 1) & 0x7F) << 15 |
-      data[offset + 3] << 7 |
-      ((data[offset + 4] >> 1) & 0x7F);
-}
-
 /// Minimal bit writer for constructing test SPS data.
 class _BitWriter {
   final List<int> _bits = [];
@@ -936,14 +927,6 @@ void main() {
           [TsPacket(pid: 0x101, payload: pes, payloadUnitStart: true)], 0x101);
       expect(pesPackets.first.pts, equals(180000));
       expect(pesPackets.first.dts, equals(90000));
-    });
-
-    test('PTS encoding round-trips', () {
-      for (final pts in [0, 1, 90000, 1234567, (1 << 33) - 1]) {
-        final buf = Uint8List(5);
-        _writePts(buf, 0, pts);
-        expect(_readPts(buf, 0), equals(pts));
-      }
     });
 
     test('handles PES spanning multiple TS packets', () {

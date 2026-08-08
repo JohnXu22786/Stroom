@@ -483,16 +483,6 @@ void main() {
   });
 
   // ==================================================================
-  // DataMigrationService delegation
-  // ==================================================================
-
-  group('DataMigrationService delegation', () {
-    test('cleanOldBackups delegates to AutoBackupService', () async {
-      await DataMigrationService.cleanOldBackups();
-    });
-  });
-
-  // ==================================================================
   // lastError tracking
   // ==================================================================
 

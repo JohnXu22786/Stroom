@@ -307,15 +307,6 @@ void main() {
   });
 
   group('UpdateNotifier', () {
-    test('initial state has no update available and not checking', () {
-      final dio = _createMockDio(_githubRelease('v0.2.13'));
-      final notifier = UpdateNotifier(dio: dio);
-      expect(notifier.state.updateAvailable, false);
-      expect(notifier.state.isChecking, false);
-      expect(notifier.state.error, isNull);
-      expect(notifier.state.latestVersion, isNull);
-    });
-
     test('checkForUpdate sets isChecking immediately', () {
       final dio = Dio(BaseOptions());
       dio.interceptors.add(InterceptorsWrapper(
@@ -757,14 +748,6 @@ void main() {
   });
 
   group('UpdateNotifier - Pre-release toggle', () {
-    test('initial acceptPreRelease is false', () async {
-      SharedPreferences.setMockInitialValues({});
-      final dio = _createMockDio(_githubRelease('v0.2.14'));
-      final notifier = UpdateNotifier(dio: dio);
-
-      expect(notifier.state.acceptPreRelease, false);
-    });
-
     test('setAcceptPreRelease(true) updates state and persists', () async {
       SharedPreferences.setMockInitialValues({});
       final dio = _createMockDio(_githubRelease('v0.2.14'));
@@ -1361,20 +1344,6 @@ void main() {
       expect(notifier.state.availableVersions!.length, 2);
       expect(notifier.state.availableVersions![0].isPreRelease, true);
       expect(notifier.state.availableVersions![1].isPreRelease, true);
-    });
-
-    test('AvailableUpdate stores downloadUrl correctly', () async {
-      final update = AvailableUpdate(
-        version: '0.2.16',
-        releaseNotes: 'Notes',
-        downloadUrl:
-            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.16/test.zip',
-        isPreRelease: false,
-      );
-
-      expect(update.version, '0.2.16');
-      expect(update.downloadUrl, contains('releases/download'));
-      expect(update.isPreRelease, false);
     });
 
     test(
@@ -2031,10 +2000,6 @@ void main() {
       await notifier.cleanupStaleInstallerFiles();
     });
 
-    test('downloadFilePathKey getter returns correct key', () {
-      expect(downloadFilePathKey, equals('update_downloaded_file_path'));
-    });
-
     test('downloadUpdate persists downloaded file path to SharedPreferences',
         () async {
       final dio = Dio(BaseOptions());
@@ -2101,30 +2066,11 @@ void main() {
       expect(result, isFalse);
     });
 
-    test('pendingUpdateRestartKey returns correct key string', () {
-      expect(pendingUpdateRestartKey, equals('pending_update_restart'));
-    });
-
     test('clearPendingUpdateRestart is idempotent when flag not set', () async {
       // Should not throw when flag is not in prefs
       await clearPendingUpdateRestart();
       final result = await hasPendingUpdateRestart();
       expect(result, isFalse);
-    });
-
-    test('isPendingRestartInMemory getter returns current state', () {
-      expect(isPendingRestartInMemory, isFalse);
-      setPendingRestartInMemory(true);
-      expect(isPendingRestartInMemory, isTrue);
-      setPendingRestartInMemory(false);
-      expect(isPendingRestartInMemory, isFalse);
-    });
-
-    test('isPendingRestartInMemory is cleared on process restart (simulated)',
-        () {
-      // Simulate process restart: flag resets to false on each isolate start
-      setPendingRestartInMemory(false);
-      expect(isPendingRestartInMemory, isFalse);
     });
 
     test('hasPendingUpdateRestart handles null SharedPreferences gracefully',

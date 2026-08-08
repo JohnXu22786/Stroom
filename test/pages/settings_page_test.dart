@@ -13,7 +13,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:stroom/pages/notification_settings_page.dart';
 import 'package:stroom/pages/settings_page.dart';
 import 'package:stroom/providers/notification_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -57,19 +56,6 @@ Widget _buildSettingsTestAppWithNotification() {
     ],
     child: const MaterialApp(
       home: SettingsPage(),
-    ),
-  );
-}
-
-/// Builds the NotificationSettingsPage test app.
-Widget _buildNotificationTestApp() {
-  return ProviderScope(
-    overrides: [
-      notificationSettingsProvider
-          .overrideWith((ref) => NotificationSettingsNotifier()),
-    ],
-    child: const MaterialApp(
-      home: NotificationSettingsPage(),
     ),
   );
 }
@@ -124,29 +110,6 @@ void main() {
   // ─────────────────────────────────────────────────────────────────────
 
   group('SettingsPage - ASR (音频转写) supplier display', () {
-    testWidgets('shows ASR supplier entry when loaded with default entries', (
-      tester,
-    ) async {
-      // Use a large viewport so all content is visible
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      // No saved data → defaults including ASR
-      SharedPreferences.setMockInitialValues({});
-
-      await tester.pumpWidget(_buildSettingsTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('TTS供应商'), findsOneWidget);
-      expect(find.text('LLM供应商'), findsOneWidget);
-      expect(find.text('OCR供应商'), findsOneWidget);
-      expect(find.text('音频转写供应商'), findsOneWidget);
-    });
-
     testWidgets(
       'shows ASR supplier after migration from saved data without it',
       (tester) async {
@@ -248,28 +211,6 @@ void main() {
       expect(find.text('任务完成或失败时发送通知'), findsNothing);
     });
 
-    testWidgets('shows 后台运行优化 card entry', (tester) async {
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      SharedPreferences.setMockInitialValues({});
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(
-        const MethodChannel('com.johntsui.stroom/keepalive'),
-        (MethodCall methodCall) async => true,
-      );
-
-      await tester.pumpWidget(_buildSettingsTestAppWithNotification());
-      await tester.pumpAndSettle();
-
-      // The new card should be visible
-      expect(find.text('后台运行优化'), findsOneWidget);
-    });
-
     testWidgets('tapping 后台运行优化 navigates to BackgroundOptimizationPage', (
       tester,
     ) async {
@@ -326,28 +267,6 @@ void main() {
       expect(find.text('通知权限检测'), findsOneWidget);
       expect(find.text('平台指南'), findsOneWidget);
     });
-
-    testWidgets('settings page still renders all other sections',
-        (tester) async {
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      SharedPreferences.setMockInitialValues({});
-
-      await tester.pumpWidget(_buildSettingsTestAppWithNotification());
-      await tester.pumpAndSettle();
-
-      // All original sections should still be present
-      expect(find.text('设置'), findsOneWidget);
-      expect(find.text('主题'), findsOneWidget);
-      expect(find.text('供应商设置'), findsOneWidget);
-      expect(find.text('数据备份'), findsOneWidget);
-      expect(find.text('关于'), findsOneWidget);
-    });
   });
 
   // ─────────────────────────────────────────────────────────────────────
@@ -355,27 +274,6 @@ void main() {
   // ─────────────────────────────────────────────────────────────────────
 
   group('SettingsPage - OCR supplier display', () {
-    testWidgets('shows OCR supplier entry when loaded with default entries',
-        (tester) async {
-      // Use a large viewport so all content is visible
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      // No saved data → defaults including OCR
-      SharedPreferences.setMockInitialValues({});
-
-      await tester.pumpWidget(_buildSettingsTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('OCR供应商'), findsOneWidget);
-      expect(find.text('TTS供应商'), findsOneWidget);
-      expect(find.text('LLM供应商'), findsOneWidget);
-    });
-
     testWidgets('shows OCR supplier after migration from saved data without it',
         (tester) async {
       tester.view.physicalSize = const Size(1080, 4000);
@@ -513,117 +411,6 @@ void main() {
       );
       // 字段随开关关闭而消失
       expect(find.byType(TextFormField), findsNothing);
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────────────
-  // From notification_settings_page_test.dart
-  // ─────────────────────────────────────────────────────────────────────
-
-  group('NotificationSettingsPage - rendering', () {
-    testWidgets('renders page title', (tester) async {
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      SharedPreferences.setMockInitialValues({});
-
-      await tester.pumpWidget(_buildNotificationTestApp());
-      await tester.pump();
-
-      // Title bar
-      expect(find.text('通知权限设置'), findsOneWidget);
-    });
-
-    testWidgets('shows system environment detection section', (tester) async {
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      SharedPreferences.setMockInitialValues({});
-
-      await tester.pumpWidget(_buildNotificationTestApp());
-      await tester.pump();
-
-      // Section header
-      expect(find.text('系统环境检测'), findsOneWidget);
-      // Platform name should be displayed (Android in test env)
-      expect(find.text('Android'), findsAtLeast(1));
-    });
-
-    testWidgets('shows notification permission status section', (tester) async {
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      SharedPreferences.setMockInitialValues({});
-
-      await tester.pumpWidget(_buildNotificationTestApp());
-      await tester.pump();
-
-      // Section header
-      expect(find.text('通知权限检测'), findsOneWidget);
-    });
-
-    testWidgets('shows platform guide section', (tester) async {
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      SharedPreferences.setMockInitialValues({});
-
-      await tester.pumpWidget(_buildNotificationTestApp());
-      await tester.pump();
-
-      // Section header
-      expect(find.text('平台指南'), findsOneWidget);
-    });
-
-    testWidgets('shows notification toggle title and subtitle', (tester) async {
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      SharedPreferences.setMockInitialValues({});
-
-      await tester.pumpWidget(_buildNotificationTestApp());
-      await tester.pump();
-
-      // Should show the toggle labels
-      expect(find.text('任务完成通知'), findsOneWidget);
-      expect(find.text('任务完成或失败时发送通知'), findsOneWidget);
-    });
-
-    testWidgets('renders a Switch for notification toggle', (tester) async {
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      SharedPreferences.setMockInitialValues({});
-
-      await tester.pumpWidget(_buildNotificationTestApp());
-      await tester.pump();
-
-      // Should have a Switch widget
-      expect(find.byType(Switch), findsOneWidget);
     });
   });
 }

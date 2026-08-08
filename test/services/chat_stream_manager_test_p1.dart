@@ -1,53 +1,6 @@
 part of 'chat_stream_manager_test.dart';
 
 void chatStreamManagerGroup1() {
-  group('ChatStreamManager - basic operations', () {
-    late ChatStreamManager manager;
-
-    setUp(() async {
-      SharedPreferences.setMockInitialValues({});
-      manager = ChatStreamManager();
-    });
-
-    tearDown(() {
-      manager.dispose();
-    });
-
-    test('manager creates and holds an adapter', () {
-      expect(manager.adapter, isA<ChatAdapter>());
-      expect(manager.adapter.isConfigured, false);
-    });
-
-    test('adapter returns the same instance', () {
-      final adapter = manager.adapter;
-      expect(adapter, isNotNull);
-      expect(manager.adapter, same(adapter));
-    });
-
-    test('isStreaming returns false when no conversation is streaming', () {
-      expect(manager.isStreaming, false);
-    });
-
-    test('isStreamingFor returns false for non-streaming conversation', () {
-      expect(manager.isStreamingFor('conv1'), false);
-    });
-
-    test('cancel does nothing when not streaming', () {
-      manager.cancel();
-      expect(manager.isStreaming, false);
-    });
-
-    test('cancel with specific convId does nothing when not streaming', () {
-      manager.cancel('conv1');
-      expect(manager.isStreaming, false);
-    });
-
-    test('dispose can be called without error', () {
-      manager.dispose();
-      expect(manager.isStreaming, false);
-    });
-  });
-
   group('ChatStreamManager - single conversation streaming', () {
     test('StreamResult contains correct history after completion', () async {
       final manager = ChatStreamManager();

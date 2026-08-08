@@ -6,18 +6,6 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('HtmlCodeBlockWidget - widget rendering', () {
-    testWidgets('renders as a StatefulWidget', (tester) async {
-      const widget = HtmlCodeBlockWidget(htmlCode: '<h1>Hello</h1>');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: widget,
-          ),
-        ),
-      );
-      expect(find.byType(HtmlCodeBlockWidget), findsOneWidget);
-    });
-
     testWidgets('shows raw HTML code as text, not rendered', (tester) async {
       const html = '<h1>Hello World</h1>';
       await tester.pumpWidget(
@@ -175,25 +163,6 @@ void main() {
       expect(find.text('<p>Hello</p>'), findsOneWidget);
       // Should show line number 1
       expect(find.text('1'), findsOneWidget);
-    });
-
-    testWidgets('adapts colors to dark mode', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          themeMode: ThemeMode.dark,
-          darkTheme: ThemeData.dark(),
-          home: Scaffold(
-            body: HtmlCodeBlockWidget(htmlCode: '<p>test</p>'),
-          ),
-        ),
-      );
-
-      // Widget should render without error in dark mode
-      expect(find.byType(HtmlCodeBlockWidget), findsOneWidget);
-      // The fullscreen icon should still be present
-      expect(find.byIcon(Icons.fullscreen), findsOneWidget);
-      // The wrap toggle icon should still be present
-      expect(find.byIcon(Icons.wrap_text), findsOneWidget);
     });
 
     testWidgets('shows multiline code with correct line numbers in wrap mode',

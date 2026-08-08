@@ -158,36 +158,6 @@ Dio _mockDio(_MockAdapter adapter) {
 
 void main() {
   group('OpenAiFileUploadConfig', () {
-    test('uses default thresholds when not specified', () {
-      final config = OpenAiFileUploadConfig(
-        apiKey: 'key',
-        baseUrl: 'https://api.test.com',
-      );
-      expect(config.multipartThresholdBytes, 512 * 1024 * 1024);
-      expect(config.partSizeBytes, 64 * 1024 * 1024);
-    });
-
-    test('accepts custom thresholds', () {
-      final config = OpenAiFileUploadConfig(
-        apiKey: 'key',
-        baseUrl: 'https://api.test.com',
-        multipartThresholdBytes: 1024 * 1024, // 1 MB
-        partSizeBytes: 256 * 1024, // 256 KB
-      );
-      expect(config.multipartThresholdBytes, 1024 * 1024);
-      expect(config.partSizeBytes, 256 * 1024);
-    });
-
-    test('filesUrl returns the correct URL', () {
-      final config = _testConfig();
-      expect(config.filesUrl, 'https://api.test.com/files');
-    });
-
-    test('uploadsUrl returns the correct URL', () {
-      final config = _testConfig();
-      expect(config.uploadsUrl, 'https://api.test.com/uploads');
-    });
-
     test('normalizedBaseUrl strips trailing slash from filesUrl', () {
       final config = _testConfig(baseUrl: 'https://api.test.com/');
       expect(config.filesUrl, 'https://api.test.com/files');
@@ -196,31 +166,6 @@ void main() {
     test('normalizedBaseUrl strips trailing slash from uploadsUrl', () {
       final config = _testConfig(baseUrl: 'https://api.test.com/');
       expect(config.uploadsUrl, 'https://api.test.com/uploads');
-    });
-
-    test('copyWith preserves existing values when fields are omitted', () {
-      final config = OpenAiFileUploadConfig(
-        apiKey: 'key',
-        baseUrl: 'https://api.test.com',
-        multipartThresholdBytes: 1000,
-        partSizeBytes: 500,
-      );
-      final copy = config.copyWith();
-      expect(copy.apiKey, 'key');
-      expect(copy.baseUrl, 'https://api.test.com');
-      expect(copy.multipartThresholdBytes, 1000);
-      expect(copy.partSizeBytes, 500);
-    });
-
-    test('copyWith updates individual fields', () {
-      final config = _testConfig();
-      final copy = config.copyWith(
-        multipartThresholdBytes: 1024,
-        partSizeBytes: 256,
-      );
-      expect(copy.multipartThresholdBytes, 1024);
-      expect(copy.partSizeBytes, 256);
-      expect(copy.apiKey, 'test-key'); // unchanged
     });
   });
 

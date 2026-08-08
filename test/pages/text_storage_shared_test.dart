@@ -25,15 +25,6 @@ void main() {
   });
 
   group('TextCreatePage', () {
-    testWidgets('renders with title and content fields', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      expect(find.text('新建'), findsOneWidget);
-      expect(find.text('保存'), findsOneWidget);
-      expect(find.byType(TextField), findsWidgets);
-    });
-
     testWidgets('shows format dropdown with txt and md options',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());

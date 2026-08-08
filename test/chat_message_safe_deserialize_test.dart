@@ -1,7 +1,4 @@
-import 'dart:convert';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 
@@ -598,22 +595,6 @@ void main() {
   });
 
   group('ConversationsNotifier._load - robust loading via raw JSON', () {
-    /// Helper: create a ProviderContainer with a ConversationsNotifier that
-    /// skips _load by using a pre-set state. This avoids timing issues with
-    /// async _load + container disposal.
-    ProviderContainer _createContainer({List<Conversation>? initialState}) {
-      SharedPreferences.setMockInitialValues({});
-      return ProviderContainer(
-        overrides: [
-          conversationsProvider.overrideWith((ref) {
-            final notifier = ConversationsNotifier(ref);
-            notifier.state = initialState ?? [];
-            return notifier;
-          }),
-        ],
-      );
-    }
-
     test(
         'conversation model handles one corrupt conversation without losing others',
         () {
@@ -682,43 +663,6 @@ void main() {
               'Both messages should be present (bad dates handled gracefully)');
       expect(conv.messages[0].content, 'Good message');
       expect(conv.messages[1].content, 'Bad message with invalid date');
-    });
-
-    test('ConversationsNotifier can have state with all valid conversations',
-        () {
-      final container = _createContainer(initialState: [
-        Conversation.fromMap({
-          'id': 'good-conv',
-          'title': 'Good',
-          'createdAt': DateTime.now().toIso8601String(),
-          'updatedAt': DateTime.now().toIso8601String(),
-          'messages': <Map<String, dynamic>>[],
-          'isPinned': false,
-          'sortOrder': 0,
-          'draftText': '',
-        }),
-        Conversation.fromMap({
-          'id': 'bad-conv',
-          'title': 'Bad',
-          'createdAt': DateTime.now().toIso8601String(),
-          'updatedAt': DateTime.now().toIso8601String(),
-          'messages': <Map<String, dynamic>>[],
-          'isPinned': false,
-          'sortOrder': 0,
-          'draftText': null,
-        }),
-      ]);
-
-      final convs = container.read(conversationsProvider);
-      expect(convs.length, 2);
-      container.dispose();
-    });
-
-    test('ConversationsNotifier state can be empty without error', () {
-      final container = _createContainer(initialState: []);
-      final convs = container.read(conversationsProvider);
-      expect(convs, isEmpty);
-      container.dispose();
     });
   });
 

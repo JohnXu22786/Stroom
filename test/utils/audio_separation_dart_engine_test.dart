@@ -92,12 +92,6 @@ void main() {
       engine = AudioSeparationEngine();
     });
 
-    test('isAvailable returns true', () async {
-      // Pure Dart implementation should always be available
-      final available = await engine.isAvailable();
-      expect(available, isTrue);
-    });
-
     test('canHandleVideoFormat handles ISOBMFF formats (mp4/mov/m4v/3gp)', () {
       expect(engine.canHandleVideoFormat('mp4'), isTrue);
       expect(engine.canHandleVideoFormat('mov'), isTrue);
@@ -154,7 +148,6 @@ void main() {
     });
 
     test('extractAudio throws on MP4 without audio track', () async {
-      // Build a minimal MP4 file that has ftyp but NO moov/mdat
       final mp4Bytes = Uint8List.fromList([
         // ftyp box: size=20, type='ftyp', major='isom', minor=0x200, compatible='isom'
         0x00, 0x00, 0x00, 0x14, // box size = 20
@@ -171,13 +164,6 @@ void main() {
         ),
         throwsA(isA<Exception>()),
       );
-    });
-
-    test('extractAudio throws on MP4 without audio track (video only)',
-        () async {
-      // Build minimal MP4 with only a video track (vide handler, no soun)
-      // This is complex to construct - skip for now, test via different means
-      // Just verify it throws for an MP4 that exists but has issues
     });
 
     test('pcmToWav produces valid WAV', () {

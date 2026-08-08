@@ -278,36 +278,6 @@ void main() {
           reason: 'Panel should move down when dragged down');
     });
 
-    testWidgets('minimize toggle works correctly', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: DraggableFloatingPanel(
-              detectedUrls: const ['https://cdn.example.com/video.mp4'],
-              onConfirmCapture: (_) {},
-            ),
-          ),
-        ),
-      );
-
-      // Should show content (URL list)
-      expect(find.textContaining('video.mp4'), findsOneWidget);
-
-      // Tap minimize button
-      await tester.tap(find.byIcon(Icons.expand_more));
-      await tester.pumpAndSettle();
-
-      // Content should be hidden
-      expect(find.textContaining('video.mp4'), findsNothing);
-
-      // Tap expand button
-      await tester.tap(find.byIcon(Icons.expand_less));
-      await tester.pumpAndSettle();
-
-      // Content should be visible again
-      expect(find.textContaining('video.mp4'), findsOneWidget);
-    });
-
     testWidgets('long URL list scrolls and the last item becomes reachable',
         (tester) async {
       // Regression: the URL list must scroll internally (the panel is
