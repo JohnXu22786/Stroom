@@ -187,8 +187,6 @@ class MermaidRenderWidget extends StatefulWidget {
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js">
-  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -202,6 +200,19 @@ class MermaidRenderWidget extends StatefulWidget {
       height: 100%;
       overflow: hidden;
       position: relative;
+    }
+    #loading-hint {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #888;
+      font-size: 13px;
+      font-family: sans-serif;
     }
     #diagram-container {
       transform-origin: 0 0;
@@ -232,6 +243,7 @@ class MermaidRenderWidget extends StatefulWidget {
 </head>
 <body>
   <div id="viewport">
+    <div id="loading-hint">图表加载中...</div>
     <div id="diagram-container">
       <pre class="mermaid" id="mermaid-code">
 MERMAID_CODE_PLACEHOLDER
@@ -337,23 +349,50 @@ MERMAID_CODE_PLACEHOLDER
 
 GESTURE_SCRIPT_PLACEHOLDER
 
-    // Initialize mermaid
-    try {
-      mermaid.initialize({
-        theme: 'default',
-        securityLevel: 'loose',
-        fontFamily: 'sans-serif',
-      });
-      mermaid.run({
-        nodes: [document.getElementById('mermaid-code')],
-      }).then(function() {
-        window.fitToViewport();
-      }).catch(function(err) {
-        reportError('Mermaid render error: ' + err.message);
-      });
-    } catch(e) {
-      reportError('Mermaid initialize error: ' + e.message);
-    }
+    // Load mermaid.js dynamically instead of via a blocking <script> tag:
+    // a static script in <head> would delay the document load event until
+    // the CDN responds, so on a slow or unreachable network the WebView's
+    // onLoadStop never fires and the Flutter-side loading overlay spins
+    // forever. Dynamic injection lets the page finish loading immediately;
+    // the diagram initializes when the script arrives, and a failure or
+    // timeout shows a visible error instead of an endless spinner.
+    (function loadMermaid() {
+      var hint = document.getElementById('loading-hint');
+      var mermaidTimer = setTimeout(function() {
+        if (hint) hint.style.display = 'none';
+        reportError('Mermaid 加载超时：请检查网络连接后重试');
+      }, 20000);
+      var script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
+      script.onload = function() {
+        clearTimeout(mermaidTimer);
+        try {
+          mermaid.initialize({
+            theme: 'default',
+            securityLevel: 'loose',
+            fontFamily: 'sans-serif',
+          });
+          mermaid.run({
+            nodes: [document.getElementById('mermaid-code')],
+          }).then(function() {
+            if (hint) hint.style.display = 'none';
+            window.fitToViewport();
+          }).catch(function(err) {
+            if (hint) hint.style.display = 'none';
+            reportError('Mermaid render error: ' + err.message);
+          });
+        } catch (e) {
+          if (hint) hint.style.display = 'none';
+          reportError('Mermaid initialize error: ' + e.message);
+        }
+      };
+      script.onerror = function() {
+        clearTimeout(mermaidTimer);
+        if (hint) hint.style.display = 'none';
+        reportError('Mermaid 加载失败：无法访问 cdn.jsdelivr.net');
+      };
+      document.head.appendChild(script);
+    })();
   </script>
 </body>
 </html>

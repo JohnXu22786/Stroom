@@ -28,6 +28,31 @@ void main() {
       expect(html, contains('mermaid.min.js'));
     });
 
+    test('loads mermaid.js dynamically so the CDN cannot block the load event',
+        () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // Regression: a static <script src="https://cdn.jsdelivr.net/..."> in
+      // <head> delays the document load event until the CDN responds. On a
+      // slow or unreachable network the WebView's onLoadStop never fires,
+      // so the Flutter-side loading overlay spun forever. The script must
+      // be injected dynamically so the page finishes loading immediately.
+      expect(html, isNot(contains('<script src="https://cdn.jsdelivr.net')));
+      expect(html, contains("document.createElement('script')"));
+      expect(
+          html,
+          contains(
+              "script.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js'"));
+    });
+
+    test('shows a visible error when the mermaid CDN fails or times out', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // A dead or hanging CDN must not leave the diagram area spinning:
+      // script.onerror and a load timeout both surface a visible error.
+      expect(html, contains('script.onerror'));
+      expect(html, contains('无法访问 cdn.jsdelivr.net'));
+      expect(html, contains('Mermaid 加载超时'));
+    });
+
     test('includes mermaid.initialize call', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('mermaid.initialize'));
