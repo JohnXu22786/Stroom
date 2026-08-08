@@ -382,7 +382,7 @@ void main() {
   });
 
   group('BuiltInPromptSelector', () {
-    testWidgets('shows new icon button in AppBar next to + button', (
+    testWidgets('shows market icon button in AppBar next to + button', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -394,15 +394,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Should show the built-in prompt icon button
-      expect(find.byIcon(Icons.auto_awesome), findsOneWidget);
+      // The market entry should use a store-like icon (conveying it picks
+      // from a "market"), not the sparkles icon
+      expect(find.byIcon(Icons.storefront), findsOneWidget);
+      expect(find.byIcon(Icons.auto_awesome), findsNothing);
       // The + button should still be there
       expect(find.byIcon(Icons.add), findsOneWidget);
     });
 
-    testWidgets('tapping built-in prompt button opens selector dialog', (
-      tester,
-    ) async {
+    testWidgets('tapping market button opens selector dialog', (tester) async {
       await tester.pumpWidget(
         createTestApp(
           assistants: [
@@ -412,15 +412,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Tap the built-in prompt button
-      await tester.tap(find.byIcon(Icons.auto_awesome));
+      // Tap the market button
+      await tester.tap(find.byIcon(Icons.storefront));
       await tester.pumpAndSettle();
 
-      // Dialog should be visible
-      expect(find.text('内置助手'), findsOneWidget);
+      // Dialog should be visible with the market title
+      expect(find.text('助手市场'), findsOneWidget);
     });
 
-    testWidgets('built-in prompt dialog shows prompt cards', (tester) async {
+    testWidgets('market dialog shows prompt cards', (tester) async {
       await tester.pumpWidget(
         createTestApp(
           assistants: [
@@ -431,7 +431,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open the dialog
-      await tester.tap(find.byIcon(Icons.auto_awesome));
+      await tester.tap(find.byIcon(Icons.storefront));
       await tester.pumpAndSettle();
 
       // Should show the first built-in prompt's name
@@ -439,7 +439,25 @@ void main() {
       expect(find.text(firstPrompt.name), findsOneWidget);
     });
 
-    testWidgets('built-in prompt cards show prompt text read-only', (
+    testWidgets('market cards have no text editing fields', (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open the dialog
+      await tester.tap(find.byIcon(Icons.storefront));
+      await tester.pumpAndSettle();
+
+      // No text editing fields should be present for the prompts
+      expect(find.byType(TextField), findsNothing);
+    });
+
+    testWidgets('prompt text is hidden on cards, shown only via info icon', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -452,43 +470,175 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open the dialog
-      await tester.tap(find.byIcon(Icons.auto_awesome));
+      await tester.tap(find.byIcon(Icons.storefront));
       await tester.pumpAndSettle();
 
-      // No text editing fields should be present for the prompts
-      expect(find.byType(TextField), findsNothing);
+      // The prompt code must NOT be visible on the card; only the
+      // description is shown by default
+      final firstPrompt = builtInPrompts.first;
+      expect(find.text(firstPrompt.prompt), findsNothing);
+      expect(find.text(firstPrompt.description), findsOneWidget);
+
+      // Tap the info icon next to the add button
+      await tester.tap(find.byIcon(Icons.info_outline).first);
+      await tester.pumpAndSettle();
+
+      // The full prompt is now visible in the viewer
+      expect(find.text(firstPrompt.prompt), findsOneWidget);
+      expect(find.textContaining('提示词'), findsOneWidget);
+
+      // Close the viewer again
+      await tester.tap(find.text('关闭'));
+      await tester.pumpAndSettle();
+      expect(find.text(firstPrompt.prompt), findsNothing);
     });
 
-    testWidgets(
-        'selecting a built-in prompt creates new assistant and closes dialog', (
+    testWidgets('tapping a card opens detail panel instead of adding', (
       tester,
     ) async {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
         createTestApp(
-          assistants: [], // Start with no assistants; the default will be auto-created
+          assistants: [
+            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
+          ],
         ),
       );
       await tester.pumpAndSettle();
 
       // Open the dialog
-      await tester.tap(find.byIcon(Icons.auto_awesome));
+      await tester.tap(find.byIcon(Icons.storefront));
       await tester.pumpAndSettle();
 
-      // Tap the first built-in prompt to create
+      // Tap the first card — this must NOT import directly
       final firstPrompt = builtInPrompts.first;
       await tester.tap(find.text(firstPrompt.name).first);
       await tester.pumpAndSettle();
 
-      // Dialog should be closed
-      expect(find.text('内置助手'), findsNothing);
-      // The new assistant should appear in the grid
+      // The detail panel is shown (with its import button), and the
+      // market dialog is still open underneath — nothing imported yet
+      expect(find.text('添加助手'), findsOneWidget);
+      expect(find.text('助手市场'), findsOneWidget);
+      // The detail panel lets the user review the prompt text
+      expect(find.text(firstPrompt.prompt), findsOneWidget);
+
+      // Close the detail panel without importing
+      await tester.tap(find.byIcon(Icons.close).last);
+      await tester.pumpAndSettle();
+      expect(find.text('添加助手'), findsNothing);
+
+      // Close the market dialog and verify nothing was added to the grid
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+      expect(find.text('助手1'), findsOneWidget);
+      expect(find.text(firstPrompt.name), findsNothing);
+    });
+
+    testWidgets(
+        'importing from the detail panel creates assistant and closes dialogs',
+        (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        createTestApp(
+          // The override starts with an empty notifier; no default assistant
+          // is auto-created, so the grid shows the empty state.
+          assistants: [],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open the dialog
+      await tester.tap(find.byIcon(Icons.storefront));
+      await tester.pumpAndSettle();
+
+      // Open the detail panel of the first prompt
+      final firstPrompt = builtInPrompts.first;
+      await tester.tap(find.text(firstPrompt.name).first);
+      await tester.pumpAndSettle();
+
+      // Import from the detail panel
+      await tester.tap(find.text('添加助手'));
+      await tester.pumpAndSettle();
+
+      // Both dialogs should be closed and the new assistant appears
+      expect(find.text('助手市场'), findsNothing);
       expect(find.text(firstPrompt.name), findsOneWidget);
     });
 
-    testWidgets('built-in prompt button also works in empty state', (
+    testWidgets('card 添加 button imports the prompt directly', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open the dialog
+      await tester.tap(find.byIcon(Icons.storefront));
+      await tester.pumpAndSettle();
+
+      // Tap the 添加 button on the first card (not the card itself)
+      final firstPrompt = builtInPrompts.first;
+      await tester.tap(find.widgetWithText(FilledButton, '添加').first);
+      await tester.pumpAndSettle();
+
+      // Dialog should be closed and the new assistant should appear
+      expect(find.text('助手市场'), findsNothing);
+      expect(find.text(firstPrompt.name), findsOneWidget);
+    });
+
+    testWidgets('rapid double tap on 添加助手 does not import twice', (
       tester,
     ) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open the market dialog and the detail panel of the first prompt
+      await tester.tap(find.byIcon(Icons.storefront));
+      await tester.pumpAndSettle();
+      final firstPrompt = builtInPrompts.first;
+      await tester.tap(find.text(firstPrompt.name).first);
+      await tester.pumpAndSettle();
+
+      // Invoke the import action twice in a row (as a rapid double-tap
+      // would). The second invocation must be a no-op — without the
+      // re-entrancy guard it would import twice and pop the page beneath
+      // the dialogs.
+      final importButton = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, '添加助手'),
+      );
+      importButton.onPressed!();
+      await tester.pump(const Duration(milliseconds: 100));
+      importButton.onPressed!();
+      await tester.pumpAndSettle();
+
+      // Exactly one assistant was created and both dialogs closed once
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AssistantSelectionPage)),
+      );
+      final imported = container
+          .read(assistantProvider)
+          .where((a) => a.name == firstPrompt.name);
+      expect(imported.length, 1);
+      expect(find.text('助手市场'), findsNothing);
+      expect(find.text('添加助手'), findsNothing);
+      // The selection page is still on screen
+      expect(find.text('选择助手'), findsOneWidget);
+    });
+
+    testWidgets('market button also works in empty state', (tester) async {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
         ProviderScope(
@@ -502,8 +652,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // The empty state appbar should have the new icon button
-      expect(find.byIcon(Icons.auto_awesome), findsAtLeast(1));
+      // The empty state appbar should have the market icon button
+      expect(find.byIcon(Icons.storefront), findsAtLeast(1));
       // The + button should also be present
       expect(find.byIcon(Icons.add), findsAtLeast(1));
     });
@@ -522,7 +672,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open dialog
-      await tester.tap(find.byIcon(Icons.auto_awesome));
+      await tester.tap(find.byIcon(Icons.storefront));
       await tester.pumpAndSettle();
 
       // Close using the X (close) icon button
@@ -530,7 +680,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Dialog should be closed
-      expect(find.text('内置助手'), findsNothing);
+      expect(find.text('助手市场'), findsNothing);
       // Original assistant should still be there
       expect(find.text('现有助手'), findsOneWidget);
     });

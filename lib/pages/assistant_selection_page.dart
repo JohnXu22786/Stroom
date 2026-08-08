@@ -34,8 +34,10 @@ class AssistantSelectionPage extends ConsumerWidget {
         backgroundColor: cs.surface,
         actions: [
           IconButton(
-            icon: const Icon(Icons.auto_awesome),
-            tooltip: '内置助手',
+            // A storefront icon conveys that this entry opens the
+            // built-in assistant "market".
+            icon: const Icon(Icons.storefront),
+            tooltip: '助手市场',
             onPressed: () => showBuiltInPromptSelector(context, ref),
           ),
           IconButton(
