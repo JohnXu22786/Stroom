@@ -328,11 +328,19 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         att.storagePath.startsWith('temp_edited/')) {
       _deleteTempFile(att.storagePath);
     }
-    // 磁盘压缩缓存同样仅普通模式清理：编辑模式下附件仍被原消息
-    // 引用，缓存随消息继续复用；孤儿缓存由删除对话时整目录清理兜底
-    // （与 temp_edited 文件语义一致）。清理须等该 hash 在途的预压缩
-    // 完成，避免"先删后写"复活缓存。
-    if (widget.editingMessageId == null) {
+    // 磁盘压缩缓存清理时机：
+    // - 普通模式（非编辑）：待发附件已被移除、无人引用，立即清理。
+    // - 编辑模式 + 本次新加的附件：与普通发送一致，立即清理。
+    // - 编辑模式 + 原消息附件：**不立即清理**——用户可能取消编辑，
+    //   原消息仍引用该附件；确定重发时（_handleSubmitted 编辑分支）
+    //   再统一清理。
+    final isOriginalEditAttachment = widget.editingMessageId != null &&
+        (widget.editingMessageAttachments
+                ?.any((a) => a.id == att.id) ??
+            false);
+    if (isOriginalEditAttachment) {
+      _removedEditAttachments.add(att);
+    } else {
       unawaited(_deleteCompressedCacheAfterPreCompress(att));
     }
     setState(() {
@@ -509,6 +517,15 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         }
         // 旧字节的压缩缓存一并清理（hash 已变，旧缓存成为孤儿）。
         // 等旧 hash 在途的预压缩完成后删除，防止它复活旧缓存。
+        await _deleteCompressedCacheAfterPreCompress(oldAtt);
+      } else if (widget.editingMessageAttachments
+              ?.any((a) => a.id == oldAtt.id) ??
+          false) {
+        // 编辑模式 + 原消息附件被编辑：旧字节缓存同样推迟到确定重发
+        // 时清理（可能取消编辑，原消息仍引用旧字节）。
+        _removedEditAttachments.add(oldAtt);
+      } else {
+        // 编辑模式 + 本次新加附件被编辑：与普通发送一致，立即清理。
         await _deleteCompressedCacheAfterPreCompress(oldAtt);
       }
 
