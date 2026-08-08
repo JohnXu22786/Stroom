@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -5,7 +6,9 @@ import 'package:extended_image/extended_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:photo_view/photo_view.dart';
 
+import '../utils/byte_lru_cache.dart';
 import '../utils/image_manifest.dart';
+import '../utils/image_thumbnail_loader.dart';
 import 'extended_image_editor_page.dart';
 import 'image_editor_page.dart';
 
@@ -29,13 +32,21 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
   late int _currentIndex;
 
   bool _isLoading = false;
-  final Map<String, Uint8List?> _imageCache = {};
+
+  /// 原图字节 LRU 缓存（按总字节数设上限，防止浏览大量大图时内存暴涨）。
+  final ByteLruCache _bytesCache = ByteLruCache(maxBytes: 48 * 1024 * 1024);
+
+  /// 进行中的磁盘读取（按 record id 去重，完成后即移除 —
+  /// 已完成的结果由 [_bytesCache] 持有，避免 Future 无限保留大图引用）。
+  final Map<String, Future<Uint8List?>> _bytesFutures = {};
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex.clamp(0, widget.images.length - 1);
     _pageController = ExtendedPageController(initialPage: _currentIndex);
+    // 预加载相邻页字节：滑到下一页时磁盘读取已完成，只剩解码
+    _preloadNeighbors(_currentIndex);
   }
 
   @override
@@ -53,33 +64,59 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
     return widget.images[_currentIndex].format.toLowerCase() == 'svg';
   }
 
-  Future<Uint8List?> _readImageBytes(ImageRecord record) async {
-    final cached = _imageCache[record.id];
-    if (cached != null) return cached;
-    final bytes = await ImageManifest.readFile(record.storagePath);
-    _imageCache[record.id] = bytes;
-    return bytes;
+  // ---- 字节缓存 ----------------------------------------------------------
+
+  Future<Uint8List?> _readImageBytes(ImageRecord record) {
+    // 缓存命中：同步返回（LRU touch）
+    final cached = _bytesCache.get(record.id);
+    if (cached != null) {
+      return Future.value(cached);
+    }
+    // 去重：同一张图的并发读取共享同一个 Future
+    final inflight = _bytesFutures[record.id];
+    if (inflight != null) return inflight;
+    late final Future<Uint8List?> future;
+    future = () async {
+      try {
+        final bytes = await ImageManifest.readFile(record.storagePath);
+        // 读取期间记录被编辑/删除（_bytesFutures 已清空）时不再
+        // 重新插入过期字节，避免死缓存占用内存
+        if (bytes != null &&
+            bytes.isNotEmpty &&
+            _bytesFutures[record.id] == future) {
+          _bytesCache.put(record.id, bytes);
+        }
+        return bytes;
+      } finally {
+        // 身份守卫：读取期间记录被编辑/删除后同 id 可能注册了新的
+        // Future，不能把它一并移除
+        if (_bytesFutures[record.id] == future) {
+          _bytesFutures.remove(record.id);
+        }
+      }
+    }();
+    _bytesFutures[record.id] = future;
+    return future;
   }
 
-  Future<Widget> _buildImagePage(int index) async {
-    if (index < 0 || index >= widget.images.length) {
-      return const Center(child: Text('Invalid index'));
+  /// 预加载 [index] 相邻页的原图字节（只触发磁盘读取，不构建页面）。
+  void _preloadNeighbors(int index) {
+    for (final i in [index - 1, index + 1]) {
+      if (i < 0 || i >= widget.images.length) continue;
+      final record = widget.images[i];
+      // 超大图（单张超过缓存上限的 1/3）预加载会被 LRU 自己挤出，
+      // 预加载毫无收益还白白多一次读盘 → 跳过，翻页时按需读取
+      if (record.size > _bytesCache.maxBytes ~/ 3) continue;
+      _readImageBytes(record);
     }
+  }
 
-    final record = widget.images[index];
+  // ---- 页面构建 ----------------------------------------------------------
+
+  Widget _buildImagePageContent(ImageRecord record, Uint8List bytes) {
     final isSvg = record.format.toLowerCase() == 'svg';
-
     if (isSvg) {
-      final bytes = await _readImageBytes(record);
-      if (bytes == null || bytes.isEmpty) {
-        return _buildErrorWidget('Cannot load SVG');
-      }
       return _buildSvgPage(bytes);
-    }
-
-    final bytes = await _readImageBytes(record);
-    if (bytes == null || bytes.isEmpty) {
-      return _buildErrorWidget('Cannot load image');
     }
     return ExtendedImage.memory(
       bytes,
@@ -98,8 +135,40 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
         if (state.extendedImageLoadState == LoadState.failed) {
           return _buildErrorWidget('Cannot load image');
         }
+        // 全分辨率解码期间继续显示缩略图，避免缩略图 → 白色加载圈 → 全图
+        // 的两次切换闪烁
+        if (state.extendedImageLoadState == LoadState.loading) {
+          final thumb = ImageThumbnailLoader.peek(record);
+          if (thumb != null) {
+            return _buildThumbnailPlaceholder(thumb);
+          }
+        }
         return null;
       },
+    );
+  }
+
+  /// 加载占位：只显示已缓存/已加载的缩略图，绝不触发新的缩略图生成。
+  /// 全图字节的读取始终已在进行（itemBuilder 的 FutureBuilder 与
+  /// 预加载），占位符再走一次 loadThumbnail 会重复读取同一张原图。
+  Widget _buildLoadingPlaceholder(ImageRecord record) {
+    final cachedThumb = ImageThumbnailLoader.peek(record);
+    if (cachedThumb != null) {
+      return _buildThumbnailPlaceholder(cachedThumb);
+    }
+    return const Center(
+      child: CircularProgressIndicator(color: Colors.white),
+    );
+  }
+
+  Widget _buildThumbnailPlaceholder(Uint8List thumb) {
+    return Center(
+      child: Image.memory(
+        thumb,
+        fit: BoxFit.contain,
+        // 256px 缩略图放大到全屏时用中等过滤，减少明显锯齿
+        filterQuality: FilterQuality.medium,
+      ),
     );
   }
 
@@ -277,8 +346,19 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
       // Insert new cache entry before removing the old one to avoid a
       // narrow window where a rebuild could attempt to read the deleted
       // file from disk.
-      _imageCache[newRecord.id] = editedBytes;
-      _imageCache.remove(file.id);
+      _bytesCache.put(newRecord.id, editedBytes);
+      _bytesCache.remove(file.id);
+      _bytesFutures.remove(file.id);
+
+      // 覆盖保存删除了旧记录：丢弃旧 hash 的缩略图内存缓存。
+      // （saveAs 分支保留旧记录，旧缩略图继续有效，无需处理。）
+      if (!isSaveAs) {
+        ImageThumbnailLoader.invalidate(file.hash);
+      }
+
+      // 后台生成新图的缩略图并持久化：返回相册网格时直接命中，
+      // 不再走"读原图 + 全分辨率解码"的回退路径
+      unawaited(ImageThumbnailLoader.loadThumbnail(newRecord));
 
       // Update the record in-place. The parent always passes a mutable
       // list (gallery_page.dart line 155 — folderImages.toList()), so
@@ -313,20 +393,30 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
             itemCount: widget.images.length,
             onPageChanged: (index) {
               setState(() => _currentIndex = index);
+              // 预加载下一页/上一页的字节，翻页只等解码不等读盘
+              _preloadNeighbors(index);
             },
             itemBuilder: (context, index) {
-              return FutureBuilder<Widget>(
-                future: _buildImagePage(index),
+              if (index < 0 || index >= widget.images.length) {
+                return const Center(child: Text('Invalid index'));
+              }
+              final record = widget.images[index];
+              // 字节已缓存：同步构建页面，避免 FutureBuilder 闪加载态
+              final cached = _bytesCache.get(record.id);
+              if (cached != null) {
+                return _buildImagePageContent(record, cached);
+              }
+              return FutureBuilder<Uint8List?>(
+                future: _readImageBytes(record),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
-                    );
+                    return _buildLoadingPlaceholder(record);
                   }
-                  if (snapshot.hasError || snapshot.data == null) {
-                    return _buildErrorWidget('Load failed');
+                  final bytes = snapshot.data;
+                  if (bytes == null || bytes.isEmpty) {
+                    return _buildErrorWidget('Cannot load image');
                   }
-                  return snapshot.data!;
+                  return _buildImagePageContent(record, bytes);
                 },
               );
             },

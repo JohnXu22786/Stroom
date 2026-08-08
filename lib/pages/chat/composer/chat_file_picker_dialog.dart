@@ -8,6 +8,7 @@ import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/file_record.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/image_manifest.dart';
+import 'package:stroom/utils/image_thumbnail_loader.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/video_manifest.dart';
 import 'package:stroom/widgets/image_preview_dialog.dart';
@@ -627,14 +628,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   Widget _buildImageThumbnail(FileRecord record) {
     final imgRecord = record as ImageRecord;
     return FutureBuilder<Uint8List?>(
-      future: () async {
-        // Try reading thumbnail file from disk first
-        final thumb =
-            await ImageManifest.readFile('${imgRecord.hash}_thumb.png');
-        if (thumb != null && thumb.isNotEmpty) return thumb;
-        // Fall back to full image
-        return ImageManifest.readFile(imgRecord.storagePath);
-      }(),
+      future: ImageThumbnailLoader.loadThumbnail(imgRecord),
       builder: (context, snapshot) {
         final data = snapshot.data;
         if (data != null && data.isNotEmpty) {
@@ -643,6 +637,9 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
             fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,
+            // 按 ≤256px 解码，避免回退路径以全分辨率解码原图
+            cacheWidth: 256,
+            cacheHeight: 256,
             loadStateChanged: (state) {
               if (state.extendedImageLoadState == LoadState.failed) {
                 return _defaultIcon();
