@@ -1040,36 +1040,48 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               ),
               onWebViewCreated: (ctrl) {
                 _webViewController = ctrl;
-                ctrl.addJavaScriptHandler(
-                  handlerName: 'onMermaidError',
-                  callback: (args) {
-                    if (mounted) {
-                      final msg = args.isNotEmpty ? args[0].toString() : '未知错误';
-                      setState(() => _errorMessage = msg);
-                    }
-                  },
-                );
-                ctrl.addJavaScriptHandler(
-                  handlerName: 'onTransformChanged',
-                  callback: (args) {
-                    // Mirrors the JS-side zoom + pan (set by setZoom,
-                    // fitToViewport, or the JS gesture fallback handlers)
-                    // into Flutter state, so button/wheel anchors and
-                    // gesture bases always continue from the current view
-                    // instead of jumping back to a stale position.
-                    //
-                    // No setState: these values are not read in build();
-                    // the WebView itself reflects the transform visually.
-                    if (!mounted || args.length < 3) return;
-                    final zoom = double.tryParse(args[0].toString());
-                    final px = double.tryParse(args[1].toString());
-                    final py = double.tryParse(args[2].toString());
-                    if (zoom == null || px == null || py == null) return;
-                    _zoomLevel = zoom;
-                    _panX = px;
-                    _panY = py;
-                  },
-                );
+                // Register the JS→Flutter message bridge (error reporting
+                // and transform sync). flutter_inappwebview's WEB platform
+                // does not implement addJavaScriptHandler and throws
+                // UnimplementedError, so on web the diagram still renders
+                // in the iframe with the template's built-in JS gesture
+                // fallbacks — only the two bridges are unavailable. Guard
+                // the registration so the WebView keeps working everywhere.
+                try {
+                  ctrl.addJavaScriptHandler(
+                    handlerName: 'onMermaidError',
+                    callback: (args) {
+                      if (mounted) {
+                        final msg = args.isNotEmpty ? args[0].toString() : '未知错误';
+                        setState(() => _errorMessage = msg);
+                      }
+                    },
+                  );
+                  ctrl.addJavaScriptHandler(
+                    handlerName: 'onTransformChanged',
+                    callback: (args) {
+                      // Mirrors the JS-side zoom + pan (set by setZoom,
+                      // fitToViewport, or the JS gesture fallback handlers)
+                      // into Flutter state, so button/wheel anchors and
+                      // gesture bases always continue from the current view
+                      // instead of jumping back to a stale position.
+                      //
+                      // No setState: these values are not read in build();
+                      // the WebView itself reflects the transform visually.
+                      if (!mounted || args.length < 3) return;
+                      final zoom = double.tryParse(args[0].toString());
+                      final px = double.tryParse(args[1].toString());
+                      final py = double.tryParse(args[2].toString());
+                      if (zoom == null || px == null || py == null) return;
+                      _zoomLevel = zoom;
+                      _panX = px;
+                      _panY = py;
+                    },
+                  );
+                } catch (e) {
+                  debugPrint(
+                      '[MermaidRenderWidget] JS handler bridge unavailable: $e');
+                }
               },
               onLoadStop: (ctrl, url) {
                 if (mounted && !_isReady) {

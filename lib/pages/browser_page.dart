@@ -487,15 +487,24 @@ class _BrowserPageState extends State<BrowserPage> {
                       onWebViewCreated: (controller) async {
                         _webViewController = controller;
 
-                        // Register JavaScript handler for CatCatchChannel
-                        controller.addJavaScriptHandler(
-                          handlerName: 'CatCatchChannel',
-                          callback: (args) {
-                            if (args.isNotEmpty && args.first is String) {
-                              _onCatCatchMessage(args.first as String);
-                            }
-                          },
-                        );
+                        // Register JavaScript handler for CatCatchChannel.
+                        // The web platform of flutter_inappwebview does not
+                        // implement addJavaScriptHandler (UnimplementedError);
+                        // guard it so the initial URL load below still runs
+                        // on web — only the message bridge is unavailable.
+                        try {
+                          controller.addJavaScriptHandler(
+                            handlerName: 'CatCatchChannel',
+                            callback: (args) {
+                              if (args.isNotEmpty && args.first is String) {
+                                _onCatCatchMessage(args.first as String);
+                              }
+                            },
+                          );
+                        } catch (e) {
+                          debugPrint(
+                              '[BrowserPage] JS handler bridge unavailable: $e');
+                        }
 
                         // Restore persisted cookies before the first page load.
                         // A restore failure must not block the initial

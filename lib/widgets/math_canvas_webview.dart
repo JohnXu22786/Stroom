@@ -367,19 +367,28 @@ class MathCanvasWebViewState extends State<MathCanvasWebView> {
   void _onWebViewCreated(InAppWebViewController controller) {
     _webViewController = controller;
 
-    // Set up JavaScript channel for WebView → Flutter communication
-    controller.addJavaScriptHandler(
-      handlerName: 'MathCanvasChannel',
-      callback: (args) {
-        if (args.isEmpty) return;
-        try {
-          final message = jsonDecode(args[0] as String) as Map<String, dynamic>;
-          _handleWebViewMessage(message);
-        } catch (e) {
-          debugPrint('[MathCanvas] Failed to parse WebView message: $e');
-        }
-      },
-    );
+    // Set up JavaScript channel for WebView → Flutter communication.
+    // The web platform of flutter_inappwebview does not implement
+    // addJavaScriptHandler (UnimplementedError). Guard the registration so
+    // the initial HTML below still loads on web — only the message bridge
+    // is unavailable there.
+    try {
+      controller.addJavaScriptHandler(
+        handlerName: 'MathCanvasChannel',
+        callback: (args) {
+          if (args.isEmpty) return;
+          try {
+            final message =
+                jsonDecode(args[0] as String) as Map<String, dynamic>;
+            _handleWebViewMessage(message);
+          } catch (e) {
+            debugPrint('[MathCanvas] Failed to parse WebView message: $e');
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('[MathCanvas] JS handler bridge unavailable: $e');
+    }
 
     // Load initial HTML
     final initialExpression = widget.initialExpression.isNotEmpty

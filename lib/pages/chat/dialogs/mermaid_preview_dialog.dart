@@ -139,27 +139,36 @@ class _MermaidPreviewDialogContentState
               ),
               onWebViewCreated: (ctrl) {
                 _webViewController = ctrl;
-                // Register error handler from JS
-                ctrl.addJavaScriptHandler(
-                  handlerName: 'onMermaidError',
-                  callback: (args) {
-                    if (mounted) {
-                      setState(() => _hasError = true);
-                    }
-                  },
-                );
-                ctrl.addJavaScriptHandler(
-                  handlerName: 'onTransformChanged',
-                  callback: (args) {
-                    // Mirrors the JS-side zoom level (the dialog does not
-                    // track pan; zoom buttons anchor in JS). No setState:
-                    // _zoomLevel is not read in build() and the WebView
-                    // reflects the transform visually.
-                    if (mounted && args.isNotEmpty) {
-                      _zoomLevel = double.tryParse(args[0].toString()) ?? 1.0;
-                    }
-                  },
-                );
+                // Register the JS→Flutter message bridge. The web platform
+                // of flutter_inappwebview does not implement
+                // addJavaScriptHandler (UnimplementedError); the diagram
+                // still renders with the template's JS gesture fallbacks,
+                // so guard the registration to keep the WebView working.
+                try {
+                  ctrl.addJavaScriptHandler(
+                    handlerName: 'onMermaidError',
+                    callback: (args) {
+                      if (mounted) {
+                        setState(() => _hasError = true);
+                      }
+                    },
+                  );
+                  ctrl.addJavaScriptHandler(
+                    handlerName: 'onTransformChanged',
+                    callback: (args) {
+                      // Mirrors the JS-side zoom level (the dialog does not
+                      // track pan; zoom buttons anchor in JS). No setState:
+                      // _zoomLevel is not read in build() and the WebView
+                      // reflects the transform visually.
+                      if (mounted && args.isNotEmpty) {
+                        _zoomLevel = double.tryParse(args[0].toString()) ?? 1.0;
+                      }
+                    },
+                  );
+                } catch (e) {
+                  debugPrint(
+                      '[MermaidPreviewDialog] JS handler bridge unavailable: $e');
+                }
               },
               onLoadStop: (ctrl, url) {
                 if (mounted) {
