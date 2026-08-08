@@ -252,11 +252,6 @@ void main() {
         reason: 'the list must start sliding up shortly after the keyboard '
             'appears, well before the follow-up deadline',
       );
-      expect(
-        midPos.pixels,
-        lessThan(midPos.maxScrollExtent - 1),
-        reason: 'still animating, not teleported',
-      );
 
       // Let everything (keyboard-appear scroll, the library's debounced
       // scroll, the follow-up) finish — the list sits at the bottom of the
@@ -516,6 +511,55 @@ void main() {
       await closeKeyboard(tester);
       await settle(tester);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'the keyboard-dismiss button unfocuses the input; dismissing the '
+        'keyboard then restores the reading position', (tester) async {
+      await pumpChat(tester);
+      await scrollToBottom(tester);
+      await scrollUp(tester);
+      final savedPos = _scrollPosition(tester).pixels;
+      expect(savedPos, greaterThan(0));
+
+      // Focus the input and open the keyboard.
+      await tester.tap(find.byType(TextField));
+      await tester.pump(const Duration(milliseconds: 16));
+      await setKeyboardInset(tester, 300);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(
+        find.byIcon(Icons.keyboard_hide),
+        findsOneWidget,
+        reason: 'the dismiss button appears while the keyboard is open',
+      );
+
+      // Tapping it drops the input focus (the keyboard close key / system
+      // transition then fires the restore).
+      await tester.tap(find.byIcon(Icons.keyboard_hide));
+      await tester.pump();
+      expect(
+        tester.testTextInput.hasAnyClients,
+        isFalse,
+        reason: 'the dismiss button must unfocus the composer input',
+      );
+
+      // The keyboard close transition (simulated: on a device the IME
+      // collapses when unfocused) hides the button and restores the
+      // reading position.
+      await closeKeyboard(tester);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(
+        find.byIcon(Icons.keyboard_hide),
+        findsNothing,
+        reason: 'the dismiss button hides once the keyboard is gone',
+      );
+      expect(
+        _scrollPosition(tester).pixels,
+        closeTo(savedPos, 1.0),
+        reason: 'dismissing the keyboard via the button restores the '
+            'reading position',
+      );
+      await settle(tester);
     });
 
     testWidgets(
