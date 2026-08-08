@@ -144,8 +144,10 @@ void main() {
       expect(settingsChip.badgeCount, isNull);
     });
 
-    testWidgets('grey + no badge when param is disabled despite a value',
-        (tester) async {
+    testWidgets('active + badge when a value is selected even if the param '
+        'was created disabled', (tester) async {
+      // 已选值即运行时开关状态（面板切换通过写入/移除参数值生效），
+      // 配置里的 enabled 只是新建参数的默认状态。
       await pumpComposer(
         tester,
         createComposerTestApp(
@@ -160,8 +162,8 @@ void main() {
         (w) => w is SettingsChip && w.label == '自定义参数',
       );
       final settingsChip = tester.widget<SettingsChip>(chip);
-      expect(settingsChip.color, Colors.grey);
-      expect(settingsChip.badgeCount, isNull);
+      expect(settingsChip.color, const Color(0xFF6366F1));
+      expect(settingsChip.badgeCount, 1);
     });
 
     testWidgets('effort param value does not count toward the custom badge',

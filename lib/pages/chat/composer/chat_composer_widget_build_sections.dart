@@ -49,14 +49,13 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
 
     // Determine reasoning chip label and color based on reasoning state.
     // When reasoning is enabled AND effort toggle is on AND the effort param
-    // is enabled with a non-empty name AND a non-empty value has been
-    // selected: show that value (e.g. "high", "low"). Otherwise: show "推理"
-    // (purple when enabled, grey when disabled).
+    // has a non-empty name AND a non-empty value has been selected: show that
+    // value (e.g. "high", "low"). Otherwise: show "推理" (purple when enabled,
+    // grey when disabled). 运行时状态以已选值为准，不检查配置的 enabled 标记。
     final String reasoningLabel;
     if (reasoningEnabled &&
         reasoningEffortEnabled &&
         effortParam != null &&
-        effortParam.enabled &&
         effortParam.paramName.trim().isNotEmpty &&
         (reasoningParamValues[effortParam.paramName]?.isNotEmpty ?? false)) {
       reasoningLabel = reasoningParamValues[effortParam.paramName]!;
@@ -77,10 +76,12 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     // ═══════════════════════════════════════════════════════════
     // Custom params chip: independent color state driven by the session.
     // A custom param (non-toggle, non-effort) counts as ACTIVE when its
-    // switch is on (enabled), its name is non-empty, and a value has been
-    // selected for it — and reasoning is on (matching what the request
-    // actually sends). The chip shows the accent color + badge with the
-    // active count; otherwise grey with no badge.
+    // name is non-empty and a value has been selected for it — and
+    // reasoning is on (matching what the request actually sends). The
+    // selected-value map is the runtime on/off state (the panel writes/
+    // removes values on switch toggle), so param.enabled is not consulted
+    // here. The chip shows the accent color + badge with the active count;
+    // otherwise grey with no badge.
     // ═══════════════════════════════════════════════════════════
     final int activeCustomParamsCount = reasoningEnabled
         ? widget.reasoningParams
@@ -88,8 +89,8 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
               (p) =>
                   p != effortParam &&
                   !p.isReasoningToggle &&
+                  !p.isEffortParam &&
                   p.paramName.trim().isNotEmpty &&
-                  p.enabled &&
                   (reasoningParamValues[p.paramName]?.isNotEmpty ?? false),
             )
             .length

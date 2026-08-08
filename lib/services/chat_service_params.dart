@@ -55,8 +55,10 @@ extension _ChatServiceParamsExt on ChatService {
   /// Rule: ALL enabled params from provider AND model are used.
   ///       If duplicate names, model's value wins.
   /// Assistant-level params take final precedence.
-  /// When [reasoning] is true, also includes user-configured reasoning params
-  /// from both provider and model configs (sent only when reasoning is enabled).
+  /// Reasoning params: the reasoning toggle (provider + model) is always
+  /// sent when filled (onValue/offValue per the reasoning switch); additional
+  /// reasoning params from both layers are sent only when [reasoning] is true
+  /// and a value was selected for them.
   ///
   /// Custom params with invalid JSON values are omitted from the result (and
   /// NOT sent as quoted strings). The omission is logged so the user can
@@ -101,53 +103,52 @@ extension _ChatServiceParamsExt on ChatService {
             source: 'provider');
       }
 
-      // Provider-level reasoning params (when reasoning enabled)
+      // Provider-level reasoning params:
+      // - The reasoning toggle (isReasoningToggle=true) is ALWAYS sent when
+      //   filled, mirroring the model level below: onValue when reasoning
+      //   is on, offValue when off. Sending the off value explicitly lets
+      //   the API disable reasoning instead of leaving the toggle absent.
+      // - Additional reasoning params are only sent when reasoning is ON
+      //   and a value was selected for them. Name-only params (no options)
+      //   defer the value to the model level / chat panel selection:
+      //   nothing is sent when no value was chosen (sending the param name
+      //   itself would inject garbage into the request body).
+      //   注意：供应商层的运行时开关以「已选值是否存在」为准（聊天面板
+      //   切换通过写入/移除参数值生效，不修改共享的供应商配置对象），
+      //   因此这里不检查 rp.enabled。
+      ReasoningParam? providerToggleParam;
+      final providerExtraParams = <ReasoningParam>[];
+      for (final rp in _providerConfig!.reasoningParams) {
+        if (rp.isReasoningToggle) {
+          providerToggleParam = rp;
+        } else {
+          providerExtraParams.add(rp);
+        }
+      }
+
+      if (providerToggleParam != null && providerToggleParam.isFilledToggle) {
+        final toggleValue = reasoning
+            ? (providerToggleParam.onValue ?? 'true')
+            : (providerToggleParam.offValue ?? 'false');
+        ChatService._setReasoningParam(
+          result,
+          providerToggleParam,
+          toggleValue,
+          source: 'provider',
+        );
+      }
+
       if (reasoning) {
-        ReasoningParam? toggleParam;
-        final extraParams = <ReasoningParam>[];
-        for (final rp in _providerConfig!.reasoningParams) {
-          if (rp.isReasoningToggle) {
-            toggleParam = rp;
-          } else {
-            extraParams.add(rp);
-          }
-        }
-
-        // Reasoning toggle
-        if (toggleParam != null && toggleParam.isFilledToggle) {
-          final toggleValue = reasoning
-              ? (toggleParam.onValue ?? 'true')
-              : (toggleParam.offValue ?? 'false');
-          ChatService._setReasoningParam(
-            result,
-            toggleParam,
-            toggleValue,
-            source: 'provider',
-          );
-        }
-
-        // Additional reasoning params (inference intensity etc.)
-        for (final rp in extraParams) {
-          if (!rp.enabled) continue;
+        for (final rp in providerExtraParams) {
           if (rp.paramName.trim().isEmpty) continue;
-          // If options are empty, send the param name itself as the value
-          // (provider allows name-only inference intensity)
-          if (rp.options.isEmpty) {
-            setNestedParam(
+          final selectedValue = reasoningParamValues[rp.paramName];
+          if (selectedValue != null && selectedValue.isNotEmpty) {
+            ChatService._setReasoningParam(
               result,
-              rp.paramName,
-              rp.paramName,
+              rp,
+              selectedValue,
+              source: 'provider',
             );
-          } else {
-            final selectedValue = reasoningParamValues[rp.paramName];
-            if (selectedValue != null && selectedValue.isNotEmpty) {
-              ChatService._setReasoningParam(
-                result,
-                rp,
-                selectedValue,
-                source: 'provider',
-              );
-            }
           }
         }
       }
@@ -184,31 +185,7 @@ extension _ChatServiceParamsExt on ChatService {
           source: 'model');
     }
 
-    // Assistant-level custom params (override model-level on name collision)
-    if (_assistantCustomParams != null) {
-      for (final cp in _assistantCustomParams!) {
-        result[cp.name] = ChatService._coerceAssistantCustomParam(cp);
-      }
-    }
-
-    // Assistant-level settings override model params when enableXxx is true
-    if (_assistantSettings != null) {
-      final as = _assistantSettings!;
-      if (as.enableTopP) {
-        result['top_p'] = as.topP;
-      }
-      if (as.enableFrequencyPenalty) {
-        result['frequency_penalty'] = as.frequencyPenalty;
-      }
-      if (as.enablePresencePenalty) {
-        result['presence_penalty'] = as.presencePenalty;
-      }
-      if (as.enableSeed && as.seed != null) {
-        result['seed'] = as.seed;
-      }
-    }
-
-    // Reasoning params:
+    // Model-level reasoning params:
     // - The reasoning toggle param (isReasoningToggle=true) controls the
     //   overall reasoning on/off: when reasoning=true send onValue,
     //   when reasoning=false send offValue.
@@ -216,7 +193,8 @@ extension _ChatServiceParamsExt on ChatService {
     // - Additional reasoning params (isReasoningToggle=false) are only sent
     //   when reasoning is ON and the param's own enabled flag is set.
     //   They send the selected value from reasoningParamValues.
-    // Find the reasoning toggle (first one marked as toggle)
+    // 位置在助手层之前：同名冲突时按「供应商 < 模型 < 助手」的层级规则，
+    // 助手层自定义参数/设置拥有最终优先级（见下方注释）。
     ReasoningParam? toggleParam;
     final extraParams = <ReasoningParam>[];
     for (final rp in _modelConfig!.reasoningParams) {
@@ -240,10 +218,13 @@ extension _ChatServiceParamsExt on ChatService {
       );
     }
 
-    // Additional reasoning params: only sent when global toggle is ON
+    // Additional reasoning params: only sent when global toggle is ON.
+    // 运行时开关以「已选值是否存在」为准（聊天面板切换通过写入/移除
+    // 参数值生效）：有已选值即发送，不再检查配置里的 enabled 标记——
+    // 该标记只是新建参数的默认状态，面板激活后以已选值为准，且激活
+    // 状态能跨重启保留（旧行为下重启后已激活参数会静默失效）。
     if (reasoning) {
       for (final rp in extraParams) {
-        if (!rp.enabled) continue;
         if (rp.paramName.trim().isEmpty) continue;
         final selectedValue = reasoningParamValues[rp.paramName];
         if (selectedValue != null && selectedValue.isNotEmpty) {
@@ -254,6 +235,30 @@ extension _ChatServiceParamsExt on ChatService {
             source: 'model',
           );
         }
+      }
+    }
+
+    // Assistant-level custom params (override model-level on name collision)
+    if (_assistantCustomParams != null) {
+      for (final cp in _assistantCustomParams!) {
+        result[cp.name] = ChatService._coerceAssistantCustomParam(cp);
+      }
+    }
+
+    // Assistant-level settings override model params when enableXxx is true
+    if (_assistantSettings != null) {
+      final as = _assistantSettings!;
+      if (as.enableTopP) {
+        result['top_p'] = as.topP;
+      }
+      if (as.enableFrequencyPenalty) {
+        result['frequency_penalty'] = as.frequencyPenalty;
+      }
+      if (as.enablePresencePenalty) {
+        result['presence_penalty'] = as.presencePenalty;
+      }
+      if (as.enableSeed && as.seed != null) {
+        result['seed'] = as.seed;
       }
     }
 

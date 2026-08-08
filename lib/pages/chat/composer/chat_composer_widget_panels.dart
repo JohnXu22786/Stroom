@@ -57,8 +57,8 @@ extension _ChatComposerPanelsExt on ChatComposerWidgetState {
         final current =
             Map<String, String>.from(ref.read(reasoningParamValuesProvider));
         if (value) {
+          // 运行时开关以已选值为准：开启时写入默认选项
           if (effortParam != null &&
-              effortParam.enabled &&
               effortParam.options.isNotEmpty &&
               (current[effortParam.paramName]?.isNotEmpty ?? false) != true) {
             current[effortParam.paramName] = effortParam.options.first;

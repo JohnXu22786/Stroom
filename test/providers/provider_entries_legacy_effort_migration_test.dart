@@ -213,7 +213,7 @@ void main() {
       container.dispose();
     });
 
-    test('provider-level legacy reasoning params are left untouched', () async {
+    test('provider-level legacy reasoning params are promoted too', () async {
       final json = providerEntriesJson(
         modelReasoningParams: [
           legacyParam('thinking.type', [], isToggle: true),
@@ -236,6 +236,34 @@ void main() {
           .read(providerEntriesProvider)
           .entries
           .firstWhere((e) => e.type == 'llm');
+      // 供应商级第一个非开关、有名且有选项的参数提升为推理力度
+      // （模型页继承视图需要供应商级 isEffortParam 标志）
+      expect(llm.configs.first.reasoningParams.first.isEffortParam, isTrue);
+      container.dispose();
+    });
+
+    test('provider-level name-only legacy params are not promoted', () async {
+      final json = providerEntriesJson(
+        modelReasoningParams: [],
+        providerReasoningParams: [
+          legacyParam('provider_effort', []),
+        ],
+      );
+      SharedPreferences.setMockInitialValues({'provider_entries': json});
+      final container = ProviderContainer(
+        overrides: [
+          providerEntriesProvider.overrideWith(
+            (ref) => ProviderEntriesNotifier(),
+          ),
+        ],
+      );
+      await container.read(providerEntriesProvider.notifier).load();
+
+      final llm = container
+          .read(providerEntriesProvider)
+          .entries
+          .firstWhere((e) => e.type == 'llm');
+      // 无选项的参数无法作为力度选择值，不提升（与模型级规则一致）
       expect(llm.configs.first.reasoningParams.first.isEffortParam, isFalse);
       container.dispose();
     });

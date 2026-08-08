@@ -533,34 +533,61 @@ void showReasoningPanel({
                                       .withValues(alpha: 0.6),
                                 ),
                               ),
+                          if (!hasEffortParam)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8, left: 4),
+                              child: Text(
+                                '当前模型未配置推理力度参数，请在模型设置中添加',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: cs.onSurfaceVariant
+                                      .withValues(alpha: 0.6),
+                                ),
+                              ),
                             ),
                           if (hasEffortParam && localEffortEnabled) ...[
                             const SizedBox(height: 12),
-                            // Effort param options
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: effortParam.options.map((option) {
-                                final currentValue =
-                                    localSelections[effortParam.paramName] ??
-                                        (effortParam.options.isNotEmpty
-                                            ? effortParam.options.first
-                                            : '');
-                                final isSelected = currentValue == option;
-                                return _OptionChip(
-                                  label: option,
-                                  selected: isSelected,
-                                  onTap: () {
-                                    setState(() {
-                                      localSelections[effortParam.paramName] =
-                                          option;
-                                    });
-                                    onReasoningParamChanged(
-                                        effortParam.paramName, option);
-                                  },
-                                );
-                              }).toList(),
-                            ),
+                            if (effortParam.options.isEmpty)
+                              // 仅声明参数名（无选项值）的力度参数：
+                              // 值由模型配置提供，给出引导而非死开关
+                              Padding(
+                                padding: const EdgeInsets.only(left: 4),
+                                child: Text(
+                                  '该参数暂无选项值，请在模型设置中添加',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: cs.onSurfaceVariant
+                                        .withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              )
+                            else
+                              // Effort param options
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: effortParam.options.map((option) {
+                                  final currentValue =
+                                      localSelections[effortParam.paramName] ??
+                                          (effortParam.options.isNotEmpty
+                                              ? effortParam.options.first
+                                              : '');
+                                  final isSelected = currentValue == option;
+                                  return _OptionChip(
+                                    label: option,
+                                    selected: isSelected,
+                                    onTap: () {
+                                      setState(() {
+                                        localSelections[effortParam.paramName] =
+                                            option;
+                                      });
+                                      onReasoningParamChanged(
+                                          effortParam.paramName, option);
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                          ],
                           ],
                           // No non-toggle params state (when reasoning is enabled
                           // but there are no additional params configured)
@@ -615,11 +642,13 @@ void showCustomReasoningParamsPanel({
   var localSelections = Map<String, String>.from(reasoningParamSelections);
   var localReasoningEnabled = reasoningEnabled;
 
-  // Non-toggle, non-effort params shown with switch + options
+  // Non-toggle, non-effort params shown with switch + options.
+  // 排除所有 isEffortParam：合并视图中若模型与供应商各有一个力度参数，
+  // 未选中的旧力度参数不应出现在附加参数面板。
   final effortParam = findEffortParam(reasoningParams);
   final displayParams = reasoningParams
       .where(
-        (p) => !p.isReasoningToggle && p != effortParam,
+        (p) => !p.isReasoningToggle && !p.isEffortParam && p != effortParam,
       )
       .toList();
 
@@ -727,14 +756,48 @@ void showCustomReasoningParamsPanel({
                                           ),
                                         ),
                                       ),
-                                      Switch(
-                                        value: param.enabled &&
+                                      if (param.options.isEmpty)
+                                        // 无选项值的参数（供应商仅声明参数名）：
+                                        // 开关无法产生值，给出引导而非死开关
+                                        Text(
+                                          '无选项值，请在模型设置中添加',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: cs.onSurfaceVariant
+                                                .withValues(alpha: 0.6),
+                                          ),
+                                        )
+                                      else
+                                        Switch(
+                                        // 开关状态以已选值是否存在为准（运行时
+                                        // 状态存于 reasoningParamSelections）：
+                                        // 面板切换通过写入/移除参数值生效，
+                                        // 不依赖参数对象上可变的 enabled 标记。
+                                        value: (localSelections[param.paramName]
+                                                    ?.isNotEmpty ??
+                                                false) &&
                                             localReasoningEnabled,
                                         activeThumbColor: cs.primary,
                                         onChanged: localReasoningEnabled
                                             ? (value) {
                                                 setState(() {
-                                                  param.enabled = value;
+                                                  // 同步本地已选值，开关显示
+                                                  // 与运行状态保持一致
+                                                  // （与 onCustomParamToggle
+                                                  // 的 putIfAbsent 语义一致）
+                                                  if (value) {
+                                                    if (param.options
+                                                        .isNotEmpty) {
+                                                      localSelections.putIfAbsent(
+                                                          param.paramName,
+                                                          () => param
+                                                              .options
+                                                              .first);
+                                                    }
+                                                  } else {
+                                                    localSelections.remove(
+                                                        param.paramName);
+                                                  }
                                                 });
                                                 // Sync the selected-value map
                                                 // so the chip color and the
@@ -748,8 +811,13 @@ void showCustomReasoningParamsPanel({
                                     ],
                                   ),
                                 ),
-                                // Options (only shown when enabled)
-                                if (param.enabled && localReasoningEnabled) ...[
+                                // Options (only shown when the param is
+                                // active — 与开关同一判定：已选值存在)
+                                if ((localSelections[param.paramName]
+                                                ?.isNotEmpty ??
+                                            false) &&
+                                    localReasoningEnabled &&
+                                    param.options.isNotEmpty) ...[
                                   const SizedBox(height: 8),
                                   Wrap(
                                     spacing: 8,

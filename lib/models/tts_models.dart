@@ -197,6 +197,14 @@ class ReasoningParam {
 
   String type; // 'string', 'number', 'boolean', 'json'
 
+  /// 模型配置页工作副本专用标记（仅内存，不序列化）。
+  ///
+  /// true 表示该参数是从供应商配置继承而来、模型尚未修改——保存时不会
+  /// 写入模型数据，供应商后续修改会同步显示。模型页首次编辑该参数会
+  /// 清除此标记，参数随即变为模型独立配置，保存时才会写入模型。
+  /// [toMap] 不持久化此字段；[copy] 也不携带（复制即"干净的序列化副本"）。
+  bool inheritedFromProvider;
+
   ReasoningParam({
     required this.paramName,
     this.enabled = true,
@@ -207,6 +215,7 @@ class ReasoningParam {
     this.offValue,
     List<String>? options,
     this.type = 'string',
+    this.inheritedFromProvider = false,
   }) : options = options ?? [];
 
   Map<String, dynamic> toMap() => {
@@ -312,6 +321,34 @@ ReasoningParam? findEffortParam(List<ReasoningParam> params) {
       );
 }
 
+/// 合并供应商级与模型级推理参数，供聊天界面展示与模型配置页继承视图使用。
+///
+/// 规则（与请求构建 [ChatService._buildExtraParams] 的同名覆盖语义一致）：
+/// - 模型参数优先：与供应商参数同名时，模型参数覆盖（替换）供应商参数；
+/// - 未被覆盖的供应商参数追加在模型参数之后；
+/// - 参数名为空的条目不参与合并（视为未配置）。
+///
+/// 返回新列表，模型参数在前——这样 UI 中 [findEffortParam] 与推理开关
+/// 的查找以模型配置为准，模型未配置时回落到供应商参数。
+List<ReasoningParam> mergeReasoningParams(
+  List<ReasoningParam> providerParams,
+  List<ReasoningParam> modelParams,
+) {
+  final providerByName = <String, ReasoningParam>{};
+  for (final p in providerParams) {
+    final name = p.paramName.trim();
+    if (name.isEmpty) continue;
+    providerByName[name] = p;
+  }
+  final result = <ReasoningParam>[];
+  for (final p in modelParams) {
+    result.add(p);
+    providerByName.remove(p.paramName.trim());
+  }
+  result.addAll(providerByName.values);
+  return result;
+}
+
 /// Ensures the effort param of [params] matches the effort toggle state in
 /// [values]:
 /// - toggle ON: writes the first option when none was selected yet;
@@ -319,6 +356,8 @@ ReasoningParam? findEffortParam(List<ReasoningParam> params) {
 ///   sending it and the chip shows "推理").
 /// Returns [values] unchanged when nothing needs writing (so callers can
 /// skip the provider update).
+/// 运行时开关以「已选值是否存在」为准（与附加参数一致），不检查配置的
+/// enabled 标记——该标记只是新建参数的默认状态。
 Map<String, String> ensureEffortValue(
   List<ReasoningParam> params,
   Map<String, String> values, {
@@ -327,8 +366,7 @@ Map<String, String> ensureEffortValue(
   final effort = findEffortParam(params);
   if (effort == null) return values;
   if (effortEnabled) {
-    if (effort.enabled &&
-        effort.options.isNotEmpty &&
+    if (effort.options.isNotEmpty &&
         (values[effort.paramName]?.isNotEmpty ?? false) != true) {
       return {...values, effort.paramName: effort.options.first};
     }

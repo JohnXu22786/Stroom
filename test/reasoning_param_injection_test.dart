@@ -157,7 +157,11 @@ void main() {
       expect(body['reasoning_effort'], 'high');
     });
 
-    test('additional disabled params not sent when reasoning is ON', () async {
+    test(
+        'config-disabled param with a selected value is sent (panel activation '
+        'is the runtime on/off)', () async {
+      // 配置里的 enabled 只是新建参数的默认状态；聊天面板切换通过
+      // 写入/移除已选值生效，因此有已选值即发送（激活状态可跨重启保留）。
       final provider = _MockProvider();
       final modelConfig = ModelConfig(
         name: 'Test',
@@ -191,8 +195,8 @@ void main() {
       expect(body, isNotNull);
       // Toggle always sent
       expect(body!['thinking']['type'], 'enabled');
-      // Disabled additional param NOT sent
-      expect(body.containsKey('reasoning_effort'), false);
+      // Panel-activated param IS sent (value present)
+      expect(body['reasoning_effort'], 'high');
     });
 
     test('additional params not sent when global toggle is OFF', () async {
