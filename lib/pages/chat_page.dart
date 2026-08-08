@@ -274,12 +274,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// The original attachments of the message being edited.
   List<Attachment>? _editingMessageAttachments;
 
-  /// Timer that auto-hides the edit data-loss warning overlay.
-  Timer? _editWarningTimer;
+  /// Whether the composer should arm the "editing will delete all messages
+  /// below" warning when entering edit mode. True when the edited message
+  /// has newer messages below it; the warning itself (its reveal timing
+  /// and auto-hide) is owned by the composer, which shows it in the edit
+  /// capsule's row.
+  bool _showEditWarningOnEntry = false;
 
-  /// Whether the "editing will delete all messages below" warning overlay
-  /// is currently visible in the message display area.
-  bool _editWarningVisible = false;
+  /// Bumped on every explicit edit entry so the composer can re-arm the
+  /// warning even when the same message is edited again (the editingMessageId
+  /// alone wouldn't change on a same-message re-entry).
+  int _editWarningArmCount = 0;
 
   // ── Infinite Scroll / Lazy Load pagination state ──
   /// Number of messages to load per page.
@@ -339,7 +344,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _editWarningTimer?.cancel();
     // The ChatStreamManager owns the adapter lifecycle. We do NOT cancel
     // or dispose it here — if streaming is active, it continues in the
     // background and saves results when complete. The adapter is cleaned
@@ -486,11 +490,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                 // ── Scroll-to-bottom overlay button ──
                                 if (_showScrollToBottomButton)
                                   _buildScrollToBottomButton(isDark: isDark),
-                                // ── Edit data-loss warning overlay ──
-                                // Centered in the message display area; auto-hides
-                                // after 2 seconds or on close-button tap.
-                                if (_editWarningVisible)
-                                  _buildEditWarningOverlay(context: context),
                               ],
                             ),
                           );
