@@ -163,13 +163,13 @@ void chatServiceToolsGroup2() {
           )
           .asFuture();
 
-      // maxToolCalls=10：最多 10 轮工具调用 + 1 轮收尾轮
-      // （收尾轮 tools 已禁用，但 mock 不尊重禁用仍返回工具调用，
-      // 循环在总轮数（maxRounds+1）处强制退出）
+      // maxToolCalls=10：最多 10 次 API 请求（stepCountIs 语义），
+      // mock 始终返回工具调用 → 恰好 10 轮工具，
+      // 第 10 轮的工具执行后循环在总请求数达到上限处强制退出。
       final toolStartEvents = events.whereType<ToolCallStartEvent>().toList();
-      expect(toolStartEvents.length, lessThanOrEqualTo(11));
-      // Should have at least 1 tool call since mock always returns tool calls
-      expect(toolStartEvents.length, greaterThan(0));
+      expect(toolStartEvents.length, equals(10));
+      expect(mockProvider.callCount, equals(10),
+          reason: '上限 = 模型 API 请求次数，不追加额外请求');
     });
 
     test('assistant message with tool_calls has content:null per DeepSeek spec',

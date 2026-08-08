@@ -63,29 +63,35 @@ class ChatService {
   /// 对齐 opencode TOOL_OUTPUT_MAX_CHARS）。
   static const int maxToolResultBytes = 50 * 1024;
 
-  /// 未配置 maxToolCalls（无限模式）时的工具循环安全上限。
+  /// 工具循环上限常量：
+  /// 单条用户消息内模型 API 请求（步骤）的最大次数，范围 1-100，默认 20。
+  /// 每次 API 响应内的多个并行工具调用属于同一"步骤"，只计 1 次；
+  /// 计数按用户消息重置，不跨对话累计。
+  static const int kMaxToolRoundsDefault = 20;
+  static const int kMaxToolRoundsMin = 1;
+  static const int kMaxToolRoundsMax = 100;
+
+  /// 计算生效的工具循环上限：
   ///
-  /// 模型一旦持续请求工具（工具结果引发 ping-pong），无上限的循环
-  /// 会无限运行（成本失控、取消还要等当前轮工具执行完）。对齐
-  /// opencode 默认 MAX_STEPS 语义，给默认模式一个安全护栏；
-  /// 配置了 maxToolCalls 的对话仍使用用户自己的上限。
-  static const int kMaxToolRoundsFallback = 40;
+  /// - 开关开启：使用用户配置值，但仅接受 [kMaxToolRoundsMin,
+  ///   kMaxToolRoundsMax] 范围内的值，越界/损坏（含持久化旧数据）回退默认值；
+  /// - 开关关闭或未配置：使用默认值 [kMaxToolRoundsDefault] —— 关闭开关
+  ///   **不等于无限**，仍按默认上限 20 执行。
+  static int getEffectiveMaxToolRounds(AssistantSettings? settings) {
+    if (settings == null || !settings.enableMaxToolCalls) {
+      return kMaxToolRoundsDefault;
+    }
+    final v = settings.maxToolCalls;
+    if (v < kMaxToolRoundsMin || v > kMaxToolRoundsMax) {
+      return kMaxToolRoundsDefault;
+    }
+    return v;
+  }
 
   /// 中断工具结果的占位文本（用户取消时对未完成工具补发）。
   /// 与协议层历史重建的占位符统一。
   static const String kToolInterruptedPlaceholder =
       kInterruptedToolResultPlaceholder;
-
-  /// 达到工具调用上限时，追加到请求的提示消息（opencode MAX_STEPS_PROMPT
-  /// 改编）：要求模型禁用工具、仅文本总结。
-  static const String maxStepsPrompt = '''
-已达到本任务的工具调用上限。工具已禁用，请仅用文本回应。
-
-要求：
-1. 不要再调用任何工具
-2. 总结到目前为止已完成的工作
-3. 列出尚未完成的任务
-4. 给出下一步建议''';
 
   /// Provider-level params to merge with model params.
   /// Provider params serve as defaults; model params override on collision.

@@ -175,38 +175,21 @@ extension ChatServiceStreamingExt on ChatService {
           ...extraParams,
         };
         int loopProtection = 0;
-        final maxRounds = _assistantSettings?.enableMaxToolCalls == true
-            ? _assistantSettings!.maxToolCalls
-            : null;
-        // 持久化损坏/旧数据可能给出非正数 maxToolCalls：totalRounds <= 0
-        // 会让 while 恒假——不发任何请求、空流无错误、消息不落库，
-        // 用户完全无反馈。非正数按未配置处理（回退安全上限）。
+        // ── 工具循环上限 ──
+        // maxToolCalls = 单条用户消息内模型 API 请求（步骤）的最大次数。
+        // 每次 API 响应内的多个并行工具调用属于同一"步骤"，只计 1 次；
+        // 计数按用户消息重置（sendStreamWithTools 每次调用独立计数），
+        // 不跨对话累计。
+        // 开关关闭 ≠ 无限：仍使用默认值 20（AI SDK 默认 step 数）。
+        // 持久化损坏/旧数据可能给出非正数或越界 maxToolCalls，
+        // getEffectiveMaxToolRounds 统一回退默认值（此前 <= 0 会让
+        // while 恒假——不发任何请求、空流无错误、消息不落库，用户
+        // 完全无反馈）。
         final effectiveMaxRounds =
-            (maxRounds != null && maxRounds >= 1) ? maxRounds : null;
-        // 对齐 opencode steps 语义：maxRounds 轮内工具可用；
-        // 若模型在最后一轮仍请求工具（超限），追加一轮"收尾轮"
-        // （tools 禁用 + 文本收尾提示词），让模型总结而不是硬跑。
-        // 未配置 maxRounds 时（无限模式）仍有安全上限护栏
-        // （kMaxToolRoundsFallback），防止模型无限 ping-pong 工具。
-        final totalRounds =
-            effectiveMaxRounds == null ? null : effectiveMaxRounds + 1;
-        final maxLoopRounds =
-            effectiveMaxRounds ?? ChatService.kMaxToolRoundsFallback;
+            ChatService.getEffectiveMaxToolRounds(_assistantSettings);
 
-        while (!_isCancelledByUser &&
-            (totalRounds == null || loopProtection < totalRounds)) {
+        while (!_isCancelledByUser && loopProtection < effectiveMaxRounds) {
           loopProtection++;
-          if (loopProtection % 50 == 0) {
-            AppLogService.info('ChatService', '工具调用循环: 第 $loopProtection 轮');
-          }
-          // 无限模式的安全护栏：达到上限后停止（等价于 maxRounds 模式
-          // 的收尾轮语义），避免成本失控。第 40 轮正常执行，第 41 轮
-          // 发出前停止（> 而非 >=，避免少执行一轮）。
-          if (totalRounds == null && loopProtection > maxLoopRounds) {
-            await AppLogService.warning(
-                'ChatService', '工具调用循环达到安全上限 $maxLoopRounds 轮, 停止');
-            break;
-          }
 
           _streamSubscription?.cancel();
           _cancelToken?.cancel();
@@ -221,29 +204,11 @@ extension ChatServiceStreamingExt on ChatService {
           // 本轮的剩余工具或发起下一轮请求（错误已上抛给 manager，
           // 继续执行工具只会产生用户看不到的副作用）。
           Object? roundStreamError;
-          // ── Max-steps 语义（opencode MAX_STEPS_PROMPT）──
-          // 收尾轮：tools 定义保留（Anthropic 要求历史含 tool_use/
-          // tool_result 块时必须定义 tools，否则 400）+ tool_choice none
-          // 显式禁止调用 + 前置文本收尾提示，要求模型总结已做/未做/下一步。
-          final isLastStep =
-              effectiveMaxRounds != null && loopProtection > effectiveMaxRounds;
-          final roundExtraParams = <String, dynamic>{...extraParams};
-          if (isLastStep) {
-            roundExtraParams.addAll(_protocol.toolChoiceNoneJson());
-          }
-          var roundMessages = messages;
-          if (isLastStep) {
-            // 收尾提示以 user 角色注入（对齐 opencode MAX_STEPS_PROMPT）：
-            // assistant 角色注入的"要求"部分模型可能不当作指令执行。
-            roundMessages = [
-              ...messages,
-              {'role': 'user', 'content': ChatService.maxStepsPrompt},
-            ];
-          }
-
+          // 上限内的每一轮工具都保持可用（与 AI SDK stepCountIs 语义一致：
+          // 所有 step 均携带 tools，达限即停，无额外"收尾轮"）。
           _streamSubscription = _provider!
               .chatStream(
-            roundMessages,
+            messages,
             model: _modelConfig!.modelId,
             reasoning: reasoning,
             reasoningEffort: reasoningEffort,
@@ -251,7 +216,7 @@ extension ChatServiceStreamingExt on ChatService {
             temperature: _effectiveTemperature, // null when toggle is OFF
             tools: toolDefs.isEmpty ? null : toolDefs,
             system: req.system,
-            extraParams: roundExtraParams,
+            extraParams: extraParams,
             cancelToken: _cancelToken,
           )
               .listen(

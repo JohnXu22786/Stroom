@@ -270,7 +270,4 @@ class OpenAIProtocol implements ChatProtocol {
         },
     ];
   }
-
-  @override
-  Map<String, dynamic> toolChoiceNoneJson() => {'tool_choice': 'none'};
 }
