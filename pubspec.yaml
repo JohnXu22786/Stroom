@@ -102,5 +102,6 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/vendor/
 
   generate: true
