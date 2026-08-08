@@ -274,6 +274,91 @@ void main() {
     });
   });
 
+  group('ReasoningPanel - effort section independent of reasoning toggle', () {
+    testWidgets('shows effort section even when reasoning is OFF',
+        (tester) async {
+      await showReasoningPanelForTest(
+        tester,
+        reasoningEnabled: false,
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['low', 'medium', 'high'],
+          ),
+        ],
+      );
+
+      // The effort section is always visible, independent of the
+      // reasoning toggle state.
+      expect(find.text('推理力度'), findsOneWidget);
+    });
+
+    testWidgets('turning reasoning on keeps the effort section visible',
+        (tester) async {
+      await showReasoningPanelForTest(
+        tester,
+        reasoningEnabled: false,
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['low', 'medium', 'high'],
+          ),
+        ],
+      );
+
+      // Effort section visible while reasoning is off
+      expect(find.text('推理力度'), findsOneWidget);
+
+      // Toggle the reasoning switch ON
+      await tester.tap(find.byType(Switch).first);
+      await tester.pump();
+
+      // The effort section must remain visible immediately (no stale
+      // hidden state from the panel-opening value).
+      expect(find.text('推理力度'), findsOneWidget);
+      expect(tester.widget<Switch>(find.byType(Switch).first).value, isTrue);
+    });
+
+    testWidgets(
+        'effort switch is enabled and reveals options while reasoning '
+        'is OFF', (tester) async {
+      await showReasoningPanelForTest(
+        tester,
+        reasoningEnabled: false,
+        reasoningEffortEnabled: false,
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['low', 'medium', 'high'],
+          ),
+        ],
+      );
+
+      // The effort switch (second switch) is tappable even when the
+      // reasoning toggle is off.
+      final effortSwitch = tester.widget<Switch>(find.byType(Switch).at(1));
+      expect(effortSwitch.onChanged, isNotNull);
+      expect(effortSwitch.value, isFalse);
+
+      await tester.tap(find.byType(Switch).at(1));
+      await tester.pump();
+
+      // Enabling the effort toggle reveals its options.
+      expect(find.text('low'), findsOneWidget);
+      expect(find.text('medium'), findsOneWidget);
+      expect(find.text('high'), findsOneWidget);
+    });
+  });
+
   group('CustomReasoningParamsPanel', () {
     testWidgets('shows custom reasoning params with switch and options',
         (tester) async {
