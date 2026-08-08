@@ -21,18 +21,18 @@ void main() {
   });
 
   group('formatReleaseTime', () {
-    test('formats ISO 8601 UTC time as local yyyy-MM-dd HH:mm', () {
+    test('formats ISO 8601 UTC time as UTC yyyy-MM-dd HH:mm', () {
       final formatted = formatReleaseTime('2026-08-08T09:30:00Z');
       // Shape check: yyyy-MM-dd HH:mm
       expect(formatted, matches(RegExp(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$')));
-      // Exact check against the same instant converted to local time
-      final local = DateTime.parse('2026-08-08T09:30:00Z').toLocal();
-      String two(int n) => n.toString().padLeft(2, '0');
+      // 展示统一 UTC+0，不做本地时区转换
+      expect(formatted, '2026-08-08 09:30');
+    });
+
+    test('normalizes explicit timezone offsets to UTC', () {
+      // 带 +08:00 偏移的输入（17:30 东八区 == 09:30 UTC）
       expect(
-        formatted,
-        '${local.year}-${two(local.month)}-${two(local.day)} '
-        '${two(local.hour)}:${two(local.minute)}',
-      );
+          formatReleaseTime('2026-08-08T17:30:00+08:00'), '2026-08-08 09:30');
     });
 
     test('returns empty string for empty input', () {
