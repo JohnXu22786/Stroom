@@ -90,7 +90,7 @@ void chatAgentSemanticsGroup6() {
         tools: ChatService.getRegisteredToolDefinitions(),
       );
 
-      // 3 次主请求（2 工具轮 + 1 收尾/文本轮）+ 标题请求：
+      // 3 次主请求（2 工具轮 + 1 文本轮）+ 标题请求：
       // - cost 每轮累加（对话级累计，4 × 0.0001）
       // - lastInputTokens = 最近一次请求的输入（工具循环中每轮请求的
       //   输入已包含前一轮内容，累计求和会高估上下文；文档语义即
