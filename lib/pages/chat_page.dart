@@ -396,24 +396,25 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (isNowVisible && !_wasKeyboardVisible) {
       // Keyboard just appeared — capture the pre-keyboard scroll position
       // (unless the composer focus hook already saved it for this session)
-      // and animate to the bottom immediately. The focus hook starts the
-      // animation at t=0, before the keyboard animation begins; this branch
-      // is the fallback for keyboards that appear without a focus event
-      // (e.g. re-tapping an already-focused field after Android's back
-      // button hid the IME). The null check keeps the fallback from
-      // overwriting the hook's saved position with a mid-animation offset.
-      // The drag flag is reset here too: this branch also starts a keyboard
-      // session, and a drag that happened while the keyboard was CLOSED
-      // (the user reading) must not cancel this session's follow-up.
+      // and START the scroll-to-bottom animation now, roughly 0.2-0.5s
+      // before the final viewport settles (the keyboard show animation is
+      // about a third in when the insets cross the threshold). The list
+      // scroll is NOT started at the tap itself — that visibly yanked the
+      // list a large distance before the keyboard had even begun rising
+      // (see [_onComposerFocusChanged]).
+      // The null check keeps this branch from overwriting the hook's saved
+      // position with a mid-animation offset. The drag flag is reset here
+      // too: this branch also starts a keyboard session, and a drag that
+      // happened while the keyboard was CLOSED (the user reading) must not
+      // cancel this session's follow-up.
       _keyboardAppeared = true;
       _userDraggedDuringKeyboardSession = false;
       _staleKeyboardPositionTimer?.cancel();
       _keyboardFollowUpTimer?.cancel();
       _keyboardFollowUpTimer =
           Timer(_keyboardFollowUpDelay, _tryKeyboardFollowUp);
-      if (_lastScrollPositionBeforeKeyboard == null &&
-          _chatScrollController.hasClients) {
-        _lastScrollPositionBeforeKeyboard =
+      if (_chatScrollController.hasClients) {
+        _lastScrollPositionBeforeKeyboard ??=
             _chatScrollController.position.pixels;
         _animateScrollToBottom();
       }
