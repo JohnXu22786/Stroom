@@ -268,7 +268,7 @@ void main() {
       expect(toggledValue, isTrue);
     });
 
-    testWidgets('option chips hidden when reasoning is disabled',
+    testWidgets('effort options hidden while both toggles are off',
         (tester) async {
       final reasoningParams = [
         ReasoningParam(
@@ -309,8 +309,9 @@ void main() {
       expect(find.text('推理设置'), findsOneWidget);
       expect(find.text('推理'), findsOneWidget);
 
-      // Effort section and options should be hidden when reasoning is disabled
-      expect(find.text('推理力度'), findsNothing);
+      // The effort section is always visible (independent of the reasoning
+      // toggle), but its options stay hidden while the effort toggle is off.
+      expect(find.text('推理力度'), findsOneWidget);
       expect(find.text('low'), findsNothing);
       expect(find.text('medium'), findsNothing);
       expect(find.text('high'), findsNothing);
