@@ -61,8 +61,16 @@ class _MermaidPreviewDialogContentState
   @override
   void initState() {
     super.initState();
-    _armReadyFallback();
-    _loadMermaidAsset();
+    if (kIsWeb) {
+      // On web the iframe manages its own loading state: no Flutter
+      // overlay, no asset pre-load (the asset template loads
+      // mermaid.min.js itself) — the diagram appears when rendered.
+      _isLoading = false;
+      _mermaidJsLoading = false;
+    } else {
+      _armReadyFallback();
+      _loadMermaidAsset();
+    }
   }
 
   Future<void> _loadMermaidAsset() async {
@@ -217,9 +225,12 @@ class _MermaidPreviewDialogContentState
                       ),
                 onWebViewCreated: (ctrl) {
                   _webViewController = ctrl;
-                  // On web there is no initialData; load the asset
-                  // template right after the controller is created.
+                  // On web the iframe manages its own loading state (the
+                  // asset template shows a hint until the diagram renders),
+                  // so the dialog is immediately ready and no fallback
+                  // timer is armed — the diagram appears when rendered.
                   if (kIsWeb) {
+                    _isLoading = false;
                     _loadCode();
                   }
                   // Register the JS→Flutter message bridge. The web platform

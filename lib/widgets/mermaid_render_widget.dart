@@ -667,7 +667,13 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   void didUpdateWidget(MermaidRenderWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.mermaidCode != widget.mermaidCode) {
-      _isReady = false;
+      // On web the loading state is managed INSIDE the iframe (the asset
+      // template shows a hint until the diagram is rendered), so _isReady
+      // stays true and the Flutter overlay never appears there. On native
+      // platforms the overlay tracks onLoadStop.
+      if (!kIsWeb) {
+        _isReady = false;
+      }
       _errorMessage = null;
       _showSourceCode = false;
       _zoomLevel = 1.0;
@@ -685,13 +691,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   /// Arms a fallback timer that force-ends the loading state after 3s if
-  /// [onLoadStop] has not fired yet. The loading overlay must never spin
-  /// forever: whatever the WebView does (rendered, blank, or errored), the
-  /// overlay is removed so the user sees the actual iframe content (which
-  /// shows its own loading hint or error message from the HTML template).
-  /// On the web platform onLoadStop reliably does NOT fire (the plugin's
-  /// web bridge does not deliver it), so this timer is the actual path
-  /// that reveals the rendered diagram there.
+  /// [onLoadStop] has not fired yet (native platforms only). The loading
+  /// overlay must never spin forever: whatever the WebView does (rendered,
+  /// blank, or errored), the overlay is removed so the user sees the
+  /// actual iframe content (which shows its own loading hint or error
+  /// message from the HTML template).
   void _armReadyFallback() {
     _readyFallbackTimer?.cancel();
     _readyFallbackTimer = Timer(const Duration(seconds: 3), () {
@@ -714,7 +718,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       // with the code as a query parameter. A data: URL cannot be used
       // here — Chromium truncates data: URLs at ~1MB, and the bundled
       // mermaid.min.js cannot be reached from a data: page (opaque origin).
-      _armReadyFallback();
+      // No ready-fallback is armed: the iframe manages its own loading
+      // state (the template hides its hint the moment the diagram renders).
       final url = code.isEmpty
           ? MermaidRenderWidget.webAssetTemplateUrl
           : '${MermaidRenderWidget.webAssetTemplateUrl}'
@@ -1251,14 +1256,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                     ),
               onWebViewCreated: (ctrl) {
                 _webViewController = ctrl;
-                // On web there is no initialData; load the asset template
-                // right after the controller is created.
+                // On web the iframe manages its own loading state (the
+                // asset template shows a hint until the diagram renders),
+                // so the widget is immediately ready and no fallback timer
+                // is armed — the diagram appears the moment it is rendered.
                 if (kIsWeb) {
+                  _isReady = true;
                   _loadMermaidCode();
+                } else {
+                  // The initial page (initialData) loads outside
+                  // [_loadMermaidCode], so arm the ready fallback here too.
+                  _armReadyFallback();
                 }
-                // The initial page (initialData) loads outside
-                // [_loadMermaidCode], so arm the ready fallback here too.
-                _armReadyFallback();
                 // Register the JS→Flutter message bridge (error reporting
                 // and transform sync). flutter_inappwebview's WEB platform
                 // does not implement addJavaScriptHandler and throws
