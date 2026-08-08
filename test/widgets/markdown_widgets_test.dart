@@ -862,8 +862,7 @@ void main() {
 
     testWidgets('table cell <br> renders as an in-cell line break',
         (WidgetTester tester) async {
-      const md =
-          '| 名称 | 值 |\n| --- | --- |\n| 张三<br>李四 | 1 |\n| 王五 | 2 |';
+      const md = '| 名称 | 值 |\n| --- | --- |\n| 张三<br>李四 | 1 |\n| 王五 | 2 |';
       final config = buildMarkdownConfig(isDark: false);
       final widgets = markdownGenerator.buildWidgets(md, config: config);
       await tester.pumpWidget(MaterialApp(
