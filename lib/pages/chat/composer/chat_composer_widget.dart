@@ -161,6 +161,14 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   /// 创建（对话已删除时还会留下永久孤儿目录）。
   final Map<String, Future<void>> _preCompressFutures = {};
 
+  /// 编辑模式下被移除的原消息附件（缓存推迟到确定重发时清理）。
+  ///
+  /// 编辑期间用户可能取消编辑：此时移除原附件不能立即删缓存（取消
+  /// 后原消息仍引用该附件）；只有点发送（确定重发）时才由
+  /// _handleSubmitted 的编辑分支统一清理。编辑时**新加**的附件不在此
+  /// 列——它们与普通发送一致，移除即清（见 _removePendingAttachment）。
+  final List<Attachment> _removedEditAttachments = [];
+
   Timer? _draftTimer;
 
   /// Tracks the last draft text that was saved, so we can avoid redundant
