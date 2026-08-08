@@ -214,9 +214,8 @@ Future<void> closeKeyboard(WidgetTester tester) async {
 void main() {
   group('ChatPage keyboard scroll', () {
     testWidgets(
-        'tapping the composer input while scrolled up starts the scroll '
-        'animation immediately (before any keyboard metrics change)',
-        (tester) async {
+        'tapping the composer input does NOT move the list; the scroll '
+        'starts when the keyboard appears', (tester) async {
       await pumpChat(tester);
       await scrollToBottom(tester);
       await scrollUp(tester);
@@ -227,42 +226,49 @@ void main() {
         reason: 'precondition: the list is scrolled up',
       );
 
-      // Just tap the input; no keyboard metrics have changed yet.
+      // Just tap the input; no keyboard metrics have changed yet. The
+      // list must NOT move (the earlier tap-time scroll visibly yanked
+      // the list a large distance before the keyboard had even risen).
       await tester.tap(find.byType(TextField));
       await tester.pump(const Duration(milliseconds: 16));
-
-      // The scroll animation must have STARTED on the very first frame
-      // after the tap (its first tick runs at elapsed=0, so the offset
-      // itself does not move until the next frame).
+      await tester.pump(const Duration(milliseconds: 100));
       expect(
-        _scrollPosition(tester).isScrollingNotifier.value,
-        isTrue,
-        reason: 'the scroll-to-bottom animation must start the moment the '
-            'input is tapped, before any keyboard metrics change arrives',
+        _scrollPosition(tester).pixels,
+        closeTo(saved, 1.0),
+        reason: 'a tap must not move the list — the scroll starts only '
+            'when the keyboard actually appears',
       );
 
+      // The keyboard rises: the scroll-to-bottom animation starts right
+      // away (~0.2-0.5s before the viewport settles), not after the
+      // follow-up delay.
+      await setKeyboardInset(tester, 300);
       await tester.pump(const Duration(milliseconds: 16));
-      final pos = _scrollPosition(tester);
+      await tester.pump(const Duration(milliseconds: 100));
+      final midPos = _scrollPosition(tester);
       expect(
-        pos.pixels,
+        midPos.pixels,
         greaterThan(saved + 1),
-        reason: 'the list must be sliding up one frame later, still before '
-            'any keyboard metrics change',
+        reason: 'the list must start sliding up shortly after the keyboard '
+            'appears, well before the follow-up deadline',
       );
       expect(
-        pos.pixels,
-        lessThan(pos.maxScrollExtent - 1),
-        reason: 'one frame in, the scroll must still be animating '
-            '(a jump would already be at the bottom)',
+        midPos.pixels,
+        lessThan(midPos.maxScrollExtent - 1),
+        reason: 'still animating, not teleported',
       );
 
+      // Let everything (keyboard-appear scroll, the library's debounced
+      // scroll, the follow-up) finish — the list sits at the bottom of the
+      // keyboard-shrunk viewport.
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));
       final endPos = _scrollPosition(tester);
       expect(
         endPos.pixels,
-        closeTo(endPos.maxScrollExtent, 10.0),
-        reason: 'the animation must finish at the bottom (small tolerance '
-            'for the chat library drifting maxScrollExtent by a few px)',
+        closeTo(endPos.maxScrollExtent, 20.0),
+        reason: 'after everything settles the list must sit at the bottom '
+            'of the keyboard-shrunk viewport',
       );
       await settle(tester);
     });
@@ -277,26 +283,28 @@ void main() {
       final savedPos = _scrollPosition(tester).pixels;
       expect(savedPos, greaterThan(0));
 
-      // Tap the input: the focus hook saves the position and starts the
-      // scroll animation at t=0. The first pump lets the ticker start
-      // (its first tick runs at elapsed=0), the second finishes it.
+      // Tap the input: the focus hook saves the position; no scroll yet.
       await tester.tap(find.byType(TextField));
       await tester.pump(const Duration(milliseconds: 16));
+      expect(
+        _scrollPosition(tester).pixels,
+        closeTo(savedPos, 1.0),
+        reason: 'precondition: a tap does not move the list',
+      );
+
+      // The keyboard appears and the list scrolls to the bottom. The
+      // metrics transition must NOT overwrite the saved position.
+      await setKeyboardInset(tester, 300);
+      // Let the keyboard-appear scroll, the chat library's debounced
+      // keyboard scroll (100ms debounce + 250ms animation) and the
+      // follow-up run to completion.
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));
       expect(
         _scrollPosition(tester).pixels,
-        closeTo(_scrollPosition(tester).maxScrollExtent, 10.0),
-        reason: 'precondition: the list reached the bottom (small tolerance '
-            'for the chat library drifting maxScrollExtent by a few px)',
+        closeTo(_scrollPosition(tester).maxScrollExtent, 20.0),
+        reason: 'precondition: keyboard open lands at the bottom',
       );
-
-      // The keyboard show animation then starts; its metrics transition
-      // must NOT overwrite the saved position with a mid-animation offset.
-      await setKeyboardInset(tester, 300);
-      // Let the chat library's debounced keyboard scroll (100ms debounce +
-      // 250ms animation) run to completion, so the dismiss below is not
-      // racing it.
-      await tester.pump(const Duration(milliseconds: 400));
 
       // Keyboard dismisses — the list must return to the tap-time position.
       await closeKeyboard(tester);

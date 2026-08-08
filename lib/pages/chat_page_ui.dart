@@ -31,16 +31,13 @@ extension _ChatPageUiExt on _ChatPageState {
     return view.viewInsets.bottom / view.devicePixelRatio;
   }
 
-  /// Called when the composer input gains focus on mobile. Reacts instantly
-  /// — before the soft-keyboard show animation starts — so the message
-  /// list starts sliding up toward the bottom the moment the user taps the
-  /// input. The [didChangeMetrics] transition alone only fires once the
-  /// insets cross the threshold mid-animation, which looks like a delayed
-  /// shift.
-  ///
-  /// The scroll is a single [ScrollPosition.animateTo] (no per-frame
-  /// compensation), so it never fights the keyboard animation or drops
-  /// frames.
+  /// Called when the composer input gains focus on mobile. Only captures
+  /// the pre-keyboard scroll position (for the dismiss restore) — the list
+  /// itself does NOT scroll here: a scroll-to-bottom right at the tap (as
+  /// the first keyboard-session implementation did) visibly yanked the
+  /// list a large distance before the keyboard had even started rising.
+  /// The scroll starts instead when the keyboard actually appears
+  /// (see the keyboard-appear branch of [didChangeMetrics]).
   void _onComposerFocusChanged(bool hasFocus) {
     if (!mounted || !hasFocus) return;
     final platform = Theme.of(context).platform;
@@ -69,7 +66,6 @@ extension _ChatPageUiExt on _ChatPageState {
       if (!mounted) return;
       if (!_keyboardAppeared) _lastScrollPositionBeforeKeyboard = null;
     });
-    _animateScrollToBottom();
   }
 
   /// Tracks user drags on the chat list via scroll notifications. Only the
@@ -96,9 +92,13 @@ extension _ChatPageUiExt on _ChatPageState {
     return false;
   }
 
-  /// Animates the chat list to the bottom over roughly the soft-keyboard
-  /// show animation, so the list visibly slides up in lockstep with the
-  /// keyboard instead of waiting for the metrics transition.
+  /// Animates the chat list to the bottom over roughly the rest of the
+  /// soft-keyboard show animation, so the list visibly slides up in
+  /// lockstep with the keyboard. Started by the keyboard-appear branch of
+  /// [didChangeMetrics] — about a third into the keyboard animation, i.e.
+  /// 0.2-0.5s before the viewport settles — NOT at the input tap (a tap
+  /// scroll visibly yanked the list before the keyboard rose; see
+  /// [_onComposerFocusChanged]).
   ///
   /// The viewport keeps shrinking while the keyboard animation runs, which
   /// grows [ScrollMetrics.maxScrollExtent] past the target captured here,
@@ -118,7 +118,7 @@ extension _ChatPageUiExt on _ChatPageState {
 
   /// Runs once, [_keyboardFollowUpDelay] after the keyboard appeared, by
   /// which time every scroll animation that can run during the show
-  /// transition has finished (the composer hook's 200ms scroll, the chat
+  /// transition has finished (the keyboard-appear scroll, the chat
   /// library's debounced 250ms keyboard scroll). If the list is not yet at
   /// the bottom of the final viewport — and the user has not taken over
   /// the list — the remaining gap is closed with one short animation.
