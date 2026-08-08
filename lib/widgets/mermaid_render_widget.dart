@@ -1052,7 +1052,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                     handlerName: 'onMermaidError',
                     callback: (args) {
                       if (mounted) {
-                        final msg = args.isNotEmpty ? args[0].toString() : '未知错误';
+                        final msg =
+                            args.isNotEmpty ? args[0].toString() : '未知错误';
                         setState(() => _errorMessage = msg);
                       }
                     },
