@@ -90,6 +90,13 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
           }
         }
       }
+      // 图片压缩缓存按对话隔离存储：删除对话时整目录清理
+      // （派生缓存，best-effort：失败不影响对话删除）
+      try {
+        await AttachmentStorage.deleteConversationCompressedImages(id);
+      } catch (_) {
+        // 非关键清理
+      }
     }
 
     await ref
@@ -135,6 +142,13 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
           await AttachmentStorage.deleteFile(att.storagePath);
         }
       }
+    }
+    // 图片压缩缓存按对话隔离存储：删除对话时整目录清理
+    // （派生缓存，best-effort：失败不影响对话删除）
+    try {
+      await AttachmentStorage.deleteConversationCompressedImages(topic.id);
+    } catch (_) {
+      // 非关键清理
     }
 
     await ref.read(conversationsProvider.notifier).deleteConversation(topic.id);

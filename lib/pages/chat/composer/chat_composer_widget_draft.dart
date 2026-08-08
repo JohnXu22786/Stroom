@@ -26,12 +26,21 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   /// attachments when entering edit mode. For image attachments, loads the
   /// bytes from storage so the preview chip can display the thumbnail.
   void _loadEditingAttachments(List<Attachment>? attachments) {
-    if (attachments == null || attachments.isEmpty) return;
+    // 新的编辑会话：无论目标消息有没有附件，都先重置本会话状态——
+    // 1) 清空上一会话遗留的 pending 附件：切换编辑目标到无附件消息
+    //    时若不清理，陈旧附件芯片仍显示且可移除，其移除会误删仍被
+    //    原消息引用图片的压缩缓存（编辑会话外移除 = 立即清理）；
+    // 2) 清空"待重发时清理"记录：避免在无附件消息上提交时，误删
+    //    上一会话推迟清理的缓存。
+    _removedEditAttachments.clear();
     setState(() {
       _pendingAttachments.clear();
       _pendingImageBytes.clear();
-      _pendingAttachments.addAll(attachments);
+      if (attachments != null && attachments.isNotEmpty) {
+        _pendingAttachments.addAll(attachments);
+      }
     });
+    if (attachments == null || attachments.isEmpty) return;
     // Load image bytes asynchronously for preview
     for (final att in attachments) {
       if (att.fileType == 'image' && att.storagePath.isNotEmpty) {
@@ -93,11 +102,20 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
       // Edit mode: call onEditSend with the message id, edited text,
       // and all pending attachments (original + newly added, minus removed).
       final attachments = [..._pendingAttachments];
+      // 确定重发：清理编辑期间被移除图片的压缩缓存。移除时推迟
+      // （用户可能取消编辑，见 _removePendingAttachment），此刻才
+      // 确认删除；同一张图（同 hash）在发送前又被加回时不删——
+      // 新消息仍需要它的缓存。等待在途预压缩完成后删除。
+      final removed = [..._removedEditAttachments];
       widget.onEditSend?.call(
         widget.editingMessageId!,
         text.trim(),
         attachments,
       );
+      for (final a in removed) {
+        if (attachments.any((n) => n.hash == a.hash)) continue;
+        unawaited(_deleteCompressedCacheAfterPreCompress(a));
+      }
       _clearPendingAttachments();
       _textController.clear();
       // Cancel any pending draft timer in edit mode
@@ -129,6 +147,10 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
   void _clearPendingAttachments() {
     _pendingAttachments.clear();
     _pendingImageBytes.clear();
+    // 编辑会话结束（提交或取消）：不再有"待重发时清理"的附件。
+    // 提交路径已在 _handleSubmitted 中完成清理；取消路径原消息仍
+    // 引用这些附件，缓存本来就不该删。
+    _removedEditAttachments.clear();
   }
 
   void _showComposerFullscreenEditor() {

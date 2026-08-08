@@ -23,6 +23,20 @@ class Attachment {
   /// 该字段不会被序列化到 toMap/fromMap，生命周期跟随内存中的 Conversation。
   String? base64Data;
 
+  /// 附件所属对话 ID（持久化）。
+  ///
+  /// 用于定位该图片的发送压缩缓存（磁盘目录
+  /// `attachments/temp_compressed/<conversationId>/<hash>`）：压缩产物按
+  /// （对话, 原字节哈希）隔离存储，删除对话时整目录清理，绝不覆盖原
+  /// 附件文件。旧数据（功能上线前）为 null：磁盘缓存不可用，回退到
+  /// 发送时压缩（与旧行为一致；Conversation.fromMap 会在加载时回填
+  /// 该字段）。发送前由 chat_page 登记（选中时对话可能尚未创建）。
+  String? conversationId;
+
+  /// 压缩缓存是否已持久化到磁盘（非持久化内存标记）。
+  /// 避免同一会话内重复写盘（每次发送都会经过读取路径）。
+  bool compressedCachePersisted = false;
+
   Attachment({
     String? id,
     required this.fileName,
@@ -34,6 +48,7 @@ class Attachment {
     DateTime? createdAt,
     this.thumbnailPath,
     this.base64Data,
+    this.conversationId,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -47,6 +62,7 @@ class Attachment {
         'fileSize': fileSize,
         'createdAt': createdAt.toIso8601String(),
         if (thumbnailPath != null) 'thumbnailPath': thumbnailPath,
+        if (conversationId != null) 'conversationId': conversationId,
         // NOTE: base64Data is intentionally NOT serialized.
         // It is a transient in-memory cache tied to conversation lifecycle.
       };
@@ -73,6 +89,7 @@ class Attachment {
       fileSize: (map['fileSize'] as int?) ?? 0,
       createdAt: createdAt,
       thumbnailPath: map['thumbnailPath'] as String?,
+      conversationId: map['conversationId'] as String?,
     );
   }
 
@@ -87,6 +104,8 @@ class Attachment {
     DateTime? createdAt,
     String? thumbnailPath,
     String? base64Data,
+    String? conversationId,
+    bool? compressedCachePersisted,
   }) =>
       Attachment(
         id: id ?? this.id,
@@ -99,7 +118,9 @@ class Attachment {
         createdAt: createdAt ?? this.createdAt,
         thumbnailPath: thumbnailPath ?? this.thumbnailPath,
         base64Data: base64Data ?? this.base64Data,
-      );
+        conversationId: conversationId ?? this.conversationId,
+      )..compressedCachePersisted =
+          compressedCachePersisted ?? this.compressedCachePersisted;
 
   @override
   String toString() =>
