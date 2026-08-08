@@ -2006,6 +2006,27 @@ void main() {
     });
 
     test(
+        'baked time with explicit offset is normalized to UTC+0 before comparing',
+        () async {
+      // 写入端与 GitHub published_at 的时区来源可能不同：内置时间带
+      // +08:00 偏移（2024-06-15T18:00+08:00 == 10:00 UTC），比对前必须
+      // 统一转 UTC+0。10:30 UTC 之后 → 包含；09:30 UTC 之前 → 排除。
+      UpdateNotifier.debugAppReleaseTimeOverride = '2024-06-15T18:00:00+08:00';
+      final releases = _githubReleases([
+        ('v0.2.14', false, 'Version 0.2.14', '2024-06-15T10:30:00Z'),
+        ('v39.0.0', false, 'Version 39', '2024-06-15T09:30:00Z'),
+      ]);
+      final dio = _createMockDioForList(releases);
+      final notifier = UpdateNotifier(dio: dio);
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, true);
+      expect(notifier.state.availableVersions!.length, 1);
+      expect(notifier.state.availableVersions![0].version, '0.2.14');
+    });
+
+    test(
         'baked mode falls back to version comparison for releases without published_at',
         () async {
       // 内置时间存在时，个别 release 缺 published_at 走版本号回退：

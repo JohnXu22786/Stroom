@@ -388,6 +388,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   /// 直接与 release 页面的 `published_at` 比对，晚于它的发布都算新版本，
   /// 全部进入 [availableVersions] 供用户在更新面板中选择。本地构建
   /// （未写入时间）时回退到「在列表中查找当前版本号」的旧逻辑。
+  /// 所有时间先归一化到 UTC+0 再比较。
   ///
   /// When [acceptPreRelease] is `false`, pre-release versions (marked by
   /// GitHub's `prerelease` field) are excluded from the list.
@@ -438,8 +439,10 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     // 同 base 的 hotfix 等后续构建同样会出现在候选里。
     // 本地构建（未写入时间）时回退到旧逻辑：在 release 列表中查找
     // 当前版本号对应的发布时间。
+    // 时间基准统一为 UTC+0：写入端（CD）与比对端（GitHub published_at）
+    // 都可能是不同时区来源，先 .toUtc() 归一化再比较，避免时区偏移。
     final bakedReleaseTime = debugAppReleaseTimeOverride ?? appReleaseTime;
-    final bakedCutoff = DateTime.tryParse(bakedReleaseTime);
+    final bakedCutoff = DateTime.tryParse(bakedReleaseTime)?.toUtc();
 
     DateTime? cutoffDate;
     Version? currentVersion;
@@ -463,7 +466,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         if (versionStr == currentVersionStr) {
           final publishedAtStr = release['published_at'];
           if (publishedAtStr is String) {
-            cutoffDate = DateTime.tryParse(publishedAtStr);
+            cutoffDate = DateTime.tryParse(publishedAtStr)?.toUtc();
           }
           // 该分支仅在发布 tag 与安装版本号完全一致时可达（意味着
           // 版本号是合法 semver），宽松解析即可。
@@ -498,7 +501,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
                 parsed.patch == parsedCurrent.patch) {
               final publishedAtStr = release['published_at'];
               if (publishedAtStr is String) {
-                cutoffDate = DateTime.tryParse(publishedAtStr);
+                cutoffDate = DateTime.tryParse(publishedAtStr)?.toUtc();
               }
               break;
             }
@@ -565,11 +568,12 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         }
 
         // Date-based comparison（有比较基准时：内置发布时间或列表中匹配
-        // 到的当前版本发布时间）
+        // 到的当前版本发布时间）。双方统一转 UTC+0 再比较（.toUtc()），
+        // 避免写入端与 GitHub 时间来源的时区差异影响判断。
         if (cutoffDate != null) {
           final publishedAtStr = release['published_at'];
           final publishedAt = publishedAtStr is String
-              ? DateTime.tryParse(publishedAtStr)
+              ? DateTime.tryParse(publishedAtStr)?.toUtc()
               : null;
           if (publishedAt != null) {
             if (!publishedAt.isAfter(cutoffDate)) continue;

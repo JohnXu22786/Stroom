@@ -18,7 +18,7 @@ const String appReleaseNotesEncoded =
 /// 解码后的更新内容；未注入或解码失败时返回空字符串。
 String get appReleaseNotes => decodeReleaseNotes(appReleaseNotesEncoded);
 
-/// 展示用的发布时间（本地时间 `yyyy-MM-dd HH:mm`）；
+/// 展示用的发布时间（UTC+0 `yyyy-MM-dd HH:mm`）；
 /// 未注入或解析失败时返回空字符串。
 String get appReleaseTimeFormatted => formatReleaseTime(appReleaseTime);
 
@@ -32,14 +32,18 @@ String decodeReleaseNotes(String encoded) {
   }
 }
 
-/// 将 ISO 8601 时间字符串格式化为本地时间的 `yyyy-MM-dd HH:mm`；
+/// 将 ISO 8601 时间字符串格式化为 UTC+0 的 `yyyy-MM-dd HH:mm`；
 /// 空串或无法解析时返回空字符串。
+///
+/// CD 构建写入的发布时间一律是 UTC+0（`...Z`）。展示与更新检查比对
+/// 统一以 UTC+0 为准，不做本地时区转换，避免「写入的时间」与用户
+/// 系统时区不一致造成歧义。
 String formatReleaseTime(String isoTime) {
   if (isoTime.isEmpty) return '';
   final dt = DateTime.tryParse(isoTime);
   if (dt == null) return '';
-  final local = dt.toLocal();
+  final utc = dt.toUtc();
   String two(int n) => n.toString().padLeft(2, '0');
-  return '${local.year}-${two(local.month)}-${two(local.day)} '
-      '${two(local.hour)}:${two(local.minute)}';
+  return '${utc.year}-${two(utc.month)}-${two(utc.day)} '
+      '${two(utc.hour)}:${two(utc.minute)}';
 }
