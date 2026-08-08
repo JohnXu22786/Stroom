@@ -423,7 +423,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // captured before the keyboard opened.
       _restoreScrollPositionAfterKeyboard();
     }
-    _wasKeyboardVisible = isNowVisible;
+    // Rebuild so the keyboard-dismiss overlay button follows the keyboard
+    // state (it is shown while the keyboard is open).
+    if (_wasKeyboardVisible != isNowVisible) {
+      setState(() => _wasKeyboardVisible = isNowVisible);
+    }
   }
 
   @override
@@ -516,6 +520,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
                             // ── Scroll-to-bottom overlay button ──
                             if (_showScrollToBottomButton)
                               _buildScrollToBottomButton(isDark: isDark),
+                            // ── Keyboard-dismiss overlay button ──
+                            // Shown while the soft keyboard is open (the
+                            // list itself never dismisses it — manual
+                            // behavior), so the user can close the
+                            // keyboard without hunting for its close key.
+                            if (_wasKeyboardVisible)
+                              _buildKeyboardDismissButton(isDark: isDark),
                           ],
                         ),
                       ),
