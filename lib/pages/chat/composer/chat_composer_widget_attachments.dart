@@ -335,9 +335,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     //   原消息仍引用该附件；确定重发时（_handleSubmitted 编辑分支）
     //   再统一清理。
     final isOriginalEditAttachment = widget.editingMessageId != null &&
-        (widget.editingMessageAttachments
-                ?.any((a) => a.id == att.id) ??
-            false);
+        (widget.editingMessageAttachments?.any((a) => a.id == att.id) ?? false);
     if (isOriginalEditAttachment) {
       _removedEditAttachments.add(att);
     } else {
