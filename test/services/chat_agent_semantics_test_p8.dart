@@ -133,7 +133,8 @@ void chatAgentSemanticsGroup8() {
       final container =
           _makeContainer(conversations: [convWithTitle('conv-multi2')]);
       final manager = container.read(chatStreamManagerProvider);
-      // 2 轮工具 + 1 轮文本收尾，每轮 cost 不同：每步都必须是独立计费
+      // 2 轮工具 + 1 轮文本（上限内的正常步骤），每轮 cost 不同：
+      // 每步都必须是独立计费
       final provider = _UsageQueueProvider([
         [
           AIStreamEvent('', toolCalls: [

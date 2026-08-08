@@ -1,47 +1,47 @@
 part of 'chat_agent_semantics_test.dart';
 
 void chatAgentSemanticsGroup1() {
-  group('max-steps 提示词', () {
-    test('maxRounds 轮工具后追加收尾轮（工具禁用 + 提示消息）', () async {
+  group('工具循环上限', () {
+    // 工具循环上限定义（AI SDK stepCountIs 语义）：
+    // maxToolCalls = 单条用户消息内模型 API 请求（步骤）的最大次数。
+    // 每次 API 响应内的多个并行工具调用属于同一"步骤"，只计 1 次；
+    // 计数按用户消息重置，不跨对话累计；达到上限即停止，无额外请求。
+
+    List<AIStreamEvent> toolRound(int i) => [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'call_$i',
+              'type': 'function',
+              'function': {
+                'name': 'loop_tool',
+                'arguments': '{"i": $i}',
+              },
+            },
+          ]),
+        ];
+
+    setUp(() {
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'loop_tool',
+          description: 'loop',
+          parameters: {'type': 'object'},
+        ),
+        (args) => 'ok',
+      );
+    });
+
+    test('maxToolCalls=2：最多 2 次 API 请求，达限即停（无收尾轮）', () async {
+      // provider 准备了 3 轮（第 3 轮是文本），但上限 2 → 只发 2 次请求
       final provider = _RecordingProvider([
-        [
-          AIStreamEvent('', toolCalls: [
-            {
-              'id': 'call_1',
-              'type': 'function',
-              'function': {
-                'name': 'loop_tool',
-                'arguments': '{"i": 1}',
-              },
-            },
-          ]),
-        ],
-        [
-          AIStreamEvent('', toolCalls: [
-            {
-              'id': 'call_2',
-              'type': 'function',
-              'function': {
-                'name': 'loop_tool',
-                'arguments': '{"i": 2}',
-              },
-            },
-          ]),
-        ],
-        [AIStreamEvent('总结完成')],
+        toolRound(1),
+        toolRound(2),
+        [AIStreamEvent('本应第 3 次的回答')],
       ]);
       final service = _makeService(provider);
       service.setAssistantSettings(
         AssistantSettings(maxToolCalls: 2, enableMaxToolCalls: true),
       );
-      ChatService.registerTool(
-        const ToolDefinition(
-          name: 'loop_tool',
-          description: 'loop',
-          parameters: {'type': 'object'},
-        ),
-        (args) => 'ok',
-      );
 
       final events = <ChatEvent>[];
       await service
@@ -53,64 +53,66 @@ void chatAgentSemanticsGroup1() {
           .listen(events.add, onError: (e) => fail('error: $e'))
           .asFuture();
 
-      // 三次请求：工具轮 ×2 + 收尾轮 ×1
-      expect(provider.captures, hasLength(3));
-
-      // 工具轮：正常带工具，无收尾提示
-      expect(provider.captures[0]['tools'], isNotNull);
-      expect(provider.captures[1]['tools'], isNotNull);
-
-      // 收尾轮：tools 定义保留（Anthropic 要求历史含 tool_use/tool_result
-      // 块时必须定义 tools）+ tool_choice: none 显式禁用 + MAX_STEPS_PROMPT 前置
-      expect(provider.captures[2]['tools'], isNotNull);
-      expect(
-        (provider.captures[2]['extraParams'] as Map)['tool_choice'],
-        'none',
-      );
-      final lastMsg = (provider.captures[2]['messages'] as List).last as Map;
-      // 收尾提示以 user 角色注入（对齐 opencode MAX_STEPS_PROMPT）：
-      // assistant 角色注入的"要求"部分模型可能不当作指令执行
-      expect(lastMsg['role'], 'user');
-      expect(lastMsg['content'], ChatService.maxStepsPrompt);
-
-      // 2 轮工具调用 + 收尾文本；无旧的终止 hack 文本
+      // 恰好 2 次 API 请求（不是 2+1 收尾轮）
+      expect(provider.captures, hasLength(2));
+      // 两轮都正常带工具，无 tool_choice 禁用
+      for (final capture in provider.captures) {
+        expect(capture['tools'], isNotNull);
+        expect(
+          (capture['extraParams'] as Map).containsKey('tool_choice'),
+          isFalse,
+          reason: '上限内所有轮次工具保持可用（无收尾轮）',
+        );
+      }
+      // 最后一轮请求消息末尾不是注入的"收尾提示"（user 角色）——
+      // 旧收尾轮会在最后一轮请求前向 messages 追加提示消息。
+      // （第 1 轮 messages 末尾是用户自己的消息，不适用此断言）
+      final lastCaptureMessages = provider.captures.last['messages'] as List;
+      expect(lastCaptureMessages.last['role'] == 'user', isFalse,
+          reason: '无收尾提示注入');
+      // 第 2 轮的工具调用仍执行（对齐 AI SDK：最后一轮的工具执行后停止）
       expect(events.whereType<ToolCallStartEvent>().length, 2);
-      expect(
-        events
-            .whereType<TextEvent>()
-            .where((e) => e.text.contains('已达到工具调用上限')),
-        isEmpty,
-        reason: 'max-steps 提示词取代了旧的终止 hack 文本',
-      );
+      expect(events.whereType<ToolCallCompleteEvent>().length, 2);
     });
 
-    test('maxToolCalls=1 仍允许 1 轮工具调用（收尾轮不吞工具轮）', () async {
+    test('maxToolCalls=1：恰好 1 次 API 请求', () async {
       final provider = _RecordingProvider([
-        [
-          AIStreamEvent('', toolCalls: [
-            {
-              'id': 'call_1',
-              'type': 'function',
-              'function': {
-                'name': 'loop_tool',
-                'arguments': '{"i": 1}',
-              },
-            },
-          ]),
-        ],
-        [AIStreamEvent('收尾总结')],
+        toolRound(1),
+        [AIStreamEvent('本应第 2 次的回答')],
       ]);
       final service = _makeService(provider);
       service.setAssistantSettings(
         AssistantSettings(maxToolCalls: 1, enableMaxToolCalls: true),
       );
-      ChatService.registerTool(
-        const ToolDefinition(
-          name: 'loop_tool',
-          description: 'loop',
-          parameters: {'type': 'object'},
-        ),
-        (args) => 'ok',
+
+      final events = <ChatEvent>[];
+      await service
+          .sendStreamWithTools(
+            'go',
+            history: [ChatMessage(role: 'user', content: 'go')],
+            tools: ChatService.getRegisteredToolDefinitions(),
+          )
+          .listen(events.add, onError: (e) => fail('error: $e'))
+          .asFuture();
+
+      expect(provider.captures, hasLength(1));
+      expect(provider.captures[0]['tools'], isNotNull);
+      expect(
+        (provider.captures[0]['extraParams'] as Map).containsKey('tool_choice'),
+        isFalse,
+      );
+      expect(events.whereType<ToolCallStartEvent>().length, 1);
+    });
+
+    test('开关关闭时使用默认上限 20（非无限）', () async {
+      // 关闭开关 + 用户值 30 → 生效上限为默认 20（关闭开关不等于无限，
+      // 仍按默认上限执行）
+      final provider = _RecordingProvider(
+        List.generate(25, (i) => toolRound(i + 1)),
+      );
+      final service = _makeService(provider);
+      service.setAssistantSettings(
+        AssistantSettings(maxToolCalls: 30, enableMaxToolCalls: false),
       );
 
       final events = <ChatEvent>[];
@@ -123,19 +125,97 @@ void chatAgentSemanticsGroup1() {
           .listen(events.add, onError: (e) => fail('error: $e'))
           .asFuture();
 
-      expect(provider.captures, hasLength(2));
-      // 第 1 轮：工具可用
-      expect(provider.captures[0]['tools'], isNotNull);
-      // 第 2 轮：收尾（tools 保留 + tool_choice none 禁用）
-      expect(provider.captures[1]['tools'], isNotNull);
-      expect(
-        (provider.captures[1]['extraParams'] as Map)['tool_choice'],
-        'none',
-      );
-      expect(events.whereType<ToolCallStartEvent>().length, 1);
+      expect(provider.captures, hasLength(20));
+      expect(events.whereType<ToolCallStartEvent>().length, 20);
     });
 
-    test('未配置 maxToolCalls 时不受影响（无收尾轮）', () async {
+    test('默认配置（enable=true, maxToolCalls=20）→ 恰好 20 次请求', () async {
+      // 钉住用户实际拿到的默认组合（AssistantSettings 默认构造）下
+      // 的生效上限：20 次请求。若默认 maxToolCalls 被改动（如 30），
+      // 或默认 enable 语义被改动导致生效值变化，此测试会失败。
+      final provider = _RecordingProvider(
+        List.generate(25, (i) => toolRound(i + 1)),
+      );
+      final service = _makeService(provider);
+      service.setAssistantSettings(AssistantSettings());
+
+      final events = <ChatEvent>[];
+      await service
+          .sendStreamWithTools(
+            'go',
+            history: [ChatMessage(role: 'user', content: 'go')],
+            tools: ChatService.getRegisteredToolDefinitions(),
+          )
+          .listen(events.add, onError: (e) => fail('error: $e'))
+          .asFuture();
+
+      expect(provider.captures, hasLength(20));
+      expect(events.whereType<ToolCallStartEvent>().length, 20);
+    });
+
+    test('损坏/越界值回退默认上限 20（0 与 150）', () async {
+      for (final invalid in [0, 150]) {
+        final provider = _RecordingProvider(
+          List.generate(25, (i) => toolRound(i + 1)),
+        );
+        final service = _makeService(provider);
+        service.setAssistantSettings(
+          AssistantSettings(maxToolCalls: invalid, enableMaxToolCalls: true),
+        );
+
+        await service
+            .sendStreamWithTools(
+              'go',
+              history: [ChatMessage(role: 'user', content: 'go')],
+              tools: ChatService.getRegisteredToolDefinitions(),
+            )
+            .listen((_) {}, onError: (e) => fail('error: $e'))
+            .asFuture();
+
+        expect(
+          provider.captures,
+          hasLength(20),
+          reason: 'maxToolCalls=$invalid 应回退默认上限 20，'
+              '且不发空流/不无限循环',
+        );
+      }
+    });
+
+    test('getEffectiveMaxToolRounds 值域校验', () {
+      // 未配置 / 关闭：默认 20
+      expect(ChatService.getEffectiveMaxToolRounds(null), 20);
+      expect(
+        ChatService.getEffectiveMaxToolRounds(
+          AssistantSettings(maxToolCalls: 50, enableMaxToolCalls: false),
+        ),
+        20,
+      );
+      // 开启 + 合法值：1..100 原样使用
+      expect(
+        ChatService.getEffectiveMaxToolRounds(
+          AssistantSettings(maxToolCalls: 1, enableMaxToolCalls: true),
+        ),
+        1,
+      );
+      expect(
+        ChatService.getEffectiveMaxToolRounds(
+          AssistantSettings(maxToolCalls: 100, enableMaxToolCalls: true),
+        ),
+        100,
+      );
+      // 开启 + 越界/损坏值：回退默认 20
+      for (final invalid in [0, -5, 101, 999]) {
+        expect(
+          ChatService.getEffectiveMaxToolRounds(
+            AssistantSettings(maxToolCalls: invalid, enableMaxToolCalls: true),
+          ),
+          20,
+          reason: 'maxToolCalls=$invalid 应回退默认 20',
+        );
+      }
+    });
+
+    test('未设置助手参数：1 次请求，无 tool_choice 注入', () async {
       final provider = _RecordingProvider([
         [AIStreamEvent('final')],
       ]);
@@ -146,7 +226,7 @@ void chatAgentSemanticsGroup1() {
             history: [ChatMessage(role: 'user', content: 'go')],
             tools: const [],
           )
-          .listen((_) {})
+          .listen((_) {}, onError: (e) => fail('error: $e'))
           .asFuture();
       expect(provider.captures, hasLength(1));
       expect(
