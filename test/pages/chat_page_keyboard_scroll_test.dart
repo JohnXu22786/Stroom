@@ -144,7 +144,8 @@ Finder _chatScrollable({bool skipOffstage = true}) {
       .first;
 }
 
-ScrollPosition _scrollPosition(WidgetTester tester, {bool skipOffstage = true}) {
+ScrollPosition _scrollPosition(WidgetTester tester,
+    {bool skipOffstage = true}) {
   return tester
       .state<ScrollableState>(_chatScrollable(skipOffstage: skipOffstage))
       .position;
@@ -311,8 +312,7 @@ void main() {
 
     testWidgets(
         'a keyboard appearing mid-scroll still ends at the bottom of the '
-        'final viewport (follow-up closes the gap)',
-        (tester) async {
+        'final viewport (follow-up closes the gap)', (tester) async {
       await pumpChat(tester);
       await scrollToBottom(tester);
       // Scroll far up so the chat library's debounced keyboard scroll
@@ -356,8 +356,7 @@ void main() {
 
     testWidgets(
         'a saved position whose keyboard never appears is dropped, so the '
-        'next keyboard session saves a fresh position',
-        (tester) async {
+        'next keyboard session saves a fresh position', (tester) async {
       await pumpChat(tester);
       await scrollToBottom(tester);
       await scrollUp(tester);
@@ -390,8 +389,7 @@ void main() {
 
     testWidgets(
         'keyboard opens without a focus event: fallback saves the position '
-        'and scrolls toward the bottom; dismiss restores it',
-        (tester) async {
+        'and scrolls toward the bottom; dismiss restores it', (tester) async {
       await pumpChat(tester);
       await scrollToBottom(tester);
       await scrollUp(tester);
@@ -440,7 +438,8 @@ void main() {
       await settle(tester);
     });
 
-    testWidgets('tapping the input while already at the bottom has no '
+    testWidgets(
+        'tapping the input while already at the bottom has no '
         'side effects', (tester) async {
       await pumpChat(tester);
       await scrollToBottom(tester);
@@ -460,8 +459,7 @@ void main() {
 
     testWidgets(
         'user dragging the list while the keyboard is open cancels the '
-        'follow-up scroll',
-        (tester) async {
+        'follow-up scroll', (tester) async {
       await pumpChat(tester);
       await scrollToBottom(tester);
       await scrollUp(tester, amount: 1500);
