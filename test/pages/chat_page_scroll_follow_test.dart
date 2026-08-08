@@ -297,33 +297,37 @@ void main() {
       await startStreaming(tester);
       await scrollToBottom(tester);
 
-      // Open the keyboard while scrolled up: the list jumps to the bottom
-      // and auto-scroll engages. (With a streaming placeholder present the
-      // keyboard pinning can overshoot the exact end by a few dozen px —
-      // a pre-existing quirk, so the precondition tolerates it.)
+      // Open the keyboard while scrolled up: the list scrolls to the
+      // bottom and auto-scroll engages. The scroll is a 200ms animation
+      // plus a 600ms follow-up (the per-frame keyboard pinning this
+      // superseded was reverted), so let it land before the precondition.
       await scrollUp(tester);
       final savedPos = _chatPosition(tester).pixels;
       expect(savedPos, greaterThan(0));
       await setKeyboardInset(tester, 300);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
       var pos = _chatPosition(tester);
       expect(
         pos.maxScrollExtent - pos.pixels,
         lessThanOrEqualTo(60),
-        reason: 'precondition: keyboard open pins at/near the bottom',
+        reason: 'precondition: keyboard open lands at/near the bottom',
       );
 
-      // Dismiss the keyboard: the restore animation starts (150ms).
+      // Dismiss the keyboard: the restore is a single jump (the animated
+      // 150ms restore belonged to the reverted keyboard pinning), so it
+      // completes within a frame.
       tester.view.devicePixelRatio = 3.0;
       tester.view.physicalSize = const Size(2400, 1800);
       tester.view.viewInsets = FakeViewPadding.zero;
       await _dispatchMetrics(tester);
-      await tester.pump(const Duration(milliseconds: 80)); // mid-restore
+      await tester.pump(const Duration(milliseconds: 16));
 
-      // The stream grows mid-restore — the list must keep restoring to
+      // The stream grows right after the restore — the list must stay at
       // the saved position, not snap back to the bottom.
       streamChunk(container, 'E' * 3000);
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300)); // finish restore
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 100));
 
