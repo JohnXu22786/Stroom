@@ -45,8 +45,7 @@ class VersionInfoDialog extends StatelessWidget {
             _buildInfoRow(cs, '发布时间', time.isEmpty ? '本地构建' : time),
             if (notes.isNotEmpty) ...[
               const SizedBox(height: 16),
-              const Text('更新内容',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('更新内容', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Text(notes),
             ],

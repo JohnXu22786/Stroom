@@ -36,7 +36,8 @@ Future<void> _openDialog(
 
 void main() {
   group('VersionInfoDialog', () {
-    testWidgets('shows version, release time and release notes', (tester) async {
+    testWidgets('shows version, release time and release notes',
+        (tester) async {
       await _openDialog(
         tester,
         version: '1.2.3',

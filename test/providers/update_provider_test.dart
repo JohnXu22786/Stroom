@@ -1983,8 +1983,7 @@ void main() {
       expect(notifier.state.availableVersions![0].version, '0.2.14');
     });
 
-    test(
-        're-created release on the current tag is not offered as an update',
+    test('re-created release on the current tag is not offered as an update',
         () async {
       // 回归：同 tag 被删除后重建（GitHub 更新 published_at，晚于内置
       // 时间）时，版本号完全一致的 release 不得当作「更新」再次提示。
