@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
@@ -44,6 +45,13 @@ class _MermaidPreviewDialogContentState
   bool _hasError = false;
   double _zoomLevel = 1.0;
 
+  /// Bundled mermaid.js source, inlined into the render template so the
+  /// diagram renders fully offline on every platform (no CDN request).
+  /// Null while the asset is loading, or when the asset is unavailable
+  /// (template then falls back to its CDN loader).
+  String? _inlineMermaidJs;
+  bool _mermaidJsLoading = true;
+
   /// Fallback timer that force-ends the loading state if [onLoadStop] never
   /// fires (e.g. the web platform's iframe load event or its JS bridge is
   /// unavailable). Without it the loading overlay could spin forever while
@@ -54,6 +62,16 @@ class _MermaidPreviewDialogContentState
   void initState() {
     super.initState();
     _armReadyFallback();
+    _loadMermaidAsset();
+  }
+
+  Future<void> _loadMermaidAsset() async {
+    final js = await MermaidRenderWidget.loadBundledMermaidJs();
+    if (!mounted) return;
+    setState(() {
+      _inlineMermaidJs = js;
+      _mermaidJsLoading = false;
+    });
   }
 
   @override
@@ -63,16 +81,18 @@ class _MermaidPreviewDialogContentState
     super.dispose();
   }
 
-  /// Arms a fallback timer that force-ends the loading state after 8s if
+  /// Arms a fallback timer that force-ends the loading state after 3s if
   /// [onLoadStop] has not fired yet, so the loading overlay can never spin
   /// forever: the user then sees the actual iframe content (which shows its
-  /// own loading hint or error message from the HTML template).
+  /// own loading hint or error message from the HTML template). On the web
+  /// platform onLoadStop reliably does NOT fire, so this timer is the
+  /// actual path that reveals the rendered diagram there.
   void _armReadyFallback() {
     _readyFallbackTimer?.cancel();
-    _readyFallbackTimer = Timer(const Duration(seconds: 8), () {
+    _readyFallbackTimer = Timer(const Duration(seconds: 3), () {
       if (mounted && _isLoading) {
         debugPrint('[MermaidPreviewDialog] onLoadStop did not fire within '
-            '8s, force-ending the loading state');
+            '3s, force-ending the loading state');
         setState(() => _isLoading = false);
       }
     });
@@ -83,7 +103,24 @@ class _MermaidPreviewDialogContentState
     if (code.isEmpty) {
       return _emptyPlaceholderHtml;
     }
-    return MermaidRenderWidget.buildMermaidHtml(code);
+    // Same shared template as the inline widget, with the bundled
+    // mermaid.js inlined (offline rendering, no CDN request).
+    return MermaidRenderWidget.buildMermaidHtml(code,
+        inlineMermaidJs: _inlineMermaidJs);
+  }
+
+  /// Web-only: loads the bundled asset template (same origin) with the
+  /// diagram code as a query parameter. The template loads mermaid.min.js
+  /// itself from the same asset directory, so no CDN request is made.
+  Future<void> _loadCode() async {
+    final ctrl = _webViewController;
+    if (ctrl == null) return;
+    final code = widget.mermaidCode.trim();
+    final url = code.isEmpty
+        ? MermaidRenderWidget.webAssetTemplateUrl
+        : '${MermaidRenderWidget.webAssetTemplateUrl}'
+            '?code=${Uri.encodeQueryComponent(code)}';
+    await ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
   }
 
   /// Zoom is anchored at the CENTER of the preview area (not the top-left
@@ -156,69 +193,86 @@ class _MermaidPreviewDialogContentState
         child: Stack(
           clipBehavior: Clip.hardEdge,
           children: [
-            // WebView — full screen rendering
-            InAppWebView(
-              initialSettings: InAppWebViewSettings(
-                javaScriptEnabled: true,
-                transparentBackground: true,
+            // WebView — full screen rendering. On native platforms it is
+            // created only after the bundled mermaid.js asset is loaded,
+            // so the initial HTML can inline it (offline, no CDN). On web
+            // the asset template loads mermaid.min.js itself (same origin),
+            // so the WebView can be created immediately.
+            if (!_mermaidJsLoading || kIsWeb)
+              InAppWebView(
+                initialSettings: InAppWebViewSettings(
+                  javaScriptEnabled: true,
+                  transparentBackground: true,
+                ),
+                // On web the initial page is loaded via loadUrl (the
+                // bundled asset template, same origin) — a data: URL
+                // cannot carry the bundled mermaid.js (Chromium truncates
+                // data: URLs at ~1MB) nor reach same-origin assets.
+                initialData: kIsWeb
+                    ? null
+                    : InAppWebViewInitialData(
+                        data: _buildHtml(),
+                        mimeType: 'text/html',
+                        encoding: 'utf8',
+                      ),
+                onWebViewCreated: (ctrl) {
+                  _webViewController = ctrl;
+                  // On web there is no initialData; load the asset
+                  // template right after the controller is created.
+                  if (kIsWeb) {
+                    _loadCode();
+                  }
+                  // Register the JS→Flutter message bridge. The web platform
+                  // of flutter_inappwebview does not implement
+                  // addJavaScriptHandler (UnimplementedError); the diagram
+                  // still renders with the template's JS gesture fallbacks,
+                  // so guard the registration to keep the WebView working.
+                  try {
+                    ctrl.addJavaScriptHandler(
+                      handlerName: 'onMermaidError',
+                      callback: (args) {
+                        if (mounted) {
+                          setState(() => _hasError = true);
+                        }
+                      },
+                    );
+                    ctrl.addJavaScriptHandler(
+                      handlerName: 'onTransformChanged',
+                      callback: (args) {
+                        // Mirrors the JS-side zoom level (the dialog does
+                        // not track pan; zoom buttons anchor in JS). No
+                        // setState: _zoomLevel is not read in build() and
+                        // the WebView reflects the transform visually.
+                        if (mounted && args.isNotEmpty) {
+                          _zoomLevel =
+                              double.tryParse(args[0].toString()) ?? 1.0;
+                        }
+                      },
+                    );
+                  } catch (e) {
+                    debugPrint(
+                        '[MermaidPreviewDialog] JS handler bridge unavailable: $e');
+                  }
+                },
+                onLoadStop: (ctrl, url) {
+                  _readyFallbackTimer?.cancel();
+                  if (mounted) {
+                    setState(() => _isLoading = false);
+                  }
+                },
+                onReceivedError: (controller, request, error) {
+                  _readyFallbackTimer?.cancel();
+                  if (mounted) {
+                    setState(() {
+                      _isLoading = false;
+                      _hasError = true;
+                    });
+                  }
+                },
               ),
-              initialData: InAppWebViewInitialData(
-                data: _buildHtml(),
-                mimeType: 'text/html',
-                encoding: 'utf8',
-              ),
-              onWebViewCreated: (ctrl) {
-                _webViewController = ctrl;
-                // Register the JS→Flutter message bridge. The web platform
-                // of flutter_inappwebview does not implement
-                // addJavaScriptHandler (UnimplementedError); the diagram
-                // still renders with the template's JS gesture fallbacks,
-                // so guard the registration to keep the WebView working.
-                try {
-                  ctrl.addJavaScriptHandler(
-                    handlerName: 'onMermaidError',
-                    callback: (args) {
-                      if (mounted) {
-                        setState(() => _hasError = true);
-                      }
-                    },
-                  );
-                  ctrl.addJavaScriptHandler(
-                    handlerName: 'onTransformChanged',
-                    callback: (args) {
-                      // Mirrors the JS-side zoom level (the dialog does not
-                      // track pan; zoom buttons anchor in JS). No setState:
-                      // _zoomLevel is not read in build() and the WebView
-                      // reflects the transform visually.
-                      if (mounted && args.isNotEmpty) {
-                        _zoomLevel = double.tryParse(args[0].toString()) ?? 1.0;
-                      }
-                    },
-                  );
-                } catch (e) {
-                  debugPrint(
-                      '[MermaidPreviewDialog] JS handler bridge unavailable: $e');
-                }
-              },
-              onLoadStop: (ctrl, url) {
-                _readyFallbackTimer?.cancel();
-                if (mounted) {
-                  setState(() => _isLoading = false);
-                }
-              },
-              onReceivedError: (controller, request, error) {
-                _readyFallbackTimer?.cancel();
-                if (mounted) {
-                  setState(() {
-                    _isLoading = false;
-                    _hasError = true;
-                  });
-                }
-              },
-            ),
 
             // Loading overlay
-            if (_isLoading)
+            if (_isLoading || _mermaidJsLoading)
               Positioned.fill(
                 child: Container(
                   color: cs.surface,

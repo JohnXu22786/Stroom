@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
@@ -51,6 +52,24 @@ void main() {
       expect(html, contains('script.onerror'));
       expect(html, contains('无法访问 cdn.jsdelivr.net'));
       expect(html, contains('Mermaid 加载超时'));
+    });
+
+    test('inlines the bundled mermaid.js when inlineMermaidJs is provided', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD',
+          inlineMermaidJs: 'var bundled = 1;');
+      // The library must be embedded in the page itself — no CDN request.
+      expect(html, contains('var bundled = 1;'));
+      expect(html, isNot(contains("script.src = 'https://cdn.jsdelivr.net")));
+    });
+
+    test('escapes < in the inlined library so the script tag stays intact', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD',
+          inlineMermaidJs: 'var s = "</script><!--";');
+      // Every '<' is emitted as \u003C inside the JS string literal, so the
+      // HTML parser never sees a raw '</script' or '<!--' from the library
+      // code that could terminate the script tag early.
+      expect(html, contains(r'\u003C/script>'));
+      expect(html, contains(r'\u003C!--'));
     });
 
     test('includes mermaid.initialize call', () {
@@ -345,6 +364,43 @@ void main() {
       expect(html, contains('mermaid.run'));
       expect(html, isNot(contains('MERMAID_CODE_PLACEHOLDER')),
           reason: 'code placeholder should be replaced');
+    });
+  });
+
+  group('MermaidRenderWidget - web asset template', () {
+    // The web platform loads the bundled asset template via loadUrl (a
+    // data: URL cannot carry the bundled mermaid.js — Chromium truncates
+    // data: URLs at ~1MB). These tests pin the template's contract so it
+    // does not silently drift from the Dart template.
+    Future<String> loadAssetTemplate() =>
+        rootBundle.loadString('assets/vendor/mermaid_render.html');
+
+    test('loads mermaid.min.js from the same asset directory (no CDN)',
+        () async {
+      final html = await loadAssetTemplate();
+      expect(html, contains("script.src = 'mermaid.min.js'"));
+      expect(html, isNot(contains('cdn.jsdelivr.net')));
+    });
+
+    test('reads the diagram code from the ?code= query parameter', () async {
+      final html = await loadAssetTemplate();
+      expect(html, contains('URLSearchParams'));
+      expect(html, contains("params.get('code')"));
+    });
+
+    test(
+        'keeps the shared fit/gesture behavior in sync with the Dart '
+        'template', () async {
+      final html = await loadAssetTemplate();
+      // fitToViewport with the SVG natural-size pinning (auto center+fit).
+      expect(html, contains('window.fitToViewport'));
+      expect(html, contains("svg.setAttribute('width', sw)"));
+      expect(html, contains("svg.setAttribute('height', sh)"));
+      // Mouse + touch pan/zoom gesture handlers.
+      expect(html, contains("document.addEventListener('mousedown'"));
+      expect(html, contains("document.addEventListener('touchstart'"));
+      // Error reporting surface.
+      expect(html, contains('reportError'));
     });
   });
 
