@@ -103,7 +103,8 @@ void main() {
   late Directory tmpRoot;
 
   setUp(() {
-    tmpRoot = Directory.systemTemp.createTempSync('stroom_composer_cache_test_');
+    tmpRoot =
+        Directory.systemTemp.createTempSync('stroom_composer_cache_test_');
     PathProviderPlatform.instance = _FakePathProviderPlatform(tmpRoot.path);
   });
 
@@ -139,15 +140,14 @@ void main() {
   }
 
   Future<bool> cacheExists(WidgetTester tester, Attachment att) async {
-    final cached = await tester.runAsync(() => AttachmentStorage
-        .readCompressedImage(
+    final cached = await tester.runAsync(() =>
+        AttachmentStorage.readCompressedImage(
             conversationId: att.conversationId, hash: att.hash));
     return cached != null;
   }
 
   group('编辑模式移除图片的压缩缓存清理时机', () {
-    testWidgets('移除原图后缓存仍在（可能取消编辑），确定重发后才清理',
-        (tester) async {
+    testWidgets('移除原图后缓存仍在（可能取消编辑），确定重发后才清理', (tester) async {
       final att = originalImage();
       await seedCache(tester, att);
 
@@ -220,8 +220,7 @@ void main() {
           reason: '取消编辑后原消息仍引用该附件，缓存必须保留');
     });
 
-    testWidgets('移除原图后切换到无附件消息编辑：陈旧芯片清空，提交不误删上一会话缓存',
-        (tester) async {
+    testWidgets('移除原图后切换到无附件消息编辑：陈旧芯片清空，提交不误删上一会话缓存', (tester) async {
       final att = originalImage();
       await seedCache(tester, att);
 
