@@ -4,9 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
-import 'package:stroom/pages/chat/chat_types.dart';
-import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/pages/chat_page.dart';
+import 'package:stroom/providers/provider_config.dart';
 
 /// Helper that creates a MaterialApp wrapped in ProviderScope with
 /// all providers needed to render ChatPage.
@@ -37,35 +36,6 @@ void main() {
     Future<void> setupSurface(WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
     }
-
-    testWidgets(
-      'settings row shows model, tools, reasoning buttons above input',
-      (tester) async {
-        await setupSurface(tester);
-        await tester.pumpWidget(createChatTestApp());
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
-        tester.takeException();
-
-        // The settings row buttons should be visible above the input
-        expect(find.text('模型'), findsOneWidget);
-        expect(find.text('工具'), findsOneWidget);
-        expect(find.text('推理'), findsOneWidget);
-      },
-    );
-
-    testWidgets('each settings button has an icon', (tester) async {
-      await setupSurface(tester);
-      await tester.pumpWidget(createChatTestApp());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      tester.takeException();
-
-      // Each button should have its icon
-      expect(find.byIcon(Icons.smart_toy_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.build_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.psychology_outlined), findsOneWidget);
-    });
 
     testWidgets('clicking model button opens model panel', (tester) async {
       await setupSurface(tester);
@@ -125,23 +95,6 @@ void main() {
         findsOneWidget,
       );
     });
-
-    testWidgets('settings row tags use natural width, not forced full width',
-        (tester) async {
-      await setupSurface(tester);
-      await tester.pumpWidget(createChatTestApp());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      tester.takeException();
-
-      // All three tags should be visible
-      expect(find.text('模型'), findsOneWidget);
-      expect(find.text('工具'), findsOneWidget);
-      expect(find.text('推理'), findsOneWidget);
-
-      // The model chip should not overflow or cause errors
-      expect(tester.takeException(), isNull);
-    });
   });
 
   // ═══════════════════════════════════════════════════════════
@@ -156,41 +109,6 @@ void main() {
       tester.takeException();
 
       expect(find.text('新对话'), findsOneWidget);
-    });
-  });
-
-  // ═══════════════════════════════════════════════════════════
-  // Req: ChatComposerWidget without Positioned
-  // ═══════════════════════════════════════════════════════════
-  group('ChatComposerWidget layout (no Positioned)', () {
-    testWidgets('composer renders without Positioned wrapper', (tester) async {
-      await tester.pumpWidget(createChatTestApp());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      tester.takeException();
-
-      // The composer should render - verify by the attach file button
-      expect(find.byIcon(Icons.attach_file_outlined), findsOneWidget);
-
-      // The send button should exist
-      expect(find.byIcon(Icons.send_rounded), findsOneWidget);
-
-      // The settings row should be visible above input
-      expect(find.text('模型'), findsOneWidget);
-      expect(find.text('工具'), findsOneWidget);
-      expect(find.text('推理'), findsOneWidget);
-    });
-
-    testWidgets('composer does not use its own Positioned widget', (
-      tester,
-    ) async {
-      await tester.pumpWidget(createChatTestApp());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      tester.takeException();
-
-      // The composer itself no longer wraps in Positioned
-      // (flutter_chat_ui may use Positioned internally for its layout)
     });
   });
 

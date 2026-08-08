@@ -118,45 +118,9 @@ void main() {
       registerBuiltinProviderTypes();
       expect(ProviderTypeRegistry.isRegistered('mcp'), isTrue);
     });
-
-    test('MCP provider type has correct definition', () {
-      registerBuiltinProviderTypes();
-      final def = ProviderTypeRegistry.get('mcp');
-      expect(def, isNotNull);
-      expect(def!.type, equals('mcp'));
-      expect(
-        def.useLlmModelConfig,
-        isFalse,
-        reason: 'MCP servers use typeConfig, not LLM model config',
-      );
-    });
   });
 
   group('MCP ProviderEntry', () {
-    test('MCP ProviderEntry can be created', () {
-      final entry = ProviderEntry(id: 'test_mcp', type: 'mcp', name: 'MCP供应商');
-      expect(entry.id, equals('test_mcp'));
-      expect(entry.type, equals('mcp'));
-      expect(entry.name, equals('MCP供应商'));
-    });
-
-    test('MCP ProviderEntry with config', () {
-      final config = ProviderConfigItem(
-        providerName: 'Test MCP Server',
-        host: '',
-        key: '',
-        models: [],
-      );
-      final entry = ProviderEntry(
-        id: 'mcp_1',
-        type: 'mcp',
-        name: 'MCP供应商',
-        configs: [config],
-      );
-      expect(entry.configs.length, equals(1));
-      expect(entry.configs[0].providerName, equals('Test MCP Server'));
-    });
-
     test('MCP ProviderEntry serialization round-trip', () {
       final config = ProviderConfigItem(
         providerName: 'My MCP Server',

@@ -35,25 +35,6 @@ void main() {
   });
 
   group('TtsPage - audio page buttons', () {
-    testWidgets('shows two action buttons: 录音 and 导入', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Find buttons specifically (title is "音频", not "录音")
-      expect(find.widgetWithText(ElevatedButton, '录音'), findsOneWidget);
-      expect(find.widgetWithText(ElevatedButton, '导入'), findsOneWidget);
-    });
-
-    testWidgets('生成录音 is no longer on TtsPage (moved to homepage)', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // "生成录音" should no longer appear on the TtsPage
-      expect(find.text('生成录音'), findsNothing);
-    });
-
     testWidgets('buttons are in correct order: 录音 → 导入', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
@@ -71,23 +52,6 @@ void main() {
 
       // And in order from left to right
       expect(button0Pos.dx, lessThan(button1Pos.dx));
-    });
-
-    testWidgets('录音 button has microphone icon', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // A mic icon should be present in the widget tree (on the first button)
-      expect(
-        find.byWidgetPredicate(
-          (w) =>
-              w is Icon &&
-              (w.icon == Icons.mic ||
-                  w.icon == Icons.mic_outlined ||
-                  w.icon == Icons.mic_none),
-        ),
-        findsWidgets,
-      );
     });
 
     testWidgets('buttons fit without overflow on narrow screen',

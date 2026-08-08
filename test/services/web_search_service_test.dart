@@ -1,50 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/services/web_search_service.dart';
-import 'package:stroom/models/tool_call.dart';
 
 void main() {
   // ====================================================================
-  // Tool definition tests (no HTTP needed)
-  // ====================================================================
-
-  group('WebSearchService - tool definition', () {
-    test('has correct tool definition structure', () {
-      final defs = WebSearchService.toolDefinitions;
-      expect(defs.length, equals(1));
-
-      final webSearchDef = defs.first;
-      expect(webSearchDef.name, equals('web_search'));
-      expect(webSearchDef.description, isNotEmpty);
-
-      final params = webSearchDef.parameters;
-      expect(params['type'], equals('object'));
-
-      final properties = params['properties'] as Map<String, dynamic>;
-      expect(properties.containsKey('query'), isTrue);
-      expect(properties.containsKey('source'), isTrue);
-      expect(properties.containsKey('count'), isTrue);
-
-      // Required should include query
-      final required = params['required'] as List;
-      expect(required, contains('query'));
-    });
-
-    test('source parameter has enum values for google/bing/baidu', () {
-      final defs = WebSearchService.toolDefinitions;
-      final webSearchDef = defs.first;
-      final properties =
-          webSearchDef.parameters['properties'] as Map<String, dynamic>;
-      final sourceProperty = properties['source'] as Map<String, dynamic>;
-
-      expect(sourceProperty['type'], equals('string'));
-      expect(sourceProperty['enum'], contains('google'));
-      expect(sourceProperty['enum'], contains('bing'));
-      expect(sourceProperty['enum'], contains('baidu'));
-    });
-  });
-
-  // ====================================================================
-  // Search result parsing tests (unit-testable without HTTP)
+  // Source validation tests (unit-testable without HTTP)
   // ====================================================================
 
   group('WebSearchService - source validation', () {

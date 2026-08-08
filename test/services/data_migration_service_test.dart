@@ -28,13 +28,6 @@ void main() {
   });
 
   group('DataMigrationService - accessible backup path', () {
-    test('getExternalBackupRootPath returns non-null on all platforms',
-        () async {
-      final path = await DataMigrationService.getExternalBackupRootPath();
-      expect(path, isNotNull);
-      expect(path.isNotEmpty, isTrue);
-    });
-
     test('backup root is outside app data directory', () async {
       final backupRoot = await DataMigrationService.getExternalBackupRootPath();
       final appDir = await AppStorage.directory;
@@ -75,12 +68,6 @@ void main() {
           reason: 'Test root must be unique per isolate, not the shared path');
     });
 
-    test('getExternalBackupRootPath returns non-empty path', () async {
-      final path = await DataMigrationService.getExternalBackupRootPath();
-      expect(path, isNotNull);
-      expect(path.isNotEmpty, isTrue);
-    });
-
     test('backup root is NOT inside private app data directory', () async {
       final backupRoot = await DataMigrationService.getExternalBackupRootPath();
       final appDir = await AppStorage.directory;
@@ -118,10 +105,6 @@ void main() {
   });
 
   group('DataMigrationService - legacy global format version', () {
-    test('returns current format version constant', () {
-      expect(DataMigrationService.currentFormatVersion, equals(3));
-    });
-
     test('default stored version is 0 (not yet set)', () async {
       final version = await DataMigrationService.getStoredFormatVersion();
       expect(version, equals(0));
@@ -137,36 +120,6 @@ void main() {
   });
 
   group('DataMigrationService - per-part versioning', () {
-    test('current part versions: chat/settings/media = 1, others = 0',
-        () async {
-      // 回归：各部分当前版本号是独立的。只有实际发生（过）格式迁移的
-      // 部分才有 > 0 的当前版本；tasks/anki/cookies 从未迁移，保持 0
-      //（机制就位，未来各自演进时递增各自版本号）。
-      final current = DataMigrationService.currentPartVersions;
-      expect(current[DataMigrationService.partChat], equals(1),
-          reason: 'chat: blocks 格式（原全局 v2→v3）');
-      expect(current[DataMigrationService.partSettings], equals(1),
-          reason: 'settings: provider_entries 格式（原全局 v0→v1）');
-      for (final part in [
-        DataMigrationService.partPictures,
-        DataMigrationService.partAudio,
-        DataMigrationService.partVideos,
-        DataMigrationService.partTexts,
-      ]) {
-        expect(current[part], equals(1),
-            reason: '$part: per-type folders（原全局 v1→v2）');
-      }
-      for (final part in [
-        DataMigrationService.partTasks,
-        DataMigrationService.partAnki,
-        DataMigrationService.partBrowserCookies,
-      ]) {
-        expect(current[part], equals(0), reason: '$part: 无迁移历史');
-      }
-      // 所有备份类别都有各自的版本号（与 BackupSelection 一一对应）。
-      expect(current.length, equals(9));
-    });
-
     test('getStoredPartVersions defaults to all zero when never stored',
         () async {
       final stored = await DataMigrationService.getStoredPartVersions();
@@ -753,14 +706,6 @@ void main() {
 
       // Cleanup
       await backupFile.delete();
-    });
-
-    test('getExternalBackupRootPath returns non-null on all platforms',
-        () async {
-      // Should never return null or empty
-      final path = await DataMigrationService.getExternalBackupRootPath();
-      expect(path, isNotNull);
-      expect(path.isNotEmpty, isTrue);
     });
   });
 

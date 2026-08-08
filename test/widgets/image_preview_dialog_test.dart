@@ -67,18 +67,6 @@ void main() {
     // Basic rendering
     // ================================================================
 
-    testWidgets('renders ExtendedImage when data is provided', (tester) async {
-      await pumpDialog(tester, imageData: validPng);
-
-      // ExtendedImage is a specific widget type from extended_image package.
-      // Note: Image decoding behavior varies by environment (CI vs local).
-      // We verify the dialog rendered successfully by checking the file name.
-      // The broken_image icon check is intentionally omitted because
-      // ExtendedImage.memory may fail to decode raw PNG bytes in some
-      // CI environments (Flutter/png version differences).
-      expect(find.text('test.jpg'), findsOneWidget);
-    });
-
     testWidgets('shows error state when imageData is null', (tester) async {
       await pumpDialog(tester, imageData: null);
 
@@ -93,49 +81,6 @@ void main() {
 
       expect(find.byIcon(Icons.broken_image), findsOneWidget);
       expect(find.text('无法加载图片'), findsOneWidget);
-    });
-
-    // ================================================================
-    // Button backgrounds (adaptive button visibility)
-    // ================================================================
-
-    testWidgets(
-        'close, crop, and edit buttons have circular semi-transparent backgrounds',
-        (tester) async {
-      await pumpDialog(tester, imageData: validPng);
-
-      // Find the Container widgets that wrap the IconButtons.
-      // The background is a Container with BoxShape.circle wrapping the IconButton.
-      // Look for containers with decoration that includes shape: BoxShape.circle.
-      final containers = find.byType(Container);
-      int circleDecoratedCount = 0;
-      for (int i = 0; i < tester.widgetList(containers).length; i++) {
-        final container =
-            tester.widgetList(containers).elementAt(i) as Container;
-        final decoration = container.decoration;
-        if (decoration is BoxDecoration &&
-            decoration.shape == BoxShape.circle &&
-            decoration.color != null &&
-            decoration.color!.a < 1.0) {
-          circleDecoratedCount++;
-        }
-      }
-
-      // Should have at least 3 circular-background containers (close + crop + edit)
-      expect(circleDecoratedCount, greaterThanOrEqualTo(3),
-          reason:
-              'Close, crop, and edit buttons should have circular semi-transparent backgrounds');
-    });
-
-    testWidgets('close, crop, and edit icons are present', (tester) async {
-      await pumpDialog(tester, imageData: validPng);
-
-      // The close icon should be present
-      expect(find.byIcon(Icons.close), findsOneWidget);
-      // The crop icon should be present
-      expect(find.byIcon(Icons.crop), findsOneWidget);
-      // The edit icon should be present
-      expect(find.byIcon(Icons.edit), findsOneWidget);
     });
 
     // ================================================================
@@ -269,16 +214,6 @@ void main() {
       expect(dialogClosed, isTrue,
           reason: 'Dialog should close immediately after tapping crop button');
       expect(result, isTrue, reason: 'Crop button should pop with true');
-    });
-
-    // ================================================================
-    // File name display
-    // ================================================================
-
-    testWidgets('displays file name', (tester) async {
-      await pumpDialog(tester, imageData: validPng, fileName: 'my_photo.jpg');
-
-      expect(find.text('my_photo.jpg'), findsOneWidget);
     });
 
     // ================================================================

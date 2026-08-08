@@ -403,18 +403,6 @@ void main() {
   });
 
   group('MathCanvas3DPainter - rendering stability', () {
-    testWidgets('painter handles empty object list without crash',
-        (tester) async {
-      const painter = MathCanvas3DPainter(
-        cameraDistance: 10,
-        cameraTheta: 0,
-        cameraPhi: 0.785,
-        canvasWidth: 800,
-        canvasHeight: 600,
-      );
-      expect(painter, isNotNull);
-    });
-
     testWidgets('painter shouldRepaint detects object version changes',
         (tester) async {
       const p1 = MathCanvas3DPainter(

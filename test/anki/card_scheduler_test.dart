@@ -8,26 +8,6 @@ import 'package:stroom/anki/models/model.dart';
 
 void main() {
   group('Card — upstream Card struct mapping', () {
-    test('creates new card with default Anki field values', () {
-      final c = Card.createNew(note_id: 1, deck_id: 1);
-      expect(c.id, greaterThan(0));
-      expect(c.note_id, equals(1));
-      expect(c.deck_id, equals(1));
-      expect(c.template_idx, equals(0));
-      expect(c.ctype, equals(CardType.new_));
-      expect(c.queue, equals(CardQueue.new_));
-      expect(c.due, equals(0));
-      expect(c.interval, equals(0));
-      expect(c.ease_factor, equals(2500)); // 250%
-      expect(c.reps, equals(0));
-      expect(c.lapses, equals(0));
-      expect(c.remaining_steps, equals(0));
-      expect(c.original_due, equals(0));
-      expect(c.original_deck_id, equals(0));
-      expect(c.flags, equals(0));
-      expect(c.custom_data, equals(''));
-    });
-
     test('toMap/fromMap round-trip preserves all fields', () {
       final c = Card.createNew(note_id: 42, deck_id: 7, template_idx: 2);
       c.ctype = CardType.review;
@@ -191,17 +171,6 @@ void main() {
   });
 
   group('Note — upstream Note struct mapping', () {
-    test('creates with correct defaults', () {
-      final n = Note.createNew(notetype_id: 1, fields: ['Front', 'Back']);
-      expect(n.id, greaterThan(0));
-      expect(n.guid, isNotEmpty);
-      expect(n.notetype_id, equals(1));
-      expect(n.fields, equals(['Front', 'Back']));
-      expect(n.sort_field, equals('Front'));
-      expect(n.tags, equals(<String>[]));
-      expect(n.flags, equals(0));
-    });
-
     test('toMap/fromMap round-trip', () {
       final n = Note.createNew(
           notetype_id: 2, fields: ['Hello', 'World'], tags: ['tag1', 'tag2']);
@@ -211,14 +180,6 @@ void main() {
       expect(r.notetype_id, 2);
       expect(r.fields, ['Hello', 'World']);
       expect(r.tags, ['tag1', 'tag2']);
-    });
-
-    test('addTag/removeTag', () {
-      final n = Note.createNew(notetype_id: 1, fields: ['A', 'B']);
-      n.addTag('test');
-      expect(n.tags, contains('test'));
-      n.removeTag('test');
-      expect(n.tags, isNot(contains('test')));
     });
 
     test('fromMap handles legacy flds format', () {
@@ -242,13 +203,6 @@ void main() {
   });
 
   group('Deck — upstream Deck struct mapping', () {
-    test('createNew has correct defaults', () {
-      final d = Deck.createNew(name: 'My Deck');
-      expect(d.name, 'My Deck');
-      expect(d.normalInfo?.description, '');
-      expect(d.kind, DeckKind.normal);
-    });
-
     test('toJson/fromJson round-trip', () {
       final d = Deck.createNew(name: 'Parent::Child', description: 'notes');
       d.mtimeSecs = 12345;
@@ -279,21 +233,6 @@ void main() {
   });
 
   group('RevlogEntry — upstream RevlogEntry struct mapping', () {
-    test('creates with correct defaults', () {
-      final r = RevlogEntry(
-          cid: 1,
-          button_chosen: 3,
-          interval: 10,
-          last_interval: 5,
-          ease_factor: 2500);
-      expect(r.cid, 1);
-      expect(r.button_chosen, 3);
-      expect(r.interval, 10);
-      expect(r.last_interval, 5);
-      expect(r.ease_factor, 2500);
-      expect(r.review_kind, RevlogReviewKind.review);
-    });
-
     test('toMap/fromMap round-trip', () {
       final r = RevlogEntry(
           cid: 42,

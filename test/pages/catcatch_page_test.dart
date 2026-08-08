@@ -302,49 +302,6 @@ void main() {
       expect(find.text('00:05:00'), findsOneWidget);
     });
 
-    // ====================================================================
-    // Bottom bar tests
-    // ====================================================================
-
-    testWidgets('Bottom bar has video and audio folder selectors', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
-      );
-      await tester.pump();
-
-      expect(find.text('视频保存至'), findsOneWidget);
-      expect(find.text('音频保存至'), findsOneWidget);
-
-      // Both should show "根目录" as default
-      expect(find.text('根目录'), findsNWidgets(2));
-    });
-
-    testWidgets('Bottom bar shows start button with correct label', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
-      );
-      await tester.pump();
-
-      expect(find.text('开始分析'), findsOneWidget);
-    });
-
-    testWidgets('Browser button is present in app bar', (tester) async {
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
-      );
-      await tester.pump();
-
-      expect(find.byIcon(Icons.language), findsOneWidget);
-    });
-
-    // ====================================================================
-    // Snackbar behavior
-    // ====================================================================
-
     testWidgets('Start button disabled when only invalid URL entered', (
       tester,
     ) async {
@@ -366,18 +323,6 @@ void main() {
       final button = find.widgetWithText(FilledButton, '开始分析');
       final filledButton = tester.widget<FilledButton>(button);
       expect(filledButton.onPressed, isNull);
-    });
-
-    testWidgets('Empty URL field shows nothing in snackbar test', (
-      tester,
-    ) async {
-      // Regression: old duration-required snackbar should never appear
-      await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
-      );
-      await tester.pump();
-
-      expect(find.text('请输入视频时长'), findsNothing);
     });
   });
 

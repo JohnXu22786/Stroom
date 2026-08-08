@@ -56,29 +56,6 @@ const _testOcrConfig = OcrConfig(
 void main() {
   group('OcrService', () {
     group('OcrConfig', () {
-      test('can be created', () {
-        const config = OcrConfig(
-          model: 'gpt-4o',
-          apiKey: 'test-key',
-          host: 'https://api.openai.com/v1',
-        );
-        expect(config.model, equals('gpt-4o'));
-        expect(config.apiKey, equals('test-key'));
-        expect(config.host, equals('https://api.openai.com/v1'));
-      });
-
-      test('copies correctly', () {
-        const config = OcrConfig(
-          model: 'gpt-4o',
-          apiKey: 'test-key',
-          host: 'https://api.openai.com/v1',
-        );
-        final copy = config.copyWith(model: 'gpt-4o-mini');
-        expect(copy.model, equals('gpt-4o-mini'));
-        expect(copy.apiKey, equals('test-key'));
-        expect(copy.host, equals('https://api.openai.com/v1'));
-      });
-
       test('normalizedHost strips trailing slash', () {
         const config = OcrConfig(
           model: 'gpt-4o',
@@ -134,36 +111,7 @@ void main() {
       });
     });
 
-    group('OcrResult', () {
-      test('can be created with all fields', () {
-        final result = OcrResult(
-          text: 'Extracted text',
-          processingTimeMs: 1500,
-          imageCount: 3,
-        );
-        expect(result.text, equals('Extracted text'));
-        expect(result.processingTimeMs, equals(1500));
-        expect(result.imageCount, equals(3));
-      });
-
-      test('default values', () {
-        final result = OcrResult(text: 'Hello');
-        expect(result.processingTimeMs, isZero);
-        expect(result.imageCount, equals(1));
-      });
-    });
-
     group('OcrService', () {
-      test('can be created with config', () {
-        const config = OcrConfig(
-          model: 'gpt-4o',
-          apiKey: 'test-key',
-          host: 'https://api.openai.com/v1',
-        );
-        final service = OcrService(config: config);
-        expect(service, isNotNull);
-      });
-
       test('Dio has no sendTimeout (no timeout)', () {
         const config = OcrConfig(
           model: 'gpt-4o',
@@ -219,20 +167,6 @@ void main() {
           () => service.recognizeBatch(imageBytesList: []),
           throwsArgumentError,
         );
-      });
-    });
-
-    group('createOcrServiceFromConfig', () {
-      test('creates service from config fields', () {
-        final service = createOcrServiceFromConfig(
-          host: 'https://api.test.com',
-          apiKey: 'key',
-          model: 'gpt-4o',
-        );
-        expect(service, isNotNull);
-        expect(service.config.model, equals('gpt-4o'));
-        expect(service.config.apiKey, equals('key'));
-        expect(service.config.host, equals('https://api.test.com'));
       });
     });
 

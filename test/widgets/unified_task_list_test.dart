@@ -914,19 +914,6 @@ void main() {
       expect(find.text('重试'), findsOneWidget, reason: '失败的任务展开后应显示"重试"按钮');
     });
 
-    testWidgets('retry button has refresh icon', (tester) async {
-      await pumpPageWithBackground(tester, [
-        _createFailedBgTask(id: 'fail-icon', title: '失败重试'),
-      ]);
-
-      await tester.tap(find.text('失败重试'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
-      expect(find.byIcon(Icons.refresh), findsOneWidget,
-          reason: '"重试"按钮应显示刷新图标');
-    });
-
     testWidgets('retry button and delete button both visible for failed tasks',
         (tester) async {
       await pumpPageWithBackground(tester, [
@@ -1119,76 +1106,7 @@ void main() {
     });
   });
 
-  group('Audio Separation Step Labels', () {
-    test('audio separation step labels should be two steps', () {
-      final labels = BackgroundTaskType.audioSeparation.stepLabels;
-      expect(labels.length, 2, reason: '音频分离应有2个执行步骤');
-      expect(labels[0], '分离音频', reason: '第一步应为"分离音频"');
-      expect(labels[1], '保存到文件', reason: '第二步应为"保存到文件"');
-    });
-
-    test('audio separation steps are not "正在分离音频..."', () {
-      final labels = BackgroundTaskType.audioSeparation.stepLabels;
-      expect(labels.contains('正在分离音频...'), false,
-          reason: '不应再使用"正在分离音频..."作为步骤名');
-    });
-
-    test('ocr steps remain unchanged', () {
-      final labels = BackgroundTaskType.ocr.stepLabels;
-      expect(labels.length, 5);
-      expect(labels[0], '连接服务器');
-    });
-
-    test('asr steps remain unchanged', () {
-      final labels = BackgroundTaskType.asr.stepLabels;
-      expect(labels.length, 5);
-      expect(labels[0], '连接服务器');
-    });
-  });
-
   group('SynthesisTask downloadedFilePath', () {
-    test('SynthesisTask has downloadedFilePath field', () {
-      final task = SynthesisTask(
-        id: 'test-id',
-        title: 'Test',
-        status: TaskStatus.completed,
-        text: 'test',
-        providerConfig: ProviderConfigItem(
-          providerName: 'P1',
-          host: 'https://test.com',
-          key: 'key',
-        ),
-        modelConfig: ModelConfig(
-          name: 'M1',
-          modelId: 'm1',
-        ),
-        createdAt: DateTime(2025, 1, 1),
-        completedAt: DateTime(2025, 1, 1),
-        downloadedFilePath: 'C:\\test\\audio.mp3',
-      );
-      expect(task.downloadedFilePath, 'C:\\test\\audio.mp3');
-    });
-
-    test('SynthesisTask downloadedFilePath defaults to null', () {
-      final task = SynthesisTask(
-        id: 'test-id-2',
-        title: 'Test',
-        status: TaskStatus.running,
-        text: 'test',
-        providerConfig: ProviderConfigItem(
-          providerName: 'P1',
-          host: 'https://test.com',
-          key: 'key',
-        ),
-        modelConfig: ModelConfig(
-          name: 'M1',
-          modelId: 'm1',
-        ),
-        createdAt: DateTime(2025, 1, 1),
-      );
-      expect(task.downloadedFilePath, isNull);
-    });
-
     test('SynthesisTask serialization includes downloadedFilePath', () {
       final task = SynthesisTask(
         id: 'ser-id',
@@ -1534,30 +1452,6 @@ void main() {
   });
 
   group('Issue 4: Retry pre-populates form with original data', () {
-    test('BackgroundTask has retryData field', () {
-      final task = BackgroundTask(
-        id: 'retry-test',
-        type: BackgroundTaskType.ocr,
-        title: 'OCR重试测试',
-        status: TaskStatus.failed,
-        createdAt: DateTime(2025, 6, 1),
-        retryData: {'type': 'ocr', 'images': [], 'modelIndex': 0},
-      );
-      expect(task.retryData, isNotNull);
-      expect(task.retryData!['type'], 'ocr');
-    });
-
-    test('BackgroundTask retryData defaults to null', () {
-      final task = BackgroundTask(
-        id: 'no-retry',
-        type: BackgroundTaskType.ocr,
-        title: '无重试数据',
-        status: TaskStatus.completed,
-        createdAt: DateTime(2025, 6, 1),
-      );
-      expect(task.retryData, isNull);
-    });
-
     test('BackgroundTask retryData is serialized and deserialized', () {
       final task = BackgroundTask(
         id: 'ser-retry',

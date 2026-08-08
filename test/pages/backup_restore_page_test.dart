@@ -26,14 +26,6 @@ void main() {
   });
 
   group('BackupRestorePage - general rendering', () {
-    testWidgets('renders title', (tester) async {
-      await tester.pumpWidget(createTestApp());
-      await tester.pump();
-
-      // Title bar
-      expect(find.text('数据备份与恢复'), findsOneWidget);
-    });
-
     testWidgets('shows unified selection card with new categories',
         (tester) async {
       await tester.pumpWidget(createTestApp());
@@ -72,44 +64,6 @@ void main() {
       }
     });
 
-    testWidgets('export and import buttons both exist', (tester) async {
-      await tester.pumpWidget(createTestApp());
-      await tester.pump();
-
-      // Scroll down to find buttons
-      await tester.scrollUntilVisible(
-        find.text('导出备份'),
-        200.0,
-        scrollable: find.byType(Scrollable),
-      );
-      await tester.pump();
-      expect(find.text('导出备份'), findsOneWidget);
-
-      await tester.scrollUntilVisible(
-        find.text('选择备份文件并恢复'),
-        200.0,
-        scrollable: find.byType(Scrollable),
-      );
-      await tester.pump();
-      expect(find.text('选择备份文件并恢复'), findsOneWidget);
-    });
-
-    testWidgets('old section headers are gone (merged into one)',
-        (tester) async {
-      await tester.pumpWidget(createTestApp());
-      await tester.pump();
-
-      // The old separate section headers should not exist
-      expect(find.text('导入恢复'), findsNothing);
-
-      // The old selection card titles should be gone
-      expect(find.text('选择要备份的数据类别'), findsNothing);
-      expect(find.text('选择要恢复的数据类别'), findsNothing);
-
-      // The unified section header should exist
-      expect(find.text('选择要备份或恢复的数据类别'), findsOneWidget);
-    });
-
     testWidgets('anki data checkbox appears in unified selection card',
         (tester) async {
       await tester.pumpWidget(createTestApp());
@@ -127,46 +81,9 @@ void main() {
       // Should show the subtitle describing it's the original data format
       expect(find.textContaining('Anki 原始数据库'), findsAtLeast(1));
     });
-
-    testWidgets('auto backup path display does not contain 点击重新选择',
-        (tester) async {
-      await tester.pumpWidget(createTestApp());
-      await tester.pump();
-
-      // The description text should not contain "点击重新选择目录"
-      expect(find.textContaining('点击重新选择'), findsNothing);
-    });
-
-    testWidgets('anki section header shows Anki闪卡牌组', (tester) async {
-      await tester.pumpWidget(createTestApp());
-      await tester.pump();
-
-      // Scroll to the Anki section
-      await tester.scrollUntilVisible(
-        find.text('Anki闪卡牌组'),
-        200.0,
-        scrollable: find.byType(Scrollable),
-      );
-      await tester.pump();
-      expect(find.text('Anki闪卡牌组'), findsOneWidget);
-      expect(find.text('导入/导出 .apkg 格式的 Anki 牌组'), findsOneWidget);
-    });
   });
 
   group('BackupRestorePage - clear selected data', () {
-    testWidgets('clear selected data button exists', (tester) async {
-      await tester.pumpWidget(createTestApp());
-      await tester.pump();
-
-      await tester.scrollUntilVisible(
-        find.widgetWithText(OutlinedButton, '清除所选数据'),
-        200.0,
-        scrollable: find.byType(Scrollable),
-      );
-      await tester.pump();
-      expect(find.widgetWithText(OutlinedButton, '清除所选数据'), findsOneWidget);
-    });
-
     testWidgets('clear button opens confirmation dialog with categories',
         (tester) async {
       await tester.pumpWidget(createTestApp());

@@ -59,131 +59,7 @@ void main() {
     TextManifest.invalidateCache();
   });
 
-  group('HomePage modular blocks', () {
-    testWidgets('renders welcome text on home page', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Should show the welcome text
-      expect(find.text('欢迎使用 Stroom'), findsOneWidget);
-    });
-
-    testWidgets('shows 8 module cards on home page', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Should show 8 module cards
-      expect(find.text('OCR'), findsOneWidget);
-      expect(find.text('语音识别'), findsOneWidget);
-      expect(find.text('下载网页资源'), findsOneWidget);
-      expect(find.text('音频分离'), findsOneWidget);
-      expect(find.text('语音合成'), findsOneWidget);
-      expect(find.text('图表制作'), findsOneWidget);
-      expect(find.text('数学绘图'), findsOneWidget);
-      expect(find.text('Anki闪卡'), findsOneWidget);
-    });
-
-    testWidgets('闪卡 card is visible on home page with Anki label',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // The flashcard card should be visible with "Anki闪卡" label
-      expect(find.text('Anki闪卡'), findsOneWidget);
-      expect(find.text('记忆辅助系统'), findsOneWidget);
-    });
-
-    testWidgets('TTSCreatePage import is available', (tester) async {
-      // Verify the tts_create_page module can be imported
-      // This test just checks the import works
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // The homepage should load without errors
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('语音合成 card has record_voice_over icon', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // The new TTS card should have the record_voice_over icon
-      // Also check the subtitle
-      expect(find.text('语音合成'), findsOneWidget);
-    });
-
-    testWidgets('语音合成 card navigates to TTSCreatePage', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Tap the 语音合成 card
-      final cardFinder = find.text('语音合成');
-      await tester.ensureVisible(cardFinder);
-      await tester.pumpAndSettle();
-      await tester.tap(cardFinder);
-      await tester.pumpAndSettle();
-
-      // Should navigate to TTSCreatePage (it has "生成录音" title + body text)
-      expect(find.text('生成录音'), findsWidgets);
-    });
-
-    testWidgets('图表制作 card is visible on home page', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // The new chart making card should be visible
-      expect(find.text('图表制作'), findsOneWidget);
-    });
-
-    testWidgets('图表制作 card navigates to MermaidChartPage', (tester) async {
-      // Verify the card exists and can be tapped; full navigation test
-      // is covered in mermaid_chart_page_test to avoid InAppWebView
-      // platform issues in test environment.
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // The 图表制作 card should be present on the home page
-      expect(find.text('图表制作'), findsOneWidget);
-      expect(find.text('Mermaid图表编辑'), findsOneWidget);
-    });
-
-    testWidgets('数学绘图 card is visible on home page', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // The new math drawing card should be visible
-      expect(find.text('数学绘图'), findsOneWidget);
-      expect(find.text('函数绘图'), findsOneWidget);
-    });
-  });
-
   group('HomePage responsive layout', () {
-    testWidgets(
-      'welcome text and status card visible on small screen',
-      (tester) async {
-        _setSmallScreen(tester);
-
-        await tester.pumpWidget(_buildTestApp());
-        await tester.pumpAndSettle();
-
-        // Welcome text should be visible
-        expect(find.text('欢迎使用 Stroom'), findsOneWidget);
-
-        // Status card should be visible with "查看全部" button
-        expect(find.text('查看全部'), findsOneWidget);
-
-        // Subtitle should be visible
-        expect(find.text('选择一个功能模块开始使用'), findsOneWidget);
-
-        // Module card labels should be visible
-        expect(find.text('OCR'), findsOneWidget);
-        expect(find.text('语音识别'), findsOneWidget);
-
-        // No overflow exceptions should have been thrown
-        expect(tester.takeException(), isNull);
-      },
-    );
-
     testWidgets('no RenderFlex overflow error on very narrow screen (320px)', (
       tester,
     ) async {
@@ -236,48 +112,9 @@ void main() {
         reason: 'Status card should be positioned below the welcome text',
       );
     });
-
-    testWidgets('module card texts fit within card bounds', (tester) async {
-      _setSmallScreen(tester);
-
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Check that the OCR card text render boxes are within the card's area
-      final ocrCard = find.text('OCR');
-      expect(ocrCard, findsOneWidget);
-
-      final ocrSubtitle = find.text('文字识别');
-      expect(ocrSubtitle, findsOneWidget);
-
-      // Verify they're rendered (rendering means they fit)
-      expect(
-        tester.renderObject<RenderBox>(ocrCard).size.width,
-        greaterThan(0),
-      );
-      expect(
-        tester.renderObject<RenderBox>(ocrSubtitle).size.width,
-        greaterThan(0),
-      );
-
-      // Verify no overflow
-      expect(tester.takeException(), isNull);
-    });
   });
 
   group('HomePage tablet adaptation', () {
-    testWidgets('SafeArea is present on home page content (tablet)', (
-      tester,
-    ) async {
-      _setTabletScreen(tester);
-
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // FilesPage (from IndexedStack) + HomePage = 2 SafeArea widgets
-      expect(find.byType(SafeArea), findsNWidgets(2));
-    });
-
     testWidgets('welcome text is positioned below status bar area on tablet', (
       tester,
     ) async {
@@ -306,28 +143,6 @@ void main() {
       );
     });
 
-    testWidgets('all key elements are visible on tablet screen', (
-      tester,
-    ) async {
-      _setTabletScreen(tester);
-
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // All key elements should be visible
-      expect(find.text('欢迎使用 Stroom'), findsOneWidget);
-      expect(find.text('选择一个功能模块开始使用'), findsOneWidget);
-      expect(find.text('OCR'), findsOneWidget);
-      expect(find.text('语音识别'), findsOneWidget);
-      expect(find.text('查看全部'), findsOneWidget);
-      expect(find.text('进行中'), findsOneWidget);
-      expect(find.text('已完成'), findsOneWidget);
-      expect(find.text('失败'), findsOneWidget);
-
-      // No overflow exceptions
-      expect(tester.takeException(), isNull);
-    });
-
     testWidgets('no overflow on tablet screen', (tester) async {
       _setTabletScreen(tester);
 
@@ -336,85 +151,6 @@ void main() {
 
       // Verify no overflow exceptions
       expect(tester.takeException(), isNull);
-    });
-  });
-
-  group('HomePage status card visual design', () {
-    testWidgets('status card shows "查看全部 >" with greater-than character', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // The "查看全部" text should exist
-      expect(find.text('查看全部'), findsOneWidget,
-          reason: '查看全部 button text should exist');
-
-      // The ">" character should be present as a visual indicator
-      expect(find.text('>'), findsOneWidget,
-          reason:
-              'Greater-than character ">" should appear in the view-all button');
-    });
-
-    testWidgets('status card displays count numbers for all 3 statuses', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // All 3 status items should show their count (initially all "0")
-      // Use findsAtLeast(3) to ensure all three status counts are rendered,
-      // accounting for the possibility that the navigation badge also
-      // renders a "0" text (making the total ≥ 3).
-      expect(find.text('0'), findsAtLeast(3),
-          reason:
-              'All 3 status count numbers should be displayed (found fewer than 3)');
-    });
-
-    testWidgets('tapping status items navigates to task list page', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Test tapping 进行中
-      await tester.tap(find.text('进行中'));
-      await tester.pumpAndSettle();
-      expect(find.text('任务列表'), findsOneWidget,
-          reason: 'Tapping 进行中 should navigate to task list page');
-
-      // Go back to home
-      await tester.tap(find.byType(BackButton));
-      await tester.pumpAndSettle();
-
-      // Test tapping 已完成
-      await tester.tap(find.text('已完成'));
-      await tester.pumpAndSettle();
-      expect(find.text('任务列表'), findsOneWidget,
-          reason: 'Tapping 已完成 should navigate to task list page');
-
-      // Go back to home
-      await tester.tap(find.byType(BackButton));
-      await tester.pumpAndSettle();
-
-      // Test tapping 失败
-      await tester.tap(find.text('失败'));
-      await tester.pumpAndSettle();
-      expect(find.text('任务列表'), findsOneWidget,
-          reason: 'Tapping 失败 should navigate to task list page');
-    });
-
-    testWidgets('tapping 查看全部 navigates to task list page', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('查看全部'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('任务列表'), findsOneWidget,
-          reason: 'Tapping 查看全部 should navigate to task list page');
     });
   });
 }

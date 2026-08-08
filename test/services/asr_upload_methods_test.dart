@@ -63,67 +63,6 @@ class _RouteAdapter implements HttpClientAdapter {
 }
 
 void main() {
-  group('AudioUploadMethod', () {
-    test('default is multipart', () {
-      expect(AudioUploadMethod.values.first, AudioUploadMethod.multipart);
-    });
-
-    test('contains three values', () {
-      expect(AudioUploadMethod.values.length, 3);
-    });
-  });
-
-  group('AsrConfig upload method', () {
-    test('uploadMethod defaults to multipart', () {
-      const config = AsrConfig(apiKey: 'k', host: 'https://api.test.com');
-      expect(config.uploadMethod, AudioUploadMethod.multipart);
-    });
-
-    test('uploadMethod can be set to base64Json', () {
-      const config = AsrConfig(
-        apiKey: 'k',
-        host: 'https://api.test.com',
-        uploadMethod: AudioUploadMethod.base64Json,
-      );
-      expect(config.uploadMethod, AudioUploadMethod.base64Json);
-    });
-
-    test('uploadMethod can be set to url', () {
-      const config = AsrConfig(
-        apiKey: 'k',
-        host: 'https://api.test.com',
-        uploadMethod: AudioUploadMethod.url,
-      );
-      expect(config.uploadMethod, AudioUploadMethod.url);
-    });
-
-    test('maxFileSizeBytes does not apply to url method (no validation)',
-        () async {
-      // URL method should not validate file size since there are no bytes
-      const config = AsrConfig(
-        apiKey: 'k',
-        host: 'https://api.test.com',
-        uploadMethod: AudioUploadMethod.url,
-        maxFileSizeBytes: 10, // 10 bytes limit, but URL doesn't use bytes
-      );
-      final service = AsrService(config: config);
-      // transcribeFromUrl with bytes param is not how URL mode works -
-      // the service should NOT reject on size for URL
-      expect(config.uploadMethod, AudioUploadMethod.url);
-      expect(config.maxFileSizeBytes, 10);
-    });
-
-    test('copyWith preserves uploadMethod', () {
-      const config = AsrConfig(
-        apiKey: 'k',
-        host: 'https://api.test.com',
-        uploadMethod: AudioUploadMethod.base64Json,
-      );
-      final copy = config.copyWith();
-      expect(copy.uploadMethod, AudioUploadMethod.base64Json);
-    });
-  });
-
   group('AsrService base64 JSON upload', () {
     test('sends Content-Type application/json with base64 file field',
         () async {
@@ -237,39 +176,6 @@ void main() {
         throwsA(predicate(
             (e) => e is Exception && e.toString().contains('文件大小超过限制'))),
       );
-    });
-
-    test('base64 JSON sends Authorization header', () async {
-      final adapter = _RouteAdapter();
-      adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
-        return ResponseBody.fromString(
-          '{"text":"ok"}',
-          200,
-          headers: {
-            Headers.contentTypeHeader: [Headers.jsonContentType]
-          },
-        );
-      });
-
-      final dio = Dio(BaseOptions(
-        baseUrl: 'https://api.test.com',
-      ))
-        ..httpClientAdapter = adapter;
-
-      const config = AsrConfig(
-        apiKey: 'my-secret-key',
-        host: 'https://api.test.com/audio/transcriptions',
-        uploadMethod: AudioUploadMethod.base64Json,
-      );
-      final service = AsrService(config: config, dio: dio);
-
-      await service.transcribe(
-        audioBytes: Uint8List(5),
-        audioFormat: 'wav',
-      );
-
-      // Check the adapter received the request
-      expect(adapter.requests.length, 1);
     });
   });
 

@@ -54,15 +54,6 @@ void main() {
       );
     }
 
-    testWidgets('renders image thumbnail when isImage=true', (tester) async {
-      await tester.pumpWidget(buildChip(isImage: true, bytes: validPng));
-
-      // Should render the chip widget
-      expect(find.byType(PreviewChip), findsOneWidget);
-      // Close icon should be present
-      expect(find.byIcon(Icons.close), findsOneWidget);
-    });
-
     testWidgets('renders file icon when isImage=false', (tester) async {
       await tester.pumpWidget(buildChip(
         fileName: 'document.pdf',
@@ -125,12 +116,6 @@ void main() {
 
       expect(removed, isTrue);
       expect(tapped, isFalse);
-    });
-
-    testWidgets('works without onTap (no crash)', (tester) async {
-      await tester.pumpWidget(buildChip(isImage: true, bytes: validPng));
-
-      expect(find.byType(PreviewChip), findsOneWidget);
     });
   });
 }

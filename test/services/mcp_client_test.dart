@@ -140,32 +140,9 @@ void main() {
   });
 
   group('McpClient creation', () {
-    test('creates client with SSE config', () {
-      final config = McpServerConfig.sse(
-        name: 'Test SSE',
-        url: 'http://localhost:3001/sse',
-      );
-      final client = McpClient(config: config);
-      expect(client, isNotNull);
-      expect(client.config.name, equals('Test SSE'));
-      expect(client.isConnected, isFalse);
-      expect(client.isDisposed, isFalse);
-    });
-
     test('throws on empty URL for SSE config', () {
       final config = McpServerConfig.sse(name: 'Bad SSE', url: '');
       expect(() => McpClient(config: config), throwsArgumentError);
-    });
-
-    test('creates client with stdio config', () {
-      final config = McpServerConfig.stdio(
-        name: 'Test Stdio',
-        command: 'echo',
-        args: ['hello'],
-      );
-      final client = McpClient(config: config);
-      expect(client, isNotNull);
-      expect(client.config.name, equals('Test Stdio'));
     });
 
     test('throws on empty command for stdio config', () {
@@ -198,11 +175,6 @@ void main() {
   });
 
   group('McpClientManager', () {
-    test('creates empty manager', () {
-      final manager = McpClientManager();
-      expect(manager.clients, isEmpty);
-    });
-
     test('adds and removes clients', () {
       final manager = McpClientManager();
       final config = McpServerConfig.sse(

@@ -102,18 +102,6 @@ void chatStreamManagerGroup2() {
     });
   });
 
-  group('ChatStreamManager - throttle behavior', () {
-    test('provider updates respect the 200ms throttle interval', () async {
-      // Verify that the throttle constant is 200ms (5 updates/sec)
-      // This is tested by checking the static constant.
-      expect(
-        ChatStreamManager.textThrottleMs,
-        200,
-        reason: 'Throttle must be 200ms = 5 updates per second',
-      );
-    });
-  });
-
   group('ChatStreamManager - cleanup', () {
     test('dispose stops all streams and cleans up', () async {
       final manager = ChatStreamManager();

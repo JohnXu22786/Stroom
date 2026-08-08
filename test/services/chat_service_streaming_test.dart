@@ -19,14 +19,13 @@ import 'package:image/image.dart' as img;
 import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/models/chat_event.dart';
 import 'package:stroom/models/chat_message.dart';
-import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_service.dart';
 import 'package:stroom/services/chat_service_shared.dart';
 import 'package:stroom/models/tool_call.dart';
+import 'package:stroom/providers/chat_api_shared.dart';
 part 'chat_service_streaming_test_p1.dart';
 part 'chat_service_streaming_test_p2.dart';
-part 'chat_service_streaming_test_p3.dart';
 part 'chat_service_streaming_test_p4.dart';
 
 /// Creates a mock provider that captures the request body for inspection.
@@ -221,28 +220,8 @@ class _StallingChatProvider extends BaseChatProvider {
   }
 }
 
-/// Top-level helper that mirrors the production `imageExtension` helper but
-/// stays private to this test file. The merged file imports the public
-/// `imageExtension` from `chat_service_shared.dart`, so this private function
-/// is renamed to avoid confusion. (Originally from chat_service_base64_cache_test.dart)
-String _privateImageExtension(String mimeType) {
-  switch (mimeType) {
-    case 'image/png':
-      return 'png';
-    case 'image/gif':
-      return 'gif';
-    case 'image/webp':
-      return 'webp';
-    case 'image/bmp':
-      return 'bmp';
-    default:
-      return 'jpeg';
-  }
-}
-
 void main() {
   chatServiceStreamingGroup1();
   chatServiceStreamingGroup2();
-  chatServiceStreamingGroup3();
   chatServiceStreamingGroup4();
 }

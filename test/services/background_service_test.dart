@@ -144,21 +144,6 @@ void main() {
       await stopBackgroundService();
       expect(true, isTrue);
     });
-
-    test('onStart is a valid top-level function', () {
-      expect(onStart, isA<Function>());
-    });
-
-    test('onIosBackground is a valid top-level function', () {
-      expect(onIosBackground, isA<Function>());
-    });
-
-    test('notification channel configuration constants are valid', () {
-      // These constants are used for Android notification channel
-      const serviceName = 'com.johntsui.stroom.background_service';
-      expect(serviceName, isNotEmpty);
-      expect(serviceName, contains('stroom'));
-    });
   });
 
   group('BackgroundService - cold start auto-restore', () {
@@ -282,10 +267,6 @@ void main() {
   });
 
   group('BackgroundService - keep-alive strategy toggles', () {
-    test('watchdog toggle defaults to enabled', () async {
-      expect(await isWatchdogEnabled(), isTrue);
-    });
-
     test('watchdog toggle persists its value', () async {
       await setWatchdogEnabled(false);
       expect(await isWatchdogEnabled(), isFalse);

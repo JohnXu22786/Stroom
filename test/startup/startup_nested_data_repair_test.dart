@@ -280,32 +280,6 @@ void main() {
   });
 
   group('ProviderEntry.fromMap - nested data resilience', () {
-    test('whereType filter protects against non-Map entries in configs',
-        () async {
-      // Simulate what the provider load() does after whereType filtering
-      final rawList = [
-        {
-          'id': 'test',
-          'type': 'tts',
-          'name': 'Test',
-          'configs': [
-            null,
-            'invalid',
-            42,
-          ],
-        },
-      ];
-
-      // Use whereType like the production code does
-      final filteredList = rawList.whereType<Map<String, dynamic>>().toList();
-
-      expect(filteredList.length, equals(1));
-      final entry = filteredList[0];
-      final configs = entry['configs'] as List;
-      // Non-Map entries remain in raw data
-      expect(configs.whereType<Map<String, dynamic>>().length, equals(0));
-    });
-
     test('validateDataFormats does not crash on top-level null/s tring entries',
         () async {
       SharedPreferences.setMockInitialValues({

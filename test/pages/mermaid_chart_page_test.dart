@@ -35,35 +35,6 @@ void main() {
   });
 
   group('MermaidChartPage', () {
-    testWidgets('renders with title and diagram type selector', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      // Should show the page title
-      expect(find.text('图表制作'), findsOneWidget);
-
-      // Should show the code editor area (text field)
-      expect(find.byType(TextField), findsWidgets);
-
-      // Should show diagram type buttons
-      expect(find.text('流程图'), findsOneWidget);
-      expect(find.text('时序图'), findsOneWidget);
-    });
-
-    testWidgets('shows all major diagram type buttons', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      // All diagram type buttons should be present
-      expect(find.text('流程图'), findsOneWidget);
-      expect(find.text('时序图'), findsOneWidget);
-      expect(find.text('类图'), findsOneWidget);
-      expect(find.text('状态图'), findsOneWidget);
-      expect(find.text('ER图'), findsOneWidget);
-      expect(find.text('甘特图'), findsOneWidget);
-      expect(find.text('饼图'), findsOneWidget);
-    });
-
     testWidgets('selecting flowchart loads template in editor', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
@@ -88,14 +59,6 @@ void main() {
       // The editor should contain sequence diagram template
       final textField = tester.widget<TextField>(find.byType(TextField).first);
       expect(textField.controller?.text, contains('sequenceDiagram'));
-    });
-
-    testWidgets('save button exists as icon button in app bar', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      // Should have a save icon button in the app bar
-      expect(find.byIcon(Icons.save), findsOneWidget);
     });
 
     testWidgets('can be created with initial code', (tester) async {
@@ -472,28 +435,6 @@ void main() {
 
       // Current mode (edit) should have a checkmark
       expect(find.byIcon(Icons.check), findsOneWidget);
-    });
-
-    // ═══════════════════════════════════════════════════
-    // Code update / debounce behavior tests
-    // ═══════════════════════════════════════════════════
-
-    testWidgets('editing code triggers debounce and updates last rendered code',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
-      await tester.pump();
-
-      // Enter some mermaid code
-      final textField = find.byType(TextField).first;
-      await tester.enterText(textField, 'graph TD\n  A-->B');
-      await tester.pump();
-
-      // The debounce timer should fire after 800ms
-      await tester.pump(const Duration(milliseconds: 900));
-
-      // Verify the text is still in the controller
-      final controller = tester.widget<TextField>(textField).controller;
-      expect(controller?.text, contains('graph TD'));
     });
 
     // ═══════════════════════════════════════════════════

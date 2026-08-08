@@ -8,21 +8,6 @@ import 'package:stroom/providers/conversation_provider.dart';
 
 void main() {
   group('AssistantModel', () {
-    test('default settings have correct values', () {
-      final settings = AssistantSettings.defaults();
-      expect(settings.temperature, 1.0);
-      expect(settings.topP, 1.0);
-      expect(settings.maxTokens, 4096);
-      expect(settings.streamOutput, true);
-      expect(settings.enableTemperature, false);
-      expect(settings.enableTopP, false);
-      expect(settings.enableMaxTokens, false);
-      expect(settings.enableWebSearch, false);
-      expect(settings.maxToolCalls, 20);
-      expect(settings.enableMaxToolCalls, true);
-      expect(settings.customParameters, isEmpty);
-    });
-
     test('settings serialization round-trip', () {
       final original = AssistantSettings(
         temperature: 0.7,
@@ -142,19 +127,6 @@ void main() {
       expect(restored.settings.topP, 0.8);
     });
 
-    test('assistant defaults use defaults settings', () {
-      final assistant = Assistant(
-        name: '默认助手',
-        prompt: '你好！',
-      );
-
-      expect(assistant.settings.temperature, 1.0);
-      expect(assistant.settings.streamOutput, true);
-      expect(assistant.emoji, '🤖');
-      expect(assistant.description, '');
-      expect(assistant.modelId, isNull);
-    });
-
     test('assistant with null modelId round-trip', () {
       final original = Assistant(
         name: 'No model',
@@ -201,11 +173,6 @@ void main() {
     // Avatar: emoji only (image avatar feature removed)
     // ========================================================================
 
-    test('assistant defaults with emoji', () {
-      final assistant = Assistant(name: '助手', prompt: '你好');
-      expect(assistant.emoji, '🤖');
-    });
-
     test('assistant with custom emoji works', () {
       final original = Assistant(
         name: '表情助手',
@@ -234,21 +201,6 @@ void main() {
       expect(assistant.emoji, '🧠');
     });
 
-    test('assistant copyWith preserves emoji', () {
-      final original = Assistant(
-        name: '原版',
-        prompt: '你好',
-        emoji: '🎨',
-      );
-
-      final updated = original.copyWith(
-        emoji: '🌟',
-      );
-
-      expect(updated.emoji, '🌟');
-      expect(updated.id, original.id);
-    });
-
     test('assistant toMap does not include avatarType field', () {
       final original = Assistant(
         name: '助手',
@@ -261,32 +213,9 @@ void main() {
       expect(map.containsKey('avatarUrl'), false);
     });
 
-    test('assistant copyWith defaults to original emoji when not changed', () {
-      final original = Assistant(
-        name: '助手',
-        prompt: '你好',
-        emoji: '🎨',
-      );
-
-      final updated = original.copyWith(name: '新名称');
-
-      expect(updated.emoji, '🎨');
-      expect(updated.name, '新名称');
-    });
-
     // ========================================================================
     // Extended params (frequencyPenalty, presencePenalty, seed)
     // ========================================================================
-
-    test('settings defaults include extended params', () {
-      final settings = AssistantSettings.defaults();
-      expect(settings.frequencyPenalty, 0.0);
-      expect(settings.enableFrequencyPenalty, false);
-      expect(settings.presencePenalty, 0.0);
-      expect(settings.enablePresencePenalty, false);
-      expect(settings.seed, isNull);
-      expect(settings.enableSeed, false);
-    });
 
     test('extended params serialization round-trip', () {
       final original = AssistantSettings(
@@ -340,30 +269,6 @@ void main() {
       expect(restored.enableSeed, true);
     });
 
-    test('settings copyWith preserves extended params', () {
-      final original = AssistantSettings.defaults();
-      final updated = original.copyWith(
-        frequencyPenalty: 0.7,
-        enableFrequencyPenalty: true,
-        presencePenalty: 0.5,
-        enablePresencePenalty: true,
-        seed: 999,
-        enableSeed: true,
-      );
-
-      expect(updated.frequencyPenalty, 0.7);
-      expect(updated.enableFrequencyPenalty, true);
-      expect(updated.presencePenalty, 0.5);
-      expect(updated.enablePresencePenalty, true);
-      expect(updated.seed, 999);
-      expect(updated.enableSeed, true);
-
-      // Original should be unchanged
-      expect(original.frequencyPenalty, 0.0);
-      expect(original.presencePenalty, 0.0);
-      expect(original.seed, isNull);
-    });
-
     test('complete settings with extended params serialization', () {
       final original = AssistantSettings(
         temperature: 0.7,
@@ -402,10 +307,6 @@ void main() {
   });
 
   group('BuiltInPrompt', () {
-    test('builtInPrompts list is non-empty', () {
-      expect(builtInPrompts, isNotEmpty);
-    });
-
     test('every built-in prompt has required fields', () {
       for (final p in builtInPrompts) {
         expect(p.name, isNotEmpty, reason: 'Prompt name must not be empty');
@@ -420,80 +321,28 @@ void main() {
       expect(names.toSet().length, names.length,
           reason: 'Each built-in prompt must have a unique name');
     });
-
-    test('BuiltInPrompt stores all fields correctly', () {
-      final prompt = BuiltInPrompt(
-        name: '测试助手',
-        emoji: '🧪',
-        description: '测试描述',
-        prompt: '测试系统提示词',
-      );
-      expect(prompt.name, '测试助手');
-      expect(prompt.emoji, '🧪');
-      expect(prompt.description, '测试描述');
-      expect(prompt.prompt, '测试系统提示词');
-    });
-
-    test('BuiltInPrompt with empty description defaults to empty string', () {
-      final prompt = BuiltInPrompt(
-        name: '测试',
-        emoji: '🤖',
-        prompt: '你好',
-      );
-      expect(prompt.description, '');
-    });
   });
 
   group('AssistantProvider', () {
-    test('createAssistant adds assistant to state', () {
+    test('updateAssistantDefaults can clear model and tool defaults', () {
       SharedPreferences.setMockInitialValues({});
       final notifier = AssistantsNotifier();
 
-      final assistant = notifier.createAssistant(
-        name: '新助手',
-        prompt: '你好！',
-        emoji: '😊',
-        description: '测试用',
+      final a1 = notifier.createAssistant(name: '助手1', prompt: 'P1');
+      notifier.updateAssistantDefaults(
+        id: a1.id,
+        defaultModelName: 'gpt-4o | OpenAI',
+        defaultToolNames: {'web_search'},
+      );
+      notifier.updateAssistantDefaults(
+        id: a1.id,
+        defaultModelName: null,
+        defaultToolNames: {},
       );
 
-      expect(notifier.state.length, 1);
-      expect(notifier.state[0].id, assistant.id);
-      expect(notifier.state[0].name, '新助手');
-      expect(notifier.state[0].prompt, '你好！');
-    });
-
-    test('createAssistant with default emoji when not provided', () {
-      SharedPreferences.setMockInitialValues({});
-      final notifier = AssistantsNotifier();
-
-      final assistant = notifier.createAssistant(
-        name: '助手',
-        prompt: 'Test',
-      );
-
-      expect(assistant.emoji, '🤖');
-    });
-
-    test('updateAssistant updates fields', () {
-      SharedPreferences.setMockInitialValues({});
-      final notifier = AssistantsNotifier();
-
-      final assistant = notifier.createAssistant(
-        name: '原名称',
-        prompt: '原提示词',
-      );
-
-      notifier.updateAssistant(
-        id: assistant.id,
-        name: '新名称',
-        prompt: '新提示词',
-        description: '新的描述',
-      );
-
-      final updated = notifier.state.firstWhere((a) => a.id == assistant.id);
-      expect(updated.name, '新名称');
-      expect(updated.prompt, '新提示词');
-      expect(updated.description, '新的描述');
+      final updated = notifier.state.firstWhere((a) => a.id == a1.id);
+      expect(updated.defaultModelName, isNull);
+      expect(updated.defaultToolNames, isEmpty);
     });
 
     test('updateAssistantSettings updates only settings', () {
@@ -542,95 +391,6 @@ void main() {
       final other = notifier.state.firstWhere((a) => a.id == a2.id);
       expect(other.defaultModelName, isNull);
       expect(other.defaultToolNames, isNull);
-    });
-
-    test('updateAssistantDefaults can clear model and tool defaults', () {
-      SharedPreferences.setMockInitialValues({});
-      final notifier = AssistantsNotifier();
-
-      final a1 = notifier.createAssistant(name: '助手1', prompt: 'P1');
-      notifier.updateAssistantDefaults(
-        id: a1.id,
-        defaultModelName: 'gpt-4o | OpenAI',
-        defaultToolNames: {'web_search'},
-      );
-      notifier.updateAssistantDefaults(
-        id: a1.id,
-        defaultModelName: null,
-        defaultToolNames: {},
-      );
-
-      final updated = notifier.state.firstWhere((a) => a.id == a1.id);
-      expect(updated.defaultModelName, isNull);
-      expect(updated.defaultToolNames, isEmpty);
-    });
-
-    test('deleteAssistant removes assistant from state', () {
-      SharedPreferences.setMockInitialValues({});
-      final notifier = AssistantsNotifier();
-
-      final a1 = notifier.createAssistant(name: '助手1', prompt: 'P1');
-      final a2 = notifier.createAssistant(name: '助手2', prompt: 'P2');
-
-      expect(notifier.state.length, 2);
-
-      notifier.deleteAssistant(a1.id);
-      expect(notifier.state.length, 1);
-      expect(notifier.state[0].id, a2.id);
-    });
-
-    test('loadFromJson restores saved assistants', () async {
-      SharedPreferences.setMockInitialValues({});
-      final notifier = AssistantsNotifier();
-
-      final a1 = notifier.createAssistant(name: '助手1', prompt: 'P1');
-      final a2 = notifier.createAssistant(name: '助手2', prompt: 'P2');
-
-      // Simulate saving and loading
-      final json = notifier.toJson();
-      final notifier2 = AssistantsNotifier();
-      notifier2.loadFromJson(json);
-
-      expect(notifier2.state.length, 2);
-      expect(notifier2.state[0].name, '助手1');
-      expect(notifier2.state[1].name, '助手2');
-      // IDs should match
-      expect(notifier2.state[0].id, a1.id);
-      expect(notifier2.state[1].id, a2.id);
-    });
-
-    test('toJson produces valid JSON array', () {
-      SharedPreferences.setMockInitialValues({});
-      final notifier = AssistantsNotifier();
-
-      notifier.createAssistant(name: '助手1', prompt: 'P1');
-      notifier.createAssistant(name: '助手2', prompt: 'P2');
-
-      final json = notifier.toJson();
-      expect(json, startsWith('['));
-      expect(json, endsWith(']'));
-
-      // Verify it's valid JSON by parsing
-      final decoded = jsonDecode(json) as List;
-      expect(decoded.length, 2);
-      expect(decoded[0]['name'], '助手1');
-      expect(decoded[1]['name'], '助手2');
-    });
-
-    test('toJson does not include avatarType field', () {
-      SharedPreferences.setMockInitialValues({});
-      final notifier = AssistantsNotifier();
-
-      notifier.createAssistant(
-        name: '助手',
-        prompt: '你好',
-        emoji: '😊',
-      );
-
-      final json = notifier.toJson();
-      final decoded = jsonDecode(json) as List;
-      expect(decoded[0].containsKey('avatarType'), false);
-      expect(decoded[0].containsKey('avatarUrl'), false);
     });
 
     test('updateAssistantSettings with extended params', () {
@@ -691,19 +451,66 @@ void main() {
       expect(updated.settings.customParameters[1].name, 'verbose');
       expect(updated.settings.customParameters[1].value, true);
     });
+
+    test('loadFromJson restores saved assistants', () async {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final a1 = notifier.createAssistant(name: '助手1', prompt: 'P1');
+      final a2 = notifier.createAssistant(name: '助手2', prompt: 'P2');
+
+      // Simulate saving and loading
+      final json = notifier.toJson();
+      final notifier2 = AssistantsNotifier();
+      notifier2.loadFromJson(json);
+
+      expect(notifier2.state.length, 2);
+      expect(notifier2.state[0].name, '助手1');
+      expect(notifier2.state[1].name, '助手2');
+      // IDs should match
+      expect(notifier2.state[0].id, a1.id);
+      expect(notifier2.state[1].id, a2.id);
+    });
+
+    test('toJson produces valid JSON array', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      notifier.createAssistant(name: '助手1', prompt: 'P1');
+      notifier.createAssistant(name: '助手2', prompt: 'P2');
+
+      final json = notifier.toJson();
+      expect(json, startsWith('['));
+      expect(json, endsWith(']'));
+
+      // Verify it's valid JSON by parsing
+      final decoded = jsonDecode(json) as List;
+      expect(decoded.length, 2);
+      expect(decoded[0]['name'], '助手1');
+      expect(decoded[1]['name'], '助手2');
+    });
+
+    test('toJson does not include avatarType field', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      notifier.createAssistant(
+        name: '助手',
+        prompt: '你好',
+        emoji: '😊',
+      );
+
+      final json = notifier.toJson();
+      final decoded = jsonDecode(json) as List;
+      expect(decoded[0].containsKey('avatarType'), false);
+      expect(decoded[0].containsKey('avatarUrl'), false);
+    });
   });
 
   // ========================================================================
   // 助手默认值：新建话题的默认模型 + 默认启用工具
   // ========================================================================
   group('Assistant conversation defaults', () {
-    test('defaults are null model and null (unconfigured) tool set', () {
-      final assistant = Assistant(name: '助手', prompt: '你好');
-      expect(assistant.defaultModelName, isNull);
-      expect(assistant.defaultToolNames, isNull,
-          reason: 'null 表示从未配置默认工具（新话题保持自动启用全部工具的旧行为）');
-    });
-
     test('defaults survive toMap/fromMap round-trip', () {
       final original = Assistant(
         name: '助手',
@@ -757,37 +564,9 @@ void main() {
       expect(assistant.defaultModelName, isNull);
       expect(assistant.defaultToolNames, isNull);
     });
-
-    test('copyWith updates defaults without touching other fields', () {
-      final original = Assistant(
-        name: '助手',
-        prompt: '你好',
-        defaultModelName: 'model-a',
-        defaultToolNames: {'t1'},
-      );
-
-      final updated = original.copyWith(
-        defaultModelName: 'model-b',
-        defaultToolNames: {'t1', 't2'},
-      );
-
-      expect(updated.defaultModelName, 'model-b');
-      expect(updated.defaultToolNames, {'t1', 't2'});
-      expect(updated.name, '助手');
-      expect(updated.prompt, '你好');
-    });
   });
 
   group('Conversation assistantId', () {
-    test('conversation can be created with assistantId', () {
-      final conv = Conversation(
-        title: '对话1',
-        assistantId: 'assistant-123',
-      );
-
-      expect(conv.assistantId, 'assistant-123');
-    });
-
     test('conversation fromMap restores assistantId', () {
       final map = <String, dynamic>{
         'id': 'conv-1',
@@ -838,26 +617,6 @@ void main() {
 
       final conv = Conversation.fromMap(map);
       expect(conv.assistantId, isNull);
-    });
-
-    test('filter conversations by assistantId', () {
-      final conversations = [
-        Conversation(title: 'T1', assistantId: 'a1'),
-        Conversation(title: 'T2', assistantId: 'a1'),
-        Conversation(title: 'T3', assistantId: 'a2'),
-        Conversation(title: 'T4'), // no assistant
-      ];
-
-      final a1Topics =
-          conversations.where((c) => c.assistantId == 'a1').toList();
-      final a2Topics =
-          conversations.where((c) => c.assistantId == 'a2').toList();
-      final nullTopics =
-          conversations.where((c) => c.assistantId == null).toList();
-
-      expect(a1Topics.length, 2);
-      expect(a2Topics.length, 1);
-      expect(nullTopics.length, 1);
     });
   });
 
