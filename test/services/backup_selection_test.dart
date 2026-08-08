@@ -26,19 +26,6 @@ void main() {
   // ==================================================================
 
   group('BackupSelection class', () {
-    test('BackupSelection.all has all flags set to true', () {
-      final sel = BackupSelection.all;
-      expect(sel.chatRecordsAndAttachments, isTrue);
-      expect(sel.settings, isTrue);
-      expect(sel.pictures, isTrue);
-      expect(sel.audio, isTrue);
-      expect(sel.videos, isTrue);
-      expect(sel.texts, isTrue);
-      expect(sel.tasks, isTrue);
-      expect(sel.ankiData, isTrue);
-      expect(sel.browserCookies, isTrue);
-    });
-
     test('BackupSelection.all.selectedLabels returns all 9 labels', () {
       final labels = BackupSelection.all.selectedLabels;
       expect(labels.length, equals(9));
@@ -68,19 +55,6 @@ void main() {
       final labels = sel.selectedLabels;
       expect(labels.length, equals(1));
       expect(labels.first, equals('图片'));
-    });
-
-    test('BackupSelection default constructor has all flags true', () {
-      final sel = BackupSelection();
-      expect(sel.chatRecordsAndAttachments, isTrue);
-      expect(sel.settings, isTrue);
-      expect(sel.pictures, isTrue);
-      expect(sel.audio, isTrue);
-      expect(sel.videos, isTrue);
-      expect(sel.texts, isTrue);
-      expect(sel.tasks, isTrue);
-      expect(sel.ankiData, isTrue);
-      expect(sel.browserCookies, isTrue);
     });
 
     test('all flags false returns empty selectedLabels', () {

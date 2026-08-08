@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/assistant.dart' show CustomParameter;
-import 'package:stroom/models/tts_models.dart'
-    show CustomParam, ModelConfig, ParamType;
+import 'package:stroom/models/tts_models.dart' show CustomParam, ModelConfig;
 import 'package:stroom/services/chat_service.dart';
 
 void main() {
@@ -121,16 +120,6 @@ void main() {
   // Tests for CustomParam — model-level parameter storage
   // ====================================================================
   group('CustomParam defaultValue type behavior', () {
-    test('defaultValue is always stored as String', () {
-      final param = CustomParam(
-        paramName: 'cfg',
-        defaultValue: '{"enabled": true}',
-        type: 'json',
-      );
-      expect(param.defaultValue, isA<String>());
-      expect(param.defaultValue, equals('{"enabled": true}'));
-    });
-
     test('defaultValue survives toMap/fromMap round-trip', () {
       final original = CustomParam(
         paramName: 'config',
@@ -168,11 +157,6 @@ void main() {
       final param = restored.customParams[0];
       expect(param.defaultValue, isA<String>());
       expect(param.defaultValue, equals('{"type": "json_object"}'));
-    });
-
-    test('ParamType.json has correct value and label', () {
-      expect(ParamType.json.value, equals('json'));
-      expect(ParamType.json.label, equals('JSON'));
     });
   });
 

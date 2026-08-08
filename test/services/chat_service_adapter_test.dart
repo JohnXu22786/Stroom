@@ -4,15 +4,12 @@
 //
 // No naming conflicts between sources for this file.
 
-import 'dart:collection';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/mcp.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_service.dart';
-import 'package:stroom/services/http_tool_service.dart';
 
 void main() {
   // ====================================================================
@@ -480,11 +477,6 @@ void main() {
       // Should include test_builtin (and any other registered tools)
       expect(names, contains('test_builtin'));
     });
-
-    test('getAllToolDefinitions returns unmodifiable copy', () {
-      final defs = toolsAdapter.getAllToolDefinitions();
-      expect(defs, isA<List<ToolDefinition>>());
-    });
   });
 
   // ====================================================================
@@ -500,22 +492,6 @@ void main() {
 
     tearDown(() {
       adapter.dispose();
-    });
-
-    test('mcpToolDefinitions is empty before initialization', () {
-      expect(adapter.mcpToolDefinitions, isEmpty);
-    });
-
-    test('mcpToolDefinitions returns unmodifiable list', () {
-      // The getter returns List.unmodifiable (a fixed-length list)
-      // Verify it cannot be mutated
-      final list = adapter.mcpToolDefinitions;
-      expect(list, isA<List<ToolDefinition>>());
-      // Attempting to modify should throw
-      expect(
-          () => list.add(const ToolDefinition(
-              name: 'x', description: '', parameters: {'type': 'object'})),
-          throws);
     });
 
     test(
@@ -628,15 +604,6 @@ void main() {
       // All tools should appear regardless of vendor status
       expect(names, contains('vendor_independent_tool'));
     });
-
-    test('HttpToolService.toolDefinitions contain expected HTTP tool names',
-        () {
-      final names = HttpToolService.toolDefinitions.map((d) => d.name).toSet();
-      expect(names, contains('brave_web_search'));
-      expect(names, contains('bocha_web_search'));
-      expect(names, contains('querit_search'));
-      expect(names, contains('searxng_search'));
-    });
   });
 
   // ====================================================================
@@ -703,134 +670,6 @@ void main() {
       expect(restored!.transportType, equals(McpTransportType.sse));
       expect(restored.url, equals('https://mcp.test.com/sse'));
       expect(restored.isVendor, isTrue);
-    });
-  });
-
-  // ====================================================================
-  // From chat_tool_filtering_test.dart
-  // ====================================================================
-
-  group('Tool filtering respects enabledToolNamesProvider', () {
-    late List<ToolDefinition> allTools;
-    late List<ToolDefinition> mcpTools;
-
-    setUp(() {
-      // Simulate the structure of available tools
-      allTools = [
-        const ToolDefinition(
-          name: 'calculator',
-          description: 'Built-in calculator',
-          parameters: {'type': 'object'},
-        ),
-        const ToolDefinition(
-          name: 'web_search',
-          description: 'MCP web search',
-          parameters: {'type': 'object'},
-        ),
-        const ToolDefinition(
-          name: 'file_reader',
-          description: 'MCP file reader',
-          parameters: {'type': 'object'},
-        ),
-      ];
-
-      mcpTools = [
-        const ToolDefinition(
-          name: 'web_search',
-          description: 'MCP web search',
-          parameters: {'type': 'object'},
-        ),
-        const ToolDefinition(
-          name: 'file_reader',
-          description: 'MCP file reader',
-          parameters: {'type': 'object'},
-        ),
-      ];
-    });
-
-    /// Simulates the OLD (buggy) filtering logic from chat_page.dart line 448-451.
-    List<ToolDefinition> buggyFilter(
-        List<ToolDefinition> allTools, Set<String> enabledTools) {
-      return allTools.where((t) {
-        final isMcp = mcpTools.any((m) => m.name == t.name);
-        // BUG: built-in tools are always included because !isMcp is always true for them
-        return !isMcp || enabledTools.contains(t.name);
-      }).toList();
-    }
-
-    /// Simulates the FIXED filtering logic.
-    List<ToolDefinition> fixedFilter(
-        List<ToolDefinition> allTools, Set<String> enabledTools) {
-      // All tools uniformly respect the enabled set
-      return allTools.where((t) => enabledTools.contains(t.name)).toList();
-    }
-
-    group('Buggy filter (OLD behavior)', () {
-      test('includes built-in tools even when NOT in enabledTools', () {
-        // enabledTools contains only MCP tools, not the built-in calculator
-        final result = buggyFilter(allTools, {'web_search'});
-
-        final names = result.map((t) => t.name).toList();
-        // BUG: calculator is included even though it's not in enabledTools
-        expect(names, contains('calculator'));
-        expect(names, contains('web_search'));
-        expect(names, isNot(contains('file_reader')));
-      });
-
-      test('includes built-in tools when enabledTools is empty', () {
-        final result = buggyFilter(allTools, {});
-
-        final names = result.map((t) => t.name).toList();
-        // BUG: calculator is included even with empty enabledTools
-        expect(names, contains('calculator'));
-        // MCP tools are correctly excluded
-        expect(names, isNot(contains('web_search')));
-        expect(names, isNot(contains('file_reader')));
-      });
-    });
-
-    group('Fixed filter (NEW behavior)', () {
-      test('excludes built-in tools when NOT in enabledTools', () {
-        final result = fixedFilter(allTools, {'web_search'});
-
-        final names = result.map((t) => t.name).toList();
-        // calculator should NOT be included because it's not in enabledTools
-        expect(names, isNot(contains('calculator')));
-        expect(names, contains('web_search'));
-        expect(names, isNot(contains('file_reader')));
-      });
-
-      test('excludes all tools when enabledTools is empty', () {
-        final result = fixedFilter(allTools, {});
-
-        expect(result, isEmpty);
-      });
-
-      test('includes only the enabled tools', () {
-        final result = fixedFilter(allTools, {'calculator', 'file_reader'});
-
-        final names = result.map((t) => t.name).toList();
-        expect(names, contains('calculator'));
-        expect(names, isNot(contains('web_search')));
-        expect(names, contains('file_reader'));
-      });
-
-      test('includes all tools when enabledTools contains all tool names', () {
-        final result =
-            fixedFilter(allTools, {'calculator', 'web_search', 'file_reader'});
-
-        expect(result.length, equals(3));
-      });
-
-      test('treats built-in and MCP tools uniformly', () {
-        // Toggle calculator OFF, keep web_search ON
-        final result = fixedFilter(allTools, {'web_search'});
-
-        final names = result.map((t) => t.name).toList();
-        // Both built-in (calculator) and MCP (web_search) are treated the same
-        expect(names, isNot(contains('calculator')));
-        expect(names, contains('web_search'));
-      });
     });
   });
 

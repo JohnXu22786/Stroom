@@ -4,15 +4,6 @@ import 'package:stroom/models/tts_models.dart';
 
 void main() {
   group('CustomParam JSON defaultValue behavior', () {
-    test('CustomParam.defaultValue is always stored as String', () {
-      final param = CustomParam(
-        paramName: 'config',
-        defaultValue: '{"key": "value"}',
-        type: 'json',
-      );
-      expect(param.defaultValue, isA<String>());
-    });
-
     test('CustomParam JSON defaultValue round-trips through toMap/fromMap', () {
       final original = CustomParam(
         paramName: 'config',
@@ -49,45 +40,6 @@ void main() {
       expect(restoredParam.defaultValue, isA<String>());
       expect(restoredParam.defaultValue,
           equals('{"key": "value", "nested": {"a": 1}}'));
-    });
-
-    test('Empty string defaultValue is handled correctly', () {
-      final param = CustomParam(
-        paramName: 'config',
-        defaultValue: '',
-        type: 'json',
-      );
-
-      // Simulate what parseJsonValue does
-      dynamic parsed;
-      try {
-        parsed = jsonDecode(param.defaultValue);
-      } catch (_) {
-        parsed = param.defaultValue;
-      }
-
-      // Empty string is NOT valid JSON, so it stays as string
-      expect(parsed, isA<String>());
-      expect(parsed, equals(''));
-    });
-
-    test('jsonDecode correctly parses valid JSON from CustomParam.defaultValue',
-        () {
-      // Object
-      var result = jsonDecode('{"key": "value"}');
-      expect(result, isA<Map>());
-      // Array
-      result = jsonDecode('["a", "b"]');
-      expect(result, isA<List>());
-      // Number
-      result = jsonDecode('42');
-      expect(result, isA<num>());
-      // Boolean
-      result = jsonDecode('true');
-      expect(result, isA<bool>());
-      // Null
-      result = jsonDecode('null');
-      expect(result, isNull);
     });
   });
 

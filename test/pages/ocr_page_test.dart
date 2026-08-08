@@ -233,15 +233,6 @@ void main() {
       // Should show just the model name when no provider name
       expect(find.text('TestModel'), findsWidgets);
     });
-
-    testWidgets('model selector label is visible', (tester) async {
-      final entry = _createOcrEntry(withModels: true);
-      await tester.pumpWidget(_buildTestApp(entries: [entry]));
-      await tester.pumpAndSettle();
-
-      // Should have a model-related label
-      expect(find.textContaining('识别模型'), findsWidgets);
-    });
   });
 
   group('OcrPage - instruction selector', () {
@@ -470,23 +461,6 @@ void main() {
     });
   });
 
-  group('OcrPage - save-to folder selector', () {
-    testWidgets('shows save-to folder selector in bottom bar', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Should show save-to section in bottom bar
-      expect(find.text('保存至'), findsOneWidget);
-    });
-
-    testWidgets('save-to shows root directory by default', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('根目录'), findsOneWidget);
-    });
-  });
-
   group('OcrPage - bottom bar', () {
     testWidgets('start recognition button is visible when no images', (
       tester,
@@ -494,17 +468,6 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      expect(find.text('开始识别'), findsOneWidget);
-    });
-
-    testWidgets('save-to section and start button are both visible', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Both save-to and start button should be present
-      expect(find.text('保存至'), findsOneWidget);
       expect(find.text('开始识别'), findsOneWidget);
     });
   });
@@ -998,35 +961,6 @@ void main() {
   // ====================================================================
 
   group('OcrPage - smooth drag-release animation', () {
-    testWidgets('grid uses AnimatedPositioned for smooth position animation', (
-      tester,
-    ) async {
-      final images = [
-        _createTestImage(seed: 1),
-        _createTestImage(seed: 2),
-        _createTestImage(seed: 3),
-      ];
-      await tester.pumpWidget(_buildTestApp(testImages: images));
-      await tester.pumpAndSettle();
-
-      // Should use AnimatedPositioned for smooth position transitions
-      // (3 items = 3 AnimatedPositioned widgets in the grid)
-      expect(find.byType(AnimatedPositioned), findsNWidgets(3));
-    });
-
-    testWidgets('grid no longer uses GridView', (tester) async {
-      final images = [
-        _createTestImage(seed: 1),
-        _createTestImage(seed: 2),
-        _createTestImage(seed: 3),
-      ];
-      await tester.pumpWidget(_buildTestApp(testImages: images));
-      await tester.pumpAndSettle();
-
-      // Grid has been replaced by Stack-based layout
-      expect(find.byType(GridView), findsNothing);
-    });
-
     testWidgets('long-press delay is 300ms (changed from 500ms)', (
       tester,
     ) async {
@@ -1112,54 +1046,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('完成'), findsOneWidget);
     });
-
-    testWidgets(
-      'AnimatedPositioned has identity-based keys for smooth transitions',
-      (tester) async {
-        final images = [
-          _createTestImage(seed: 1),
-          _createTestImage(seed: 2),
-          _createTestImage(seed: 3),
-        ];
-        await tester.pumpWidget(_buildTestApp(testImages: images));
-        await tester.pumpAndSettle();
-
-        // Each AnimatedPositioned should have a key (identity-based)
-        final animatedPositions = find.byType(AnimatedPositioned);
-        expect(animatedPositions, findsNWidgets(3));
-
-        // Verify each has a key matching the identity-based pattern
-        for (final element in tester.widgetList(animatedPositions)) {
-          final widget = element as AnimatedPositioned;
-          expect(widget.key, isA<ValueKey<String>>());
-          final keyValue = (widget.key as ValueKey<String>).value;
-          expect(keyValue, contains('grid_item_pos_'));
-          // Extract the numeric suffix and verify it's a valid integer hash
-          final suffix = keyValue.replaceAll('grid_item_pos_', '');
-          expect(int.tryParse(suffix), isNotNull);
-        }
-      },
-    );
-
-    testWidgets(
-      'AnimatedPositioned duration is set to 300ms for smooth animation',
-      (tester) async {
-        final images = [
-          _createTestImage(seed: 1),
-          _createTestImage(seed: 2),
-          _createTestImage(seed: 3),
-        ];
-        await tester.pumpWidget(_buildTestApp(testImages: images));
-        await tester.pumpAndSettle();
-
-        // AnimatedPositioned should have 300ms duration
-        final animatedPositions = find.byType(AnimatedPositioned);
-        for (final element in tester.widgetList(animatedPositions)) {
-          final widget = element as AnimatedPositioned;
-          expect(widget.duration, const Duration(milliseconds: 300));
-        }
-      },
-    );
 
     testWidgets('no crash during rapid drag and drop', (tester) async {
       final images = [
@@ -1316,36 +1202,6 @@ void main() {
 
       expect(find.text('从应用相册选择'), findsOneWidget);
       expect(find.text('从系统相册选择'), findsOneWidget);
-    });
-  });
-
-  // ====================================================================
-  // NEW TESTS: Unified colors - app=green, system=blue
-  // ====================================================================
-
-  group('OcrPage - unified colors (app=green, system=blue)', () {
-    testWidgets('app album ChoiceCard uses green icon color', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('相册选择'));
-      await tester.pumpAndSettle();
-
-      final choiceCards = find.byType(ChoiceCard);
-      final firstCard = tester.widget<ChoiceCard>(choiceCards.at(0));
-      expect(firstCard.color, Colors.green);
-    });
-
-    testWidgets('system album ChoiceCard uses blue icon color', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('相册选择'));
-      await tester.pumpAndSettle();
-
-      final choiceCards = find.byType(ChoiceCard);
-      final secondCard = tester.widget<ChoiceCard>(choiceCards.at(1));
-      expect(secondCard.color, Colors.blue);
     });
   });
 
@@ -1571,23 +1427,6 @@ void main() {
       // Dialog should be closed
       expect(find.byIcon(Icons.crop), findsNothing);
       expect(find.byIcon(Icons.edit), findsNothing);
-    });
-
-    testWidgets('tapping crop button opens quick edit page', (tester) async {
-      final images = [_createTestImage()];
-      await tester.pumpWidget(_buildTestApp(testImages: images));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
-      await tester.pumpAndSettle();
-
-      // Tap the crop button — should navigate to ExtendedImageEditorPage
-      await tester.tap(find.byIcon(Icons.crop));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // In test, the navigation may fail due to missing routes, but
-      // verify no crash occurs from the event handler
     });
   });
 

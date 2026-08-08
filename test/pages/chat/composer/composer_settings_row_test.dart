@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
-import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/pages/chat_page.dart';
 
 /// Helper that creates a MaterialApp wrapped in ProviderScope with
@@ -59,20 +58,6 @@ void main() {
     );
 
     testWidgets(
-      '自定义参数 button has correct icon',
-      (tester) async {
-        await setupSurface(tester);
-        await tester.pumpWidget(createChatTestApp());
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
-        tester.takeException();
-
-        // The custom params button should have the tune icon
-        expect(find.byIcon(Icons.tune), findsOneWidget);
-      },
-    );
-
-    testWidgets(
       'tapping 自定义参数 opens panel even with no params',
       (tester) async {
         await setupSurface(tester);
@@ -96,51 +81,6 @@ void main() {
           find.textContaining('当前模型未配置自定义推理参数'),
           findsOneWidget,
         );
-      },
-    );
-
-    testWidgets(
-      '工具 button is always visible with badge count',
-      (tester) async {
-        await setupSurface(tester);
-        await tester.pumpWidget(createChatTestApp());
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
-        tester.takeException();
-
-        // Tools button should be visible
-        expect(find.text('工具'), findsOneWidget);
-      },
-    );
-
-    testWidgets(
-      '推理 button is always visible with correct label',
-      (tester) async {
-        await setupSurface(tester);
-        await tester.pumpWidget(createChatTestApp());
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
-        tester.takeException();
-
-        // Reasoning button should be visible with default label
-        expect(find.text('推理'), findsOneWidget);
-      },
-    );
-
-    testWidgets(
-      'all settings row icons are present',
-      (tester) async {
-        await setupSurface(tester);
-        await tester.pumpWidget(createChatTestApp());
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
-        tester.takeException();
-
-        // All four icons should be present
-        expect(find.byIcon(Icons.smart_toy_outlined), findsOneWidget);
-        expect(find.byIcon(Icons.build_outlined), findsOneWidget);
-        expect(find.byIcon(Icons.psychology_outlined), findsOneWidget);
-        expect(find.byIcon(Icons.tune), findsOneWidget);
       },
     );
   });

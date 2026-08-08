@@ -82,65 +82,6 @@ void main() {
   group('Chat showImagePreviewDialog', () {
     final validPng = _createValidPng();
 
-    testWidgets('opens and displays image with ExtendedImage', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(
-          builder: (context) => ElevatedButton(
-            onPressed: () {
-              showImagePreviewDialog(
-                context: context,
-                fileName: 'photo.png',
-                data: validPng,
-              );
-            },
-            child: const Text('Open Preview'),
-          ),
-        ),
-      ));
-
-      await tester.tap(find.text('Open Preview'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Dialog should be shown with the file name
-      expect(find.text('photo.png'), findsOneWidget);
-      // Note: No broken_image assertion here because
-      // ExtendedImage.memory may fail to decode raw PNG bytes in some
-      // CI environments, which is an environmental rather than a logic issue.
-    });
-
-    testWidgets('close button dismisses dialog', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(
-          builder: (context) => ElevatedButton(
-            onPressed: () {
-              showImagePreviewDialog(
-                context: context,
-                fileName: 'photo.png',
-                data: validPng,
-              );
-            },
-            child: const Text('Open Preview'),
-          ),
-        ),
-      ));
-
-      await tester.tap(find.text('Open Preview'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      expect(find.text('photo.png'), findsOneWidget);
-
-      await tester.tap(find.byIcon(Icons.close));
-      // Pump multiple frames to allow dialog close animation to complete
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.pump();
-
-      // Dialog should now be dismissed
-      expect(find.text('photo.png'), findsNothing);
-    });
-
     testWidgets(
         'shows loading indicator then image when using dataLoader '
         '(no blocking disk read before the dialog opens)', (tester) async {

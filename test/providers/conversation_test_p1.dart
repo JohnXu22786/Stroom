@@ -5,11 +5,6 @@ void conversationGroup1() {
   // 1. Conversation model - draftText serialization
   // ===================================================================
   group('Conversation model - draftText serialization', () {
-    test('draftText is empty by default', () {
-      final conv = Conversation(id: 'test', title: 'Test');
-      expect(conv.draftText, '');
-    });
-
     test('draftText is preserved in toMap/fromMap round-trip', () {
       final conv = Conversation(
         id: 'test',

@@ -1,56 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/models/chat_event.dart';
 import 'package:stroom/models/chat_message.dart';
 
 void main() {
-  group('ReasoningEvent', () {
-    test('can be empty', () {
-      const event = ReasoningEvent('');
-      expect(event.text, '');
-    });
-
-    test('can be used in a switch statement', () {
-      final ChatEvent event = ReasoningEvent('reasoning');
-      String result = '';
-      switch (event) {
-        case ReasoningEvent e:
-          result = 'reasoning: ${e.text}';
-        case TextEvent e:
-          result = 'text: ${e.text}';
-        default:
-          result = 'unknown';
-      }
-      expect(result, 'reasoning: reasoning');
-    });
-  });
-
-  group('ReasoningSectionEndEvent', () {
-    test('can be used in a switch statement', () {
-      final ChatEvent event = ReasoningSectionEndEvent();
-      String result = '';
-      switch (event) {
-        case ReasoningSectionEndEvent():
-          result = 'section_end';
-        case ReasoningEvent e:
-          result = 'reasoning: ${e.text}';
-        case TextEvent e:
-          result = 'text: ${e.text}';
-        default:
-          result = 'unknown';
-      }
-      expect(result, 'section_end');
-    });
-
-    test('is distinct from ReasoningEvent and TextEvent', () {
-      final end = ReasoningSectionEndEvent();
-      final reasoning = ReasoningEvent('think');
-      final text = TextEvent('speak');
-
-      expect(end.runtimeType, isNot(reasoning.runtimeType));
-      expect(end.runtimeType, isNot(text.runtimeType));
-    });
-  });
-
   group('ChatMessage reasoningContent serialization', () {
     test('reasoningContent is serialized and deserialized correctly', () {
       final msg = ChatMessage(

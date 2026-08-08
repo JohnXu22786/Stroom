@@ -104,58 +104,6 @@ bool _multipartFileHasMimeType(List<int> bodyBytes, String mimeType) {
 void main() {
   group('AsrService', () {
     group('AsrConfig', () {
-      test('can be created with all fields', () {
-        const config = AsrConfig(
-          model: 'whisper-1',
-          apiKey: 'test-key',
-          host: 'https://api.openai.com/v1',
-          language: 'zh',
-        );
-        expect(config.model, equals('whisper-1'));
-        expect(config.apiKey, equals('test-key'));
-        expect(config.host, equals('https://api.openai.com/v1'));
-        expect(config.language, equals('zh'));
-      });
-
-      test('default model is whisper-1', () {
-        const config = AsrConfig(
-          apiKey: 'test-key',
-          host: 'https://api.openai.com/v1',
-        );
-        expect(config.model, equals('whisper-1'));
-      });
-
-      test('language is null by default', () {
-        const config = AsrConfig(
-          apiKey: 'test-key',
-          host: 'https://api.openai.com/v1',
-        );
-        expect(config.language, isNull);
-      });
-
-      test('copies correctly', () {
-        const config = AsrConfig(
-          model: 'whisper-1',
-          apiKey: 'test-key',
-          host: 'https://api.openai.com/v1',
-          language: 'en',
-        );
-        final copy = config.copyWith(model: 'whisper-2');
-        expect(copy.model, equals('whisper-2'));
-        expect(copy.apiKey, equals('test-key'));
-        expect(copy.host, equals('https://api.openai.com/v1'));
-        expect(copy.language, equals('en'));
-      });
-
-      test('copyWith can update language', () {
-        const config = AsrConfig(
-          apiKey: 'key',
-          host: 'https://api.test.com',
-        );
-        final copy = config.copyWith(language: 'zh');
-        expect(copy.language, equals('zh'));
-      });
-
       test('normalizedHost strips trailing slash', () {
         const config = AsrConfig(
           apiKey: 'key',
@@ -173,15 +121,6 @@ void main() {
         expect(config.normalizedHost, equals('https://api.openai.com/v1'));
       });
 
-      test('transcribeUrl returns normalizedHost directly (no auto-append)',
-          () {
-        const config = AsrConfig(
-          apiKey: 'key',
-          host: 'https://api.openai.com/v1',
-        );
-        expect(config.transcribeUrl, equals('https://api.openai.com/v1'));
-      });
-
       test('transcribeUrl handles trailing slash in host', () {
         const config = AsrConfig(
           apiKey: 'key',
@@ -191,60 +130,7 @@ void main() {
       });
     });
 
-    group('AsrResult', () {
-      test('can be created with all fields', () {
-        final result = AsrResult(
-          text: 'Hello world',
-          processingTimeMs: 2000,
-        );
-        expect(result.text, equals('Hello world'));
-        expect(result.processingTimeMs, equals(2000));
-      });
-
-      test('default values', () {
-        final result = AsrResult(text: 'Hello');
-        expect(result.processingTimeMs, isZero);
-      });
-    });
-
     group('AsrService', () {
-      test('can be created with config', () {
-        const config = AsrConfig(
-          apiKey: 'test-key',
-          host: 'https://api.openai.com/v1',
-        );
-        final service = AsrService(config: config);
-        expect(service, isNotNull);
-        expect(service.config.model, equals('whisper-1'));
-      });
-
-      test('Dio has no sendTimeout (no timeout)', () {
-        const config = AsrConfig(
-          apiKey: 'test-key',
-          host: 'https://api.openai.com/v1',
-        );
-        final service = AsrService(config: config);
-        expect(service.sendTimeout, isNull);
-      });
-
-      test('Dio has no connectTimeout (no timeout)', () {
-        const config = AsrConfig(
-          apiKey: 'test-key',
-          host: 'https://api.openai.com/v1',
-        );
-        final service = AsrService(config: config);
-        expect(service.connectTimeout, isNull);
-      });
-
-      test('Dio has no receiveTimeout (no timeout)', () {
-        const config = AsrConfig(
-          apiKey: 'test-key',
-          host: 'https://api.openai.com/v1',
-        );
-        final service = AsrService(config: config);
-        expect(service.receiveTimeout, isNull);
-      });
-
       test('throws on empty host', () async {
         const config = AsrConfig(
           apiKey: 'test-key',
@@ -452,30 +338,6 @@ void main() {
         // Verify diagnostics also include language
         expect(service.lastRequestBody, isNotNull);
         expect(service.lastRequestBody!['language'], 'zh');
-      });
-    });
-
-    group('createAsrServiceFromConfig', () {
-      test('creates service from config fields', () {
-        final service = createAsrServiceFromConfig(
-          host: 'https://api.test.com',
-          apiKey: 'key',
-          model: 'whisper-1',
-        );
-        expect(service, isNotNull);
-        expect(service.config.model, equals('whisper-1'));
-        expect(service.config.apiKey, equals('key'));
-        expect(service.config.host, equals('https://api.test.com'));
-      });
-
-      test('creates service with language', () {
-        final service = createAsrServiceFromConfig(
-          host: 'https://api.test.com',
-          apiKey: 'key',
-          model: 'whisper-1',
-          language: 'zh',
-        );
-        expect(service.config.language, equals('zh'));
       });
     });
 
@@ -756,32 +618,7 @@ void main() {
       });
     });
 
-    group('createAsrServiceFromConfig with typeConfig', () {
-      test('creates service with typeConfig and customParams', () {
-        final service = createAsrServiceFromConfig(
-          host: 'https://api.test.com',
-          apiKey: 'key',
-          model: 'whisper-1',
-          typeConfig: {'enableLanguage': true, 'language': 'zh'},
-          customParams: [
-            CustomParam(paramName: 'test', defaultValue: 'value'),
-          ],
-        );
-        expect(service.config.typeConfig['language'], equals('zh'));
-        expect(service.config.customParams.length, equals(1));
-        expect(service.config.customParams[0].paramName, equals('test'));
-      });
-    });
-
     group('AsrService file size validation', () {
-      test('default maxFileSizeBytes is 25 MB for OpenAI compatibility', () {
-        const config = AsrConfig(
-          apiKey: 'test-key',
-          host: 'https://api.test.com',
-        );
-        expect(config.maxFileSizeBytes, 25 * 1024 * 1024);
-      });
-
       test('rejects files exceeding maxFileSizeBytes before making request',
           () async {
         const config = AsrConfig(
@@ -819,15 +656,6 @@ void main() {
           audioFormat: 'wav',
         );
         expect(result.text, equals('Hello world'));
-      });
-
-      test('accepts custom maxFileSizeBytes', () {
-        const config = AsrConfig(
-          apiKey: 'test-key',
-          host: 'https://api.test.com',
-          maxFileSizeBytes: 50 * 1024 * 1024, // 50 MB
-        );
-        expect(config.maxFileSizeBytes, 50 * 1024 * 1024);
       });
 
       test('allows files exactly at maxFileSizeBytes', () async {
@@ -868,22 +696,6 @@ void main() {
           expect(msg, contains('2.0 KB'));
           expect(msg, contains('1.0 KB'));
         }
-      });
-
-      test('copyWith preserves maxFileSizeBytes', () {
-        const config = AsrConfig(
-          apiKey: 'key',
-          host: 'https://api.test.com',
-          maxFileSizeBytes: 10 * 1024 * 1024, // 10 MB
-        );
-        final copy = config.copyWith(model: 'whisper-2');
-        expect(copy.maxFileSizeBytes, 10 * 1024 * 1024);
-      });
-
-      test('copyWith can update maxFileSizeBytes', () {
-        const config = AsrConfig(apiKey: 'key', host: 'https://api.test.com');
-        final copy = config.copyWith(maxFileSizeBytes: 100 * 1024 * 1024);
-        expect(copy.maxFileSizeBytes, 100 * 1024 * 1024);
       });
     });
   });

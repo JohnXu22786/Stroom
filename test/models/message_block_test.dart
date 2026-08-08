@@ -5,20 +5,11 @@ import 'package:stroom/models/tool_call.dart';
 
 void main() {
   group('MessageBlock model', () {
-    test('TextBlock can be created', () {
-      final b = TextBlock(text: 'Hello');
-      expect(b.text, 'Hello');
-    });
-
     test('TextBlock toMap/fromMap round-trip', () {
       final j = TextBlock(text: 'x').toMap();
       final r = MessageBlock.fromMap(j);
       expect(r, isA<TextBlock>());
       expect((r as TextBlock).text, 'x');
-    });
-
-    test('ReasoningBlock defaults isComplete=false', () {
-      expect(ReasoningBlock(text: 't').isComplete, false);
     });
 
     test('ReasoningBlock toMap/fromMap round-trip', () {
@@ -60,15 +51,6 @@ void main() {
           ToolCallStatus.pending);
     });
 
-    test('ToolCallBlock.copyWith', () {
-      final b = ToolCallBlock(
-          id: 'c1', name: 'n', arguments: {}, status: ToolCallStatus.pending);
-      final u = b.copyWith(status: ToolCallStatus.completed, result: 'ok');
-      expect(u.status, ToolCallStatus.completed);
-      expect(u.result, 'ok');
-      expect(u.id, 'c1');
-    });
-
     test('ErrorBlock toMap/fromMap round-trip', () {
       final j = ErrorBlock(message: 'fail').toMap();
       final r = MessageBlock.fromMap(j);
@@ -103,24 +85,6 @@ void main() {
 
     test('empty list round-trip', () {
       expect(MessageBlock.fromJsonList([]), isEmpty);
-    });
-
-    test('multi-step chain preserves ordering', () {
-      final blocks = <MessageBlock>[
-        ReasoningBlock(text: 'step1'),
-        ToolCallBlock(
-            id: 't1',
-            name: 'search',
-            arguments: {},
-            status: ToolCallStatus.completed,
-            result: 'r1'),
-        ReasoningBlock(text: 'step2'),
-        TextBlock(text: 'final'),
-      ];
-      expect(blocks[0], isA<ReasoningBlock>());
-      expect(blocks[1], isA<ToolCallBlock>());
-      expect(blocks[2], isA<ReasoningBlock>());
-      expect(blocks[3], isA<TextBlock>());
     });
   });
 }

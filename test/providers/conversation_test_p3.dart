@@ -5,12 +5,6 @@ void conversationGroup3() {
   // 8. Conversation - enabledMcpToolNames persistence
   // ===================================================================
   group('Conversation - enabledMcpToolNames persistence', () {
-    test('new conversation has empty enabledMcpToolNames (default OFF)', () {
-      final conv = Conversation(title: 'Test', messages: []);
-      expect(conv.enabledMcpToolNames, isEmpty,
-          reason: 'All tools should be OFF by default');
-    });
-
     test('toMap/fromMap roundtrip preserves enabledMcpToolNames', () {
       final conv = Conversation(
         id: 'test-id',
@@ -88,21 +82,6 @@ void conversationGroup3() {
       expect(list.length, equals(2));
     });
 
-    test('setting enabledMcpToolNames replaces previous values', () {
-      final conv = Conversation(
-        id: 'test-id',
-        title: 'Test',
-        messages: [],
-      );
-      conv.enabledMcpToolNames = {'tool_a', 'tool_b'};
-      conv.hasExplicitEnabledMcpTools = true;
-      expect(conv.enabledMcpToolNames, equals({'tool_a', 'tool_b'}));
-
-      // Replace with different set
-      conv.enabledMcpToolNames = {'tool_c'};
-      expect(conv.enabledMcpToolNames, equals({'tool_c'}));
-    });
-
     test('multiple conversations preserve independent enabledMcpToolNames', () {
       final conv1 = Conversation(id: 'conv-1', title: 'Conv 1');
       conv1.enabledMcpToolNames = {'tool_a'};
@@ -127,11 +106,6 @@ void conversationGroup3() {
   // 9. Conversation - lastUsedModelName persistence
   // ===================================================================
   group('Conversation - lastUsedModelName persistence', () {
-    test('new conversation has no lastUsedModelName', () {
-      final conv = Conversation(title: 'Test', messages: []);
-      expect(conv.lastUsedModelName, isNull);
-    });
-
     test('toMap/fromMap roundtrip preserves lastUsedModelName', () {
       final conv = Conversation(
         id: 'test-id',

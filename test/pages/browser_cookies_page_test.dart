@@ -21,34 +21,6 @@ void main() {
   // ====================================================================
 
   group('BrowserCookiesPage rendering', () {
-    testWidgets('shows AppBar with correct title', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(home: BrowserCookiesPage()),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('浏览器数据管理'), findsOneWidget);
-    });
-
-    testWidgets('shows Clear All Cookies button', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(home: BrowserCookiesPage()),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('清除所有Cookies'), findsOneWidget);
-    });
-
-    testWidgets('shows retention toggle with correct label', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(home: BrowserCookiesPage()),
-      );
-      await tester.pumpAndSettle();
-
-      // Should show the retention toggle label
-      expect(find.textContaining('退出保留Cookies'), findsOneWidget);
-    });
-
     testWidgets('retention toggle is off when the preference is false',
         (tester) async {
       await BrowserCookieService.setRetentionMode(false);

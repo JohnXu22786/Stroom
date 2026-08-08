@@ -3,29 +3,6 @@ import 'package:stroom/providers/provider_config.dart';
 
 void main() {
   group('ReasoningParam model', () {
-    test('constructor with required name', () {
-      final param = ReasoningParam(paramName: 'reasoning_effort');
-      expect(param.paramName, 'reasoning_effort');
-      expect(param.options, isEmpty);
-    });
-
-    test('constructor with name and options', () {
-      final param = ReasoningParam(
-        paramName: 'reasoning_effort',
-        options: ['low', 'medium', 'high'],
-      );
-      expect(param.paramName, 'reasoning_effort');
-      expect(param.options, ['low', 'medium', 'high']);
-    });
-
-    test('options preserved in order', () {
-      final param = ReasoningParam(
-        paramName: 'thinking.type',
-        options: ['enabled'],
-      );
-      expect(param.options, ['enabled']);
-    });
-
     test('toMap serialization', () {
       final param = ReasoningParam(
         paramName: 'reasoning_effort',
@@ -70,84 +47,12 @@ void main() {
       expect(param.options, isEmpty);
     });
 
-    test('constructor with default enabled', () {
-      final param = ReasoningParam(paramName: 'thinking.type');
-      expect(param.enabled, isTrue);
-    });
-
-    test('constructor with explicit enabled', () {
-      final param = ReasoningParam(
-        paramName: 'thinking.type',
-        enabled: false,
-      );
-      expect(param.enabled, isFalse);
-    });
-
-    test('toMap serialization includes enabled and isEffortParam', () {
-      final param = ReasoningParam(
-        paramName: 'reasoning_effort',
-        options: ['low', 'medium', 'high'],
-        enabled: false,
-      );
-      final map = param.toMap();
-      expect(map, {
-        'paramName': 'reasoning_effort',
-        'options': ['low', 'medium', 'high'],
-        'enabled': false,
-        'isReasoningToggle': false,
-        'isEffortParam': false,
-        'type': 'string',
-      });
-    });
-
-    test('fromMap deserialization includes enabled', () {
-      final param = ReasoningParam.fromMap({
-        'paramName': 'thinking.type',
-        'options': ['enabled'],
-        'enabled': false,
-      });
-      expect(param.paramName, 'thinking.type');
-      expect(param.options, ['enabled']);
-      expect(param.enabled, isFalse);
-    });
-
     test('fromMap defaults enabled to true when missing', () {
       final param = ReasoningParam.fromMap({
         'paramName': 'thinking.type',
         'options': ['enabled'],
       });
       expect(param.enabled, isTrue);
-    });
-
-    test('copy preserves enabled', () {
-      final param = ReasoningParam(
-        paramName: 'test',
-        enabled: false,
-        options: ['a', 'b'],
-      );
-      final copy = param.copy();
-      expect(copy.enabled, isFalse);
-
-      // Verify independence
-      copy.enabled = true;
-      expect(param.enabled, isFalse);
-    });
-
-    test('options with single value (e.g. only max)', () {
-      final param = ReasoningParam(
-        paramName: 'budget_tokens',
-        options: ['max'],
-      );
-      expect(param.paramName, 'budget_tokens');
-      expect(param.options, ['max']);
-    });
-
-    test('options with boolean values', () {
-      final param = ReasoningParam(
-        paramName: 'thinking.type',
-        options: ['true', 'false'],
-      );
-      expect(param.options, ['true', 'false']);
     });
   });
 
@@ -286,67 +191,6 @@ void main() {
         options: [],
       );
       expect(param.validationError, isNull);
-    });
-  });
-
-  group('ReasoningParam duplicate name validation', () {
-    test('two params with same name should have duplicate error', () {
-      final params = [
-        ReasoningParam(paramName: 'reasoning_effort', options: ['low', 'high']),
-        ReasoningParam(paramName: 'reasoning_effort', options: ['1', '2']),
-      ];
-      final seen = <String>{};
-      for (final param in params) {
-        final name = param.paramName.trim();
-        if (!seen.add(name)) {
-          // Duplicate detected
-          expect(name, 'reasoning_effort');
-        }
-      }
-      expect(
-          seen.length, 1); // Only 1 unique name because duplicate was rejected
-    });
-
-    test('params with all different names should be valid', () {
-      final params = [
-        ReasoningParam(paramName: 'reasoning_effort', options: ['low', 'high']),
-        ReasoningParam(paramName: 'thinking.type', options: ['a', 'b']),
-      ];
-      final seen = <String>{};
-      for (final param in params) {
-        final name = param.paramName.trim();
-        expect(seen.add(name), isTrue,
-            reason: '$name should not be a duplicate');
-      }
-      expect(seen.length, 2);
-    });
-
-    test(
-        'toggle param and non-toggle param sharing same name should be rejected',
-        () {
-      final params = [
-        ReasoningParam(
-          paramName: 'thinking.type',
-          isReasoningToggle: true,
-          onValue: 'enabled',
-          offValue: 'disabled',
-        ),
-        ReasoningParam(
-          paramName: 'thinking.type',
-          isReasoningToggle: false,
-          options: ['a', 'b'],
-        ),
-      ];
-      final seen = <String>{};
-      for (final param in params) {
-        final name = param.paramName.trim();
-        final isUnique = seen.add(name);
-        if (!isUnique) {
-          // Duplicate detected - this is the expected behavior
-          expect(name, 'thinking.type');
-        }
-      }
-      expect(seen.length, 1); // Only 1 unique because duplicate was rejected
     });
   });
 

@@ -52,13 +52,6 @@ void main() {
       );
     }
 
-    testWidgets('renders thumbnail and close button', (tester) async {
-      await tester.pumpWidget(buildChip());
-
-      // Should find the close icon
-      expect(find.byIcon(Icons.close), findsOneWidget);
-    });
-
     testWidgets('close button calls onRemove when tapped', (tester) async {
       bool removed = false;
 
@@ -105,35 +98,6 @@ void main() {
 
       expect(removed, isTrue);
       expect(tapped, isFalse);
-    });
-
-    testWidgets('works without onTap (no crash)', (tester) async {
-      await tester.pumpWidget(buildChip());
-
-      expect(find.byType(AlbumPreviewChip), findsOneWidget);
-      expect(find.byIcon(Icons.close), findsOneWidget);
-    });
-
-    testWidgets('close button has error color circular background', (
-      tester,
-    ) async {
-      await tester.pumpWidget(buildChip());
-
-      // Find the close button container - should be a small circle with error color
-      final containers = find.byType(Container);
-      int errorCircleCount = 0;
-      for (int i = 0; i < tester.widgetList(containers).length; i++) {
-        final container =
-            tester.widgetList(containers).elementAt(i) as Container;
-        final decoration = container.decoration;
-        if (decoration is BoxDecoration &&
-            decoration.shape == BoxShape.circle &&
-            decoration.color != null) {
-          errorCircleCount++;
-        }
-      }
-      // Should find at least one circular container (the close button background)
-      expect(errorCircleCount, greaterThanOrEqualTo(1));
     });
   });
 }

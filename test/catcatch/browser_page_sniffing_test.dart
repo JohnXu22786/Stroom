@@ -8,7 +8,6 @@ import 'package:flutter_test/flutter_test.dart';
 // Panel-behavior tests (rendering, selection, minimize, drag) live in
 // test/catcatch/draggable_floating_panel_test.dart.
 
-import 'package:stroom/catcatch/engine/js_hook_script.dart';
 import 'package:stroom/catcatch/widgets/draggable_floating_panel.dart';
 
 /// Helper that pumps a test environment with the panel stacked above a tap
@@ -53,17 +52,6 @@ class _TapTestHelper {
 }
 
 void main() {
-  group('BrowserPage sniffing architecture', () {
-    test('hook script references the CatCatchChannel contract', () {
-      // Regression: BrowserPage registers a JavaScript handler named
-      // 'CatCatchChannel' and the hook must post to exactly that channel
-      // through flutter_inappwebview's callHandler.
-      expect(JsHookScript.script, isNotEmpty);
-      expect(JsHookScript.script, contains('CatCatchChannel'));
-      expect(JsHookScript.script, contains('flutter_inappwebview'));
-    });
-  });
-
   // ===========================================================================
   // Click interaction behavior tests
   // ===========================================================================

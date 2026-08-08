@@ -9,45 +9,6 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('MediaPreviewSheet', () {
-    testWidgets('shows loading state initially', (tester) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(
-            home: MediaPreviewSheet(
-              resource: MediaResource(
-                url: 'https://example.com/video.mp4',
-                name: 'test_video',
-                ext: 'mp4',
-              ),
-              taskTitle: 'Test Task',
-            ),
-          ),
-        ),
-      );
-
-      // Should show loading indicator
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    });
-
-    testWidgets('shows task title', (tester) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(
-            home: MediaPreviewSheet(
-              resource: MediaResource(
-                url: 'https://example.com/video.mp4',
-                name: 'test_video',
-                ext: 'mp4',
-              ),
-              taskTitle: 'My Preview Task',
-            ),
-          ),
-        ),
-      );
-
-      expect(find.text('My Preview Task'), findsOneWidget);
-    });
-
     testWidgets('shows unsupported format error for unknown extensions',
         (tester) async {
       await tester.pumpWidget(

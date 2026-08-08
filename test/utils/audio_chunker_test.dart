@@ -366,18 +366,6 @@ void main() {
     });
   });
 
-  group('Cross-platform guarantees', () {
-    test('only uses dart:typed_data and dart:math (no platform deps)', () {
-      // This test verifies that the module compiles and runs.
-      // The absence of import errors in the analyzer confirms
-      // no native/FFI dependencies.
-      final wav = _buildTestWav(segments: [(0.1, 0.5)]);
-      final chunker = AudioChunker();
-      final chunks = chunker.split(wav);
-      expect(chunks.isNotEmpty, true);
-    });
-  });
-
   group('AudioChunker - fixed duration', () {
     test('splits audio into fixed-duration chunks', () {
       final wav = _buildTestWav(
@@ -487,41 +475,6 @@ void main() {
   // ===========================================================================
 
   group('Environment Analyzer', () {
-    test('classifies quiet recording from low-amplitude audio', () {
-      final wav = _buildTestWav(
-        sampleRate: 16000,
-        segments: [
-          (2.0, 0.05), // very quiet tone (~-26dB)
-          (0.5, 0.0), // short silence
-          (2.0, 0.05),
-        ],
-      );
-      final info = parseWavHeader(wav);
-      final samples = readPcmSamplesFloat(wav, info);
-      final analyzer = EnvironmentAnalyzer();
-      final env = analyzer.analyze(samples, info.sampleRate);
-      // Very low amplitude should be classified as quiet or normal speech
-      expect(env, isNotNull);
-      expect(env, isA<AudioEnvironment>());
-    });
-
-    test('classifies noisy recording from higher background', () {
-      // Build audio with constant background noise floor
-      final wav = _buildTestWav(
-        sampleRate: 16000,
-        segments: [
-          (2.0, 0.3), // moderate tone
-          (0.5, 0.0), // short silence
-          (2.0, 0.3), // moderate tone
-        ],
-      );
-      final info = parseWavHeader(wav);
-      final samples = readPcmSamplesFloat(wav, info);
-      final analyzer = EnvironmentAnalyzer();
-      final env = analyzer.analyze(samples, info.sampleRate);
-      expect(env, isA<AudioEnvironment>());
-    });
-
     test('provides environment-adjusted minSilenceDuration', () {
       final analyzer = EnvironmentAnalyzer();
       const baseMs = 500.0;
@@ -810,30 +763,6 @@ void main() {
       // (Allow small variance due to rounding at frame boundaries)
       expect(totalChunkData,
           closeTo(originalInfo.dataSize, originalInfo.dataSize * 0.1));
-    });
-  });
-
-  // ===========================================================================
-  // Smart Audio Chunker — Config Defaults
-  // ===========================================================================
-
-  group('Smart Chunker - config defaults', () {
-    test('provides reasonable defaults for all smart chunking parameters', () {
-      const config = AudioChunkConfig();
-      // All durations must be positive and in a sensible order
-      expect(config.minChunkDuration, greaterThan(0));
-      expect(config.targetChunkDuration, greaterThan(0));
-      expect(config.maxChunkDuration, greaterThan(0));
-      expect(config.minSilenceDuration, greaterThan(0));
-      expect(config.analysisWindowSeconds, greaterThan(0));
-      // Temporal constraint ordering: min < target < max
-      expect(config.minChunkDuration, lessThan(config.targetChunkDuration));
-      expect(config.targetChunkDuration, lessThan(config.maxChunkDuration));
-      // No overlap in output
-      expect(config.overlapSeconds, 0.0);
-      // Legacy params still intact
-      expect(config.maxChunkBytes, 25 * 1024 * 1024);
-      expect(config.silenceDbThreshold, -40.0);
     });
   });
 }

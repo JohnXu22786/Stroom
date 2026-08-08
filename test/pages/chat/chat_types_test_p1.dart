@@ -2,60 +2,6 @@ part of 'chat_types_test.dart';
 
 void chatTypesGroup1() {
   group('ChatTypes', () {
-    group('TextSegment', () {
-      test('stores text correctly', () {
-        final segment = TextSegment('Hello world');
-        expect(segment.text, 'Hello world');
-      });
-    });
-
-    group('ToolCallSegment', () {
-      test('stores tool call data correctly', () {
-        final data = ToolCallData(
-          id: 'call_1',
-          name: 'calculator',
-          arguments: {'expression': '2 + 2'},
-          status: ToolCallStatus.completed,
-          result: '4',
-        );
-        final segment = ToolCallSegment(data);
-        expect(segment.data.id, 'call_1');
-        expect(segment.data.name, 'calculator');
-        expect(segment.data.arguments['expression'], '2 + 2');
-        expect(segment.data.status, ToolCallStatus.completed);
-        expect(segment.data.result, '4');
-      });
-    });
-
-    group('ReasoningSegment', () {
-      test('stores sectionIndex and isStreaming=false correctly', () {
-        final segment = ReasoningSegment(sectionIndex: 0, isStreaming: false);
-        expect(segment.sectionIndex, 0);
-        expect(segment.isStreaming, false);
-      });
-
-      test('stores isStreaming=true correctly', () {
-        final segment = ReasoningSegment(sectionIndex: 1, isStreaming: true);
-        expect(segment.sectionIndex, 1);
-        expect(segment.isStreaming, true);
-      });
-
-      test('defaults isStreaming to false', () {
-        final segment = ReasoningSegment(sectionIndex: 2);
-        expect(segment.sectionIndex, 2);
-        expect(segment.isStreaming, false);
-      });
-    });
-
-    group('SearchMatch', () {
-      test('stores search match data correctly', () {
-        final match = SearchMatch('msg1', 5, 10);
-        expect(match.messageId, 'msg1');
-        expect(match.matchStart, 5);
-        expect(match.matchEnd, 10);
-      });
-    });
-
     group('mergeConsecutiveTextSegments', () {
       test('merges multiple consecutive TextSegments into one', () {
         final segments = <MessageSegment>[

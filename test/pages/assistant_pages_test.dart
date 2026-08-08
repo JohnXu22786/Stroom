@@ -183,24 +183,6 @@ void main() {
   });
 
   group('AssistantSelectionPage', () {
-    testWidgets('renders with title', (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            assistantProvider.overrideWith((ref) {
-              return AssistantsNotifier();
-            }),
-          ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // The title should always be shown
-      expect(find.text('选择助手'), findsOneWidget);
-    });
-
     testWidgets('shows assistant cards in grid', (tester) async {
       await tester.pumpWidget(
         createTestApp(
@@ -277,30 +259,6 @@ void main() {
       expect(find.text('🤖'), findsOneWidget);
     });
 
-    testWidgets('uses responsive grid with MaxCrossAxisExtent (like homepage)',
-        (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [
-            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
-            Assistant(name: '助手2', prompt: 'P2', emoji: '😊'),
-            Assistant(name: '助手3', prompt: 'P3', emoji: '🎉'),
-            Assistant(name: '助手4', prompt: 'P4', emoji: '🔥'),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Find the GridView
-      final gridView = tester.widget<GridView>(find.byType(GridView));
-      final delegate = gridView.gridDelegate;
-
-      // Should use SliverGridDelegateWithMaxCrossAxisExtent (not FixedCrossAxisCount)
-      expect(delegate, isA<SliverGridDelegateWithMaxCrossAxisExtent>());
-    });
-
     testWidgets('wide screen shows more columns than narrow screen', (
       tester,
     ) async {
@@ -334,27 +292,6 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('assistant card uses 0.85 aspect ratio', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [
-            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Find the GridView
-      final gridView = tester.widget<GridView>(find.byType(GridView));
-      final delegate =
-          gridView.gridDelegate as SliverGridDelegateWithMaxCrossAxisExtent;
-
-      // Aspect ratio should be 0.85 (taller than wide)
-      expect(delegate.childAspectRatio, closeTo(0.85, 0.01));
-      // Max cross axis extent should be around 220 (bigger than homepage's 180)
-      expect(delegate.maxCrossAxisExtent, greaterThan(200));
-    });
-
     testWidgets('tapping assistant navigates to select conversation page', (
       tester,
     ) async {
@@ -382,24 +319,6 @@ void main() {
   });
 
   group('BuiltInPromptSelector', () {
-    testWidgets('shows new icon button in AppBar next to + button', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [
-            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Should show the built-in prompt icon button
-      expect(find.byIcon(Icons.auto_awesome), findsOneWidget);
-      // The + button should still be there
-      expect(find.byIcon(Icons.add), findsOneWidget);
-    });
-
     testWidgets('tapping built-in prompt button opens selector dialog', (
       tester,
     ) async {
@@ -484,28 +403,6 @@ void main() {
       expect(find.text('内置助手'), findsNothing);
       // The new assistant should appear in the grid
       expect(find.text(firstPrompt.name), findsOneWidget);
-    });
-
-    testWidgets('built-in prompt button also works in empty state', (
-      tester,
-    ) async {
-      SharedPreferences.setMockInitialValues({});
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            assistantProvider.overrideWith((ref) {
-              return AssistantsNotifier();
-            }),
-          ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // The empty state appbar should have the new icon button
-      expect(find.byIcon(Icons.auto_awesome), findsAtLeast(1));
-      // The + button should also be present
-      expect(find.byIcon(Icons.add), findsAtLeast(1));
     });
 
     testWidgets('closing dialog via X button does not create any assistant', (

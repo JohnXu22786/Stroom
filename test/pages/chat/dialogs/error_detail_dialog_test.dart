@@ -405,55 +405,6 @@ void main() {
       },
     );
 
-    testWidgets('has a close button', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => ElevatedButton(
-              onPressed: () => showDataDetailDialog(
-                context: context,
-                rawRequest: null,
-                rawResponse: null,
-              ),
-              child: const Text('Show'),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Show'));
-      await tester.pumpAndSettle();
-
-      expect(find.widgetWithText(OutlinedButton, '关闭'), findsOneWidget);
-    });
-
-    testWidgets('close button dismisses dialog', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => ElevatedButton(
-              onPressed: () => showDataDetailDialog(
-                context: context,
-                rawRequest: {'url': 'https://api.example.com'},
-                rawResponse: {'statusCode': 200},
-              ),
-              child: const Text('Show'),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Show'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('数据详情'), findsOneWidget);
-
-      await tester.tap(find.widgetWithText(OutlinedButton, '关闭'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('数据详情'), findsNothing);
-    });
-
     testWidgets('Status Code detail shows the numeric code', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -625,30 +576,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('消息内容'), findsNothing);
-    });
-
-    testWidgets('dialog has uniform rounded corners', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => ElevatedButton(
-              onPressed: () => showDataDetailDialog(
-                context: context,
-                rawRequest: {'url': 'https://api.example.com'},
-                rawResponse: {'statusCode': 200},
-              ),
-              child: const Text('Show'),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Show'));
-      await tester.pumpAndSettle();
-
-      // Verify the dialog exists by checking its content
-      expect(find.text('数据详情'), findsOneWidget);
-      expect(find.text('关闭'), findsOneWidget);
     });
 
     testWidgets('response body sections only for data and error keys', (

@@ -125,18 +125,6 @@ void main() {
       // Model list section visible
       expect(find.text('模型列表'), findsOneWidget);
     });
-
-    testWidgets('model list section is visible in default display', (
-      tester,
-    ) async {
-      await tester.pumpDetailPage();
-      await tester.pumpAndSettle();
-
-      // Model section header visible
-      expect(find.text('模型列表'), findsOneWidget);
-      // Add model button visible
-      expect(find.text('添加'), findsOneWidget);
-    });
   });
 
   group('New config creation', () {

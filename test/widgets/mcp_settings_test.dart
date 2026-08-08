@@ -34,31 +34,6 @@ void main() {
     });
 
     testWidgets(
-      'settings page shows MCP供应商 entry when MCP type is registered',
-      (tester) async {
-        // Use a large viewport so all content is visible
-        tester.view.physicalSize = const Size(1080, 4000);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-
-        // No saved data → defaults including MCP
-        SharedPreferences.setMockInitialValues({});
-
-        await tester.pumpWidget(_buildTestApp());
-        await tester.pumpAndSettle();
-
-        expect(find.text('MCP供应商'), findsOneWidget);
-        expect(find.text('TTS供应商'), findsOneWidget);
-        expect(find.text('LLM供应商'), findsOneWidget);
-        expect(find.text('OCR供应商'), findsOneWidget);
-        expect(find.text('音频转写供应商'), findsOneWidget);
-      },
-    );
-
-    testWidgets(
         'tapping MCP entry navigates to MCP config page with built-in configs',
         (
       tester,

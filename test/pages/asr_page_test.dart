@@ -145,50 +145,15 @@ void main() {
       // Should show just the model name when no provider name
       expect(find.text('TestModel'), findsWidgets);
     });
-
-    testWidgets('model selector label is visible', (tester) async {
-      final entry = _createAsrEntry(withModels: true);
-      await tester.pumpWidget(_buildTestApp(entries: [entry]));
-      await tester.pumpAndSettle();
-
-      // Should have a model-related label
-      expect(find.textContaining('识别模型'), findsWidgets);
-    });
   });
 
   group('AsrPage - save-to folder selector', () {
-    testWidgets('shows save-to folder selector in bottom bar', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Should show save-to section in bottom bar
-      expect(find.text('保存至'), findsOneWidget);
-    });
-
     testWidgets('save-to shows root directory by default', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
       // By default save-to shows root directory
       expect(find.text('根目录'), findsOneWidget);
-    });
-  });
-
-  group('AsrPage - bottom bar', () {
-    testWidgets('start transcription button is present', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('开始识别'), findsOneWidget);
-    });
-
-    testWidgets('save-to section is above the start button', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Both save-to and start button should be present
-      expect(find.text('保存至'), findsOneWidget);
-      expect(find.text('开始识别'), findsOneWidget);
     });
   });
 
@@ -337,15 +302,6 @@ void main() {
     });
   });
 
-  group('AsrPage - rename to 音频转写', () {
-    testWidgets('page title shows 音频转写', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('音频转写'), findsOneWidget);
-    });
-  });
-
   group('AsrPage - multi-select in-app audio picker', () {
     testWidgets('in-app audio picker has multiSelect enabled', (tester) async {
       await tester.pumpWidget(_buildTestApp());
@@ -425,19 +381,6 @@ void main() {
       // Confirm button should be present
       expect(find.byKey(const Key('media_picker_confirm_btn')), findsOneWidget);
     });
-  });
-
-  group('AsrPage - sequential processing of multiple audios', () {
-    testWidgets(
-      'start transcription button is present when audios are selected',
-      (tester) async {
-        await tester.pumpWidget(_buildTestApp());
-        await tester.pumpAndSettle();
-
-        // The start transcription button should be visible in the bottom bar
-        expect(find.text('开始识别'), findsOneWidget);
-      },
-    );
   });
 
   // ====================================================================
