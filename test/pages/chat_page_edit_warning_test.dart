@@ -1,7 +1,10 @@
-﻿// Tests for the edit data-loss warning overlay on ChatPage:
-// editing a user message deletes every message below it once sent,
-// so entering edit mode shows a centered, auto-dismissing warning
-// ("重新编辑发送后下面所有的消息将丢失") with a close button.
+﻿// Tests for the edit data-loss warning on ChatPage:
+// editing a user message deletes every message below it once sent, so
+// entering edit mode arms a warning ("重新编辑发送后下面所有的消息将丢失")
+// that is revealed once the soft keyboard pops up — or after a short
+// fallback delay when no keyboard appears (floating / external keyboard) —
+// in the composer, centered in the edit capsule's row, replacing the
+// capsule while visible. Auto-dismisses after 2 seconds or via close.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +22,16 @@ const _warningText = '重新编辑发送后下面所有的消息将丢失';
 /// Key of the warning's close button (distinguishes it from the edit
 /// capsule's own close button in the composer).
 const _closeButtonKey = Key('editWarningCloseButton');
+
+/// Key of the warning pill itself (for centering assertions).
+const _pillKey = Key('editWarningPill');
+
+/// Text of the composer's edit capsule.
+const _capsuleText = '编辑消息';
+
+/// How long the composer waits for the soft keyboard before revealing the
+/// warning anyway (no-keyboard fallback). Tests pump past it.
+const _noKeyboardFallback = Duration(milliseconds: 800);
 
 /// Creates a ChatPage app with a conversation pre-populated with [messages].
 ///
@@ -81,7 +94,8 @@ Finder _editButton({required bool last}) {
   return last ? matches.last : matches.first;
 }
 
-/// The close (X) button of the composer's edit capsule.
+/// The close (X) button of the composer's edit capsule (only present when
+/// the capsule — not the warning pill — is shown).
 Finder _editCapsuleCloseButton() {
   return find.descendant(
     of: find.byType(ChatComposerWidget),
@@ -104,8 +118,9 @@ void main() {
 
   group('ChatPage edit data-loss warning', () {
     testWidgets(
-      'editing a user message with newer messages below shows the '
-      'centered warning with a close button',
+      'editing a user message with newer messages below reveals the '
+      'warning after the no-keyboard fallback, centered in the composer '
+      'and replacing the capsule, with a close button',
       (tester) async {
         // user_0 has assistant_1 and user_2 below it.
         await _pumpLoadedChatPage(tester, _alternatingMessages(3));
@@ -113,16 +128,84 @@ void main() {
         await tester.tap(_editButton(last: false));
         await tester.pump();
 
+        // The warning waits for the soft keyboard (or the fallback delay):
+        // it must not appear immediately on edit entry.
+        expect(find.text(_warningText), findsNothing);
+
+        // No keyboard in the default test environment — the fallback
+        // reveals the warning after a short delay.
+        await tester.pump(_noKeyboardFallback);
+
         expect(find.text(_warningText), findsOneWidget);
         expect(find.byKey(_closeButtonKey), findsOneWidget);
-        // The requirement: floating centered in the message display area.
+        // The pill replaces the capsule in its row while visible.
+        expect(find.text(_capsuleText), findsNothing);
+        // It sits in the composer (not the message display area)…
         expect(
           find.ancestor(
             of: find.text(_warningText),
-            matching: find.byType(Center),
+            matching: find.byType(ChatComposerWidget),
           ),
           findsOneWidget,
         );
+        // …horizontally centered on the capsule's row.
+        final composerCenter = tester.getCenter(
+          find.byType(ChatComposerWidget),
+        );
+        final pillCenter = tester.getCenter(find.byKey(_pillKey));
+        expect((pillCenter.dx - composerCenter.dx).abs(), lessThan(1.0));
+
+        // Dismiss via the close button so no timers stay pending.
+        await tester.tap(find.byKey(_closeButtonKey));
+        await tester.pump();
+        expect(find.text(_warningText), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'the warning appears the moment the soft keyboard pops up',
+      (tester) async {
+        // Restore the fake view metrics (keyboard insets) afterwards.
+        addTearDown(tester.view.reset);
+        await _pumpLoadedChatPage(tester, _alternatingMessages(3));
+
+        await tester.tap(_editButton(last: false));
+        await tester.pump();
+        expect(find.text(_warningText), findsNothing);
+
+        // Simulate the soft keyboard appearing. viewInsets are physical
+        // pixels and the test devicePixelRatio is 3.0, so 600px → 200
+        // logical, above the 100px keyboard-visible threshold.
+        tester.view.viewInsets = const FakeViewPadding(bottom: 600);
+        await tester.pump();
+
+        // Revealed immediately — no need to wait for the fallback.
+        expect(find.text(_warningText), findsOneWidget);
+
+        // Dismiss via the close button so no timers stay pending.
+        await tester.tap(find.byKey(_closeButtonKey));
+        await tester.pump();
+        expect(find.text(_warningText), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'the warning appears immediately when the keyboard is already up '
+      'on edit entry',
+      (tester) async {
+        addTearDown(tester.view.reset);
+        await _pumpLoadedChatPage(tester, _alternatingMessages(3));
+
+        // The soft keyboard is up before the user taps edit (they were
+        // typing in the composer).
+        tester.view.viewInsets = const FakeViewPadding(bottom: 600);
+        await tester.pump();
+
+        await tester.tap(_editButton(last: false));
+        await tester.pump();
+
+        // Revealed at entry — no need to wait for the fallback.
+        expect(find.text(_warningText), findsOneWidget);
 
         // Dismiss via the close button so no timers stay pending.
         await tester.tap(find.byKey(_closeButtonKey));
@@ -136,11 +219,15 @@ void main() {
 
       await tester.tap(_editButton(last: false));
       await tester.pump();
+      await tester.pump(_noKeyboardFallback);
       expect(find.text(_warningText), findsOneWidget);
+      expect(find.text(_capsuleText), findsNothing);
 
       await tester.pump(const Duration(seconds: 2));
       await tester.pump();
       expect(find.text(_warningText), findsNothing);
+      // The edit capsule is back in its row.
+      expect(find.text(_capsuleText), findsOneWidget);
     });
 
     testWidgets('close button dismisses the warning immediately', (
@@ -150,11 +237,13 @@ void main() {
 
       await tester.tap(_editButton(last: false));
       await tester.pump();
+      await tester.pump(_noKeyboardFallback);
       expect(find.text(_warningText), findsOneWidget);
 
       await tester.tap(find.byKey(_closeButtonKey));
       await tester.pump();
       expect(find.text(_warningText), findsNothing);
+      expect(find.text(_capsuleText), findsOneWidget);
 
       // Nothing reappears when the would-be 2s window elapses.
       await tester.pump(const Duration(seconds: 2));
@@ -171,30 +260,40 @@ void main() {
 
         await tester.tap(_editButton(last: true));
         await tester.pump();
+        // Even after the no-keyboard fallback window, no warning appears.
+        await tester.pump(_noKeyboardFallback);
 
         expect(find.text(_warningText), findsNothing);
         expect(find.byKey(_closeButtonKey), findsNothing);
+        expect(find.text(_capsuleText), findsOneWidget);
       },
     );
 
-    testWidgets('canceling edit mode hides a still-visible warning', (
-      tester,
-    ) async {
-      await _pumpLoadedChatPage(tester, _alternatingMessages(3));
+    testWidgets(
+      'canceling edit mode after the warning auto-hides shows no warning',
+      (tester) async {
+        await _pumpLoadedChatPage(tester, _alternatingMessages(3));
 
-      await tester.tap(_editButton(last: false));
-      await tester.pump();
-      expect(find.text(_warningText), findsOneWidget);
+        await tester.tap(_editButton(last: false));
+        await tester.pump();
+        await tester.pump(_noKeyboardFallback);
+        expect(find.text(_warningText), findsOneWidget);
 
-      // Tap the composer's edit-capsule X to cancel edit mode.
-      await tester.tap(_editCapsuleCloseButton());
-      await tester.pump();
-      expect(find.text(_warningText), findsNothing);
+        // Let the warning auto-hide, then cancel via the capsule's X.
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pump();
+        expect(find.text(_capsuleText), findsOneWidget);
 
-      // Nothing reappears when the would-be 2s window elapses.
-      await tester.pump(const Duration(seconds: 2));
-      expect(find.text(_warningText), findsNothing);
-    });
+        await tester.tap(_editCapsuleCloseButton());
+        await tester.pump();
+        expect(find.text(_capsuleText), findsNothing);
+        expect(find.text(_warningText), findsNothing);
+
+        // Nothing reappears when the would-be 2s window elapses.
+        await tester.pump(const Duration(seconds: 2));
+        expect(find.text(_warningText), findsNothing);
+      },
+    );
 
     testWidgets('no warning before any edit interaction', (tester) async {
       await _pumpLoadedChatPage(tester, _alternatingMessages(3));
