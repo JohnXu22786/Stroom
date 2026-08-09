@@ -77,11 +77,6 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   /// the message being edited re-shows the warning after a dismissal.
   final int editWarningArmCount;
 
-  /// Called when the input field gains/loses focus. The chat page uses the
-  /// gain event to start the scroll-to-bottom animation immediately —
-  /// before the soft-keyboard show animation begins.
-  final ValueChanged<bool>? onFocusChanged;
-
   const ChatComposerWidget({
     super.key,
     required this.onSend,
@@ -104,7 +99,6 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.onEditCancel,
     this.showEditWarningOnEntry = false,
     this.editWarningArmCount = 0,
-    this.onFocusChanged,
   });
 
   @override
@@ -187,11 +181,6 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     // Listen to app lifecycle events so drafts are saved even when the
     // app goes to background or is terminated unexpectedly.
     WidgetsBinding.instance.addObserver(this);
-
-    // Notify the chat page the moment the input gains/loses focus so it can
-    // start the scroll-to-bottom animation before the soft-keyboard
-    // animation begins.
-    _focusNode.addListener(_onFocusChanged);
 
     // Restore draft text for the current conversation, if any
     if (widget.initialDraftText.isNotEmpty) {
@@ -417,15 +406,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     _revealEditWarningIfKeyboardUp();
   }
 
-  /// Forwards focus changes (with the current focus state) to the page.
-  void _onFocusChanged() {
-    widget.onFocusChanged?.call(_focusNode.hasFocus);
-  }
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _focusNode.removeListener(_onFocusChanged);
     _draftTimer?.cancel();
     _editWarningTimer?.cancel();
     _editWarningFallbackTimer?.cancel();

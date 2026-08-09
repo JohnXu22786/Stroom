@@ -221,40 +221,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// background stream cannot keep the list hidden indefinitely.
   int _initialAdjustChaseFrames = 0;
 
-  /// Captured scroll position before the keyboard opened, so it can be
-  /// restored when the keyboard is dismissed.
-  double? _lastScrollPositionBeforeKeyboard;
-
-  /// Insets above which the soft keyboard is considered visible.
-  /// Small (not the usual 100px): the keyboard-appear scroll must start
-  /// as soon as the insets begin to rise — about 0.3-0.5s earlier than
-  /// crossing a large threshold — so the list slides up in lockstep with
-  /// the keyboard instead of visibly lagging it. Non-keyboard system bars
-  /// live in [MediaQueryData.padding], not viewInsets, so a small
-  /// threshold cannot misfire.
+  /// Insets above which the soft keyboard is considered visible. Used to
+  /// start/end the keyboard session (which swallows the library's own
+  /// keyboard scroll and gates the content-growth follow). Non-keyboard
+  /// system bars live in [MediaQueryData.padding], not viewInsets, so a
+  /// small threshold cannot misfire.
   static const double _keyboardVisibleThreshold = 20;
-
-  /// Duration of the keyboard-follow scroll started when the keyboard
-  /// appears — matching the soft-keyboard show animation length, so the
-  /// list slides up in lockstep with the keyboard and stops as it settles
-  /// (nothing else scrolls after it).
-  static const Duration _keyboardOpenScrollDuration =
-      Duration(milliseconds: 300);
-
-  /// Grace period after the composer hook saves the scroll position during
-  /// which the keyboard is expected to appear; after it, an unconfirmed
-  /// save is dropped as stale.
-  static const Duration _staleKeyboardPositionDelay =
-      Duration(milliseconds: 800);
-
-  /// True while the soft keyboard is visible in the current session. Used
-  /// to drop the composer hook's saved position when the keyboard never
-  /// actually appears (physical keyboard / suppressed IME).
-  bool _keyboardAppeared = false;
 
   /// True between the keyboard appearing and its dismissal. Used to keep
   /// the content-growth follow ([_followContentGrowth]) inert during the
-  /// session — its instant jump would otherwise fight the keyboard scroll.
+  /// session — its instant jump would otherwise move the list while the
+  /// keyboard is up.
   bool _keyboardFollowUpPending = false;
 
   /// True while the user is touching/dragging the chat list. Used by the
@@ -262,11 +239,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// fighting a finger scroll (the keyboard bottom-pinning that originally
   /// introduced this flag was reverted).
   bool _userIsDragging = false;
-
-  /// Drops [_lastScrollPositionBeforeKeyboard] if the soft keyboard never
-  /// appeared within this delay after the composer hook saved it (the hook
-  /// fires on focus, which on a physical keyboard happens without an IME).
-  Timer? _staleKeyboardPositionTimer;
 
   /// Last OBSERVED content extent (maxScrollExtent + viewportDimension —
   /// the list's total content height) from [_followContentGrowth] metrics
@@ -371,7 +343,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _staleKeyboardPositionTimer?.cancel();
     // The ChatStreamManager owns the adapter lifecycle. We do NOT cancel
     // or dispose it here — if streaming is active, it continues in the
     // background and saves results when complete. The adapter is cleaned
@@ -414,32 +385,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
 
     if (isNowVisible && !_wasKeyboardVisible) {
-      // Keyboard just appeared — capture the pre-keyboard scroll position
-      // (unless the composer focus hook already saved it for this session)
-      // and START the keyboard-follow scroll now, as soon as the insets
-      // begin to rise (~0.3-0.5s before the viewport settles). The list
-      // scrolls by the keyboard height (keeping the reading spot above the
-      // keyboard) — NOT to the bottom, which read as an overshooting
-      // "first scroll" the user asked to drop. The library's own debounced
-      // keyboard scroll is swallowed for the session so it cannot run a
-      // second, competing scroll.
-      // The null check keeps this branch from overwriting the hook's saved
-      // position with a mid-animation offset. The drag flag is reset here
-      // too: this branch also starts a keyboard session, and a drag that
-      // happened while the keyboard was CLOSED (the user reading) must not
-      // cancel this session's follow-up.
-      _keyboardAppeared = true;
+      // Keyboard just appeared — start the keyboard session. The list is
+      // NOT scrolled (the user asked for no keyboard scroll at all): it
+      // stays where it is; the Scaffold shrinks the viewport around it.
+      // The library's own debounced keyboard scroll is swallowed for the
+      // session so it cannot move the list either.
       _keyboardFollowUpPending = true;
-      _staleKeyboardPositionTimer?.cancel();
       _chatScrollController.swallowScrolls = true;
-      if (_chatScrollController.hasClients) {
-        _lastScrollPositionBeforeKeyboard ??=
-            _chatScrollController.position.pixels;
-        _animateKeyboardFollowScroll();
-      }
     } else if (!isNowVisible && _wasKeyboardVisible) {
-      // Keyboard just disappeared — restore the scroll position that was
-      // captured before the keyboard opened.
+      // Keyboard just disappeared — end the keyboard session. The list is
+      // not moved on dismiss.
       _restoreScrollPositionAfterKeyboard();
     }
     // Rebuild so the keyboard-dismiss overlay button follows the keyboard

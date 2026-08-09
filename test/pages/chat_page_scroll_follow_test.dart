@@ -290,60 +290,6 @@ void main() {
     });
 
     testWidgets(
-        'stream growth during the keyboard-dismiss restore never yanks '
-        'the list away from the restore target', (tester) async {
-      final container = await pumpChat(tester);
-      await scrollToBottom(tester);
-      await startStreaming(tester);
-      await scrollToBottom(tester);
-
-      // Open the keyboard while scrolled up: the list follows by the
-      // keyboard height (no bottom pinning, nothing scrolls after it).
-      await scrollUp(tester);
-      final savedPos = _chatPosition(tester).pixels;
-      expect(savedPos, greaterThan(0));
-      await setKeyboardInset(tester, 300);
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(milliseconds: 400));
-      var pos = _chatPosition(tester);
-      expect(
-        pos.pixels,
-        closeTo(savedPos + 300, 10.0),
-        reason: 'precondition: keyboard open follows the list by the '
-            'keyboard height',
-      );
-
-      // Dismiss the keyboard: the restore is a smooth animation now (the
-      // instant jump was dropped per user feedback), so let it land.
-      tester.view.devicePixelRatio = 3.0;
-      tester.view.physicalSize = const Size(2400, 1800);
-      tester.view.viewInsets = FakeViewPadding.zero;
-      await _dispatchMetrics(tester);
-      await tester.pump(const Duration(milliseconds: 16));
-      await tester.pump(const Duration(milliseconds: 400));
-
-      // The stream grows right after the restore — the list must stay at
-      // the saved position, not snap back to the bottom.
-      streamChunk(container, 'E' * 3000);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump(const Duration(milliseconds: 100));
-
-      final restored = _chatPosition(tester);
-      expect(
-        restored.pixels,
-        closeTo(savedPos, 10.0),
-        reason: 'the keyboard-dismiss restore wins over stream growth; '
-            'the list must not be yanked to the bottom',
-      );
-      // Flush one-shot timers before teardown.
-      for (var i = 0; i < 4; i++) {
-        await tester.pump(const Duration(milliseconds: 500));
-      }
-    });
-
-    testWidgets(
         'a small scroll-up within the at-bottom window is not undone by '
         'the follow logic; growth within the window still re-pins',
         (tester) async {

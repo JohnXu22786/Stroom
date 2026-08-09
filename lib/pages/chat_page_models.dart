@@ -424,7 +424,6 @@ extension _ChatPageModelsExt on _ChatPageState {
       onEditCancel: _handleEditCancel,
       showEditWarningOnEntry: _showEditWarningOnEntry,
       editWarningArmCount: _editWarningArmCount,
-      onFocusChanged: _onComposerFocusChanged,
     );
   }
 }
