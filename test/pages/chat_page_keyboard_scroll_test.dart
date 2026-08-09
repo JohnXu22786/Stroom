@@ -106,7 +106,13 @@ Future<void> pumpChat(
           theme: platform == null
               ? null
               : ThemeData(platform: platform, useMaterial3: true),
-          home: const ChatPage(),
+          // In production ChatPage lives inside HomePage's Scaffold,
+          // which strips viewInsets.bottom from the body's MediaQuery —
+          // keyboard logic must therefore read the View directly. Keep
+          // the Scaffold in the test tree so a regression (reading
+          // MediaQuery instead) fails these tests instead of only
+          // misbehaving on device.
+          home: Scaffold(body: const ChatPage()),
         ),
       ),
       visible: visible,
@@ -193,20 +199,20 @@ Future<void> _dispatchMetrics(WidgetTester tester) async {
 }
 
 /// Simulates the soft keyboard occupying [inset] logical pixels at the
-/// bottom of the window: both the window (and therefore the chat area)
-/// shrinks — mirroring `adjustResize` — and the view insets update.
+/// bottom of the window: the view insets change and the enclosing
+/// Scaffold (present in the test tree, like in production) shrinks the
+/// body — mirroring `adjustResize` on Android. The window itself does NOT
+/// resize (a resize here would double-shrink the chat area).
 Future<void> setKeyboardInset(WidgetTester tester, double inset) async {
   const dpr = 3.0;
   tester.view.devicePixelRatio = dpr;
-  tester.view.physicalSize = Size(800.0 * dpr, (600.0 - inset) * dpr);
   tester.view.viewInsets = FakeViewPadding(bottom: inset * dpr);
   await _dispatchMetrics(tester);
 }
 
-/// Restores the window to its full size with no keyboard insets.
+/// Restores the view insets to zero (keyboard gone).
 Future<void> closeKeyboard(WidgetTester tester) async {
   tester.view.devicePixelRatio = 3.0;
-  tester.view.physicalSize = const Size(2400, 1800);
   tester.view.viewInsets = FakeViewPadding.zero;
   await _dispatchMetrics(tester);
 }
@@ -255,9 +261,13 @@ void main() {
 
       // Let everything (keyboard-appear scroll, the library's debounced
       // scroll, the follow-up) finish — the list sits at the bottom of the
-      // keyboard-shrunk viewport.
+      // keyboard-shrunk viewport. (The final extra frames let the follow-up
+      // animation actually run: in the test clock its start is deferred a
+      // frame by the debounce timer / post-frame scheduling.)
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 250));
       final endPos = _scrollPosition(tester);
       expect(
         endPos.pixels,
@@ -292,9 +302,12 @@ void main() {
       await setKeyboardInset(tester, 300);
       // Let the keyboard-appear scroll, the chat library's debounced
       // keyboard scroll (100ms debounce + 250ms animation) and the
-      // follow-up run to completion.
+      // follow-up run to completion (extra frames for the follow-up's
+      // frame-deferred start in the test clock).
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 250));
       expect(
         _scrollPosition(tester).pixels,
         closeTo(_scrollPosition(tester).maxScrollExtent, 20.0),
@@ -630,10 +643,13 @@ void main() {
       expect(savedPos, greaterThan(0));
 
       await setKeyboardInset(tester, 300);
-      // The keyboard-open scroll is a 200ms animation plus a 600ms
-      // follow-up; let it land.
+      // The keyboard-open scroll, the library's debounced scroll and the
+      // follow-up land within ~700ms (extra frames for the follow-up's
+      // frame-deferred start in the test clock).
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 250));
       expect(
         _scrollPosition(tester).pixels,
         closeTo(_scrollPosition(tester).maxScrollExtent, 10.0),
@@ -654,7 +670,7 @@ void main() {
                 return ProviderEntriesNotifier();
               }),
             ],
-            child: const MaterialApp(home: ChatPage()),
+            child: const MaterialApp(home: Scaffold(body: ChatPage())),
           ),
           visible: false,
         ),
@@ -679,7 +695,7 @@ void main() {
                 return ProviderEntriesNotifier();
               }),
             ],
-            child: const MaterialApp(home: ChatPage()),
+            child: const MaterialApp(home: Scaffold(body: ChatPage())),
           ),
           visible: true,
         ),
