@@ -445,11 +445,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final conversations = ref.watch(conversationsProvider);
     String title = '新对话';
     String currentDraftText = '';
+    List<Attachment> currentDraftAttachments = const [];
     if (activeId != null) {
       final conv = conversations.where((c) => c.id == activeId).firstOrNull;
       if (conv != null) {
         if (conv.title.isNotEmpty) title = conv.title;
         currentDraftText = conv.draftText;
+        currentDraftAttachments = conv.draftAttachments;
       }
     }
 
@@ -513,6 +515,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
               _buildComposer(
                 activeId: activeId,
                 currentDraftText: currentDraftText,
+                currentDraftAttachments: currentDraftAttachments,
               ),
             ],
           ),

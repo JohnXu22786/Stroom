@@ -118,6 +118,21 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
             await AttachmentStorage.deleteFile(att.storagePath);
           }
         }
+        // 未发送的附件草稿文件一并清理（随对话删除，避免孤儿）
+        for (final att in conv.draftAttachments) {
+          try {
+            await AttachmentStorage.deleteFile(att.storagePath);
+          } catch (_) {
+            // 非关键清理
+          }
+        }
+      }
+      // 图片压缩缓存按对话隔离存储：删除对话时整目录清理
+      // （派生缓存，best-effort：失败不影响对话删除）
+      try {
+        await AttachmentStorage.deleteConversationCompressedImages(id);
+      } catch (_) {
+        // 非关键清理
       }
     }
 
@@ -161,6 +176,21 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           await AttachmentStorage.deleteFile(att.storagePath);
         }
       }
+      // 未发送的附件草稿文件一并清理（随对话删除，避免孤儿）
+      for (final att in conv.draftAttachments) {
+        try {
+          await AttachmentStorage.deleteFile(att.storagePath);
+        } catch (_) {
+          // 非关键清理
+        }
+      }
+    }
+    // 图片压缩缓存按对话隔离存储：删除对话时整目录清理
+    // （派生缓存，best-effort：失败不影响对话删除）
+    try {
+      await AttachmentStorage.deleteConversationCompressedImages(id);
+    } catch (_) {
+      // 非关键清理
     }
 
     await ref.read(conversationsProvider.notifier).deleteConversation(id);

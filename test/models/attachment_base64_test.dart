@@ -62,5 +62,40 @@ void main() {
       // base64Data should be lost after round-trip (not persisted)
       expect(restored.base64Data, isNull);
     });
+
+    test('toMap(includeBase64Data: true) 显式携带 base64Data（草稿快照用）', () {
+      final att = Attachment(
+        fileName: 'photo.jpg',
+        mimeType: 'image/jpeg',
+        fileType: 'image',
+        hash: 'snap-hash',
+        storagePath: 'attachments/snap-hash_1.jpg',
+        fileSize: 2048,
+      )..base64Data = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAYEBQYFBAYGBQYH';
+
+      final map = att.toMap(includeBase64Data: true);
+      final restored = Attachment.fromMap(map);
+
+      expect(map['base64Data'], att.base64Data);
+      expect(restored.base64Data, att.base64Data,
+          reason: '草稿快照的压缩 base64 必须随 toMap/fromMap 往返保留');
+      expect(restored.hash, 'snap-hash');
+      expect(restored.fileName, 'photo.jpg');
+    });
+
+    test('toMap(includeBase64Data: true) 在 base64Data 为 null 时仍不携带该键', () {
+      final att = Attachment(
+        fileName: 'photo.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'no-b64',
+        storagePath: 'attachments/no-b64_1.png',
+        fileSize: 1024,
+      );
+
+      final map = att.toMap(includeBase64Data: true);
+
+      expect(map.containsKey('base64Data'), false);
+    });
   });
 }
