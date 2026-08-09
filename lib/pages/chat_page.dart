@@ -238,6 +238,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// actually appears (physical keyboard / suppressed IME).
   bool _keyboardAppeared = false;
 
+  /// True between the keyboard appearing and its dismissal. While set,
+  /// every scroll that ends re-runs the follow-up evaluation (see
+  /// [_onChatScrollNotification]), which makes the final landing timing
+  /// deterministic instead of relying on the [_keyboardFollowUpDelay]
+  /// backstop.
+  bool _keyboardFollowUpPending = false;
+
   /// True once the user drags the chat list during the current keyboard
   /// session. The follow-up scroll must not fight the user: once they take
   /// over the list, the follow-up is skipped for this session.
@@ -413,6 +420,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // happened while the keyboard was CLOSED (the user reading) must not
       // cancel this session's follow-up.
       _keyboardAppeared = true;
+      _keyboardFollowUpPending = true;
       _userDraggedDuringKeyboardSession = false;
       _staleKeyboardPositionTimer?.cancel();
       _keyboardFollowUpTimer?.cancel();
@@ -428,11 +436,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // captured before the keyboard opened.
       _restoreScrollPositionAfterKeyboard();
     }
-    // Rebuild so the keyboard-dismiss overlay button follows the keyboard
-    // state (it is shown while the keyboard is open).
-    if (_wasKeyboardVisible != isNowVisible) {
-      setState(() => _wasKeyboardVisible = isNowVisible);
-    }
+    _wasKeyboardVisible = isNowVisible;
   }
 
   @override
@@ -530,7 +534,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
                             // list itself never dismisses it — manual
                             // behavior), so the user can close the
                             // keyboard without hunting for its close key.
-                            if (_wasKeyboardVisible)
+                            // Reads MediaQuery directly (instead of a
+                            // state flag) so the button appears/disappears
+                            // with the insets via the normal rebuild.
+                            if (MediaQuery.viewInsetsOf(context).bottom >
+                                _ChatPageState._keyboardVisibleThreshold)
                               _buildKeyboardDismissButton(isDark: isDark),
                           ],
                         ),
