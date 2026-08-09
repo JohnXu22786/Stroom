@@ -13,6 +13,7 @@ import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
 import '../providers/task_flow_provider.dart';
 import '../services/task_flow_execution_service.dart';
+import '../utils/block_param_display.dart';
 import '../widgets/block_chain_editor.dart';
 import '../widgets/block_editor_dialog.dart';
 import '../widgets/flow_block_card.dart';
@@ -721,19 +722,23 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
-                ...block.params.entries.map(
-                  (e) => Padding(
+                ...block.params.entries.map((e) {
+                  final paramDef =
+                      def?.params.where((p) => p.key == e.key).firstOrNull;
+                  return Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${e.key}: ',
+                          '${paramDef?.label ?? e.key}: ',
                           style: TextStyle(fontSize: 13, color: cs.primary),
                         ),
                         Expanded(
+                          // Friendly display — raw ids (assistant uuids,
+                          // voice ids, model indices) must never appear.
                           child: Text(
-                            '${e.value}',
+                            friendlyParamValue(paramDef, e.value, ref),
                             style: TextStyle(
                               fontSize: 13,
                               color: cs.onSurfaceVariant,
@@ -742,8 +747,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                         ),
                       ],
                     ),
-                  ),
-                ),
+                  );
+                }),
               ],
             ],
           ),

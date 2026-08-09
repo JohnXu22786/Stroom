@@ -430,6 +430,39 @@ void main() {
   });
 
   testWidgets(
+      'block card shows the MODEL name for modelSelector params '
+      '(no raw index)', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          providerEntriesProvider.overrideWith(
+            (ref) => _FakeEntriesNotifier(_asrEntries()),
+          ),
+          assistantProvider.overrideWith(
+            (ref) => _FakeAssistantsNotifier(const []),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: FlowBlockCard(
+              block: TaskFlowBlock(
+                typeKey: BlockType.asr,
+                params: {'modelIndex': 1},
+              ),
+              index: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Index 1 = whisper-large | OpenAI in the shared flattened list.
+    expect(find.text('识别模型: whisper-large | OpenAI'), findsOneWidget);
+    expect(find.textContaining('modelIndex'), findsNothing);
+  });
+
+  testWidgets(
       'TTS panel with duplicate voice ids within one model does not '
       'crash (deduped dropdown)', (tester) async {
     final entries = ProviderEntriesState(

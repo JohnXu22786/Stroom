@@ -1,12 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../models/assistant.dart';
-import '../../models/built_in_prompts.dart';
-import '../../models/tts_models.dart';
-import '../../providers/assistant_provider.dart';
-import '../../providers/provider_config.dart';
-import '../models/block_type_definition.dart';
 import '../models/task_flow_definition.dart';
+import '../utils/block_param_display.dart';
 import 'io_type_indicator.dart';
 
 /// A card representing a single block in the task flow builder.
@@ -217,7 +212,7 @@ class FlowBlockCard extends ConsumerWidget {
                               .firstOrNull;
                           final label = paramDef?.label ?? e.key;
                           return Text(
-                            '$label: ${_friendlyParamValue(paramDef, e.value, ref)}',
+                            '$label: ${friendlyParamValue(paramDef, e.value, ref)}',
                             style: TextStyle(
                               fontSize: 10,
                               color: cs.onSurfaceVariant,
@@ -295,47 +290,5 @@ class FlowBlockCard extends ConsumerWidget {
         ),
       ],
     );
-  }
-
-  /// Renders a param value with a FRIENDLY name — raw ids (assistant
-  /// uuids, voice ids like zh-CN-XiaoxiaoNeural) must never appear on the
-  /// builder canvas. Resolves selector-typed params the same way the
-  /// settings panel does; unresolvable values show 已失效 instead of the
-  /// raw string.
-  String _friendlyParamValue(
-    BlockParamDefinition? paramDef,
-    dynamic value,
-    WidgetRef ref,
-  ) {
-    if (paramDef == null) return value.toString();
-    final raw = value?.toString() ?? '';
-    if (paramDef.type == BlockParamType.assistantSelector) {
-      if (raw.isEmpty) return '未指定';
-      final builtIn = builtInPromptById(raw);
-      if (builtIn != null) return '${builtIn.emoji} ${builtIn.name}';
-      final assistants = ref.read(assistantProvider);
-      final a = assistants.where((a) => a.id == raw).firstOrNull;
-      return a != null ? '${a.emoji} ${a.name}' : '已失效';
-    }
-    if (paramDef.type == BlockParamType.voiceSelector) {
-      final voices = _ttsVoices(ref);
-      final v = voices.where((v) => v.id == raw).firstOrNull;
-      return v != null ? v.name : '已失效';
-    }
-    return raw;
-  }
-
-  /// Voices of the TTS model the executor uses (configs.first.models.first
-  /// — same source as the settings panel and the TTS page).
-  List<VoiceEntry> _ttsVoices(WidgetRef ref) {
-    final state = ref.read(providerEntriesProvider);
-    for (final e in state.entries) {
-      if (e.type != 'tts') continue;
-      for (final c in e.configs) {
-        if (c.models.isEmpty) continue;
-        return c.models.first.voices;
-      }
-    }
-    return const [];
   }
 }
