@@ -160,9 +160,11 @@ extension _ChatPageUiExt on _ChatPageState {
   }
 
   /// Restores the scroll position that was captured before the keyboard
-  /// opened, so the user returns to where they were reading. Also ends the
-  /// keyboard scroll session: the saved position is cleared and every
-  /// keyboard-session flag/timer is reset for the next session.
+  /// opened, so the user returns to where they were reading. Animates
+  /// instead of jumping — an instant jump back read as a sudden far
+  /// "hop" on device, while the user asked to keep the smooth motion.
+  /// Also ends the keyboard scroll session: the saved position is cleared
+  /// and every keyboard-session flag/timer is reset for the next session.
   void _restoreScrollPositionAfterKeyboard() {
     final savedPos = _lastScrollPositionBeforeKeyboard;
     _lastScrollPositionBeforeKeyboard = null;
@@ -172,12 +174,19 @@ extension _ChatPageUiExt on _ChatPageState {
     _staleKeyboardPositionTimer?.cancel();
     _keyboardFollowUpTimer?.cancel();
     if (savedPos == null) return;
+    if (!_chatScrollController.hasClients) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_chatScrollController.hasClients) {
-        final maxScroll = _chatScrollController.position.maxScrollExtent;
-        _chatScrollController.jumpTo(savedPos.clamp(0.0, maxScroll));
-      }
+      if (!_chatScrollController.hasClients) return;
+      final pos = _chatScrollController.position;
+      final maxScroll = pos.maxScrollExtent;
+      final target = savedPos.clamp(0.0, maxScroll);
+      if ((pos.pixels - target).abs() < 1) return;
+      pos.animateTo(
+        target,
+        duration: _ChatPageState._keyboardOpenScrollDuration,
+        curve: Curves.easeOutCubic,
+      );
     });
   }
 
@@ -230,6 +239,12 @@ extension _ChatPageUiExt on _ChatPageState {
   /// window.
   void _followContentGrowth() {
     if (_pendingInitialScrollAdjustment) return;
+    // While a keyboard session is open the list is being scrolled by the
+    // keyboard-appear animation and its follow-up; the lazy list building
+    // the lower messages during that scroll makes maxScrollExtent grow,
+    // and an instant jump here read as a sudden far "hop" on device. The
+    // keyboard session's own follow-up closes the gap smoothly instead.
+    if (_keyboardFollowUpPending) return;
     if (!_chatScrollController.hasClients) return;
     final pos = _chatScrollController.position;
     final contentExtent = pos.maxScrollExtent + pos.viewportDimension;

@@ -319,14 +319,14 @@ void main() {
         reason: 'precondition: keyboard open lands at/near the bottom',
       );
 
-      // Dismiss the keyboard: the restore is a single jump (the animated
-      // 150ms restore belonged to the reverted keyboard pinning), so it
-      // completes within a frame.
+      // Dismiss the keyboard: the restore is a smooth animation now (the
+      // instant jump was dropped per user feedback), so let it land.
       tester.view.devicePixelRatio = 3.0;
       tester.view.physicalSize = const Size(2400, 1800);
       tester.view.viewInsets = FakeViewPadding.zero;
       await _dispatchMetrics(tester);
       await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 400));
 
       // The stream grows right after the restore — the list must stay at
       // the saved position, not snap back to the bottom.

@@ -314,9 +314,11 @@ void main() {
         reason: 'precondition: keyboard open lands at the bottom',
       );
 
-      // Keyboard dismisses — the list must return to the tap-time position.
+      // Keyboard dismisses — the list must return to the tap-time position
+      // (a smooth restore animation now, no instant jump).
       await closeKeyboard(tester);
       await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 400));
       expect(
         _scrollPosition(tester).pixels,
         closeTo(savedPos, 1.0),
@@ -394,6 +396,7 @@ void main() {
 
       await closeKeyboard(tester);
       await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 400));
       expect(
         _scrollPosition(tester).pixels,
         closeTo(newPos, 1.0),
@@ -428,6 +431,7 @@ void main() {
 
       await closeKeyboard(tester);
       await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 400));
       expect(
         _scrollPosition(tester).pixels,
         closeTo(savedPos, 1.0),
@@ -468,6 +472,7 @@ void main() {
 
       await closeKeyboard(tester);
       await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 400));
       expect(
         _scrollPosition(tester).pixels,
         closeTo(saved, 1.0),
@@ -588,6 +593,7 @@ void main() {
         findsNothing,
         reason: 'the dismiss button hides once the keyboard is gone',
       );
+      await tester.pump(const Duration(milliseconds: 400));
       expect(
         _scrollPosition(tester).pixels,
         closeTo(savedPos, 1.0),
@@ -684,7 +690,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Return to the chat tab — the list is back at the reading position.
+      // Return to the chat tab — the list is back at the reading position
+      // (the restore is a smooth animation now; give it time to land).
       await tester.pumpWidget(
         _wrapTabVisibility(
           ProviderScope(
@@ -701,6 +708,7 @@ void main() {
         ),
       );
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
 
       expect(
         _scrollPosition(tester).pixels,
