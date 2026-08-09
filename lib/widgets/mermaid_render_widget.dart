@@ -284,9 +284,11 @@ class MermaidRenderWidget extends StatefulWidget {
   /// Web-only: absolute URL of the bundled asset template loaded via
   /// [InAppWebViewController.loadUrl]. Flutter web serves assets under
   /// `/assets/<pubspec path>`, and the template loads mermaid.min.js from
-  /// the same directory (same origin, no CDN request).
+  /// the same directory (same origin, no CDN request). The ?v= query
+  /// forces a fresh template fetch — a stale browser/iframe cache of the
+  /// old template would otherwise keep failing after an app update.
   static const webAssetTemplateUrl =
-      '/assets/assets/vendor/mermaid_render.html';
+      '/assets/assets/vendor/mermaid_render.html?v=4';
 
   /// Load-once cache of the bundled mermaid.js source, shared by every
   /// [MermaidRenderWidget] instance and the preview dialog.
