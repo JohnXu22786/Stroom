@@ -393,18 +393,43 @@ void main() {
       // Click the projected anchor of the polygon (inside the face).
       final proj = state.scene.projection;
       final s = proj.project(const Point3D(1, 1, 0))!;
-      debugPrint('AREA-DEBUG tap at ${s.x},${s.y}');
       await tester.tapAt(Offset(s.x, s.y));
       await tester.pump();
       await tester.pump();
-      debugPrint('AREA-DEBUG objects=${state.objects.length} '
-          'inputs=${state.construction?.inputs.length} '
-          'complete=${state.construction?.isComplete}');
 
       expect(state.objects.length, 2);
       final created = state.objects.last;
       expect(created.type, Object3DType.measurement);
       expect(created.measureText, contains('4'));
+    });
+
+    testWidgets('area tool: clicking exactly on a polygon vertex also works',
+        (tester) async {
+      await tester.pumpWidget(_wrap(MathCanvas3D(
+        initialTool: ConstructionTool.area,
+      )));
+      await tester.pump();
+
+      final state = tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
+      state.addObject(Object3D.polygon(const [
+        Point3D(0, 0, 0),
+        Point3D(2, 0, 0),
+        Point3D(2, 2, 0),
+        Point3D(0, 2, 0),
+      ], name: 'poly'));
+      await tester.pump();
+
+      // Click exactly on vertex (0,0,0) — floating-point sign noise at the
+      // barycentric boundary must not reject the hit (regression for the
+      // CI-only failure where libm produced u = -1e-16).
+      final proj = state.scene.projection;
+      final s = proj.project(const Point3D(0, 0, 0))!;
+      await tester.tapAt(Offset(s.x, s.y));
+      await tester.pump();
+      await tester.pump();
+
+      expect(state.objects.length, 2);
+      expect(state.objects.last.type, Object3DType.measurement);
     });
 
     testWidgets('dragging a selected point does not drift', (tester) async {

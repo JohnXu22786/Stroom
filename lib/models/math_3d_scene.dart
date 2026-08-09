@@ -385,8 +385,13 @@ Point3D? intersectLinePlane(Point3D a, Vector3D d, Vector3D n, double planeD) {
 }
 
 /// Möller–Trumbore ray-triangle intersection. Returns t or null.
+///
+/// Barycentric bounds use a small epsilon so rays hitting exactly on a
+/// vertex or edge are accepted (floating-point sign noise at u/v ≈ 0 must
+/// not reject legitimate hits).
 double? rayTriangle(
     Point3D origin, Vector3D dir, Point3D v0, Point3D v1, Point3D v2) {
+  const eps = 1e-9;
   final e1 = v1 - v0;
   final e2 = v2 - v0;
   final p = dir.cross(e2);
@@ -395,10 +400,10 @@ double? rayTriangle(
   final inv = 1 / det;
   final tvec = origin - v0;
   final u = tvec.dot(p) * inv;
-  if (u < 0 || u > 1) return null;
+  if (u < -eps || u > 1 + eps) return null;
   final q = tvec.cross(e1);
   final v = dir.dot(q) * inv;
-  if (v < 0 || u + v > 1) return null;
+  if (v < -eps || u + v > 1 + eps) return null;
   final t = e2.dot(q) * inv;
   if (t < 0) return null;
   return t;
