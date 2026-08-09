@@ -128,11 +128,11 @@ void main() {
     });
 
     testWidgets(
-        'switch ON with a stale value still refreshes the chip (provider '
-        'write fires)', (tester) async {
-      // Pre-fix sessions could hold a value in the map while the switch is
-      // off (the old handler never removed values). Turning the switch on
-      // must still trigger the provider write so the chip rebuilds.
+        'stale value keeps the chip active without config write-through',
+        (tester) async {
+      // 已选值即运行时开关状态：即使参数创建时 enabled=false（从未
+      // 在配置页激活），存在已选值就视为激活，chip 点亮且请求发送
+      // （激活状态可跨重启保留，无需写穿共享配置对象）。
       SharedPreferences.setMockInitialValues({});
       final staleApp = ProviderScope(
         overrides: [
@@ -165,21 +165,33 @@ void main() {
       );
       await pumpComposer(tester, staleApp);
 
-      // Chip starts grey (switch off in config)
-      final greyChip = find.byWidgetPredicate(
+      // Chip 已点亮（有已选值，参数视为运行时激活）
+      final litChip = find.byWidgetPredicate(
         (w) => w is SettingsChip && w.label == '自定义参数',
       );
-      expect(tester.widget<SettingsChip>(greyChip).color, Colors.grey);
+      expect(
+        tester.widget<SettingsChip>(litChip).color,
+        const Color(0xFF6366F1),
+      );
 
       await tester.tap(find.text('自定义参数'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
+      // 开关显示为开（有已选值）
+      final sw = tester.widget<Switch>(find.byType(Switch));
+      expect(sw.value, isTrue);
+
       await tester.tap(find.byType(Switch));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // The value is preserved and the chip now lights up (it rebuilt).
+      // 先关后开：关闭移除值，重新开启时写入默认选项值
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // 值被重新写入，chip 保持点亮
       final container = containerOf(tester);
       expect(container.read(reasoningParamValuesProvider),
           {'budget_tokens': '5000'});

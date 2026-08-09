@@ -6,6 +6,78 @@ part of 'llm_model_config_page.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ReasoningBuildersExt on _LlmModelConfigPageState {
+  /// 上移/下移小按钮组（排序用）。[upDisabled] / [downDisabled] 控制
+  /// 两端按钮的禁用状态。
+  Widget _buildMoveButtons({
+    required VoidCallback? onUp,
+    required VoidCallback? onDown,
+    bool upDisabled = false,
+    bool downDisabled = false,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_upward, size: 16),
+          visualDensity: VisualDensity.compact,
+          tooltip: '上移',
+          onPressed: upDisabled ? null : onUp,
+        ),
+        IconButton(
+          icon: const Icon(Icons.arrow_downward, size: 16),
+          visualDensity: VisualDensity.compact,
+          tooltip: '下移',
+          onPressed: downDisabled ? null : onDown,
+        ),
+      ],
+    );
+  }
+
+  /// 供应商继承标记徽章：显示在继承参数的卡片标题旁。
+  Widget _buildInheritedBadge(ColorScheme cs) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: cs.tertiaryContainer.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        '来自供应商',
+        style: TextStyle(fontSize: 10, color: cs.onTertiaryContainer),
+      ),
+    );
+  }
+
+  /// 继承参数卡片底部的提示文案。
+  Widget _buildInheritedHint(ColorScheme cs) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        '此参数继承自供应商配置，修改后将变为本模型独立配置；'
+        '删除需在供应商设置中操作。',
+        style: TextStyle(
+          fontSize: 11,
+          color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+        ),
+      ),
+    );
+  }
+
+  /// 判断 [param] 的当前参数名是否与「本模型其他已填写参数」或
+  /// 自定义参数重名（除自身外）。继承自供应商的参数不参与重名判定——
+  /// 与供应商参数同名即模型覆盖（override），是受支持的行为。
+  bool _isReasoningParamNameDuplicate(ReasoningParam param) {
+    final name = param.paramName.trim();
+    if (name.isEmpty) return false;
+    return _reasoningParams.any(
+          (p) =>
+              p != param &&
+              !p.inheritedFromProvider &&
+              p.paramName.trim() == name,
+        ) ||
+        _customParams.any((p) => p.paramName.trim() == name);
+  }
+
   /// Builds the reasoning toggle card section.
   Widget _buildReasoningToggleSection(ColorScheme cs) {
     final toggle = _toggleReasoningParam;
@@ -35,11 +107,8 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
       );
     }
 
-    final toggleName = toggle.paramName.trim();
-    final isToggleDuplicate = toggleName.isNotEmpty &&
-        (_reasoningParams.indexWhere((p) => p.paramName.trim() == toggleName) !=
-                _reasoningParams.indexOf(toggle) ||
-            _customParams.any((p) => p.paramName.trim() == toggleName));
+    final isToggleDuplicate = _isReasoningParamNameDuplicate(toggle);
+    final inherited = toggle.inheritedFromProvider;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -61,15 +130,20 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     ),
                   ),
                 ),
+                if (inherited) ...[
+                  _buildInheritedBadge(cs),
+                  const SizedBox(width: 4),
+                ],
                 // 参数值类型选择
                 _buildTypeDropdown(toggle, cs),
                 const SizedBox(width: 4),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                  onPressed: () =>
-                      _removeReasoningParam(_reasoningParams.indexOf(toggle)),
-                  tooltip: '删除推理开关',
-                ),
+                if (!inherited)
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                    onPressed: () =>
+                        _removeReasoningParam(_reasoningParams.indexOf(toggle)),
+                    tooltip: '删除推理开关',
+                  ),
               ],
             ),
             const SizedBox(height: 8),
@@ -85,6 +159,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               ),
               onChanged: (v) {
                 toggle.paramName = v;
+                _claimReasoningParam(toggle);
                 setState(() {});
               },
             ),
@@ -102,6 +177,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     ),
                     onChanged: (v) {
                       toggle.onValue = v;
+                      _claimReasoningParam(toggle);
                       setState(() {});
                     },
                   ),
@@ -118,6 +194,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     ),
                     onChanged: (v) {
                       toggle.offValue = v;
+                      _claimReasoningParam(toggle);
                       setState(() {});
                     },
                   ),
@@ -133,6 +210,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 color: cs.onSurfaceVariant.withValues(alpha: 0.7),
               ),
             ),
+            if (inherited) _buildInheritedHint(cs),
           ],
         ),
       ),
@@ -177,11 +255,8 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
   Widget _buildReasoningEffortCard(ReasoningParam effort, ColorScheme cs) {
     final toggleComplete = _isToggleComplete;
 
-    final effortName = effort.paramName.trim();
-    final isDuplicate = effortName.isNotEmpty &&
-        (_reasoningParams.indexWhere((p) => p.paramName.trim() == effortName) !=
-                _reasoningParams.indexOf(effort) ||
-            _customParams.any((p) => p.paramName.trim() == effortName));
+    final isDuplicate = _isReasoningParamNameDuplicate(effort);
+    final inherited = effort.inheritedFromProvider;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -204,14 +279,19 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     ),
                   ),
                 ),
+                if (inherited) ...[
+                  _buildInheritedBadge(cs),
+                  const SizedBox(width: 4),
+                ],
                 _buildTypeDropdown(effort, cs),
                 const SizedBox(width: 4),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                  onPressed: () =>
-                      _removeReasoningParam(_reasoningParams.indexOf(effort)),
-                  tooltip: '删除推理力度参数',
-                ),
+                if (!inherited)
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                    onPressed: () =>
+                        _removeReasoningParam(_reasoningParams.indexOf(effort)),
+                    tooltip: '删除推理力度参数',
+                  ),
               ],
             ),
             const SizedBox(height: 8),
@@ -228,12 +308,13 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               ),
               onChanged: (v) {
                 effort.paramName = v;
+                _claimReasoningParam(effort);
                 setState(() {});
               },
             ),
             const SizedBox(height: 8),
             Text(
-              '选项值（模型必须添加至少一个选项值）',
+              '选项值（模型必须添加至少一个选项值，可上移/下移排序）',
               style: TextStyle(
                 fontSize: 12,
                 color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -259,12 +340,36 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                         ),
                         onChanged: (v) {
                           effort.options[j] = v;
+                          _claimReasoningParam(effort);
                           setState(() {});
                         },
                       ),
                     ),
                     const SizedBox(width: 4),
-                    if (effort.options.length > 1)
+                    if (effort.options.length > 1) ...[
+                      _buildMoveButtons(
+                        onUp: toggleComplete
+                            ? () {
+                                _moveOptionInParam(
+                                  _reasoningParams.indexOf(effort),
+                                  j,
+                                  -1,
+                                );
+                              }
+                            : null,
+                        onDown: toggleComplete
+                            ? () {
+                                _moveOptionInParam(
+                                  _reasoningParams.indexOf(effort),
+                                  j,
+                                  1,
+                                );
+                              }
+                            : null,
+                        upDisabled: j == 0,
+                        downDisabled: j == effort.options.length - 1,
+                      ),
+                      const SizedBox(width: 4),
                       IconButton(
                         icon: const Icon(
                           Icons.remove_circle,
@@ -272,13 +377,17 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                           size: 18,
                         ),
                         onPressed: toggleComplete
-                            ? () => _removeOptionFromParam(
+                            ? () {
+                                _removeOptionFromParam(
                                   _reasoningParams.indexOf(effort),
                                   j,
-                                )
+                                );
+                                _claimReasoningParam(effort);
+                              }
                             : null,
                         tooltip: '删除选项',
                       ),
+                    ],
                   ],
                 ),
               );
@@ -288,7 +397,10 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               icon: Icon(Icons.add, size: 16),
               label: Text('添加选项', style: TextStyle(fontSize: 13)),
               onPressed: toggleComplete
-                  ? () => _addOptionToParam(_reasoningParams.indexOf(effort))
+                  ? () {
+                      _addOptionToParam(_reasoningParams.indexOf(effort));
+                      _claimReasoningParam(effort);
+                    }
                   : null,
             ),
             if (!toggleComplete)
@@ -302,6 +414,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                   ),
                 ),
               ),
+            if (inherited) _buildInheritedHint(cs),
           ],
         ),
       ),
@@ -334,6 +447,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
           onChanged: (v) {
             if (v != null) {
               setState(() => param.type = v);
+              _claimReasoningParam(param);
             }
           },
         ),
@@ -348,11 +462,8 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
     int displayIndex,
     ColorScheme cs,
   ) {
-    final name = param.paramName.trim();
-    final isDuplicate = name.isNotEmpty &&
-        (_reasoningParams.indexWhere((p) => p.paramName.trim() == name) !=
-                actualIndex ||
-            _customParams.any((p) => p.paramName.trim() == name));
+    final isDuplicate = _isReasoningParamNameDuplicate(param);
+    final inherited = param.inheritedFromProvider;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -375,17 +486,41 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     ),
                     onChanged: (v) {
                       param.paramName = v;
+                      _claimReasoningParam(param);
                       setState(() {});
                     },
                   ),
                 ),
                 const SizedBox(width: 4),
-                _buildTypeDropdown(param, cs),
-                const SizedBox(width: 4),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                  onPressed: () => _removeReasoningParam(actualIndex),
-                  tooltip: '删除参数',
+                // 尾部控件（徽章/排序/类型/删除）用 Wrap 包裹，窄屏
+                // 自动换行，避免 RenderFlex 溢出
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (inherited) ...[
+                      _buildInheritedBadge(cs),
+                      const SizedBox(width: 4),
+                    ],
+                    // 参数排序（在附加参数之间上移/下移）
+                    _buildMoveButtons(
+                      onUp: () => _moveAdditionalReasoningParam(param, -1),
+                      onDown: () => _moveAdditionalReasoningParam(param, 1),
+                      upDisabled: displayIndex == 0,
+                      downDisabled:
+                          displayIndex == _additionalReasoningParams.length - 1,
+                    ),
+                    _buildTypeDropdown(param, cs),
+                    const SizedBox(width: 4),
+                    if (!inherited)
+                      IconButton(
+                        icon: const Icon(Icons.delete,
+                            color: Colors.red, size: 20),
+                        onPressed: () => _removeReasoningParam(actualIndex),
+                        tooltip: '删除参数',
+                      ),
+                  ],
                 ),
               ],
             ),
@@ -400,7 +535,8 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
             ),
             const SizedBox(height: 4),
             Text(
-              '这些选项将按顺序显示在推理面板中供选择。启用/禁用开关在推理面板中操作。',
+              '这些选项将按顺序显示在推理面板中供选择，可上移/下移排序。'
+              '启用/禁用开关在推理面板中操作。',
               style: TextStyle(
                 fontSize: 11,
                 color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -423,21 +559,33 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                         ),
                         onChanged: (v) {
                           param.options[j] = v;
+                          _claimReasoningParam(param);
                           setState(() {});
                         },
                       ),
                     ),
                     const SizedBox(width: 4),
-                    if (param.options.length > 1)
+                    if (param.options.length > 1) ...[
+                      _buildMoveButtons(
+                        onUp: () => _moveOptionInParam(actualIndex, j, -1),
+                        onDown: () => _moveOptionInParam(actualIndex, j, 1),
+                        upDisabled: j == 0,
+                        downDisabled: j == param.options.length - 1,
+                      ),
+                      const SizedBox(width: 4),
                       IconButton(
                         icon: const Icon(
                           Icons.remove_circle,
                           color: Colors.red,
                           size: 18,
                         ),
-                        onPressed: () => _removeOptionFromParam(actualIndex, j),
+                        onPressed: () {
+                          _removeOptionFromParam(actualIndex, j);
+                          _claimReasoningParam(param);
+                        },
                         tooltip: '删除选项',
                       ),
+                    ],
                   ],
                 ),
               );
@@ -446,8 +594,12 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
             TextButton.icon(
               icon: const Icon(Icons.add, size: 16),
               label: const Text('添加选项', style: TextStyle(fontSize: 13)),
-              onPressed: () => _addOptionToParam(actualIndex),
+              onPressed: () {
+                _addOptionToParam(actualIndex);
+                _claimReasoningParam(param);
+              },
             ),
+            if (inherited) _buildInheritedHint(cs),
           ],
         ),
       ),

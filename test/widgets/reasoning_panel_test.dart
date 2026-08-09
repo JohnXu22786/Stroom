@@ -391,13 +391,17 @@ void main() {
       // Param name should be visible
       expect(find.text('budget_tokens'), findsOneWidget);
 
-      // Options should be visible
+      // 无已选值 → 开关关闭、选项隐藏（运行时状态以已选值为准）
+      final sw = tester.widget<Switch>(find.byType(Switch));
+      expect(sw.value, isFalse);
+      expect(find.text('5000'), findsNothing);
+
+      // 开启开关 → 写入默认选项值，选项显示
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
       expect(find.text('5000'), findsOneWidget);
       expect(find.text('10000'), findsOneWidget);
       expect(find.text('20000'), findsOneWidget);
-
-      // Switches should exist for the params
-      expect(find.byType(Switch), findsWidgets);
     });
 
     testWidgets('shows empty state when no custom params', (tester) async {

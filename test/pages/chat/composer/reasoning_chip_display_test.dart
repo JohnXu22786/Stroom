@@ -427,8 +427,11 @@ void main() {
       expect(chip.badgeCount, isNull);
     });
 
-    testWidgets('custom params chip turns grey when the param is disabled',
-        (tester) async {
+    testWidgets(
+        'custom params chip lights up when a value is selected even if the '
+        'param was created disabled', (tester) async {
+      // 已选值即运行时开关状态（面板切换通过写入/移除参数值生效），
+      // 配置里的 enabled 只是新建参数的默认状态。
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(createComposerTestApp(
         reasoningEnabled: true,
@@ -436,7 +439,7 @@ void main() {
         extraReasoningParams: [
           ReasoningParam(
             paramName: 'budget_tokens',
-            enabled: false, // switch off — not active
+            enabled: false, // created disabled — runtime state is the value
             options: ['5000', '10000'],
           ),
         ],
@@ -453,8 +456,8 @@ void main() {
         (w) => w is SettingsChip && w.label == '自定义参数',
       );
       final chip = tester.widget<SettingsChip>(customChip);
-      expect(chip.color, Colors.grey);
-      expect(chip.badgeCount, isNull);
+      expect(chip.color, const Color(0xFF6366F1));
+      expect(chip.badgeCount, 1);
     });
 
     testWidgets('shows 推理 when no effort param exists (isEffortParam=false)',
@@ -509,8 +512,11 @@ void main() {
       expect(find.text('medium'), findsNothing);
     });
 
-    testWidgets('shows 推理 when effort param is disabled despite a value',
-        (tester) async {
+    testWidgets(
+        'shows the effort value when a value is selected even if the param '
+        'was created disabled', (tester) async {
+      // 已选值即运行时开关状态（与附加参数一致），配置里的 enabled 只是
+      // 新建参数的默认状态。
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(
         ProviderScope(
@@ -556,9 +562,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
 
-      // A disabled effort param is never sent, so the chip shows "推理".
-      expect(find.text('推理'), findsOneWidget);
-      expect(find.text('medium'), findsNothing);
+      // 有已选值即视为运行时激活：chip 显示该值
+      expect(find.text('medium'), findsOneWidget);
+      expect(find.text('推理'), findsNothing);
     });
 
     testWidgets(

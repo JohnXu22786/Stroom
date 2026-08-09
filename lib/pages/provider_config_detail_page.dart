@@ -235,7 +235,7 @@ class _ProviderConfigDetailPageState
           final result = await Navigator.push<ModelConfig>(
             context,
             MaterialPageRoute(
-              builder: (_) => const LlmModelConfigPage(),
+              builder: (_) => LlmModelConfigPage(provider: _config),
             ),
           );
           if (result != null && mounted) {
@@ -312,14 +312,22 @@ class _ProviderConfigDetailPageState
     if (currentEntry == null) return;
     if (_isExistingConfig && widget.configIndex < currentEntry.configs.length) {
       var configs = currentEntry.configs.map((c) => c.copy()).toList();
+      // 在完整副本上追加模型：保留供应商的 typeConfig / customParams /
+      // reasoningParams / endpointType（重建会丢配置，推理参数继承
+      // 视图与请求构建都依赖供应商级参数）。
+      final base = configs[widget.configIndex];
       configs[widget.configIndex] = ProviderConfigItem(
-        providerName: configs[widget.configIndex].providerName,
-        host: configs[widget.configIndex].host,
-        key: configs[widget.configIndex].key,
+        providerName: base.providerName,
+        host: base.host,
+        key: base.key,
         models: [
-          ...configs[widget.configIndex].models,
+          ...base.models,
           result,
         ],
+        typeConfig: base.typeConfig,
+        customParams: base.customParams,
+        reasoningParams: base.reasoningParams,
+        endpointType: base.endpointType,
       );
       final updated = ProviderEntry(
         id: currentEntry.id,
@@ -359,6 +367,7 @@ class _ProviderConfigDetailPageState
               MaterialPageRoute(
                 builder: (_) => LlmModelConfigPage(
                   model: config.models[modelIndex].copy(),
+                  provider: config,
                 ),
               ),
             );
@@ -372,6 +381,7 @@ class _ProviderConfigDetailPageState
               MaterialPageRoute(
                 builder: (_) => LlmModelConfigPage(
                   model: _pendingModels[modelIndex].copy(),
+                  provider: _config,
                 ),
               ),
             );
@@ -542,13 +552,21 @@ class _ProviderConfigDetailPageState
     if (currentEntry == null) return;
     var configs = currentEntry.configs.map((c) => c.copy()).toList();
     if (widget.configIndex >= 0 && widget.configIndex < configs.length) {
-      final models = List<ModelConfig>.from(configs[widget.configIndex].models);
+      // 在完整副本上更新模型：保留供应商的 typeConfig / customParams /
+      // reasoningParams / endpointType（重建会丢配置，推理参数继承
+      // 视图与请求构建都依赖供应商级参数）。
+      final base = configs[widget.configIndex];
+      final models = List<ModelConfig>.from(base.models);
       models[modelIndex] = result;
       configs[widget.configIndex] = ProviderConfigItem(
-        providerName: configs[widget.configIndex].providerName,
-        host: configs[widget.configIndex].host,
-        key: configs[widget.configIndex].key,
+        providerName: base.providerName,
+        host: base.host,
+        key: base.key,
         models: models,
+        typeConfig: base.typeConfig,
+        customParams: base.customParams,
+        reasoningParams: base.reasoningParams,
+        endpointType: base.endpointType,
       );
       final updated = ProviderEntry(
         id: currentEntry.id,
@@ -654,11 +672,18 @@ class _ProviderConfigDetailPageState
     var configs = entry.configs.map((c) => c.copy()).toList();
     var models = List<ModelConfig>.from(config.models);
     models.removeAt(modelIndex);
+    // 在完整副本上删除模型：保留供应商的 typeConfig / customParams /
+    // reasoningParams / endpointType（重建会丢配置，推理参数继承
+    // 视图与请求构建都依赖供应商级参数）。
     configs[widget.configIndex] = ProviderConfigItem(
       providerName: config.providerName,
       host: config.host,
       key: config.key,
       models: models,
+      typeConfig: config.typeConfig,
+      customParams: config.customParams,
+      reasoningParams: config.reasoningParams,
+      endpointType: config.endpointType,
     );
 
     final updated = ProviderEntry(
