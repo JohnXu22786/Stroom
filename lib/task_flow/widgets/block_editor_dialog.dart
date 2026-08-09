@@ -499,12 +499,17 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           voices.addAll(byId.values);
         }
         final current = value?.toString() ?? '';
-        final stale = current.isNotEmpty && !voices.any((v) => v.id == current);
         // A stale voice (not in the selected model's voices) must not
-        // survive confirm — reset it to '' (use the model default) so the
-        // run can't fail on an invalid id.
+        // survive confirm — reset it to '' (use the model default). Only
+        // applies when the model HAS voices: in the manual fallback (no
+        // voices configured) the user's typed id is the source of truth
+        // and must never be wiped by unrelated rebuilds.
+        final stale = voices.isNotEmpty &&
+            current.isNotEmpty &&
+            !voices.any((v) => v.id == current);
         if (stale) {
           _params[param.key] = '';
+          _controllers[param.key]?.text = '';
         }
         // Track the controller in both branches (dropdown + manual
         // fallback) so it is disposed with the panel. The fallback field
@@ -630,10 +635,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         // Slider like the TTS page — range from the selected TTS model's
         // speedMin/speedMax (defaults 0.5–2.0).
         final model = _selectedTtsModel();
-        final speedMin =
-            ((model?.speedMin as num?)?.toDouble() ?? 0.5).clamp(0.1, 4.0);
-        final speedMax =
-            ((model?.speedMax as num?)?.toDouble() ?? 2.0).clamp(0.1, 4.0);
+        // Raw model bounds (like the TTS page and the executor) — no
+        // pre-clamp into a hard window, so display always matches run.
+        final speedMin = (model?.speedMin as num?)?.toDouble() ?? 0.5;
+        final speedMax = (model?.speedMax as num?)?.toDouble() ?? 2.0;
         final lo = math.min(speedMin, speedMax);
         final hi = math.max(speedMin, speedMax);
         final speedRaw = value is num ? value.toDouble() : 1.0;

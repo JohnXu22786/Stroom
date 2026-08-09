@@ -570,6 +570,77 @@ void main() {
             'survive confirm');
   });
 
+  testWidgets('manual voice fallback keeps typed input across rebuilds',
+      (tester) async {
+    // A TTS config whose model has NO voices → the panel shows the manual
+    // TextField; a typed id must survive unrelated rebuilds and confirm.
+    final entries = ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          id: 'tts-1',
+          type: 'tts',
+          name: 'TTS',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'CustomTTS',
+              host: 'https://example.com',
+              key: 'k',
+              models: [
+                ModelConfig(name: 'custom', modelId: 'custom'),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    TaskFlowBlock? result;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          providerEntriesProvider.overrideWith(
+            (ref) => _FakeEntriesNotifier(entries),
+          ),
+          assistantProvider.overrideWith(
+            (ref) => _FakeAssistantsNotifier(const []),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    result = await showBlockEditorDialog(
+                      context,
+                      block: TaskFlowBlock(typeKey: BlockType.tts),
+                    );
+                  },
+                  child: const Text('打开设置'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('打开设置'));
+    await tester.pumpAndSettle();
+
+    // Manual fallback field with the hint.
+    expect(find.text('未配置TTS音色，可手动输入ID'), findsOneWidget);
+    await tester.enterText(
+      find.byType(TextField).last,
+      'custom-voice-id',
+    );
+    await tester.pumpAndSettle();
+
+    // Confirm — the typed id must survive (no unrelated rebuild wipes it).
+    await tester.tap(find.text('确认'));
+    await tester.pumpAndSettle();
+    expect(result, isNotNull);
+    expect(result!.params['voice'], 'custom-voice-id');
+  });
+
   testWidgets(
       'TTS panel with duplicate voice ids within one model does not '
       'crash (deduped dropdown)', (tester) async {
