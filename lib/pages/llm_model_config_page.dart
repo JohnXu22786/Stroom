@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../providers/provider_config.dart';
+import 'chat/composer/setting_panels_shared.dart' show OptionChip;
 import 'llm_model_config_shared.dart';
 
 part 'llm_model_config_page_custom_params.dart';
@@ -33,23 +34,23 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   late List<CustomParam> _customParams;
   late List<ReasoningParam> _reasoningParams;
 
-  /// 打开页面时从供应商继承的参数名集合（合并视图中的继承部分，
-  /// 不含被模型同名覆盖的；随后被认领的参数名仍在此集合中）。
-  /// 用于隐藏「删除」按钮：供应商参数只能覆盖、不能删除——删除模型
-  /// 副本后参数会重新继承回来，删除按钮会造成「删除无效」的错觉。
-  late final Set<String> _providerInheritedNames;
+  // ===================================================================
+  // 推理力度参数「勾选块」状态（仅内存，不序列化）
+  //
+  // 模型页力度参数以块（OptionChip 风格）展示：块 = 一个可选值，
+  // 点击高亮选中、再点取消（多选）；块来自供应商提供的值 + 模型
+  // 自己添加的值。勾选结果按块顺序写入模型的 options。
+  // ===================================================================
 
-  /// 打开页面时各继承参数的工作副本 → 供应商侧原始内容（按实例身份
-  /// 索引）。用于「认领回退」：编辑又被还原成与供应商原值一致时，参数
-  /// 保持继承状态（不写入模型），避免出现「改了又改回去却无法保存」的
-  /// 死局。按身份索引保证：只有初始就是继承状态的参数可回退，且改名后
-  /// 不会误匹配到其他供应商参数。
-  late final Map<ReasoningParam, ReasoningParam> _providerOriginals;
+  /// 所有力度块的顺序（供应商值在前 + 模型独有值在后），可拖拽排序。
+  late List<String> _effortBlockValues;
 
-  /// 被排序操作强制认领的参数（本会话内不回退为继承）。
-  /// 排序结果没有内容载体（toMap 不含列表位置），内容还原不能撤销
-  /// 排序造成的认领，否则排序会随保存静默丢失。
-  final Set<ReasoningParam> _forceClaimedParamsStore = {};
+  /// 当前勾选（高亮）的值集合。
+  late Set<String> _effortSelectedValues;
+
+  /// 打开页面时供应商提供的力度值集合——来源判定：供应商的块不能
+  /// 删除（只能取消勾选），模型自己添加的块带删除按钮。
+  late Set<String> _providerEffortValues;
 
   final Map<int, String?> _jsonErrors = {};
 
@@ -84,8 +85,15 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       if (_modelIdController.text.isNotEmpty) return true;
       if (_contextController.text.isNotEmpty) return true;
       if (_customParams.any((p) => p.paramName.isNotEmpty)) return true;
-      if (_reasoningParams
-          .any((p) => !p.inheritedFromProvider && p.paramName.isNotEmpty)) {
+      // 新模型 + 供应商参数：打开即显示供应商参数不算改动，与
+      // merge(provider, []) 初始态比较
+      _syncEffortOptionsFromBlocks();
+      final initialReasoning = mergeReasoningParams(
+        widget.provider?.reasoningParams ?? [],
+        const [],
+      ).map((p) => p.toMap()).toList();
+      final currentReasoning = _reasoningParams.map((p) => p.toMap()).toList();
+      if (jsonEncode(initialReasoning) != jsonEncode(currentReasoning)) {
         return true;
       }
       if (_enableTemperature ||
@@ -171,18 +179,39 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     final originalCustom = m.customParams.map((p) => p.toMap()).toList();
     final currentCustom = _customParams.map((p) => p.toMap()).toList();
     if (jsonEncode(originalCustom) != jsonEncode(currentCustom)) return true;
-    // Reasoning params: 仅比较模型自有（非继承）参数。继承自供应商且
-    // 未修改的参数不写入模型，不视为改动；修改过的（已被认领）参数
-    // 会进入自有子集参与比较。
-    final originalReasoning = m.reasoningParams.map((p) => p.toMap()).toList();
-    final currentReasoning = _reasoningParams
-        .where((p) => !p.inheritedFromProvider)
-        .map((p) => p.toMap())
-        .toList();
-    if (jsonEncode(originalReasoning) != jsonEncode(currentReasoning)) {
+    // Reasoning params: 与「打开时的初始合并视图」比较——保存会全量写入
+    // 工作副本，而打开时的工作副本 = merge(provider, model) 再应用力度
+    // 遮蔽。两者相等说明用户未做任何修改（打开即显示供应商参数不算
+    // 改动）。
+    // 力度勾选块先同步到工作副本，勾选/排序变化才能被检测到。
+    _syncEffortOptionsFromBlocks();
+    final initialReasoning = _applyEffortShadowing(
+      mergeReasoningParams(
+        widget.provider?.reasoningParams ?? [],
+        m.reasoningParams,
+      ),
+      m.reasoningParams,
+    ).map((p) => p.toMap()).toList();
+    final currentReasoning = _reasoningParams.map((p) => p.toMap()).toList();
+    if (jsonEncode(initialReasoning) != jsonEncode(currentReasoning)) {
       return true;
     }
     return false;
+  }
+
+  /// 应用「力度参数遮蔽」：模型有自己的力度参数时，移除供应商的
+  /// 异名力度参数（页面不显示、不持久化、不参与未保存比较）。
+  /// 按参数名匹配（工作副本是 copy() 实例，不能按身份比较）。
+  List<ReasoningParam> _applyEffortShadowing(
+    List<ReasoningParam> merged,
+    List<ReasoningParam> modelParams,
+  ) {
+    final modelEffort = findEffortParam(modelParams);
+    if (modelEffort == null) return merged;
+    final modelEffortName = modelEffort.paramName;
+    return merged
+        .where((p) => !p.isEffortParam || p.paramName == modelEffortName)
+        .toList();
   }
 
   @override
@@ -235,40 +264,44 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     for (int i = 0; i < _customParams.length; i++) {
       _validateJsonField(i, _customParams[i]);
     }
-    // Reasoning params: 模型自身参数 + 供应商参数（继承视图，实时同步）。
-    // 与供应商参数同名的模型参数覆盖供应商参数（与请求构建时的合并
-    // 语义一致，见 mergeReasoningParams）。供应商参数以 inheritedFromProvider
-    // 标记，首次编辑即变为模型独立配置，保存时才写入模型。
+    // Reasoning params: 合并视图工作副本（供应商参数 + 模型参数，
+    // 同名时模型参数覆盖供应商参数，与请求构建时的合并语义一致）。
+    // 无「继承/独立」标记：页面显示什么、保存就写入什么。
     final provider = widget.provider;
-    final modelNames = (m?.reasoningParams ?? [])
-        .map((p) => p.paramName.trim())
-        .where((n) => n.isNotEmpty)
-        .toSet();
-    // 供应商参数中未被模型同名覆盖的部分 = 继承参数
-    _providerInheritedNames = (provider?.reasoningParams ?? [])
-        .map((p) => p.paramName.trim())
-        .where((n) => n.isNotEmpty && !modelNames.contains(n))
-        .toSet();
     _reasoningParams = mergeReasoningParams(
       provider?.reasoningParams ?? [],
       m?.reasoningParams ?? [],
-    ).map((p) {
-      final copy = p.copy();
-      copy.inheritedFromProvider =
-          _providerInheritedNames.contains(p.paramName.trim());
-      return copy;
-    }).toList();
-    // 记录继承参数的工作副本 → 供应商原值（按实例身份，认领回退用；
-    // 新建的参数不是 key，不会被误标为继承）
-    final providerByName = {
-      for (final p in provider?.reasoningParams ?? [])
-        if (p.paramName.trim().isNotEmpty) p.paramName.trim(): p,
-    };
-    _providerOriginals = {
-      for (final copy in _reasoningParams)
-        if (copy.inheritedFromProvider)
-          copy: providerByName[copy.paramName.trim()]!,
-    };
+    ).map((p) => p.copy()).toList();
+
+    // 力度参数遮蔽：模型有自己的力度参数时，供应商的力度参数（可能
+    // 同名或异名）被模型版本遮蔽——页面不显示它，也不应持久化它，
+    // 否则会产生不可见的陈旧副本（供应商后续修改失效、保存被重名
+    // 检查误拦）。仅当模型无力度参数时才保留供应商的力度参数。
+    _reasoningParams = _applyEffortShadowing(
+      _reasoningParams,
+      m?.reasoningParams ?? [],
+    );
+
+    // 推理力度「勾选块」初始化：
+    // - 块顺序：模型已保存的顺序在前（模型有力度参数时），供应商
+    //   独有值追加——保证「打开即未修改」比较成立（工作副本与初始
+    //   合并视图一致）；
+    // - 勾选 = 模型已保存的 options；模型无力度参数时默认全选供应商值；
+    // - 供应商来源判定用于删除按钮的显隐。
+    final providerEffort = findEffortParam(provider?.reasoningParams ?? []);
+    _providerEffortValues = {...providerEffort?.options ?? []};
+    final modelEffortParam = findEffortParam(m?.reasoningParams ?? []);
+    final modelEffortValues = modelEffortParam?.options ?? [];
+    _effortBlockValues = modelEffortParam != null
+        ? [
+            ...modelEffortValues,
+            ..._providerEffortValues
+                .where((v) => !modelEffortValues.contains(v)),
+          ]
+        : [..._providerEffortValues];
+    _effortSelectedValues = modelEffortParam != null
+        ? modelEffortValues.toSet()
+        : {..._providerEffortValues};
   }
 
   @override

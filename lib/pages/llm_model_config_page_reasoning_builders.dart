@@ -1,81 +1,97 @@
 part of 'llm_model_config_page.dart';
 // Extension methods on the State class cannot use @protected members
-// (setState / state) without analyzer warnings, but the receiver IS the
-// State/StateNotifier, so runtime behavior is identical to the original
-// inline code.
+// (setState / state) without authorization warnings, but the receiver IS
+// the State/StateNotifier, so runtime behavior is identical to the
+// original inline code.
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ReasoningBuildersExt on _LlmModelConfigPageState {
-  /// 上移/下移小按钮组（排序用）。[upDisabled] / [downDisabled] 控制
-  /// 两端按钮的禁用状态。
-  Widget _buildMoveButtons({
-    required VoidCallback? onUp,
-    required VoidCallback? onDown,
-    bool upDisabled = false,
-    bool downDisabled = false,
-  }) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_upward, size: 16),
-          visualDensity: VisualDensity.compact,
-          tooltip: '上移',
-          onPressed: upDisabled ? null : onUp,
-        ),
-        IconButton(
-          icon: const Icon(Icons.arrow_downward, size: 16),
-          visualDensity: VisualDensity.compact,
-          tooltip: '下移',
-          onPressed: downDisabled ? null : onDown,
-        ),
-      ],
-    );
-  }
-
-  /// 供应商继承标记徽章：显示在继承参数的卡片标题旁。
-  Widget _buildInheritedBadge(ColorScheme cs) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: cs.tertiaryContainer.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        '来自供应商',
-        style: TextStyle(fontSize: 10, color: cs.onTertiaryContainer),
-      ),
-    );
-  }
-
-  /// 继承参数卡片底部的提示文案。
-  Widget _buildInheritedHint(ColorScheme cs) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Text(
-        '此参数继承自供应商配置，修改后将变为本模型独立配置；'
-        '删除需在供应商设置中操作。',
-        style: TextStyle(
-          fontSize: 11,
-          color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-        ),
-      ),
-    );
-  }
-
   /// 判断 [param] 的当前参数名是否与「本模型其他已填写参数」或
-  /// 自定义参数重名（除自身外）。继承自供应商的参数不参与重名判定——
-  /// 与供应商参数同名即模型覆盖（override），是受支持的行为。
+  /// 自定义参数重名（除自身外）。
   bool _isReasoningParamNameDuplicate(ReasoningParam param) {
     final name = param.paramName.trim();
     if (name.isEmpty) return false;
     return _reasoningParams.any(
-          (p) =>
-              p != param &&
-              !p.inheritedFromProvider &&
-              p.paramName.trim() == name,
+          (p) => p != param && p.paramName.trim() == name,
         ) ||
         _customParams.any((p) => p.paramName.trim() == name);
+  }
+
+  /// 推理力度值块（复用推理面板的 OptionChip 样式：点击高亮/取消，
+  /// 多选）。块左侧为拖拽把手，自定义（非供应商来源）块右侧带删除。
+  Widget _buildEffortOptionBlock(
+    String value,
+    int index,
+    ColorScheme cs,
+  ) {
+    final selected = _effortSelectedValues.contains(value);
+    final fromProvider = _providerEffortValues.contains(value);
+    return Row(
+      key: ValueKey('effort-block-$value'),
+      children: [
+        // 拖拽把手
+        ReorderableDragStartListener(
+          index: index,
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 2),
+            child: Icon(Icons.drag_handle, size: 20, color: Colors.grey),
+          ),
+        ),
+        const SizedBox(width: 2),
+        // 勾选块（点击高亮/取消）
+        Expanded(
+          child: OptionChip(
+            label: value,
+            selected: selected,
+            onTap: () => _toggleEffortBlock(value),
+          ),
+        ),
+        if (!fromProvider)
+          IconButton(
+            icon: const Icon(Icons.remove_circle, color: Colors.red, size: 18),
+            onPressed: () => _removeEffortBlock(value),
+            tooltip: '删除该值',
+          ),
+      ],
+    );
+  }
+
+  /// 添加力度值：弹出输入框，输入后作为勾选块出现（默认选中）。
+  Future<void> _addEffortBlockWithDialog() async {
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('添加推理力度值'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '如 max、ultra、deep',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    if (value == null || value.isEmpty || !mounted) return;
+    setState(() {
+      if (!_effortBlockValues.contains(value)) {
+        _effortBlockValues.add(value);
+        _effortSelectedValues.add(value);
+      }
+    });
   }
 
   /// Builds the reasoning toggle card section.
@@ -108,7 +124,6 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
     }
 
     final isToggleDuplicate = _isReasoningParamNameDuplicate(toggle);
-    final inherited = toggle.inheritedFromProvider;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -130,20 +145,15 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     ),
                   ),
                 ),
-                if (inherited) ...[
-                  _buildInheritedBadge(cs),
-                  const SizedBox(width: 4),
-                ],
                 // 参数值类型选择
                 _buildTypeDropdown(toggle, cs),
                 const SizedBox(width: 4),
-                if (!inherited)
-                  IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                    onPressed: () =>
-                        _removeReasoningParam(_reasoningParams.indexOf(toggle)),
-                    tooltip: '删除推理开关',
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                  onPressed: () =>
+                      _removeReasoningParam(_reasoningParams.indexOf(toggle)),
+                  tooltip: '删除推理开关',
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -159,7 +169,6 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               ),
               onChanged: (v) {
                 toggle.paramName = v;
-                _claimReasoningParam(toggle);
                 setState(() {});
               },
             ),
@@ -177,7 +186,6 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     ),
                     onChanged: (v) {
                       toggle.onValue = v;
-                      _claimReasoningParam(toggle);
                       setState(() {});
                     },
                   ),
@@ -194,7 +202,6 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     ),
                     onChanged: (v) {
                       toggle.offValue = v;
-                      _claimReasoningParam(toggle);
                       setState(() {});
                     },
                   ),
@@ -210,7 +217,6 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 color: cs.onSurfaceVariant.withValues(alpha: 0.7),
               ),
             ),
-            if (inherited) _buildInheritedHint(cs),
           ],
         ),
       ),
@@ -218,14 +224,13 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
   }
 
   /// Builds the reasoning effort section. If an effort param exists, shows
-  /// the effort card. Otherwise, shows the "添加推理力度" button, which is
-  /// disabled (gray) when no toggle exists.
+  /// the effort card with selectable/draggable option blocks. Otherwise,
+  /// shows the "添加推理力度" button, disabled when no toggle exists.
   Widget _buildReasoningEffortSection(ColorScheme cs) {
     final effort = _effortReasoningParam;
     if (effort != null) {
       return _buildReasoningEffortCard(effort, cs);
     }
-    // No effort param — show add button (always visible, disabled if no toggle)
     final hasToggle = _toggleReasoningParam != null;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -249,14 +254,14 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
     );
   }
 
-  /// Builds the reasoning effort card — a single card, same style as the
-  /// toggle card. Only editable after the toggle is complete. There is
-  /// exactly one effort param.
+  /// Builds the reasoning effort card — a single card showing the param
+  /// name and its option values as selectable blocks (multi-select, like
+  /// the reasoning panel's OptionChip) that can be reordered by dragging
+  /// the handle. Provider-provided values cannot be deleted (unchecking
+  /// hides them); model-added values show a delete button.
   Widget _buildReasoningEffortCard(ReasoningParam effort, ColorScheme cs) {
     final toggleComplete = _isToggleComplete;
-
     final isDuplicate = _isReasoningParamNameDuplicate(effort);
-    final inherited = effort.inheritedFromProvider;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -279,19 +284,14 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     ),
                   ),
                 ),
-                if (inherited) ...[
-                  _buildInheritedBadge(cs),
-                  const SizedBox(width: 4),
-                ],
                 _buildTypeDropdown(effort, cs),
                 const SizedBox(width: 4),
-                if (!inherited)
-                  IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                    onPressed: () =>
-                        _removeReasoningParam(_reasoningParams.indexOf(effort)),
-                    tooltip: '删除推理力度参数',
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                  onPressed: () =>
+                      _removeReasoningParam(_reasoningParams.indexOf(effort)),
+                  tooltip: '删除推理力度参数',
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -308,100 +308,36 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               ),
               onChanged: (v) {
                 effort.paramName = v;
-                _claimReasoningParam(effort);
                 setState(() {});
               },
             ),
             const SizedBox(height: 8),
             Text(
-              '选项值（模型必须添加至少一个选项值，可上移/下移排序）',
+              '点击块选中/取消（选中的值将显示在聊天推理面板），'
+              '拖动把手排序。供应商的值不可删除，取消勾选即可隐藏。',
               style: TextStyle(
                 fontSize: 12,
                 color: cs.onSurfaceVariant.withValues(alpha: 0.7),
               ),
             ),
             const SizedBox(height: 8),
-            ...List.generate(effort.options.length, (j) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        initialValue: effort.options[j],
-                        readOnly: !toggleComplete,
-                        decoration: InputDecoration(
-                          labelText: '选项 ${j + 1}',
-                          hintText: toggleComplete
-                              ? '如 low, medium, high'
-                              : '请先填写推理开关',
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        onChanged: (v) {
-                          effort.options[j] = v;
-                          _claimReasoningParam(effort);
-                          setState(() {});
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    if (effort.options.length > 1) ...[
-                      _buildMoveButtons(
-                        onUp: toggleComplete
-                            ? () {
-                                _moveOptionInParam(
-                                  _reasoningParams.indexOf(effort),
-                                  j,
-                                  -1,
-                                );
-                              }
-                            : null,
-                        onDown: toggleComplete
-                            ? () {
-                                _moveOptionInParam(
-                                  _reasoningParams.indexOf(effort),
-                                  j,
-                                  1,
-                                );
-                              }
-                            : null,
-                        upDisabled: j == 0,
-                        downDisabled: j == effort.options.length - 1,
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.remove_circle,
-                          color: Colors.red,
-                          size: 18,
-                        ),
-                        onPressed: toggleComplete
-                            ? () {
-                                _removeOptionFromParam(
-                                  _reasoningParams.indexOf(effort),
-                                  j,
-                                );
-                                _claimReasoningParam(effort);
-                              }
-                            : null,
-                        tooltip: '删除选项',
-                      ),
-                    ],
-                  ],
-                ),
-              );
-            }),
+            // 勾选块列表（可拖拽排序）
+            ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              itemCount: _effortBlockValues.length,
+              onReorderItem: _reorderEffortBlock,
+              itemBuilder: (context, index) {
+                final value = _effortBlockValues[index];
+                return _buildEffortOptionBlock(value, index, cs);
+              },
+            ),
             const SizedBox(height: 4),
             TextButton.icon(
               icon: Icon(Icons.add, size: 16),
-              label: Text('添加选项', style: TextStyle(fontSize: 13)),
-              onPressed: toggleComplete
-                  ? () {
-                      _addOptionToParam(_reasoningParams.indexOf(effort));
-                      _claimReasoningParam(effort);
-                    }
-                  : null,
+              label: Text('添加值', style: TextStyle(fontSize: 13)),
+              onPressed: toggleComplete ? _addEffortBlockWithDialog : null,
             ),
             if (!toggleComplete)
               Padding(
@@ -414,7 +350,6 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                   ),
                 ),
               ),
-            if (inherited) _buildInheritedHint(cs),
           ],
         ),
       ),
@@ -447,7 +382,6 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
           onChanged: (v) {
             if (v != null) {
               setState(() => param.type = v);
-              _claimReasoningParam(param);
             }
           },
         ),
@@ -455,15 +389,16 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
     );
   }
 
-  /// Builds a card for an additional (non-toggle, non-effort) reasoning param.
+  /// Builds a card for an additional (non-toggle, non-effort) reasoning
+  /// param. The card can be reordered among additional params by dragging
+  /// its header handle; its option values are draggable rows.
   Widget _buildAdditionalReasoningParamCard(
     ReasoningParam param,
-    int actualIndex,
     int displayIndex,
     ColorScheme cs,
   ) {
     final isDuplicate = _isReasoningParamNameDuplicate(param);
-    final inherited = param.inheritedFromProvider;
+    final actualIndex = _reasoningParams.indexOf(param);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -473,6 +408,16 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
           children: [
             Row(
               children: [
+                // 卡片间拖拽把手（附加参数排序）
+                ReorderableDragStartListener(
+                  index: displayIndex,
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 2),
+                    child:
+                        Icon(Icons.drag_handle, size: 20, color: Colors.grey),
+                  ),
+                ),
+                const SizedBox(width: 2),
                 Expanded(
                   child: TextFormField(
                     initialValue: param.paramName,
@@ -486,41 +431,17 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     ),
                     onChanged: (v) {
                       param.paramName = v;
-                      _claimReasoningParam(param);
                       setState(() {});
                     },
                   ),
                 ),
                 const SizedBox(width: 4),
-                // 尾部控件（徽章/排序/类型/删除）用 Wrap 包裹，窄屏
-                // 自动换行，避免 RenderFlex 溢出
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (inherited) ...[
-                      _buildInheritedBadge(cs),
-                      const SizedBox(width: 4),
-                    ],
-                    // 参数排序（在附加参数之间上移/下移）
-                    _buildMoveButtons(
-                      onUp: () => _moveAdditionalReasoningParam(param, -1),
-                      onDown: () => _moveAdditionalReasoningParam(param, 1),
-                      upDisabled: displayIndex == 0,
-                      downDisabled:
-                          displayIndex == _additionalReasoningParams.length - 1,
-                    ),
-                    _buildTypeDropdown(param, cs),
-                    const SizedBox(width: 4),
-                    if (!inherited)
-                      IconButton(
-                        icon: const Icon(Icons.delete,
-                            color: Colors.red, size: 20),
-                        onPressed: () => _removeReasoningParam(actualIndex),
-                        tooltip: '删除参数',
-                      ),
-                  ],
+                _buildTypeDropdown(param, cs),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                  onPressed: () => _removeReasoningParam(actualIndex),
+                  tooltip: '删除参数',
                 ),
               ],
             ),
@@ -535,7 +456,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
             ),
             const SizedBox(height: 4),
             Text(
-              '这些选项将按顺序显示在推理面板中供选择，可上移/下移排序。'
+              '这些选项将按顺序显示在推理面板中供选择，拖动把手排序。'
               '启用/禁用开关在推理面板中操作。',
               style: TextStyle(
                 fontSize: 11,
@@ -543,11 +464,31 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               ),
             ),
             const SizedBox(height: 8),
-            ...List.generate(param.options.length, (j) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
+            // 选项值行（可拖拽排序）
+            ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              itemCount: param.options.length,
+              onReorderItem: (oldIndex, newIndex) {
+                setState(() {
+                  final value = param.options.removeAt(oldIndex);
+                  param.options.insert(newIndex, value);
+                });
+              },
+              itemBuilder: (context, j) {
+                return Row(
+                  key: ValueKey('opt-$actualIndex-$j'),
                   children: [
+                    ReorderableDragStartListener(
+                      index: j,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 2),
+                        child: Icon(Icons.drag_handle,
+                            size: 20, color: Colors.grey),
+                      ),
+                    ),
+                    const SizedBox(width: 2),
                     Expanded(
                       child: TextFormField(
                         initialValue: param.options[j],
@@ -559,20 +500,12 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                         ),
                         onChanged: (v) {
                           param.options[j] = v;
-                          _claimReasoningParam(param);
                           setState(() {});
                         },
                       ),
                     ),
                     const SizedBox(width: 4),
-                    if (param.options.length > 1) ...[
-                      _buildMoveButtons(
-                        onUp: () => _moveOptionInParam(actualIndex, j, -1),
-                        onDown: () => _moveOptionInParam(actualIndex, j, 1),
-                        upDisabled: j == 0,
-                        downDisabled: j == param.options.length - 1,
-                      ),
-                      const SizedBox(width: 4),
+                    if (param.options.length > 1)
                       IconButton(
                         icon: const Icon(
                           Icons.remove_circle,
@@ -581,25 +514,19 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                         ),
                         onPressed: () {
                           _removeOptionFromParam(actualIndex, j);
-                          _claimReasoningParam(param);
                         },
                         tooltip: '删除选项',
                       ),
-                    ],
                   ],
-                ),
-              );
-            }),
+                );
+              },
+            ),
             const SizedBox(height: 4),
             TextButton.icon(
               icon: const Icon(Icons.add, size: 16),
               label: const Text('添加选项', style: TextStyle(fontSize: 13)),
-              onPressed: () {
-                _addOptionToParam(actualIndex);
-                _claimReasoningParam(param);
-              },
+              onPressed: () => _addOptionToParam(actualIndex),
             ),
-            if (inherited) _buildInheritedHint(cs),
           ],
         ),
       ),

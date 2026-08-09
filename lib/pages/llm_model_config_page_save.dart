@@ -83,21 +83,14 @@ extension _SaveExt on _LlmModelConfigPageState {
       }
     }
 
-    // 验证推理参数
-    // 仅验证模型自有（非继承）参数：继承自供应商的参数由供应商保存时
-    // 校验，未修改的继承参数不写入模型。开关完备性检查基于合并视图
-    // （推理开关可来自供应商），与请求构建时的行为一致。
-    final modelOwnedParams =
-        _reasoningParams.where((p) => !p.inheritedFromProvider).toList();
-
-    // Check 1: If the model owns any reasoning params, the toggle must
-    // exist (model-owned or inherited from provider) and be filled.
+    // 验证推理参数（全量：页面工作副本即最终保存内容）
     final toggleParam = _toggleReasoningParam;
-    final hasOwnedNonToggleParams = modelOwnedParams.any(
+    final hasNonToggleParams = _reasoningParams.any(
       (p) => !p.isReasoningToggle && p.paramName.trim().isNotEmpty,
     );
 
-    if (hasOwnedNonToggleParams &&
+    // Check 1: If there are any reasoning params, the toggle must exist and be filled
+    if (hasNonToggleParams &&
         (toggleParam == null || !toggleParam.isFilledToggle)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -108,15 +101,16 @@ extension _SaveExt on _LlmModelConfigPageState {
       return;
     }
 
-    // Check 2: For model-level inference intensity (non-toggle), if name is filled,
-    // must have at least one option value
-    for (int i = 0; i < modelOwnedParams.length; i++) {
-      final param = modelOwnedParams[i];
+    // Check 2: 附加推理参数（非力度）若填写了参数名，必须至少有一个选项值。
+    // 推理力度参数例外：勾选块允许全部取消（= 该模型不显示任何力度选项）。
+    for (int i = 0; i < _reasoningParams.length; i++) {
+      final param = _reasoningParams[i];
       if (param.isReasoningToggle) continue;
+      if (param.isEffortParam) continue;
       if (param.paramName.trim().isNotEmpty && param.options.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('推理力度参数必须至少添加一个选项值'),
+            content: Text('推理参数必须至少添加一个选项值'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -125,8 +119,8 @@ extension _SaveExt on _LlmModelConfigPageState {
     }
 
     // Check 3: Validate each param individually
-    for (int i = 0; i < modelOwnedParams.length; i++) {
-      final param = modelOwnedParams[i];
+    for (int i = 0; i < _reasoningParams.length; i++) {
+      final param = _reasoningParams[i];
       final error = param.validationError;
       if (error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -139,10 +133,10 @@ extension _SaveExt on _LlmModelConfigPageState {
       }
     }
 
-    // Check 4: Duplicate name check across model-owned reasoning params
+    // Check 4: Duplicate name check across reasoning params
     final reasoningSeenNames = <String>{};
-    for (int i = 0; i < modelOwnedParams.length; i++) {
-      final name = modelOwnedParams[i].paramName.trim();
+    for (int i = 0; i < _reasoningParams.length; i++) {
+      final name = _reasoningParams[i].paramName.trim();
       if (name.isEmpty) {
         continue; // Empty names are caught by validationError above
       }
@@ -158,16 +152,11 @@ extension _SaveExt on _LlmModelConfigPageState {
     }
 
     // Check 4: Cross-check duplicate names between reasoning params and custom params
-    // 覆盖全部推理参数（含继承自供应商的）：若模型自定义参数与供应商推理
-    // 参数重名，请求构建中自定义参数会覆盖推理参数的值，聊天面板上的推理
-    // 开关形同虚设 → 保存时拦截。
-    // 注意：推理参数之间的重名（继承参数 + 本页新建的同名覆盖参数）是
-    // 合法的覆盖语义，不在此拦截——只拦截「推理参数 vs 自定义参数」。
-    final reasoningNames = <String>{};
+    // 若模型自定义参数与推理参数重名，请求构建中自定义参数会覆盖推理参数
+    // 的值，聊天面板上的推理开关形同虚设 → 保存时拦截。
     for (final param in _reasoningParams) {
       final name = param.paramName.trim();
       if (name.isEmpty) continue;
-      if (!reasoningNames.add(name)) continue; // 推理内部重名（合法覆盖）
       if (seenNames.contains(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -178,6 +167,10 @@ extension _SaveExt on _LlmModelConfigPageState {
         return;
       }
     }
+
+    // 把力度勾选块同步到力度参数（勾选值按块顺序写入 options；
+    // 全取消 = options 为空，该模型不提供力度选项）
+    _syncEffortOptionsFromBlocks();
 
     setState(() => _isSaving = true);
 
@@ -269,12 +262,27 @@ extension _SaveExt on _LlmModelConfigPageState {
       modelId: modelId,
       typeConfig: typeConfig,
       customParams: _customParams.map((p) => p.copy()).toList(),
-      // 只保存模型自有参数：未修改的供应商继承参数不写入模型，
-      // 保证供应商后续修改能继续同步到模型。
-      reasoningParams: modelOwnedParams.map((p) => p.copy()).toList(),
+      // 全量保存工作副本（页面显示什么就保存什么）
+      reasoningParams: _reasoningParams.map((p) => p.copy()).toList(),
       endpointType: _overrideEndpointType ? _endpointType : null,
     );
 
     Navigator.pop(context, result);
+  }
+
+  /// 把力度勾选块同步到力度参数工作副本：
+  /// 勾选的值按块顺序写入 [ReasoningParam.options]（全取消 = 空列表）。
+  /// 幂等，保存前与 _hasUnsavedChanges 比较前调用。
+  void _syncEffortOptionsFromBlocks() {
+    final effort = _effortReasoningParam;
+    if (effort == null) return;
+    final selected = _effortBlockValues
+        .where((v) => _effortSelectedValues.contains(v))
+        .toList();
+    if (jsonEncode(effort.options) != jsonEncode(selected)) {
+      effort.options
+        ..clear()
+        ..addAll(selected);
+    }
   }
 }

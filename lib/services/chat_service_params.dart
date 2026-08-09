@@ -139,8 +139,14 @@ extension _ChatServiceParamsExt on ChatService {
       }
 
       if (reasoning) {
+        // 模型有自己的力度参数时，供应商的力度参数被模型版本遮蔽
+        // （合并视图与面板均不显示它）：跳过——陈旧值会注入请求且
+        // UI 无法清除。
+        final hasModelEffort =
+            findEffortParam(_modelConfig!.reasoningParams) != null;
         for (final rp in providerExtraParams) {
           if (rp.paramName.trim().isEmpty) continue;
+          if (hasModelEffort && rp.isEffortParam) continue;
           final selectedValue = reasoningParamValues[rp.paramName];
           if (selectedValue != null && selectedValue.isNotEmpty) {
             ChatService._setReasoningParam(

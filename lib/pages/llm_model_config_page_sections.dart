@@ -80,12 +80,12 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
       const SizedBox(height: 4),
       Text(
         '推理开关控制聊天页面中推理功能的开启和关闭，由您定义参数名和对应的开/关值。'
-        '推理力度参数有且只有一个，每个含参数名和可选项，显示在推理面板中供选择。'
+        '推理力度参数有且只有一个：点击块选中/取消值，拖动把手排序，'
+        '选中的值将按此顺序显示在聊天推理面板中供选择。'
         '您还可以通过底部按钮添加额外的推理参数。'
         '参数名支持点号嵌套（如 thinking.type 会展开为 {"thinking": {"type": "..."}}）。'
-        '供应商已配置的推理参数会直接显示在本页（标注「来自供应商」），'
-        '修改后即变为本模型独立配置；未修改的部分始终跟随供应商设置同步。'
-        '参数与选项值均可通过上移/下移按钮排序。',
+        '供应商已配置的推理参数会直接显示在本页，'
+        '每次打开都会同步供应商的最新值。参数与选项值均可拖拽排序。',
         style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
       ),
       const SizedBox(height: 12),
@@ -96,18 +96,30 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
       // 推理力度 — 有且只有一个 card（通过「添加推理力度」按钮添加）
       _buildReasoningEffortSection(cs),
 
-      // 附加推理参数（通过「添加推理参数」按钮添加）
+      // 附加推理参数（通过「添加推理参数」按钮添加，拖拽把手排序）
       if (_additionalReasoningParams.isNotEmpty)
-        ...List.generate(_additionalReasoningParams.length, (i) {
-          final param = _additionalReasoningParams[i];
-          final actualIndex = _reasoningParams.indexOf(param);
-          return _buildAdditionalReasoningParamCard(
-            param,
-            actualIndex,
-            i,
-            cs,
-          );
-        }),
+        ReorderableListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false,
+          itemCount: _additionalReasoningParams.length,
+          onReorderItem: _reorderAdditionalParam,
+          itemBuilder: (context, i) {
+            // 拖拽动画期间 framework 可能用临时索引请求构建，
+            // 越界时返回空占位，避免重建过程中的越界崩溃
+            final additional = _additionalReasoningParams;
+            if (i >= additional.length) {
+              return const SizedBox.shrink(key: ValueKey('rlv-placeholder'));
+            }
+            final param = additional[i];
+            return KeyedSubtree(
+              // ReorderableListView 要求每个 item 有 key；用实例身份
+              // 保证拖拽动画期间 key 稳定
+              key: ValueKey('add-param-${identityHashCode(param)}'),
+              child: _buildAdditionalReasoningParamCard(param, i, cs),
+            );
+          },
+        ),
       const SizedBox(height: 8),
       Center(
         child: TextButton.icon(

@@ -58,59 +58,42 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
     });
   }
 
-  /// 上移/下移附加推理参数（仅在附加参数之间交换位置，跳过开关与
-  /// 力度参数）。
-  void _moveAdditionalReasoningParam(ReasoningParam param, int delta) {
-    final additional = _additionalReasoningParams;
-    final from = additional.indexOf(param);
-    final to = from + delta;
-    if (from < 0 || to < 0 || to >= additional.length) return;
+  /// 拖拽排序附加推理参数（在附加参数之间移动；开关与力度参数的位置
+  /// 由类别决定，不参与排序）。
+  void _reorderAdditionalParam(int oldIndex, int newIndex) {
     setState(() {
-      final target = additional[to];
-      final i1 = _reasoningParams.indexOf(param);
-      final i2 = _reasoningParams.indexOf(target);
-      final list = _reasoningParams;
-      final tmp = list[i1];
-      list[i1] = list[i2];
-      list[i2] = tmp;
+      final additional = _additionalReasoningParams;
+      final param = additional.removeAt(oldIndex);
+      additional.insert(newIndex, param);
+      // 重建列表：开关/力度保持原顺序，附加参数按新顺序
+      final rebuilt = <ReasoningParam>[
+        ..._reasoningParams
+            .where((p) => p.isReasoningToggle || p.isEffortParam),
+        ...additional,
+      ];
+      _reasoningParams
+        ..clear()
+        ..addAll(rebuilt);
     });
   }
 
-  /// 上移/下移 [paramIndex] 参数的选项值。
-  void _moveOptionInParam(int paramIndex, int optionIndex, int delta) {
+  /// 拖拽排序 [paramIndex] 参数的选项值。
+  void _reorderOptionInParam(int paramIndex, int oldIndex, int newIndex) {
     final options = _reasoningParams[paramIndex].options;
-    final to = optionIndex + delta;
-    if (to < 0 || to >= options.length) return;
     setState(() {
-      final tmp = options[optionIndex];
-      options[optionIndex] = options[to];
-      options[to] = tmp;
+      final value = options.removeAt(oldIndex);
+      options.insert(newIndex, value);
     });
   }
 
-  /// 上移/下移小按钮组（排序用）。
-  Widget _buildMoveButtons({
-    required VoidCallback? onUp,
-    required VoidCallback? onDown,
-    bool upDisabled = false,
-    bool downDisabled = false,
-  }) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_upward, size: 16),
-          visualDensity: VisualDensity.compact,
-          tooltip: '上移',
-          onPressed: upDisabled ? null : onUp,
-        ),
-        IconButton(
-          icon: const Icon(Icons.arrow_downward, size: 16),
-          visualDensity: VisualDensity.compact,
-          tooltip: '下移',
-          onPressed: downDisabled ? null : onDown,
-        ),
-      ],
+  /// 拖拽排序把手。
+  Widget _buildDragHandle({required int index}) {
+    return ReorderableDragStartListener(
+      index: index,
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 2),
+        child: Icon(Icons.drag_handle, size: 20, color: Colors.grey),
+      ),
     );
   }
 
@@ -184,18 +167,30 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
       // 推理力度 — 有且只有一个 card（通过「添加推理力度」按钮添加）
       _buildReasoningEffortSection(cs),
 
-      // 附加推理参数（通过「添加推理参数」按钮添加）
+      // 附加推理参数（通过「添加推理参数」按钮添加，拖拽把手排序）
       if (_additionalReasoningParams.isNotEmpty)
-        ...List.generate(_additionalReasoningParams.length, (i) {
-          final param = _additionalReasoningParams[i];
-          final actualIndex = _reasoningParams.indexOf(param);
-          return _buildAdditionalReasoningParamCard(
-            param,
-            actualIndex,
-            i,
-            cs,
-          );
-        }),
+        ReorderableListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false,
+          itemCount: _additionalReasoningParams.length,
+          onReorderItem: _reorderAdditionalParam,
+          itemBuilder: (context, i) {
+            // 拖拽动画期间 framework 可能用临时索引请求构建，
+            // 越界时返回空占位，避免重建过程中的越界崩溃
+            final additional = _additionalReasoningParams;
+            if (i >= additional.length) {
+              return const SizedBox.shrink(key: ValueKey('rlv-placeholder'));
+            }
+            final param = additional[i];
+            return KeyedSubtree(
+              // ReorderableListView 要求每个 item 有 key；用实例身份
+              // 保证拖拽动画期间 key 稳定
+              key: ValueKey('add-param-${identityHashCode(param)}'),
+              child: _buildAdditionalReasoningParamCard(param, i, cs),
+            );
+          },
+        ),
       const SizedBox(height: 8),
       Center(
         child: TextButton.icon(
@@ -438,18 +433,34 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
             ),
             const SizedBox(height: 8),
             Text(
-              '选项值（可选，仅填参数名时参数值由模型配置提供；可上移/下移排序）',
+              '选项值（可选，仅填参数名时参数值由模型配置提供；拖动把手排序）',
               style: TextStyle(
                 fontSize: 12,
                 color: cs.onSurfaceVariant.withValues(alpha: 0.7),
               ),
             ),
             const SizedBox(height: 8),
-            ...List.generate(effort.options.length, (j) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
+            // 选项值行（可拖拽排序）
+            ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              itemCount: effort.options.length,
+              onReorderItem: (oldIndex, newIndex) => _reorderOptionInParam(
+                  _reasoningParams.indexOf(effort), oldIndex, newIndex),
+              itemBuilder: (context, j) {
+                return Row(
+                  key: ValueKey('effort-opt-$j'),
                   children: [
+                    if (toggleComplete)
+                      _buildDragHandle(index: j)
+                    else
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 2),
+                        child: Icon(Icons.drag_handle,
+                            size: 20, color: Colors.grey),
+                      ),
+                    const SizedBox(width: 2),
                     Expanded(
                       child: TextFormField(
                         initialValue: effort.options[j],
@@ -469,26 +480,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    if (effort.options.length > 1) ...[
-                      _buildMoveButtons(
-                        onUp: toggleComplete
-                            ? () => _moveOptionInParam(
-                                  _reasoningParams.indexOf(effort),
-                                  j,
-                                  -1,
-                                )
-                            : null,
-                        onDown: toggleComplete
-                            ? () => _moveOptionInParam(
-                                  _reasoningParams.indexOf(effort),
-                                  j,
-                                  1,
-                                )
-                            : null,
-                        upDisabled: j == 0,
-                        downDisabled: j == effort.options.length - 1,
-                      ),
-                      const SizedBox(width: 4),
+                    if (effort.options.length > 1)
                       IconButton(
                         icon: const Icon(
                           Icons.remove_circle,
@@ -503,11 +495,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                             : null,
                         tooltip: '删除选项',
                       ),
-                    ],
                   ],
-                ),
-              );
-            }),
+                );
+              },
+            ),
             const SizedBox(height: 4),
             TextButton.icon(
               icon: Icon(Icons.add, size: 16),
@@ -570,11 +561,11 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
   /// (mirrors the model config page).
   Widget _buildAdditionalReasoningParamCard(
     ReasoningParam param,
-    int actualIndex,
     int displayIndex,
     ColorScheme cs,
   ) {
     final isDuplicate = _isReasoningParamNameDuplicate(param);
+    final actualIndex = _reasoningParams.indexOf(param);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -584,6 +575,9 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
           children: [
             Row(
               children: [
+                // 卡片间拖拽把手（附加参数排序）
+                _buildDragHandle(index: displayIndex),
+                const SizedBox(width: 2),
                 Expanded(
                   child: TextFormField(
                     initialValue: param.paramName,
@@ -602,21 +596,13 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                   ),
                 ),
                 const SizedBox(width: 4),
-                // 尾部控件（排序/类型/删除）用 Wrap 包裹，窄屏自动换行，
+                // 尾部控件（类型/删除）用 Wrap 包裹，窄屏自动换行，
                 // 避免 RenderFlex 溢出
                 Wrap(
                   spacing: 4,
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    // 参数排序（在附加参数之间上移/下移）
-                    _buildMoveButtons(
-                      onUp: () => _moveAdditionalReasoningParam(param, -1),
-                      onDown: () => _moveAdditionalReasoningParam(param, 1),
-                      upDisabled: displayIndex == 0,
-                      downDisabled:
-                          displayIndex == _additionalReasoningParams.length - 1,
-                    ),
                     _buildTypeDropdown(param, cs),
                     const SizedBox(width: 4),
                     IconButton(
@@ -640,7 +626,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
             ),
             const SizedBox(height: 4),
             Text(
-              '这些选项将按顺序显示在推理面板中供选择，可上移/下移排序。'
+              '这些选项将按顺序显示在推理面板中供选择，拖动把手排序。'
               '启用/禁用开关在推理面板中操作。',
               style: TextStyle(
                 fontSize: 11,
@@ -648,11 +634,20 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               ),
             ),
             const SizedBox(height: 8),
-            ...List.generate(param.options.length, (j) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
+            // 选项值行（可拖拽排序）
+            ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              itemCount: param.options.length,
+              onReorderItem: (oldIndex, newIndex) =>
+                  _reorderOptionInParam(actualIndex, oldIndex, newIndex),
+              itemBuilder: (context, j) {
+                return Row(
+                  key: ValueKey('add-opt-$actualIndex-$j'),
                   children: [
+                    _buildDragHandle(index: j),
+                    const SizedBox(width: 2),
                     Expanded(
                       child: TextFormField(
                         initialValue: param.options[j],
@@ -669,14 +664,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    if (param.options.length > 1) ...[
-                      _buildMoveButtons(
-                        onUp: () => _moveOptionInParam(actualIndex, j, -1),
-                        onDown: () => _moveOptionInParam(actualIndex, j, 1),
-                        upDisabled: j == 0,
-                        downDisabled: j == param.options.length - 1,
-                      ),
-                      const SizedBox(width: 4),
+                    if (param.options.length > 1)
                       IconButton(
                         icon: const Icon(
                           Icons.remove_circle,
@@ -686,11 +674,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                         onPressed: () => _removeOptionFromParam(actualIndex, j),
                         tooltip: '删除选项',
                       ),
-                    ],
                   ],
-                ),
-              );
-            }),
+                );
+              },
+            ),
             const SizedBox(height: 4),
             TextButton.icon(
               icon: const Icon(Icons.add, size: 16),

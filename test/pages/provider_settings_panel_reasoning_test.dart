@@ -183,15 +183,22 @@ void main() {
       await tester.tap(find.text('参数设置'));
       await tester.pumpAndSettle();
 
-      // 滚动到力度选项区，把第一个选项值（low）下移
+      // 滚动到力度选项区，把第一个选项值（low）向下拖过第二个
       await tester.scrollUntilVisible(
         find.text('low'),
         200,
         scrollable: find.byType(Scrollable).last,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.arrow_downward).first);
-      await tester.pump();
+      final handle = find.byIcon(Icons.drag_handle).first;
+      await tester.ensureVisible(handle);
+      await tester.pumpAndSettle();
+      await tester.timedDrag(
+        handle,
+        const Offset(0, 50),
+        const Duration(milliseconds: 300),
+      );
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -253,15 +260,30 @@ void main() {
       await tester.tap(find.text('参数设置'));
       await tester.pumpAndSettle();
 
-      // 滚动到附加参数区，第一个附加参数（first_param）下移
+      // 滚动到附加参数区，第一个附加参数（first_param）向下拖
       await tester.scrollUntilVisible(
         find.text('first_param'),
         200,
         scrollable: find.byType(Scrollable).last,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.arrow_downward).first);
-      await tester.pump();
+      final handle = find
+          .descendant(
+            of: find.ancestor(
+              of: find.text('first_param'),
+              matching: find.byType(Card),
+            ),
+            matching: find.byIcon(Icons.drag_handle),
+          )
+          .first;
+      await tester.ensureVisible(handle);
+      await tester.pumpAndSettle();
+      await tester.timedDrag(
+        handle,
+        const Offset(0, 120),
+        const Duration(milliseconds: 300),
+      );
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();

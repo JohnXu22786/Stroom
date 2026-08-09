@@ -197,14 +197,6 @@ class ReasoningParam {
 
   String type; // 'string', 'number', 'boolean', 'json'
 
-  /// 模型配置页工作副本专用标记（仅内存，不序列化）。
-  ///
-  /// true 表示该参数是从供应商配置继承而来、模型尚未修改——保存时不会
-  /// 写入模型数据，供应商后续修改会同步显示。模型页首次编辑该参数会
-  /// 清除此标记，参数随即变为模型独立配置，保存时才会写入模型。
-  /// [toMap] 不持久化此字段；[copy] 也不携带（复制即"干净的序列化副本"）。
-  bool inheritedFromProvider;
-
   ReasoningParam({
     required this.paramName,
     this.enabled = true,
@@ -215,7 +207,6 @@ class ReasoningParam {
     this.offValue,
     List<String>? options,
     this.type = 'string',
-    this.inheritedFromProvider = false,
   }) : options = options ?? [];
 
   Map<String, dynamic> toMap() => {

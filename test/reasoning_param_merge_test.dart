@@ -107,29 +107,6 @@ void main() {
     });
   });
 
-  group('ReasoningParam.inheritedFromProvider', () {
-    test('defaults to false', () {
-      final param = ReasoningParam(paramName: 'x');
-      expect(param.inheritedFromProvider, isFalse);
-    });
-
-    test('is not serialized by toMap', () {
-      final param = ReasoningParam(
-        paramName: 'x',
-        inheritedFromProvider: true,
-      );
-      expect(param.toMap().containsKey('inheritedFromProvider'), isFalse);
-    });
-
-    test('is not preserved by copy()', () {
-      final param = ReasoningParam(
-        paramName: 'x',
-        inheritedFromProvider: true,
-      );
-      expect(param.copy().inheritedFromProvider, isFalse);
-    });
-  });
-
   group('ChatAdapter merged reasoningParams', () {
     late ChatAdapter adapter;
     late ProviderEntriesState entriesState;
@@ -305,6 +282,53 @@ void main() {
       // 修改副本不影响共享配置
       providerToggle.enabled = false;
       expect(cachedProvider.reasoningParams.first.enabled, isTrue);
+    });
+
+    test('model effort param shadows a differently-named provider effort param',
+        () {
+      // 模型有自己命名的力度参数时，供应商的力度参数从合并视图中
+      // 移除（面板不可见、陈旧值不注入请求）。
+      entriesState = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_llm',
+            type: 'llm',
+            name: 'Test Provider',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'Test Provider',
+                host: 'https://api.example.com/v1',
+                key: 'sk-test',
+                reasoningParams: [
+                  ReasoningParam(
+                    paramName: 'provider.effort',
+                    isEffortParam: true,
+                    options: ['a', 'b'],
+                  ),
+                ],
+                models: [
+                  ModelConfig(
+                    name: 'Test Model',
+                    modelId: 'test-model',
+                    typeConfig: {'context': 4096},
+                    reasoningParams: [
+                      ReasoningParam(
+                        paramName: 'model.effort',
+                        isEffortParam: true,
+                        options: ['x', 'y'],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      adapter.configure(entriesState);
+      final params = adapter.reasoningParams;
+      expect(params.map((p) => p.paramName).toList(), ['model.effort']);
+      expect(findEffortParam(params)!.paramName, 'model.effort');
     });
 
     test('hasReasoningParams false when both layers have only an empty toggle',
