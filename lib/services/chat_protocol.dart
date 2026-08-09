@@ -180,6 +180,24 @@ Future<bool> preCompressImageForPendingAttachment(
   return true;
 }
 
+/// 附件是否已具备"可直接发送的载荷"（base64Data 无需再读取/转换）。
+///
+/// 用于对话草稿附件快照：图片的 base64Data 是预压缩产物（≤ 阈值）
+/// 时随草稿持久化，恢复后发送零等待；原始大图/未压缩完成的图片
+/// 不携带（体积无谓膨胀），恢复时重新读取文件并预压缩。
+bool attachmentHasReadyPayload(Attachment att, {required int maxBytes}) {
+  if (att.base64Data == null || att.base64Data!.isEmpty) return false;
+  // 非图片：base64Data 即原始文件编码，直接可用
+  if (att.fileType != 'image') return true;
+  // 图片：内存载荷 ≤ 阈值才是"已压缩/小图"，可直接发送
+  if (att.base64Data!.length > maxBytes * 2) return false;
+  try {
+    return base64Decode(att.base64Data!).length <= maxBytes;
+  } catch (_) {
+    return false; // 损坏的 base64 视为未就绪
+  }
+}
+
 /// 读取附件 base64 载荷。
 ///
 /// 优先使用附件内存缓存（[Attachment.base64Data]），避免重复读取磁盘。

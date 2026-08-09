@@ -42,6 +42,11 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final ValueChanged<int> onModelSelected;
   final String? conversationId;
   final String initialDraftText;
+
+  /// 该对话未发送的附件草稿（按对话隔离，与 [initialDraftText] 一起
+  /// 恢复）。图片附件带预压缩 base64（发送零等待），文件附件只带
+  /// 引用（恢复时重新读取编码）。
+  final List<Attachment> initialDraftAttachments;
   final ValueChanged<List<String>>? onModelsReordered;
   final List<ReasoningParam> reasoningParams;
 
@@ -91,6 +96,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     required this.onModelSelected,
     this.conversationId,
     this.initialDraftText = '',
+    this.initialDraftAttachments = const [],
     this.onModelsReordered,
     this.reasoningParams = const [],
     this.editingMessageId,
@@ -168,6 +174,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   /// saves when the text hasn't actually changed.
   String _lastSavedDraft = '';
 
+  /// Tracks the last saved attachment-draft signature (per-attachment
+  /// id/hash/type), so attachment changes also trigger a draft save even
+  /// when the text is unchanged.
+  List<String> _lastSavedDraftAttSignature = const [];
+
   /// Tracks the previous send-button enabled state to avoid calling
   /// setState on every keystroke. Only triggers a rebuild when the
   /// send-button state actually transitions (empty ↔ non-empty).
@@ -204,6 +215,13 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       _lastSavedDraft = widget.initialDraftText;
     }
     _lastHadText = _textController.text.trim().isNotEmpty;
+
+    // Restore the conversation's unsent attachment draft (if any).
+    // Edit mode populates its own attachments below.
+    if (widget.editingMessageId == null) {
+      _restoreDraftAttachments(widget.initialDraftAttachments);
+      _lastSavedDraftAttSignature = _draftAttSignature();
+    }
 
     // If entering edit mode, pre-fill with the message text
     // and pre-populate pending attachments with the original attachments.
@@ -277,12 +295,25 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         _armEditWarning(fromBuild: true);
       } else if (widget.editingMessageId == null &&
           oldWidget.editingMessageId != null) {
-        // Edit mode cancelled - clear everything
+        // Edit mode cancelled - clear everything, then restore the current
+        // conversation's draft (text + attachments). Covers both plain
+        // cancel and the "switched conversation while editing" case (the
+        // page clears edit state asynchronously after the history load —
+        // the switch branch skipped the restore, this branch does it).
+        _draftTimer?.cancel();
         _textController.clear();
         _lastSavedDraft = '';
+        _lastSavedDraftAttSignature = const [];
         _lastHadText = false;
         _clearPendingAttachments();
         _disarmEditWarning();
+        if (widget.initialDraftText.isNotEmpty) {
+          _textController.text = widget.initialDraftText;
+          _lastSavedDraft = widget.initialDraftText;
+        }
+        _lastHadText = _textController.text.trim().isNotEmpty;
+        _restoreDraftAttachments(widget.initialDraftAttachments);
+        _lastSavedDraftAttSignature = _draftAttSignature();
       }
       return;
     }
@@ -309,18 +340,46 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       // Cancel any pending debounced save to avoid it firing with a stale
       // text value for the wrong conversation after the switch.
       _draftTimer?.cancel();
-      // Save draft for the old conversation (if any)
-      _saveDraftImmediately(oldWidget);
+      // 编辑中切换对话：不保存、不恢复草稿——页面清除编辑态是异步的
+      // （历史加载完成后），此帧 editingMessageId 仍非空，保存会把
+      // "正在编辑的消息内容"当成旧对话草稿写进去；恢复会把编辑文本
+      // 冲掉。页面清除编辑态后由下面的取消分支统一恢复当前对话草稿。
+      if (oldWidget.editingMessageId == null) {
+        // 保存旧对话草稿（文字 + 附件快照）。必须在恢复新对话**之前**
+        // 快照旧内容；且不能在 didUpdateWidget（构建阶段）同步修改
+        // provider（Riverpod 调试断言），推迟到帧后执行。
+        final oldConvId = oldWidget.conversationId;
+        final oldTextSnapshot = _textController.text;
+        final oldAttsSnapshot = _draftAttachmentSnapshot();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (oldConvId == null) return;
+          try {
+            ref.read(conversationsProvider.notifier).saveDraft(
+                  oldConvId,
+                  oldTextSnapshot,
+                  draftAttachments: oldAttsSnapshot,
+                );
+          } catch (e) {
+            // 帧后组件可能已销毁：草稿保存 best-effort
+            debugPrint(
+                '[ChatComposer] failed to save old-conversation draft: $e');
+          }
+        });
 
-      // Restore draft for the new conversation
-      if (widget.initialDraftText.isNotEmpty) {
-        _textController.text = widget.initialDraftText;
-        _lastSavedDraft = widget.initialDraftText;
-        _lastHadText = widget.initialDraftText.trim().isNotEmpty;
-      } else {
-        _textController.clear();
-        _lastSavedDraft = '';
-        _lastHadText = false;
+        // Restore draft for the new conversation
+        if (widget.initialDraftText.isNotEmpty) {
+          _textController.text = widget.initialDraftText;
+          _lastSavedDraft = widget.initialDraftText;
+          _lastHadText = widget.initialDraftText.trim().isNotEmpty;
+        } else {
+          _textController.clear();
+          _lastSavedDraft = '';
+          _lastHadText = false;
+        }
+        // 附件草稿同样按对话隔离：切走时已保存旧对话快照，切回时
+        // 加载新对话的草稿附件（替换当前 pending）。
+        _restoreDraftAttachments(widget.initialDraftAttachments);
+        _lastSavedDraftAttSignature = _draftAttSignature();
       }
     }
   }

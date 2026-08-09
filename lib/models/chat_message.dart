@@ -52,7 +52,7 @@ class Attachment {
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
-  Map<String, dynamic> toMap() => {
+  Map<String, dynamic> toMap({bool includeBase64Data = false}) => {
         'id': id,
         'fileName': fileName,
         'mimeType': mimeType,
@@ -63,8 +63,10 @@ class Attachment {
         'createdAt': createdAt.toIso8601String(),
         if (thumbnailPath != null) 'thumbnailPath': thumbnailPath,
         if (conversationId != null) 'conversationId': conversationId,
-        // NOTE: base64Data is intentionally NOT serialized.
-        // It is a transient in-memory cache tied to conversation lifecycle.
+        // NOTE: base64Data 默认不序列化——历史消息的附件若带内存缓存
+        // 会让对话 JSON 膨胀到不可用。仅在显式请求时携带（对话草稿
+        // 附件：图片的预压缩 base64 随草稿持久化，恢复后发送零等待）。
+        if (includeBase64Data && base64Data != null) 'base64Data': base64Data,
       };
 
   factory Attachment.fromMap(Map<String, dynamic> map) {
@@ -90,6 +92,9 @@ class Attachment {
       createdAt: createdAt,
       thumbnailPath: map['thumbnailPath'] as String?,
       conversationId: map['conversationId'] as String?,
+      // 仅对话草稿附件会序列化 base64Data（预压缩产物）；
+      // 历史消息附件没有该字段，保持 null。
+      base64Data: map['base64Data'] as String?,
     );
   }
 

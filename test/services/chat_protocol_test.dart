@@ -1141,4 +1141,55 @@ void main() {
       expect(cached!.bytes, preCompressed);
     });
   });
+
+  // ═════════════════════════════════════════════════════════════════════
+  // attachmentHasReadyPayload —— 草稿快照的 base64 携带判定
+  // ═════════════════════════════════════════════════════════════════════
+  group('attachmentHasReadyPayload', () {
+    const maxBytes = 1024;
+    // 512 字节 JPEG 魔数开头的内容（≤ 阈值 → 可直接发送）
+    final smallPayload = base64Encode(List<int>.generate(512, (i) => i % 251));
+
+    Attachment att({String? b64, String fileType = 'image'}) => Attachment(
+          fileName: 'f.bin',
+          mimeType: fileType == 'image' ? 'image/jpeg' : 'application/pdf',
+          fileType: fileType,
+          hash: 'h',
+          storagePath: 'attachments/h_1.bin',
+          fileSize: 2048,
+          base64Data: b64,
+        );
+
+    test('图片 + 压缩产物（≤ 阈值）→ true（可随草稿持久化）', () {
+      expect(
+          attachmentHasReadyPayload(att(b64: smallPayload), maxBytes: maxBytes),
+          isTrue);
+    });
+
+    test('图片 + 未压缩完成的原始大 base64（> 阈值）→ false', () {
+      final big =
+          base64Encode(List<int>.generate(maxBytes * 2, (i) => i % 251));
+      expect(attachmentHasReadyPayload(att(b64: big), maxBytes: maxBytes),
+          isFalse);
+    });
+
+    test('图片 + 无 base64Data → false', () {
+      expect(attachmentHasReadyPayload(att(), maxBytes: maxBytes), isFalse);
+    });
+
+    test('非图片 + base64Data → true（文件原始编码直接可用）', () {
+      expect(
+          attachmentHasReadyPayload(
+              att(b64: smallPayload, fileType: 'document'),
+              maxBytes: maxBytes),
+          isTrue);
+    });
+
+    test('损坏的 base64 → false（不误判为可发送载荷）', () {
+      expect(
+          attachmentHasReadyPayload(att(b64: '!!!not-base64!!!'),
+              maxBytes: maxBytes),
+          isFalse);
+    });
+  });
 }

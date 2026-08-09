@@ -399,10 +399,12 @@ extension _ChatPageModelsExt on _ChatPageState {
   Widget _buildComposer({
     required String? activeId,
     required String currentDraftText,
+    required List<Attachment> currentDraftAttachments,
   }) {
     return ChatComposerWidget(
       conversationId: activeId,
       initialDraftText: currentDraftText,
+      initialDraftAttachments: currentDraftAttachments,
       onSend: _onMessageSend,
       onStop: _stopStreaming,
       onPreviewAttachment: _showAttachmentPreview,

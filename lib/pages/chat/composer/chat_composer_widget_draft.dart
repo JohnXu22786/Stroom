@@ -6,8 +6,51 @@ part of 'chat_composer_widget.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ChatComposerDraftExt on ChatComposerWidgetState {
-  /// Saves the current text as draft for the given widget's conversation,
-  /// bypassing the debounce timer.
+  /// 草稿 JSON 携带 base64 的总预算（按原始字节计）。
+  ///
+  /// 超过预算的图片放弃携带压缩 base64（恢复时从磁盘压缩缓存/重新
+  /// 压缩取回，见 [_restoreDraftAttachmentPayload]）——保护 Web 端
+  /// localStorage（约 5MB）不被草稿撑爆：一旦爆掉，**整个对话持久化
+  /// 都会静默失败**（不止草稿）。桌面端无硬限，但预算也能避免每次
+  /// 防抖持久化编码数 MB 字符串。
+  static const int _kDraftB64BudgetBytes = 1500 * 1024;
+
+  /// 当前 pending 附件的草稿快照签名：文字未变但附件变了时也要保存。
+  /// 含 base64Data 长度——预压缩完成（base64 从原始大字节变为压缩
+  /// 产物）也会触发一次保存，把可零等待的载荷落进草稿。
+  List<String> _draftAttSignature() => _pendingAttachments
+      .map(
+          (a) => '${a.id}:${a.hash}:${a.fileType}:${a.base64Data?.length ?? 0}')
+      .toList();
+
+  /// 生成待保存的附件草稿快照（深拷贝，与 pending 列表无引用共享）。
+  ///
+  /// 仅图片附件携带 base64Data，且必须是"已压缩完成/小图"的可直接
+  /// 发送载荷（≤ 阈值）——未压缩完的原始大 base64 不携带（体积无谓
+  /// 膨胀），恢复时重新读文件并触发预压缩。文件附件只存引用，
+  /// 恢复时重新读取编码。总携带量受 [_kDraftB64BudgetBytes] 预算约束。
+  List<Attachment> _draftAttachmentSnapshot() {
+    var budget = _kDraftB64BudgetBytes;
+    return _pendingAttachments.map((a) {
+      var includeB64 = false;
+      if (a.fileType == 'image' &&
+          attachmentHasReadyPayload(a, maxBytes: imageCompressThresholdBytes)) {
+        // base64 体积 ≈ 4/3 × 原始字节；预算内才携带
+        final payloadLen = a.base64Data!.length * 3 ~/ 4;
+        if (payloadLen <= budget) {
+          includeB64 = true;
+          budget -= payloadLen;
+        }
+      }
+      final copy = Attachment.fromMap(a.toMap(includeBase64Data: includeB64));
+      // 草稿归属当前对话：恢复后的清理/缓存定位使用
+      copy.conversationId ??= widget.conversationId;
+      return copy;
+    }).toList();
+  }
+
+  /// Saves the current text + attachment snapshot as draft for the given
+  /// widget's conversation, bypassing the debounce timer.
   void _saveDraftImmediately(ChatComposerWidget w) {
     final convId = w.conversationId;
     if (convId == null) return;
@@ -15,11 +58,122 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
     // 进入后台/被销毁时，正在编辑的消息文本会被当作新消息草稿
     // 持久化，重进对话后草稿区出现陈旧的编辑文本。
     if (w.editingMessageId != null) return;
-    // If the text hasn't changed since last save, skip
-    if (w == widget && _lastSavedDraft == _textController.text) return;
+    // If neither the text nor the attachments changed since last save, skip
+    if (w == widget &&
+        _lastSavedDraft == _textController.text &&
+        _lastSavedDraftAttSignature.toString() ==
+            _draftAttSignature().toString()) {
+      return;
+    }
     final textToSave = _textController.text;
-    ref.read(conversationsProvider.notifier).saveDraft(convId, textToSave);
+    ref.read(conversationsProvider.notifier).saveDraft(
+          convId,
+          textToSave,
+          draftAttachments: _draftAttachmentSnapshot(),
+        );
     _lastSavedDraft = textToSave;
+    _lastSavedDraftAttSignature = _draftAttSignature();
+  }
+
+  /// 附件变化（添加/移除/编辑）后调度一次草稿保存（防抖，与文字
+  /// 共用同一计时器）。文字未变时原有 skip 逻辑会拦下冗余保存，
+  /// 因此这里不能只依赖文字——见 [_draftAttSignature]。
+  void _scheduleDraftSave() {
+    if (widget.editingMessageId != null) return;
+    if (widget.conversationId == null) return;
+    _draftTimer?.cancel();
+    _draftTimer = Timer(const Duration(milliseconds: 800), () {
+      if (!mounted) return;
+      _saveDraftImmediately(widget);
+    });
+  }
+
+  /// 恢复该对话的附件草稿（替换当前 pending）。
+  ///
+  /// - 图片附件：base64Data 为预压缩产物时直接可用（发送零等待，
+  ///   无需读文件）；否则先查磁盘压缩缓存，再读原文件重新预压缩。
+  /// - 文件附件：异步读原文件并重新 base64 编码。
+  /// - 预览字节（原始图）异步从 storagePath 读取。
+  ///
+  /// **深拷贝**：草稿附件是对话持有的对象，恢复进 pending 后会被
+  /// 预压缩/文件编码就地修改——直接引用会把大体积 base64 写回
+  /// 对话状态，撑爆持久化。
+  void _restoreDraftAttachments(List<Attachment> attachments) {
+    final copies = attachments
+        .map((a) => Attachment.fromMap(a.toMap(includeBase64Data: true)))
+        .toList();
+    _removedEditAttachments.clear();
+    setState(() {
+      _pendingAttachments.clear();
+      _pendingImageBytes.clear();
+      if (copies.isNotEmpty) {
+        _pendingAttachments.addAll(copies);
+      }
+    });
+    for (final att in copies) {
+      unawaited(_restoreDraftAttachmentPayload(att));
+    }
+  }
+
+  /// 恢复单个草稿附件的载荷（base64Data/预览字节），并重新触发
+  /// 未完成的后台预压缩。
+  Future<void> _restoreDraftAttachmentPayload(Attachment att) async {
+    // 图片且已有可直接发送的压缩载荷：零 IO 恢复
+    if (att.fileType == 'image' &&
+        attachmentHasReadyPayload(att, maxBytes: imageCompressThresholdBytes)) {
+      await _loadDraftPreviewFromDisk(att);
+      return;
+    }
+    if (att.fileType == 'image') {
+      // 磁盘压缩缓存优先（选中时预压缩/发送时压缩的产物）：
+      // 避免每次重进对话都重新压缩；缓存命中即零等待。
+      final cached = await AttachmentStorage.readCompressedImage(
+        conversationId: att.conversationId ?? widget.conversationId,
+        hash: att.hash,
+      );
+      if (cached != null &&
+          cached.bytes.length <= imageCompressThresholdBytes &&
+          mounted) {
+        att.base64Data = base64Encode(cached.bytes);
+        att.compressedCachePersisted = true;
+        await _loadDraftPreviewFromDisk(att);
+        return;
+      }
+    }
+    if (att.storagePath.isEmpty) {
+      // 无法读取（理论上草稿总是带 storagePath）：发送路径兜底
+      if (att.fileType == 'image' && att.base64Data != null) {
+        await _loadDraftPreviewFromDisk(att);
+      }
+      return;
+    }
+    final bytes = await AttachmentStorage.readFile(att.storagePath);
+    if (bytes == null || !mounted) return;
+    if (att.fileType == 'image') {
+      // 重新触发后台预压缩（结果写回 base64Data + 磁盘缓存）
+      await _preCompressPendingImage(att, bytes);
+      if (!mounted) return;
+      setState(() {
+        _pendingImageBytes[att.id] = bytes;
+      });
+    } else {
+      // 文件：重新 base64 编码（发送载荷）
+      att.base64Data = base64Encode(bytes);
+      if (!mounted) return;
+      setState(() {
+        _pendingImageBytes[att.id] = bytes;
+      });
+    }
+  }
+
+  /// 从磁盘读取原始字节作为预览（不覆盖已就绪的发送载荷）。
+  Future<void> _loadDraftPreviewFromDisk(Attachment att) async {
+    if (att.storagePath.isEmpty) return;
+    final bytes = await AttachmentStorage.readFile(att.storagePath);
+    if (bytes == null || !mounted) return;
+    setState(() {
+      _pendingImageBytes[att.id] = bytes;
+    });
   }
 
   /// Pre-populates the pending attachments area with the original message's
@@ -69,16 +223,7 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
     // Skip draft saving in edit mode — the text is for editing a sent
     // message, not composing a new one.
     if (widget.editingMessageId != null) return;
-    _draftTimer?.cancel();
-    // Skip saving if the text hasn't actually changed since last save
-    if (text == _lastSavedDraft) return;
-    _draftTimer = Timer(const Duration(milliseconds: 800), () {
-      if (!mounted) return;
-      final convId = widget.conversationId;
-      if (convId == null) return;
-      ref.read(conversationsProvider.notifier).saveDraft(convId, text);
-      _lastSavedDraft = text;
-    });
+    _scheduleDraftSave();
   }
 
   void _handleSubmitted(String text) {
@@ -121,6 +266,7 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
       // Cancel any pending draft timer in edit mode
       _draftTimer?.cancel();
       _lastSavedDraft = '';
+      _lastSavedDraftAttSignature = const [];
       return;
     }
 
@@ -128,12 +274,18 @@ extension _ChatComposerDraftExt on ChatComposerWidgetState {
     _clearPendingAttachments();
     _textController.clear();
 
-    // Clear the draft for this conversation after sending
+    // Clear the draft (text + attachments) for this conversation after
+    // sending
     final convId = widget.conversationId;
     if (convId != null) {
       _draftTimer?.cancel();
-      ref.read(conversationsProvider.notifier).saveDraft(convId, '');
+      ref.read(conversationsProvider.notifier).saveDraft(
+        convId,
+        '',
+        draftAttachments: const [],
+      );
       _lastSavedDraft = '';
+      _lastSavedDraftAttSignature = const [];
     }
   }
 

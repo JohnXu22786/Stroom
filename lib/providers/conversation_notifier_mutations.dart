@@ -200,14 +200,25 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     await _persistNow();
   }
 
-  /// Saves the draft text for a specific conversation.
+  /// Saves the draft (text + unsent attachment snapshots) for a specific
+  /// conversation.
   ///
   /// Drafts are per-conversation and persisted along with the conversation
-  /// data. When [draftText] is empty, the draft is cleared.
-  void saveDraft(String conversationId, String draftText) {
+  /// data. When [draftText] is empty and [draftAttachments] is empty, the
+  /// draft is cleared.
+  void saveDraft(
+    String conversationId,
+    String draftText, {
+    List<Attachment>? draftAttachments,
+  }) {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.draftText = draftText;
+      if (draftAttachments != null) {
+        // composer 传入的是快照副本（toMap/fromMap 深拷贝），与
+        // pending 列表无引用共享——后续预压缩/编辑不会污染草稿。
+        c.draftAttachments = draftAttachments;
+      }
       return c;
     }).toList();
     _persist();

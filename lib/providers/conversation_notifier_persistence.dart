@@ -291,6 +291,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 sortOrder: c.sortOrder,
                 assistantId: c.assistantId,
                 draftText: c.draftText,
+                draftAttachments: c.draftAttachments,
                 enabledMcpToolNames: c.enabledMcpToolNames,
                 hasExplicitEnabledMcpTools: c.hasExplicitEnabledMcpTools,
                 contextSummary: c.contextSummary,

@@ -215,6 +215,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     setState(() {
       _pendingAttachments.add(att);
     });
+    // 附件变化触发草稿保存（文字未变时原有 skip 逻辑靠签名识别）
+    _scheduleDraftSave();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -344,6 +346,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     setState(() {
       _pendingAttachments.removeAt(index);
     });
+    // 附件变化触发草稿保存（文字未变时原有 skip 逻辑靠签名识别）
+    _scheduleDraftSave();
   }
 
   /// Delete a temp-edited file from the attachment storage.
@@ -364,6 +368,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     setState(() {
       _pendingAttachments.insert(newIndex, item);
     });
+    // 草稿快照保留列表顺序：重排后必须保存，否则恢复时顺序复原
+    _scheduleDraftSave();
   }
 
   /// Called when a pending attachment chip is tapped.
@@ -541,6 +547,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       });
       // 编辑后的图片同样立即后台预压缩（发送时零等待）
       unawaited(_preCompressPendingImage(updatedAtt, editedBytes));
+      // 附件变化触发草稿保存
+      _scheduleDraftSave();
     } catch (e) {
       debugPrint('[ChatComposer] _updatePendingAttachmentAfterEdit error: $e');
       if (mounted) {
