@@ -423,20 +423,42 @@ void main() {
       await settle(tester);
     });
 
-    testWidgets('desktop platforms do not scroll on input focus',
-        (tester) async {
+    testWidgets(
+        'desktop platforms handle the on-screen keyboard the same way: a '
+        'tap alone does not scroll, an insets change does', (tester) async {
       await pumpChat(tester, platform: TargetPlatform.windows);
       await scrollToBottom(tester);
       await scrollUp(tester);
       final saved = _scrollPosition(tester).pixels;
 
+      // Tap alone (no keyboard on a desktop yet): no scroll.
       await tester.tap(find.byType(TextField));
       await tester.pump(const Duration(milliseconds: 16));
-
       expect(
         _scrollPosition(tester).pixels,
         closeTo(saved, 1.0),
-        reason: 'no soft keyboard on desktop — the list must not move',
+        reason: 'a tap must not move the list on any platform',
+      );
+
+      // A touch keyboard appears (Windows TabTip / Linux on-screen
+      // keyboard drive viewInsets the same way as mobile): the list
+      // scrolls up with it.
+      await setKeyboardInset(tester, 300);
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(
+        _scrollPosition(tester).pixels,
+        greaterThan(saved + 1),
+        reason: 'the keyboard-appear scroll must work on desktop platforms '
+            'too — an on-screen keyboard is not mobile-only',
+      );
+
+      await closeKeyboard(tester);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(
+        _scrollPosition(tester).pixels,
+        closeTo(saved, 1.0),
+        reason: 'dismiss restores the reading position on desktop too',
       );
       await settle(tester);
     });

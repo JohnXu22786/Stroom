@@ -102,11 +102,13 @@ extension _ChatPageBuildersExt on _ChatPageState {
       // (The library defaults to onDrag, which hides the keyboard on any
       // drag — exactly what the user reported as unwanted.)
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-      // The library's own debounced keyboard scroll would otherwise run a
-      // 250ms animation that cancels this page's keyboard scroll and
-      // delays the final landing; with Duration.zero it becomes an
-      // instant jump that never fights the page's animation.
-      scrollToEndAnimationDuration: Duration.zero,
+      // The library's own debounced keyboard scroll (100ms debounce +
+      // 250ms animation) runs alongside this page's keyboard-appear
+      // scroll. Its animation is smooth (NOT Duration.zero — an instant
+      // jump there cancelled this page's scroll mid-flight, which looked
+      // like the animation disappearing); when it takes over mid-scroll
+      // it continues toward the same bottom and the two read as one
+      // continuous slide. The follow-up closes any small gap it leaves.
       // While the initial positioning pass runs (entry / conversation
       // switch), suppress the built-in jump-to-bottom — the page positions
       // the list at the last user message itself. Same-conversation reloads

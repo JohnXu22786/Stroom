@@ -195,14 +195,19 @@ class _ChatPageState extends ConsumerState<ChatPage>
   double? _lastScrollPositionBeforeKeyboard;
 
   /// Insets above which the soft keyboard is considered visible.
-  /// Below this the keyboard is treated as (almost) gone.
-  static const double _keyboardVisibleThreshold = 100;
+  /// Small (not the usual 100px): the keyboard-appear scroll must start
+  /// as soon as the insets begin to rise — about 0.3-0.5s earlier than
+  /// crossing a large threshold — so the list slides up in lockstep with
+  /// the keyboard instead of visibly lagging it. Non-keyboard system bars
+  /// live in [MediaQueryData.padding], not viewInsets, so a small
+  /// threshold cannot misfire.
+  static const double _keyboardVisibleThreshold = 20;
 
-  /// Duration of the scroll-to-bottom animation started when the composer
-  /// input gains focus — roughly matching the soft-keyboard show animation
-  /// so the list slides up in lockstep with the keyboard.
+  /// Duration of the scroll-to-bottom animation started when the keyboard
+  /// appears — matching the soft-keyboard show animation length, so the
+  /// list slides up in lockstep with the keyboard and lands as it settles.
   static const Duration _keyboardOpenScrollDuration =
-      Duration(milliseconds: 200);
+      Duration(milliseconds: 300);
 
   /// Short follow-up animation covering the remaining scroll distance once
   /// the keyboard show animation has finished (the viewport stopped
