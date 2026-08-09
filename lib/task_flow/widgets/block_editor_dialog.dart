@@ -487,8 +487,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           ),
           style: TextStyle(fontSize: 13, color: cs.onSurface),
           hint: Text(
+            // A persisted voice id that no longer exists must not show the
+            // raw id string — guide re-selection instead.
             current.isNotEmpty && !voices.any((v) => v.id == current)
-                ? current
+                ? '音色已失效，请重新选择'
                 : '选择音色',
             style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
           ),
