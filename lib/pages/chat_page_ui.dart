@@ -78,6 +78,13 @@ extension _ChatPageUiExt on _ChatPageState {
   /// until the scroll ends, and [_userDraggedDuringKeyboardSession] keeps
   /// the keyboard follow-up from yanking the list back from a user who
   /// took over.
+  ///
+  /// Every scroll that ends while a keyboard session is open re-runs the
+  /// follow-up evaluation (one frame later, so the activity chain from the
+  /// scroll that just ended — the chat library's debounced keyboard scroll
+  /// in particular — has fully unwound). This makes the final landing
+  /// timing deterministic: ~120ms after whichever scroll ends last, instead
+  /// of whatever the 600ms backstop happened to catch.
   bool _onChatScrollNotification(ScrollNotification notification) {
     if (notification is ScrollStartNotification) {
       if (notification.dragDetails != null) {
@@ -88,6 +95,12 @@ extension _ChatPageUiExt on _ChatPageState {
       }
     } else if (notification is ScrollEndNotification) {
       _userIsDragging = false;
+      if (_keyboardAppeared && _keyboardFollowUpPending) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _tryKeyboardFollowUp();
+        });
+      }
     }
     return false;
   }
@@ -154,6 +167,7 @@ extension _ChatPageUiExt on _ChatPageState {
     final savedPos = _lastScrollPositionBeforeKeyboard;
     _lastScrollPositionBeforeKeyboard = null;
     _keyboardAppeared = false;
+    _keyboardFollowUpPending = false;
     _userDraggedDuringKeyboardSession = false;
     _staleKeyboardPositionTimer?.cancel();
     _keyboardFollowUpTimer?.cancel();
