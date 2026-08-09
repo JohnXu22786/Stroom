@@ -58,6 +58,62 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
     });
   }
 
+  /// 上移/下移附加推理参数（仅在附加参数之间交换位置，跳过开关与
+  /// 力度参数）。
+  void _moveAdditionalReasoningParam(ReasoningParam param, int delta) {
+    final additional = _additionalReasoningParams;
+    final from = additional.indexOf(param);
+    final to = from + delta;
+    if (from < 0 || to < 0 || to >= additional.length) return;
+    setState(() {
+      final target = additional[to];
+      final i1 = _reasoningParams.indexOf(param);
+      final i2 = _reasoningParams.indexOf(target);
+      final list = _reasoningParams;
+      final tmp = list[i1];
+      list[i1] = list[i2];
+      list[i2] = tmp;
+    });
+  }
+
+  /// 上移/下移 [paramIndex] 参数的选项值。
+  void _moveOptionInParam(int paramIndex, int optionIndex, int delta) {
+    final options = _reasoningParams[paramIndex].options;
+    final to = optionIndex + delta;
+    if (to < 0 || to >= options.length) return;
+    setState(() {
+      final tmp = options[optionIndex];
+      options[optionIndex] = options[to];
+      options[to] = tmp;
+    });
+  }
+
+  /// 上移/下移小按钮组（排序用）。
+  Widget _buildMoveButtons({
+    required VoidCallback? onUp,
+    required VoidCallback? onDown,
+    bool upDisabled = false,
+    bool downDisabled = false,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_upward, size: 16),
+          visualDensity: VisualDensity.compact,
+          tooltip: '上移',
+          onPressed: upDisabled ? null : onUp,
+        ),
+        IconButton(
+          icon: const Icon(Icons.arrow_downward, size: 16),
+          visualDensity: VisualDensity.compact,
+          tooltip: '下移',
+          onPressed: downDisabled ? null : onDown,
+        ),
+      ],
+    );
+  }
+
   // ===================================================================
   // 推理参数帮助方法
   // ===================================================================
@@ -382,7 +438,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
             ),
             const SizedBox(height: 8),
             Text(
-              '选项值（可选，仅填参数名时参数值由模型配置提供）',
+              '选项值（可选，仅填参数名时参数值由模型配置提供；可上移/下移排序）',
               style: TextStyle(
                 fontSize: 12,
                 color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -413,7 +469,26 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    if (effort.options.length > 1)
+                    if (effort.options.length > 1) ...[
+                      _buildMoveButtons(
+                        onUp: toggleComplete
+                            ? () => _moveOptionInParam(
+                                  _reasoningParams.indexOf(effort),
+                                  j,
+                                  -1,
+                                )
+                            : null,
+                        onDown: toggleComplete
+                            ? () => _moveOptionInParam(
+                                  _reasoningParams.indexOf(effort),
+                                  j,
+                                  1,
+                                )
+                            : null,
+                        upDisabled: j == 0,
+                        downDisabled: j == effort.options.length - 1,
+                      ),
+                      const SizedBox(width: 4),
                       IconButton(
                         icon: const Icon(
                           Icons.remove_circle,
@@ -428,6 +503,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                             : null,
                         tooltip: '删除选项',
                       ),
+                    ],
                   ],
                 ),
               );
@@ -526,12 +602,30 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                   ),
                 ),
                 const SizedBox(width: 4),
-                _buildTypeDropdown(param, cs),
-                const SizedBox(width: 4),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                  onPressed: () => _removeReasoningParam(actualIndex),
-                  tooltip: '删除参数',
+                // 尾部控件（排序/类型/删除）用 Wrap 包裹，窄屏自动换行，
+                // 避免 RenderFlex 溢出
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    // 参数排序（在附加参数之间上移/下移）
+                    _buildMoveButtons(
+                      onUp: () => _moveAdditionalReasoningParam(param, -1),
+                      onDown: () => _moveAdditionalReasoningParam(param, 1),
+                      upDisabled: displayIndex == 0,
+                      downDisabled:
+                          displayIndex == _additionalReasoningParams.length - 1,
+                    ),
+                    _buildTypeDropdown(param, cs),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon:
+                          const Icon(Icons.delete, color: Colors.red, size: 20),
+                      onPressed: () => _removeReasoningParam(actualIndex),
+                      tooltip: '删除参数',
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -546,7 +640,8 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
             ),
             const SizedBox(height: 4),
             Text(
-              '这些选项将按顺序显示在推理面板中供选择。启用/禁用开关在推理面板中操作。',
+              '这些选项将按顺序显示在推理面板中供选择，可上移/下移排序。'
+              '启用/禁用开关在推理面板中操作。',
               style: TextStyle(
                 fontSize: 11,
                 color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -574,7 +669,14 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    if (param.options.length > 1)
+                    if (param.options.length > 1) ...[
+                      _buildMoveButtons(
+                        onUp: () => _moveOptionInParam(actualIndex, j, -1),
+                        onDown: () => _moveOptionInParam(actualIndex, j, 1),
+                        upDisabled: j == 0,
+                        downDisabled: j == param.options.length - 1,
+                      ),
+                      const SizedBox(width: 4),
                       IconButton(
                         icon: const Icon(
                           Icons.remove_circle,
@@ -584,6 +686,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                         onPressed: () => _removeOptionFromParam(actualIndex, j),
                         tooltip: '删除选项',
                       ),
+                    ],
                   ],
                 ),
               );

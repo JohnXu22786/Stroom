@@ -137,6 +137,145 @@ void main() {
       expect(saved!.reasoningParams[1].options, isEmpty);
     });
 
+    testWidgets('provider effort values are sortable and the order is saved',
+        (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            enabled: true,
+            options: ['low', 'high', 'medium'],
+          ),
+        ],
+      );
+
+      ProviderConfigItem? saved;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () async {
+                  saved = await showProviderSettingsPanel(
+                    context: context,
+                    config: config,
+                    providerType: 'llm',
+                  );
+                },
+                child: const Text('打开供应商设置'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开供应商设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('参数设置'));
+      await tester.pumpAndSettle();
+
+      // 滚动到力度选项区，把第一个选项值（low）下移
+      await tester.scrollUntilVisible(
+        find.text('low'),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.arrow_downward).first);
+      await tester.pump();
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      final effort = saved!.reasoningParams
+          .firstWhere((p) => p.paramName == 'reasoning_effort');
+      expect(effort.options, ['high', 'low', 'medium']);
+    });
+
+    testWidgets(
+        'provider additional params are sortable and the order is saved',
+        (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'first_param',
+            enabled: true,
+            options: ['1'],
+          ),
+          ReasoningParam(
+            paramName: 'second_param',
+            enabled: true,
+            options: ['2'],
+          ),
+        ],
+      );
+
+      ProviderConfigItem? saved;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () async {
+                  saved = await showProviderSettingsPanel(
+                    context: context,
+                    config: config,
+                    providerType: 'llm',
+                  );
+                },
+                child: const Text('打开供应商设置'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开供应商设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('参数设置'));
+      await tester.pumpAndSettle();
+
+      // 滚动到附加参数区，第一个附加参数（first_param）下移
+      await tester.scrollUntilVisible(
+        find.text('first_param'),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.arrow_downward).first);
+      await tester.pump();
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(
+        saved!.reasoningParams
+            .where((p) => !p.isReasoningToggle)
+            .map((p) => p.paramName)
+            .toList(),
+        ['second_param', 'first_param'],
+      );
+    });
+
     testWidgets('duplicate reasoning param name shows inline error',
         (tester) async {
       final config = ProviderConfigItem(

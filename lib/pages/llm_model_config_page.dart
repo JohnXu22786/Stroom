@@ -46,6 +46,11 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   /// 不会误匹配到其他供应商参数。
   late final Map<ReasoningParam, ReasoningParam> _providerOriginals;
 
+  /// 被排序操作强制认领的参数（本会话内不回退为继承）。
+  /// 排序结果没有内容载体（toMap 不含列表位置），内容还原不能撤销
+  /// 排序造成的认领，否则排序会随保存静默丢失。
+  final Set<ReasoningParam> _forceClaimedParamsStore = {};
+
   final Map<int, String?> _jsonErrors = {};
 
   // Slider values
@@ -161,9 +166,11 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     if ((mOverride != null) != _overrideEndpointType) return true;
     if (_overrideEndpointType && _endpointType != mOverride) return true;
     // Custom params and reasoning params (simple check via serialization)
+    // 用 jsonEncode 而非 toString 比较：List/Map 的 toString 不引用
+    // 字符串，空选项 [''] 会与无选项 [] 混淆。
     final originalCustom = m.customParams.map((p) => p.toMap()).toList();
     final currentCustom = _customParams.map((p) => p.toMap()).toList();
-    if (originalCustom.toString() != currentCustom.toString()) return true;
+    if (jsonEncode(originalCustom) != jsonEncode(currentCustom)) return true;
     // Reasoning params: 仅比较模型自有（非继承）参数。继承自供应商且
     // 未修改的参数不写入模型，不视为改动；修改过的（已被认领）参数
     // 会进入自有子集参与比较。
@@ -172,7 +179,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         .where((p) => !p.inheritedFromProvider)
         .map((p) => p.toMap())
         .toList();
-    if (originalReasoning.toString() != currentReasoning.toString()) {
+    if (jsonEncode(originalReasoning) != jsonEncode(currentReasoning)) {
       return true;
     }
     return false;
