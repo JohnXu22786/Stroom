@@ -70,6 +70,18 @@ extension _ChatComposerPanelsExt on ChatComposerWidgetState {
             ref.read(reasoningParamValuesProvider.notifier).state = current;
           }
         }
+        // Keep reasoningEffortProvider in sync with the map so the two
+        // sources of truth can't diverge after an off→on cycle (requests
+        // use the map; this string is persisted alongside it).
+        if (value && effortParam != null) {
+          final mapValue = current[effortParam.paramName];
+          if (mapValue != null && mapValue.isNotEmpty) {
+            ref.read(reasoningEffortProvider.notifier).state = mapValue;
+          } else if (effortParam.enabled && effortParam.options.isNotEmpty) {
+            ref.read(reasoningEffortProvider.notifier).state =
+                effortParam.options.first;
+          }
+        }
         // Effort toggle state is auto-persisted via the ref.listen in
         // chat_page.dart's _persistCurrentReasoningSettings mechanism.
       },
