@@ -615,6 +615,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// the WebView actually rendered (or failed to render) underneath.
   Timer? _readyFallbackTimer;
 
+  /// Total fallback: if the WebView is never created (onWebViewCreated
+  /// does not fire, e.g. the platform view failed to mount), the loading
+  /// state must still end with a visible error instead of spinning
+  /// forever. "Loading forever" is structurally impossible with this.
+  Timer? _webViewCreationFallbackTimer;
+
   /// Guard flag to prevent concurrent save operations.
   bool _isSaving = false;
 
@@ -645,6 +651,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !_shouldCreateWebView) {
         setState(() => _shouldCreateWebView = true);
+        _armWebViewCreationFallback();
       }
     });
     // Load the bundled mermaid.js (inlined into the page so rendering
@@ -688,8 +695,24 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   @override
   void dispose() {
     _readyFallbackTimer?.cancel();
+    _webViewCreationFallbackTimer?.cancel();
     _webViewController = null;
     super.dispose();
+  }
+
+  /// Arms the total fallback: 12s after the WebView creation was
+  /// requested, if the controller still does not exist (the platform view
+  /// failed to mount — onWebViewCreated never fired), show a visible error
+  /// instead of the loading placeholder spinning forever.
+  void _armWebViewCreationFallback() {
+    _webViewCreationFallbackTimer?.cancel();
+    _webViewCreationFallbackTimer = Timer(const Duration(seconds: 12), () {
+      if (mounted && _webViewController == null && _errorMessage == null) {
+        debugPrint('[MermaidRenderWidget] WebView was not created within '
+            '12s, showing an error');
+        setState(() => _errorMessage = '图表渲染引擎初始化失败，请重试');
+      }
+    });
   }
 
   /// Arms a fallback timer that force-ends the loading state after 3s if
@@ -760,6 +783,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       _errorMessage = null;
       _isReady = false;
     });
+    if (_webViewController == null) {
+      // The WebView was never created; re-arm the creation fallback for
+      // the retry attempt so a repeated failure cannot spin forever.
+      _armWebViewCreationFallback();
+    }
     _loadMermaidCode();
   }
 

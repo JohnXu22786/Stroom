@@ -271,6 +271,12 @@
     function initMermaid() {
       var hint = document.getElementById('loading-hint');
       var codeEl = document.getElementById('mermaid-code');
+      // Render watchdog: if the diagram has not appeared 15s after the
+      // library loaded, surface an error instead of a perpetual hint.
+      var renderTimer = setTimeout(function() {
+        if (hint) hint.style.display = 'none';
+        reportError('Mermaid 渲染超时');
+      }, 15000);
       try {
         mermaid.initialize({
           theme: 'default',
@@ -280,13 +286,16 @@
         mermaid.run({
           nodes: [codeEl],
         }).then(function() {
+          clearTimeout(renderTimer);
           if (hint) hint.style.display = 'none';
           window.fitToViewport();
         }).catch(function(err) {
+          clearTimeout(renderTimer);
           if (hint) hint.style.display = 'none';
           reportError('Mermaid render error: ' + err.message);
         });
       } catch(e) {
+        clearTimeout(renderTimer);
         if (hint) hint.style.display = 'none';
         reportError('Mermaid initialize error: ' + e.message);
       }
@@ -297,7 +306,7 @@
       script.async = true;
       script.onload = initMermaid;
       script.onerror = function() {
-        reportError('Mermaid 资源加载失败');
+        reportError('Mermaid 资源加载失败: ' + url);
       };
       script.src = url;
       document.head.appendChild(script);
@@ -328,7 +337,7 @@
           .then(function(jsBlob) {
             runScriptUrl(URL.createObjectURL(jsBlob));
           })
-          .catch(function() {
+          .catch(function(err) {
             // DecompressionStream unavailable or the gz asset missing:
             // fall back to the raw library file.
             runScriptUrl('mermaid.min.js');
