@@ -347,6 +347,11 @@ void showToolsPanel({
 ///    and option chips for the effort param's values. Shown even when no
 ///    effort param is configured (disabled state with hint).
 ///
+/// The effort section is ALWAYS visible — the effort toggle is independent
+/// of the global reasoning toggle. Whether the effort param is actually
+/// SENT is decided at request time: it is only included when the global
+/// reasoning toggle is on (see ChatService._buildExtraParams).
+///
 /// Additional reasoning params (non-toggle, non-effort) are shown in a
 /// separate panel via [showCustomReasoningParamsPanel].
 void showReasoningPanel({
@@ -371,9 +376,6 @@ void showReasoningPanel({
   final hasParams = reasoningParams.isNotEmpty;
   final hasNonToggleParams = reasoningParams.any((p) => !p.isReasoningToggle);
   final hasEffortParam = effortParam != null;
-
-  // Show the effort section even when effortParam is null (disabled state)
-  final showEffortSection = localEnabled;
 
   showModalBottomSheet(
     context: context,
@@ -481,82 +483,84 @@ void showReasoningPanel({
                               ),
                             ),
                           // ── Section 2: Reasoning effort (力度) ──
-                          if (showEffortSection) ...[
-                            const SizedBox(height: 12),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: cs.surfaceContainerHighest
-                                    .withValues(alpha: 0.5),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 4),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      '推理力度',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w500,
-                                        color: cs.onSurface,
-                                      ),
+                          // Always visible: the effort toggle is independent
+                          // of the global reasoning toggle. The effort param
+                          // is only SENT when the global toggle is on
+                          // (see ChatService._buildExtraParams).
+                          const SizedBox(height: 12),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerHighest
+                                  .withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 4),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '推理力度',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                      color: cs.onSurface,
                                     ),
                                   ),
-                                  Switch(
-                                    value: localEffortEnabled && hasEffortParam,
-                                    activeThumbColor: cs.primary,
-                                    onChanged: hasEffortParam
-                                        ? (value) {
-                                            setState(() =>
-                                                localEffortEnabled = value);
-                                            onReasoningEffortToggle(value);
-                                          }
-                                        : null,
-                                  ),
-                                ],
-                              ),
+                                ),
+                                Switch(
+                                  value: localEffortEnabled && hasEffortParam,
+                                  activeThumbColor: cs.primary,
+                                  onChanged: hasEffortParam
+                                      ? (value) {
+                                          setState(
+                                              () => localEffortEnabled = value);
+                                          onReasoningEffortToggle(value);
+                                        }
+                                      : null,
+                                ),
+                              ],
                             ),
-                            if (!hasEffortParam)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8, left: 4),
-                                child: Text(
-                                  '当前模型未配置推理力度参数，请在模型设置中添加',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: cs.onSurfaceVariant
-                                        .withValues(alpha: 0.6),
-                                  ),
+                          ),
+                          if (!hasEffortParam)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8, left: 4),
+                              child: Text(
+                                '当前模型未配置推理力度参数，请在模型设置中添加',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: cs.onSurfaceVariant
+                                      .withValues(alpha: 0.6),
                                 ),
                               ),
-                            if (hasEffortParam && localEffortEnabled) ...[
-                              const SizedBox(height: 12),
-                              // Effort param options
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: effortParam.options.map((option) {
-                                  final currentValue =
-                                      localSelections[effortParam.paramName] ??
-                                          (effortParam.options.isNotEmpty
-                                              ? effortParam.options.first
-                                              : '');
-                                  final isSelected = currentValue == option;
-                                  return _OptionChip(
-                                    label: option,
-                                    selected: isSelected,
-                                    onTap: () {
-                                      setState(() {
-                                        localSelections[effortParam.paramName] =
-                                            option;
-                                      });
-                                      onReasoningParamChanged(
-                                          effortParam.paramName, option);
-                                    },
-                                  );
-                                }).toList(),
-                              ),
-                            ],
+                            ),
+                          if (hasEffortParam && localEffortEnabled) ...[
+                            const SizedBox(height: 12),
+                            // Effort param options
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: effortParam.options.map((option) {
+                                final currentValue =
+                                    localSelections[effortParam.paramName] ??
+                                        (effortParam.options.isNotEmpty
+                                            ? effortParam.options.first
+                                            : '');
+                                final isSelected = currentValue == option;
+                                return _OptionChip(
+                                  label: option,
+                                  selected: isSelected,
+                                  onTap: () {
+                                    setState(() {
+                                      localSelections[effortParam.paramName] =
+                                          option;
+                                    });
+                                    onReasoningParamChanged(
+                                        effortParam.paramName, option);
+                                  },
+                                );
+                              }).toList(),
+                            ),
                           ],
                           // No non-toggle params state (when reasoning is enabled
                           // but there are no additional params configured)
