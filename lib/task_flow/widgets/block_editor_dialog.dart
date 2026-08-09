@@ -499,15 +499,19 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           voices.addAll(byId.values);
         }
         final current = value?.toString() ?? '';
+        final stale = current.isNotEmpty && !voices.any((v) => v.id == current);
         // A stale voice (not in the selected model's voices) must not
         // survive confirm — reset it to '' (use the model default) so the
         // run can't fail on an invalid id.
-        if (current.isNotEmpty && !voices.any((v) => v.id == current)) {
+        if (stale) {
           _params[param.key] = '';
         }
         // Track the controller in both branches (dropdown + manual
-        // fallback) so it is disposed with the panel.
-        _controllers[param.key] ??= TextEditingController(text: current);
+        // fallback) so it is disposed with the panel. The fallback field
+        // must show the POST-reset value — a stale id would display while
+        // confirm silently drops it.
+        _controllers[param.key] ??=
+            TextEditingController(text: stale ? '' : current);
         if (voices.isEmpty) {
           return TextField(
             controller: _controllers[param.key],
@@ -541,9 +545,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           hint: Text(
             // A persisted voice id that no longer exists must not show the
             // raw id string — guide re-selection instead.
-            current.isNotEmpty && !voices.any((v) => v.id == current)
-                ? '音色已失效，请重新选择'
-                : '选择音色',
+            stale ? '音色已失效，请重新选择' : '选择音色',
             style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
           ),
           items: voices.map((v) {
@@ -627,8 +629,6 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
       case BlockParamType.speedSlider:
         // Slider like the TTS page — range from the selected TTS model's
         // speedMin/speedMax (defaults 0.5–2.0).
-        final speedValue =
-            (value is num ? value.toDouble() : 1.0).clamp(0.5, 4.0);
         final model = _selectedTtsModel();
         final speedMin =
             ((model?.speedMin as num?)?.toDouble() ?? 0.5).clamp(0.1, 4.0);
@@ -636,22 +636,27 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             ((model?.speedMax as num?)?.toDouble() ?? 2.0).clamp(0.1, 4.0);
         final lo = math.min(speedMin, speedMax);
         final hi = math.max(speedMin, speedMax);
+        final speedRaw = value is num ? value.toDouble() : 1.0;
+        // Display (and slider value) clamped to the model's range — the
+        // executed speed is clamped identically in the executor, so what
+        // the user sees always matches what runs.
+        final display = speedRaw.clamp(lo, hi).toDouble();
         return Row(
           children: [
             Expanded(
               child: Slider(
-                value: speedValue.clamp(lo, hi).toDouble(),
+                value: display,
                 min: lo,
                 max: hi,
                 divisions: ((hi - lo) * 10).round().clamp(1, 100),
-                label: '${speedValue.toStringAsFixed(1)}x',
+                label: '${display.toStringAsFixed(1)}x',
                 onChanged: (v) => setState(() => _params[param.key] = v),
               ),
             ),
             SizedBox(
               width: 44,
               child: Text(
-                '${speedValue.toStringAsFixed(1)}x',
+                '${display.toStringAsFixed(1)}x',
                 style: TextStyle(fontSize: 13, color: cs.onSurface),
                 textAlign: TextAlign.right,
               ),
