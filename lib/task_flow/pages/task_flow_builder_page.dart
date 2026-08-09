@@ -509,7 +509,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 Icon(Icons.input, size: 18, color: cs.primary),
                 const SizedBox(width: 8),
                 Text(
-                  '输入（${_inputType.label}）',
+                  '输入（${_inputType.userFacing.label}）',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -648,7 +648,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 2),
                         child: Text(
-                          '输入类型: ${_inputType.label}',
+                          '输入类型: ${_inputType.userFacing.label}',
                           style: TextStyle(
                             fontSize: 12,
                             color: cs.onSurfaceVariant,
@@ -725,7 +725,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                           // Friendly display — raw ids (assistant uuids,
                           // voice ids, model indices) must never appear.
                           child: Text(
-                            friendlyParamValue(paramDef, e.value, ref),
+                            friendlyParamValue(
+                              paramDef,
+                              e.value,
+                              ref,
+                              params: block.params,
+                            ),
                             style: TextStyle(
                               fontSize: 13,
                               color: cs.onSurfaceVariant,

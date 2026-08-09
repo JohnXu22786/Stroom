@@ -106,17 +106,6 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     super.dispose();
   }
 
-  /// Configs of a provider type (flattened) — used by voiceSelector, which
-  /// needs the config's models.
-  List<dynamic> _configsOf(String configType) {
-    return ref
-        .read(providerEntriesProvider)
-        .entries
-        .where((e) => e.type == configType)
-        .expand((e) => e.configs)
-        .toList();
-  }
-
   /// Models of a provider type, flattened with their config — the same
   /// shared list the executors and standalone pages use (configs without
   /// host/key excluded), so a selected index resolves identically
@@ -510,6 +499,12 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           voices.addAll(byId.values);
         }
         final current = value?.toString() ?? '';
+        // A stale voice (not in the selected model's voices) must not
+        // survive confirm — reset it to '' (use the model default) so the
+        // run can't fail on an invalid id.
+        if (current.isNotEmpty && !voices.any((v) => v.id == current)) {
+          _params[param.key] = '';
+        }
         // Track the controller in both branches (dropdown + manual
         // fallback) so it is disposed with the panel.
         _controllers[param.key] ??= TextEditingController(text: current);

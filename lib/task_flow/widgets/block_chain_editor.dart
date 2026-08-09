@@ -155,7 +155,10 @@ class BlockChainEditor extends StatelessWidget {
                 Row(
                   children: [
                     Flexible(
-                      child: IOTypeIndicator(type: inputType, isInput: false),
+                      child: IOTypeIndicator(
+                        type: inputType.userFacing,
+                        isInput: false,
+                      ),
                     ),
                   ],
                 ),
@@ -261,8 +264,8 @@ class BlockChainEditor extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 blocks.isEmpty
-                    ? '当前初始输入类型: ${inputType.label}'
-                    : '上一个功能块输出: ${blocks.last.getDefinition()?.outputType.label ?? inputType.label}',
+                    ? '当前初始输入类型: ${inputType.userFacing.label}'
+                    : '上一个功能块输出: ${blocks.last.getDefinition()?.outputType.label ?? inputType.userFacing.label}',
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
               const SizedBox(height: 12),

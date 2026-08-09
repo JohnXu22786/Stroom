@@ -38,7 +38,11 @@ Future<String> executeTtsBlock({
 
   final title = input.length > 20 ? input.substring(0, 20) : input;
   final voice = asStringParam(block.params, 'voice', '');
-  final speed = asStringParam(block.params, 'speed', '1.0');
+  // Clamp into the model's speed range — an old flow may hold an
+  // out-of-range value (the old number field had no bounds).
+  final speedRaw =
+      double.tryParse(asStringParam(block.params, 'speed', '1.0')) ?? 1.0;
+  final speed = speedRaw.clamp(model.speedMin, model.speedMax).toString();
   final saveFolder = asStringParam(block.params, 'saveFolder', '');
 
   try {

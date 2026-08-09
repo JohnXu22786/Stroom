@@ -462,6 +462,114 @@ void main() {
     expect(find.textContaining('modelIndex'), findsNothing);
   });
 
+  testWidgets('TTS voice dropdown follows the selected model', (tester) async {
+    final entries = ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          id: 'tts-1',
+          type: 'tts',
+          name: 'TTS',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'EdgeTTS',
+              host: 'https://example.com',
+              key: 'k',
+              models: [
+                ModelConfig(
+                  name: 'edge-a',
+                  modelId: 'edge-a',
+                  voices: [
+                    VoiceEntry(name: '晓晓', id: 'zh-CN-XiaoxiaoNeural'),
+                  ],
+                ),
+                ModelConfig(
+                  name: 'edge-b',
+                  modelId: 'edge-b',
+                  voices: [
+                    VoiceEntry(name: '云希', id: 'zh-CN-YunxiNeural'),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    await pumpPanel(
+      tester,
+      block: TaskFlowBlock(typeKey: BlockType.tts),
+      entries: entries,
+    );
+
+    // Default model (index 0) → open the voice dropdown: only 晓晓.
+    await tester.tap(find.text('选择音色'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('晓晓'), findsOneWidget);
+    expect(find.textContaining('云希'), findsNothing);
+    // Close the voice menu by tapping outside.
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    // Switch 合成模型 to edge-b → the voice dropdown lists 云希.
+    await tester.tap(find.text('edge-a | EdgeTTS'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('edge-b | EdgeTTS').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('选择音色'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('云希'), findsOneWidget);
+    expect(find.textContaining('晓晓'), findsNothing);
+  });
+
+  testWidgets(
+      'a stale voice (not in the selected model) resets on confirm '
+      '(no invalid id survives)', (tester) async {
+    TaskFlowBlock? result;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          providerEntriesProvider.overrideWith(
+            (ref) => _FakeEntriesNotifier(_ttsEntries()),
+          ),
+          assistantProvider.overrideWith(
+            (ref) => _FakeAssistantsNotifier(const []),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    result = await showBlockEditorDialog(
+                      context,
+                      block: TaskFlowBlock(
+                        typeKey: BlockType.tts,
+                        params: {'voice': 'deleted-voice'},
+                      ),
+                    );
+                  },
+                  child: const Text('打开设置'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('打开设置'));
+    await tester.pumpAndSettle();
+
+    // The stale voice shows the 音色已失效 hint; confirming resets it.
+    expect(find.text('音色已失效，请重新选择'), findsOneWidget);
+    await tester.tap(find.text('确认'));
+    await tester.pumpAndSettle();
+    expect(result, isNotNull);
+    expect(result!.params['voice'], '',
+        reason: 'a stale voice must reset to the model default, not '
+            'survive confirm');
+  });
+
   testWidgets(
       'TTS panel with duplicate voice ids within one model does not '
       'crash (deduped dropdown)', (tester) async {

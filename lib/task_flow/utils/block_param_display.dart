@@ -6,17 +6,23 @@ import '../../models/tts_models.dart';
 import '../../providers/assistant_provider.dart';
 import '../../providers/provider_config.dart';
 import '../models/block_type_definition.dart';
+import '../services/block_executors/shared_helpers.dart' show asIntParam;
 import '../../utils/provider_models.dart';
 
 /// Friendly display value for a block param — raw ids (assistant uuids,
 /// voice ids like zh-CN-XiaoxiaoNeural, model indices) must never appear
 /// to the user. Used by the block card summary AND the run-mode 查看参数
 /// dialog, so both surfaces always agree.
+///
+/// [params] is the block's full param map — voice resolution follows the
+/// selected model (modelIndex), exactly like the executor and the
+/// settings panel.
 String friendlyParamValue(
   BlockParamDefinition? paramDef,
   dynamic value,
-  WidgetRef ref,
-) {
+  WidgetRef ref, {
+  required Map<String, dynamic> params,
+}) {
   if (paramDef == null) return value.toString();
   final raw = value?.toString() ?? '';
   switch (paramDef.type) {
@@ -28,7 +34,7 @@ String friendlyParamValue(
       final a = assistants.where((a) => a.id == raw).firstOrNull;
       return a != null ? '${a.emoji} ${a.name}' : '已失效';
     case BlockParamType.voiceSelector:
-      final voices = ttsVoicesOf(ref);
+      final voices = selectedTtsVoices(ref, params);
       final v = voices.where((v) => v.id == raw).firstOrNull;
       return v != null ? v.name : '已失效';
     case BlockParamType.modelSelector:
@@ -47,16 +53,19 @@ String friendlyParamValue(
   }
 }
 
-/// Voices of the TTS model the executors use (configs.first.models.first —
-/// same source as the settings panel and the TTS page).
-List<VoiceEntry> ttsVoicesOf(WidgetRef ref) {
-  final state = ref.read(providerEntriesProvider);
-  for (final e in state.entries) {
-    if (e.type != 'tts') continue;
-    for (final c in e.configs) {
-      if (c.models.isEmpty) continue;
-      return c.models.first.voices;
-    }
-  }
-  return const [];
+/// Voices of the TTS model selected by the block's modelIndex param —
+/// the same model the executor synthesizes with (shared
+/// flattenProviderModels list).
+List<VoiceEntry> selectedTtsVoices(
+  WidgetRef ref,
+  Map<String, dynamic> params,
+) {
+  final models = flattenProviderModels(
+    ref.read(providerEntriesProvider),
+    'tts',
+  );
+  final idx = asIntParam(params, 'modelIndex', 0);
+  if (models.isEmpty || idx >= models.length) return const [];
+  final m = models[idx].model;
+  return m.voices;
 }
