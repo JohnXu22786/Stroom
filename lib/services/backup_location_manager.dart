@@ -1,11 +1,14 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../utils/free_space.dart' as free_space;
 
 // ====================================================================
 // BackupLocationManager — 跨平台备份存储位置管理
@@ -29,6 +32,10 @@ class BackupLocationManager {
   BackupLocationManager._();
 
   static const String _androidSafUriKey = 'backup_saf_uri';
+
+  /// 测试专用：覆盖剩余空间查询（null 表示不覆盖，使用真实查询）。
+  @visibleForTesting
+  static Future<int?> Function()? debugFreeSpaceOverride;
 
   static String? _testBackupRoot;
   static String? _testLogRoot;
@@ -61,10 +68,19 @@ class BackupLocationManager {
   static const MethodChannel _safChannel =
       MethodChannel('com.johntsui.stroom/saf');
 
+  /// iOS 存储信息专用 MethodChannel（AppDelegate 侧实现）。
+  static const MethodChannel _iosStorageChannel =
+      MethodChannel('com.johntsui.stroom/storage');
+
   /// SAF 通道调用超时：原生侧卡死（主线程忙/ANR 窗口）时，
   /// 启动路径上的存储检查/备份写入不能被永久阻塞（见
   /// [BackupLocationManager.isStorageAccessible] 等启动关键调用）。
   static const Duration _safChannelTimeout = Duration(seconds: 10);
+
+  /// 大文件流式写入的超时：写入时长与文件大小成正比（数百 MB 备份
+  /// 可能耗时数十秒），不能套用 [_safChannelTimeout]；同时保留宽松的
+  /// 上限兜底，防止原生侧永久无响应挂起启动流程。
+  static const Duration _safWriteFromPathTimeout = Duration(minutes: 5);
 
   /// 备份目录路径（所有平台统一，相对于用户选择的 Documents 目录）。
   /// 使用 Stroom/AutoBackups 两级目录结构，便于用户识别和管理。
@@ -506,6 +522,62 @@ class BackupLocationManager {
     }
   }
 
+  /// 从本地文件流式复制到备份位置（大文件备份专用，避免整包载入内存）。
+  ///
+  /// [relativePath] 是相对于备份根目录的路径（如 backup_xxx.zip），
+  /// [srcPath] 是本地源文件路径（如系统临时目录中的 .tmp 备份）。
+  ///
+  /// Android SAF 模式下通过原生层分块流式写入（64KB 块），不会把整个
+  /// 备份包通过 MethodChannel 传输 —— 大备份（数百 MB）通过 Binder 整包
+  /// 传输会触发 TransactionTooLargeException 导致应用崩溃。
+  /// 非 SAF 平台直接复制文件（dart:io 原生复制，同样不经过 Dart 内存）。
+  static Future<void> writeBackupFileFromPath(
+      String relativePath, String srcPath) async {
+    debugPrint('[BackupLocationManager] 写入备份文件(流式): $relativePath <- $srcPath');
+    if (kIsWeb) {
+      throw UnsupportedError('Web 平台不支持本地文件写入');
+    }
+
+    // Android SAF：原生层流式写入
+    if (!kIsWeb) {
+      try {
+        if (Platform.isAndroid) {
+          final uri = await _getSavedSafUri();
+          if (uri == null) {
+            throw Exception('SAF URI 未配置，无法写入备份文件');
+          }
+          await _safChannel.invokeMethod<void>('writeFileFromPath', {
+            'uri': uri,
+            'fileName': relativePath,
+            'srcPath': srcPath,
+          }).timeout(_safWriteFromPathTimeout);
+          return;
+        }
+      } catch (e) {
+        debugPrint('[BackupLocationManager] SAF 流式写入失败: $e');
+        rethrow;
+      }
+    }
+
+    // 非 Android 平台：dart:io 复制
+    try {
+      final rootPath = await getBackupRootPath();
+      if (rootPath == null) {
+        throw Exception('无法获取备份根目录');
+      }
+      final dest = File(p.join(rootPath, relativePath));
+      await dest.parent.create(recursive: true);
+      final src = File(srcPath);
+      if (!await src.exists()) {
+        throw Exception('备份源文件不存在: $srcPath');
+      }
+      await src.copy(dest.path);
+    } catch (e) {
+      debugPrint('[BackupLocationManager] 写入备份文件失败(流式): $relativePath: $e');
+      rethrow;
+    }
+  }
+
   /// 读取备份文件。
   static Future<Uint8List?> readBackupFile(String relativePath) async {
     debugPrint('[BackupLocationManager] 读取备份文件: $relativePath');
@@ -878,42 +950,77 @@ class BackupLocationManager {
   // 存储空间检查
   // ================================================================
 
+  /// 获取备份目标所在存储的剩余可用空间（字节）。
+  ///
+  /// - Android SAF: 通过原生通道查询外部存储剩余空间
+  /// - iOS: 通过原生通道查询文件系统剩余空间
+  /// - 桌面 (Win/macOS/Linux): 通过 dart:ffi 查询
+  /// - Web / 无法获取: 返回 null（调用方应跳过空间相关逻辑）
+  ///
+  /// 测试环境可通过 [debugFreeSpaceOverride] 覆盖返回值。
+  static Future<int?> getFreeDiskSpaceBytes() async {
+    if (debugFreeSpaceOverride != null) {
+      return await debugFreeSpaceOverride!();
+    }
+    if (kIsWeb) return null;
+
+    // Android SAF
+    if (!kIsWeb) {
+      try {
+        if (Platform.isAndroid) {
+          final uri = await _getSavedSafUri();
+          if (uri == null) return null;
+          final freeBytes =
+              await _safChannel.invokeMethod<int>('getFreeSpace', {
+            'uri': uri,
+          }).timeout(_safChannelTimeout);
+          if (freeBytes != null && freeBytes > 0) return freeBytes;
+          return null;
+        }
+      } catch (e) {
+        debugPrint('[BackupLocationManager] 获取 Android 剩余空间失败: $e');
+        return null;
+      }
+    }
+
+    // iOS
+    if (!kIsWeb) {
+      try {
+        if (Platform.isIOS) {
+          final freeBytes = await _iosStorageChannel
+              .invokeMethod<int>('getFreeSpace')
+              .timeout(_safChannelTimeout);
+          if (freeBytes != null && freeBytes > 0) return freeBytes;
+          return null;
+        }
+      } catch (e) {
+        debugPrint('[BackupLocationManager] 获取 iOS 剩余空间失败: $e');
+        return null;
+      }
+    }
+
+    // 桌面平台：dart:ffi 查询备份根目录所在文件系统
+    try {
+      final path = await getBackupRootPath();
+      if (path == null) return null;
+      return free_space.getFreeDiskSpaceBytes(path);
+    } catch (e) {
+      debugPrint('[BackupLocationManager] 获取磁盘剩余空间失败: $e');
+      return null;
+    }
+  }
+
   /// 检查是否有足够的可用空间。
   ///
-  /// 阈值：100MB。
-  /// Android SAF 模式下通过 MethodChannel 获取可用空间；
-  /// 其他平台因无法从 Dart 层获取精确值，默认返回 true。
-  static Future<bool> hasSufficientSpace() async {
-    try {
-      if (kIsWeb) return false;
-
-      // Android SAF: 通过 MethodChannel 检查
-      if (!kIsWeb) {
-        try {
-          if (Platform.isAndroid) {
-            final uri = await _getSavedSafUri();
-            if (uri == null) return false;
-            final freeBytes =
-                await _safChannel.invokeMethod<int>('getFreeSpace', {
-              'uri': uri,
-            }).timeout(_safChannelTimeout);
-            if (freeBytes != null && freeBytes > 0) {
-              return freeBytes > 100 * 1024 * 1024; // 100MB
-            }
-            return true; // 无法检查时默认通过
-          }
-        } catch (e) {
-          debugPrint(
-              '[BackupLocationManager] hasSufficientSpace 检查 Android 空间失败: $e');
-        }
-      }
-
-      // 其他平台无法精确获取可用空间，默认通过
-      return true;
-    } catch (e) {
-      debugPrint('[BackupLocationManager] 检查空间失败: $e');
-      return true; // 无法检查时默认通过
-    }
+  /// [requiredBytes] 为预计需要的最小空间（如本次备份的估算大小）；
+  /// 不传时使用默认阈值 100MB。
+  /// 无法获取剩余空间时默认返回 true（不阻塞功能）。
+  static Future<bool> hasSufficientSpace({int? requiredBytes}) async {
+    if (kIsWeb) return false;
+    final freeBytes = await getFreeDiskSpaceBytes();
+    if (freeBytes == null) return true;
+    final needed = requiredBytes ?? (100 * 1024 * 1024); // 100MB
+    return freeBytes > needed;
   }
 
   // ================================================================
