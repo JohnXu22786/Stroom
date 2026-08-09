@@ -386,7 +386,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
   void didChangeMetrics() {
     super.didChangeMetrics();
     if (!mounted) return;
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    // Read the inset from the VIEW, not the inherited MediaQuery: the
+    // page sits inside HomePage's Scaffold, which strips
+    // viewInsets.bottom from the body's MediaQuery (resizeToAvoidBottom-
+    // Inset consumes it), so MediaQuery would always report 0 here and
+    // the whole keyboard session would never run on device. The view is
+    // fresh even inside this callback (the composer's _isKeyboardUp uses
+    // the same pattern).
+    final bottomInset = _currentKeyboardInset();
     final isNowVisible = bottomInset > _keyboardVisibleThreshold;
     // While the initial positioning pass runs the list is hidden; keyboard /
     // viewport changes must not fight the pass. Still track the keyboard
@@ -436,7 +443,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // captured before the keyboard opened.
       _restoreScrollPositionAfterKeyboard();
     }
-    _wasKeyboardVisible = isNowVisible;
+    // Rebuild so the keyboard-dismiss overlay button follows the keyboard
+    // state (shown while the keyboard is open).
+    if (_wasKeyboardVisible != isNowVisible) {
+      setState(() => _wasKeyboardVisible = isNowVisible);
+    }
   }
 
   @override
@@ -534,11 +545,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
                             // list itself never dismisses it — manual
                             // behavior), so the user can close the
                             // keyboard without hunting for its close key.
-                            // Reads MediaQuery directly (instead of a
-                            // state flag) so the button appears/disappears
-                            // with the insets via the normal rebuild.
-                            if (MediaQuery.viewInsetsOf(context).bottom >
-                                _ChatPageState._keyboardVisibleThreshold)
+                            // Driven by the keyboard-visibility flag that
+                            // didChangeMetrics setState-updates (MediaQuery
+                            // would always read 0 here — the enclosing
+                            // Scaffold strips viewInsets from the body).
+                            if (_wasKeyboardVisible)
                               _buildKeyboardDismissButton(isDark: isDark),
                           ],
                         ),

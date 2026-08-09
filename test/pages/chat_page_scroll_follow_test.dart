@@ -307,6 +307,11 @@ void main() {
       await setKeyboardInset(tester, 300);
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));
+      // Extra frames for the follow-up's frame-deferred start in the test
+      // clock (the debounce timer and post-frame callbacks defer the
+      // library's and the follow-up scrolls by a frame each).
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 250));
       var pos = _chatPosition(tester);
       expect(
         pos.maxScrollExtent - pos.pixels,
