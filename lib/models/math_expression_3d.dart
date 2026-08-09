@@ -7,6 +7,9 @@ enum Expression3DType {
   /// Surface z = f(x, y) — explicit function of x and y.
   surface,
 
+  /// Implicit equation F(x, y, z) = 0 — plane, sphere, quadrics, any F.
+  implicit,
+
   /// Parametric curve (x(t), y(t), z(t)).
   parametricCurve,
 
@@ -14,11 +17,10 @@ enum Expression3DType {
   parametricSurface,
 }
 
-/// Represents a 3D math expression — a surface, parametric curve, or
-/// parametric surface.
+/// Represents a 3D math expression — a surface, implicit equation,
+/// parametric curve, or parametric surface.
 ///
-/// Uses [function_tree] for expression parsing and evaluation, extending
-/// the same approach as the 2D [MathExpression] class.
+/// Uses [function_tree] for expression parsing and evaluation.
 class Expression3D {
   final String rawExpression;
   final String normalizedExpression;
@@ -27,6 +29,9 @@ class Expression3D {
 
   // Surface: z = f(x, y)
   final double Function(double x, double y)? _surfaceEvaluator;
+
+  // Implicit: F(x, y, z) = 0
+  final double Function(double x, double y, double z)? _implicitEvaluator;
 
   // Parametric curve: (x(t), y(t), z(t))
   final double Function(double t)? _curveX;
@@ -55,6 +60,7 @@ class Expression3D {
     required this.type,
     required this.parameters,
     double Function(double, double)? surfaceEvaluator,
+    double Function(double, double, double)? implicitEvaluator,
     double Function(double t)? curveX,
     double Function(double t)? curveY,
     double Function(double t)? curveZ,
@@ -69,6 +75,7 @@ class Expression3D {
     this.vMax = 1,
     String? parseError,
   })  : _surfaceEvaluator = surfaceEvaluator,
+        _implicitEvaluator = implicitEvaluator,
         _curveX = curveX,
         _curveY = curveY,
         _curveZ = curveZ,
@@ -140,8 +147,8 @@ class Expression3D {
     return _surfaceEvaluator!(x, y);
   }
 
-  /// Sample the surface on a grid and return a [SurfaceMesh].
-  SurfaceMesh sampleSurfaceGrid({
+  /// Sample the surface on a grid and return a [MeshData].
+  MeshData sampleSurfaceGrid({
     double xMin = -5,
     double xMax = 5,
     double yMin = -5,
@@ -150,13 +157,10 @@ class Expression3D {
     int gridY = 40,
   }) {
     if (!isValid || _surfaceEvaluator == null) {
-      return const SurfaceMesh(
-        vertices: [],
-        indices: [],
-      );
+      return const MeshData(vertices: [], indices: []);
     }
 
-    return SurfaceMesh.fromFunction(
+    return MeshBuilder.fromFunction(
       xMin: xMin,
       xMax: xMax,
       yMin: yMin,
@@ -165,6 +169,92 @@ class Expression3D {
       gridY: gridY,
       f: _surfaceEvaluator!,
     );
+  }
+
+  // ==================================================================
+  // Implicit equation F(x, y, z) = 0
+  // ==================================================================
+
+  /// Create an implicit-surface expression from F(x, y, z) = 0 input,
+  /// e.g. "x^2 + y^2 + z^2 = 6", "x + y + z = 1", "x^2 + y^2 = 4".
+  factory Expression3D.implicit(
+    String input, {
+    Map<String, double> parameterValues = const {},
+  }) {
+    final trimmed = input.trim();
+    if (trimmed.isEmpty) {
+      return Expression3D._(
+        rawExpression: '',
+        normalizedExpression: '',
+        type: Expression3DType.implicit,
+        parameters: {},
+        parseError: '表达式为空',
+      );
+    }
+
+    // Split on the first top-level '='.
+    final eqIdx = _findTopLevelEquals(trimmed);
+    if (eqIdx < 0) {
+      return Expression3D._(
+        rawExpression: trimmed,
+        normalizedExpression: '',
+        type: Expression3DType.implicit,
+        parameters: {},
+        parseError: '隐式方程需要等号，如 x^2 + y^2 + z^2 = 1',
+      );
+    }
+
+    final lhsRaw = trimmed.substring(0, eqIdx).trim();
+    final rhsRaw = trimmed.substring(eqIdx + 1).trim();
+
+    String? error;
+    double Function(double, double, double)? evalFn;
+    try {
+      final lhs = _normalizeExpression(lhsRaw);
+      final rhs = _normalizeExpression(rhsRaw);
+      final varNames = ['x', 'y', 'z'];
+      for (final key in parameterValues.keys) {
+        if (!varNames.contains(key)) varNames.add(key);
+      }
+      final lhsFn = lhs.isEmpty ? null : lhs.toMultiVariableFunction(varNames);
+      final rhsFn = rhs.isEmpty ? null : rhs.toMultiVariableFunction(varNames);
+      evalFn = (x, y, z) {
+        final args = <String, num>{'x': x, 'y': y, 'z': z, ...parameterValues};
+        final l = lhsFn == null ? 0.0 : lhsFn(args).toDouble();
+        final r = rhsFn == null ? 0.0 : rhsFn(args).toDouble();
+        return l - r;
+      };
+    } catch (e) {
+      error = e.toString();
+    }
+
+    final params = _extractParameters('$lhsRaw $rhsRaw');
+
+    return Expression3D._(
+      rawExpression: trimmed,
+      normalizedExpression: '',
+      type: Expression3DType.implicit,
+      parameters: params,
+      implicitEvaluator: evalFn,
+      parseError: error,
+    );
+  }
+
+  /// Evaluate the implicit function F(x, y, z) (lhs - rhs of the equation).
+  double evaluateImplicit(double x, double y, double z) {
+    if (_implicitEvaluator == null) throw _parseError ?? '无效的隐式方程';
+    return _implicitEvaluator!(x, y, z);
+  }
+
+  /// Sample the implicit surface with marching tetrahedra.
+  ///
+  /// [box] is the sampling half-extent (default 5).
+  /// [grid] is the number of cells per axis (default 32).
+  MeshData sampleImplicitGrid({double box = 5, int grid = 32}) {
+    if (!isValid || _implicitEvaluator == null) {
+      return const MeshData(vertices: [], indices: []);
+    }
+    return _marchingTetrahedra(_implicitEvaluator!, box: box, grid: grid);
   }
 
   // ==================================================================
@@ -252,7 +342,7 @@ class Expression3D {
   }
 
   /// Sample the curve at [numSamples] points.
-  List<Point3D> sampleCurve({int numSamples = 100}) {
+  List<Point3D> sampleCurve({int numSamples = 120}) {
     if (!isValid || _curveX == null) return [];
     if (numSamples < 2) return [];
 
@@ -362,6 +452,27 @@ class Expression3D {
     return Point3D(_surfX!(u, v), _surfY!(u, v), _surfZ!(u, v));
   }
 
+  /// Sample the parametric surface into a [MeshData].
+  MeshData sampleParametricSurface({
+    int gridU = 40,
+    int gridV = 40,
+  }) {
+    if (!isValid || _surfX == null) {
+      return const MeshData(vertices: [], indices: []);
+    }
+    return MeshBuilder.parametric(
+      x: _surfX!,
+      y: _surfY!,
+      z: _surfZ!,
+      uMin: uMin,
+      uMax: uMax,
+      vMin: vMin,
+      vMax: vMax,
+      gridU: gridU,
+      gridV: gridV,
+    );
+  }
+
   // ==================================================================
   // Parameter support
   // ==================================================================
@@ -373,6 +484,11 @@ class Expression3D {
     switch (type) {
       case Expression3DType.surface:
         return Expression3D.surface(
+          rawExpression,
+          parameterValues: parameterValues,
+        );
+      case Expression3DType.implicit:
+        return Expression3D.implicit(
           rawExpression,
           parameterValues: parameterValues,
         );
@@ -415,6 +531,22 @@ class Expression3D {
     return expr;
   }
 
+  /// Find the first '=' that is not inside parentheses or brackets.
+  static int _findTopLevelEquals(String expr) {
+    var depth = 0;
+    for (int i = 0; i < expr.length; i++) {
+      final ch = expr[i];
+      if (ch == '(' || ch == '[') {
+        depth++;
+      } else if (ch == ')' || ch == ']') {
+        depth--;
+      } else if (ch == '=' && depth == 0) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
   /// Parse a parametric expression like (x(t), y(t), z(t)) or
   /// (x(u,v), y(u,v), z(u,v)) into three component strings.
   ///
@@ -448,7 +580,6 @@ class Expression3D {
 
   /// Normalize expression for function_tree.
   static String _normalizeExpression(String expr) {
-    // Reuse normalization logic similar to MathExpression
     var result = expr.trim();
     if (result.isEmpty) return '';
 
@@ -491,7 +622,6 @@ class Expression3D {
   ) {
     final normalized = _normalizeExpression(expr);
 
-    // Always use multi-variable function to handle non-x variable names
     final allVars = <String>['t'];
     for (final key in parameterValues.keys) {
       if (!allVars.contains(key)) {
@@ -614,11 +744,147 @@ class Expression3D {
     final matches = RegExp(r'\b([a-zA-Z]\w*)\b').allMatches(expr);
     for (final m in matches) {
       final name = m[1]!;
-      if (name == 'x' || name == 'y' || name == 'e') continue;
+      if (name == 'x' || name == 'y' || name == 'z' || name == 'e') continue;
       if (knownFunctions.contains(name.toLowerCase())) continue;
       params.add(name);
     }
     return params;
+  }
+
+  // ==================================================================
+  // Marching tetrahedra (implicit surfaces)
+  // ==================================================================
+
+  /// Builds a triangle mesh of the isosurface F = 0 over the box
+  /// [-box, box]³ using marching tetrahedra on a [grid]³ lattice.
+  static MeshData _marchingTetrahedra(
+    double Function(double, double, double) f, {
+    required double box,
+    required int grid,
+  }) {
+    final n = grid + 1;
+    final step = 2 * box / grid;
+
+    // Sample values at lattice points.
+    final values = List<double>.filled(n * n * n, 0);
+    for (int iz = 0; iz < n; iz++) {
+      final z = -box + iz * step;
+      for (int iy = 0; iy < n; iy++) {
+        final y = -box + iy * step;
+        for (int ix = 0; ix < n; ix++) {
+          final x = -box + ix * step;
+          final v = f(x, y, z);
+          values[(iz * n + iy) * n + ix] = v.isFinite ? v : double.infinity;
+        }
+      }
+    }
+
+    Point3D vertex(int ix, int iy, int iz) =>
+        Point3D(-box + ix * step, -box + iy * step, -box + iz * step);
+
+    // Cell corners and the 12 edges connecting them.
+    final corners = List.generate(8, (i) => Point3D.origin);
+    final cornerVals = List<double>.filled(8, 0);
+
+    // Subdivide each cell into 5 tetrahedra (standard Kuhn decomposition).
+    // NOTE: some tetrahedra contain face/body diagonals, so each tetrahedron
+    // interpolates its own 6 edges (shared via a cell-level cache so the
+    // mesh stays watertight without duplicate vertices).
+    const tetras = [
+      [0, 1, 3, 5],
+      [0, 3, 2, 5],
+      [0, 2, 6, 5],
+      [0, 6, 4, 5],
+      [0, 4, 1, 5],
+    ];
+
+    final verts = <Point3D>[];
+    final indices = <int>[];
+
+    for (int iz = 0; iz < grid; iz++) {
+      for (int iy = 0; iy < grid; iy++) {
+        for (int ix = 0; ix < grid; ix++) {
+          for (int i = 0; i < 8; i++) {
+            final dx = i & 1, dy = (i >> 1) & 1, dz = (i >> 2) & 1;
+            corners[i] = vertex(ix + dx, iy + dy, iz + dz);
+            cornerVals[i] =
+                values[((iz + dz) * n + (iy + dy)) * n + (ix + dx)];
+          }
+
+          // Edge intersection cache for this cell: key = a*8+b (a<b).
+          final edgeIdx = <int, int>{};
+
+          int interp(int a, int b) {
+            final key = a < b ? a * 8 + b : b * 8 + a;
+            final cached = edgeIdx[key];
+            if (cached != null) return cached;
+            final fa = cornerVals[a], fb = cornerVals[b];
+            if ((fa < 0 && fb >= 0) || (fa >= 0 && fb < 0)) {
+              final k = fa / (fa - fb);
+              final idx = verts.length;
+              verts.add(corners[a].lerp(corners[b], k));
+              edgeIdx[key] = idx;
+              return idx;
+            }
+            edgeIdx[key] = -1;
+            return -1;
+          }
+
+          for (final t in tetras) {
+            final tv = [
+              cornerVals[t[0]],
+              cornerVals[t[1]],
+              cornerVals[t[2]],
+              cornerVals[t[3]],
+            ];
+            final neg = <int>[];
+            for (int i = 0; i < 4; i++) {
+              if (tv[i] < 0) neg.add(i);
+            }
+            if (neg.isEmpty || neg.length == 4) continue;
+
+            void addTri(int va, int vb, int vc) {
+              if (va < 0 || vb < 0 || vc < 0) return;
+              indices.addAll([va, vb, vc]);
+            }
+
+            if (neg.length == 1) {
+              final i = neg[0];
+              final other = [0, 1, 2, 3]..remove(i);
+              addTri(
+                interp(t[i], t[other[0]]),
+                interp(t[i], t[other[1]]),
+                interp(t[i], t[other[2]]),
+              );
+            } else if (neg.length == 3) {
+              final pos = [0, 1, 2, 3].firstWhere((e) => !neg.contains(e));
+              addTri(
+                interp(t[pos], t[neg[0]]),
+                interp(t[pos], t[neg[1]]),
+                interp(t[pos], t[neg[2]]),
+              );
+            } else {
+              final i = neg[0];
+              final j = neg[1];
+              final k = [0, 1, 2, 3].firstWhere((e) => !neg.contains(e));
+              final l = [0, 1, 2, 3].lastWhere((e) => !neg.contains(e));
+              addTri(
+                interp(t[i], t[k]),
+                interp(t[j], t[k]),
+                interp(t[j], t[l]),
+              );
+              addTri(
+                interp(t[i], t[k]),
+                interp(t[j], t[l]),
+                interp(t[i], t[l]),
+              );
+            }
+          }
+        }
+      }
+    }
+
+    return MeshData(vertices: verts, indices: indices);
   }
 
   // ==================================================================

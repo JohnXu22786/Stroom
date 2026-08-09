@@ -1,49 +1,63 @@
 import 'dart:math' as dart_math;
-import 'dart:ui' show PointMode;
 
-import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 
+import '../models/math_3d_construction.dart';
 import '../models/math_3d_object.dart';
 import '../models/math_3d_scene.dart';
 import '../models/math_3d_tool.dart';
-import '../models/math_3d_construction.dart';
 
-// Re-export so pages can use these without direct imports
-export '../models/math_3d_scene.dart' show ProjectionType;
+export '../models/math_3d_scene.dart' show ProjectionType, StandardView;
 export '../models/math_3d_tool.dart' show ConstructionTool;
 
-/// Callback types for canvas → parent communication.
+// ======================================================================
+// Callbacks
+// ======================================================================
+
 typedef On3DReady = void Function();
 typedef On3DViewportChange = void Function();
-typedef On3DObjectCreated = void Function(Object3D object);
+typedef On3DSceneChanged = void Function();
 typedef On3DToolInstruction = void Function(String instruction);
+typedef On3DNumericInput = Future<double?> Function(String prompt, double initial);
 
-/// A 3D rendering canvas using Flutter's CustomPainter.
+/// Point capturing modes (GeoGebra: Automatic / Snap to Grid / Fixed to Grid / Off).
+enum PointCapturing {
+  off,
+  automatic,
+  snapToGrid,
+  fixedToGrid,
+}
+
+/// The 3D rendering canvas — a software 3D renderer on Flutter's Canvas.
 ///
-/// Renders a 3D scene with:
-/// - Orbital camera controls (drag to rotate, scroll to zoom)
-/// - Coordinate axes with labels
-/// - Grid on the xOz-plane
-/// - Points, lines, planes, surfaces, spheres, polyhedra
-/// - Parallel and perspective projection
-///
-/// Uses painter's algorithm (back-to-front sorting) for correct occlusion
-/// since we don't have a depth buffer on 2D Canvas.
+/// Features:
+/// - Z-up coordinate system with xOy ground plane, adaptive grid and ticked axes
+/// - Parallel / perspective / oblique projections, auto-rotation
+/// - Filled surfaces with back-face culling and simple diffuse lighting
+/// - Painter's-algorithm depth sorting of faces, lines, points and labels
+/// - GeoGebra-style interactions: drag to orbit, pinch to zoom, two-finger
+///   pan, click to select, drag to move, tap-and-hold to place points with
+///   height adjustment, keyboard control, click existing objects as
+///   construction inputs.
 class MathCanvas3D extends StatefulWidget {
   final On3DReady? onReady;
   final On3DViewportChange? onViewportChange;
-  final On3DObjectCreated? onObjectCreated;
+  final On3DSceneChanged? onSceneChanged;
   final On3DToolInstruction? onToolInstruction;
-  final ConstructionTool currentTool;
+  final On3DNumericInput? onNumericInput;
+  final ConstructionTool initialTool;
 
   const MathCanvas3D({
     super.key,
     this.onReady,
     this.onViewportChange,
-    this.onObjectCreated,
+    this.onSceneChanged,
     this.onToolInstruction,
-    this.currentTool = ConstructionTool.move,
+    this.onNumericInput,
+    this.initialTool = ConstructionTool.move,
   });
 
   @override
@@ -51,171 +65,67 @@ class MathCanvas3D extends StatefulWidget {
 }
 
 /// The state class for [MathCanvas3D], exposing methods for parent control.
-class MathCanvas3DState extends State<MathCanvas3D> {
-  // Camera state
-  double _cameraDistance = 10;
-  double _cameraTheta = 0;
-  double _cameraPhi = dart_math.pi / 4;
-  Point3D _cameraTarget = Point3D.origin;
+class MathCanvas3DState extends State<MathCanvas3D>
+    with SingleTickerProviderStateMixin {
+  final Scene3D _scene = Scene3D();
+  late final Ticker _autoRotateTicker;
+  bool _autoRotating = false;
 
-  // Visual state
-  ProjectionType _projectionType = ProjectionType.parallel;
+  // View settings
   bool _showAxes = true;
   bool _showGrid = true;
+  bool _showPlane = true;
+  PointCapturing _capturing = PointCapturing.off;
 
-  // Scene objects
-  final List<Object3D> _objects = [];
-  int _objectsVersion = 0;
-
-  /// Get the list of objects (unmodifiable).
-  List<Object3D> get objects => List.unmodifiable(_objects);
-
-  // Construction state
+  // Tool state
+  ConstructionTool _tool = ConstructionTool.move;
   ConstructionState? _construction;
-  ConstructionTool _currentTool = ConstructionTool.move;
 
-  // Construction gesture tracking (for 3D point placement with height)
-  Point3D? _constGroundPos; // ground (y=0) position during construction
-  double _constHeight = 0; // height offset from ground during drag
-  Offset? _constStartPoint; // screen position where point gesture started
-  bool _constPointPlaced = false; // whether the point was committed
+  // Selection & dragging
+  Object3D? _selected;
+  Object3D? _prevSelected; // selection at gesture start
+  bool _dragModeZ = false; // false: move in xOy plane; true: along Z axis
+  bool _draggingObject = false;
+  bool _pausedAutoRotate = false;
+
+  // Construction: the object hit by the current gesture (if any).
+  (Object3D, Point3D)? _pendingObjectHit;
 
   // Gesture state
   Offset? _lastFocalPoint;
-  double?
-      _initialScaleDistance; // camera distance at gesture start (for stable zoom)
-  bool _isReady = false;
+  double? _initialScaleDistance;
+  bool _tapCandidate = false;
+  Offset? _tapStart;
+  Point3D? _constGroundPos;
+  double _constHeight = 0;
+  bool _constCommitted = false;
 
   // Canvas size
   double _canvasWidth = 1;
   double _canvasHeight = 1;
 
-  // ==================================================================
-  // Public API
-  // ==================================================================
+  bool _isReady = false;
 
-  /// Get the current camera state.
-  Camera3D get camera => Camera3D(
-        target: _cameraTarget,
-        distance: _cameraDistance,
-        theta: _cameraTheta,
-        phi: _cameraPhi,
-      );
+  /// Bumped on every setState so the painter repaints (the Scene3D instance
+  /// itself is mutated in place and reference comparison alone won't work).
+  int _repaintVersion = 0;
 
-  /// Get the current projection type.
-  ProjectionType get projectionType => _projectionType;
-
-  /// Whether axes are visible.
-  bool get showAxes => _showAxes;
-
-  /// Whether grid is visible.
-  bool get showGrid => _showGrid;
-
-  /// Number of objects in the scene.
-  int get objectCount => _objects.length;
-
-  /// Set the projection type.
-  void setProjectionType(ProjectionType type) {
-    setState(() {
-      _projectionType = type;
-    });
-  }
-
-  /// Toggle axis visibility.
-  void toggleAxes() {
-    setState(() {
-      _showAxes = !_showAxes;
-    });
-  }
-
-  /// Toggle grid visibility.
-  void toggleGrid() {
-    setState(() {
-      _showGrid = !_showGrid;
-    });
-  }
-
-  /// Reset the camera to the default view.
-  void resetView() {
-    setState(() {
-      _cameraDistance = 10;
-      _cameraTheta = 0;
-      _cameraPhi = dart_math.pi / 4;
-      _cameraTarget = Point3D.origin;
-    });
-    widget.onViewportChange?.call();
-  }
-
-  /// Set the objects to render.
-  void setObjects(List<Object3D> objects) {
-    setState(() {
-      _objects
-        ..clear()
-        ..addAll(objects);
-      _objectsVersion++;
-    });
-  }
-
-  /// Clear all objects.
-  void clearObjects() {
-    setState(() {
-      _objects.clear();
-      _objectsVersion++;
-    });
-  }
-
-  /// Add a surface mesh to the scene.
-  void setSurface({
-    required List<Point3D> vertices,
-    required List<int> indices,
-    List<Vector3D>? normals,
-    int color = 0xFFAAAAAA,
-    double opacity = 1.0,
-  }) {
-    setState(() {
-      _objects.add(Object3D.surface(
-        vertices: vertices,
-        indices: indices,
-        normals: normals,
-        color: color,
-        opacity: opacity,
-      ));
-      _objectsVersion++;
-    });
-  }
-
-  /// Get the current construction state (null if no tool is active).
-  ConstructionState? get constructionState => _construction;
-
-  /// Get the active construction tool.
-  ConstructionTool get activeTool => _currentTool;
-
-  /// Get the current construction instruction.
-  String? get constructionInstruction => _construction?.currentInstruction;
-
-  /// Set the active construction tool.
-  void setTool(ConstructionTool tool) {
-    setState(() {
-      _currentTool = tool;
-      if (tool == ConstructionTool.move) {
-        _construction = null;
-      } else {
-        _construction = ConstructionState(tool: tool);
-      }
-      _constPointPlaced = false;
-      _constGroundPos = null;
-      _constStartPoint = null;
-    });
-    widget.onToolInstruction?.call(_construction?.currentInstruction ?? '');
-  }
+  void _bump() => _repaintVersion++;
 
   @override
   void initState() {
     super.initState();
-    // Initialize tool from widget, which also creates construction state
-    _currentTool = widget.currentTool;
-    if (_currentTool != ConstructionTool.move) {
-      _construction = ConstructionState(tool: _currentTool);
+    _autoRotateTicker = createTicker((elapsed) {
+      if (_autoRotating && mounted) {
+        setState(() {
+          _scene.setCamera(
+              _scene.camera.orbit(deltaTheta: 0.003, deltaPhi: 0));
+        });
+      }
+    });
+    _tool = widget.initialTool;
+    if (_tool != ConstructionTool.move) {
+      _construction = ConstructionState(tool: _tool);
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -227,32 +137,272 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   }
 
   @override
-  void didUpdateWidget(MathCanvas3D oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.currentTool != oldWidget.currentTool) {
-      setTool(widget.currentTool);
+  void dispose() {
+    _autoRotateTicker.dispose();
+    super.dispose();
+  }
+
+  // ==================================================================
+  // Public API
+  // ==================================================================
+
+  Scene3D get scene => _scene;
+  Camera3D get camera => _scene.camera;
+  ProjectionType get projectionType => _scene.projectionType;
+  bool get showAxes => _showAxes;
+  bool get showGrid => _showGrid;
+  bool get showPlane => _showPlane;
+  PointCapturing get capturing => _capturing;
+  bool get autoRotating => _autoRotating;
+  List<Object3D> get objects => _scene.objects;
+  ConstructionTool get activeTool => _tool;
+  ConstructionState? get construction => _construction;
+  Object3D? get selected => _selected;
+
+  void setProjectionType(ProjectionType type) {
+    setState(() => _scene.setProjectionType(type));
+  }
+
+  void toggleAxes() => setState(() => _showAxes = !_showAxes);
+  void toggleGrid() => setState(() => _showGrid = !_showGrid);
+  void togglePlane() => setState(() => _showPlane = !_showPlane);
+
+  void setPointCapturing(PointCapturing mode) {
+    setState(() => _capturing = mode);
+  }
+
+  void setAutoRotate(bool on) {
+    setState(() => _autoRotating = on);
+    if (on) {
+      _autoRotateTicker.start();
+    } else {
+      _autoRotateTicker.stop();
     }
   }
 
-  @override
-  void dispose() {
-    _construction = null;
-    super.dispose();
+  void resetView() {
+    setState(() {
+      _scene.setCamera(const Camera3D());
+    });
+    widget.onViewportChange?.call();
+  }
+
+  void setStandardView(StandardView view) {
+    setState(() {
+      _scene.setCamera(_scene.camera.withStandardView(view));
+    });
+    widget.onViewportChange?.call();
+  }
+
+  void fitView() {
+    setState(() {
+      _scene.fitToView();
+    });
+    widget.onViewportChange?.call();
+  }
+
+  void setObjects(List<Object3D> objects) {
+    setState(() {
+      _scene.clear();
+      for (final o in objects) {
+        _scene.add(o);
+      }
+      _selected = null;
+      _expressionObjects = List.from(objects);
+    });
+    _notifySceneChanged();
+  }
+
+  /// The objects currently owned by expression input (kept separate from
+  /// objects created with construction tools).
+  List<Object3D> _expressionObjects = [];
+
+  /// Number of expression-owned objects (used to detect first plot).
+  int get expressionObjectCount => _expressionObjects.length;
+
+  /// Replace only the expression-created objects, keeping construction
+  /// objects intact. Removal matches by name because the stored objects may
+  /// have been replaced in place (drag / style edits).
+  void setExpressionObjects(List<Object3D> objects) {
+    setState(() {
+      for (final o in _expressionObjects) {
+        _scene.removeWhere((x) => x.name == o.name);
+        if (_selected != null && _selected!.name == o.name) _selected = null;
+      }
+      for (final o in objects) {
+        _scene.add(o);
+      }
+      _expressionObjects = List.from(objects);
+    });
+    _notifySceneChanged();
+  }
+
+  void clearObjects() {
+    setState(() {
+      _scene.clear();
+      _selected = null;
+      _expressionObjects = [];
+    });
+    _notifySceneChanged();
+  }
+
+  void addObject(Object3D obj) {
+    setState(() => _scene.add(obj));
+    _notifySceneChanged();
+  }
+
+  void removeObject(Object3D obj) {
+    setState(() {
+      _scene.remove(obj);
+      if (_selected == obj) _selected = null;
+    });
+    _notifySceneChanged();
+  }
+
+  void setObjectVisible(String name, bool visible) {
+    final obj = _scene.byName(name);
+    if (obj == null) return;
+    setState(() {
+      final updated = obj.withVisible(visible);
+      _scene.replace(obj, updated);
+      if (identical(_selected, obj)) _selected = updated;
+    });
+    _notifySceneChanged();
+  }
+
+  void setObjectStyle(String name, ObjectStyle style) {
+    final obj = _scene.byName(name);
+    if (obj == null) return;
+    setState(() {
+      final updated = obj.withStyle(style);
+      _scene.replace(obj, updated);
+      if (identical(_selected, obj)) _selected = updated;
+    });
+    _notifySceneChanged();
+  }
+
+  void setTool(ConstructionTool tool) {
+    setState(() {
+      _tool = tool;
+      if (tool == ConstructionTool.move) {
+        _construction = null;
+      } else {
+        _construction = ConstructionState(tool: tool);
+      }
+      _constCommitted = false;
+      _constGroundPos = null;
+    });
+    widget.onToolInstruction
+        ?.call(_construction?.currentInstruction ?? '');
+  }
+
+  void selectObject(Object3D? obj) {
+    setState(() {
+      _selected = obj;
+      _dragModeZ = false;
+    });
+  }
+
+  void _notifySceneChanged() {
+    widget.onSceneChanged?.call();
+  }
+
+  // ==================================================================
+  // Helpers
+  // ==================================================================
+
+  Projection3D get _projection => _scene.projection;
+
+  /// Snaps a world point according to the capturing mode.
+  Point3D _capture(Point3D p) {
+    switch (_capturing) {
+      case PointCapturing.off:
+        return p;
+      case PointCapturing.automatic:
+      case PointCapturing.snapToGrid:
+        // Snap to the nearest multiple of 0.5 world units when close enough.
+        const snap = 0.5;
+        if (_capturing == PointCapturing.automatic) {
+          // Only snap when within 20% of a grid point.
+          final dx = (p.x / snap).roundToDouble() * snap;
+          final dy = (p.y / snap).roundToDouble() * snap;
+          final dz = (p.z / snap).roundToDouble() * snap;
+          if ((p.x - dx).abs() < 0.1 &&
+              (p.y - dy).abs() < 0.1 &&
+              (p.z - dz).abs() < 0.1) {
+            return Point3D(dx, dy, dz);
+          }
+          return p;
+        }
+        return Point3D(
+          (p.x / snap).roundToDouble() * snap,
+          (p.y / snap).roundToDouble() * snap,
+          (p.z / snap).roundToDouble() * snap,
+        );
+      case PointCapturing.fixedToGrid:
+        const snap = 0.5;
+        return Point3D(
+          (p.x / snap).roundToDouble() * snap,
+          (p.y / snap).roundToDouble() * snap,
+          (p.z / snap).roundToDouble() * snap,
+        );
+    }
+  }
+
+  /// The ground point under a screen position (z = 0 by default, or the
+  /// current height of the construction drag).
+  Point3D? _groundAt(Offset pos, {double z0 = 0}) {
+    final proj = _projection;
+    return proj.screenToGround(pos.dx, pos.dy, z0: z0);
   }
 
   // ==================================================================
   // Gesture handling
   // ==================================================================
+
   void _onScaleStart(ScaleStartDetails details) {
     _lastFocalPoint = details.focalPoint;
-    _initialScaleDistance = _cameraDistance;
+    _initialScaleDistance = _scene.camera.distance;
+    _tapCandidate = true;
+    _tapStart = details.focalPoint;
+    _constGroundPos = null;
+    _constHeight = 0;
+    _constCommitted = false;
+    _draggingObject = false;
+    _pendingObjectHit = null;
+    _prevSelected = _selected;
 
-    // In construction mode, start tracking for point + height placement
-    if (_currentTool != ConstructionTool.move && _construction != null) {
-      _constStartPoint = details.focalPoint;
-      _constGroundPos = null;
-      _constHeight = 0;
-      _constPointPlaced = false;
+    // Pause auto-rotation while interacting (resumed on scale end).
+    if (_autoRotating) {
+      _pausedAutoRotate = true;
+      setAutoRotate(false);
+    }
+
+    if (_tool == ConstructionTool.move) {
+      // Try to grab an object under the pointer.
+      final hit = _scene.pick(details.focalPoint.dx, details.focalPoint.dy);
+      if (hit != null) {
+        final obj = hit.$1;
+        // Keep the previous drag mode when the object was already selected;
+        // otherwise start in the xOy-plane mode.
+        final keepMode = identical(obj, _prevSelected);
+        setState(() {
+          _selected = obj;
+          if (!keepMode) _dragModeZ = false;
+          _draggingObject = true;
+        });
+      } else {
+        setState(() => _selected = null);
+      }
+    } else if (_construction != null && !_construction!.isComplete) {
+      // Construction: clicking an existing object feeds it as an input
+      // (GeoGebra behavior); clicking empty space places a new point.
+      final hit = _scene.pick(details.focalPoint.dx, details.focalPoint.dy);
+      if (hit != null) {
+        _pendingObjectHit = hit;
+      } else {
+        _constGroundPos = _groundAt(details.focalPoint);
+      }
     }
   }
 
@@ -260,72 +410,81 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     final focalPoint = details.focalPoint;
     final scale = details.scale;
 
-    // ===== Construction mode: tap → point on ground, drag → adjust height
-    if (_currentTool != ConstructionTool.move &&
+    // ---- Construction: place point on ground, drag changes height ----
+    if (_tool != ConstructionTool.move &&
         _construction != null &&
-        !_constPointPlaced) {
-      if (_constGroundPos == null) {
-        // First movement: compute the ground position from the current point
-        _constGroundPos = _screenToPointOnPlane(focalPoint.dx, focalPoint.dy);
-        _constHeight = 0;
-      } else if (_lastFocalPoint != null) {
-        // Subsequent movement: vertical drag adjusts height
-        final dy = focalPoint.dy - _lastFocalPoint!.dy;
-        _constHeight -= dy * 0.08; // sensitivity: pixels → world units
-        // Recompute ground x,z from current pointer (allows moving point around)
-        _constGroundPos = _screenToPointOnPlane(focalPoint.dx, focalPoint.dy);
+        !_construction!.isComplete &&
+        !_constCommitted) {
+      // A drag that moves away from a hit object converts the gesture into
+      // a free point placement (so users can drag near existing objects).
+      if (_pendingObjectHit != null && _tapStart != null) {
+        if ((focalPoint - _tapStart!).distance > 8) {
+          _pendingObjectHit = null;
+          _constGroundPos = _groundAt(focalPoint);
+        }
+      }
+      if (_constGroundPos != null) {
+        final dy = _lastFocalPoint == null
+            ? 0.0
+            : focalPoint.dy - _lastFocalPoint!.dy;
+        _constHeight = (_constHeight - dy * 0.06)
+            .clamp(-50.0, 50.0);
+        // Re-anchor ground x,y from pointer so the point can be dragged around.
+        _constGroundPos = _groundAt(focalPoint) ?? _constGroundPos;
       }
       _lastFocalPoint = focalPoint;
-      return; // Don't orbit during construction
+      return;
     }
 
-    // ===== Standard orbit/pan/zoom (Move tool or no construction active)
+    // ---- Move tool: dragging a selected object ----
+    if (_tool == ConstructionTool.move && _draggingObject && _selected != null) {
+      if (details.pointerCount == 1) {
+        // Moving the object means this is a drag, not a tap.
+        if (_tapStart != null && (focalPoint - _tapStart!).distance > 4) {
+          _tapCandidate = false;
+        }
+        _moveSelectedObject(focalPoint);
+        _lastFocalPoint = focalPoint;
+        return;
+      }
+    }
+
+    // ---- Camera navigation ----
     if (details.pointerCount == 1) {
-      // Single finger: orbit
-      final dx =
-          _lastFocalPoint == null ? 0.0 : (focalPoint.dx - _lastFocalPoint!.dx);
-      final dy =
-          _lastFocalPoint == null ? 0.0 : (focalPoint.dy - _lastFocalPoint!.dy);
+      final dx = _lastFocalPoint == null
+          ? 0.0
+          : (focalPoint.dx - _lastFocalPoint!.dx);
+      final dy = _lastFocalPoint == null
+          ? 0.0
+          : (focalPoint.dy - _lastFocalPoint!.dy);
+      if (dx.abs() > 1 || dy.abs() > 1) _tapCandidate = false;
 
       setState(() {
-        _cameraTheta -= dx * 0.01;
-        _cameraPhi = (_cameraPhi - dy * 0.01)
-            .clamp(-dart_math.pi * 0.49, dart_math.pi * 0.49);
+        _scene.setCamera(_scene.camera.orbit(
+            deltaTheta: -dx * 0.01, deltaPhi: -dy * 0.01));
       });
     } else if (details.pointerCount >= 2) {
-      // Two fingers: detect scale change (zoom) vs focal point change (pan)
-      // Use cumulative scale relative to gesture start for zoom detection
       final hasScaleChange =
           (scale - 1.0).abs() > 0.02 && _initialScaleDistance != null;
       final hasPanMovement = _lastFocalPoint != null &&
           (focalPoint - _lastFocalPoint!).distance > 2.0;
 
       if (hasScaleChange) {
-        // Pinch zoom: use cumulative scale from gesture start for stability
-        final newDistance =
-            (_initialScaleDistance! * scale).clamp(0.1, 1000).toDouble();
+        // Cumulative scale from gesture start → new distance = initial × scale.
+        final initial = _initialScaleDistance ?? _scene.camera.distance;
         setState(() {
-          _cameraDistance = newDistance;
+          _scene.setCamera(_scene.camera.copyWith(
+              distance: (initial * scale).clamp(0.05, 5000.0)));
         });
       } else if (hasPanMovement) {
-        // Two-finger drag without scale change = pan
         final dx = _lastFocalPoint == null
             ? 0.0
             : (focalPoint.dx - _lastFocalPoint!.dx);
         final dy = _lastFocalPoint == null
             ? 0.0
             : (focalPoint.dy - _lastFocalPoint!.dy);
-
-        // Build camera for pan computation
-        final cam = Camera3D(
-          target: _cameraTarget,
-          distance: _cameraDistance,
-          theta: _cameraTheta,
-          phi: _cameraPhi,
-        );
-        final panned = cam.pan(deltaX: dx, deltaY: dy);
         setState(() {
-          _cameraTarget = panned.target;
+          _scene.setCamera(_scene.camera.pan(deltaX: dx, deltaY: dy));
         });
       }
     }
@@ -333,178 +492,257 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     _lastFocalPoint = focalPoint;
   }
 
+  void _moveSelectedObject(Offset focalPoint) {
+    final obj = _selected!;
+    final proj = _projection;
+    final ray = proj.screenRay(focalPoint.dx, focalPoint.dy);
+
+    if (_dragModeZ) {
+      // Move along the vertical line through the object's current x,y.
+      final d = ray.direction;
+      final anchor = obj.anchorPoint;
+      if (d.x.abs() < 1e-9 && d.y.abs() < 1e-9) return; // straight top view
+      final tx = d.x.abs() > d.y.abs() ? (anchor.x - ray.origin.x) / d.x
+          : (anchor.y - ray.origin.y) / d.y;
+      final z = ray.origin.z + tx * d.z;
+      final delta = Vector3D(0, 0, z - anchor.z);
+      setState(() {
+        _scene.replace(obj, obj.translated(delta));
+        _selected = obj.translated(delta);
+      });
+    } else {
+      // Move in the xOy plane (preserve z): delta relative to the CURRENT
+      // anchor so repeated updates do not accumulate drift.
+      final anchor = obj.anchorPoint;
+      final hit = ray.intersectPlane(Vector3D.unitZ, anchor.z);
+      if (hit != null) {
+        final moved = obj.translated(hit - anchor);
+        setState(() {
+          _scene.replace(obj, moved);
+          _selected = moved;
+        });
+      }
+    }
+  }
+
   void _onScaleEnd(ScaleEndDetails details) {
-    // ===== Construction mode: finalize the point with height
-    if (_currentTool != ConstructionTool.move &&
+    // ---- Construction: commit the picked object or placed point ----
+    if (_tool != ConstructionTool.move &&
         _construction != null &&
-        !_constPointPlaced &&
-        _constGroundPos != null) {
-      _constPointPlaced = true;
-      final finalPos = Point3D(
-        _constGroundPos!.x,
-        _constHeight,
-        _constGroundPos!.z,
-      );
-      _handleConstructionPoint(finalPos);
-
+        !_construction!.isComplete &&
+        !_constCommitted) {
+      _constCommitted = true;
+      if (_pendingObjectHit != null) {
+        // Clicked an existing object: feed it as the construction input.
+        final (obj, world) = _pendingObjectHit!;
+        _handleConstructionInput(ObjectInput(obj, snapPoint: world));
+      } else {
+        final ground =
+            _constGroundPos ?? _groundAt(_tapStart ?? Offset.zero);
+        if (ground != null) {
+          // Z-up: the ground position supplies x/y, the drag sets the height z.
+          var world = Point3D(ground.x, ground.y, _constHeight);
+          world = _capture(world);
+          _handleConstructionInput(NewPointInput(world));
+        }
+      }
       _constGroundPos = null;
-      _constStartPoint = null;
-      _lastFocalPoint = null;
-      widget.onViewportChange?.call();
+      _constHeight = 0;
+      _pendingObjectHit = null;
+      _resumeAutoRotate();
       return;
     }
 
-    // Handle the case where user just tapped without dragging
-    if (_currentTool != ConstructionTool.move &&
-        _construction != null &&
-        !_constPointPlaced &&
-        _constGroundPos == null &&
-        _constStartPoint != null) {
-      // Place point on the ground plane at the tap position
-      _constPointPlaced = true;
-      final groundPos =
-          _screenToPointOnPlane(_constStartPoint!.dx, _constStartPoint!.dy);
-      _handleConstructionPoint(groundPos);
-
-      _constGroundPos = null;
-      _constStartPoint = null;
-      _lastFocalPoint = null;
-      widget.onViewportChange?.call();
-      return;
+    // ---- Move tool: tap selects, second tap toggles drag mode ----
+    if (_tool == ConstructionTool.move) {
+      final wasTap = _tapCandidate &&
+          _tapStart != null &&
+          details.pointerCount <= 1;
+      if (wasTap) {
+        final hit =
+            _scene.pick(_tapStart!.dx, _tapStart!.dy);
+        setState(() {
+          if (hit == null) {
+            _selected = null;
+          } else if (identical(_prevSelected, hit.$1) && _selected == hit.$1) {
+            // Second tap on the object already selected BEFORE this gesture
+            // toggles the drag mode (xOy plane ↔ z axis).
+            _dragModeZ = !_dragModeZ;
+          } else {
+            _selected = hit.$1;
+            _dragModeZ = false;
+          }
+        });
+        _notifySceneChanged();
+      }
+      _draggingObject = false;
     }
+
+    // Resume auto-rotation that was paused for this interaction.
+    _resumeAutoRotate();
 
     _lastFocalPoint = null;
-    _constStartPoint = null;
+    _tapStart = null;
     _constGroundPos = null;
+    _constHeight = 0;
+    _pendingObjectHit = null;
+    _prevSelected = null;
     widget.onViewportChange?.call();
   }
 
+  void _resumeAutoRotate() {
+    if (_pausedAutoRotate) {
+      _pausedAutoRotate = false;
+      setAutoRotate(true);
+    }
+  }
+
+  /// Route a click into the active construction workflow.
+  void _handleConstructionInput(ConstructionInput input) {
+    final state = _construction;
+    if (state == null) return;
+
+    final step = state.currentStep;
+    // Object-step requires an ObjectInput; if the user clicked empty space
+    // on an object-step, treat the clicked position as a new point only for
+    // point-kind steps. For strict object steps, ignore free-space clicks.
+    if (step != null && step.kind == InputKind.object) {
+      if (input is NewPointInput) return; // free click on object step: ignore
+    }
+
+    final completed = state.addInput(input);
+    if (state.awaitingNumber && !completed) {
+      _requestNumberInput();
+    }
+    if (completed) {
+      _applyConstructionResult();
+    }
+    widget.onToolInstruction?.call(state.currentInstruction);
+    setState(() {});
+  }
+
+  Future<void> _requestNumberInput() async {
+    final state = _construction;
+    if (state == null) return;
+    final step = state.currentStep;
+    if (step == null || step.kind != InputKind.number) return;
+
+    final prompt = step.instruction;
+    double? value;
+    if (widget.onNumericInput != null) {
+      value = await widget.onNumericInput!(prompt, 1);
+    }
+    if (!mounted) return;
+    if (value == null) {
+      // User cancelled: reset the construction so the tool stays usable.
+      state.reset();
+      widget.onToolInstruction?.call(state.currentInstruction);
+      setState(() {});
+      return;
+    }
+    final completed = state.addInput(NumberInput(value));
+    if (completed) {
+      _applyConstructionResult();
+    }
+    widget.onToolInstruction?.call(state.currentInstruction);
+    setState(() {});
+  }
+
+  void _applyConstructionResult() {
+    final state = _construction;
+    final result = state?.result;
+    if (result == null) return;
+
+    setState(() {
+      for (final o in result.created) {
+        _scene.add(_renameIfNeeded(o));
+      }
+      for (final o in result.removed) {
+        _scene.remove(o);
+        if (_selected == o) _selected = null;
+      }
+      for (final o in result.modified) {
+        // Match by name; rebuild with the new visibility.
+        final existing = _scene.byName(o.name);
+        if (existing != null) _scene.replace(existing, o);
+      }
+      // Start a fresh construction for the same tool (GeoGebra behavior:
+      // the tool stays active and can create multiple objects).
+      _construction = ConstructionState(tool: _tool);
+    });
+    _notifySceneChanged();
+  }
+
+  /// Reassign GeoGebra-style labels so that construction objects never
+  /// collide with expression objects.
+  Object3D _renameIfNeeded(Object3D obj) {
+    if (_scene.byName(obj.name) == null) return obj;
+    final name = switch (obj.type) {
+      Object3DType.point => _scene.nextPointName(),
+      Object3DType.measurement => 'm${_scene.objects.length + 1}',
+      _ => _scene.nextPointName(),
+    };
+    return obj.withRenamed(name);
+  }
+
+  // ==================================================================
+  // Pointer signal (scroll wheel) & keyboard
+  // ==================================================================
+
   void _onPointerSignal(PointerSignalEvent event) {
     if (event is PointerScrollEvent) {
-      final scrollDelta = event.scrollDelta;
-      final zoomFactor = 1.0 + scrollDelta.dy * 0.002;
-      final clampedFactor = zoomFactor.clamp(0.1, 10.0);
-
-      setState(() {
-        _cameraDistance = (_cameraDistance / clampedFactor).clamp(0.1, 1000);
-      });
+      final shift = HardwareKeyboard.instance.isShiftPressed;
+      if (shift) {
+        // Shift + scroll: pan.
+        setState(() {
+          _scene.setCamera(_scene.camera.pan(
+              deltaX: -event.scrollDelta.dx * 2, deltaY: -event.scrollDelta.dy * 2));
+        });
+      } else {
+        final zoomFactor = 1.0 + event.scrollDelta.dy * 0.002;
+        setState(() {
+          _scene.setCamera(_scene.camera.zoom(factor: zoomFactor));
+        });
+      }
       widget.onViewportChange?.call();
     }
   }
 
-  // ==================================================================
-  // Construction click handling
-  // ==================================================================
+  /// Handle keyboard input for object manipulation (GeoGebra-style).
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (_selected == null) return KeyEventResult.ignored;
 
-  /// Compute the orthographic scale matching the painter's projection.
-  double _computeScaleForCanvas() {
-    return 800 / _cameraDistance.clamp(0.1, 1000);
-  }
-
-  /// Convert a screen position to a 3D point on the y=0 (ground) plane.
-  ///
-  /// Uses the camera view matrix and orthographic projection to compute
-  /// the inverse mapping from screen coordinates to world coordinates.
-  /// Solves the 2×2 linear system: given viewX, viewY, and worldY=0,
-  /// find worldX and worldZ.
-  Point3D _screenToPointOnPlane(double screenX, double screenY) {
-    final cam = Camera3D(
-      target: _cameraTarget,
-      distance: _cameraDistance,
-      theta: _cameraTheta,
-      phi: _cameraPhi,
-    );
-
-    // Step 1: Build the view matrix (world → view transform)
-    final viewMatrix = cam.viewMatrix();
-    // viewMatrix is column-major: [right.x, up.x, -fwd.x, 0,
-    //                               right.y, up.y, -fwd.y, 0,
-    //                               right.z, up.z, -fwd.z, 0,
-    //                               -R·pos, -U·pos, F·pos, 1]
-    final pos = cam.position;
-    final right = Vector3D(viewMatrix[0], viewMatrix[4], viewMatrix[8]);
-    final up = Vector3D(viewMatrix[1], viewMatrix[5], viewMatrix[9]);
-
-    // Step 2: Screen → NDC
-    final ndcX = 2 * screenX / _canvasWidth - 1;
-    final ndcY = 1 - 2 * screenY / _canvasHeight;
-
-    // Step 3: NDC → view space (inverse orthographic projection)
-    final scale = _computeScaleForCanvas();
-    final aspect = _canvasWidth / _canvasHeight;
-    final halfW = scale * aspect;
-    final halfH = scale;
-    final viewX = ndcX * halfW;
-    final viewY = ndcY * halfH;
-
-    // Step 4: View space → world space on y=0 plane.
-    // The view matrix transforms: viewPoint = R·(worldPoint) + T
-    // where R = [right, up, -forward]^T and T is the translation.
-    //
-    // viewX = right·worldPoint + right·(-pos)
-    // viewY = up·worldPoint + up·(-pos)
-    //
-    // Given worldY = 0:
-    // viewX = right.x·worldX + right.z·worldZ - right·pos
-    // viewY = up.x·worldX + up.z·worldZ - up·pos
-    //
-    // Rearranged:
-    // right.x·worldX + right.z·worldZ = viewX + right·pos
-    // up.x·worldX + up.z·worldZ = viewY + up·pos
-
-    final rhsX = viewX + right.dot(pos.toVector());
-    final rhsY = viewY + up.dot(pos.toVector());
-
-    // Solve the 2×2 system
-    final a = right.x; // coefficient of worldX in first eq
-    final b = right.z; // coefficient of worldZ in first eq
-    final c = up.x; // coefficient of worldX in second eq
-    final d = up.z; // coefficient of worldZ in second eq
-
-    final det = a * d - b * c;
-    if (det.abs() < 1e-10) {
-      // Degenerate case — fall back to camera target on ground
-      return Point3D(_cameraTarget.x, 0, _cameraTarget.z);
+    final step = 0.1 * (HardwareKeyboard.instance.isShiftPressed ? 10 : 1);
+    Point3D? target;
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowLeft:
+        target = _selected!.anchorPoint + Vector3D.unitX * (-step);
+      case LogicalKeyboardKey.arrowRight:
+        target = _selected!.anchorPoint + Vector3D.unitX * step;
+      case LogicalKeyboardKey.arrowUp:
+        target = _selected!.anchorPoint + Vector3D.unitY * (-step);
+      case LogicalKeyboardKey.arrowDown:
+        target = _selected!.anchorPoint + Vector3D.unitY * step;
+      case LogicalKeyboardKey.pageUp:
+        target = _selected!.anchorPoint + Vector3D.unitZ * step;
+      case LogicalKeyboardKey.pageDown:
+        target = _selected!.anchorPoint + Vector3D.unitZ * (-step);
+      case LogicalKeyboardKey.delete:
+      case LogicalKeyboardKey.backspace:
+        removeObject(_selected!);
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
     }
-
-    final worldX = (rhsX * d - b * rhsY) / det;
-    final worldZ = (a * rhsY - rhsX * c) / det;
-
-    return Point3D(worldX, 0, worldZ);
-  }
-
-  /// Handle a placed 3D point during construction.
-  /// Advances the construction state and creates the object when ready.
-  void _handleConstructionPoint(Point3D worldPt) {
-    if (_construction == null) return;
-
-    final action = _construction!.addPoint(worldPt);
-    switch (action) {
-      case ConstructionAction.complete:
-        final obj = _construction!.result;
-        if (obj != null) {
-          widget.onObjectCreated?.call(obj);
-        }
-        _construction = ConstructionState(tool: _currentTool);
-        break;
-      case ConstructionAction.advanceStep:
-        // Continue to next step
-        break;
-      case ConstructionAction.awaitInput:
-        // Wait for more input
-        break;
-      case ConstructionAction.reset:
-        _construction = ConstructionState(tool: _currentTool);
-        break;
-    }
-    widget.onToolInstruction?.call(_construction?.currentInstruction ?? '');
-
-    // Reset the placement guard so the next gesture can place a point
-    // (needed for tap-based construction where _onScaleStart won't fire again)
-    _constPointPlaced = false;
-
-    // Update preview objects
-    _objectsVersion++;
+    final obj = _selected!;
+    final delta = target - obj.anchorPoint;
+    setState(() {
+      _scene.replace(obj, obj.translated(delta));
+      _selected = obj.translated(delta);
+    });
+    _notifySceneChanged();
+    return KeyEventResult.handled;
   }
 
   // ==================================================================
@@ -514,39 +752,44 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    _bump(); // ensure every rebuild triggers a repaint
 
     return LayoutBuilder(
       builder: (context, constraints) {
         _canvasWidth = constraints.maxWidth;
         _canvasHeight = constraints.maxHeight;
+        _scene.setViewport(_canvasWidth, _canvasHeight);
 
-        return GestureDetector(
-          onScaleStart: _onScaleStart,
-          onScaleUpdate: _onScaleUpdate,
-          onScaleEnd: _onScaleEnd,
-          child: Listener(
-            onPointerSignal: _onPointerSignal,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: CustomPaint(
-                painter: MathCanvas3DPainter(
-                  cameraDistance: _cameraDistance,
-                  cameraTheta: _cameraTheta,
-                  cameraPhi: _cameraPhi,
-                  cameraTarget: _cameraTarget,
-                  projectionType: _projectionType,
-                  showAxes: _showAxes,
-                  showGrid: _showGrid,
-                  objects: _objects,
-                  objectsVersion: _objectsVersion,
-                  canvasWidth: _canvasWidth,
-                  canvasHeight: _canvasHeight,
-                  backgroundColor: cs.surface,
-                  axisColor: cs.onSurface,
-                  gridColor: cs.outlineVariant.withValues(alpha: 0.3),
-                  labelColor: cs.onSurfaceVariant,
+        return Focus(
+          autofocus: true,
+          onKeyEvent: _onKeyEvent,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onScaleStart: _onScaleStart,
+            onScaleUpdate: _onScaleUpdate,
+            onScaleEnd: _onScaleEnd,
+            child: Listener(
+              onPointerSignal: _onPointerSignal,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: CustomPaint(
+                  painter: _ScenePainter(
+                    scene: _scene,
+                    showAxes: _showAxes,
+                    showGrid: _showGrid,
+                    showPlane: _showPlane,
+                    selected: _selected,
+                    construction: _construction,
+                    repaintVersion: _repaintVersion,
+                    backgroundColor: cs.surface,
+                    axisColor: cs.onSurface.withValues(alpha: 0.85),
+                    gridColor: cs.outlineVariant.withValues(alpha: 0.35),
+                    planeColor: const Color(0xFF64B5F6),
+                    labelColor: cs.onSurfaceVariant,
+                    highlightColor: cs.primary,
+                  ),
+                  size: Size(_canvasWidth, _canvasHeight),
                 ),
-                size: Size(constraints.maxWidth, constraints.maxHeight),
               ),
             ),
           ),
@@ -557,696 +800,978 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 }
 
 // ======================================================================
-// MathCanvas3DPainter
+// Rendering
 // ======================================================================
 
-/// CustomPainter that renders a 3D scene onto a 2D Canvas.
-///
-/// Uses painter's algorithm (back-to-front sorting) for correct occlusion.
-class MathCanvas3DPainter extends CustomPainter {
-  final double cameraDistance;
-  final double cameraTheta;
-  final double cameraPhi;
-  final Point3D cameraTarget;
-  final ProjectionType projectionType;
+/// Render primitives with depth, collected then sorted back-to-front.
+sealed class _Prim {
+  final double depth;
+  const _Prim({required this.depth});
+}
+
+class _FacePrim extends _Prim {
+  final Path path;
+  final Color color;
+  final Vector3D normal; // world-space, for lighting
+  final Paint fillPaint;
+  final Paint strokePaint;
+
+  _FacePrim({
+    required super.depth,
+    required this.path,
+    required this.color,
+    required this.normal,
+    Paint? fillPaint,
+    Paint? strokePaint,
+  })  : fillPaint = fillPaint ?? Paint()..color = color,
+        strokePaint = strokePaint ?? Paint()..style = PaintingStyle.stroke..color = color.withValues(alpha: 0.5)..strokeWidth = 0.5;
+}
+
+class _LinePrim extends _Prim {
+  final List<Offset> points;
+  final Color color;
+  final double width;
+  final LineStyle style;
+  final Paint paint;
+
+  _LinePrim({
+    required super.depth,
+    required this.points,
+    required this.color,
+    this.width = 2,
+    this.style = LineStyle.solid,
+  }) : paint = Paint()
+          ..color = color
+          ..strokeWidth = width
+          ..style = PaintingStyle.stroke;
+}
+
+class _PointPrim extends _Prim {
+  final Offset pos;
+  final Color color;
+  final double size;
+  final PointStyle style;
+  final Paint paint;
+
+  _PointPrim({
+    required super.depth,
+    required this.pos,
+    required this.color,
+    this.size = 5,
+    this.style = PointStyle.dot,
+  }) : paint = Paint()..color = color;
+}
+
+class _LabelPrim extends _Prim {
+  final Offset pos;
+  final String text;
+  final Color color;
+  final bool bold;
+  final Offset anchor; // screen-space offset of the text from the point
+
+  _LabelPrim({
+    required super.depth,
+    required this.pos,
+    required this.text,
+    required this.color,
+    this.bold = false,
+    this.anchor = const Offset(7, -7),
+  });
+}
+
+/// The painter for the 3D scene.
+class _ScenePainter extends CustomPainter {
+  final Scene3D scene;
   final bool showAxes;
   final bool showGrid;
-  final List<Object3D> objects;
-  final int objectsVersion;
-  final double canvasWidth;
-  final double canvasHeight;
+  final bool showPlane;
+  final Object3D? selected;
+  final ConstructionState? construction;
   final Color backgroundColor;
   final Color axisColor;
   final Color gridColor;
+  final Color planeColor;
   final Color labelColor;
+  final Color highlightColor;
+  final int repaintVersion;
 
-  const MathCanvas3DPainter({
-    this.cameraDistance = 10,
-    this.cameraTheta = 0,
-    this.cameraPhi = 0.785,
-    this.cameraTarget = Point3D.origin,
-    this.projectionType = ProjectionType.parallel,
-    this.showAxes = true,
-    this.showGrid = true,
-    this.objects = const [],
-    this.objectsVersion = 0,
-    this.canvasWidth = 800,
-    this.canvasHeight = 600,
-    this.backgroundColor = Colors.white,
-    this.axisColor = Colors.black87,
-    this.gridColor = const Color(0x4DCCCCCC),
-    this.labelColor = Colors.grey,
+  const _ScenePainter({
+    required this.scene,
+    required this.showAxes,
+    required this.showGrid,
+    required this.showPlane,
+    required this.selected,
+    required this.construction,
+    required this.repaintVersion,
+    required this.backgroundColor,
+    required this.axisColor,
+    required this.gridColor,
+    required this.planeColor,
+    required this.labelColor,
+    required this.highlightColor,
   });
+
+  Projection3D get proj => scene.projection;
+
+  static const _lightDir = Vector3D(-0.45, -0.5, 0.74);
 
   @override
   void paint(Canvas canvas, Size size) {
-    _drawBackground(canvas, size);
+    canvas.drawRect(Offset.zero & size, Paint()..color = backgroundColor);
 
-    // Build camera and projection
-    final camera = Camera3D(
-      target: cameraTarget,
-      distance: cameraDistance,
-      theta: cameraTheta,
-      phi: cameraPhi,
-    );
-    final projection = projectionType == ProjectionType.parallel
-        ? Projection3D.parallel(
-            width: size.width,
-            height: size.height,
-            scale: _computeScale(),
-          )
-        : Projection3D.perspective(
-            width: size.width,
-            height: size.height,
-            fov: 60,
-          );
+    final prims = <_Prim>[];
 
-    // Draw grid (on xOz-plane)
+    // Ground plane + grid.
+    if (showPlane) {
+      _collectPlane(prims, size);
+    }
     if (showGrid) {
-      _drawGrid(canvas, size, camera, projection);
+      _collectGrid(prims);
     }
-
-    // Draw axes
     if (showAxes) {
-      _drawAxes(canvas, size, camera, projection);
+      _collectAxes(prims);
     }
 
-    // Draw objects (sorted back-to-front)
-    _drawObjects(canvas, size, camera, projection);
-  }
-
-  /// Compute a reasonable scale based on camera distance.
-  double _computeScale() {
-    return 800 / cameraDistance.clamp(0.1, 1000);
-  }
-
-  // ==================================================================
-  // Background
-  // ==================================================================
-
-  void _drawBackground(Canvas canvas, Size size) {
-    final paint = Paint()..color = backgroundColor;
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
-  }
-
-  // ==================================================================
-  // Grid
-  // ==================================================================
-
-  void _drawGrid(
-    Canvas canvas,
-    Size size,
-    Camera3D camera,
-    Projection3D projection,
-  ) {
-    final paint = Paint()
-      ..color = gridColor
-      ..strokeWidth = 0.5;
-
-    // Draw grid lines on the xOz-plane (y=0) from -10 to 10
-    const gridRange = 10.0;
-    const step = 1.0;
-    final lines = <List<Offset>>[];
-
-    // Lines along X (constant Z), at y=0
-    for (double z = -gridRange; z <= gridRange; z += step) {
-      if (z.abs() < 1e-10) continue; // Skip axis line
-      final p1 = worldToScreen(Point3D(-gridRange, 0, z), camera, projection);
-      final p2 = worldToScreen(Point3D(gridRange, 0, z), camera, projection);
-      lines.add([Offset(p1.x, p1.y), Offset(p2.x, p2.y)]);
+    // Objects.
+    for (final obj in scene.objects) {
+      if (!obj.visible) continue;
+      _collectObject(prims, obj);
     }
 
-    // Lines along Z (constant X), at y=0
-    for (double x = -gridRange; x <= gridRange; x += step) {
-      if (x.abs() < 1e-10) continue; // Skip axis line
-      final p1 = worldToScreen(Point3D(x, 0, -gridRange), camera, projection);
-      final p2 = worldToScreen(Point3D(x, 0, gridRange), camera, projection);
-      lines.add([Offset(p1.x, p1.y), Offset(p2.x, p2.y)]);
+    // Construction preview.
+    if (construction != null && !construction!.isComplete) {
+      _collectConstructionPreview(prims, construction!);
     }
 
-    for (final line in lines) {
-      canvas.drawLine(line[0], line[1], paint);
+    // Sort back-to-front (far = larger depth drawn first).
+    prims.sort((a, b) => b.depth.compareTo(a.depth));
+    for (final p in prims) {
+      _drawPrim(canvas, p);
     }
   }
 
   // ==================================================================
-  // Axes
+  // Ground plane & grid
   // ==================================================================
 
-  void _drawAxes(
-    Canvas canvas,
-    Size size,
-    Camera3D camera,
-    Projection3D projection,
-  ) {
-    final axisPaint = Paint()
-      ..color = axisColor
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    final arrowPaint = Paint()
-      ..color = axisColor
-      ..style = PaintingStyle.fill;
-
-    final labelStyle = TextStyle(
-      color: labelColor,
-      fontSize: 12,
-      fontWeight: FontWeight.bold,
+  /// Visible world extents around the camera target.
+  (double, double, double, double) _visibleRange() {
+    final cam = scene.camera;
+    final height = proj.height;
+    final worldUnits =
+        (cam.distance * (height / 800)).clamp(0.5, 200.0).toDouble();
+    final halfW = worldUnits * (proj.width / proj.height);
+    return (
+      cam.target.x - halfW,
+      cam.target.x + halfW,
+      cam.target.y - worldUnits / 2,
+      cam.target.y + worldUnits / 2,
     );
+  }
 
-    const axisLength = 8.0;
-    const origin = Point3D.origin;
+  double _niceStep(double worldPerPixel) {
+    // Target ~70 px between lines; snap to 1/2/5 × 10^k.
+    final target = 70 * worldPerPixel;
+    final pow10 = dart_math.pow(10, (dart_math.log(target) / dart_math.ln10).floor()).toDouble();
+    for (final m in [1.0, 2.0, 5.0, 10.0]) {
+      if (m * pow10 >= target) return m * pow10;
+    }
+    return 10 * pow10;
+  }
 
-    final axes = [
-      ('X', Point3D(axisLength, 0, 0), const Offset(12, 0)),
-      ('Y', Point3D(0, axisLength, 0), const Offset(0, -12)),
-      ('Z', Point3D(0, 0, axisLength), const Offset(0, 12)),
+  void _collectGrid(List<_Prim> prims) {
+    final (xMin, xMax, yMin, yMax) = _visibleRange();
+    final worldPerPixel = scene.camera.distance / 800;
+    var step = _niceStep(worldPerPixel);
+    // Never let the step exceed a quarter of the visible range, otherwise
+    // no grid lines appear when zoomed far out.
+    final rangeX = (xMax - xMin).abs();
+    if (rangeX > 1e-9 && step > rangeX / 4) step = rangeX / 4;
+    // Keep line counts sane (per direction).
+    final maxLines = 60;
+    final iMin = (xMin / step).ceil();
+    final iMax = (xMax / step).floor();
+    final jMin = (yMin / step).ceil();
+    final jMax = (yMax / step).floor();
+
+    var count = 0;
+    for (int i = iMin; i <= iMax && count < maxLines; i++) {
+      if (i == 0) continue;
+      final a = proj.project(Point3D(i * step, yMin, 0));
+      final b = proj.project(Point3D(i * step, yMax, 0));
+      if (a == null || b == null || a.x.isNaN || b.x.isNaN) continue;
+      prims.add(_LinePrim(
+        depth: (a.z + b.z) / 2,
+        points: [Offset(a.x, a.y), Offset(b.x, b.y)],
+        color: gridColor,
+        width: 0.5,
+      ));
+      count++;
+    }
+    count = 0;
+    for (int j = jMin; j <= jMax && count < maxLines; j++) {
+      if (j == 0) continue;
+      final a = proj.project(Point3D(xMin, j * step, 0));
+      final b = proj.project(Point3D(xMax, j * step, 0));
+      if (a == null || b == null || a.x.isNaN || b.x.isNaN) continue;
+      prims.add(_LinePrim(
+        depth: (a.z + b.z) / 2,
+        points: [Offset(a.x, a.y), Offset(b.x, b.y)],
+        color: gridColor,
+        width: 0.5,
+      ));
+      count++;
+    }
+
+    // Tick labels along the axes.
+    for (int i = iMin; i <= iMax; i++) {
+      if (i == 0) continue;
+      final p = proj.project(Point3D(i * step, 0, 0));
+      if (p == null || p.x.isNaN) continue;
+      final label = _fmtTick(i * step);
+      prims.add(_LabelPrim(
+        depth: p.z,
+        pos: Offset(p.x, p.y + 12),
+        text: label,
+        color: gridColor,
+        anchor: Offset.zero,
+      ));
+    }
+    for (int j = jMin; j <= jMax; j++) {
+      if (j == 0) continue;
+      final p = proj.project(Point3D(0, j * step, 0));
+      if (p == null || p.x.isNaN) continue;
+      final label = _fmtTick(j * step);
+      prims.add(_LabelPrim(
+        depth: p.z,
+        pos: Offset(p.x + 4, p.y),
+        text: label,
+        color: gridColor,
+        anchor: Offset.zero,
+      ));
+    }
+  }
+
+  static String _fmtTick(double v) {
+    if (v.abs() < 1e-9) return '0';
+    if (v.abs() >= 100) return v.round().toString();
+    if ((v * 100).roundToDouble() == v * 100) {
+      return v.toStringAsFixed(v.abs() >= 10 ? 0 : 2).replaceFirst(RegExp(r'\.?0+$'), '');
+    }
+    return v.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+  }
+
+  /// The translucent xOy plane with a boundary rectangle.
+  void _collectPlane(List<_Prim> prims, Size size) {
+    final (xMin, xMax, yMin, yMax) = _visibleRange();
+    final corners = [
+      Point3D(xMin, yMin, 0),
+      Point3D(xMax, yMin, 0),
+      Point3D(xMax, yMax, 0),
+      Point3D(xMin, yMax, 0),
+    ];
+    final projected = corners.map((p) => proj.project(p)).toList();
+    if (projected.any((p) => p == null || p.x.isNaN)) return;
+
+    final path = Path()
+      ..moveTo(projected[0]!.x, projected[0]!.y)
+      ..lineTo(projected[1]!.x, projected[1]!.y)
+      ..lineTo(projected[2]!.x, projected[2]!.y)
+      ..lineTo(projected[3]!.x, projected[3]!.y)
+      ..close();
+
+    // The plane lies on z = 0: use the average corner depth so it sorts
+    // consistently with the grid lines and ground objects.
+    final depth = projected
+            .map((p) => p?.z ?? 0)
+            .reduce((a, b) => a + b) /
+        projected.length;
+    prims.add(_FacePrim(
+      depth: depth,
+      path: path,
+      color: planeColor.withValues(alpha: 0.08),
+      normal: Vector3D.unitZ,
+    ));
+    // Boundary (drawn per segment so partially clipped corners don't
+    // remove the whole border).
+    final pts = <Offset>[];
+    for (int i = 0; i < projected.length; i++) {
+      final a = projected[i];
+      final b = projected[(i + 1) % projected.length];
+      if (a == null || b == null || a.x.isNaN || b.x.isNaN) continue;
+      pts.add(Offset(a.x, a.y));
+      pts.add(Offset(b.x, b.y));
+    }
+    if (pts.isNotEmpty) {
+      prims.add(_LinePrim(
+        depth: depth,
+        points: pts,
+        color: planeColor.withValues(alpha: 0.55),
+        width: 1.2,
+      ));
+    }
+  }
+
+  void _collectAxes(List<_Prim> prims) {
+    final (xMin, xMax, yMin, yMax) = _visibleRange();
+    // Axis extent = visible range (both directions).
+    final zNeg = -(yMin.abs()).clamp(2, 20).toDouble();
+    final zPos = yMax.abs().clamp(2, 20).toDouble();
+    final axes = <(String, Point3D, Point3D, Offset)>[
+      ('X', Point3D(xMin, 0, 0), Point3D(xMax, 0, 0), const Offset(0, 14)),
+      ('Y', Point3D(0, yMin, 0), Point3D(0, yMax, 0), const Offset(14, 0)),
+      ('Z', Point3D(0, 0, zNeg), Point3D(0, 0, zPos), const Offset(8, -8)),
     ];
 
-    for (final (label, tip, labelOffset) in axes) {
-      final originScreen = worldToScreen(origin, camera, projection);
-      final tipScreen = worldToScreen(tip, camera, projection);
-      final originPt = Offset(originScreen.x, originScreen.y);
-      final tipPt = Offset(tipScreen.x, tipScreen.y);
-
-      // Draw axis line
-      canvas.drawLine(originPt, tipPt, axisPaint);
-
-      // Draw arrow head
-      _drawArrowHead(canvas, originPt, tipPt, arrowPaint);
-
-      // Draw label
-      final tp = TextPainter(
-        text: TextSpan(text: label, style: labelStyle),
-        textDirection: TextDirection.ltr,
-      );
-      tp.layout();
-      tp.paint(canvas, tipPt + labelOffset);
-    }
-  }
-
-  void _drawArrowHead(Canvas canvas, Offset from, Offset to, Paint paint) {
-    final direction = (to - from);
-    final length = direction.distance;
-    if (length < 1) return;
-
-    final unit = direction / length;
-    final perp = Offset(-unit.dy, unit.dx);
-    final arrowSize = 8.0;
-
-    final tip = to;
-    final base = to - unit * arrowSize;
-    final left = base + perp * arrowSize * 0.4;
-    final right = base - perp * arrowSize * 0.4;
-
-    final path = Path()
-      ..moveTo(tip.dx, tip.dy)
-      ..lineTo(left.dx, left.dy)
-      ..lineTo(right.dx, right.dy)
-      ..close();
-
-    canvas.drawPath(path, paint);
-  }
-
-  // ==================================================================
-  // Objects rendering with painter's algorithm
-  // ==================================================================
-
-  void _drawObjects(
-    Canvas canvas,
-    Size size,
-    Camera3D camera,
-    Projection3D projection,
-  ) {
-    // Collect all renderables with depth info
-    final renderables = <_Renderable>[];
-
-    for (final obj in objects) {
-      switch (obj.type) {
-        case Object3DType.point:
-          _collectPoint(renderables, obj, camera, projection);
-        case Object3DType.line:
-          _collectLine(renderables, obj, camera, projection);
-        case Object3DType.plane:
-          _collectPlane(renderables, obj, camera, projection);
-        case Object3DType.surface:
-          _collectSurface(renderables, obj, camera, projection);
-        case Object3DType.sphere:
-          _collectSphere(renderables, obj, camera, projection);
-        case Object3DType.polyhedron:
-          _collectPolyhedron(renderables, obj, camera, projection);
-        case Object3DType.vector:
-          _collectVector(renderables, obj, camera, projection);
-        case Object3DType.curve:
-          _collectCurve(renderables, obj, camera, projection);
+    final originScreen = proj.project(Point3D.origin);
+    for (final (label, from, to, labelOff) in axes) {
+      final a = proj.project(from);
+      final b = proj.project(to);
+      if (a == null || b == null || a.x.isNaN || b.x.isNaN) continue;
+      final depth = (a.z + b.z) / 2;
+      prims.add(_LinePrim(
+        depth: depth,
+        points: [Offset(a.x, a.y), Offset(b.x, b.y)],
+        color: axisColor,
+        width: 1.6,
+      ));
+      // Arrow head.
+      final dir = Offset(b.x - a.x, b.y - a.y);
+      final len = dir.distance;
+      if (len > 4) {
+        final unit = dir / len;
+        final perp = Offset(-unit.dy, unit.dx);
+        final tip = Offset(b.x, b.y);
+        final base = tip - unit * 7;
+        final p1 = base + perp * 3;
+        final p2 = base - perp * 3;
+        final head = Path()
+          ..moveTo(tip.dx, tip.dy)
+          ..lineTo(p1.dx, p1.dy)
+          ..lineTo(p2.dx, p2.dy)
+          ..close();
+        prims.add(_FacePrim(
+          depth: depth,
+          path: head,
+          color: axisColor,
+          normal: Vector3D.unitZ,
+        ));
       }
-    }
-
-    // Sort back-to-front (larger z = farther = drawn first)
-    renderables.sort((a, b) => b.depth.compareTo(a.depth));
-
-    // Draw in order
-    for (final r in renderables) {
-      r.draw(canvas);
-    }
-  }
-
-  void _collectPoint(
-    List<_Renderable> renderables,
-    Object3D obj,
-    Camera3D camera,
-    Projection3D projection,
-  ) {
-    final screen = worldToScreen(obj.point, camera, projection);
-    final _objAlpha = ((obj.color >> 24) & 0xFF) / 255.0;
-    final color = Color(obj.color).withOpacity(_objAlpha * obj.opacity);
-    renderables.add(_Renderable(
-      depth: screen.z,
-      draw: (canvas) {
-        final paint = Paint()
-          ..color = color
-          ..style = PaintingStyle.fill;
-        canvas.drawCircle(Offset(screen.x, screen.y), 4, paint);
-
-        if (obj.label != null) {
-          final tp = TextPainter(
-            text: TextSpan(
-              text: obj.label,
-              style: TextStyle(color: color, fontSize: 11),
-            ),
-            textDirection: TextDirection.ltr,
-          );
-          tp.layout();
-          tp.paint(canvas, Offset(screen.x + 6, screen.y - 6));
-        }
-      },
-    ));
-  }
-
-  void _collectLine(
-    List<_Renderable> renderables,
-    Object3D obj,
-    Camera3D camera,
-    Projection3D projection,
-  ) {
-    final a = worldToScreen(obj.pointA, camera, projection);
-    final b = worldToScreen(obj.pointB, camera, projection);
-    final _objAlpha = ((obj.color >> 24) & 0xFF) / 255.0;
-    final color = Color(obj.color).withOpacity(_objAlpha * obj.opacity);
-    final avgZ = (a.z + b.z) / 2;
-
-    renderables.add(_Renderable(
-      depth: avgZ,
-      draw: (canvas) {
-        final paint = Paint()
-          ..color = color
-          ..strokeWidth = 2
-          ..style = PaintingStyle.stroke;
-        canvas.drawLine(Offset(a.x, a.y), Offset(b.x, b.y), paint);
-      },
-    ));
-  }
-
-  void _collectPlane(
-    List<_Renderable> renderables,
-    Object3D obj,
-    Camera3D camera,
-    Projection3D projection,
-  ) {
-    // Render a plane as a grid of lines on the plane surface
-    final a = obj.planeA;
-    final b = obj.planeB;
-    final c = obj.planeC;
-    final d = obj.planeD;
-    final _objAlpha = ((obj.color >> 24) & 0xFF) / 255.0;
-    final color = Color(obj.color).withOpacity(_objAlpha * obj.opacity);
-
-    // Generate grid points on the plane within a range
-    // Plane: ax + by + cz = d
-    // Solve for the axis with largest coefficient for numeric stability
-    const range = 5.0;
-    const step = 1.0;
-    final lines = <List<Offset>>[];
-    var totalZ = 0.0;
-    var count = 0;
-
-    if (c.abs() > 1e-10) {
-      // z = (d - ax - by) / c
-      // Lines along X (constant Y)
-      for (double y = -range; y <= range; y += step) {
-        final pts = <Offset>[];
-        for (double x = -range; x <= range; x += step * 0.5) {
-          final z = (d - a * x - b * y) / c;
-          final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-          pts.add(Offset(screen.x, screen.y));
-          totalZ += screen.z;
-          count++;
-        }
-        if (pts.length >= 2) lines.add(pts);
-      }
-      // Lines along Y (constant X)
-      for (double x = -range; x <= range; x += step) {
-        final pts = <Offset>[];
-        for (double y = -range; y <= range; y += step * 0.5) {
-          final z = (d - a * x - b * y) / c;
-          final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-          pts.add(Offset(screen.x, screen.y));
-        }
-        if (pts.length >= 2) lines.add(pts);
-      }
-    } else if (b.abs() > 1e-10) {
-      // y = (d - ax - cz) / b  — vertical plane, free variable z
-      for (double z = -range; z <= range; z += step) {
-        final pts = <Offset>[];
-        for (double x = -range; x <= range; x += step * 0.5) {
-          final y = (d - a * x - c * z) / b;
-          final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-          pts.add(Offset(screen.x, screen.y));
-          totalZ += screen.z;
-          count++;
-        }
-        if (pts.length >= 2) lines.add(pts);
-      }
-      for (double x = -range; x <= range; x += step) {
-        final pts = <Offset>[];
-        for (double z = -range; z <= range; z += step * 0.5) {
-          final y = (d - a * x - c * z) / b;
-          final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-          pts.add(Offset(screen.x, screen.y));
-        }
-        if (pts.length >= 2) lines.add(pts);
-      }
-    } else if (a.abs() > 1e-10) {
-      // x = (d - by - cz) / a  — vertical plane, free variable z
-      for (double z = -range; z <= range; z += step) {
-        final pts = <Offset>[];
-        for (double y = -range; y <= range; y += step * 0.5) {
-          final x = (d - b * y - c * z) / a;
-          final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-          pts.add(Offset(screen.x, screen.y));
-          totalZ += screen.z;
-          count++;
-        }
-        if (pts.length >= 2) lines.add(pts);
-      }
-      for (double y = -range; y <= range; y += step) {
-        final pts = <Offset>[];
-        for (double z = -range; z <= range; z += step * 0.5) {
-          final x = (d - b * y - c * z) / a;
-          final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-          pts.add(Offset(screen.x, screen.y));
-        }
-        if (pts.length >= 2) lines.add(pts);
-      }
-    }
-
-    final avgZ = count > 0 ? totalZ / count : 0.0;
-
-    renderables.add(_Renderable(
-      depth: avgZ,
-      draw: (canvas) {
-        final paint = Paint()
-          ..color = color
-          ..strokeWidth = 1
-          ..style = PaintingStyle.stroke;
-        for (final pts in lines) {
-          if (pts.length >= 2) {
-            canvas.drawPoints(PointMode.polygon, pts, paint);
-          }
-        }
-      },
-    ));
-  }
-
-  void _collectSurface(
-    List<_Renderable> renderables,
-    Object3D obj,
-    Camera3D camera,
-    Projection3D projection,
-  ) {
-    final vertices = obj.vertices;
-    final indices = obj.indices;
-    if (vertices.isEmpty || indices.length < 3) return;
-
-    final _objAlpha = ((obj.color >> 24) & 0xFF) / 255.0;
-    final color = Color(obj.color).withOpacity(_objAlpha * obj.opacity);
-    final fillPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-    final strokePaint = Paint()
-      ..color = color.withValues(alpha: 0.3)
-      ..strokeWidth = 0.5
-      ..style = PaintingStyle.stroke;
-
-    // Project all vertices
-    final projected = <_ProjectedPoint>[];
-    for (final v in vertices) {
-      final s = worldToScreen(v, camera, projection);
-      projected.add(_ProjectedPoint(
-        screen: Offset(s.x, s.y),
-        depth: s.z,
-        world: v,
+      // Label (b is guaranteed non-null here since the NaN check passed).
+      prims.add(_LabelPrim(
+        depth: depth,
+        pos: Offset(b.x, b.y) + labelOff,
+        text: label,
+        color: axisColor,
+        bold: true,
+        anchor: Offset.zero,
       ));
     }
 
-    // Create triangle renderables
-    for (int i = 0; i < indices.length; i += 3) {
-      if (i + 2 >= indices.length) break;
-      final p0 = projected[indices[i]];
-      final p1 = projected[indices[i + 1]];
-      final p2 = projected[indices[i + 2]];
-
-      final avgDepth = (p0.depth + p1.depth + p2.depth) / 3;
-      final triPath = Path()
-        ..moveTo(p0.screen.dx, p0.screen.dy)
-        ..lineTo(p1.screen.dx, p1.screen.dy)
-        ..lineTo(p2.screen.dx, p2.screen.dy)
-        ..close();
-
-      renderables.add(_Renderable(
-        depth: avgDepth,
-        draw: (canvas) {
-          canvas.drawPath(triPath, fillPaint);
-          canvas.drawPath(triPath, strokePaint);
-        },
+    // Origin marker.
+    if (originScreen != null && !originScreen.x.isNaN) {
+      prims.add(_PointPrim(
+        depth: originScreen.z,
+        pos: Offset(originScreen.x, originScreen.y),
+        color: axisColor,
+        size: 2.5,
       ));
     }
   }
 
-  void _collectSphere(
-    List<_Renderable> renderables,
-    Object3D obj,
-    Camera3D camera,
-    Projection3D projection,
-  ) {
-    final center = obj.sphereCenter;
-    final radius = obj.sphereRadius;
-    final _objAlpha = ((obj.color >> 24) & 0xFF) / 255.0;
-    final color = Color(obj.color).withOpacity(_objAlpha * obj.opacity);
-    final segments = 16;
+  // ==================================================================
+  // Objects
+  // ==================================================================
 
-    // Generate wireframe sphere: latitude and longitude lines
-    final lines = <List<Offset>>[];
-    var totalZ = 0.0;
-    var count = 0;
+  void _collectObject(List<_Prim> prims, Object3D obj) {
+    final style = obj.style;
+    final isSelected = identical(obj, selected);
+    final baseColor = Color(style.color).withValues(alpha: style.opacity);
+    final strokeColor = isSelected
+        ? highlightColor
+        : Color(style.color).withValues(alpha: style.opacity);
 
-    // Longitude lines (around Y axis)
-    for (int i = 0; i < segments; i++) {
-      final theta = i * 2 * dart_math.pi / segments;
-      final pts = <Offset>[];
-      for (int j = 0; j <= segments; j++) {
-        final phi = -dart_math.pi / 2 + j * dart_math.pi / segments;
-        final x = center.x + radius * dart_math.cos(phi) * dart_math.cos(theta);
-        final y = center.y + radius * dart_math.sin(phi);
-        final z = center.z + radius * dart_math.cos(phi) * dart_math.sin(theta);
-        final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-        pts.add(Offset(screen.x, screen.y));
-        totalZ += screen.z;
-        count++;
-      }
-      if (pts.length >= 2) lines.add(pts);
-    }
-
-    // Latitude lines
-    for (int j = 1; j < segments; j++) {
-      final phi = -dart_math.pi / 2 + j * dart_math.pi / segments;
-      final pts = <Offset>[];
-      for (int i = 0; i <= segments; i++) {
-        final theta = i * 2 * dart_math.pi / segments;
-        final x = center.x + radius * dart_math.cos(phi) * dart_math.cos(theta);
-        final y = center.y + radius * dart_math.sin(phi);
-        final z = center.z + radius * dart_math.cos(phi) * dart_math.sin(theta);
-        final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-        pts.add(Offset(screen.x, screen.y));
-      }
-      if (pts.length >= 2) lines.add(pts);
-    }
-
-    final avgZ = count > 0
-        ? totalZ / count
-        : (worldToScreen(center, camera, projection).z);
-
-    renderables.add(_Renderable(
-      depth: avgZ,
-      draw: (canvas) {
-        final paint = Paint()
-          ..color = color
-          ..strokeWidth = 1
-          ..style = PaintingStyle.stroke;
-        for (final pts in lines) {
-          canvas.drawPoints(PointMode.polygon, pts, paint);
+    switch (obj.type) {
+      case Object3DType.point:
+        final s = proj.project(obj.pointValue);
+        if (s == null || s.x.isNaN) return;
+        final c = isSelected ? highlightColor : baseColor;
+        final size = style.pointSize * (isSelected ? 1.4 : 1.0);
+        prims.add(_PointPrim(
+          depth: s.z,
+          pos: Offset(s.x, s.y),
+          color: c,
+          size: size,
+          style: style.pointStyle,
+        ));
+        if (isSelected) {
+          prims.add(_PointPrim(
+            depth: s.z - 0.01,
+            pos: Offset(s.x, s.y),
+            color: highlightColor.withValues(alpha: 0.35),
+            size: size + 6,
+            style: PointStyle.dot,
+          ));
         }
-      },
+        _addLabel(prims, obj, Offset(s.x, s.y), s.z);
+
+      case Object3DType.segment:
+        _collectSegment(prims, obj, strokeColor, style);
+
+      case Object3DType.line:
+        // Draw a long but clipped line.
+        final len = obj.vectorValue.magnitude;
+        if (len < 1e-12) return;
+        final t = (40.0 / len).clamp(1.0, 100.0).toDouble();
+        _collectSegment(
+          prims,
+          Object3D.segment(
+              obj.pointAValue + obj.vectorValue * (-(t - 1) * 0.5),
+              obj.pointAValue + obj.vectorValue * ((t + 1) * 0.5),
+              name: obj.name,
+              style: style),
+          strokeColor,
+          style,
+        );
+
+      case Object3DType.ray:
+        final len = obj.vectorValue.magnitude;
+        if (len < 1e-12) return;
+        final t = (40.0 / len).clamp(1.0, 100.0).toDouble();
+        _collectSegment(
+          prims,
+          Object3D.segment(
+              obj.pointAValue, obj.pointAValue + obj.vectorValue * t,
+              name: obj.name,
+              style: style),
+          strokeColor,
+          style,
+        );
+
+      case Object3DType.vector:
+        final from = proj.project(obj.pointValue);
+        final to = proj.project(obj.pointValue + obj.vectorValue);
+        if (from == null || to == null || from.x.isNaN || to.x.isNaN) return;
+        final pts = [Offset(from.x, from.y), Offset(to.x, to.y)];
+        prims.add(_LinePrim(
+          depth: (from.z + to.z) / 2,
+          points: pts,
+          color: strokeColor,
+          width: style.lineWidth,
+          style: style.lineStyle,
+        ));
+        _drawArrowHead(prims, pts, strokeColor, (from.z + to.z) / 2);
+        _addLabel(prims, obj, Offset(to.x, to.y), (from.z + to.z) / 2);
+
+      case Object3DType.circle:
+      case Object3DType.arc:
+        _collectCircle(prims, obj, strokeColor, style);
+
+      case Object3DType.polygon:
+        _collectPolygon(prims, obj, baseColor, strokeColor, style);
+
+      case Object3DType.polyhedron:
+        _collectMesh(prims, obj.mesh, baseColor, strokeColor, style,
+            isSelected,
+            owner: obj);
+
+      case Object3DType.sphere:
+        _collectMesh(
+            prims,
+            MeshBuilder.sphere(obj.sphereRadius)
+                .transformed((p) => p + obj.sphereCenter.toVector()),
+            baseColor,
+            strokeColor,
+            style,
+            isSelected,
+            owner: obj);
+
+      case Object3DType.cone:
+        _collectMesh(
+            prims,
+            MeshBuilder.cone(obj.solidRadius, obj.solidHeight)
+                .transformed((p) => p + obj.solidCenter.toVector()),
+            baseColor,
+            strokeColor,
+            style,
+            isSelected,
+            owner: obj);
+
+      case Object3DType.cylinder:
+        _collectMesh(
+            prims,
+            MeshBuilder.cylinder(obj.solidRadius, obj.solidHeight)
+                .transformed((p) => p + obj.solidCenter.toVector()),
+            baseColor,
+            strokeColor,
+            style,
+            isSelected,
+            owner: obj);
+
+      case Object3DType.plane:
+        _collectPlaneObject(prims, obj, baseColor, strokeColor);
+
+      case Object3DType.surface:
+        _collectMesh(prims, obj.mesh, baseColor, strokeColor, style,
+            isSelected,
+            owner: obj);
+
+      case Object3DType.curve:
+        _collectCurve(prims, obj, strokeColor, style);
+
+      case Object3DType.measurement:
+        final anchor = proj.project(obj.measureAnchor ?? Point3D.origin);
+        if (anchor == null || anchor.x.isNaN) return;
+        prims.add(_LabelPrim(
+          depth: anchor.z,
+          pos: Offset(anchor.x, anchor.y),
+          text: obj.measureText ?? '',
+          color: Color(style.color),
+          bold: true,
+          anchor: const Offset(8, -8),
+        ));
+    }
+  }
+
+  void _collectSegment(List<_Prim> prims, Object3D seg, Color color, ObjectStyle style) {
+    final a = proj.project(seg.pointAValue);
+    final b = proj.project(seg.pointBValue);
+    if (a == null || b == null || a.x.isNaN || b.x.isNaN) return;
+    final pts = [Offset(a.x, a.y), Offset(b.x, b.y)];
+    prims.add(_LinePrim(
+      depth: (a.z + b.z) / 2,
+      points: pts,
+      color: color,
+      width: style.lineWidth,
+      style: style.lineStyle,
     ));
+    _addLabel(prims, seg, Offset((a.x + b.x) / 2, (a.y + b.y) / 2), (a.z + b.z) / 2);
   }
 
-  void _collectPolyhedron(
-    List<_Renderable> renderables,
-    Object3D obj,
-    Camera3D camera,
-    Projection3D projection,
-  ) {
-    // Same as surface: triangulated faces
-    _collectSurface(renderables, obj, camera, projection);
-  }
-
-  void _collectVector(
-    List<_Renderable> renderables,
-    Object3D obj,
-    Camera3D camera,
-    Projection3D projection,
-  ) {
-    final origin = obj.point;
-    final tip = origin + obj.vector;
-    final _objAlpha = ((obj.color >> 24) & 0xFF) / 255.0;
-    final color = Color(obj.color).withOpacity(_objAlpha * obj.opacity);
-
-    final originScreen = worldToScreen(origin, camera, projection);
-    final tipScreen = worldToScreen(tip, camera, projection);
-    final avgZ = (originScreen.z + tipScreen.z) / 2;
-
-    renderables.add(_Renderable(
-      depth: avgZ,
-      draw: (canvas) {
-        final paint = Paint()
-          ..color = color
-          ..strokeWidth = 2
-          ..style = PaintingStyle.stroke;
-
-        final from = Offset(originScreen.x, originScreen.y);
-        final to = Offset(tipScreen.x, tipScreen.y);
-        canvas.drawLine(from, to, paint);
-
-        // Arrow head
-        _drawArrowHeadStatic(canvas, from, to, color);
-      },
-    ));
-  }
-
-  void _drawArrowHeadStatic(
-      Canvas canvas, Offset from, Offset to, Color color) {
-    final direction = (to - from);
-    final length = direction.distance;
-    if (length < 5) return;
-
-    final unit = direction / length;
+  void _drawArrowHead(List<_Prim> prims, List<Offset> pts, Color color, double depth) {
+    final from = pts[0];
+    final to = pts[1];
+    final dir = to - from;
+    final len = dir.distance;
+    if (len < 6) return;
+    final unit = dir / len;
     final perp = Offset(-unit.dy, unit.dx);
-    final arrowSize = 10.0;
-
     final tip = to;
-    final base = to - unit * arrowSize;
-    final left = base + perp * arrowSize * 0.4;
-    final right = base - perp * arrowSize * 0.4;
-
-    final paint = Paint()..color = color;
-    final path = Path()
+    final base = to - unit * 9;
+    final p1 = base + perp * 4;
+    final p2 = base - perp * 4;
+    final head = Path()
       ..moveTo(tip.dx, tip.dy)
-      ..lineTo(left.dx, left.dy)
-      ..lineTo(right.dx, right.dy)
+      ..lineTo(p1.dx, p1.dy)
+      ..lineTo(p2.dx, p2.dy)
       ..close();
-    canvas.drawPath(path, paint);
+    prims.add(_FacePrim(
+      depth: depth,
+      path: head,
+      color: color,
+      normal: Vector3D.unitZ,
+    ));
   }
 
-  void _collectCurve(
-    List<_Renderable> renderables,
-    Object3D obj,
-    Camera3D camera,
-    Projection3D projection,
-  ) {
-    final vertices = obj.vertices;
-    if (vertices.length < 2) return;
-
-    final _objAlpha = ((obj.color >> 24) & 0xFF) / 255.0;
-    final color = Color(obj.color).withOpacity(_objAlpha * obj.opacity);
-
-    // Project all points
+  void _collectCircle(List<_Prim> prims, Object3D obj, Color color, ObjectStyle style) {
+    final c = obj.circleCenter ?? Point3D.origin;
+    final n = (obj.circleNormal ?? Vector3D.unitZ).normalized();
+    final r = obj.circleRadius ?? 1;
+    final pts = obj.samplePoints();
+    if (pts.length < 2) return;
     final projected = <Offset>[];
     var totalZ = 0.0;
-    for (final v in vertices) {
-      final s = worldToScreen(v, camera, projection);
+    var count = 0;
+    for (final p in pts) {
+      final s = proj.project(p);
+      if (s == null || s.x.isNaN) continue;
+      projected.add(Offset(s.x, s.y));
+      totalZ += s.z;
+      count++;
+    }
+    if (projected.length < 2) return;
+    prims.add(_LinePrim(
+      depth: totalZ / count,
+      points: projected,
+      color: color,
+      width: style.lineWidth,
+      style: style.lineStyle,
+    ));
+    // Center marker.
+    final cs = proj.project(c);
+    if (cs != null && !cs.x.isNaN) {
+      prims.add(_PointPrim(
+        depth: cs.z,
+        pos: Offset(cs.x, cs.y),
+        color: color.withValues(alpha: 0.6),
+        size: 3,
+      ));
+    }
+    // Label at the top of the circle.
+    final top = proj.project(c + n.cross(Vector3D.unitZ).normalized() * r);
+    if (top != null && !top.x.isNaN) {
+      _addLabel(prims, obj, Offset(top.x, top.y), top.z);
+    }
+  }
+
+  void _collectPolygon(List<_Prim> prims, Object3D obj, Color baseColor,
+      Color strokeColor, ObjectStyle style) {
+    final v = obj.polygonVertices;
+    if (v.length < 3) return;
+    final projected = <Offset>[];
+    var totalZ = 0.0;
+    for (final p in v) {
+      final s = proj.project(p);
+      if (s == null || s.x.isNaN) return;
       projected.add(Offset(s.x, s.y));
       totalZ += s.z;
     }
-    final avgZ = totalZ / vertices.length;
+    final avgZ = totalZ / v.length;
 
-    renderables.add(_Renderable(
+    final path = Path()..addPolygon(projected, true);
+    final normal = (v[1] - v[0]).cross(v[2] - v[0]).normalized();
+    final faceColor = _shaded(baseColor, normal);
+    prims.add(_FacePrim(
       depth: avgZ,
-      draw: (canvas) {
-        final paint = Paint()
-          ..color = color
-          ..strokeWidth = 2
-          ..style = PaintingStyle.stroke;
-        canvas.drawPoints(PointMode.polygon, projected, paint);
-      },
+      path: path,
+      color: faceColor,
+      normal: normal,
+    ));
+    // Border.
+    prims.add(_LinePrim(
+      depth: avgZ - 0.001,
+      points: [...projected, projected.first],
+      color: strokeColor,
+      width: style.lineWidth,
+      style: style.lineStyle,
+    ));
+    // Label at the polygon anchor.
+    final anchor = proj.project(obj.anchorPoint);
+    if (anchor != null && !anchor.x.isNaN) {
+      _addLabel(prims, obj, Offset(anchor.x, anchor.y), anchor.z);
+    }
+  }
+
+  void _collectPlaneObject(List<_Prim> prims, Object3D obj, Color baseColor,
+      Color strokeColor) {
+    // Render as a grid of lines on the plane (GeoGebra-style). The grid is
+    // centered on the camera target so it follows the view.
+    final n = obj.planeNormal.normalized();
+    final d = obj.planeDValue;
+    final (xMin, xMax, yMin, yMax) = _visibleRange();
+    final range = (xMax - xMin).abs().clamp(4, 30).toDouble();
+    final p0 = scene.camera.target.projectedOnPlane(n, d);
+
+    // Build two tangent directions.
+    final ref = n.cross(Vector3D.unitZ);
+    final u = ref.isZero ? n.cross(Vector3D.unitX).normalized() : ref.normalized();
+    final v = n.cross(u).normalized();
+
+    final step = _niceStep(scene.camera.distance / 800);
+    final half = range;
+    final maxLines = 60;
+    final lines = <(double, List<Offset>)>[];
+    var count = 0;
+    for (double t = -half; t <= half + 1e-9 && count < maxLines; t += step) {
+      final a = proj.project(p0 + u * t + v * (-half));
+      final b = proj.project(p0 + u * t + v * half);
+      if (a == null || b == null || a.x.isNaN || b.x.isNaN) continue;
+      lines.add(((a.z + b.z) / 2, [Offset(a.x, a.y), Offset(b.x, b.y)]));
+      count++;
+    }
+    count = 0;
+    for (double t = -half; t <= half + 1e-9 && count < maxLines; t += step) {
+      final a = proj.project(p0 + v * t + u * (-half));
+      final b = proj.project(p0 + v * t + u * half);
+      if (a == null || b == null || a.x.isNaN || b.x.isNaN) continue;
+      lines.add(((a.z + b.z) / 2, [Offset(a.x, a.y), Offset(b.x, b.y)]));
+      count++;
+    }
+    for (final (depth, pts) in lines) {
+      prims.add(_LinePrim(
+        depth: depth,
+        points: pts,
+        color: baseColor.withValues(alpha: 0.9),
+        width: 1.2,
+      ));
+    }
+    // Plane label at the projected plane center.
+    final cs = proj.project(p0);
+    if (cs != null && !cs.x.isNaN) {
+      _addLabel(prims, obj, Offset(cs.x, cs.y), cs.z,
+          anchor: const Offset(0, -14));
+    }
+  }
+
+  void _collectMesh(List<_Prim> prims, MeshData? mesh, Color baseColor,
+      Color strokeColor, ObjectStyle style, bool isSelected,
+      {Object3D? owner}) {
+    if (mesh == null || mesh.isEmpty) return;
+    final normals = mesh.normals.length == mesh.vertices.length
+        ? mesh.normals
+        : null;
+    final opaque = style.opacity >= 0.99;
+    final viewDir =
+        (scene.camera.target - scene.camera.position).normalized();
+
+    // Faces.
+    for (int i = 0; i < mesh.indices.length; i += 3) {
+      final i0 = mesh.indices[i];
+      final i1 = mesh.indices[i + 1];
+      final i2 = mesh.indices[i + 2];
+      final p0 = proj.project(mesh.vertices[i0]);
+      final p1 = proj.project(mesh.vertices[i1]);
+      final p2 = proj.project(mesh.vertices[i2]);
+      if (p0 == null || p1 == null || p2 == null ||
+          p0.x.isNaN || p1.x.isNaN || p2.x.isNaN) {
+        continue;
+      }
+      final path = Path()
+        ..moveTo(p0.x, p0.y)
+        ..lineTo(p1.x, p1.y)
+        ..lineTo(p2.x, p2.y)
+        ..close();
+      final normal = normals != null
+          ? (normals[i0] + normals[i1] + normals[i2]).normalized()
+          : (mesh.vertices[i1] - mesh.vertices[i0])
+              .cross(mesh.vertices[i2] - mesh.vertices[i0])
+              .normalized();
+      final avgZ = (p0.z + p1.z + p2.z) / 3;
+      // Back-face culling for opaque closed solids.
+      final facing = normal.dot(viewDir) < 0;
+      if (opaque && !facing) continue;
+      final faceColor = _shaded(baseColor, normal);
+      prims.add(_FacePrim(
+        depth: avgZ,
+        path: path,
+        color: faceColor,
+        normal: normal,
+      ));
+    }
+
+    // Label at the object anchor.
+    if (owner != null) {
+      final s = proj.project(owner.anchorPoint);
+      if (s != null && !s.x.isNaN) {
+        _addLabel(prims, owner, Offset(s.x, s.y), s.z);
+      }
+    }
+  }
+
+  void _collectCurve(List<_Prim> prims, Object3D obj, Color color, ObjectStyle style) {
+    final pts = obj.curveSamplePoints;
+    if (pts.length < 2) return;
+    final projected = <Offset>[];
+    var totalZ = 0.0;
+    for (final p in pts) {
+      final s = proj.project(p);
+      if (s == null || s.x.isNaN) continue;
+      projected.add(Offset(s.x, s.y));
+      totalZ += s.z;
+    }
+    if (projected.length < 2) return;
+    prims.add(_LinePrim(
+      depth: totalZ / projected.length,
+      points: projected,
+      color: color,
+      width: style.lineWidth,
+      style: style.lineStyle,
+    ));
+    if (projected.isNotEmpty) {
+      _addLabel(prims, obj, projected.first, totalZ / projected.length);
+    }
+  }
+
+  // ==================================================================
+  // Construction preview
+  // ==================================================================
+
+  void _collectConstructionPreview(List<_Prim> prims, ConstructionState state) {
+    const previewColor = Color(0xFF808080);
+    final pts = state.previewPoints;
+    for (final p in pts) {
+      final s = proj.project(p);
+      if (s == null || s.x.isNaN) continue;
+      prims.add(_PointPrim(
+        depth: s.z,
+        pos: Offset(s.x, s.y),
+        color: previewColor.withValues(alpha: 0.8),
+        size: 5,
+      ));
+    }
+    for (final (a, b) in state.previewSegments) {
+      final pa = proj.project(a);
+      final pb = proj.project(b);
+      if (pa == null || pb == null || pa.x.isNaN || pb.x.isNaN) continue;
+      prims.add(_LinePrim(
+        depth: (pa.z + pb.z) / 2,
+        points: [Offset(pa.x, pa.y), Offset(pb.x, pb.y)],
+        color: previewColor.withValues(alpha: 0.7),
+        width: 1.5,
+        style: LineStyle.shortDash,
+      ));
+    }
+  }
+
+  // ==================================================================
+  // Labels
+  // ==================================================================
+
+  void _addLabel(List<_Prim> prims, Object3D obj, Offset pos, double depth,
+      {Offset anchor = const Offset(7, -7)}) {
+    final mode = obj.style.labelMode;
+    if (mode == LabelMode.hidden) return;
+    final text = switch (mode) {
+      LabelMode.hidden => '',
+      LabelMode.name => obj.name,
+      LabelMode.value => _valueOf(obj),
+      LabelMode.nameValue => '${obj.name} = ${_valueOf(obj)}',
+    };
+    if (text.isEmpty) return;
+    prims.add(_LabelPrim(
+      depth: depth - 0.001,
+      pos: pos,
+      text: text,
+      color: labelColor,
+      anchor: anchor,
     ));
   }
 
+  static String _valueOf(Object3D obj) {
+    switch (obj.type) {
+      case Object3DType.point:
+        final p = obj.pointValue;
+        return '(${_fmtNum(p.x)}, ${_fmtNum(p.y)}, ${_fmtNum(p.z)})';
+      case Object3DType.segment:
+        return _fmtNum(obj.pointAValue.distanceTo(obj.pointBValue));
+      case Object3DType.circle:
+      case Object3DType.arc:
+        return 'r=${_fmtNum(obj.circleRadius ?? 1)}';
+      case Object3DType.sphere:
+        return 'r=${_fmtNum(obj.sphereRadius)}';
+      case Object3DType.plane:
+        return '${_fmtNum(obj.planeNormalA)}x+${_fmtNum(obj.planeNormalB)}y+${_fmtNum(obj.planeNormalC)}z=${_fmtNum(obj.planeDValue)}';
+      default:
+        return '';
+    }
+  }
+
+  static String _fmtNum(double v) {
+    if (v.abs() < 1e-9) return '0';
+    return v.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+  }
+
   // ==================================================================
-  // shouldRepaint
+  // Drawing
   // ==================================================================
+
+  void _drawPrim(Canvas canvas, _Prim prim) {
+    switch (prim) {
+      case _FacePrim p:
+        canvas.drawPath(p.path, p.fillPaint);
+        canvas.drawPath(p.path, p.strokePaint);
+      case _LinePrim p:
+        if (p.style == LineStyle.solid) {
+          if (p.points.length == 2) {
+            canvas.drawLine(p.points[0], p.points[1], p.paint);
+          } else {
+            final path = Path()..moveTo(p.points.first.dx, p.points.first.dy);
+            for (final pt in p.points.skip(1)) {
+              path.lineTo(pt.dx, pt.dy);
+            }
+            canvas.drawPath(path, p.paint);
+          }
+        } else {
+          _drawDashedLine(canvas, p);
+        }
+      case _PointPrim p:
+        _drawPoint(canvas, p);
+      case _LabelPrim p:
+        final tp = TextPainter(
+          text: TextSpan(
+            text: p.text,
+            style: TextStyle(
+              color: p.color,
+              fontSize: 11,
+              fontWeight: p.bold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas, p.pos + p.anchor);
+    }
+  }
+
+  void _drawPoint(Canvas canvas, _PointPrim p) {
+    final pos = p.pos;
+    switch (p.style) {
+      case PointStyle.dot:
+        canvas.drawCircle(pos, p.size / 2, p.paint);
+      case PointStyle.cross:
+        final r = p.size / 2;
+        canvas.drawLine(Offset(pos.dx - r, pos.dy - r),
+            Offset(pos.dx + r, pos.dy + r), p.paint..strokeWidth = 1.5);
+        canvas.drawLine(Offset(pos.dx - r, pos.dy + r),
+            Offset(pos.dx + r, pos.dy - r), p.paint);
+      case PointStyle.square:
+        canvas.drawRect(
+            Rect.fromCenter(center: pos, width: p.size, height: p.size), p.paint);
+      case PointStyle.diamond:
+        final r = p.size / 2;
+        final path = Path()
+          ..moveTo(pos.dx, pos.dy - r)
+          ..lineTo(pos.dx + r, pos.dy)
+          ..lineTo(pos.dx, pos.dy + r)
+          ..lineTo(pos.dx - r, pos.dy)
+          ..close();
+        canvas.drawPath(path, p.paint);
+    }
+  }
+
+  void _drawDashedLine(Canvas canvas, _LinePrim p) {
+    const dashLen = 8.0;
+    const gapLen = 5.0;
+    final paint = p.paint;
+    paint.strokeWidth = p.width;
+
+    for (int seg = 0; seg < p.points.length - 1; seg++) {
+      final a = p.points[seg];
+      final b = p.points[seg + 1];
+      final dir = b - a;
+      final len = dir.distance;
+      if (len < 1e-6) continue;
+      final unit = dir / len;
+      double t = 0;
+      while (t < len) {
+        final t2 = dart_math.min(t + dashLen, len);
+        canvas.drawLine(a + unit * t, a + unit * t2, paint);
+        t = t2 + gapLen;
+      }
+    }
+  }
+
+  Color _shaded(Color color, Vector3D normal) {
+    final n = normal.normalized();
+    final diff = dart_math.max(0.0, n.dot(_lightDir));
+    final shade = 0.45 + 0.55 * diff;
+    int ch(double v) => (v * shade).round().clamp(0, 255);
+    return Color.fromARGB(
+      (color.a * 255).round(),
+      ch(color.r),
+      ch(color.g),
+      ch(color.b),
+    );
+  }
 
   @override
-  bool shouldRepaint(MathCanvas3DPainter oldDelegate) {
-    return oldDelegate.cameraDistance != cameraDistance ||
-        oldDelegate.cameraTheta != cameraTheta ||
-        oldDelegate.cameraPhi != cameraPhi ||
-        oldDelegate.cameraTarget != cameraTarget ||
-        oldDelegate.projectionType != projectionType ||
+  bool shouldRepaint(_ScenePainter oldDelegate) {
+    return oldDelegate.repaintVersion != repaintVersion ||
         oldDelegate.showAxes != showAxes ||
         oldDelegate.showGrid != showGrid ||
-        oldDelegate.objectsVersion != objectsVersion ||
-        oldDelegate.canvasWidth != canvasWidth ||
-        oldDelegate.canvasHeight != canvasHeight ||
+        oldDelegate.showPlane != showPlane ||
+        oldDelegate.selected != selected ||
+        oldDelegate.construction != construction ||
         oldDelegate.backgroundColor != backgroundColor ||
-        oldDelegate.axisColor != axisColor ||
-        oldDelegate.gridColor != gridColor;
+        oldDelegate.highlightColor != highlightColor;
   }
-}
-
-// ======================================================================
-// Internal types
-// ======================================================================
-
-/// A projected point with screen position and depth.
-class _ProjectedPoint {
-  final Offset screen;
-  final double depth;
-  final Point3D world;
-
-  const _ProjectedPoint({
-    required this.screen,
-    required this.depth,
-    required this.world,
-  });
-}
-
-/// A renderable element with depth for z-sorting.
-class _Renderable {
-  final double depth;
-  final void Function(Canvas canvas) draw;
-
-  const _Renderable({
-    required this.depth,
-    required this.draw,
-  });
 }

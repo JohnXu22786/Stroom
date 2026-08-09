@@ -1,280 +1,339 @@
+import 'dart:math' as dart_math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/math_3d_object.dart';
 
 void main() {
   group('Point3D', () {
-    test('creates a 3D point with x, y, z coordinates', () {
-      final p = Point3D(1.0, 2.0, 3.0);
-      expect(p.x, 1.0);
-      expect(p.y, 2.0);
-      expect(p.z, 3.0);
+    test('distance and midpoint', () {
+      const a = Point3D(0, 0, 0);
+      const b = Point3D(3, 4, 12);
+      expect(a.distanceTo(b), 13);
+      expect(a.midpoint(b), const Point3D(1.5, 2, 6));
     });
 
-    test('subtracts two points to get a vector', () {
-      final a = Point3D(3, 4, 5);
-      final b = Point3D(1, 2, 3);
-      final v = a - b;
-      expect(v.x, closeTo(2, 1e-10));
-      expect(v.y, closeTo(2, 1e-10));
-      expect(v.z, closeTo(2, 1e-10));
+    test('lerp interpolates', () {
+      const a = Point3D(0, 0, 0);
+      const b = Point3D(2, 4, 6);
+      expect(a.lerp(b, 0.5), const Point3D(1, 2, 3));
+      expect(a.lerp(b, 1), b);
     });
 
-    test('adds a vector to a point', () {
-      final p = Point3D(1, 2, 3);
-      final v = Vector3D(10, 20, 30);
-      final result = p + v;
-      expect(result.x, closeTo(11, 1e-10));
-      expect(result.y, closeTo(22, 1e-10));
-      expect(result.z, closeTo(33, 1e-10));
+    test('closestOnSegment clamps to segment', () {
+      const a = Point3D(0, 0, 0);
+      const b = Point3D(10, 0, 0);
+      const p = Point3D(5, 3, 0);
+      expect(p.closestOnSegment(a, b), const Point3D(5, 0, 0));
+      const far = Point3D(50, 3, 0);
+      expect(far.closestOnSegment(a, b), b);
     });
 
-    test('distanceTo calculates Euclidean distance', () {
-      final a = Point3D(0, 0, 0);
-      final b = Point3D(3, 4, 0);
-      expect(a.distanceTo(b), closeTo(5, 1e-10));
+    test('projectedOnPlane projects onto plane', () {
+      const p = Point3D(1, 2, 3);
+      final n = const Vector3D(0, 0, 1);
+      expect(p.projectedOnPlane(n, 0), const Point3D(1, 2, 0));
     });
 
-    test('distanceTo handles 3D distance', () {
-      final a = Point3D(0, 0, 0);
-      final b = Point3D(1, 2, 3);
-      expect(a.distanceTo(b), closeTo(3.741657, 1e-5));
-    });
-
-    test('midpoint calculates correct center between two points', () {
-      final a = Point3D(0, 0, 0);
-      final b = Point3D(2, 4, 6);
-      final m = a.midpoint(b);
-      expect(m.x, closeTo(1, 1e-10));
-      expect(m.y, closeTo(2, 1e-10));
-      expect(m.z, closeTo(3, 1e-10));
-    });
-
-    test('toVector creates a vector from origin', () {
-      final p = Point3D(1, 2, 3);
-      final v = p.toVector();
-      expect(v.x, closeTo(1, 1e-10));
-      expect(v.y, closeTo(2, 1e-10));
-      expect(v.z, closeTo(3, 1e-10));
-    });
-
-    test('equality works by value', () {
-      expect(Point3D(1, 2, 3), equals(Point3D(1, 2, 3)));
-      expect(Point3D(1, 2, 3), isNot(equals(Point3D(1, 2, 4))));
-    });
-
-    test('origin constant is (0,0,0)', () {
-      expect(Point3D.origin.x, 0);
-      expect(Point3D.origin.y, 0);
-      expect(Point3D.origin.z, 0);
+    test('operator semantics', () {
+      const a = Point3D(1, 2, 3);
+      const b = Point3D(4, 5, 6);
+      final v = b - a;
+      expect(v, const Vector3D(3, 3, 3));
+      expect(a + v, b);
     });
   });
 
   group('Vector3D', () {
-    test('creates a vector with x, y, z components', () {
-      final v = Vector3D(1, 2, 3);
-      expect(v.x, 1);
-      expect(v.y, 2);
-      expect(v.z, 3);
-    });
-
-    test('magnitude returns correct length', () {
-      expect(Vector3D(3, 4, 0).magnitude, closeTo(5, 1e-10));
-      expect(Vector3D(1, 2, 3).magnitude, closeTo(3.741657, 1e-5));
-    });
-
-    test('normalized returns unit vector', () {
-      final v = Vector3D(3, 0, 0);
+    test('magnitude and normalization', () {
+      const v = Vector3D(3, 4, 0);
+      expect(v.magnitude, 5);
       final n = v.normalized();
-      expect(n.x, closeTo(1, 1e-10));
-      expect(n.y, closeTo(0, 1e-10));
-      expect(n.z, closeTo(0, 1e-10));
-      expect(n.magnitude, closeTo(1, 1e-10));
+      expect(n.magnitude, closeTo(1, 1e-12));
+      expect(n.x, closeTo(0.6, 1e-12));
     });
 
-    test('normalized handles zero vector gracefully', () {
-      final v = Vector3D(0, 0, 0);
-      final n = v.normalized();
-      expect(n.x, 0);
-      expect(n.y, 0);
-      expect(n.z, 0);
+    test('dot and cross products', () {
+      const a = Vector3D(1, 0, 0);
+      const b = Vector3D(0, 1, 0);
+      expect(a.dot(b), 0);
+      expect(a.cross(b), Vector3D.unitZ);
+      expect(b.cross(a), -Vector3D.unitZ);
     });
 
-    test('dot product calculates correctly', () {
-      final a = Vector3D(1, 0, 0);
-      final b = Vector3D(0, 1, 0);
-      expect(a.dot(b), closeTo(0, 1e-10));
-      expect(a.dot(a), closeTo(1, 1e-10));
-    });
-
-    test('cross product calculates correctly', () {
-      final x = Vector3D(1, 0, 0);
-      final y = Vector3D(0, 1, 0);
-      final z = x.cross(y);
-      expect(z.x, closeTo(0, 1e-10));
-      expect(z.y, closeTo(0, 1e-10));
-      expect(z.z, closeTo(1, 1e-10));
-    });
-
-    test('addition and subtraction work', () {
-      final a = Vector3D(1, 2, 3);
-      final b = Vector3D(10, 20, 30);
-      expect((a + b), equals(Vector3D(11, 22, 33)));
-      expect((a - b), equals(Vector3D(-9, -18, -27)));
-    });
-
-    test('scalar multiplication works', () {
-      final v = Vector3D(1, 2, 3);
-      final scaled = v * 3;
-      expect(scaled, equals(Vector3D(3, 6, 9)));
-    });
-
-    test('negation works', () {
-      final v = Vector3D(1, -2, 3);
-      expect(-v, equals(Vector3D(-1, 2, -3)));
+    test('zero vector cannot be normalized', () {
+      expect(Vector3D.zero.normalized(), Vector3D.zero);
     });
   });
 
-  group('Object3D', () {
-    test('point object stores Point3D correctly', () {
-      final p = Object3D.point(Point3D(1, 2, 3), color: 0xFF0000FF);
+  group('Object3D types', () {
+    test('point and segment objects expose geometry', () {
+      final p = Object3D.point(const Point3D(1, 2, 3),
+          name: 'A', style: const ObjectStyle(color: 0xFF112233));
       expect(p.type, Object3DType.point);
-      expect(p.point, equals(Point3D(1, 2, 3)));
-      expect(p.color, 0xFF0000FF);
+      expect(p.pointValue, const Point3D(1, 2, 3));
+      expect(p.name, 'A');
+      expect(p.style.color, 0xFF112233);
+
+      final s = Object3D.segment(const Point3D(0, 0, 0), const Point3D(1, 1, 1));
+      expect(s.type, Object3DType.segment);
+      expect(s.pointAValue, const Point3D(0, 0, 0));
+      expect(s.pointBValue, const Point3D(1, 1, 1));
     });
 
-    test('line object stores endpoints correctly', () {
-      final line = Object3D.line(
+    test('circle stores center, normal and radius', () {
+      final c = Object3D.circle(const Point3D(1, 1, 1), Vector3D.unitZ, 5);
+      expect(c.circleCenter, const Point3D(1, 1, 1));
+      expect(c.circleNormal, Vector3D.unitZ);
+      expect(c.circleRadius, 5);
+    });
+
+    test('arc samples only its angular range', () {
+      // Quarter arc from 0 to π/2 on the unit circle in the xOy plane.
+      // The circle basis is (u, v) = ((0,1,0), (-1,0,0)) for n = unitZ, so
+      // angle 0 lies at (0,1,0) and π/2 at (-1,0,0).
+      final arc = Object3D.arc(
+          Point3D.origin, Vector3D.unitZ, 1, 0, dart_math.pi / 2);
+      final pts = arc.samplePoints();
+      expect(pts.length, 49);
+      expect(pts.first.distanceTo(const Point3D(0, 1, 0)), lessThan(1e-9));
+      expect(pts.last.distanceTo(const Point3D(-1, 0, 0)), lessThan(1e-9));
+      for (final p in pts) {
+        expect(p.z, closeTo(0, 1e-9));
+        expect(p.x, lessThanOrEqualTo(1e-9));
+        expect(p.y, greaterThanOrEqualTo(-1e-9));
+      }
+      // A full circle still samples the whole turn (first == last point).
+      final circle = Object3D.circle(Point3D.origin, Vector3D.unitZ, 1);
+      final cpts = circle.samplePoints();
+      expect(cpts.first.distanceTo(const Point3D(0, 1, 0)), lessThan(1e-9));
+      expect(cpts.last.distanceTo(const Point3D(0, 1, 0)), lessThan(1e-9));
+    });
+
+    test('solid objects store mesh builders data', () {
+      final sph = Object3D.sphere(const Point3D(0, 0, 1), 2);
+      expect(sph.sphereCenter, const Point3D(0, 0, 1));
+      expect(sph.sphereRadius, 2);
+
+      final cone = Object3D.cone(Point3D.origin, 1, 3);
+      expect(cone.solidRadius, 1);
+      expect(cone.solidHeight, 3);
+
+      final cyl = Object3D.cylinder(Point3D.origin, 2, 4);
+      expect(cyl.solidRadius, 2);
+      expect(cyl.solidHeight, 4);
+    });
+
+    test('plane object exposes coefficients', () {
+      final pl = Object3D.plane(a: 1, b: 2, c: 3, d: 4);
+      expect(pl.planeNormalA, 1);
+      expect(pl.planeNormalB, 2);
+      expect(pl.planeNormalC, 3);
+      expect(pl.planeDValue, 4);
+      expect(pl.planeNormal, const Vector3D(1, 2, 3));
+    });
+
+    test('polygon keeps vertices', () {
+      final poly = Object3D.polygon(const [
         Point3D(0, 0, 0),
-        Point3D(1, 1, 1),
-        color: 0xFF00FF00,
+        Point3D(1, 0, 0),
+        Point3D(1, 1, 0),
+      ]);
+      expect(poly.polygonVertices.length, 3);
+    });
+
+    test('surface mesh gets computed normals', () {
+      final mesh = MeshBuilder.fromFunction(
+        xMin: -1,
+        xMax: 1,
+        yMin: -1,
+        yMax: 1,
+        gridX: 2,
+        gridY: 2,
+        f: (x, y) => 0,
       );
-      expect(line.type, Object3DType.line);
-      expect(line.pointA, equals(Point3D(0, 0, 0)));
-      expect(line.pointB, equals(Point3D(1, 1, 1)));
+      expect(mesh.vertices.length, 9);
+      expect(mesh.indices.length, 8 * 3);
+      final withNormals = mesh.withComputedNormals();
+      expect(withNormals.normals.length, 9);
+      expect(withNormals.normals.first.magnitude, closeTo(1, 1e-9));
     });
 
-    test('plane object stores plane equation', () {
-      // Plane z = 0: a=0, b=0, c=1, d=0
-      final plane = Object3D.plane(a: 0, b: 0, c: 1, d: 0);
-      expect(plane.type, Object3DType.plane);
-      expect(plane.planeA, 0);
-      expect(plane.planeB, 0);
-      expect(plane.planeC, 1);
-      expect(plane.planeD, 0);
+    test('anchorPoint for plane is the closest point to origin', () {
+      final pl = Object3D.plane(a: 0, b: 0, c: 1, d: 2);
+      expect(pl.anchorPoint, const Point3D(0, 0, 2));
+    });
+  });
+
+  group('Object3D transforms', () {
+    test('translated moves all geometry', () {
+      final seg = Object3D.segment(const Point3D(0, 0, 0), const Point3D(1, 0, 0));
+      final moved = seg.translated(const Vector3D(0, 0, 5));
+      expect(moved.pointAValue, const Point3D(0, 0, 5));
+      expect(moved.pointBValue, const Point3D(1, 0, 5));
+      expect(moved.name, seg.name);
     });
 
-    test('surface object stores mesh data', () {
-      final vertices = [
+    test('reflected across xOy plane mirrors z', () {
+      final p = Object3D.point(const Point3D(1, 2, 3));
+      final r = p.reflected(Vector3D.unitZ, 0);
+      expect(r.pointValue, const Point3D(1, 2, -3));
+    });
+
+    test('reflectedAboutPoint mirrors through a point', () {
+      final p = Object3D.point(const Point3D(1, 2, 3));
+      final r = p.reflectedAboutPoint(const Point3D(0, 0, 0));
+      expect(r.pointValue, const Point3D(-1, -2, -3));
+    });
+
+    test('rotated rotates around axis', () {
+      final p = Object3D.point(const Point3D(1, 0, 0));
+      final r = p.rotated(Point3D.origin, Vector3D.unitZ, dart_math.pi / 2);
+      expect(r.pointValue.x, closeTo(0, 1e-9));
+      expect(r.pointValue.y, closeTo(1, 1e-9));
+      expect(r.pointValue.z, closeTo(0, 1e-9));
+    });
+
+    test('scaled scales from center', () {
+      final p = Object3D.point(const Point3D(2, 0, 0));
+      final s = p.scaled(Point3D.origin, 0.5);
+      expect(s.pointValue, const Point3D(1, 0, 0));
+    });
+
+    test('withVisible and withStyle preserve geometry', () {
+      final p = Object3D.point(const Point3D(1, 1, 1), name: 'P');
+      final hidden = p.withVisible(false);
+      expect(hidden.visible, false);
+      expect(hidden.pointValue, p.pointValue);
+      final styled = p.withStyle(const ObjectStyle(color: 0xFF000000));
+      expect(styled.style.color, 0xFF000000);
+      expect(styled.pointValue, p.pointValue);
+    });
+
+    test('plane transform rebuilds a valid plane', () {
+      final pl = Object3D.plane(a: 0, b: 0, c: 1, d: 0);
+      final moved = pl.translated(const Vector3D(0, 0, 3));
+      // Plane z=0 shifted up by 3 → d = 3.
+      expect(moved.planeNormalC, closeTo(1, 1e-9));
+      expect(moved.planeDValue, closeTo(3, 1e-9));
+    });
+  });
+
+  group('MeshBuilder', () {
+    test('sphere mesh is closed and non-degenerate', () {
+      final m = MeshBuilder.sphere(2, segments: 8);
+      expect(m.vertices.length, 81);
+      expect(m.indices.length, 8 * 8 * 6);
+    });
+
+    test('cone mesh has apex, rim and base center', () {
+      final m = MeshBuilder.cone(1, 2, segments: 12);
+      expect(m.vertices.length, 14);
+      expect(m.indices.length, 12 * 6);
+    });
+
+    test('cylinder mesh has two caps', () {
+      final m = MeshBuilder.cylinder(1, 2, segments: 12);
+      expect(m.vertices.length, 26);
+      expect(m.indices.length, 12 * 12);
+    });
+
+    test('prism extrudes base along normal', () {
+      final base = [
+        Point3D(0, 0, 0),
+        Point3D(2, 0, 0),
+        Point3D(2, 2, 0),
+        Point3D(0, 2, 0),
+      ];
+      final m = MeshBuilder.prism(base, 3);
+      // 8 vertices: 4 bottom + 4 top.
+      expect(m.vertices.length, 8);
+      // 4 side quads (8 tris) + 2 base fans (2 tris each) = 12 triangles.
+      expect(m.indices.length, 12 * 3);
+      final topZ = m.vertices.sublist(4).map((v) => v.z).toList();
+      expect(topZ.every((z) => (z - 3).abs() < 1e-9), true);
+    });
+
+    test('pyramid has base + apex', () {
+      final base = [
+        Point3D(0, 0, 0),
+        Point3D(2, 0, 0),
+        Point3D(2, 2, 0),
+        Point3D(0, 2, 0),
+      ];
+      final m = MeshBuilder.pyramid(base, const Point3D(1, 1, 4));
+      expect(m.vertices.length, 5);
+      expect(m.vertices.last.z, 4);
+    });
+
+    test('tetrahedron uses 4 vertices', () {
+      final m = MeshBuilder.tetrahedron(const [
         Point3D(0, 0, 0),
         Point3D(1, 0, 0),
         Point3D(0, 1, 0),
-        Point3D(1, 1, 1),
+        Point3D(0, 0, 1),
+      ]);
+      expect(m.vertices.length, 4);
+      expect(m.indices.length, 12);
+    });
+
+    test('cube mesh has 8 vertices and 12 faces', () {
+      final m = MeshBuilder.cube(Point3D.origin, const Point3D(1, 1, 1));
+      expect(m.vertices.length, 8);
+      expect(m.indices.length, 36);
+    });
+
+    test('revolve creates a lathe surface', () {
+      final profile = [
+        Point3D(1, 0, 0), // radius 1 at z=0
+        Point3D(1, 1, 0), // radius 1 at z=1
       ];
-      final indices = [0, 1, 2, 1, 3, 2];
-      final surface = Object3D.surface(
-        vertices: vertices,
-        indices: indices,
-        color: 0x80FF0000,
+      final m = MeshBuilder.revolve(profile, 2 * dart_math.pi, segments: 12);
+      expect(m.vertices.length, 13 * 2);
+      expect(m.indices.length, 12 * 2 * 3);
+    });
+
+    test('parametric grid respects ranges', () {
+      final m = MeshBuilder.parametric(
+        x: (u, v) => u,
+        y: (u, v) => v,
+        z: (u, v) => 0,
+        uMin: 0,
+        uMax: 1,
+        vMin: 0,
+        vMax: 2,
+        gridU: 3,
+        gridV: 4,
       );
-      expect(surface.type, Object3DType.surface);
-      expect(surface.vertices.length, 4);
-      expect(surface.indices.length, 6);
-    });
-
-    test('sphere object stores center and radius', () {
-      final sphere = Object3D.sphere(
-        center: Point3D(0, 0, 0),
-        radius: 2,
-        color: 0x80808080,
-      );
-      expect(sphere.type, Object3DType.sphere);
-      expect(sphere.sphereCenter, equals(Point3D(0, 0, 0)));
-      expect(sphere.sphereRadius, 2);
-    });
-
-    test('default color is grey', () {
-      final p = Object3D.point(Point3D(1, 2, 3));
-      expect(p.color, 0xFFAAAAAA);
-    });
-
-    test('transformOrigin centers geometry at origin', () {
-      final sphere = Object3D.sphere(
-        center: Point3D(5, 10, 15),
-        radius: 1,
-      );
-      expect(sphere.transformOrigin, false);
-    });
-
-    test('custom label can be set', () {
-      final p = Object3D.point(Point3D(0, 0, 0), label: 'A');
-      expect(p.label, 'A');
+      expect(m.vertices.length, 4 * 5);
+      final zs = m.vertices.map((v) => v.z).toSet();
+      expect(zs, {0.0});
     });
   });
 
-  group('Object3DType enum', () {
-    test('has all expected types', () {
-      expect(Object3DType.values.length, 8);
-      expect(Object3DType.values, contains(Object3DType.point));
-      expect(Object3DType.values, contains(Object3DType.line));
-      expect(Object3DType.values, contains(Object3DType.plane));
-      expect(Object3DType.values, contains(Object3DType.surface));
-      expect(Object3DType.values, contains(Object3DType.sphere));
-      expect(Object3DType.values, contains(Object3DType.polyhedron));
-      expect(Object3DType.values, contains(Object3DType.vector));
-      expect(Object3DType.values, contains(Object3DType.curve));
-    });
-  });
-
-  group('SurfaceMesh utility', () {
-    test('creates grid mesh for z = f(x,y) function', () {
-      final mesh = SurfaceMesh.fromFunction(
-        xMin: -1,
-        xMax: 1,
-        yMin: -1,
-        yMax: 1,
-        gridX: 2,
-        gridY: 2,
-        f: (x, y) => x * x + y * y,
-      );
-      // 3x3 grid = 9 vertices
-      // 2x2 cells × 2 triangles per cell = 8 triangles = 24 indices
-      expect(mesh.vertices.length, 9);
-      expect(mesh.indices.length, 24);
-      // Center point (0,0) should have z = 0
-      expect(mesh.vertices[4].z, closeTo(0, 1e-10));
+  group('Object3D inputPoint (snapping)', () {
+    test('point input returns the point', () {
+      final p = Object3D.point(const Point3D(1, 2, 3));
+      expect(p.inputPoint(const Point3D(9, 9, 9)), const Point3D(1, 2, 3));
     });
 
-    test('computes vertex normals for lighting', () {
-      final mesh = SurfaceMesh.fromFunction(
-        xMin: -1,
-        xMax: 1,
-        yMin: -1,
-        yMax: 1,
-        gridX: 2,
-        gridY: 2,
-        f: (x, y) => 0, // flat plane
-      );
-      expect(mesh.normals.length, 9);
-      // All normals should point up
-      for (final n in mesh.normals) {
-        expect(n.z, greaterThan(0));
-      }
+    test('segment input snaps to segment', () {
+      final s = Object3D.segment(const Point3D(0, 0, 0), const Point3D(4, 0, 0));
+      final snapped = s.inputPoint(const Point3D(2, 5, 1));
+      expect(snapped.x, closeTo(2, 1e-9));
+      expect(snapped.y, closeTo(0, 1e-9));
     });
 
-    test('computes bounding box', () {
-      final mesh = SurfaceMesh.fromFunction(
-        xMin: -2,
-        xMax: 2,
-        yMin: -3,
-        yMax: 3,
-        gridX: 4,
-        gridY: 6,
-        f: (x, y) => x + y,
-      );
-      expect(mesh.boundingBoxMin.x, closeTo(-2, 1e-10));
-      expect(mesh.boundingBoxMax.x, closeTo(2, 1e-10));
-      expect(mesh.boundingBoxMin.y, closeTo(-3, 1e-10));
-      expect(mesh.boundingBoxMax.y, closeTo(3, 1e-10));
+    test('circle input snaps onto the circle', () {
+      final c = Object3D.circle(Point3D.origin, Vector3D.unitZ, 2);
+      final snapped = c.inputPoint(const Point3D(5, 0, 0));
+      expect(snapped.distanceTo(Point3D.origin), closeTo(2, 1e-9));
+      expect(snapped.z, closeTo(0, 1e-9));
+    });
+
+    test('plane input projects onto plane', () {
+      final pl = Object3D.plane(a: 0, b: 0, c: 1, d: 3);
+      final snapped = pl.inputPoint(const Point3D(1, 1, 1));
+      expect(snapped.z, closeTo(3, 1e-9));
     });
   });
 }

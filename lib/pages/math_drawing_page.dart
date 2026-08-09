@@ -3,14 +3,15 @@ import 'dart:math' as dart_math;
 import 'package:flutter/material.dart';
 
 import '../models/math_3d_object.dart';
-import '../models/math_3d_tool.dart';
 import '../models/math_drawing_state.dart';
 import '../models/math_expression.dart' show MathExpression;
 import '../models/math_expression_3d.dart';
 import '../models/formula_entry.dart';
+import '../widgets/math_3d_object_panel.dart';
+import '../widgets/math_3d_toolbar.dart';
+import '../widgets/math_3d_view_toolbar.dart';
 import '../widgets/math_canvas.dart';
 import '../widgets/math_canvas_3d.dart';
-import '../widgets/math_3d_toolbar.dart';
 
 /// 数学绘图页面 — 多公式、等价的公式行、颜色选择、显隐切换。
 class MathDrawingPage extends StatefulWidget {
@@ -38,6 +39,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   // 3D construction state
   ConstructionTool _current3DTool = ConstructionTool.move;
   String _toolInstruction = '';
+  bool _showObjectPanel = true;
 
   /// All formula rows (each is equal).
   final List<_FormulaState> _formulas = [];
@@ -73,6 +75,24 @@ class _MathDrawingPageState extends State<MathDrawingPage>
         _currentView =
             _tabController.index == 0 ? ViewMode.mode2D : ViewMode.mode3D;
       });
+      // Pause auto-rotation while the 3D canvas is hidden (IndexedStack
+      // keeps it alive).
+      if (_currentView == ViewMode.mode2D) {
+        _canvas3DKey.currentState?.setAutoRotate(false);
+      }
+      // When switching to 3D with formulas already committed in 2D, plot
+      // them so the 3D canvas is not empty (the ✓ button is disabled
+      // because nothing changed).
+      if (_currentView == ViewMode.mode3D) {
+        final canvas = _canvas3DKey.currentState;
+        final hasFormulas =
+            _formulas.any((f) => f.controller.text.trim().isNotEmpty);
+        if (canvas != null &&
+            hasFormulas &&
+            canvas.expressionObjectCount == 0) {
+          _plotAll3D();
+        }
+      }
     }
   }
 
@@ -130,6 +150,135 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     _canvasKey.currentState?.setFormulas(entries);
   }
 
+  /// Parse a formula into 3D objects (surface / implicit / curve).
+  List<Object3D>? _parse3DFormula(String text, int colorInt) {
+    final trimmed = text.trim();
+
+    // 1) Explicit surface: z = f(x,y) or f(x,y) = ...
+    final isSurfacePrefix = trimmed.startsWith('z=') ||
+        trimmed.startsWith('z =') ||
+        RegExp(r'^f\s*\(\s*x\s*,\s*y\s*\)').hasMatch(trimmed);
+
+    if (!isSurfacePrefix && _hasTopLevelEquals(trimmed)) {
+      // 2) Implicit equation: F(x, y, z) = 0
+      final implicit = Expression3D.implicit(trimmed);
+      if (implicit.isValid) {
+        final mesh = implicit.sampleImplicitGrid(box: 5, grid: 32);
+        if (mesh.vertices.isNotEmpty) {
+          return [
+            Object3D.surface(
+              mesh,
+              name: 'f${_formulaIndex(trimmed)}',
+              style: ObjectStyle(
+                color: colorInt,
+                opacity: 0.85,
+                labelMode: LabelMode.name,
+              ),
+            ),
+          ];
+        }
+        _showError('无法生成隐式曲面: $text');
+        return null;
+      }
+      _showError('隐式方程解析失败: ${implicit.parseError}');
+      return null;
+    }
+
+    if (trimmed.startsWith('(')) {
+      // 3) Parametric curve (t) or parametric surface (u, v).
+      final curve = Expression3D.parametricCurve(trimmed, tMax: 2 * dart_math.pi);
+      if (curve.isValid) {
+        final points = curve.sampleCurve(numSamples: 150);
+        if (points.isNotEmpty) {
+          return [
+            Object3D.curve(
+              points,
+              // 'F' prefix avoids clashing with construction labels
+              // (circles use 'c1', 'c2', …).
+              name: 'F${_formulaIndex(trimmed)}',
+              style: ObjectStyle(color: colorInt, labelMode: LabelMode.name),
+            ),
+          ];
+        }
+      }
+      final surface = Expression3D.parametricSurface(
+        trimmed,
+        uMin: 0,
+        uMax: 2 * dart_math.pi,
+        vMin: -1,
+        vMax: 1,
+      );
+      if (surface.isValid) {
+        final mesh = surface.sampleParametricSurface();
+        if (mesh.vertices.isNotEmpty) {
+          return [
+            Object3D.surface(
+              mesh,
+              name: 'f${_formulaIndex(trimmed)}',
+              style: ObjectStyle(
+                color: colorInt,
+                opacity: 0.85,
+                labelMode: LabelMode.name,
+              ),
+            ),
+          ];
+        }
+      }
+      _showError('无法解析为参数曲线或参数曲面: $text');
+      return null;
+    }
+
+    // 4) Surface z = f(x, y)
+    final surfaceExpr = Expression3D.surface(trimmed);
+    if (surfaceExpr.isValid) {
+      final mesh = surfaceExpr.sampleSurfaceGrid(
+        xMin: -5,
+        xMax: 5,
+        yMin: -5,
+        yMax: 5,
+        gridX: 36,
+        gridY: 36,
+      );
+      if (mesh.vertices.isNotEmpty) {
+        return [
+          Object3D.surface(
+            mesh,
+            name: 'f${_formulaIndex(trimmed)}',
+            style: ObjectStyle(
+              color: colorInt,
+              opacity: 0.85,
+              labelMode: LabelMode.name,
+            ),
+          ),
+        ];
+      }
+    }
+    _showError('无法解析为3D表达式: $text');
+    return null;
+  }
+
+  int _formulaIndex(String text) {
+    for (int i = 0; i < _formulas.length; i++) {
+      if (_formulas[i].controller.text.trim() == text) return i + 1;
+    }
+    return 1;
+  }
+
+  static bool _hasTopLevelEquals(String expr) {
+    var depth = 0;
+    for (int i = 0; i < expr.length; i++) {
+      final ch = expr[i];
+      if (ch == '(' || ch == '[') {
+        depth++;
+      } else if (ch == ')' || ch == ']') {
+        depth--;
+      } else if (ch == '=' && depth == 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   void _plotAll3D() {
     final objects = <Object3D>[];
     for (final f in _formulas) {
@@ -137,50 +286,10 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       if (text.isEmpty) continue;
       if (!f.visible) continue;
 
-      final colorInt = f.color.value;
-
-      // Try parsing as 3D surface z = f(x, y)
-      final surfaceExpr = Expression3D.surface(text);
-      if (surfaceExpr.isValid) {
-        final mesh = surfaceExpr.sampleSurfaceGrid(
-          xMin: -5,
-          xMax: 5,
-          yMin: -5,
-          yMax: 5,
-          gridX: 30,
-          gridY: 30,
-        );
-        if (mesh.vertices.isNotEmpty) {
-          objects.add(Object3D.surface(
-            vertices: mesh.vertices,
-            indices: mesh.indices,
-            normals: mesh.normals,
-            color: colorInt,
-            opacity: 0.85,
-            label: text,
-          ));
-          continue;
-        }
-      }
-
-      // Try parsing as parametric curve
-      final curveExpr =
-          Expression3D.parametricCurve(text, tMax: 2 * dart_math.pi);
-      if (curveExpr.isValid) {
-        final points = curveExpr.sampleCurve(numSamples: 100);
-        if (points.isNotEmpty) {
-          objects.add(Object3D.curve(
-            points: points,
-            color: colorInt,
-            label: text,
-          ));
-          continue;
-        }
-      }
-
-      // If none matched, show error
-      _showError('无法解析为3D表达式: $text');
-      return;
+      final colorInt = f.color.toARGB32();
+      final parsed = _parse3DFormula(text, colorInt);
+      if (parsed == null) return; // error already shown
+      objects.addAll(parsed);
     }
 
     setState(() {
@@ -189,11 +298,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       }
     });
 
-    if (objects.isEmpty) {
-      _canvas3DKey.currentState?.clearObjects();
-    } else {
-      _canvas3DKey.currentState?.setObjects(objects);
-    }
+    _canvas3DKey.currentState?.setExpressionObjects(objects);
   }
 
   void _addFormula() {
@@ -305,7 +410,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
       behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 2),
+      duration: const Duration(seconds: 3),
     ));
   }
 
@@ -315,6 +420,37 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     } else {
       _canvas3DKey.currentState?.resetView();
     }
+  }
+
+  /// Numeric input dialog for construction tools that need a number.
+  Future<double?> _askNumber(String prompt, double initial) async {
+    final controller = TextEditingController(text: '$initial');
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(prompt),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType:
+              const TextInputType.numberWithOptions(decimal: true, signed: true),
+          decoration: const InputDecoration(hintText: '输入数值'),
+          onSubmitted: (v) => Navigator.pop(ctx, double.tryParse(v)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, double.tryParse(controller.text)),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
   }
 
   // ==================================================================
@@ -329,6 +465,15 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       appBar: AppBar(
         title: const Text('数学绘图'),
         actions: [
+          if (_currentView == ViewMode.mode3D)
+            IconButton(
+              icon: Icon(_showObjectPanel
+                  ? Icons.view_list
+                  : Icons.view_list_outlined,
+                  size: 20),
+              tooltip: '对象列表',
+              onPressed: () => setState(() => _showObjectPanel = !_showObjectPanel),
+            ),
           IconButton(
             icon: const Icon(Icons.center_focus_strong, size: 20),
             tooltip: '重置视图',
@@ -384,8 +529,6 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   // ==================================================================
 
   Widget _buildFormulaList(ColorScheme cs) {
-    // Dynamic expand: no max height, the list grows as formulas are added,
-    // pushing the canvas down naturally.
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
       shrinkWrap: true,
@@ -404,7 +547,6 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
-          // ---- Left spacing before color indicator ----
           const SizedBox(width: 4),
 
           // ---- Color indicator (tappable) ----
@@ -429,7 +571,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             child: TextField(
               controller: f.controller,
               decoration: InputDecoration(
-                hintText: '公式 ${index + 1}',
+                hintText: _currentView == ViewMode.mode3D
+                    ? '公式（z=f(x,y) / x²+y²+z²=1 / (cos t, sin t, t)）'
+                    : '公式 ${index + 1}',
                 isDense: true,
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -437,7 +581,6 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                     OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                 filled: true,
                 fillColor: f.color.withValues(alpha: 0.06),
-                // Undo button: appears only when text has been modified
                 suffixIcon: hasChanged
                     ? IconButton(
                         icon: Icon(Icons.undo,
@@ -571,11 +714,11 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   Widget _build3DCanvas(ColorScheme cs) {
     return Column(
       children: [
-        // Construction toolbar
+        // Construction toolbar (toolboxes).
         Math3DToolbar(
           activeTool: _current3DTool,
           instruction: _current3DTool != ConstructionTool.move
-              ? (_canvas3DKey.currentState?.constructionInstruction ??
+              ? (_canvas3DKey.currentState?.construction?.currentInstruction ??
                   _toolInstruction)
               : null,
           onToolSelected: (tool) {
@@ -586,125 +729,122 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             _canvas3DKey.currentState?.setTool(tool);
           },
         ),
-        // View settings row (projection, axes, grid)
-        if (_current3DTool == ConstructionTool.move) _buildViewSettingsRow(cs),
-        // 3D canvas
+        // Canvas + object panel.
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: cs.outlineVariant, width: 0.5),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: MathCanvas3D(
-                  key: _canvas3DKey,
-                  currentTool: _current3DTool,
-                  onReady: () {},
-                  onViewportChange: () {},
-                  onObjectCreated: (obj) {
-                    _canvas3DKey.currentState?.setObjects(
-                      [...?_canvas3DKey.currentState?.objects, obj],
-                    );
-                  },
-                  onToolInstruction: (instruction) {
-                    setState(() {
-                      _toolInstruction = instruction;
-                    });
-                  },
+          child: Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: cs.outlineVariant, width: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: MathCanvas3D(
+                        key: _canvas3DKey,
+                        initialTool: _current3DTool,
+                        onReady: () {},
+                        onViewportChange: () {},
+                        onSceneChanged: () {
+                          if (mounted) setState(() {});
+                        },
+                        onToolInstruction: (instruction) {
+                          setState(() {
+                            _toolInstruction = instruction;
+                          });
+                        },
+                        onNumericInput: _askNumber,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              if (_showObjectPanel) _buildObjectPanel(cs),
+            ],
           ),
+        ),
+        // View settings (style bar).
+        Math3DViewToolbar(
+          showAxes: _canvas3DKey.currentState?.showAxes ?? true,
+          showGrid: _canvas3DKey.currentState?.showGrid ?? true,
+          showPlane: _canvas3DKey.currentState?.showPlane ?? true,
+          autoRotating: _canvas3DKey.currentState?.autoRotating ?? false,
+          capturing: _canvas3DKey.currentState?.capturing ?? PointCapturing.off,
+          projectionType:
+              _canvas3DKey.currentState?.projectionType ?? ProjectionType.parallel,
+          onToggleAxes: () {
+            _canvas3DKey.currentState?.toggleAxes();
+            setState(() {});
+          },
+          onToggleGrid: () {
+            _canvas3DKey.currentState?.toggleGrid();
+            setState(() {});
+          },
+          onTogglePlane: () {
+            _canvas3DKey.currentState?.togglePlane();
+            setState(() {});
+          },
+          onToggleAutoRotate: () {
+            final s = _canvas3DKey.currentState;
+            if (s != null) s.setAutoRotate(!s.autoRotating);
+            setState(() {});
+          },
+          onResetView: () => _canvas3DKey.currentState?.resetView(),
+          onCapturingChanged: (mode) {
+            _canvas3DKey.currentState?.setPointCapturing(mode);
+            setState(() {});
+          },
+          onStandardView: (view) {
+            _canvas3DKey.currentState?.setStandardView(view);
+          },
+          onProjectionChanged: (type) {
+            _canvas3DKey.currentState?.setProjectionType(type);
+            setState(() {});
+          },
         ),
       ],
     );
   }
 
-  Widget _buildViewSettingsRow(ColorScheme cs) {
-    final state3D = _canvas3DKey.currentState;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            // Projection toggle
-            _buildToolButton(
-              icon: state3D?.projectionType == ProjectionType.perspective
-                  ? Icons.view_in_ar
-                  : Icons.grid_3x3,
-              tooltip: '切换投影类型',
-              onPressed: () {
-                final current =
-                    state3D?.projectionType ?? ProjectionType.parallel;
-                state3D?.setProjectionType(
-                  current == ProjectionType.parallel
-                      ? ProjectionType.perspective
-                      : ProjectionType.parallel,
-                );
-                setState(() {});
-              },
+  Widget _buildObjectPanel(ColorScheme cs) {
+    final state = _canvas3DKey.currentState;
+    return SizedBox(
+      width: 190,
+      child: Math3DObjectPanel(
+        objects: state?.objects ?? const [],
+        selected: state?.selected,
+        onSelect: (obj) {
+          state?.selectObject(obj);
+          setState(() {}); // refresh the panel highlight
+        },
+        onToggleVisible: (obj) => state?.setObjectVisible(obj.name, !obj.visible),
+        onDelete: (obj) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: Text('删除对象'),
+              content: Text('确定要删除对象 "${obj.name}" 吗？'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('取消'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    state?.removeObject(obj);
+                  },
+                  child: Text('删除',
+                      style: TextStyle(color: cs.error)),
+                ),
+              ],
             ),
-            const SizedBox(width: 4),
-            // Reset view
-            _buildToolButton(
-              icon: Icons.center_focus_strong,
-              tooltip: '重置视图',
-              onPressed: () => state3D?.resetView(),
-            ),
-            const SizedBox(width: 4),
-            // Toggle axes
-            _buildToolButton(
-              icon: Icons.crop_square,
-              tooltip: '显示/隐藏坐标轴',
-              isActive: state3D?.showAxes ?? true,
-              onPressed: () {
-                state3D?.toggleAxes();
-                setState(() {});
-              },
-            ),
-            const SizedBox(width: 4),
-            // Toggle grid
-            _buildToolButton(
-              icon: Icons.grid_on,
-              tooltip: '显示/隐藏网格',
-              isActive: state3D?.showGrid ?? true,
-              onPressed: () {
-                state3D?.toggleGrid();
-                setState(() {});
-              },
-            ),
-          ],
-        ),
+          );
+        },
       ),
-    );
-  }
-
-  Widget _buildToolButton({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onPressed,
-    bool isActive = true,
-  }) {
-    return IconButton(
-      icon: Icon(icon, size: 20),
-      tooltip: tooltip,
-      onPressed: onPressed,
-      style: ButtonStyle(
-        backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-          if (states.contains(WidgetState.pressed)) return null;
-          return isActive ? null : Colors.grey.withValues(alpha: 0.1);
-        }),
-        foregroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-          return isActive ? null : Colors.grey;
-        }),
-      ),
-      visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints(
-          minWidth: 36, minHeight: 36, maxWidth: 36, maxHeight: 36),
     );
   }
 }

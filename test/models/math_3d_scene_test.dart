@@ -6,317 +6,377 @@ import 'package:stroom/models/math_3d_scene.dart';
 
 void main() {
   group('Camera3D', () {
-    test('creates camera with default values looking at origin', () {
-      final cam = Camera3D();
-      expect(cam.target, equals(Point3D(0, 0, 0)));
-      expect(cam.distance, 10);
-      expect(cam.theta, closeTo(0, 1e-10));
-      expect(cam.phi, closeTo(dart_math.pi / 4, 1e-10));
-    });
-
-    test('position is derived from spherical coordinates', () {
-      // Use phi=0 so camera is on the horizon (no clamping issues)
-      final cam = Camera3D(
-        target: Point3D(0, 0, 0),
-        distance: 10,
-        theta: 0,
-        phi: 0,
-      );
+    test('default camera looks at origin from above', () {
+      const cam = Camera3D();
       final pos = cam.position;
-      // phi=0, theta=0: position should be (0, 0, 10)
-      expect(pos.x, closeTo(0, 1e-10));
-      expect(pos.y, closeTo(0, 1e-10));
-      expect(pos.z, closeTo(10, 1e-10));
+      expect(pos.z, greaterThan(0));
+      expect(pos.x, greaterThan(0));
+      expect(pos.y, greaterThan(0));
+      // Distance from origin equals the camera distance.
+      expect(pos.distanceTo(Point3D.origin), closeTo(cam.distance, 1e-9));
     });
 
-    test('phi is clamped during orbit operation', () {
-      // Constructor doesn't clamp (const), but orbit does
-      final cam = Camera3D().orbit(deltaTheta: 0, deltaPhi: dart_math.pi * 6);
-      expect(cam.phi, lessThanOrEqualTo(dart_math.pi * 0.49));
-      expect(cam.phi, greaterThanOrEqualTo(-dart_math.pi * 0.49));
+    test('position follows spherical coordinates (z-up)', () {
+      const cam = Camera3D(
+          target: Point3D.origin, distance: 10, theta: 0, phi: 0);
+      final pos = cam.position;
+      // phi=0 → horizontal, theta=0 → along +X.
+      expect(pos.z, closeTo(0, 1e-9));
+      expect(pos.x, closeTo(10, 1e-9));
+      expect(pos.y, closeTo(0, 1e-9));
     });
 
-    test('distance is clamped during zoom operation', () {
-      // Constructor doesn't clamp (const), but zoom does
-      final cam = Camera3D(distance: 10).zoom(factor: 0.001);
-      expect(cam.distance, greaterThanOrEqualTo(0.1));
+    test('view from top looks straight down', () {
+      const cam = Camera3D(
+          target: Point3D.origin, distance: 10, theta: 0, phi: dart_math.pi / 2 - 0.01);
+      final pos = cam.position;
+      expect(pos.x.abs(), lessThan(0.2));
+      expect(pos.y.abs(), lessThan(0.2));
+      expect(pos.z, greaterThan(9));
     });
 
-    test('orbit rotation updates theta', () {
-      final cam = Camera3D();
-      final updated = cam.orbit(deltaTheta: 0.5, deltaPhi: 0);
-      expect(updated.theta, closeTo(0.5, 1e-10));
-      expect(updated.phi, closeTo(dart_math.pi / 4, 1e-10));
+    test('orbit updates theta and phi', () {
+      const cam = Camera3D();
+      final orbited = cam.orbit(deltaTheta: 0.5, deltaPhi: 0.25);
+      expect(orbited.theta, closeTo(cam.theta + 0.5, 1e-12));
+      expect(orbited.phi, closeTo(cam.phi + 0.25, 1e-12));
     });
 
-    test('orbit rotation updates phi', () {
-      final cam = Camera3D();
-      final updated = cam.orbit(deltaTheta: 0, deltaPhi: 0.3);
-      expect(updated.phi, closeTo(dart_math.pi / 4 + 0.3, 1e-10));
+    test('phi is clamped near poles', () {
+      const cam = Camera3D();
+      final orbited = cam.orbit(deltaTheta: 0, deltaPhi: dart_math.pi);
+      expect(orbited.phi, lessThan(dart_math.pi / 2));
+      expect(orbited.phi, greaterThan(-dart_math.pi / 2));
     });
 
-    test('zoom changes distance by factor', () {
-      final cam = Camera3D(distance: 10);
-      final updated = cam.zoom(factor: 2);
-      expect(updated.distance, closeTo(5, 1e-10)); // zoom in: distance / factor
+    test('zoom changes distance', () {
+      const cam = Camera3D(distance: 10);
+      final closer = cam.zoom(factor: 2);
+      expect(closer.distance, closeTo(5, 1e-12));
+      final farther = cam.zoom(factor: 0.5);
+      expect(farther.distance, closeTo(20, 1e-12));
     });
 
     test('pan moves target parallel to view plane', () {
-      final cam = Camera3D(
-        target: Point3D(0, 0, 0),
-        distance: 10,
-        theta: 0,
-        phi: 0, // looking along Z axis
-      );
-      final updated = cam.pan(deltaX: 100, deltaY: 200);
-      // Pan sensitivity: distance * 0.005
-      // deltaX=100 → target.x changes by -100 * 10 * 0.005 = -5
-      expect(updated.target.x, closeTo(-5, 1e-10));
-      // deltaY=200 → target.y changes by 200 * 10 * 0.005 = 10
-      expect(updated.target.y, closeTo(10, 1e-10));
-      expect(updated.target.z, closeTo(0, 1e-10));
+      const cam = Camera3D(
+          target: Point3D.origin, distance: 10, theta: 0, phi: dart_math.pi / 4);
+      final panned = cam.pan(deltaX: 100, deltaY: 0);
+      // The target must move (along the screen-right vector).
+      expect(panned.target.distanceTo(Point3D.origin), greaterThan(0.01));
+      expect(panned.target.z, closeTo(0, 1e-9)); // horizontal pan keeps z
     });
 
-    test('view matrix is 4x4', () {
-      final cam = Camera3D();
-      final viewMatrix = cam.viewMatrix();
-      expect(viewMatrix.length, 16); // 4x4 column-major
-    });
+    test('standard views point along axes', () {
+      const cam = Camera3D();
+      final top = cam.withStandardView(StandardView.viewFromTop);
+      final pos = top.position;
+      expect(pos.x.abs(), lessThan(0.5));
+      expect(pos.y.abs(), lessThan(0.5));
+      expect(pos.z, greaterThan(9));
 
-    test('position is finite for valid camera', () {
-      final cam = Camera3D();
-      final pos = cam.position;
-      expect(pos.x.isFinite, true);
-      expect(pos.y.isFinite, true);
-      expect(pos.z.isFinite, true);
-    });
-
-    test('copyWith creates modified copy', () {
-      final cam = Camera3D();
-      final modified = cam.copyWith(distance: 20);
-      expect(modified.distance, 20);
-      // Original unchanged
-      expect(cam.distance, 10);
+      final front = cam.withStandardView(StandardView.viewFromFront);
+      final fpos = front.position;
+      expect(fpos.z.abs(), lessThan(0.5));
+      expect(fpos.x, greaterThan(9));
     });
   });
 
   group('Projection3D', () {
-    test('parallel projection creates orthographic matrix', () {
-      final proj = Projection3D.parallel(
-        width: 800,
-        height: 600,
-        scale: 50,
-      );
-      expect(proj.type, ProjectionType.parallel);
-      expect(proj.width, 800);
-      expect(proj.height, 600);
+    const cam = Camera3D(
+        target: Point3D.origin, distance: 10, theta: dart_math.pi / 4, phi: 0.615);
+
+    test('parallel projection centers the target', () {
+      final proj = Projection3D(
+          type: ProjectionType.parallel,
+          width: 800,
+          height: 600,
+          camera: cam);
+      final s = proj.project(Point3D.origin);
+      expect(s, isNotNull);
+      expect(s!.x, closeTo(400, 0.1));
+      expect(s.y, closeTo(300, 0.1));
     });
 
-    test('perspective projection creates perspective matrix', () {
-      final proj = Projection3D.perspective(
-        width: 800,
-        height: 600,
-        fov: 60,
-        near: 0.1,
-        far: 1000,
-      );
-      expect(proj.type, ProjectionType.perspective);
-      expect(proj.fov, 60);
+    test('perspective differs from parallel', () {
+      final par = Projection3D(
+          type: ProjectionType.parallel,
+          width: 800,
+          height: 600,
+          camera: cam);
+      final per = Projection3D(
+          type: ProjectionType.perspective,
+          width: 800,
+          height: 600,
+          camera: cam);
+      final p1 = par.project(const Point3D(2, 0, 2))!;
+      final p2 = per.project(const Point3D(2, 0, 2))!;
+      expect(p1.x, isNot(closeTo(p2.x, 0.01)));
     });
 
-    test('projection matrix is 4x4', () {
-      final proj = Projection3D.parallel(width: 800, height: 600);
-      final matrix = proj.projectionMatrix();
-      expect(matrix.length, 16);
+    test('points behind camera project to NaN (perspective)', () {
+      final per = Projection3D(
+          type: ProjectionType.perspective,
+          width: 800,
+          height: 600,
+          camera: cam);
+      // A point far behind the camera (opposite the view direction).
+      final behind = per.project(Point3D.origin + cam.forward * (-1000));
+      expect(behind, isNull);
     });
 
-    test('project transforms 3D point to 2D screen coordinates', () {
-      final proj = Projection3D.parallel(width: 800, height: 600, scale: 50);
-      // Origin should project to center of screen
-      final screen = proj.project(Point3D(0, 0, 0));
-      expect(screen.x, closeTo(400, 1));
-      expect(screen.y, closeTo(300, 1));
-      // z is depth (for sorting) — finite
-      expect(screen.z.isFinite, isTrue);
+    test('oblique projection keeps xOy face-on', () {
+      final proj = Projection3D(
+          type: ProjectionType.oblique,
+          width: 800,
+          height: 600,
+          camera: const Camera3D());
+      final a = proj.project(const Point3D(1, 0, 0))!;
+      final b = proj.project(const Point3D(0, 1, 0))!;
+      final c = proj.project(const Point3D(0, 0, 1))!;
+      // X increases screen x, Z decreases screen y (screen y is down).
+      expect(a.x, greaterThan(400));
+      expect(a.y, closeTo(300, 1));
+      expect(c.y, lessThan(300));
+      expect(c.x, closeTo(400, 1));
+      // Y is sheared: not purely vertical.
+      expect(b.x, isNot(closeTo(400, 1)));
     });
 
-    test('project maps positive x to the right', () {
-      final proj = Projection3D.parallel(width: 800, height: 600, scale: 50);
-      final screen = proj.project(Point3D(1, 0, 0));
-      expect(screen.x, greaterThan(400)); // right of center
+    test('screenRay and screenToGround are inverse of project for parallel', () {
+      final proj = Projection3D(
+          type: ProjectionType.parallel,
+          width: 800,
+          height: 600,
+          camera: cam);
+      const world = Point3D(1.5, -2, 0.5);
+      final s = proj.project(world)!;
+      final ground = proj.screenToGround(s.x, s.y, z0: world.z);
+      expect(ground, isNotNull);
+      expect(ground!.x, closeTo(world.x, 1e-6));
+      expect(ground.y, closeTo(world.y, 1e-6));
     });
 
-    test('project maps positive y upward (screen y decreases)', () {
-      final proj = Projection3D.parallel(width: 800, height: 600, scale: 50);
-      final screen = proj.project(Point3D(0, 1, 0));
-      expect(screen.y, lessThan(300)); // higher on screen
+    test('perspective screenRay passes through the world point', () {
+      final proj = Projection3D(
+          type: ProjectionType.perspective,
+          width: 800,
+          height: 600,
+          camera: cam);
+      const world = Point3D(1, 1, 1);
+      final s = proj.project(world)!;
+      final ray = proj.screenRay(s.x, s.y);
+      // The ray origin + t·dir should hit the plane z=1 at world.
+      final hit = ray.intersectPlane(Vector3D.unitZ, world.z);
+      expect(hit, isNotNull);
+      expect(hit!.x, closeTo(world.x, 0.5));
+      expect(hit.y, closeTo(world.y, 0.5));
+    });
+  });
+
+  group('Geometry utilities', () {
+    test('distancePointToLine', () {
+      final d = distancePointToLine(
+          const Point3D(0, 2, 0), Point3D.origin, Vector3D.unitX);
+      expect(d, closeTo(2, 1e-9));
     });
 
-    test('perspective projection produces different results from parallel', () {
-      final parallel =
-          Projection3D.parallel(width: 800, height: 600, scale: 50);
-      final perspective = Projection3D.perspective(
-        width: 800,
-        height: 600,
-        fov: 60,
-        near: 0.1,
-        far: 1000,
-      );
-      final p1 = parallel.project(Point3D(1, 0, 5));
-      final p2 = perspective.project(Point3D(1, 0, 5));
-      // They differ (perspective has foreshortening)
-      expect(p1.x, isNot(equals(p2.x)));
+    test('distancePointToSegment', () {
+      final d = distancePointToSegment(
+          const Point3D(5, 5, 0), Point3D.origin, const Point3D(2, 0, 0));
+      // Clamps to the endpoint (2, 0, 0): sqrt(3² + 5²).
+      expect(d, closeTo(dart_math.sqrt(34), 1e-9));
+    });
+
+    test('intersectLineLine finds the intersection', () {
+      final p = intersectLineLine(
+          Point3D.origin,
+          Vector3D.unitX,
+          const Point3D(1, -2, 0),
+          Vector3D.unitY);
+      expect(p, isNotNull);
+      expect(p!.x, closeTo(1, 1e-9));
+      expect(p.y, closeTo(0, 1e-9));
+      expect(p.z, closeTo(0, 1e-9));
+    });
+
+    test('intersectLineLine returns null for skew lines', () {
+      final p = intersectLineLine(
+          Point3D.origin,
+          Vector3D.unitX,
+          const Point3D(0, 0, 1),
+          Vector3D.unitY);
+      expect(p, isNull);
+    });
+
+    test('intersectLinePlane', () {
+      final p = intersectLinePlane(
+          Point3D.origin, Vector3D.unitZ, Vector3D.unitZ, 4);
+      expect(p, isNotNull);
+      expect(p!.z, closeTo(4, 1e-9));
+    });
+
+    test('intersectPlanePlane returns the crease line', () {
+      final res = intersectPlanePlane(
+          Vector3D.unitZ, 0, // z = 0
+          const Vector3D(1, 0, 0), 1 // x = 1
+          );
+      expect(res, isNotNull);
+      final (point, dir) = res!;
+      expect(point.x, closeTo(1, 1e-9));
+      expect(point.z, closeTo(0, 1e-9));
+      expect(dir.dot(Vector3D.unitZ), closeTo(0, 1e-9));
+      expect(dir.dot(const Vector3D(1, 0, 0)), closeTo(0, 1e-9));
+    });
+
+    test('rayTriangle intersection', () {
+      const v0 = Point3D(0, 0, 0);
+      const v1 = Point3D(1, 0, 0);
+      const v2 = Point3D(0, 1, 0);
+      final t = rayTriangle(const Point3D(0.2, 0.2, 5), Vector3D.unitZ * -1,
+          v0, v1, v2);
+      expect(t, isNotNull);
+      expect(t!, closeTo(5, 1e-9));
+      // Ray missing the triangle returns null.
+      final miss = rayTriangle(const Point3D(5, 5, 5), Vector3D.unitZ * -1,
+          v0, v1, v2);
+      expect(miss, isNull);
     });
   });
 
   group('Scene3D', () {
-    test('creates empty scene', () {
+    test('add / remove / clear / replace', () {
       final scene = Scene3D();
-      expect(scene.objects, isEmpty);
-      expect(scene.camera, isNotNull);
-    });
+      final a = Object3D.point(const Point3D(1, 2, 3), name: 'A');
+      final b = Object3D.point(const Point3D(4, 5, 6), name: 'B');
+      scene.add(a);
+      scene.add(b);
+      expect(scene.objects.length, 2);
 
-    test('adds objects to scene', () {
-      final scene = Scene3D();
-      final obj = Object3D.point(Point3D(1, 2, 3));
-      scene.add(obj);
+      scene.replace(a, a.translated(const Vector3D(0, 0, 10)));
+      expect(scene.objects.first.pointValue.z, closeTo(13, 1e-9));
+
+      scene.remove(b);
       expect(scene.objects.length, 1);
-    });
-
-    test('removes objects from scene', () {
-      final scene = Scene3D();
-      final obj = Object3D.point(Point3D(1, 2, 3));
-      scene.add(obj);
-      scene.remove(obj);
-      expect(scene.objects, isEmpty);
-    });
-
-    test('clears all objects', () {
-      final scene = Scene3D();
-      scene.add(Object3D.point(Point3D(1, 2, 3)));
-      scene.add(Object3D.point(Point3D(4, 5, 6)));
       scene.clear();
-      expect(scene.objects, isEmpty);
+      expect(scene.objects.isEmpty, true);
     });
 
-    test('scene center is at target if no objects', () {
-      final scene = Scene3D();
-      expect(scene.sceneCenter, equals(Point3D(0, 0, 0)));
+    test('objects list is unmodifiable', () {
+      final scene = Scene3D()..add(Object3D.point(const Point3D(1, 1, 1)));
+      expect(() => scene.objects.add(Object3D.point(const Point3D(0, 0, 0))),
+          throwsUnsupportedError);
     });
 
-    test('fitToView adjusts camera to encompass all objects', () {
-      final scene = Scene3D();
-      scene.add(Object3D.point(Point3D(-5, -5, -5)));
-      scene.add(Object3D.point(Point3D(5, 5, 5)));
+    test('byName finds objects', () {
+      final scene = Scene3D()..add(Object3D.point(const Point3D(0, 0, 0), name: 'A'));
+      expect(scene.byName('A'), isNotNull);
+      expect(scene.byName('B'), isNull);
+    });
+
+    test('nextPointName generates unique labels', () {
+      final scene = Scene3D()
+        ..add(Object3D.point(const Point3D(0, 0, 0), name: 'A'))
+        ..add(Object3D.point(const Point3D(0, 0, 0), name: 'B'));
+      expect(scene.nextPointName(), 'C');
+    });
+
+    test('boundingBox covers all objects', () {
+      final scene = Scene3D()
+        ..add(Object3D.point(const Point3D(-1, -2, -3)))
+        ..add(Object3D.point(const Point3D(4, 5, 6)));
+      final bb = scene.boundingBox();
+      expect(bb, isNotNull);
+      final (min, max) = bb!;
+      expect(min, const Point3D(-1, -2, -3));
+      expect(max, const Point3D(4, 5, 6));
+    });
+
+    test('fitToView centers on the scene', () {
+      final scene = Scene3D()
+        ..add(Object3D.point(const Point3D(10, 10, 10)))
+        ..add(Object3D.point(const Point3D(-10, -10, -10)));
       scene.fitToView();
-      // Camera distance should be large enough to see both points
-      expect(scene.camera.distance, greaterThan(5));
+      final cam = scene.camera;
+      expect(cam.target, const Point3D(0, 0, 0));
+      expect(cam.distance, greaterThan(10));
     });
 
-    test('objects list is immutable from outside', () {
-      final scene = Scene3D();
-      scene.add(Object3D.point(Point3D(1, 2, 3)));
-      final objects = scene.objects;
-      expect(objects.length, 1);
-      // Modifying the returned list should not affect scene
-      // (the getter returns an unmodifiable list)
-      // This test verifies the behavior even if it's just the length
+    test('pick finds a point object under the cursor', () {
+      final scene = Scene3D()
+        ..setViewport(800, 600)
+        ..add(Object3D.point(const Point3D(0, 0, 0), name: 'A'));
+      final cam = Camera3D(
+          target: Point3D.origin,
+          distance: 10,
+          theta: dart_math.pi / 4,
+          phi: 0.615);
+      scene.setCamera(cam);
+      final proj = scene.projection;
+      final s = proj.project(Point3D.origin)!;
+      final hit = scene.pick(s.x, s.y);
+      expect(hit, isNotNull);
+      expect(hit!.$1.name, 'A');
+      expect(hit.$2, const Point3D(0, 0, 0));
+    });
+
+    test('pick returns null on empty space', () {
+      final scene = Scene3D()
+        ..setViewport(800, 600)
+        ..add(Object3D.point(const Point3D(3, 3, 3), name: 'A'));
+      final cam = Camera3D(
+          target: Point3D.origin,
+          distance: 10,
+          theta: dart_math.pi / 4,
+          phi: 0.615);
+      scene.setCamera(cam);
+      final hit = scene.pick(100, 100);
+      expect(hit, isNull);
+    });
+
+    test('pick hits a sphere via ray-triangle', () {
+      final scene = Scene3D()
+        ..setViewport(800, 600)
+        ..add(Object3D.sphere(Point3D.origin, 1, name: 'S'));
+      final cam = Camera3D(
+          target: Point3D.origin,
+          distance: 10,
+          theta: dart_math.pi / 4,
+          phi: 0.615);
+      scene.setCamera(cam);
+      final s = scene.projection.project(Point3D.origin)!;
+      final hit = scene.pick(s.x, s.y);
+      expect(hit, isNotNull);
+      expect(hit!.$1.name, 'S');
+    });
+
+    test('pick hits a segment', () {
+      final scene = Scene3D()
+        ..setViewport(800, 600)
+        ..add(Object3D.segment(const Point3D(-2, 0, 0), const Point3D(2, 0, 0),
+            name: 's'));
+      final cam = Camera3D(
+          target: Point3D.origin,
+          distance: 10,
+          theta: dart_math.pi / 4,
+          phi: 0.615);
+      scene.setCamera(cam);
+      final s = scene.projection.project(const Point3D(0, 0, 0))!;
+      final hit = scene.pick(s.x, s.y);
+      expect(hit, isNotNull);
+      expect(hit!.$1.name, 's');
+      expect(hit.$2.distanceTo(Point3D.origin), lessThan(1));
     });
   });
 
-  group('3D to 2D pipeline', () {
-    test('worldToScreen transforms through camera and projection', () {
-      final cam = Camera3D(
-        target: Point3D(0, 0, 0),
-        distance: 10,
-        theta: 0,
-        phi: 0,
-      );
-      final proj = Projection3D.parallel(width: 800, height: 600, scale: 50);
-      final screen = worldToScreen(Point3D(0, 0, 0), cam, proj);
-      expect(screen.x, closeTo(400, 5));
-      expect(screen.y, closeTo(300, 5));
-    });
-
-    test('worldToScreen preserves relative positions', () {
-      final cam = Camera3D(
-        target: Point3D(0, 0, 0),
-        distance: 10,
-        theta: 0,
-        phi: 0,
-      );
-      final proj = Projection3D.parallel(width: 800, height: 600, scale: 50);
-      final left = worldToScreen(Point3D(-1, 0, 0), cam, proj);
-      final right = worldToScreen(Point3D(1, 0, 0), cam, proj);
-      expect(left.x, lessThan(right.x));
-    });
-
-    test('worldToScreen returns finite values for valid input', () {
-      final cam = Camera3D();
-      final proj = Projection3D.parallel(width: 800, height: 600);
-      final screen = worldToScreen(Point3D(100, 100, 100), cam, proj);
-      expect(screen.x.isFinite, true);
-      expect(screen.y.isFinite, true);
-    });
-
-    test('worldToScreen handles object behind camera', () {
-      final cam = Camera3D(
-        target: Point3D(0, 0, 0),
-        distance: 5,
-        theta: 0,
-        phi: 0,
-      );
-      final proj = Projection3D.perspective(
-        width: 800,
-        height: 600,
-        fov: 60,
-      );
-      // Point behind the camera
-      final screen = worldToScreen(Point3D(0, 0, 20), cam, proj);
-      // Should not crash, might return invalid coordinates
-      expect(screen, isNotNull);
-    });
-  });
-
-  group('Matrix4 utilities', () {
-    test('identity matrix has correct diagonal', () {
-      final m = identityMatrix4();
-      for (int i = 0; i < 4; i++) {
-        expect(m[i * 4 + i], closeTo(1, 1e-10));
-      }
-    });
-
-    test('matrix multiplication produces correct result', () {
-      // A = translate(1,2,3), B = scale(2,2,2)
-      // A * B means "scale then translate" — translation is unchanged
-      final a = <double>[
-        1,
-        0,
-        0,
-        0,
-        0,
-        1,
-        0,
-        0,
-        0,
-        0,
-        1,
-        0,
-        1,
-        2,
-        3,
-        1,
-      ];
-      final b = scaleMatrix4(2, 2, 2);
-      final result = multiplyMatrix4(a, b);
-      // Scale part should be [2, 2, 2]
-      expect(result[0], closeTo(2, 1e-10)); // scale x
-      expect(result[5], closeTo(2, 1e-10)); // scale y
-      expect(result[10], closeTo(2, 1e-10)); // scale z
-      // Translation remains unchanged (scale then translate)
-      expect(result[12], closeTo(1, 1e-10));
-      expect(result[13], closeTo(2, 1e-10));
-      expect(result[14], closeTo(3, 1e-10));
+  group('Scene3D projection round trip', () {
+    test('worldToScreen is consistent for the default camera', () {
+      final scene = Scene3D()..setViewport(800, 600);
+      final proj = scene.projection;
+      const world = Point3D(1, 2, 3);
+      final s = proj.project(world);
+      expect(s, isNotNull);
+      expect(s!.x.isFinite, true);
+      expect(s.y.isFinite, true);
     });
   });
 }

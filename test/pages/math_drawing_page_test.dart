@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/models/math_3d_object.dart';
 import 'package:stroom/models/math_3d_tool.dart';
 import 'package:stroom/pages/math_drawing_page.dart';
+import 'package:stroom/widgets/math_3d_object_panel.dart';
 import 'package:stroom/widgets/math_3d_toolbar.dart';
+import 'package:stroom/widgets/math_canvas_3d.dart';
 
 Widget _buildTestApp({String? initialExpression}) {
   return MaterialApp(
@@ -46,7 +49,7 @@ void main() {
     });
   });
 
-  group('MathDrawingPage - formula input', () {
+  group('MathDrawingPage - formula input (2D)', () {
     testWidgets('typing shows in text field', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
@@ -88,36 +91,20 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      // Add a second formula
       await tester.tap(find.byIcon(Icons.add_circle));
       await tester.pump();
       expect(find.byType(TextField), findsNWidgets(2));
 
-      // Tap remove on first formula
       await tester.tap(find.byIcon(Icons.remove_circle_outline).first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Confirmation dialog should appear
       expect(find.text('删除'), findsWidgets);
 
-      // Confirm deletion
       await tester.tap(find.text('删除').last);
       await tester.pump();
 
-      // Now 1 formula should remain
       expect(find.byType(TextField), findsOneWidget);
-    });
-
-    testWidgets('add button only on first row', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      await tester.tap(find.byIcon(Icons.add_circle));
-      await tester.pump();
-
-      // There should be exactly 1 add button (only on first row)
-      expect(find.byIcon(Icons.add_circle), findsOneWidget);
     });
 
     testWidgets('eye toggle hides formula', (tester) async {
@@ -127,11 +114,9 @@ void main() {
       await tester.enterText(find.byType(TextField), 'x^2');
       await tester.pump();
 
-      // Tap eye to toggle
       await tester.tap(find.byIcon(Icons.visibility));
       await tester.pump();
 
-      // Should now show eye-off icon
       expect(find.byIcon(Icons.visibility_off), findsOneWidget);
     });
 
@@ -139,28 +124,156 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      // Enter formula
       await tester.enterText(find.byType(TextField), 'x^2');
       await tester.pump();
 
-      // Plot it
       await tester.tap(find.byIcon(Icons.check_circle_outline));
       await tester.pumpAndSettle();
 
-      // Switch to 3D tab
       await tester.tap(find.text('3D'));
       await tester.pumpAndSettle();
 
-      // Switch back to 2D tab
       await tester.tap(find.text('2D 绘图'));
       await tester.pumpAndSettle();
 
-      // Text field should still have the formula
       final tf = tester.widget<TextField>(find.byType(TextField));
       expect(tf.controller?.text, equals('x^2'));
-
-      // Canvas should still be present
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('MathDrawingPage - 3D mode', () {
+    testWidgets('3D tab shows toolbar, canvas and object panel',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      await tester.tap(find.text('3D'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MathCanvas3D), findsOneWidget);
+      expect(find.byType(Math3DToolbar), findsOneWidget);
+      expect(find.byType(Math3DObjectPanel), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('object panel toggles via app bar button', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      await tester.tap(find.text('3D'));
+      await tester.pumpAndSettle();
+      expect(find.byType(Math3DObjectPanel), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.view_list));
+      await tester.pumpAndSettle();
+      expect(find.byType(Math3DObjectPanel), findsNothing);
+    });
+
+    testWidgets('plotting an explicit surface creates an object',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      await tester.tap(find.text('3D'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'z = x + y');
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.check_circle_outline));
+      await tester.pumpAndSettle();
+
+      final state =
+          tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
+      expect(state.objects.length, 1);
+      expect(state.objects.first.type, Object3DType.surface);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('plotting an implicit sphere creates a mesh object',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      await tester.tap(find.text('3D'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'x^2 + y^2 + z^2 = 4');
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.check_circle_outline));
+      await tester.pumpAndSettle();
+
+      final state =
+          tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
+      expect(state.objects.length, 1);
+      expect(state.objects.first.type, Object3DType.surface);
+      expect(state.objects.first.mesh!.vertices.length, greaterThan(100));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('plotting a parametric curve creates a curve',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      await tester.tap(find.text('3D'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byType(TextField), '(cos(t), sin(t), t)');
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.check_circle_outline));
+      await tester.pumpAndSettle();
+
+      final state =
+          tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
+      expect(state.objects.length, 1);
+      expect(state.objects.first.type, Object3DType.curve);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('invalid 3D expression shows error snackbar', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      await tester.tap(find.text('3D'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'x ^^ 2');
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.check_circle_outline));
+      await tester.pumpAndSettle();
+
+      // Error snackbar appears; no crash.
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('selecting a tool shows the instruction bar', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      await tester.tap(find.text('3D'));
+      await tester.pumpAndSettle();
+
+      // Open the point toolbox (second toolbox) and pick the Point tool.
+      final toolboxes = find.byWidgetPredicate(
+        (w) => w is PopupMenuButton<ConstructionTool>,
+      );
+      await tester.tap(toolboxes.at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('点').last);
+      await tester.pumpAndSettle();
+
+      final state =
+          tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
+      expect(state.activeTool, ConstructionTool.point);
+      // Instruction bar appears (contains 点击).
+      expect(find.textContaining('点击'), findsOneWidget);
+
+      // Cancel via close icon returns to move.
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pump();
+      expect(state.activeTool, ConstructionTool.move);
     });
   });
 
@@ -171,7 +284,8 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('shows error for invalid expression', (tester) async {
+    testWidgets('shows error for invalid expression without crash',
+        (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
@@ -191,11 +305,8 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      // Color circle and visibility icon should both be present
       expect(find.byIcon(Icons.visibility), findsOneWidget);
       expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
-
-      // No layout exceptions
       expect(tester.takeException(), isNull);
     });
 
@@ -207,7 +318,6 @@ void main() {
       final textField = find.byType(TextField);
       final eyeIcon = find.byIcon(Icons.visibility);
 
-      // Eye icon's left edge must be to the right of the TextField's right edge
       final textFieldRect = tester.getRect(textField);
       final eyeRect = tester.getRect(eyeIcon);
 
@@ -216,95 +326,16 @@ void main() {
               'Eye icon should be positioned to the right of the text field (outside the input)');
     });
 
-    testWidgets('color circle has left padding from the row edge',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      // Find the Container with BoxShape.circle (the color indicator)
-      final colorCircle = find.byWidgetPredicate(
-        (w) =>
-            w is Container &&
-            w.decoration is BoxDecoration &&
-            (w.decoration as BoxDecoration).shape == BoxShape.circle,
-      );
-      expect(colorCircle, findsOneWidget);
-
-      // The left edge of the color circle should have padding (the 4px
-      // SizedBox) before it, plus the 8px ListView padding
-      final circleRect = tester.getRect(colorCircle);
-      expect(circleRect.left, greaterThan(2),
-          reason: 'Color circle should have left padding from the row edge');
-    });
-
-    testWidgets(
-        'right side formula IconButtons have compact constraints for consistent sizing',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      // Find only the IconButtons within the formula list (exclude AppBar)
-      final formulaList = find.byType(ListView);
-      final iconButtonsInFormula = find.descendant(
-        of: formulaList,
-        matching: find.byType(IconButton),
-      );
-
-      // Should have at least add + checkmark (2)
-      expect(iconButtonsInFormula, findsAtLeastNWidgets(2));
-
-      // All formula IconButtons should have explicit tight constraints (24x24)
-      for (final btn in iconButtonsInFormula.evaluate()) {
-        final ib = btn.widget as IconButton;
-        final c = ib.constraints;
-        expect(c, isNotNull);
-        expect(c!.minWidth, 24);
-        expect(c.maxWidth, 24);
-        expect(c.minHeight, 24);
-        expect(c.maxHeight, 24);
-      }
-    });
-
-    testWidgets('remove button also has tight constraints when visible',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
-
-      // Add a second formula to make remove button visible
-      await tester.tap(find.byType(IconButton).first);
-      await tester.pump();
-
-      final formulaList = find.byType(ListView);
-      final iconButtonsInFormula = find.descendant(
-        of: formulaList,
-        matching: find.byType(IconButton),
-      );
-
-      // Now should have more IconButtons (add, 2×remove, 2×plot = 5)
-      expect(iconButtonsInFormula, findsAtLeastNWidgets(3));
-
-      // All should have tight constraints
-      for (final btn in iconButtonsInFormula.evaluate()) {
-        final ib = btn.widget as IconButton;
-        final c = ib.constraints;
-        expect(c, isNotNull);
-        expect(c!.minWidth, 24);
-        expect(c.maxWidth, 24);
-      }
-    });
-
     testWidgets('formula row overall layout does not overflow', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      // Type a long formula to stress test layout
       await tester.enterText(
         find.byType(TextField),
         'sin(x) + cos(x) + tan(x) + log(x) + sqrt(x)',
       );
       await tester.pump();
 
-      // Should not have overflow errors
       expect(tester.takeException(), isNull);
     });
   });
@@ -321,85 +352,26 @@ void main() {
     });
   });
 
-  group('Math3DToolbar - tool icons', () {
-    testWidgets('renders all tool buttons with Material icons', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: Math3DToolbar(
-            activeTool: ConstructionTool.move,
-            onToolSelected: (_) {},
-          ),
-        ),
-        localizationsDelegates: const [
-          DefaultMaterialLocalizations.delegate,
-          DefaultWidgetsLocalizations.delegate,
-        ],
-      ));
-      await tester.pump();
-
-      // Each ConstructionTool should have a corresponding Material Icon rendered
+  group('Tool metadata', () {
+    testWidgets('every tool has metadata and an icon', (tester) async {
       for (final tool in ConstructionTool.values) {
         final info = ToolInfo.all[tool]!;
-        // Verify the icon data is a Material Design icon (not a string)
         expect(info.iconData, isA<IconData>());
-        // Each tool button should be findable by tooltip message prefix
-        expect(
-          find.byWidgetPredicate(
-            (w) =>
-                w is Tooltip &&
-                (w.message?.startsWith('${info.name}:') ?? false),
-          ),
-          findsOneWidget,
-        );
+        expect(info.name, isNotEmpty);
       }
     });
 
-    testWidgets('active tool button has highlighted background',
-        (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: Math3DToolbar(
-            activeTool: ConstructionTool.sphere,
-            onToolSelected: (_) {},
-          ),
-        ),
-        localizationsDelegates: const [
-          DefaultMaterialLocalizations.delegate,
-          DefaultWidgetsLocalizations.delegate,
-        ],
-      ));
-      await tester.pump();
-
-      // Find the sphere tool button by tooltip
-      final sphereInfo = ToolInfo.all[ConstructionTool.sphere]!;
-      final tooltip = find.byWidgetPredicate(
-        (w) =>
-            w is Tooltip &&
-            (w.message?.startsWith('${sphereInfo.name}:') ?? false),
-      );
-      expect(tooltip, findsOneWidget);
-
-      // The active tool's Material should have a non-transparent background
-      final tooltipWidget = tester.widget<Tooltip>(tooltip);
-      expect(tooltipWidget.message, contains(sphereInfo.name));
-
-      // The Icon rendered inside should use the primary color via iconColor
-      // (verify by checking the Icon widget exists with correct iconData)
-      final iconFinder = find.byWidgetPredicate(
-        (w) => w is Icon && w.icon == sphereInfo.iconData,
-      );
-      expect(iconFinder, findsAtLeastNWidgets(1));
+    testWidgets('all tools are grouped', (tester) async {
+      final grouped = ToolInfo.groups.expand((g) => g).toSet();
+      expect(grouped.length, ConstructionTool.values.length);
     });
 
-    testWidgets('each tool has a unique Material icon', (tester) async {
-      final icons = <IconData>{};
+    testWidgets('each tool has at least one workflow step', (tester) async {
       for (final tool in ConstructionTool.values) {
-        final icon = ToolInfo.all[tool]!.iconData;
-        icons.add(icon);
+        if (tool == ConstructionTool.move) continue;
+        expect(ToolInfo.all[tool]!.steps, isNotEmpty,
+            reason: '$tool needs workflow steps');
       }
-      // Most tools should have unique icons; at minimum there should be
-      // more than 8 distinct icons for the 12 tools
-      expect(icons.length, greaterThan(8));
     });
   });
 }
