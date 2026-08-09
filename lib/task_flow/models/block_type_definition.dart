@@ -148,6 +148,13 @@ class BlockTypeDefinition {
     color: Color(0xFF009688),
     params: [
       BlockParamDefinition(
+        key: 'modelIndex',
+        label: '识别模型',
+        type: BlockParamType.modelSelector,
+        configType: 'ocr',
+        defaultValue: 0,
+      ),
+      BlockParamDefinition(
         key: 'saveFolder',
         label: '保存文件夹',
         type: BlockParamType.filePath,
@@ -216,10 +223,10 @@ class BlockTypeDefinition {
       ),
       BlockParamDefinition(
         key: 'durationSec',
-        label: '预期时长(秒)',
+        label: '预期时长（秒）',
         type: BlockParamType.number,
         defaultValue: 0,
-        hintText: '0 表示不筛选时长',
+        hintText: '按视频时长筛选，0 表示不筛选',
       ),
     ],
   );
@@ -237,13 +244,14 @@ class BlockTypeDefinition {
         key: 'voice',
         label: '语音',
         type: BlockParamType.voiceSelector,
-        hintText: '选择配置的TTS模型音色',
+        hintText: '选择TTS模型提供的音色',
       ),
       BlockParamDefinition(
         key: 'speed',
         label: '语速',
         type: BlockParamType.number,
         defaultValue: 1.0,
+        hintText: '倍速，如 0.8 慢速、1.2 快速',
       ),
       BlockParamDefinition(
         key: 'saveFolder',

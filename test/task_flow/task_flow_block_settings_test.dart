@@ -155,6 +155,58 @@ void main() {
     expect(find.textContaining('代码助手'), findsOneWidget);
   });
 
+  ProviderEntriesState _asrEntries() {
+    return ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          id: 'asr-1',
+          type: 'asr',
+          name: 'ASR',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'OpenAI',
+              host: 'https://api.openai.com',
+              key: 'k',
+              models: [
+                ModelConfig(name: 'whisper-1', modelId: 'whisper-1'),
+                ModelConfig(name: 'whisper-large', modelId: 'whisper-large'),
+              ],
+            ),
+            ProviderConfigItem(
+              providerName: 'Groq',
+              host: 'https://api.groq.com',
+              key: 'k',
+              models: [
+                ModelConfig(name: 'distil-whisper', modelId: 'distil-whisper'),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  testWidgets(
+      'ASR block panel lists MODELS as "modelName | providerName" '
+      '(same granularity as the ASR page)', (tester) async {
+    await pumpPanel(
+      tester,
+      block: TaskFlowBlock(typeKey: BlockType.asr),
+      entries: _asrEntries(),
+    );
+
+    // All three models across both configs are selectable.
+    await tester.tap(find.text('whisper-1 | OpenAI'));
+    await tester.pumpAndSettle();
+    expect(find.text('whisper-large | OpenAI'), findsOneWidget);
+    expect(find.text('distil-whisper | Groq'), findsOneWidget);
+
+    // Select a model from the second provider.
+    await tester.tap(find.text('distil-whisper | Groq').last);
+    await tester.pumpAndSettle();
+    expect(find.text('distil-whisper | Groq'), findsOneWidget);
+  });
+
   testWidgets(
       'chat panel with a DELETED assistant id shows the warning line '
       '(no crash, re-selection works)', (tester) async {

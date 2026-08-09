@@ -167,18 +167,26 @@ Future<String> executeOcrBlock({
     );
   }
 
-  final configs = providerEntries.entries
-      .where((e) => e.type == 'ocr')
-      .expand((e) => e.configs)
-      .toList();
-  if (configs.isEmpty) {
+  // Model-level selection, same granularity as the OCR page: flatten all
+  // configured OCR models (each entry carries its config for host/key).
+  final modelIndex = asIntParam(block.params, 'modelIndex', 0);
+  final models = <({dynamic config, dynamic model})>[
+    for (final e in providerEntries.entries)
+      if (e.type == 'ocr')
+        for (final c in e.configs)
+          if ((c.host as String? ?? '').isNotEmpty &&
+              (c.key as String? ?? '').isNotEmpty)
+            for (final m in c.models as List<dynamic>? ?? const [])
+              (config: c, model: m),
+  ];
+  if (models.isEmpty || modelIndex >= models.length) {
     failSubTask(
       bgNotifier,
       taskId,
       execNotifier,
       execId,
       flowSubTask.id,
-      '未配置OCR模型',
+      '未配置OCR模型或索引越界',
     );
     throw BlockExecutionException(
       '未配置OCR模型',
@@ -187,23 +195,8 @@ Future<String> executeOcrBlock({
     );
   }
 
-  final config = configs.first;
-  final model = config.models.isNotEmpty ? config.models.first : null;
-  if (model == null) {
-    failSubTask(
-      bgNotifier,
-      taskId,
-      execNotifier,
-      execId,
-      flowSubTask.id,
-      'OCR模型配置为空',
-    );
-    throw BlockExecutionException(
-      '模型配置为空',
-      blockType: def.typeKey.name,
-      blockTitle: def.label,
-    );
-  }
+  final config = models[modelIndex].config;
+  final model = models[modelIndex].model;
 
   try {
     bgNotifier.updateStep(taskId, 0, running: true);

@@ -223,12 +223,17 @@ Future<String> executeAsrBlock({
 
   final modelIndex = asIntParam(block.params, 'modelIndex', 0);
   final saveFolder = asStringParam(block.params, 'saveFolder', '');
-  final configs = providerEntries.entries
-      .where((e) => e.type == 'asr')
-      .expand((e) => e.configs)
-      .toList();
+  // Model-level selection, same granularity as the ASR page: flatten all
+  // configured ASR models (each entry carries its config for host/key).
+  final models = <({ProviderConfigItem config, ModelConfig model})>[
+    for (final e in providerEntries.entries)
+      if (e.type == 'asr')
+        for (final c in e.configs)
+          if (c.host.isNotEmpty && c.key.isNotEmpty)
+            for (final m in c.models) (config: c, model: m),
+  ];
 
-  if (configs.isEmpty || modelIndex >= configs.length) {
+  if (models.isEmpty || modelIndex >= models.length) {
     failSubTask(
       bgNotifier,
       taskId,
@@ -244,23 +249,8 @@ Future<String> executeAsrBlock({
     );
   }
 
-  final config = configs[modelIndex];
-  final model = config.models.isNotEmpty ? config.models.first : null;
-  if (model == null) {
-    failSubTask(
-      bgNotifier,
-      taskId,
-      execNotifier,
-      execId,
-      flowSubTask.id,
-      'ASR模型配置为空',
-    );
-    throw BlockExecutionException(
-      '模型配置为空',
-      blockType: def.typeKey.name,
-      blockTitle: def.label,
-    );
-  }
+  final config = models[modelIndex].config;
+  final model = models[modelIndex].model;
 
   try {
     bgNotifier.updateStep(taskId, 0, running: true);

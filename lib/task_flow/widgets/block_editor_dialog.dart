@@ -65,19 +65,19 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     _params = Map<String, dynamic>.from(widget.block.params);
     _definition = widget.block.getDefinition();
 
-    // Clamp persisted modelSelector values into the CURRENT config range
-    // (configs may have been deleted since the block was saved) — a stale
-    // out-of-range index would otherwise survive untouched through a
+    // Clamp persisted modelSelector values into the CURRENT model range
+    // (configs/models may have been deleted since the block was saved) — a
+    // stale out-of-range index would otherwise survive untouched through a
     // confirm and fail at execution time.
     if (_definition != null) {
       final def = _definition!;
       for (final p in def.params) {
         if (p.type != BlockParamType.modelSelector) continue;
-        final configs = _configsOf(p.configType);
-        if (configs.isEmpty) continue;
+        final models = _modelsOf(p.configType);
+        if (models.isEmpty) continue;
         final raw = _params[p.key];
         final idx = raw is num ? raw.toInt() : (int.tryParse('$raw') ?? 0);
-        _params[p.key] = idx.clamp(0, configs.length - 1).toInt();
+        _params[p.key] = idx.clamp(0, models.length - 1).toInt();
       }
     }
 
@@ -103,8 +103,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     super.dispose();
   }
 
-  /// Configs of a provider type (flattened, in the same order the
-  /// executors index them).
+  /// Configs of a provider type (flattened) — used by voiceSelector, which
+  /// needs the config's models.
   List<dynamic> _configsOf(String configType) {
     return ref
         .read(providerEntriesProvider)
@@ -112,6 +112,16 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         .where((e) => e.type == configType)
         .expand((e) => e.configs)
         .toList();
+  }
+
+  /// Models of a provider type, flattened with their config — the same
+  /// granularity the executors use (modelSelector indexes this list).
+  List<({dynamic config, dynamic model})> _modelsOf(String configType) {
+    return [
+      for (final c in _configsOf(configType))
+        for (final m in c.models as List<dynamic>? ?? const [])
+          (config: c, model: m),
+    ];
   }
 
   @override
@@ -346,6 +356,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             ),
           ),
           obscureText: param.type == BlockParamType.secret,
+          // Multi-line for text prompts (e.g. the chat block's 开头提示语)
+          // — single-line scrolling hides long instructions.
+          maxLines: param.key == 'promptPrefix' ? 3 : 1,
           style: const TextStyle(fontSize: 13),
           onChanged: (v) => _params[param.key] = v,
         );
@@ -355,8 +368,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         // would fail and silently reset the selection to 0.
         final currentIndex =
             value is num ? value.toInt() : (int.tryParse('$value') ?? 0);
-        final configs = _configsOf(param.configType);
-        if (configs.isEmpty) {
+        // Model-level selection, same granularity as the standalone page:
+        // each entry is a model of a configured provider, displayed as
+        // 'modelName | providerName'.
+        final models = _modelsOf(param.configType);
+        if (models.isEmpty) {
           return const ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
@@ -367,7 +383,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           );
         }
         final clampedIndex =
-            currentIndex.clamp(0, math.max(0, configs.length - 1)).toInt();
+            currentIndex.clamp(0, math.max(0, models.length - 1)).toInt();
         return DropdownButtonFormField<int>(
           value: clampedIndex,
           isDense: true,
@@ -380,12 +396,22 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             ),
           ),
           style: TextStyle(fontSize: 13, color: cs.onSurface),
-          items: List.generate(configs.length, (i) {
-            final dynamic c = configs[i];
+          items: List.generate(models.length, (i) {
+            final dynamic m = models[i].model;
+            final dynamic c = models[i].config;
+            final modelName = (m.name as String?)?.isNotEmpty == true
+                ? m.name as String
+                : (m.modelId as String? ?? '模型 $i');
             final providerName = (c.providerName as String?)?.isNotEmpty == true
                 ? c.providerName as String
-                : '模型 $i';
-            return DropdownMenuItem<int>(value: i, child: Text(providerName));
+                : '未命名供应商';
+            return DropdownMenuItem<int>(
+              value: i,
+              child: Text(
+                '$modelName | $providerName',
+                overflow: TextOverflow.ellipsis,
+              ),
+            );
           }),
           onChanged: (v) {
             if (v != null) {
@@ -464,7 +490,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           items: voices.map((v) {
             return DropdownMenuItem<String>(
               value: v.id,
-              child: Text('${v.name} (${v.id})'),
+              // Name only — the id (e.g. zh-CN-XiaoxiaoNeural) is a long
+              // opaque string that would confuse users; the TTS page shows
+              // the same.
+              child: Text(v.name),
             );
           }).toList(),
           onChanged: (v) {
@@ -594,6 +623,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                         ? cs.onSurface
                         : cs.onSurfaceVariant,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
               TextButton(
