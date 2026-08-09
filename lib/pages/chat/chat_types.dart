@@ -286,7 +286,13 @@ List<MessageBlock> legacyToBlocks({
       : (toolCalls.isNotEmpty ? 1 : 0);
 
   for (var i = 0; i < numRounds; i++) {
-    if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
+    // Emit EVERY reasoning section — including empty '' placeholders —
+    // so blocksToSegments' ordinal sectionIndex equals the raw section
+    // index in the message's reasoningSections list. Skipping empties
+    // misaligned ordinals whenever a middle tool round had no reasoning
+    // (interior ''), making the wrong section's text render (or none).
+    // Empty blocks render nothing (ReasoningSection skips empty texts).
+    if (i < reasoningSections.length) {
       blocks.add(ReasoningBlock(text: reasoningSections[i], isComplete: true));
     }
     if (i < textChunks.length && textChunks[i].isNotEmpty) {
@@ -314,7 +320,9 @@ List<MessageBlock> legacyToBlocks({
       ? reasoningSections.length
       : textChunks.length;
   for (var i = numRounds; i < maxRemaining; i++) {
-    if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
+    // Unconditional emission keeps ordinal section indices aligned with
+    // the raw reasoningSections indices (see round loop above).
+    if (i < reasoningSections.length) {
       blocks.add(ReasoningBlock(text: reasoningSections[i], isComplete: true));
     }
     if (i < textChunks.length && textChunks[i].isNotEmpty) {
