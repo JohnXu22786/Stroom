@@ -132,7 +132,18 @@
       if (!svg) return;
       var vw = viewport.clientWidth;
       var vh = viewport.clientHeight;
-      if (vw <= 0 || vh <= 0) return;
+      if (vw <= 0 || vh <= 0) {
+        // The WebView is not laid out yet (zero-size iframe, e.g. created
+        // during a page transition). Fit again as soon as the size becomes
+        // available (e.g. after a window resize), instead of giving up.
+        window.addEventListener('resize', function onFitRetry() {
+          if (viewport.clientWidth > 0 && viewport.clientHeight > 0) {
+            window.removeEventListener('resize', onFitRetry);
+            window.fitToViewport();
+          }
+        });
+        return;
+      }
       var sw = 0, sh = 0;
       try {
         var bbox = svg.getBBox();

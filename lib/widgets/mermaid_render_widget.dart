@@ -633,6 +633,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// forever. "Loading forever" is structurally impossible with this.
   Timer? _webViewCreationFallbackTimer;
 
+  /// Delays WebView creation until the page transition animation has
+  /// settled (see [initState]). Cancelled on dispose so widget tests do
+  /// not fail with a pending timer.
+  Timer? _deferredCreationTimer;
+
   /// Guard flag to prevent concurrent save operations.
   bool _isSaving = false;
 
@@ -658,13 +663,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       _showSourceCode = true;
       return;
     }
-    // Defer WebView creation to after the first frame so that the
-    // page transition is not blocked by platform view creation.
+    // Defer WebView creation until the page transition animation has
+    // settled: creating the platform view mid-transition can leave the
+    // iframe with a zero size (the diagram is actually rendered, but the
+    // iframe stays invisible until a window resize forces a re-layout).
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_shouldCreateWebView) {
-        setState(() => _shouldCreateWebView = true);
-        _armWebViewCreationFallback();
-      }
+      _deferredCreationTimer?.cancel();
+      _deferredCreationTimer = Timer(const Duration(milliseconds: 400), () {
+        if (mounted && !_shouldCreateWebView) {
+          setState(() => _shouldCreateWebView = true);
+          _armWebViewCreationFallback();
+        }
+      });
     });
     // Load the bundled mermaid.js (inlined into the page so rendering
     // works offline). The WebView is created only after it is ready.
@@ -708,6 +718,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   void dispose() {
     _readyFallbackTimer?.cancel();
     _webViewCreationFallbackTimer?.cancel();
+    _deferredCreationTimer?.cancel();
     _webViewController = null;
     super.dispose();
   }
