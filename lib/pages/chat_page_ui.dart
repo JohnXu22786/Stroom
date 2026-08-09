@@ -31,19 +31,19 @@ extension _ChatPageUiExt on _ChatPageState {
     return view.viewInsets.bottom / view.devicePixelRatio;
   }
 
-  /// Called when the composer input gains focus on mobile. Only captures
-  /// the pre-keyboard scroll position (for the dismiss restore) — the list
+  /// Called when the composer input gains focus. Only captures the
+  /// pre-keyboard scroll position (for the dismiss restore) — the list
   /// itself does NOT scroll here: a scroll-to-bottom right at the tap (as
   /// the first keyboard-session implementation did) visibly yanked the
   /// list a large distance before the keyboard had even started rising.
   /// The scroll starts instead when the keyboard actually appears
   /// (see the keyboard-appear branch of [didChangeMetrics]).
+  ///
+  /// No platform gate: an on-screen keyboard can appear on ANY platform
+  /// (Android/iOS, and Windows/Linux/macOS touch keyboards, web tablet
+  /// mode — all drive [MediaQueryData.viewInsets] the same way).
   void _onComposerFocusChanged(bool hasFocus) {
     if (!mounted || !hasFocus) return;
-    final platform = Theme.of(context).platform;
-    if (platform != TargetPlatform.android && platform != TargetPlatform.iOS) {
-      return;
-    }
     // While the initial positioning pass runs the list is hidden; the pass
     // positions the list itself, so the hook must not interfere.
     if (_pendingInitialScrollAdjustment) return;
