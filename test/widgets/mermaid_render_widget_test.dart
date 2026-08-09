@@ -378,7 +378,12 @@ void main() {
     test('loads mermaid.min.js from the same asset directory (no CDN)',
         () async {
       final html = await loadAssetTemplate();
-      expect(html, contains("script.src = 'mermaid.min.js'"));
+      // The library ships gzip-compressed (dev-server transfer stays
+      // fast); it is fetched from the same asset directory, decompressed
+      // in the browser, and falls back to the raw file if needed.
+      expect(html, contains("fetch('mermaid.min.js.gz')"));
+      expect(html, contains("DecompressionStream('gzip')"));
+      expect(html, contains("runScriptUrl('mermaid.min.js')"));
       expect(html, isNot(contains('cdn.jsdelivr.net')));
     });
 

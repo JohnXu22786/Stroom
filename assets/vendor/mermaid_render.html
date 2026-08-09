@@ -264,6 +264,45 @@
     // Asset version: the mermaid code arrives via the ?code= query
     // parameter, and mermaid.min.js is loaded from the SAME asset
     // directory (same origin) — no CDN request, no network dependency.
+    // The library is shipped gzip-compressed (~1MB instead of 3.5MB) to
+    // keep the dev-server transfer fast; it is decompressed in the
+    // browser and executed from a blob URL. Falls back to the raw file
+    // when decompression is unavailable.
+    function initMermaid() {
+      var hint = document.getElementById('loading-hint');
+      var codeEl = document.getElementById('mermaid-code');
+      try {
+        mermaid.initialize({
+          theme: 'default',
+          securityLevel: 'loose',
+          fontFamily: 'sans-serif',
+        });
+        mermaid.run({
+          nodes: [codeEl],
+        }).then(function() {
+          if (hint) hint.style.display = 'none';
+          window.fitToViewport();
+        }).catch(function(err) {
+          if (hint) hint.style.display = 'none';
+          reportError('Mermaid render error: ' + err.message);
+        });
+      } catch(e) {
+        if (hint) hint.style.display = 'none';
+        reportError('Mermaid initialize error: ' + e.message);
+      }
+    }
+
+    function runScriptUrl(url) {
+      var script = document.createElement('script');
+      script.async = true;
+      script.onload = initMermaid;
+      script.onerror = function() {
+        reportError('Mermaid 资源加载失败');
+      };
+      script.src = url;
+      document.head.appendChild(script);
+    }
+
     (function loadMermaid() {
       var hint = document.getElementById('loading-hint');
       var codeEl = document.getElementById('mermaid-code');
@@ -275,35 +314,28 @@
         return;
       }
       codeEl.textContent = code;
-      var script = document.createElement('script');
-      script.async = true;
-      script.src = 'mermaid.min.js';
-      script.onload = function() {
-        try {
-          mermaid.initialize({
-            theme: 'default',
-            securityLevel: 'loose',
-            fontFamily: 'sans-serif',
+      try {
+        fetch('mermaid.min.js.gz')
+          .then(function(resp) {
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            return resp.blob();
+          })
+          .then(function(blob) {
+            return new Response(
+              blob.stream().pipeThrough(new DecompressionStream('gzip'))
+            ).blob();
+          })
+          .then(function(jsBlob) {
+            runScriptUrl(URL.createObjectURL(jsBlob));
+          })
+          .catch(function() {
+            // DecompressionStream unavailable or the gz asset missing:
+            // fall back to the raw library file.
+            runScriptUrl('mermaid.min.js');
           });
-          mermaid.run({
-            nodes: [codeEl],
-          }).then(function() {
-            if (hint) hint.style.display = 'none';
-            window.fitToViewport();
-          }).catch(function(err) {
-            if (hint) hint.style.display = 'none';
-            reportError('Mermaid render error: ' + err.message);
-          });
-        } catch(e) {
-          if (hint) hint.style.display = 'none';
-          reportError('Mermaid initialize error: ' + e.message);
-        }
-      };
-      script.onerror = function() {
-        if (hint) hint.style.display = 'none';
-        reportError('Mermaid 资源加载失败');
-      };
-      document.head.appendChild(script);
+      } catch(e) {
+        runScriptUrl('mermaid.min.js');
+      }
     })();
   </script>
 </body>
