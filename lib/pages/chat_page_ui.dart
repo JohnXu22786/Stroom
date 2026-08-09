@@ -33,41 +33,6 @@ extension _ChatPageUiExt on _ChatPageState {
     return view.viewInsets.bottom / view.devicePixelRatio;
   }
 
-  /// Called when the composer input gains focus. Only captures the
-  /// pre-keyboard scroll position (for the dismiss restore) — the list
-  /// itself does NOT scroll here: a scroll-to-bottom right at the tap (as
-  /// the first keyboard-session implementation did) visibly yanked the
-  /// list a large distance before the keyboard had even started rising.
-  /// The scroll starts instead when the keyboard actually appears
-  /// (see the keyboard-appear branch of [didChangeMetrics]).
-  ///
-  /// No platform gate: an on-screen keyboard can appear on ANY platform
-  /// (Android/iOS, and Windows/Linux/macOS touch keyboards, web tablet
-  /// mode — all drive [MediaQueryData.viewInsets] the same way).
-  void _onComposerFocusChanged(bool hasFocus) {
-    if (!mounted || !hasFocus) return;
-    // While the initial positioning pass runs the list is hidden; the pass
-    // positions the list itself, so the hook must not interfere.
-    if (_pendingInitialScrollAdjustment) return;
-    // Keyboard already visible — the session is already being handled.
-    if (_currentKeyboardInset() > _ChatPageState._keyboardVisibleThreshold) {
-      return;
-    }
-    // Session already handled (a position was saved) — e.g. a mid-restore
-    // re-tap must not overwrite the saved pre-keyboard position.
-    if (_lastScrollPositionBeforeKeyboard != null) return;
-    if (!_chatScrollController.hasClients) return;
-    _lastScrollPositionBeforeKeyboard = _chatScrollController.position.pixels;
-    // If the keyboard never shows up (physical keyboard, suppressed IME),
-    // the saved position would go stale; drop it after a grace period.
-    _staleKeyboardPositionTimer?.cancel();
-    _staleKeyboardPositionTimer =
-        Timer(_ChatPageState._staleKeyboardPositionDelay, () {
-      if (!mounted) return;
-      if (!_keyboardAppeared) _lastScrollPositionBeforeKeyboard = null;
-    });
-  }
-
   /// Tracks user drags on the chat list via scroll notifications. Only the
   /// drag-initiating [ScrollStartNotification] carries [dragDetails]; a
   /// fling's ballistic phase and every programmatic scroll (animateTo /
@@ -88,58 +53,22 @@ extension _ChatPageUiExt on _ChatPageState {
     return false;
   }
 
-  /// Scrolls the list by the soft-keyboard height as the keyboard rises,
-  /// so the reading spot stays above the keyboard. Started by the
-  /// keyboard-appear branch of [didChangeMetrics] as soon as the insets
-  /// begin to rise (~0.3-0.5s before the viewport settles) — NOT at the
-  /// input tap, and NOT to the bottom (a bottom scroll read as a sudden
-  /// far "hop" the user asked to drop; the follow only moves by the
-  /// keyboard height and clamps at the bottom).
-  ///
-  /// After the keyboard finishes rising nothing else scrolls: the
-  /// library's own debounced keyboard scroll is swallowed for the session
-  /// (see [_KeyboardAwareScrollController]) and there is no follow-up
-  /// animation.
-  void _animateKeyboardFollowScroll() {
-    final pos = _chatScrollController.position;
-    final inset = _currentKeyboardInset();
-    final target = (pos.pixels + inset).clamp(0.0, pos.maxScrollExtent);
-    if ((pos.pixels - target).abs() < 1) return;
-    pos.animateTo(
-      target,
-      duration: _ChatPageState._keyboardOpenScrollDuration,
-      curve: Curves.easeOutCubic,
-    );
-  }
-
-  /// Restores the scroll position that was captured before the keyboard
-  /// opened, so the user returns to where they were reading. Animates
-  /// instead of jumping — an instant jump back read as a sudden far
-  /// "hop" on device, while the user asked to keep the smooth motion.
-  /// Also ends the keyboard scroll session: the saved position is cleared,
-  /// every keyboard-session flag is reset, and the library's scrolls are
-  /// un-swallowed for the next session.
+  /// Ends the keyboard scroll session: the library's scrolls are
+  /// un-swallowed and the session flags are reset. The list itself is NOT
+  /// moved on dismiss — the user asked for no keyboard scroll at all —
+  /// but the viewport growing back shrinks maxScrollExtent, so an offset
+  /// left past it (e.g. the user scrolled to the bottom while the
+  /// keyboard was up) would hang with blank space below; that overflow is
+  /// snapped back with a single instant correction.
   void _restoreScrollPositionAfterKeyboard() {
-    final savedPos = _lastScrollPositionBeforeKeyboard;
-    _lastScrollPositionBeforeKeyboard = null;
-    _keyboardAppeared = false;
     _keyboardFollowUpPending = false;
-    _staleKeyboardPositionTimer?.cancel();
     _chatScrollController.swallowScrolls = false;
-    if (savedPos == null) return;
-    if (!_chatScrollController.hasClients) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (!_chatScrollController.hasClients) return;
       final pos = _chatScrollController.position;
-      final maxScroll = pos.maxScrollExtent;
-      final target = savedPos.clamp(0.0, maxScroll);
-      if ((pos.pixels - target).abs() < 1) return;
-      pos.animateTo(
-        target,
-        duration: _ChatPageState._keyboardOpenScrollDuration,
-        curve: Curves.easeOutCubic,
-      );
+      final max = pos.maxScrollExtent;
+      if (pos.pixels > max + 0.5) pos.jumpTo(max);
     });
   }
 
@@ -800,14 +729,14 @@ extension _ChatPageUiExt on _ChatPageState {
     );
   }
 
-  /// Dismisses the soft keyboard, to the left of the scroll-to-bottom
-  /// button, visible while the keyboard is open. The keyboard otherwise
-  /// stays up while the user reads/scrolls (the list's
-  /// [ScrollViewKeyboardDismissBehavior.manual]): it is closed either via
-  /// the keyboard's own close key or this button.
+  /// Dismisses the soft keyboard, bottom-LEFT (symmetric to the
+  /// scroll-to-bottom button on the bottom-right), visible while the
+  /// keyboard is open. The keyboard otherwise stays up while the user
+  /// reads/scrolls (the list's [ScrollViewKeyboardDismissBehavior.manual]):
+  /// it is closed either via the keyboard's own close key or this button.
   Widget _buildKeyboardDismissButton({required bool isDark}) {
     return Positioned(
-      right: 16 + 36 + 8,
+      left: 16,
       bottom: 16,
       child: Material(
         elevation: 4,

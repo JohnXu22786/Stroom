@@ -220,8 +220,8 @@ Future<void> closeKeyboard(WidgetTester tester) async {
 void main() {
   group('ChatPage keyboard scroll', () {
     testWidgets(
-        'tapping the composer input does NOT move the list; the scroll '
-        'starts when the keyboard appears', (tester) async {
+        'the keyboard opening or closing never moves the list — the '
+        'library keyboard scroll is swallowed', (tester) async {
       await pumpChat(tester);
       await scrollToBottom(tester);
       await scrollUp(tester);
@@ -232,121 +232,105 @@ void main() {
         reason: 'precondition: the list is scrolled up',
       );
 
-      // Just tap the input; no keyboard metrics have changed yet. The
-      // list must NOT move (the earlier tap-time scroll visibly yanked
-      // the list a large distance before the keyboard had even risen).
+      // Tap the input: no keyboard metrics yet, the list must not move.
       await tester.tap(find.byType(TextField));
       await tester.pump(const Duration(milliseconds: 16));
       await tester.pump(const Duration(milliseconds: 100));
       expect(
         _scrollPosition(tester).pixels,
         closeTo(saved, 1.0),
-        reason: 'a tap must not move the list — the scroll starts only '
-            'when the keyboard actually appears',
+        reason: 'a tap must not move the list',
       );
 
-      // The keyboard rises: the keyboard-follow scroll starts right away
-      // (~0.2-0.5s before the viewport settles).
+      // The keyboard appears — the list still must not move (no keyboard
+      // scroll at all; the library's debounced scroll is swallowed).
       await setKeyboardInset(tester, 300);
       await tester.pump(const Duration(milliseconds: 16));
       await tester.pump(const Duration(milliseconds: 100));
-      final midPos = _scrollPosition(tester);
-      expect(
-        midPos.pixels,
-        greaterThan(saved + 1),
-        reason: 'the list must start sliding up shortly after the keyboard '
-            'appears',
-      );
-
-      // The follow scroll moves by the keyboard height (300 logical px) —
-      // NOT to the bottom (a bottom scroll read as a sudden overshooting
-      // "hop"), and nothing scrolls after it settles.
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(milliseconds: 400));
-      final endPos = _scrollPosition(tester);
-      expect(
-        endPos.pixels,
-        closeTo(saved + 300, 20.0),
-        reason: 'the list must follow the keyboard by its height and stop '
-            'there — no second scroll, no bottom pinning',
-      );
-      await settle(tester);
-    });
-
-    testWidgets(
-        'opening the keyboard does not overwrite the position saved by the '
-        'focus hook; dismissing restores the tap-time position',
-        (tester) async {
-      await pumpChat(tester);
-      await scrollToBottom(tester);
-      await scrollUp(tester);
-      final savedPos = _scrollPosition(tester).pixels;
-      expect(savedPos, greaterThan(0));
-
-      // Tap the input: the focus hook saves the position; no scroll yet.
-      await tester.tap(find.byType(TextField));
-      await tester.pump(const Duration(milliseconds: 16));
-      expect(
-        _scrollPosition(tester).pixels,
-        closeTo(savedPos, 1.0),
-        reason: 'precondition: a tap does not move the list',
-      );
-
-      // The keyboard appears and the list follows it (by the keyboard
-      // height). The metrics transition must NOT overwrite the saved
-      // position.
-      await setKeyboardInset(tester, 300);
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));
       expect(
         _scrollPosition(tester).pixels,
-        closeTo(savedPos + 300, 20.0),
-        reason: 'precondition: keyboard open follows the list by the '
-            'keyboard height',
+        closeTo(saved, 1.0),
+        reason: 'the keyboard appearing must not scroll the list — the '
+            'library scroll is swallowed and nothing else moves it',
       );
 
-      // Keyboard dismisses — the list must return to the tap-time position
-      // (a smooth restore animation now, no instant jump).
+      // The keyboard closes — the list still must not move.
       await closeKeyboard(tester);
       await tester.pump(const Duration(milliseconds: 16));
       await tester.pump(const Duration(milliseconds: 400));
       expect(
         _scrollPosition(tester).pixels,
-        closeTo(savedPos, 1.0),
-        reason: 'dismiss restores the position captured at tap time, not a '
-            'mid-animation offset',
+        closeTo(saved, 1.0),
+        reason: 'the keyboard closing must not move the list',
       );
       await settle(tester);
     });
 
     testWidgets(
-        'a keyboard appearing while the list is scrolled far up: the '
-        'follow scroll moves by the keyboard height and clamps at the '
-        'bottom — the library scroll is swallowed', (tester) async {
+        'scrolling to the bottom while the keyboard is open (user action) '
+        'is clamped when the keyboard closes', (tester) async {
       await pumpChat(tester);
       await scrollToBottom(tester);
-      // Scroll far up; with the keyboard height (300) the follow target
-      // (offset + height) stays below the bottom — the follow must not
-      // overshoot, and the library's debounced scroll must not run a
-      // second competing scroll.
+      await scrollUp(tester);
+      final saved = _scrollPosition(tester).pixels;
+
+      // Open the keyboard: the list does not move (no keyboard scroll).
+      await setKeyboardInset(tester, 300);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(
+        _scrollPosition(tester).pixels,
+        closeTo(saved, 1.0),
+        reason: 'precondition: keyboard open does not move the list',
+      );
+
+      // The user scrolls to the bottom while the keyboard is up (the
+      // keyboard-shrunk bottom is past the pre-keyboard bottom).
+      await scrollToBottom(tester);
+      final openBottom = _scrollPosition(tester).pixels;
+
+      // Dismiss: the list must NOT be animated; the viewport growing back
+      // shrinks maxScrollExtent, so the offset is snapped back to the
+      // (smaller) bottom — an instant correction, not a motion.
+      await closeKeyboard(tester);
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(
+        _scrollPosition(tester).pixels,
+        closeTo(_scrollPosition(tester).maxScrollExtent, 1.0),
+        reason: 'the overflow from the keyboard-shrunk bottom is clamped '
+            'to the restored bottom, without any animation',
+      );
+      expect(
+        _scrollPosition(tester).pixels,
+        lessThan(openBottom),
+        reason: 'the clamp moved the list back by the viewport growth',
+      );
+      await settle(tester);
+    });
+
+    testWidgets(
+        'a keyboard appearing while the list is scrolled far up does not '
+        'move it — the library scroll is swallowed', (tester) async {
+      await pumpChat(tester);
+      await scrollToBottom(tester);
+      // Scroll far up; the keyboard must not scroll the list at all.
       await scrollUp(tester, amount: 1500);
       final saved = _scrollPosition(tester).pixels;
 
       await tester.tap(find.byType(TextField));
       await tester.pump(const Duration(milliseconds: 16));
       await setKeyboardInset(tester, 300);
-      // Small steps so the follow animation runs; then let it finish.
-      for (var i = 0; i < 12; i++) {
-        await tester.pump(const Duration(milliseconds: 16));
-      }
+      // Well past the library's debounce window: nothing may move.
       await tester.pump(const Duration(milliseconds: 400));
-      final endPos = _scrollPosition(tester);
+      await tester.pump(const Duration(milliseconds: 400));
       expect(
-        endPos.pixels,
-        closeTo(saved + 300, 20.0),
-        reason: 'the follow moves by the keyboard height and stops — '
-            'clamped at the bottom if the keyboard height reaches it, '
-            'never overshooting and never running a second scroll',
+        _scrollPosition(tester).pixels,
+        closeTo(saved, 1.0),
+        reason: 'the keyboard must not scroll the list, no matter how far '
+            'up it is — the library scroll is swallowed',
       );
 
       await closeKeyboard(tester);
@@ -356,76 +340,34 @@ void main() {
     });
 
     testWidgets(
-        'a saved position whose keyboard never appears is dropped, so the '
-        'next keyboard session saves a fresh position', (tester) async {
-      await pumpChat(tester);
-      await scrollToBottom(tester);
-      await scrollUp(tester);
-
-      // Physical-keyboard tap: the hook saves the position and scrolls,
-      // but no IME ever appears (no metrics change).
-      await tester.tap(find.byType(TextField));
-      await tester.pump(const Duration(milliseconds: 16));
-      await tester.pump(const Duration(milliseconds: 400));
-      // Past the 800ms stale-position grace period.
-      await tester.pump(const Duration(milliseconds: 500));
-
-      // The user then reads elsewhere; a keyboard appears later without a
-      // focus event (fallback path) and must save THIS position.
-      await scrollUp(tester);
-      final newPos = _scrollPosition(tester).pixels;
-      await setKeyboardInset(tester, 300);
-      await tester.pump(const Duration(milliseconds: 600));
-
-      await closeKeyboard(tester);
-      await tester.pump(const Duration(milliseconds: 16));
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(
-        _scrollPosition(tester).pixels,
-        closeTo(newPos, 1.0),
-        reason: 'dismiss restores the position saved when the keyboard '
-            'actually appeared, not the stale tap-time one',
-      );
-      await settle(tester);
-    });
-
-    testWidgets(
-        'keyboard opens without a focus event: fallback saves the position '
-        'and scrolls toward the bottom; dismiss restores it', (tester) async {
+        'a keyboard opening without a focus event does not move the list '
+        'either', (tester) async {
       await pumpChat(tester);
       await scrollToBottom(tester);
       await scrollUp(tester);
       final savedPos = _scrollPosition(tester).pixels;
       expect(savedPos, greaterThan(0));
 
-      // Keyboard appears with no focus event (e.g. Android back button
-      // hid the IME without unfocusing, then a re-tap re-shows it).
+      // Keyboard appears with no focus event.
       await setKeyboardInset(tester, 300);
-      await tester.pump(const Duration(milliseconds: 600));
-      // The list moved away from the pre-keyboard position. (Part of this
-      // movement comes from the chat library's own debounced keyboard
-      // scroll; the restore below is what proves the app's fallback saved
-      // the position.)
-      expect(
-        _scrollPosition(tester).pixels,
-        greaterThan(savedPos + 100),
-        reason: 'the list must leave the pre-keyboard position',
-      );
-
-      await closeKeyboard(tester);
-      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));
       expect(
         _scrollPosition(tester).pixels,
         closeTo(savedPos, 1.0),
-        reason: 'dismissing the keyboard returns to the saved position',
+        reason: 'the keyboard must not scroll the list even without a '
+            'focus event',
       );
+
+      await closeKeyboard(tester);
+      await tester.pump(const Duration(milliseconds: 16));
       await settle(tester);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets(
-        'desktop platforms handle the on-screen keyboard the same way: a '
-        'tap alone does not scroll, an insets change does', (tester) async {
+        'desktop platforms handle the on-screen keyboard the same way: '
+        'nothing moves on tap or insets change', (tester) async {
       await pumpChat(tester, platform: TargetPlatform.windows);
       await scrollToBottom(tester);
       await scrollUp(tester);
@@ -441,16 +383,17 @@ void main() {
       );
 
       // A touch keyboard appears (Windows TabTip / Linux on-screen
-      // keyboard drive viewInsets the same way as mobile): the list
-      // scrolls up with it.
+      // keyboard drive viewInsets the same way as mobile): the list must
+      // not move either.
       await setKeyboardInset(tester, 300);
       await tester.pump(const Duration(milliseconds: 16));
       await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 400));
       expect(
         _scrollPosition(tester).pixels,
-        greaterThan(saved + 1),
-        reason: 'the keyboard-appear scroll must work on desktop platforms '
-            'too — an on-screen keyboard is not mobile-only',
+        closeTo(saved, 1.0),
+        reason: 'the keyboard must not scroll the list on desktop '
+            'platforms either',
       );
 
       await closeKeyboard(tester);
@@ -459,7 +402,7 @@ void main() {
       expect(
         _scrollPosition(tester).pixels,
         closeTo(saved, 1.0),
-        reason: 'dismiss restores the reading position on desktop too',
+        reason: 'dismiss must not move the list on desktop either',
       );
       await settle(tester);
     });
@@ -537,13 +480,13 @@ void main() {
     });
 
     testWidgets(
-        'the keyboard-dismiss button unfocuses the input; dismissing the '
-        'keyboard then restores the reading position', (tester) async {
+        'the keyboard-dismiss button unfocuses the input and is visible '
+        'bottom-left, symmetric to the scroll-to-bottom button',
+        (tester) async {
       await pumpChat(tester);
       await scrollToBottom(tester);
       await scrollUp(tester);
-      final savedPos = _scrollPosition(tester).pixels;
-      expect(savedPos, greaterThan(0));
+      final saved = _scrollPosition(tester).pixels;
 
       // Focus the input and open the keyboard.
       await tester.tap(find.byType(TextField));
@@ -554,6 +497,20 @@ void main() {
         find.byIcon(Icons.keyboard_hide),
         findsOneWidget,
         reason: 'the dismiss button appears while the keyboard is open',
+      );
+      // Symmetric to the scroll-to-bottom button: bottom-left.
+      final dismissRect = tester.getRect(find.byIcon(Icons.keyboard_hide));
+      final scrollRect = tester.getRect(find.byIcon(Icons.arrow_downward));
+      expect(
+        dismissRect.left,
+        lessThan(scrollRect.left),
+        reason: 'the dismiss button sits on the LEFT, the scroll-to-bottom '
+            'button on the RIGHT',
+      );
+      expect(
+        (dismissRect.bottom - scrollRect.bottom).abs(),
+        lessThan(2.0),
+        reason: 'the two buttons share the bottom edge (symmetric)',
       );
 
       // Tapping it drops the input focus (the keyboard close key / system
@@ -567,8 +524,8 @@ void main() {
       );
 
       // The keyboard close transition (simulated: on a device the IME
-      // collapses when unfocused) hides the button and restores the
-      // reading position.
+      // collapses when unfocused) hides the button; the list itself is
+      // not moved on dismiss.
       await closeKeyboard(tester);
       await tester.pump(const Duration(milliseconds: 16));
       expect(
@@ -579,9 +536,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       expect(
         _scrollPosition(tester).pixels,
-        closeTo(savedPos, 1.0),
-        reason: 'dismissing the keyboard via the button restores the '
-            'reading position',
+        closeTo(saved, 1.0),
+        reason: 'dismissing the keyboard must not move the list — it stays '
+            'where it was before the keyboard opened',
       );
       await settle(tester);
     });
@@ -622,25 +579,22 @@ void main() {
     });
 
     testWidgets(
-        'keyboard dismissed while the chat tab is hidden still restores '
-        'the reading position', (tester) async {
+        'keyboard dismissed while the chat tab is hidden: the list is not '
+        'moved (no dismiss restore)', (tester) async {
       // Session starts while the chat tab is visible.
       await pumpChat(tester);
       await scrollToBottom(tester);
       await scrollUp(tester);
       final savedPos = _scrollPosition(tester).pixels;
-      expect(savedPos, greaterThan(0));
 
       await setKeyboardInset(tester, 300);
-      // The keyboard-follow scroll (by the keyboard height) lands within
-      // the animation duration.
+      // The keyboard open must not move the list.
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));
       expect(
         _scrollPosition(tester).pixels,
-        closeTo(savedPos + 300, 10.0),
-        reason: 'precondition: keyboard open on the visible chat tab '
-            'follows the list by the keyboard height',
+        closeTo(savedPos, 1.0),
+        reason: 'precondition: keyboard open does not move the list',
       );
 
       // Switch to another tab while the keyboard is still open (the same
@@ -663,15 +617,15 @@ void main() {
       );
       await tester.pump();
 
-      // The keyboard dismisses while the chat tab is hidden — only the
-      // OPEN transition is gated; the close must still restore the saved
-      // reading position.
+      // The keyboard dismisses while the chat tab is hidden — the close
+      // transition is honored (session cleanup), but the list is not
+      // moved.
       await closeKeyboard(tester);
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Return to the chat tab — the list is back at the reading position
-      // (the restore is a smooth animation now; give it time to land).
+      // Return to the chat tab — the list is still where it was (no
+      // dismiss restore, no motion).
       await tester.pumpWidget(
         _wrapTabVisibility(
           ProviderScope(
@@ -693,8 +647,8 @@ void main() {
       expect(
         _scrollPosition(tester).pixels,
         closeTo(savedPos, 5.0),
-        reason: 'dismissing the keyboard while hidden must still restore '
-            'the reading position captured before the session',
+        reason: 'dismissing the keyboard while hidden must not move the '
+            'list',
       );
       await settle(tester);
     });
