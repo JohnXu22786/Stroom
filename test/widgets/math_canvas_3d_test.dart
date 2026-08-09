@@ -359,9 +359,11 @@ void main() {
           name: 's'));
       await tester.pump();
 
-      // Click near the center of the segment (its midpoint is at the origin,
-      // which projects to the canvas center).
-      await tester.tapAt(const Offset(400, 300));
+      // Click the projected midpoint of the segment (its midpoint is at the
+      // origin, which projects to the canvas center).
+      final proj = state.scene.projection;
+      final s = proj.project(const Point3D(0, 0, 0))!;
+      await tester.tapAt(Offset(s.x, s.y));
       await tester.pump();
       await tester.pump();
 
@@ -388,11 +390,16 @@ void main() {
       ], name: 'poly'));
       await tester.pump();
 
-      // Click somewhere on the polygon (its anchor at (1,1,0) projects near
-      // the canvas center for the default camera).
-      await tester.tapAt(const Offset(400, 300));
+      // Click the projected anchor of the polygon (inside the face).
+      final proj = state.scene.projection;
+      final s = proj.project(const Point3D(1, 1, 0))!;
+      debugPrint('AREA-DEBUG tap at ${s.x},${s.y}');
+      await tester.tapAt(Offset(s.x, s.y));
       await tester.pump();
       await tester.pump();
+      debugPrint('AREA-DEBUG objects=${state.objects.length} '
+          'inputs=${state.construction?.inputs.length} '
+          'complete=${state.construction?.isComplete}');
 
       expect(state.objects.length, 2);
       final created = state.objects.last;
