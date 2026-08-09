@@ -1,12 +1,16 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as p;
 
 import 'app_log_service.dart';
 import 'backup_location_manager.dart';
 import 'backup_service.dart';
+import 'backup_service_shared.dart' show collectAttachmentPaths;
 import 'data_migration_service.dart';
+import 'manifest_database.dart';
+import 'storage_service.dart';
 
 // ====================================================================
 // AutoBackupService — 自动后台备份服务
@@ -50,6 +54,152 @@ enum _BackupOutcome {
   failed,
 }
 
+// ====================================================================
+// 备份失败分类 — 为 UI 提供具体、可操作的失败原因
+// ====================================================================
+
+/// 备份失败原因分类。
+enum BackupFailureReason {
+  /// 存储空间不足（可预检或在写入时触发）。
+  noSpace,
+
+  /// 设备内存不足（OOM）。
+  outOfMemory,
+
+  /// 备份目录权限异常（Android SAF 未授权/授权失效）。
+  permission,
+
+  /// 文件被其他程序占用（如 Windows 上被占用无法写入）。
+  fileLocked,
+
+  /// 备份被取消。
+  cancelled,
+
+  /// 其他未知错误。
+  other,
+}
+
+/// 一次备份失败的详细信息（供 UI 展示针对性提示）。
+class BackupFailure {
+  /// 失败原因分类。
+  final BackupFailureReason reason;
+
+  /// 用户可读的失败原因描述。
+  final String message;
+
+  /// 技术细节（原始异常信息）。
+  final String? detail;
+
+  /// 预计所需空间（noSpace 时）。
+  final int? requiredBytes;
+
+  /// 当前剩余空间（noSpace 时）。
+  final int? freeBytes;
+
+  const BackupFailure({
+    required this.reason,
+    required this.message,
+    this.detail,
+    this.requiredBytes,
+    this.freeBytes,
+  });
+}
+
+/// 将异常分类为具体的备份失败原因。
+///
+/// 通过错误文本匹配常见系统错误（ENOSPC / OOM / 权限 / 文件占用），
+/// 无法识别时归为 [BackupFailureReason.other]。
+BackupFailure classifyBackupFailure(
+  Object error, {
+  int? requiredBytes,
+  int? freeBytes,
+}) {
+  final text = error.toString();
+  final lower = text.toLowerCase();
+
+  BackupFailureReason reason;
+  String message;
+
+  if (error is BackupCancelledException) {
+    reason = BackupFailureReason.cancelled;
+    message = '备份已取消。';
+  } else if (text.contains('No space left on device') ||
+      text.contains('ENOSPC') ||
+      text.contains('insufficient storage') ||
+      text.contains('not enough space') ||
+      lower.contains('no space') ||
+      text.contains('存储空间不足') ||
+      text.contains('空间不足')) {
+    reason = BackupFailureReason.noSpace;
+    message = '存储空间不足，无法完成自动备份。'
+        '请清理设备中的文件（如旧的备份、大视频、缓存）后重试。';
+  } else if (text.contains('Out of Memory') ||
+      text.contains('OutOfMemory') ||
+      lower.contains('out of memory') ||
+      text.contains('Cannot allocate memory') ||
+      text.contains('failed to map file') ||
+      text.contains('malloc failed')) {
+    reason = BackupFailureReason.outOfMemory;
+    message = '设备内存不足，无法完成自动备份（备份数据可能过大）。'
+        '建议清理一些不需要的大文件后重试。';
+  } else if (text.contains('Permission denied') ||
+      lower.contains('permission') ||
+      text.contains('SAF URI') ||
+      text.contains('未授权') ||
+      text.contains('权限') ||
+      text.contains('ACCESS_DENIED') ||
+      text.contains('SECURITY_EXCEPTION')) {
+    reason = BackupFailureReason.permission;
+    message = '备份目录访问权限异常，无法写入备份文件。'
+        '请重新授权备份目录后重试。';
+  } else if (text.contains('被占用') ||
+      lower.contains('in use') ||
+      text.contains('sharing violation') ||
+      text.contains('used by another process') ||
+      lower.contains('locked')) {
+    reason = BackupFailureReason.fileLocked;
+    message = '部分数据文件被其他程序占用，无法完成自动备份。'
+        '请关闭正在占用这些文件的程序后重试。';
+  } else {
+    reason = BackupFailureReason.other;
+    message = '自动备份失败，请稍后重试。';
+  }
+
+  return BackupFailure(
+    reason: reason,
+    message: message,
+    detail: text,
+    requiredBytes: requiredBytes,
+    freeBytes: freeBytes,
+  );
+}
+
+/// 是否需要提醒用户清理空间。
+///
+/// 规则：当前设备/磁盘剩余空间 < 5 × 本次备份大小 时需要提醒
+/// （为后续备份预留足够的空间）。
+bool shouldRemindSpaceCleanup({
+  required int backupSizeBytes,
+  required int freeBytes,
+}) {
+  if (backupSizeBytes <= 0 || freeBytes < 0) return false;
+  return freeBytes < 5 * backupSizeBytes;
+}
+
+/// 空间清理提醒信息。
+class SpaceReminderInfo {
+  /// 本次备份的实际大小（字节）。
+  final int backupSizeBytes;
+
+  /// 当前设备/磁盘剩余空间（字节）。
+  final int freeBytes;
+
+  const SpaceReminderInfo({
+    required this.backupSizeBytes,
+    required this.freeBytes,
+  });
+}
+
 /// 自动后台备份服务。
 class AutoBackupService {
   AutoBackupService._();
@@ -67,6 +217,16 @@ class AutoBackupService {
 
   /// 最近一次备份失败的错误信息（用于调用方判断错误类型）。
   static String? lastError;
+
+  /// 最近一次备份失败的分类信息（供 UI 展示针对性提示）。
+  static BackupFailure? lastFailure;
+
+  /// 最近一次成功备份的文件大小（字节），供空间提醒使用。
+  static int? lastBackupSizeBytes;
+
+  /// 测试专用：覆盖剩余空间查询（null 表示不覆盖，使用真实查询）。
+  @visibleForTesting
+  static Future<int?> Function()? debugFreeSpaceOverride;
 
   /// 当前是否正在执行自动备份。
   static bool get isRunning => _isRunning;
@@ -148,6 +308,12 @@ class AutoBackupService {
     required bool isPreMigration,
   }) async {
     _isRunning = true;
+    // 清空上次备份的状态（必须放在 1 小时规则检查之前 —— 若跳过本次
+    // 备份，不应残留上一次备份的大小/失败信息，否则空间提醒会用
+    // 过期的「本次备份大小」弹窗）。
+    lastError = null;
+    lastFailure = null;
+    lastBackupSizeBytes = null;
 
     // ================================================================
     // 1 小时规则检查：如果最近 1 小时内有备份，则跳过本次备份
@@ -172,7 +338,6 @@ class AutoBackupService {
 
     await AppLogService.info(
         'AutoBackupService', '开始执行自动备份 (isPreMigration=$isPreMigration)');
-    lastError = null;
     if (_cancelRequested) {
       _isRunning = false;
       _cancelRequested = false;
@@ -184,6 +349,37 @@ class AutoBackupService {
 
     String? safTempPath; // SAF 模式下写入的系统临时文件路径
     try {
+      // ============================================================
+      // 空间预检：估算本次备份所需空间，与剩余空间对比。
+      // 不足时快速失败并给出明确的「存储空间不足」原因，
+      // 而不是写入到一半才触发 ENOSPC（后者信息不明确且浪费时间）。
+      // 注意：预检必须放在 try/finally 内，保证失败时 _isRunning
+      // 被正确复位（否则后续 cancel() 会让备份永久无法启动）。
+      // ============================================================
+      try {
+        final requiredBytes = await estimateBackupSize();
+        final freeBytes = debugFreeSpaceOverride != null
+            ? await debugFreeSpaceOverride!()
+            : await BackupLocationManager.getFreeDiskSpaceBytes();
+        if (freeBytes != null && freeBytes < requiredBytes) {
+          debugPrint('[AutoBackupService] 空间不足预检失败: '
+              '需要约 $requiredBytes 字节, 可用 $freeBytes 字节');
+          final failure = classifyBackupFailure(
+            '存储空间不足: 需要约 $requiredBytes 字节, 当前可用 $freeBytes 字节',
+            requiredBytes: requiredBytes,
+            freeBytes: freeBytes,
+          );
+          lastError = failure.detail;
+          lastFailure = failure;
+          await AppLogService.error(
+              'AutoBackupService', '自动备份失败：存储空间不足', Exception(failure.detail));
+          return _BackupOutcome.failed;
+        }
+      } catch (e) {
+        // 预检失败不阻止备份（无法获取剩余空间时跳过预检）
+        debugPrint('[AutoBackupService] 空间预检失败，跳过: $e');
+      }
+
       final isAndroidSaf = await BackupLocationManager.isUsingSafMode();
       final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
       final tmpFileName = 'backup_$timestamp.tmp';
@@ -211,9 +407,15 @@ class AutoBackupService {
           return _BackupOutcome.failed;
         }
 
-        // 读取临时文件并通过 SAF 写入公共目录
-        final bytes = await File(safTempPath).readAsBytes();
-        await BackupLocationManager.writeBackupFile(zipFileName, bytes);
+        // 记录备份大小（供空间提醒使用）
+        lastBackupSizeBytes = File(safTempPath).lengthSync();
+
+        // 流式上传：本地临时文件 → SAF 公共目录。
+        // 不能 readAsBytes 后经 MethodChannel 传整包 —— 大备份
+        // （数百 MB）会耗尽内存，且超过 Android Binder 事务上限
+        // （约 1MB）会抛 TransactionTooLargeException 导致崩溃。
+        await BackupLocationManager.writeBackupFileFromPath(
+            zipFileName, safTempPath);
 
         // 清理旧备份
         await _cleanupOldBackupsSaf();
@@ -260,6 +462,7 @@ class AutoBackupService {
         if (await tmpFile.exists()) {
           await tmpFile.rename(zipPath);
         }
+        lastBackupSizeBytes = File(zipPath).lengthSync();
 
         // 清理旧备份
         await _cleanupOldBackups(backupRoot);
@@ -273,11 +476,13 @@ class AutoBackupService {
       debugPrint('[AutoBackupService] 备份被取消');
       await AppLogService.warning('AutoBackupService', '备份被取消');
       lastError = null;
+      lastFailure = null;
       return _BackupOutcome.failed;
     } catch (e) {
       debugPrint('[AutoBackupService] 备份失败: $e');
       await AppLogService.error('AutoBackupService', '备份失败', e);
       lastError = e.toString();
+      lastFailure = classifyBackupFailure(e);
       return _BackupOutcome.failed;
     } finally {
       // 清理 SAF 遗留的系统临时文件（无论成功失败）
@@ -292,6 +497,109 @@ class AutoBackupService {
   /// 让出事件循环，确保 UI 可以处理帧渲染。
   static Future<void> _yieldToEventLoop() {
     return Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+
+  /// 最近 1 小时内是否已有备份（1 小时规则是否会跳过本次备份）。
+  ///
+  /// 供启动流程在「空间检查」前判断：若备份将被 1 小时规则跳过，
+  /// 则不需要检查/要求空间，避免对根本不会执行的备份弹出空间不足
+  /// 提示（例如迁移刚创建了备份，或用户 1 小时内刚启动过应用）。
+  static Future<bool> hasRecentBackupWithinHour() async {
+    try {
+      return await _hasBackupWithinLastHour();
+    } catch (e) {
+      debugPrint('[AutoBackupService] 检查最近备份失败: $e');
+      return false; // 检查失败按「无最近备份」处理（保守执行备份流程）
+    }
+  }
+
+  /// 估算一次全量备份所需的空间（字节）。
+  ///
+  /// 统计：媒体数据库记录的大小字段 + 附件文件实际大小 +
+  /// 任务/Anki/Cookies 文件大小，再加 10% 余量与 1MB 固定开销
+  /// （manifest 等 JSON 清单）。
+  ///
+  /// 用于备份前的空间预检（快速失败并给出明确原因）与
+  /// 启动时的空间检查。统计失败的部分静默跳过（估算仅供预判）。
+  static Future<int> estimateBackupSize() async {
+    if (kIsWeb) return 0;
+    var total = 0;
+
+    void addFileLength(String path) {
+      try {
+        final f = File(path);
+        if (f.existsSync()) total += f.lengthSync();
+      } catch (_) {}
+    }
+
+    // 媒体记录大小（记录中的 size 字段）+ 缩略图实际大小
+    try {
+      final appDir = await AppStorage.directory;
+      final imageRecords = await ManifestDatabase.getAllImageRecords();
+      final audioRecords = await ManifestDatabase.getAllAudioRecords();
+      final videoRecords = await ManifestDatabase.getAllVideoRecords();
+      final textRecords = await ManifestDatabase.getAllTextRecords();
+      for (final r in imageRecords) {
+        total += (r['size'] as num?)?.toInt() ?? 0;
+        // 缩略图按实际文件大小统计（避免固定估算过度放大）
+        final hash = r['hash'] as String?;
+        if (hash != null) {
+          addFileLength(p.join(appDir, 'pictures', '${hash}_thumb.png'));
+        }
+      }
+      for (final r in audioRecords) {
+        total += (r['size'] as num?)?.toInt() ?? 0;
+      }
+      for (final r in videoRecords) {
+        total += (r['size'] as num?)?.toInt() ?? 0;
+      }
+      for (final r in textRecords) {
+        total += (r['size'] as num?)?.toInt() ?? 0;
+      }
+    } catch (_) {}
+
+    // 附件文件（按实际文件大小统计）
+    try {
+      final paths = await collectAttachmentPaths();
+      final appDir = await AppStorage.directory;
+      for (final storagePath in paths) {
+        final parts = storagePath.split('/');
+        if (parts.length < 2) continue;
+        addFileLength(p.join(appDir, parts[0], parts.sublist(1).join('/')));
+      }
+    } catch (_) {}
+
+    // 任务 / Anki / Cookies 文件
+    try {
+      final appDir = await AppStorage.directory;
+      addFileLength(p.join(appDir, 'synthesis', 'tasks.json'));
+      addFileLength(p.join(appDir, 'catcatch', 'tasks.json'));
+      addFileLength(p.join(appDir, 'collection.anki2'));
+      addFileLength(p.join(appDir, 'browser_cookies.json'));
+    } catch (_) {}
+
+    // 10% 余量 + 1MB 固定开销
+    return total + total ~/ 10 + 1024 * 1024;
+  }
+
+  /// 自动备份完成后的空间清理提醒检查。
+  ///
+  /// 规则：当前设备/磁盘剩余空间 < 5 × 本次备份大小 时，返回提醒信息；
+  /// 否则（或无法获取剩余空间 / 无备份大小）返回 null。
+  ///
+  /// 由启动检查在备份成功后调用并弹出清理提醒。
+  static Future<SpaceReminderInfo?> checkSpaceReminder() async {
+    final backupSize = lastBackupSizeBytes;
+    if (backupSize == null || backupSize <= 0) return null;
+    final freeBytes = debugFreeSpaceOverride != null
+        ? await debugFreeSpaceOverride!()
+        : await BackupLocationManager.getFreeDiskSpaceBytes();
+    if (freeBytes == null) return null;
+    if (!shouldRemindSpaceCleanup(
+        backupSizeBytes: backupSize, freeBytes: freeBytes)) {
+      return null;
+    }
+    return SpaceReminderInfo(backupSizeBytes: backupSize, freeBytes: freeBytes);
   }
 
   /// 删除系统临时目录中的文件。

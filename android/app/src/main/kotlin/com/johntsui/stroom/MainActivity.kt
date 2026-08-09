@@ -20,6 +20,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 
 class MainActivity : FlutterActivity() {
@@ -115,6 +116,16 @@ class MainActivity : FlutterActivity() {
                     val bytes = call.argument<ByteArray>("bytes")
                     if (uriStr != null && fileName != null && bytes != null) {
                         writeFileToSaf(uriStr, fileName, bytes, result)
+                    } else {
+                        result.error("INVALID_ARGS", "参数不完整", null)
+                    }
+                }
+                "writeFileFromPath" -> {
+                    val uriStr = call.argument<String>("uri")
+                    val fileName = call.argument<String>("fileName")
+                    val srcPath = call.argument<String>("srcPath")
+                    if (uriStr != null && fileName != null && srcPath != null) {
+                        writeFileFromPathToSaf(uriStr, fileName, srcPath, result)
                     } else {
                         result.error("INVALID_ARGS", "参数不完整", null)
                     }
@@ -756,6 +767,92 @@ class MainActivity : FlutterActivity() {
             Log.e(TAG, "SAF: 写入文件失败", e)
             result.error("WRITE_FAILED", "写入备份文件失败: ${e.message}", null)
         }
+    }
+
+    /// 通过 SAF 从本地文件流式复制到备份文件（大备份专用）。
+    ///
+    /// 大备份（数百 MB）不能通过 MethodChannel 传字节（Binder 事务上限
+    /// 约 1MB，超出会抛 TransactionTooLargeException 导致应用崩溃），
+    /// 因此 Dart 侧先把备份写入系统临时目录，这里按 64KB 分块流式复制。
+    ///
+    /// 复制在后台线程执行：大文件复制可能耗时数十秒，若在平台主线程
+    /// 同步执行会阻塞输入分发导致 ANR。结果统一回主线程回调。
+    private fun writeFileFromPathToSaf(
+        uriStr: String,
+        fileName: String,
+        srcPath: String,
+        result: MethodChannel.Result
+    ) {
+        Thread {
+            try {
+                val uri = Uri.parse(uriStr)
+                val treeDocument = DocumentFile.fromTreeUri(this, uri)
+
+                if (treeDocument == null) {
+                    runOnUiThread {
+                        result.error("TREE_DOC_FAILED", "无法访问目录", null)
+                    }
+                    return@Thread
+                }
+
+                val backupDir = getOrCreateBackupDir(treeDocument)
+                if (backupDir == null) {
+                    runOnUiThread {
+                        result.error("CREATE_DIR_FAILED", "无法创建备份目录", null)
+                    }
+                    return@Thread
+                }
+
+                val srcFile = File(srcPath)
+                if (!srcFile.exists() || !srcFile.isFile) {
+                    runOnUiThread {
+                        result.error("SRC_NOT_FOUND", "备份源文件不存在: $srcPath", null)
+                    }
+                    return@Thread
+                }
+
+                // 删除已存在的同名文件，然后创建新文件
+                val existingFile = backupDir.findFile(fileName)
+                if (existingFile != null) {
+                    existingFile.delete()
+                }
+
+                val newFile = backupDir.createFile("application/zip", fileName)
+                if (newFile == null) {
+                    runOnUiThread {
+                        result.error("CREATE_FILE_FAILED", "无法创建备份文件", null)
+                    }
+                    return@Thread
+                }
+
+                val outputStream = contentResolver.openOutputStream(newFile.uri)
+                if (outputStream == null) {
+                    newFile.delete()
+                    runOnUiThread {
+                        result.error("WRITE_FAILED", "无法打开输出流", null)
+                    }
+                    return@Thread
+                }
+
+                val buf = ByteArray(65536)
+                FileInputStream(srcFile).use { input ->
+                    outputStream.use { out ->
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n == -1) break
+                            out.write(buf, 0, n)
+                        }
+                        out.flush()
+                    }
+                }
+                runOnUiThread { result.success(null) }
+            } catch (e: Exception) {
+                Log.e(TAG, "SAF: 流式写入文件失败", e)
+                runOnUiThread {
+                    result.error("WRITE_FAILED", "写入备份文件失败: ${e.message}", null)
+                }
+            }
+        }.start()
     }
 
     /// 通过 SAF 从文件中读取字节。
