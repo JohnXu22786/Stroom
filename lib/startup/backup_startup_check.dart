@@ -1,11 +1,13 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 
 import '../services/app_log_service.dart';
-import '../services/backup_location_manager.dart';
 import '../services/auto_backup_service.dart';
+import '../services/backup_location_manager.dart';
+import '../utils/format_file_size.dart';
 
 // ====================================================================
 // BackupStartupCheck — 启动时备份存储位置检查
@@ -124,19 +126,31 @@ class BackupStartupCheck {
       await AppLogService.info('BackupStartupCheck', '存储可访问，开始检查可用空间');
 
       // ---------------------------------------------------------------
-      // 步骤 2：检查可用空间
+      // 步骤 2：检查可用空间（按本次备份的估算大小，而非固定阈值）。
+      // 若最近 1 小时已有备份（1 小时规则将跳过本次备份），
+      // 无需检查空间 —— 避免对不会执行的备份要求用户清理空间。
       // ---------------------------------------------------------------
-      bool hasSpace = await BackupLocationManager.hasSufficientSpace();
+      final willSkipDueToOneHour =
+          await AutoBackupService.hasRecentBackupWithinHour();
+      final estimatedSize = await AutoBackupService.estimateBackupSize();
 
-      while (!hasSpace && context.mounted) {
-        final shouldRetry = await _showStorageSpaceDialog(context);
-        if (!shouldRetry || !context.mounted) {
-          return BackupStartupResult(
-            storageReady: true,
-            autoBackupPerformed: false,
-          );
+      bool hasSpace = true;
+      if (!willSkipDueToOneHour) {
+        hasSpace = await BackupLocationManager.hasSufficientSpace(
+            requiredBytes: estimatedSize);
+
+        while (!hasSpace && context.mounted) {
+          final shouldRetry = await showStorageSpaceDialog(context,
+              requiredBytes: estimatedSize);
+          if (!shouldRetry || !context.mounted) {
+            return BackupStartupResult(
+              storageReady: true,
+              autoBackupPerformed: false,
+            );
+          }
+          hasSpace = await BackupLocationManager.hasSufficientSpace(
+              requiredBytes: estimatedSize);
         }
-        hasSpace = await BackupLocationManager.hasSufficientSpace();
       }
 
       if (!context.mounted) {
@@ -167,7 +181,7 @@ class BackupStartupCheck {
 
         if (!backupSuccess && context.mounted) {
           final reachedMaxAttempts = backupAttempts >= maxBackupAttempts;
-          final dialogResult = await _showBackupFailedDialog(
+          final dialogResult = await showBackupFailedDialog(
             context,
             showSkip: reachedMaxAttempts,
             errorMessage: AutoBackupService.lastError,
@@ -196,6 +210,10 @@ class BackupStartupCheck {
 
     if (backupSuccess) {
       await AppLogService.info('BackupStartupCheck', '启动后自动备份成功');
+      // 空间清理提醒：剩余空间 < 5 × 本次备份大小 时提示清理
+      if (context.mounted) {
+        await maybeShowSpaceReminder(context);
+      }
     } else {
       await AppLogService.warning(
           'BackupStartupCheck', '启动后自动备份未执行（可能因 1 小时规则跳过或失败）');
@@ -205,6 +223,57 @@ class BackupStartupCheck {
       storageReady: true,
       autoBackupPerformed: backupSuccess,
     );
+  }
+
+  /// 备份成功后的空间清理提醒。
+  ///
+  /// 规则：当前设备/磁盘剩余空间 < 5 × 本次备份大小 时弹窗提醒清理，
+  /// 为后续备份预留足够空间（否则下次自动备份可能因空间不足失败）。
+  @visibleForTesting
+  static Future<void> maybeShowSpaceReminder(BuildContext context) async {
+    try {
+      final reminder = await AutoBackupService.checkSpaceReminder();
+      if (reminder == null || !context.mounted) return;
+
+      final freeText = formatFileSize(reminder.freeBytes);
+      final backupText = formatFileSize(reminder.backupSizeBytes);
+      final recommendedText = formatFileSize(5 * reminder.backupSizeBytes);
+
+      await AppLogService.info(
+          'BackupStartupCheck',
+          '空间提醒: 剩余 $freeText, 本次备份 $backupText, '
+              '建议保留 ≥ $recommendedText');
+      if (!context.mounted) return;
+
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.cleaning_services_outlined,
+                  color: Colors.orange.shade700, size: 24),
+              const SizedBox(width: 8),
+              const Text('存储空间提醒'),
+            ],
+          ),
+          content: Text(
+            '当前设备剩余空间约 $freeText，而本次自动备份大小为 $backupText。\n\n'
+            '建议保留至少 5 倍备份大小的空间（约 $recommendedText），'
+            '以确保后续自动备份能够顺利进行。\n\n'
+            '请清理一些不必要的文件（如旧的备份文件、大视频、应用缓存）。',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      // 提醒失败不阻塞启动流程
+      debugPrint('[BackupStartupCheck] 空间提醒失败: $e');
+    }
   }
 
   /// 显示存储访问授权引导对话框。
@@ -332,7 +401,15 @@ class BackupStartupCheck {
   /// 显示存储空间不足对话框。
   ///
   /// 返回 true 表示用户已清理空间并重试。
-  static Future<bool> _showStorageSpaceDialog(BuildContext context) async {
+  /// [requiredBytes] 为本次备份的估算大小，用于提示具体需求。
+  @visibleForTesting
+  static Future<bool> showStorageSpaceDialog(
+    BuildContext context, {
+    int? requiredBytes,
+  }) async {
+    final requiredText = requiredBytes != null && requiredBytes > 0
+        ? formatFileSize(requiredBytes)
+        : '足够的';
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -344,10 +421,11 @@ class BackupStartupCheck {
             const Text('存储空间不足'),
           ],
         ),
-        content: const Text(
-          '设备存储空间不足，无法正常完成自动备份。\n\n'
-          '请清理一些不必要的文件后点击「重试」，'
-          '或释放足够的空间后再继续使用应用。',
+        content: Text(
+          '设备存储空间不足，无法正常完成自动备份'
+          '（本次备份约需 $requiredText 空间）。\n\n'
+          '请清理一些不必要的文件（如旧的备份、大视频、缓存）'
+          '后点击「重试」，或释放足够的空间后再继续使用应用。',
         ),
         actions: [
           FilledButton(
@@ -374,12 +452,16 @@ class BackupStartupCheck {
   /// [showSkip] 为 true 时在 Android 上也显示「跳过」按钮
   /// （达到最大重试次数后，避免无限循环）。
   /// [errorMessage] 可选的错误详情，用于判断是否为 OOM 并显示针对性提示。
-  static Future<bool?> _showBackupFailedDialog(
+  @visibleForTesting
+  static Future<bool?> showBackupFailedDialog(
     BuildContext context, {
     bool showSkip = false,
     String? errorMessage,
   }) async {
     final isAndroid = !kIsWeb && Platform.isAndroid;
+    final failure = AutoBackupService.lastFailure;
+
+    // 根据失败分类构建提示文本；分类失败时回退到旧的关键字判断。
     final isOom = errorMessage != null &&
         (errorMessage.contains('Out of Memory') ||
             errorMessage.contains('OutOfMemory') ||
@@ -388,9 +470,55 @@ class BackupStartupCheck {
             errorMessage.contains('failed to map file') ||
             errorMessage.contains('malloc failed'));
 
-    // 根据错误类型和重试次数构建提示文本
+    // 分类信息优先；有具体原因时展示针对性提示（含所需/可用空间）。
+    // 注意：提示文本不引用具体按钮 —— 重试/跳过/重新授权按钮的可见性
+    // 随重试次数与平台变化（达到最大重试次数时只剩「跳过」），
+    // 文本指引具体按钮会在按钮不存在时自相矛盾。
     String contentText;
-    if (isOom) {
+    if (failure != null && failure.reason != BackupFailureReason.other) {
+      switch (failure.reason) {
+        case BackupFailureReason.noSpace:
+          final requiredText = failure.requiredBytes != null
+              ? formatFileSize(failure.requiredBytes!)
+              : null;
+          final freeText = failure.freeBytes != null
+              ? formatFileSize(failure.freeBytes!)
+              : null;
+          final details = <String>[
+            if (requiredText != null) '约需 $requiredText 空间',
+            if (freeText != null) '当前可用 $freeText',
+          ];
+          final parenthetical =
+              details.isNotEmpty ? '（${details.join('，')}）' : '';
+          contentText = '自动备份因设备存储空间不足而失败$parenthetical。\n\n'
+              '请清理一些不必要的文件（如旧的备份、大视频、应用缓存）'
+              '后再试。\n'
+              '也可以在设置中手动导出备份（可选择排除视频等大文件）。';
+        case BackupFailureReason.outOfMemory:
+          contentText = '自动备份因设备内存不足而失败。\n\n'
+              '这通常是因为备份数据（尤其是视频文件）太大。'
+              '您可以：\n'
+              '• 在设置中手动导出备份（可选择排除视频等大文件）\n'
+              '• 清理一些不需要的视频/图片后再试';
+        case BackupFailureReason.permission:
+          contentText = '自动备份因备份目录权限异常而失败。\n\n'
+              '请确认已授权正确的「Documents」文档目录路径'
+              '（Android 可在授权界面重新选择目录），'
+              '然后再次尝试备份。';
+        case BackupFailureReason.fileLocked:
+          contentText = '自动备份因部分数据文件被其他程序占用而失败。\n\n'
+              '请关闭正在占用这些文件的程序（如播放器、文件管理器），'
+              '然后再试。';
+        case BackupFailureReason.cancelled:
+          contentText = '自动备份已取消。';
+        case BackupFailureReason.other:
+          contentText = '自动备份未能成功完成，请稍后重试。';
+      }
+      if (showSkip) {
+        contentText += '\n\n自动备份多次尝试后仍未成功，'
+            '点击「跳过」暂不备份，稍后可在应用中手动备份。';
+      }
+    } else if (isOom) {
       contentText = '自动备份因设备内存不足而失败。\n\n'
           '这通常是因为备份数据（尤其是视频文件）太大。'
           '您可以：\n'
@@ -412,8 +540,17 @@ class BackupStartupCheck {
           '备份成功后即可正常使用。';
     }
 
+    // 以下失败原因与存储路径授权无关，「重新授权」按钮无意义：
+    // 空间不足 / 内存不足 / 文件占用 / 已取消 → 直接显示「跳过」
+    final reauthIrrelevant = failure != null &&
+        (failure.reason == BackupFailureReason.noSpace ||
+            failure.reason == BackupFailureReason.outOfMemory ||
+            failure.reason == BackupFailureReason.fileLocked ||
+            failure.reason == BackupFailureReason.cancelled);
+
     // OOM 时「重新授权」无意义，直接显示「跳过」
-    final showSkipInDialog = isOom || showSkip || !isAndroid;
+    final showSkipInDialog =
+        isOom || showSkip || !isAndroid || reauthIrrelevant;
 
     final result = await showDialog<bool?>(
       context: context,
