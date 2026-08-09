@@ -546,6 +546,13 @@ extension _ChatPageMessagesExt on _ChatPageState {
   /// completes in [_initialize], so that MCP tools discovered asynchronously
   /// are immediately visible and enabled (badge/list show the full count)
   /// instead of staying OFF until the next conversation switch.
+  ///
+  /// MCP 总开关或助手显示开关关闭时，解析基于 [_selectableTools]（不含被
+  /// 隐藏的 MCP 工具）：新建话题的自动启用集不再包含它们。**显式保存过的
+  /// 偏好集合保持原样**（含被隐藏的 MCP 工具名）——运行时启用集只在
+  /// 与保存集不一致时才会被持久化，隐藏与恢复由显示/发送层过滤处理
+  /// （见 selectableToolsForAssistant / 工具徽标），不会把隐藏的工具从
+  /// 对话偏好中抹掉。
   void _resolveEnabledToolsForActiveConversation() {
     final activeId = ref.read(activeConversationIdProvider);
     if (activeId == null) return;
@@ -555,10 +562,15 @@ extension _ChatPageMessagesExt on _ChatPageState {
         ? Set<String>.from(conv.enabledMcpToolNames)
         : <String>{};
     final hasExplicitPrefs = conv?.hasExplicitEnabledMcpTools ?? false;
-    ref.read(enabledToolNamesProvider.notifier).state = resolveEnabledToolNames(
-      allTools: _adapter.getAllToolDefinitions(),
+    final next = resolveEnabledToolNames(
+      allTools: _selectableTools(),
       savedEnabledNames: convEnabled,
       hasExplicitSavedPrefs: hasExplicitPrefs,
     );
+    // 集合未变时不写 provider，避免无谓的重建（重复解析、无关的助手
+    // 变更等）。
+    if (!setEquals(next, ref.read(enabledToolNamesProvider))) {
+      ref.read(enabledToolNamesProvider.notifier).state = next;
+    }
   }
 }

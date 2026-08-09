@@ -528,6 +528,118 @@ void main() {
       expect(decoded[0].containsKey('avatarType'), false);
       expect(decoded[0].containsKey('avatarUrl'), false);
     });
+
+    test('updateAssistantMcpVisibility toggles only the target assistant', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final a1 = notifier.createAssistant(name: '助手1', prompt: 'P1');
+      final a2 = notifier.createAssistant(name: '助手2', prompt: 'P2');
+
+      notifier.updateAssistantMcpVisibility(
+        id: a1.id,
+        mcpToolsVisible: false,
+      );
+
+      expect(
+        notifier.state.firstWhere((a) => a.id == a1.id).mcpToolsVisible,
+        isFalse,
+      );
+      expect(
+        notifier.state.firstWhere((a) => a.id == a2.id).mcpToolsVisible,
+        isTrue,
+      );
+
+      // 可再开启
+      notifier.updateAssistantMcpVisibility(
+        id: a1.id,
+        mcpToolsVisible: true,
+      );
+      expect(
+        notifier.state.firstWhere((a) => a.id == a1.id).mcpToolsVisible,
+        isTrue,
+      );
+    });
+
+    test(
+        'createAssistant defaults to visible before any provider master-switch '
+        'toggle', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final a1 = notifier.createAssistant(name: '助手1', prompt: 'P1');
+      expect(a1.mcpToolsVisible, isTrue,
+          reason: '未切换过 MCP总开关时新建助手默认可见（保持原有行为）');
+    });
+
+    test(
+        'resetMcpToolsVisibility resets all assistants to off and new '
+        'assistants default to off afterwards', () async {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final a1 = notifier.createAssistant(name: '助手1', prompt: 'P1');
+      final a2 = notifier.createAssistant(name: '助手2', prompt: 'P2');
+      // 模拟用户在助手页手动开启过显示开关
+      notifier.updateAssistantMcpVisibility(
+        id: a1.id,
+        mcpToolsVisible: true,
+      );
+      expect(notifier.state.every((a) => a.mcpToolsVisible), isTrue);
+
+      // 在 Provider 页切换过 MCP总开关 → 全部重置为关闭
+      await notifier.resetMcpToolsVisibility();
+      expect(notifier.state.every((a) => !a.mcpToolsVisible), isTrue,
+          reason: '切换后助手页显示开关以关闭为基准，而不是以上一次状态为基准');
+
+      // 之后新建的助手默认也是关闭
+      final a3 = notifier.createAssistant(name: '助手3', prompt: 'P3');
+      expect(a3.mcpToolsVisible, isFalse);
+
+      // 持久化标记已写入
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('mcp_master_switch_toggled'), isTrue);
+    });
+
+    test('mcpToolsVisible survives loadFromJson round-trip', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final a1 = notifier.createAssistant(name: '助手1', prompt: 'P1');
+      notifier.updateAssistantMcpVisibility(
+        id: a1.id,
+        mcpToolsVisible: false,
+      );
+
+      final json = notifier.toJson();
+      final notifier2 = AssistantsNotifier();
+      notifier2.loadFromJson(json);
+
+      expect(notifier2.state.first.mcpToolsVisible, isFalse);
+    });
+
+    test('updateAssistantDefaults preserves mcpToolsVisible', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final a1 = notifier.createAssistant(name: '助手1', prompt: 'P1');
+      notifier.updateAssistantMcpVisibility(
+        id: a1.id,
+        mcpToolsVisible: false,
+      );
+
+      // 更新默认工具/默认模型不应把显示开关重置回可见
+      notifier.updateAssistantDefaults(
+        id: a1.id,
+        defaultModelName: 'gpt-4o | OpenAI',
+        defaultToolNames: {'web_search'},
+      );
+
+      final updated = notifier.state.firstWhere((a) => a.id == a1.id);
+      expect(updated.mcpToolsVisible, isFalse,
+          reason: 'updateAssistantDefaults 重建 Assistant 时必须保留显示开关');
+      expect(updated.defaultToolNames, {'web_search'});
+    });
   });
 
   // ========================================================================
@@ -586,6 +698,32 @@ void main() {
       final assistant = Assistant.fromMap(map);
       expect(assistant.defaultModelName, isNull);
       expect(assistant.defaultToolNames, isNull);
+    });
+
+    test('mcpToolsVisible survives toMap/fromMap round-trip', () {
+      final original = Assistant(
+        name: '助手',
+        prompt: '你好',
+        mcpToolsVisible: false,
+      );
+
+      final map = original.toMap();
+      expect(map['mcpToolsVisible'], isFalse);
+
+      final restored = Assistant.fromMap(map);
+      expect(restored.mcpToolsVisible, isFalse);
+    });
+
+    test('legacy assistant map without mcpToolsVisible parses as visible', () {
+      final map = <String, dynamic>{
+        'id': 'legacy-1',
+        'name': '旧助手',
+        'prompt': '你好',
+      };
+
+      final assistant = Assistant.fromMap(map);
+      expect(assistant.mcpToolsVisible, isTrue,
+          reason: '旧数据缺省可见，保持原有行为（MCP 工具在对话页可选用）');
     });
   });
 

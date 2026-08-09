@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
@@ -20,7 +21,7 @@ import '../utils/model_order.dart';
 
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
-import '../models/tool_call.dart' show ToolCallData;
+import '../models/tool_call.dart' show ToolCallData, ToolDefinition;
 import '../services/app_log_service.dart';
 import '../services/chat_adapter.dart';
 import '../providers/conversation_provider.dart';
@@ -28,7 +29,8 @@ import '../providers/chat_stream_provider.dart';
 import '../providers/chat_manager_provider.dart';
 import '../services/chat_stream_manager.dart' show StreamResult;
 import '../providers/provider_config.dart';
-import '../providers/assistant_provider.dart' show selectedAssistantProvider;
+import '../providers/assistant_provider.dart'
+    show assistantProvider, selectedAssistantProvider;
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
 import 'message_search_page.dart';
@@ -435,11 +437,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _registerConversationsListener();
     // Re-configure adapter when provider entries change.
     _registerProviderEntriesListener();
+    // Keep the runtime enabled set in sync with assistant changes (MCP 显示开关).
+    _registerAssistantListener();
     // Auto-save reasoning settings when they change (per-model persistence).
     _registerReasoningListeners();
 
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
+
+    // 监听助手数据（MCP 工具显示开关等）：编辑助手后工具列表即时刷新。
+    ref.watch(assistantProvider);
 
     // Get conversation title
     final conversations = ref.watch(conversationsProvider);

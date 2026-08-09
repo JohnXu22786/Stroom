@@ -40,6 +40,7 @@ void showAssistantFullEditDialog(
     defaultToolNames: assistant.defaultToolNames == null
         ? null
         : Set<String>.from(assistant.defaultToolNames!),
+    mcpToolsVisible: assistant.mcpToolsVisible,
   );
   final seedController =
       TextEditingController(text: vars.seed?.toString() ?? '');
@@ -155,6 +156,10 @@ void showAssistantFullEditDialog(
                               next == null ? null : Set<String>.from(next);
                           vars.defaultsToolsEngaged = true;
                         }),
+                        mcpToolsVisible: vars.mcpToolsVisible,
+                        onMcpToolsVisibleChanged: (value) => setDlgState(() {
+                          vars.mcpToolsVisible = value;
+                        }),
                       ),
                     ],
                   ),
@@ -235,6 +240,17 @@ void showAssistantFullEditDialog(
                     clearDefaultToolNames: vars.defaultsToolsEngaged &&
                         vars.defaultToolNames == null,
                   );
+
+              // MCP 工具显示开关：未改动时不写（避免每次保存都触发一次
+              // 持久化与状态发射）。
+              if (vars.mcpToolsVisible != assistant.mcpToolsVisible) {
+                ref
+                    .read(assistantProvider.notifier)
+                    .updateAssistantMcpVisibility(
+                      id: assistant.id,
+                      mcpToolsVisible: vars.mcpToolsVisible,
+                    );
+              }
 
               Navigator.pop(ctx);
             },
