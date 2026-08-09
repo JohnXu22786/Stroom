@@ -314,6 +314,49 @@ void main() {
   });
 
   testWidgets(
+      'TTS panel with a stale voice id shows 音色已失效 (never the '
+      'raw id string)', (tester) async {
+    final entries = ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          id: 'tts-1',
+          type: 'tts',
+          name: 'TTS',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'EdgeTTS',
+              host: 'https://example.com',
+              key: 'k',
+              models: [
+                ModelConfig(
+                  name: 'edge-a',
+                  modelId: 'edge-a',
+                  voices: [
+                    VoiceEntry(name: '晓晓', id: 'zh-CN-XiaoxiaoNeural'),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    await pumpPanel(
+      tester,
+      block: TaskFlowBlock(
+        typeKey: BlockType.tts,
+        // A voice that no longer exists in the configured model.
+        params: {'voice': 'deleted-voice-id'},
+      ),
+      entries: entries,
+    );
+
+    // The hint guides re-selection; the raw id must not appear.
+    expect(find.text('音色已失效，请重新选择'), findsOneWidget);
+    expect(find.text('deleted-voice-id'), findsNothing);
+  });
+
+  testWidgets(
       'TTS panel with duplicate voice ids within one model does not '
       'crash (deduped dropdown)', (tester) async {
     final entries = ProviderEntriesState(

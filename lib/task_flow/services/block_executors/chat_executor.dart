@@ -130,11 +130,13 @@ Future<String> executeChatBlock({
       );
     }
 
-    // Save text via the shared helper (with folder dedup).
+    // Save text via the shared helper (with folder dedup). The title is a
+    // friendly name — the record shows in the text gallery by name, and a
+    // raw UUID suffix would be an opaque string (dedup appends (2), (3)...).
     final textPath = await saveTextForFlow(
       reply,
       saveFolder: '',
-      title: '助手对话_${flowSubTask.id}',
+      title: '助手对话',
       // Guard against a flow deleted mid-save (narrow race after the
       // existence check above).
       shouldCommit: () => execNotifier.state.any((e) => e.id == execId),
