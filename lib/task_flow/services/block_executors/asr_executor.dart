@@ -12,6 +12,7 @@ import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider_shared.dart';
 import '../../../utils/audio_utils.dart';
 import '../../../utils/http_timeout.dart';
+import '../../../utils/provider_models.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_definition.dart';
@@ -223,15 +224,9 @@ Future<String> executeAsrBlock({
 
   final modelIndex = asIntParam(block.params, 'modelIndex', 0);
   final saveFolder = asStringParam(block.params, 'saveFolder', '');
-  // Model-level selection, same granularity as the ASR page: flatten all
-  // configured ASR models (each entry carries its config for host/key).
-  final models = <({ProviderConfigItem config, ModelConfig model})>[
-    for (final e in providerEntries.entries)
-      if (e.type == 'asr')
-        for (final c in e.configs)
-          if (c.host.isNotEmpty && c.key.isNotEmpty)
-            for (final m in c.models) (config: c, model: m),
-  ];
+  // Model-level selection, same granularity as the ASR page: the shared
+  // flattened list (configs without host/key are excluded).
+  final models = flattenProviderModels(providerEntries, 'asr');
 
   if (models.isEmpty || modelIndex >= models.length) {
     failSubTask(

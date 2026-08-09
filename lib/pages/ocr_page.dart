@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:extended_image/extended_image.dart';
 
 import '../providers/provider_config.dart';
+import '../utils/provider_models.dart';
 import '../providers/background_task_provider.dart';
 import '../providers/text_provider.dart';
 import '../services/ocr_service.dart';
@@ -42,24 +43,15 @@ class _ModelOption {
 /// Only includes configs with valid host and API key.
 List<_ModelOption> _getOcrModelOptions(WidgetRef ref) {
   final state = ref.read(providerEntriesProvider);
-  final result = <_ModelOption>[];
-  for (final entry in state.entries) {
-    if (entry.type == 'ocr') {
-      for (final config in entry.configs) {
-        if (config.host.isNotEmpty && config.key.isNotEmpty) {
-          for (final model in config.models) {
-            result.add(_ModelOption(
-              model,
-              config.providerName,
-              config.host,
-              config.key,
-            ));
-          }
-        }
-      }
-    }
-  }
-  return result;
+  return [
+    for (final e in flattenProviderModels(state, 'ocr'))
+      _ModelOption(
+        e.model,
+        e.config.providerName,
+        e.config.host,
+        e.config.key,
+      ),
+  ];
 }
 
 /// Get the first OCR entry ID for navigation to its config page.

@@ -10,6 +10,7 @@ import '../../../providers/background_task_provider.dart';
 import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider_shared.dart';
 import '../../../utils/http_timeout.dart';
+import '../../../utils/provider_models.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_definition.dart';
@@ -167,18 +168,10 @@ Future<String> executeOcrBlock({
     );
   }
 
-  // Model-level selection, same granularity as the OCR page: flatten all
-  // configured OCR models (each entry carries its config for host/key).
+  // Model-level selection, same granularity as the OCR page: the shared
+  // flattened list (configs without host/key are excluded).
   final modelIndex = asIntParam(block.params, 'modelIndex', 0);
-  final models = <({dynamic config, dynamic model})>[
-    for (final e in providerEntries.entries)
-      if (e.type == 'ocr')
-        for (final c in e.configs)
-          if ((c.host as String? ?? '').isNotEmpty &&
-              (c.key as String? ?? '').isNotEmpty)
-            for (final m in c.models as List<dynamic>? ?? const [])
-              (config: c, model: m),
-  ];
+  final models = flattenProviderModels(providerEntries, 'ocr');
   if (models.isEmpty || modelIndex >= models.length) {
     failSubTask(
       bgNotifier,

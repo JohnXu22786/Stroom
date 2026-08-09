@@ -8,6 +8,7 @@ import '../../models/tts_models.dart';
 import '../../providers/assistant_provider.dart';
 import '../../providers/provider_config.dart';
 import '../../utils/file_manifest.dart';
+import '../../utils/provider_models.dart';
 import '../../utils/video_manifest.dart';
 import '../../widgets/folder_picker_dialog.dart';
 import '../models/task_flow_definition.dart';
@@ -115,12 +116,16 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
   }
 
   /// Models of a provider type, flattened with their config — the same
-  /// granularity the executors use (modelSelector indexes this list).
+  /// shared list the executors and standalone pages use (configs without
+  /// host/key excluded), so a selected index resolves identically
+  /// everywhere.
   List<({dynamic config, dynamic model})> _modelsOf(String configType) {
     return [
-      for (final c in _configsOf(configType))
-        for (final m in c.models as List<dynamic>? ?? const [])
-          (config: c, model: m),
+      for (final e in flattenProviderModels(
+        ref.read(providerEntriesProvider),
+        configType,
+      ))
+        (config: e.config, model: e.model),
     ];
   }
 

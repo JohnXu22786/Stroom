@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
 import '../providers/provider_config.dart';
+import '../utils/provider_models.dart';
 import '../providers/tts_state_provider.dart';
 import '../providers/background_task_provider.dart';
 import '../providers/task_provider.dart';
@@ -44,25 +45,16 @@ class _ModelOption {
 /// Only includes configs with valid host and API key.
 List<_ModelOption> _getAsrModelOptions(WidgetRef ref) {
   final state = ref.read(providerEntriesProvider);
-  final result = <_ModelOption>[];
-  for (final entry in state.entries) {
-    if (entry.type == 'asr') {
-      for (final config in entry.configs) {
-        if (config.host.isNotEmpty && config.key.isNotEmpty) {
-          for (final model in config.models) {
-            result.add(_ModelOption(
-              model,
-              config.providerName,
-              config.host,
-              config.key,
-              Map<String, dynamic>.from(config.typeConfig),
-            ));
-          }
-        }
-      }
-    }
-  }
-  return result;
+  return [
+    for (final e in flattenProviderModels(state, 'asr'))
+      _ModelOption(
+        e.model,
+        e.config.providerName,
+        e.config.host,
+        e.config.key,
+        Map<String, dynamic>.from(e.config.typeConfig),
+      ),
+  ];
 }
 
 /// Get the first ASR entry ID for navigation to its config page.

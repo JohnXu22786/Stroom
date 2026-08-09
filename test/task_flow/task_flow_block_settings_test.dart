@@ -208,6 +208,65 @@ void main() {
   });
 
   testWidgets(
+      'ASR panel excludes models of configs without host/key '
+      '(index alignment with the executor)', (tester) async {
+    final entries = ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          id: 'asr-1',
+          type: 'asr',
+          name: 'ASR',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'OpenAI',
+              host: 'https://api.openai.com',
+              key: 'k',
+              models: [
+                ModelConfig(name: 'whisper-1', modelId: 'whisper-1'),
+              ],
+            ),
+            // Empty host/key — its model must NOT appear in the panel
+            // (the executor and the ASR page skip it too; including it
+            // would shift the selected index to a different model).
+            ProviderConfigItem(
+              providerName: '未配置',
+              host: '',
+              key: '',
+              models: [
+                ModelConfig(name: 'ghost-model', modelId: 'ghost'),
+              ],
+            ),
+            ProviderConfigItem(
+              providerName: 'Groq',
+              host: 'https://api.groq.com',
+              key: 'k',
+              models: [
+                ModelConfig(name: 'distil-whisper', modelId: 'distil-whisper'),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    await pumpPanel(
+      tester,
+      block: TaskFlowBlock(typeKey: BlockType.asr),
+      entries: entries,
+    );
+
+    // Only the two valid configs' models are listed (the field shows the
+    // selected one; the ghost config's model is absent everywhere).
+    expect(find.text('whisper-1 | OpenAI'), findsOneWidget);
+    expect(find.textContaining('ghost-model'), findsNothing);
+    // Index 1 in the panel == index 1 in the executor's flattened list:
+    // opening the dropdown lists distil-whisper at the same index the
+    // executor resolves for modelIndex 1.
+    await tester.tap(find.text('whisper-1 | OpenAI'));
+    await tester.pumpAndSettle();
+    expect(find.text('distil-whisper | Groq'), findsOneWidget);
+  });
+
+  testWidgets(
       'chat panel with a DELETED assistant id shows the warning line '
       '(no crash, re-selection works)', (tester) async {
     await pumpPanel(
