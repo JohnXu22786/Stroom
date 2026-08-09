@@ -66,4 +66,29 @@ enum IOType {
         (e) => e.name == value,
         orElse: () => IOType.any,
       );
+
+  /// The types users can actually pick for a flow's initial input.
+  ///
+  /// `url` is folded into [text] (URLs are plain text input — the blocks
+  /// treat them identically), and the internal `file`/`any` markers are
+  /// not user-selectable.
+  static const List<IOType> userSelectable = [
+    IOType.text,
+    IOType.audio,
+    IOType.image,
+    IOType.video,
+  ];
+
+  /// Maps a stored type to the type shown in the UI: `url`/`file`/`any`
+  /// all display as [IOType.text] (their compatible user-facing type).
+  IOType get userFacing {
+    switch (this) {
+      case IOType.url:
+      case IOType.file:
+      case IOType.any:
+        return IOType.text;
+      default:
+        return this;
+    }
+  }
 }

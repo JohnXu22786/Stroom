@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/assistant.dart';
 import '../../models/built_in_prompts.dart';
@@ -13,6 +14,7 @@ import '../../utils/video_manifest.dart';
 import '../../widgets/folder_picker_dialog.dart';
 import '../models/task_flow_definition.dart';
 import '../models/block_type_definition.dart';
+import '../services/block_executors/shared_helpers.dart' show asIntParam;
 
 /// Opens the block settings panel for editing a [TaskFlowBlock] instance.
 ///
@@ -127,6 +129,14 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
       ))
         (config: e.config, model: e.model),
     ];
+  }
+
+  /// The TTS model selected by the block's modelIndex param (shared list).
+  dynamic _selectedTtsModel() {
+    final models = _modelsOf('tts');
+    final idx = asIntParam(_params, 'modelIndex', 0);
+    if (models.isEmpty || idx >= models.length) return null;
+    return models[idx].model;
   }
 
   @override
@@ -389,64 +399,111 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         }
         final clampedIndex =
             currentIndex.clamp(0, math.max(0, models.length - 1)).toInt();
-        return DropdownButtonFormField<int>(
-          value: clampedIndex,
-          isDense: true,
-          decoration: InputDecoration(
-            isDense: true,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 10,
-              vertical: 8,
-            ),
-          ),
-          style: TextStyle(fontSize: 13, color: cs.onSurface),
-          items: List.generate(models.length, (i) {
-            final dynamic m = models[i].model;
-            final dynamic c = models[i].config;
-            final modelName = (m.name as String?)?.isNotEmpty == true
-                ? m.name as String
-                : (m.modelId as String? ?? '模型 $i');
-            final providerName = (c.providerName as String?)?.isNotEmpty == true
-                ? c.providerName as String
-                : '未命名供应商';
-            return DropdownMenuItem<int>(
-              value: i,
-              child: Text(
-                '$modelName | $providerName',
-                overflow: TextOverflow.ellipsis,
+        final selectedModel = models[clampedIndex].model;
+        final customParams =
+            (selectedModel.customParams as List<dynamic>? ?? const []);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DropdownButtonFormField<int>(
+              value: clampedIndex,
+              isDense: true,
+              decoration: InputDecoration(
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
               ),
-            );
-          }),
-          onChanged: (v) {
-            if (v != null) {
-              setState(() => _params[param.key] = v);
-            }
-          },
+              style: TextStyle(fontSize: 13, color: cs.onSurface),
+              items: List.generate(models.length, (i) {
+                final dynamic m = models[i].model;
+                final dynamic c = models[i].config;
+                final modelName = (m.name as String?)?.isNotEmpty == true
+                    ? m.name as String
+                    : (m.modelId as String? ?? '模型 $i');
+                final providerName =
+                    (c.providerName as String?)?.isNotEmpty == true
+                        ? c.providerName as String
+                        : '未命名供应商';
+                return DropdownMenuItem<int>(
+                  value: i,
+                  child: Text(
+                    '$modelName | $providerName',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }),
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() => _params[param.key] = v);
+                }
+              },
+            ),
+            // Custom params of the selected model — shown so the user sees
+            // what extra fields the request carries (edited in the model
+            // settings page).
+            if (customParams.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '模型自定义参数',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      for (final dynamic cp in customParams)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            '${cp.paramName}: ${cp.defaultValue}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: cs.onSurfaceVariant,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         );
 
       case BlockParamType.voiceSelector:
-        // Voices of the SAME TTS model the executor uses
-        // (tts_executor: configs.first.models.first) — listing voices of
-        // every config would offer voices the executed model can't use.
-        // Deduped by id (a model can list the same voice id twice, which
-        // would otherwise break the dropdown's exactly-one-item assert).
+        // Voices of the SELECTED TTS model (the same model the executor
+        // uses via modelIndex) — offering voices of every model would
+        // confuse ("my voice isn't there") and the executor would reject
+        // them. Deduped by id.
+        final selectedTtsModel = _selectedTtsModel();
         final voices = <VoiceEntry>[];
         {
           final byId = <String, VoiceEntry>{};
-          final ttsConfigs = _configsOf('tts');
-          if (ttsConfigs.isNotEmpty) {
-            final dynamic config = ttsConfigs.first;
-            final models = config.models as List<dynamic>? ?? const [];
-            if (models.isNotEmpty) {
-              final mVoices = models.first.voices as List<dynamic>? ?? const [];
-              for (final v in mVoices) {
-                final entry = v is VoiceEntry
-                    ? v
-                    : VoiceEntry.fromMap(Map<String, dynamic>.from(v as Map));
-                if (entry.name.isNotEmpty && entry.id.isNotEmpty) {
-                  byId[entry.id] = entry;
-                }
+          final model = selectedTtsModel;
+          if (model != null) {
+            final mVoices = model.voices as List<dynamic>? ?? const [];
+            for (final v in mVoices) {
+              final entry = v is VoiceEntry
+                  ? v
+                  : VoiceEntry.fromMap(Map<String, dynamic>.from(v as Map));
+              if (entry.name.isNotEmpty && entry.id.isNotEmpty) {
+                byId[entry.id] = entry;
               }
             }
           }
@@ -569,6 +626,110 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                   style: TextStyle(fontSize: 11, color: cs.error),
                 ),
               ),
+          ],
+        );
+
+      case BlockParamType.speedSlider:
+        // Slider like the TTS page — range from the selected TTS model's
+        // speedMin/speedMax (defaults 0.5–2.0).
+        final speedValue =
+            (value is num ? value.toDouble() : 1.0).clamp(0.5, 4.0);
+        final model = _selectedTtsModel();
+        final speedMin =
+            ((model?.speedMin as num?)?.toDouble() ?? 0.5).clamp(0.1, 4.0);
+        final speedMax =
+            ((model?.speedMax as num?)?.toDouble() ?? 2.0).clamp(0.1, 4.0);
+        final lo = math.min(speedMin, speedMax);
+        final hi = math.max(speedMin, speedMax);
+        return Row(
+          children: [
+            Expanded(
+              child: Slider(
+                value: speedValue.clamp(lo, hi).toDouble(),
+                min: lo,
+                max: hi,
+                divisions: ((hi - lo) * 10).round().clamp(1, 100),
+                label: '${speedValue.toStringAsFixed(1)}x',
+                onChanged: (v) => setState(() => _params[param.key] = v),
+              ),
+            ),
+            SizedBox(
+              width: 44,
+              child: Text(
+                '${speedValue.toStringAsFixed(1)}x',
+                style: TextStyle(fontSize: 13, color: cs.onSurface),
+                textAlign: TextAlign.right,
+              ),
+            ),
+          ],
+        );
+
+      case BlockParamType.durationSeconds:
+        // 时/分/秒 three fields, like the CatCatch page's duration input.
+        final totalSec = value is num ? value.toInt() : 0;
+        final h = totalSec ~/ 3600;
+        final m = (totalSec % 3600) ~/ 60;
+        final s = totalSec % 60;
+        final hCtrl = _controllers['${param.key}_h'] ??
+            TextEditingController(text: h == 0 ? '' : '$h');
+        final mCtrl = _controllers['${param.key}_m'] ??
+            TextEditingController(text: m == 0 ? '' : '$m');
+        final sCtrl = _controllers['${param.key}_s'] ??
+            TextEditingController(text: s == 0 ? '' : '$s');
+        _controllers['${param.key}_h'] = hCtrl;
+        _controllers['${param.key}_m'] = mCtrl;
+        _controllers['${param.key}_s'] = sCtrl;
+        void rebuild() {
+          final hh = int.tryParse(hCtrl.text) ?? 0;
+          final mm = int.tryParse(mCtrl.text) ?? 0;
+          final ss = int.tryParse(sCtrl.text) ?? 0;
+          setState(() {
+            _params[param.key] = hh * 3600 + mm * 60 + ss;
+          });
+        }
+
+        InputDecoration dec() => InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            );
+        return Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: hCtrl,
+                decoration: dec().copyWith(hintText: '时'),
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                style: const TextStyle(fontSize: 13),
+                onChanged: (_) => rebuild(),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: TextField(
+                controller: mCtrl,
+                decoration: dec().copyWith(hintText: '分'),
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                style: const TextStyle(fontSize: 13),
+                onChanged: (_) => rebuild(),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: TextField(
+                controller: sCtrl,
+                decoration: dec().copyWith(hintText: '秒'),
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                style: const TextStyle(fontSize: 13),
+                onChanged: (_) => rebuild(),
+              ),
+            ),
           ],
         );
 

@@ -545,26 +545,13 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               ),
               const SizedBox(height: 8),
             ],
-            if (_inputType == IOType.url)
+            // userFacing: url/file/any all display as text (a URL is
+            // plain text input — the blocks treat them identically).
+            if (_inputType.userFacing == IOType.text)
               TextField(
                 controller: _inputController,
                 decoration: InputDecoration(
-                  hintText: '输入网页链接',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  prefixIcon: const Icon(Icons.link, size: 18),
-                  filled: true,
-                  fillColor: cs.surface,
-                ),
-                style: const TextStyle(fontSize: 14),
-                keyboardType: TextInputType.url,
-              )
-            else if (_inputType == IOType.text)
-              TextField(
-                controller: _inputController,
-                decoration: InputDecoration(
-                  hintText: '输入文本',
+                  hintText: '输入文本或链接',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -579,7 +566,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               TextField(
                 controller: _inputController,
                 decoration: InputDecoration(
-                  hintText: '输入 ${_inputType.label} 路径或标识',
+                  hintText: '输入 ${_inputType.userFacing.label} 路径或标识',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),

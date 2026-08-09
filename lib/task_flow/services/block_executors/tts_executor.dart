@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider.dart';
 import '../../../providers/task_provider_shared.dart';
+import '../../../utils/provider_models.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_definition.dart';
@@ -20,27 +21,20 @@ Future<String> executeTtsBlock({
   required TaskListNotifier taskListNotifier,
   required ProviderEntriesState providerEntries,
 }) async {
-  final configs = providerEntries.entries
-      .where((e) => e.type == 'tts')
-      .expand((e) => e.configs)
-      .toList();
-  if (configs.isEmpty) {
+  // Model-level selection, same granularity as the TTS page: the shared
+  // flattened list (configs without host/key excluded).
+  final modelIndex = asIntParam(block.params, 'modelIndex', 0);
+  final models = flattenProviderModels(providerEntries, 'tts');
+  if (models.isEmpty || modelIndex >= models.length) {
     throw BlockExecutionException(
-      '未配置TTS模型',
+      '未配置TTS模型或索引越界',
       blockType: def.typeKey.name,
       blockTitle: def.label,
     );
   }
 
-  final config = configs.first;
-  final model = config.models.isNotEmpty ? config.models.first : null;
-  if (model == null) {
-    throw BlockExecutionException(
-      '模型配置为空',
-      blockType: def.typeKey.name,
-      blockTitle: def.label,
-    );
-  }
+  final config = models[modelIndex].config;
+  final model = models[modelIndex].model;
 
   final title = input.length > 20 ? input.substring(0, 20) : input;
   final voice = asStringParam(block.params, 'voice', '');

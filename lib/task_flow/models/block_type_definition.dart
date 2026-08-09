@@ -36,8 +36,14 @@ enum BlockParamType {
   /// e.g. 'asr' — the executor indexes the same flattened list).
   modelSelector,
 
-  /// Voice selector (dropdown of the voices of the configured TTS model).
+  /// Voice selector (dropdown of the voices of the selected TTS model).
   voiceSelector,
+
+  /// Speed slider (0.5x–2.0x or the selected TTS model's speedMin/Max).
+  speedSlider,
+
+  /// Duration in seconds, entered as 时/分/秒 three fields (CatCatch).
+  durationSeconds,
 
   /// Assistant selector (dropdown of user-defined assistants from
   /// [assistantProvider]; empty = the currently selected assistant).
@@ -223,10 +229,10 @@ class BlockTypeDefinition {
       ),
       BlockParamDefinition(
         key: 'durationSec',
-        label: '预期时长（秒）',
-        type: BlockParamType.number,
+        label: '预期时长',
+        type: BlockParamType.durationSeconds,
         defaultValue: 0,
-        hintText: '按视频时长筛选，0 表示不筛选',
+        hintText: '按视频时长筛选，留空表示不筛选',
       ),
     ],
   );
@@ -241,17 +247,23 @@ class BlockTypeDefinition {
     color: Color(0xFF00BCD4),
     params: [
       BlockParamDefinition(
+        key: 'modelIndex',
+        label: '合成模型',
+        type: BlockParamType.modelSelector,
+        configType: 'tts',
+        defaultValue: 0,
+      ),
+      BlockParamDefinition(
         key: 'voice',
         label: '语音',
         type: BlockParamType.voiceSelector,
-        hintText: '选择TTS模型提供的音色',
+        hintText: '选择所选模型的音色',
       ),
       BlockParamDefinition(
         key: 'speed',
         label: '语速',
-        type: BlockParamType.number,
+        type: BlockParamType.speedSlider,
         defaultValue: 1.0,
-        hintText: '倍速，如 0.8 慢速、1.2 快速',
       ),
       BlockParamDefinition(
         key: 'saveFolder',

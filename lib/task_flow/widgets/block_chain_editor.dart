@@ -26,10 +26,10 @@ class BlockChainEditor extends StatelessWidget {
     required this.onReplaceBlock,
   });
 
-  /// All types are offered so restored flows with a `url`/`file`/`any`
-  /// input type keep a valid `DropdownButton` value (a value not present
-  /// in `items` triggers an assertion in debug builds).
-  static const List<IOType> _inputTypeOptions = IOType.values;
+  /// The types users can pick for the initial input — text/audio/image/
+  /// video only (URLs are text; the internal file/any markers are not
+  /// user-selectable).
+  static const List<IOType> _inputTypeOptions = IOType.userSelectable;
 
   @override
   Widget build(BuildContext context) {
@@ -120,7 +120,10 @@ class BlockChainEditor extends StatelessWidget {
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<IOType>(
-                          value: inputType,
+                          // Stored url/file/any values display as their
+                          // user-facing type (url→text) — the value must be
+                          // in items to avoid the debug assert.
+                          value: inputType.userFacing,
                           isDense: true,
                           icon: Icon(
                             Icons.arrow_drop_down,
