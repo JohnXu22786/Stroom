@@ -100,14 +100,11 @@ void main() {
       );
       await openDefaultsTab(tester);
 
-      final switchFinder =
-          find.widgetWithText(SwitchListTile, '在对话页显示 MCP 工具');
-      expect(switchFinder, findsOneWidget,
-          reason: '总开关关闭时显示开关仍渲染（禁用态+提示）');
+      final switchFinder = find.widgetWithText(SwitchListTile, '在对话页显示 MCP 工具');
+      expect(switchFinder, findsOneWidget, reason: '总开关关闭时显示开关仍渲染（禁用态+提示）');
       final switchTile = tester.widget<SwitchListTile>(switchFinder);
       expect(switchTile.value, isFalse);
-      expect(switchTile.onChanged, isNull,
-          reason: '总开关关闭时显示开关不可操作');
+      expect(switchTile.onChanged, isNull, reason: '总开关关闭时显示开关不可操作');
       expect(find.textContaining('MCP 总开关已关闭'), findsOneWidget);
     });
 
@@ -134,12 +131,10 @@ void main() {
       );
       await openDefaultsTab(tester);
 
-      final switchFinder =
-          find.widgetWithText(SwitchListTile, '在对话页显示 MCP 工具');
+      final switchFinder = find.widgetWithText(SwitchListTile, '在对话页显示 MCP 工具');
       expect(switchFinder, findsOneWidget);
       final switchTile = tester.widget<SwitchListTile>(switchFinder);
-      expect(switchTile.value, isTrue,
-          reason: '未切换过总开关时助手默认可见（保持原有行为）');
+      expect(switchTile.value, isTrue, reason: '未切换过总开关时助手默认可见（保持原有行为）');
       expect(switchTile.onChanged, isNotNull);
     });
   });

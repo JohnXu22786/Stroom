@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, setEquals;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';

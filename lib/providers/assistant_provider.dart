@@ -277,9 +277,7 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
   /// 开关以关闭为基准，而不是以上一次的状态为基准。
   Future<void> resetMcpToolsVisibility() async {
     _mcpMasterSwitchToggled = true;
-    state = state
-        .map((a) => a.copyWith(mcpToolsVisible: false))
-        .toList();
+    state = state.map((a) => a.copyWith(mcpToolsVisible: false)).toList();
     await _persist();
     try {
       final prefs = await SharedPreferences.getInstance();

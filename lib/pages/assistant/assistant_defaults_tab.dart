@@ -92,9 +92,8 @@ class AssistantDefaultsTab extends ConsumerWidget {
     final adapter = ref.read(chatStreamManagerProvider).adapter;
     // MCP 总开关（MCP 列表页设置）：关闭时 MCP 工具不在助手页面显示，
     // 显示开关随之禁用。
-    final mcpEntry = entriesState.entries
-        .where((e) => e.type == 'mcp')
-        .firstOrNull;
+    final mcpEntry =
+        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
     final mcpMasterEnabled = mcpEntry?.enabled ?? true;
     final effectiveMcpToolsVisible = mcpToolsVisible && mcpMasterEnabled;
     // 按显示名去重：两个供应商配置同名模型时只保留第一个（与聊天页
