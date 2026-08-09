@@ -245,9 +245,8 @@ void main() {
             'when the keyboard actually appears',
       );
 
-      // The keyboard rises: the scroll-to-bottom animation starts right
-      // away (~0.2-0.5s before the viewport settles), not after the
-      // follow-up delay.
+      // The keyboard rises: the keyboard-follow scroll starts right away
+      // (~0.2-0.5s before the viewport settles).
       await setKeyboardInset(tester, 300);
       await tester.pump(const Duration(milliseconds: 16));
       await tester.pump(const Duration(milliseconds: 100));
@@ -256,24 +255,20 @@ void main() {
         midPos.pixels,
         greaterThan(saved + 1),
         reason: 'the list must start sliding up shortly after the keyboard '
-            'appears, well before the follow-up deadline',
+            'appears',
       );
 
-      // Let everything (keyboard-appear scroll, the library's debounced
-      // scroll, the follow-up) finish — the list sits at the bottom of the
-      // keyboard-shrunk viewport. (The final extra frames let the follow-up
-      // animation actually run: in the test clock its start is deferred a
-      // frame by the debounce timer / post-frame scheduling.)
+      // The follow scroll moves by the keyboard height (300 logical px) —
+      // NOT to the bottom (a bottom scroll read as a sudden overshooting
+      // "hop"), and nothing scrolls after it settles.
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(milliseconds: 16));
-      await tester.pump(const Duration(milliseconds: 250));
       final endPos = _scrollPosition(tester);
       expect(
         endPos.pixels,
-        closeTo(endPos.maxScrollExtent, 20.0),
-        reason: 'after everything settles the list must sit at the bottom '
-            'of the keyboard-shrunk viewport',
+        closeTo(saved + 300, 20.0),
+        reason: 'the list must follow the keyboard by its height and stop '
+            'there — no second scroll, no bottom pinning',
       );
       await settle(tester);
     });
@@ -297,21 +292,17 @@ void main() {
         reason: 'precondition: a tap does not move the list',
       );
 
-      // The keyboard appears and the list scrolls to the bottom. The
-      // metrics transition must NOT overwrite the saved position.
+      // The keyboard appears and the list follows it (by the keyboard
+      // height). The metrics transition must NOT overwrite the saved
+      // position.
       await setKeyboardInset(tester, 300);
-      // Let the keyboard-appear scroll, the chat library's debounced
-      // keyboard scroll (100ms debounce + 250ms animation) and the
-      // follow-up run to completion (extra frames for the follow-up's
-      // frame-deferred start in the test clock).
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(milliseconds: 16));
-      await tester.pump(const Duration(milliseconds: 250));
       expect(
         _scrollPosition(tester).pixels,
-        closeTo(_scrollPosition(tester).maxScrollExtent, 20.0),
-        reason: 'precondition: keyboard open lands at the bottom',
+        closeTo(savedPos + 300, 20.0),
+        reason: 'precondition: keyboard open follows the list by the '
+            'keyboard height',
       );
 
       // Keyboard dismisses — the list must return to the tap-time position
@@ -329,41 +320,33 @@ void main() {
     });
 
     testWidgets(
-        'a keyboard appearing mid-scroll still ends at the bottom of the '
-        'final viewport (follow-up closes the gap)', (tester) async {
+        'a keyboard appearing while the list is scrolled far up: the '
+        'follow scroll moves by the keyboard height and clamps at the '
+        'bottom — the library scroll is swallowed', (tester) async {
       await pumpChat(tester);
       await scrollToBottom(tester);
-      // Scroll far up so the chat library's debounced keyboard scroll
-      // (target = offset + keyboard height, without the final viewport's
-      // growth) lands far short of the bottom — a gap only the follow-up
-      // scroll can close. Without the follow-up the gap is ~12% of the
-      // distance (≈180px here), far beyond the 20px tolerance.
+      // Scroll far up; with the keyboard height (300) the follow target
+      // (offset + height) stays below the bottom — the follow must not
+      // overshoot, and the library's debounced scroll must not run a
+      // second competing scroll.
       await scrollUp(tester, amount: 1500);
+      final saved = _scrollPosition(tester).pixels;
 
-      // Tap the input; the hook's scroll animation is still running when
-      // the keyboard metrics arrive (a fast IME on Android). Small pump
-      // steps keep the chat library's debounced keyboard scroll (100ms
-      // debounce) firing mid-hook-animation, where its target (offset +
-      // keyboard height, without the final viewport growth) lands far
-      // short of the bottom (~190px gap) — a gap only the follow-up
-      // scroll can close.
       await tester.tap(find.byType(TextField));
       await tester.pump(const Duration(milliseconds: 16));
       await setKeyboardInset(tester, 300);
+      // Small steps so the follow animation runs; then let it finish.
       for (var i = 0; i < 12; i++) {
         await tester.pump(const Duration(milliseconds: 16));
       }
-      // The library's debounced scroll has finished; the follow-up runs
-      // 600ms after the keyboard appeared.
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 400));
+      final endPos = _scrollPosition(tester);
       expect(
-        _scrollPosition(tester).pixels,
-        closeTo(_scrollPosition(tester).maxScrollExtent, 20.0),
-        reason: 'after everything settles the list must sit at the bottom '
-            'of the keyboard-shrunk viewport (tolerance covers the chat '
-            'library drifting maxScrollExtent by a few px)',
+        endPos.pixels,
+        closeTo(saved + 300, 20.0),
+        reason: 'the follow moves by the keyboard height and stops — '
+            'clamped at the bottom if the keyboard height reaches it, '
+            'never overshooting and never running a second scroll',
       );
 
       await closeKeyboard(tester);
@@ -649,18 +632,15 @@ void main() {
       expect(savedPos, greaterThan(0));
 
       await setKeyboardInset(tester, 300);
-      // The keyboard-open scroll, the library's debounced scroll and the
-      // follow-up land within ~700ms (extra frames for the follow-up's
-      // frame-deferred start in the test clock).
+      // The keyboard-follow scroll (by the keyboard height) lands within
+      // the animation duration.
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(milliseconds: 16));
-      await tester.pump(const Duration(milliseconds: 250));
       expect(
         _scrollPosition(tester).pixels,
-        closeTo(_scrollPosition(tester).maxScrollExtent, 10.0),
+        closeTo(savedPos + 300, 10.0),
         reason: 'precondition: keyboard open on the visible chat tab '
-            'lands at the bottom',
+            'follows the list by the keyboard height',
       );
 
       // Switch to another tab while the keyboard is still open (the same

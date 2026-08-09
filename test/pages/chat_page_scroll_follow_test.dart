@@ -297,26 +297,20 @@ void main() {
       await startStreaming(tester);
       await scrollToBottom(tester);
 
-      // Open the keyboard while scrolled up: the list scrolls to the
-      // bottom and auto-scroll engages. The scroll is a 200ms animation
-      // plus a 600ms follow-up (the per-frame keyboard pinning this
-      // superseded was reverted), so let it land before the precondition.
+      // Open the keyboard while scrolled up: the list follows by the
+      // keyboard height (no bottom pinning, nothing scrolls after it).
       await scrollUp(tester);
       final savedPos = _chatPosition(tester).pixels;
       expect(savedPos, greaterThan(0));
       await setKeyboardInset(tester, 300);
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));
-      // Extra frames for the follow-up's frame-deferred start in the test
-      // clock (the debounce timer and post-frame callbacks defer the
-      // library's and the follow-up scrolls by a frame each).
-      await tester.pump(const Duration(milliseconds: 16));
-      await tester.pump(const Duration(milliseconds: 250));
       var pos = _chatPosition(tester);
       expect(
-        pos.maxScrollExtent - pos.pixels,
-        lessThanOrEqualTo(60),
-        reason: 'precondition: keyboard open lands at/near the bottom',
+        pos.pixels,
+        closeTo(savedPos + 300, 10.0),
+        reason: 'precondition: keyboard open follows the list by the '
+            'keyboard height',
       );
 
       // Dismiss the keyboard: the restore is a smooth animation now (the
