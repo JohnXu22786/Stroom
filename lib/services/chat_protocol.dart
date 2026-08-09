@@ -131,6 +131,73 @@ const int maxAttachmentBytes = 10 * 1024 * 1024;
 /// 每轮 5-7 张图片的总量仍在 Anthropic 32MB / Gemini 20MB 之内。
 const int imageCompressThresholdBytes = 2 * 1024 * 1024;
 
+/// 图片选中后立即后台预压缩（供 composer 在图片选中时调用）。
+///
+/// - 输入未超阈值 / 无法解码 / 压缩无收益 → 不改动 [att]，返回 false。
+/// - 成功 → 压缩结果写入内存缓存（[Attachment.base64Data]，发送路径
+///   直接复用、发送时零压缩等待），并在 [conversationId] 或
+///   [Attachment.conversationId] 非空时写入磁盘缓存
+///   （`temp_compressed/<conversationId>/<hash>`，见
+///   [AttachmentStorage.saveCompressedImage]），保证重启后依然零压缩等待。
+/// - [isStillRelevant]：压缩耗时期间附件可能已被移除/编辑/对话已切换，
+///   写入前再次确认（返回 false 则跳过一切写入，避免复活已被清理的
+///   缓存）。
+///
+/// 压缩本身在后台 isolate 执行（[compressImageForSend]），不占用
+/// 前台资源；失败静默忽略，发送路径会按需重新压缩兜底。
+Future<bool> preCompressImageForPendingAttachment(
+  Attachment att,
+  Uint8List rawBytes, {
+  required int maxBytes,
+  String? conversationId,
+  bool Function()? isStillRelevant,
+}) async {
+  if (rawBytes.isEmpty || rawBytes.length <= maxBytes) return false;
+  final result = await compressImageForSend(rawBytes, maxBytes: maxBytes);
+  if (!result.decodable || result.compressed == null) return false;
+  if (isStillRelevant != null && !isStillRelevant()) return false;
+  att.base64Data = base64Encode(result.compressed!.bytes);
+  final convId = conversationId ?? att.conversationId;
+  if (convId != null) {
+    try {
+      final saved = await AttachmentStorage.saveCompressedImage(
+        conversationId: convId,
+        hash: att.hash,
+        bytes: result.compressed!.bytes,
+        mimeType: result.compressed!.mimeType,
+      );
+      // 缓存写入哪个对话就登记到哪个对话：清理/复用路径都依赖
+      // att.conversationId 定位（发送前对话归属变化时由调用方重置）。
+      // 仅在真实写入后才标记已落盘（空 hash/convId 时为 no-op）。
+      if (saved != null) {
+        att.conversationId ??= convId;
+        att.compressedCachePersisted = true;
+      }
+    } catch (e) {
+      debugPrint('[ChatProtocol] 图片压缩缓存写入失败: $e');
+    }
+  }
+  return true;
+}
+
+/// 附件是否已具备"可直接发送的载荷"（base64Data 无需再读取/转换）。
+///
+/// 用于对话草稿附件快照：图片的 base64Data 是预压缩产物（≤ 阈值）
+/// 时随草稿持久化，恢复后发送零等待；原始大图/未压缩完成的图片
+/// 不携带（体积无谓膨胀），恢复时重新读取文件并预压缩。
+bool attachmentHasReadyPayload(Attachment att, {required int maxBytes}) {
+  if (att.base64Data == null || att.base64Data!.isEmpty) return false;
+  // 非图片：base64Data 即原始文件编码，直接可用
+  if (att.fileType != 'image') return true;
+  // 图片：内存载荷 ≤ 阈值才是"已压缩/小图"，可直接发送
+  if (att.base64Data!.length > maxBytes * 2) return false;
+  try {
+    return base64Decode(att.base64Data!).length <= maxBytes;
+  } catch (_) {
+    return false; // 损坏的 base64 视为未就绪
+  }
+}
+
 /// 读取附件 base64 载荷。
 ///
 /// 优先使用附件内存缓存（[Attachment.base64Data]），避免重复读取磁盘。
@@ -193,21 +260,79 @@ Future<AttachmentReadOutcome> readAttachmentBase64(
   // 图片超过通用阈值 → 自动压缩（替代旧行为的"跳过"）
   String? mimeTypeOverride;
   if (att.fileType == 'image' && bytes.length > maxBytes) {
-    final compression = await compressImageForSend(
-      bytes,
-      maxBytes: maxBytes,
-    );
-    if (compression.decodable && compression.compressed != null) {
-      bytes = compression.compressed!.bytes;
-      mimeTypeOverride = compression.compressed!.mimeType;
+    // 1) 磁盘缓存优先：图片选中时后台预压缩 / 上次发送时压缩的产物
+    //    （temp_compressed/<conversationId>/<hash>）。内存缓存
+    //    （base64Data）在重启或历史重载后丢失，命中磁盘缓存即可
+    //    零压缩等待复用，避免"每次发送都重新压缩"。
+    CompressedImage? cached;
+    if (att.conversationId != null && att.hash.isNotEmpty) {
+      try {
+        cached = await AttachmentStorage.readCompressedImage(
+          conversationId: att.conversationId,
+          hash: att.hash,
+        );
+        if (cached != null && cached.bytes.length > maxBytes) {
+          cached = null; // 防御：超限缓存视为未命中，重新压缩
+        }
+      } catch (_) {
+        cached = null; // 缓存 IO 失败不影响发送
+      }
     }
-    // 压缩后仍超过 10MB 硬顶（无法解码的 HEIC/损坏文件，或病理级
-    // 超大图在极限压缩下仍超限）：发送必然整条请求被 API 拒绝，且
-    // 白白撑大请求体 → 保持"过大跳过"占位，让其余图片/文本正常发送。
-    if (bytes.length > maxAttachmentBytes) {
-      return const AttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
+    if (cached != null) {
+      bytes = cached.bytes;
+      mimeTypeOverride = _detectImagePayloadMimeType(bytes);
+      att.compressedCachePersisted = true;
+    } else {
+      final compression = await compressImageForSend(
+        bytes,
+        maxBytes: maxBytes,
+      );
+      if (compression.decodable && compression.compressed != null) {
+        bytes = compression.compressed!.bytes;
+        mimeTypeOverride = compression.compressed!.mimeType;
+        // 产物写入磁盘缓存：后续发送（含重启后）直接复用，不再等待
+        if (att.conversationId != null && att.hash.isNotEmpty) {
+          try {
+            await AttachmentStorage.saveCompressedImage(
+              conversationId: att.conversationId,
+              hash: att.hash,
+              bytes: bytes,
+              mimeType: mimeTypeOverride,
+            );
+            att.compressedCachePersisted = true;
+          } catch (e) {
+            debugPrint('[ChatProtocol] 图片压缩缓存写入失败: $e');
+          }
+        }
+      }
+      // 压缩后仍超过 10MB 硬顶（无法解码的 HEIC/损坏文件，或病理级
+      // 超大图在极限压缩下仍超限）：发送必然整条请求被 API 拒绝，且
+      // 白白撑大请求体 → 保持"过大跳过"占位，让其余图片/文本正常发送。
+      if (bytes.length > maxAttachmentBytes) {
+        return const AttachmentReadOutcome(AttachmentReadStatus.tooLarge, null);
+      }
+      // 压缩后 > 阈值但 ≤ 硬顶（如 48MP 照片）：尽力发送
     }
-    // 压缩后 > 阈值但 ≤ 硬顶（如 48MP 照片）：尽力发送
+  } else if (att.fileType == 'image' &&
+      !att.compressedCachePersisted &&
+      bytes.length <= maxBytes &&
+      att.fileSize > maxBytes &&
+      att.conversationId != null &&
+      att.hash.isNotEmpty) {
+    // 2) 内存缓存命中（选中时后台预压缩的结果，或上一轮压缩的缓存）：
+    //    该附件在本次会话中尚未落盘压缩缓存（例如选中时对话尚未创建、
+    //    旧数据），首次经过发送路径时补齐磁盘缓存，重启后不再等待。
+    try {
+      await AttachmentStorage.saveCompressedImage(
+        conversationId: att.conversationId,
+        hash: att.hash,
+        bytes: bytes,
+        mimeType: _detectImagePayloadMimeType(bytes) ?? att.mimeType,
+      );
+      att.compressedCachePersisted = true;
+    } catch (e) {
+      debugPrint('[ChatProtocol] 图片压缩缓存写入失败: $e');
+    }
   }
 
   if (bytes.length > maxAttachmentBytes && att.fileType != 'image') {

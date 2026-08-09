@@ -220,6 +220,19 @@ extension _ChatPageEditingExt on _ChatPageState {
           );
       if (!isReferencedElsewhere) {
         await AttachmentStorage.deleteFile(att.storagePath);
+        // 磁盘压缩缓存一并清理（派生缓存，best-effort：失败不影响
+        // 消息删除）。缓存按（对话, hash）定位，isReferencedElsewhere
+        // 按 storagePath 判定——字节完全相同（同 hash 不同文件）的
+        // 兄弟消息共享同一缓存条目，可能被本删除连带清掉，其下次
+        // 发送重新压缩即可（缓存删除永远安全）。
+        try {
+          await AttachmentStorage.deleteCompressedImage(
+            conversationId: att.conversationId,
+            hash: att.hash,
+          );
+        } catch (_) {
+          // 非关键清理
+        }
       }
     }
 

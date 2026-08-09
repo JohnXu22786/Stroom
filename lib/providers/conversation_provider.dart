@@ -105,6 +105,14 @@ class Conversation {
   String? assistantId;
   String draftText;
 
+  /// 未发送的附件草稿（按对话隔离，与 [draftText] 一起持久化）。
+  ///
+  /// 图片附件带预压缩 base64（[Attachment.base64Data]，序列化时仅
+  /// 携带已压缩完成的载荷，见 _saveDraftImmediately 的快照规则）；
+  /// 文件/未压缩完成的图片只存引用（storagePath），恢复时重新读取。
+  /// 发送成功后清空。
+  List<Attachment> draftAttachments = [];
+
   /// Per-conversation set of MCP/built-in tool names that the user has enabled.
   /// Defaults to empty (interpreted by the chat page as "auto-enable all
   /// available tools" for new conversations; explicit empty is preserved
@@ -165,6 +173,7 @@ class Conversation {
     this.sortOrder = 0,
     this.assistantId,
     this.draftText = '',
+    List<Attachment>? draftAttachments,
     Set<String>? enabledMcpToolNames,
     this.hasExplicitEnabledMcpTools = false,
     this.contextSummary,
@@ -178,7 +187,8 @@ class Conversation {
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
         messages = messages ?? [],
-        enabledMcpToolNames = enabledMcpToolNames ?? {};
+        enabledMcpToolNames = enabledMcpToolNames ?? {},
+        draftAttachments = draftAttachments ?? [];
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -190,6 +200,12 @@ class Conversation {
         'sortOrder': sortOrder,
         if (assistantId != null) 'assistantId': assistantId,
         'draftText': draftText,
+        // 草稿附件序列化时携带 base64Data：快照在 composer 侧已过滤
+        // （仅图片的压缩产物），历史消息附件不走此路径不受影响。
+        if (draftAttachments.isNotEmpty)
+          'draftAttachments': draftAttachments
+              .map((a) => a.toMap(includeBase64Data: true))
+              .toList(),
         if (contextSummary != null) 'contextSummary': contextSummary,
         if (compactionTailStartId != null)
           'compactionTailStartId': compactionTailStartId,
@@ -248,6 +264,38 @@ class Conversation {
       }
     }
 
+    // 回填附件所属对话 ID（功能上线前的旧数据没有该字段）：
+    // 图片压缩磁盘缓存按（对话, 哈希）定位，回填后旧对话的图片也能
+    // 在发送时/选中后写入缓存，避免"重启后每次发送都重新压缩"。
+    final backfillConvId = map['id'];
+    if (backfillConvId is String && backfillConvId.isNotEmpty) {
+      for (final m in messages) {
+        for (final a in m.attachments) {
+          a.conversationId ??= backfillConvId;
+        }
+      }
+    }
+
+    // Defensive draft attachment parsing（草稿附件，含图片压缩 base64）
+    List<Attachment> draftAttachments = [];
+    final draftAttsRaw = map['draftAttachments'];
+    if (draftAttsRaw is List) {
+      for (final e in draftAttsRaw) {
+        if (e is Map) {
+          try {
+            final a = Attachment.fromMap(Map<String, dynamic>.from(e));
+            if (a.fileName.isNotEmpty || a.storagePath.isNotEmpty) {
+              a.conversationId ??=
+                  backfillConvId is String ? backfillConvId : null;
+              draftAttachments.add(a);
+            }
+          } catch (_) {
+            // Skip corrupt draft attachment
+          }
+        }
+      }
+    }
+
     // Defensive enabledMcpToolNames parsing
     Set<String> enabledMcpToolNames = {};
     final toolsRaw = map['enabledMcpToolNames'];
@@ -289,6 +337,7 @@ class Conversation {
       sortOrder: sortOrder,
       assistantId: assistantIdRaw is String ? assistantIdRaw : null,
       draftText: draftRaw is String ? draftRaw : '',
+      draftAttachments: draftAttachments,
       enabledMcpToolNames: enabledMcpToolNames,
       hasExplicitEnabledMcpTools: hasExplicit,
       contextSummary: contextSummaryRaw is String ? contextSummaryRaw : null,
