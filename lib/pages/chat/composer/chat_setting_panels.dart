@@ -533,17 +533,6 @@ void showReasoningPanel({
                                       .withValues(alpha: 0.6),
                                 ),
                               ),
-                          if (!hasEffortParam)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8, left: 4),
-                              child: Text(
-                                '当前模型未配置推理力度参数，请在模型设置中添加',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: cs.onSurfaceVariant
-                                      .withValues(alpha: 0.6),
-                                ),
-                              ),
                             ),
                           if (hasEffortParam && localEffortEnabled) ...[
                             const SizedBox(height: 12),
