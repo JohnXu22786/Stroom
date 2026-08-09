@@ -371,8 +371,7 @@ void main() {
       expect(find.text('思考 2 思考完成'), findsOneWidget);
       expect(find.textContaining('思考 3'), findsNothing,
           reason: '空占位段落不应渲染出第三个按钮');
-      expect(find.text('思考完成'), findsNothing,
-          reason: '多段落时按钮带序号前缀，不应出现无前缀的按钮');
+      expect(find.text('思考完成'), findsNothing, reason: '多段落时按钮带序号前缀，不应出现无前缀的按钮');
     });
   });
 }

@@ -59,8 +59,7 @@ Widget _buildTestApp(_HangingStreamManager manager) {
       chatStreamManagerProvider.overrideWith((ref) => manager),
       conversationsProvider.overrideWith((ref) => ConversationsNotifier(ref)),
       activeConversationIdProvider.overrideWith((ref) => 'test-conv'),
-      providerEntriesProvider
-          .overrideWith((ref) => ProviderEntriesNotifier()),
+      providerEntriesProvider.overrideWith((ref) => ProviderEntriesNotifier()),
     ],
     child: const MaterialApp(home: ChatPage()),
   );
@@ -76,8 +75,7 @@ Future<void> _sendMessage(WidgetTester tester, String text) async {
       )
       .where((b) => b.onPressed != null)
       .toList();
-  expect(sendButtons, isNotEmpty,
-      reason: '发送按钮应在输入文本后可用');
+  expect(sendButtons, isNotEmpty, reason: '发送按钮应在输入文本后可用');
   await tester.tap(find.byWidget(sendButtons.first));
   await tester.pump();
   // Let _onMessageSend insert the user message and the textStream
@@ -125,21 +123,21 @@ void main() {
       // TextStreamMessage — i.e. no text token has arrived yet. This is
       // exactly the phase that used to hide tool calls.
       final chat = tester.widget<Chat>(find.byType(Chat));
-      final placeholder = chat.chatController.messages
-          .whereType<TextStreamMessage>()
-          .toList();
-      expect(placeholder, hasLength(1),
-          reason: '发送后应有一个 textStream 占位消息');
+      final placeholder =
+          chat.chatController.messages.whereType<TextStreamMessage>().toList();
+      expect(placeholder, hasLength(1), reason: '发送后应有一个 textStream 占位消息');
 
       // Simulate the provider state after: think → ReasoningSectionEnd →
       // ToolCallStart (no text events at all).
       final container = ProviderScope.containerOf(
         tester.element(find.byType(ChatPage)),
       );
-      container.read(streamingReasoningSectionsProvider('test-conv').notifier)
+      container
+          .read(streamingReasoningSectionsProvider('test-conv').notifier)
           .state = ['模型思考内容', ''];
-      container.read(streamingTextSectionsProvider('test-conv').notifier).state =
-          ['', ''];
+      container
+          .read(streamingTextSectionsProvider('test-conv').notifier)
+          .state = ['', ''];
       container
           .read(streamingToolCallRoundStartsProvider('test-conv').notifier)
           .state = [0];
@@ -184,10 +182,12 @@ void main() {
       );
       // Round 1: think → tool1; Round 2: think → tool2; third section is
       // the empty placeholder for a round that has not started yet.
-      container.read(streamingReasoningSectionsProvider('test-conv').notifier)
+      container
+          .read(streamingReasoningSectionsProvider('test-conv').notifier)
           .state = ['第一轮思考', '第二轮思考', ''];
-      container.read(streamingTextSectionsProvider('test-conv').notifier).state =
-          ['', '', ''];
+      container
+          .read(streamingTextSectionsProvider('test-conv').notifier)
+          .state = ['', '', ''];
       container
           .read(streamingToolCallRoundStartsProvider('test-conv').notifier)
           .state = [0, 1];

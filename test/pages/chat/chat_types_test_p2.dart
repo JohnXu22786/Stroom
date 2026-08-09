@@ -466,9 +466,7 @@ void chatTypesGroup2() {
       );
       final finalSegments = blocksToSegments(blocks);
       expect(
-        finalSegments
-            .whereType<ReasoningSegment>()
-            .map((s) => s.sectionIndex),
+        finalSegments.whereType<ReasoningSegment>().map((s) => s.sectionIndex),
         [0, 1, 2, 3],
         reason: 'every reasoning section (incl. empty placeholders) must be '
             'emitted so ordinal == raw index',
@@ -477,9 +475,7 @@ void chatTypesGroup2() {
       // index 2 resolves to 'think3'.
       expect(finalSegments.whereType<ToolCallSegment>().length, 3);
       expect(
-        finalSegments
-            .whereType<ToolCallSegment>()
-            .map((s) => s.data.name),
+        finalSegments.whereType<ToolCallSegment>().map((s) => s.data.name),
         ['A', 'B', 'C'],
         reason: 'tool calls must keep round order',
       );
