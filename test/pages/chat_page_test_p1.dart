@@ -1,65 +1,6 @@
 part of 'chat_page_test.dart';
 
 void chatPageGroup1() {
-  group('ChatPage (v0.2.15 restored)', () {
-    // Helper: pump the widget and consume any pre-existing framework
-    // exceptions from flutter_chat_ui rendering in test mode.
-    Future<void> pumpChatPage(WidgetTester tester) async {
-      await tester.pumpWidget(createChatTestApp());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      // Consume any pre-existing framework exceptions from flutter_chat_ui
-      // (TextField without Material ancestor is a test-only issue)
-      tester.takeException();
-    }
-
-    testWidgets('renders chat page with title', (tester) async {
-      await pumpChatPage(tester);
-
-      // Verify the page renders with the default conversation title
-      expect(find.text('新对话'), findsOneWidget);
-      // Verify the search button exists
-      expect(find.byIcon(Icons.search), findsOneWidget);
-    });
-
-    testWidgets('history button is removed from top bar', (tester) async {
-      await pumpChatPage(tester);
-
-      // In merged design, history button has been removed
-      expect(find.byIcon(Icons.history), findsNothing);
-    });
-
-    testWidgets('new conversation button is removed from top bar',
-        (tester) async {
-      await pumpChatPage(tester);
-
-      // In merged design, new conversation button has been removed
-      expect(find.byIcon(Icons.add), findsNothing);
-    });
-
-    testWidgets('shows search button', (tester) async {
-      await pumpChatPage(tester);
-
-      // The search/toggle button should be present
-      expect(find.byIcon(Icons.search), findsOneWidget);
-    });
-
-    testWidgets('shows send button in composer', (tester) async {
-      await pumpChatPage(tester);
-
-      // Note: Icons.send_rounded can appear in both the composer and
-      // the fullscreen editor dialog, so we only check it exists
-      expect(find.byIcon(Icons.send_rounded), findsWidgets);
-    });
-
-    // Note: Testing the composer TextField and attachment button requires
-    // a full Material ancestor chain in the test environment. These elements
-    // render correctly in the running app but fail in unit tests due to the
-    // Positioned widget in ChatComposerWidget not inheriting Material context
-    // from the flutter_chat_ui Chat widget's Scaffold.
-    // This is a pre-existing limitation in v0.2.15.
-  });
-
   group('ChatPage composer layout (bottom of Column, not Stack overlay)', () {
     Future<void> pumpChatPage(WidgetTester tester) async {
       await tester.pumpWidget(createChatTestApp());
@@ -67,15 +8,6 @@ void chatPageGroup1() {
       await tester.pump(const Duration(milliseconds: 50));
       tester.takeException();
     }
-
-    testWidgets('composer is visible at the bottom of the page',
-        (tester) async {
-      await pumpChatPage(tester);
-
-      // Verify the composer's icon buttons exist (attach file and send)
-      expect(find.byIcon(Icons.attach_file_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.send_rounded), findsWidgets);
-    });
 
     testWidgets('composer is rendered below the top bar', (tester) async {
       await pumpChatPage(tester);

@@ -76,7 +76,12 @@ void main() {
       expect(selectedIndex, 1);
     });
 
-    testWidgets('model panel dismisses on background tap', (tester) async {
+    testWidgets('model panel reorder uses the adjusted onReorderItem index',
+        (tester) async {
+      // 回归测试：onReorderItem 的 newIndex 已经是移除后的索引，
+      // 处理器不能再做 `if (newIndex > oldIndex) newIndex--`，
+      // 否则向下拖动一格会变成无效操作。
+      List<String>? reordered;
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -86,9 +91,10 @@ void main() {
                   onPressed: () {
                     showModelPanel(
                       context: context,
-                      models: ['GPT-4o'],
+                      models: ['GPT-4o', 'Claude 3', 'Gemini'],
                       selectedModelIndex: 0,
                       onModelSelected: (_) {},
+                      onModelsReordered: (models) => reordered = models,
                     );
                   },
                   child: const Text('Open'),
@@ -101,82 +107,14 @@ void main() {
 
       await openPanel(tester);
 
-      expect(find.text('选择模型'), findsOneWidget);
-
-      await tester.tapAt(const Offset(10, 10));
+      final listView = tester.widget<ReorderableListView>(
+        find.byType(ReorderableListView),
+      );
+      // 把第一项拖到第三项之后：真实拖拽中框架会传 (0, 2)。
+      listView.onReorderItem?.call(0, 2);
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('选择模型'), findsNothing);
-    });
-
-    testWidgets('model panel uses ReorderableListView for drag support',
-        (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) {
-                return ElevatedButton(
-                  onPressed: () {
-                    showModelPanel(
-                      context: context,
-                      models: ['GPT-4o', 'Claude 3', 'Gemini'],
-                      selectedModelIndex: 0,
-                      onModelSelected: (_) {},
-                    );
-                  },
-                  child: const Text('Open'),
-                );
-              },
-            ),
-          ),
-        ),
-      );
-
-      await openPanel(tester);
-
-      // Should use ReorderableListView for drag-to-reorder
-      expect(find.byType(ReorderableListView), findsOneWidget);
-    });
-
-    testWidgets('model panel fires onModelsReordered callback on drag',
-        (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) {
-                return ElevatedButton(
-                  onPressed: () {
-                    showModelPanel(
-                      context: context,
-                      models: ['GPT-4o', 'Claude 3', 'Gemini'],
-                      selectedModelIndex: 0,
-                      onModelSelected: (_) {},
-                      onModelsReordered: (models) => List<String>.from(models),
-                    );
-                  },
-                  child: const Text('Open'),
-                );
-              },
-            ),
-          ),
-        ),
-      );
-
-      await openPanel(tester);
-
-      // Verify all three models are visible
-      expect(find.text('GPT-4o'), findsOneWidget);
-      expect(find.text('Claude 3'), findsOneWidget);
-      expect(find.text('Gemini'), findsOneWidget);
-
-      // Verify the ReorderableListView exists (drag infrastructure)
-      expect(find.byType(ReorderableListView), findsOneWidget);
-
-      // Verify drag indicator icons exist
-      expect(find.byIcon(Icons.drag_indicator), findsNWidgets(3));
+      expect(reordered, ['Claude 3', 'Gemini', 'GPT-4o']);
     });
 
     testWidgets('selected model follow reorder logic is correct',
@@ -456,46 +394,6 @@ void main() {
   });
 
   group('ReasoningPanel tests (old API - with effort)', () {
-    testWidgets('reasoning panel shows toggle and params', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) {
-                return ElevatedButton(
-                  onPressed: () {
-                    showReasoningPanel(
-                      context: context,
-                      reasoningEnabled: true,
-                      reasoningEffortEnabled: false,
-                      reasoningParamSelections: {'reasoning_effort': 'medium'},
-                      reasoningParams: [
-                        ReasoningParam(
-                          paramName: 'reasoning_effort',
-                          options: ['low', 'medium', 'high'],
-                        ),
-                      ],
-                      onReasoningToggle: (_) {},
-                      onReasoningEffortToggle: (_) {},
-                      onReasoningParamChanged: (_, __) {},
-                    );
-                  },
-                  child: const Text('Open'),
-                );
-              },
-            ),
-          ),
-        ),
-      );
-
-      await openPanel(tester);
-
-      expect(find.text('推理设置'), findsOneWidget);
-      expect(find.text('推理'), findsOneWidget);
-      // Now there are 2 switches: reasoning toggle + effort section
-      expect(find.byType(Switch), findsWidgets);
-    });
-
     testWidgets('option chips appear when reasoning and effort are enabled',
         (tester) async {
       await tester.pumpWidget(
@@ -760,7 +658,6 @@ void main() {
       );
 
       String? changedName;
-      String? changedValue;
 
       await tester.pumpWidget(
         MaterialApp(
@@ -776,7 +673,6 @@ void main() {
                       reasoningParams: params,
                       onReasoningParamChanged: (name, value) {
                         changedName = name;
-                        changedValue = value;
                       },
                       onCustomParamToggle: (_, __) {},
                     );

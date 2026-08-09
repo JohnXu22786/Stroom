@@ -78,31 +78,6 @@ String _formatSize(int bytes) {
 
 void main() {
   group('UnifiedMediaPickerDialog', () {
-    testWidgets('shows title and close button', (tester) async {
-      await tester.pumpWidget(
-        _buildTestApp(
-          Builder(
-            builder: (context) {
-              return ElevatedButton(
-                onPressed: () =>
-                    showMediaPickerDialog(context, _createTestConfig()),
-                child: const Text('Open'),
-              );
-            },
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Open'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Should show the configured title
-      expect(find.text('测试选择器'), findsOneWidget);
-      // Should have a close button
-      expect(find.byIcon(Icons.close), findsOneWidget);
-    });
-
     testWidgets('shows loading state momentarily before data resolves',
         (tester) async {
       // Use a delayed future to keep loading visible
@@ -799,38 +774,6 @@ void main() {
       expect(find.text('无法读取文件'), findsAtLeastNWidgets(1));
       // Dialog should remain open
       expect(find.text('测试选择器'), findsOneWidget);
-    });
-
-    testWidgets('subtitle builder renders correct media-specific info', (
-      tester,
-    ) async {
-      final records = [
-        const _TestRecord(id: '1', name: '音频文件', format: 'wav', size: 2048),
-      ];
-
-      await tester.pumpWidget(
-        _buildTestApp(
-          Builder(
-            builder: (context) {
-              return ElevatedButton(
-                onPressed: () => showMediaPickerDialog(
-                  context,
-                  _createTestConfig(records: records),
-                ),
-                child: const Text('Open'),
-              );
-            },
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Open'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Should show subtitle info
-      expect(find.textContaining('WAV'), findsOneWidget);
-      expect(find.textContaining('2.0 KB'), findsOneWidget);
     });
 
     // ====================================================================

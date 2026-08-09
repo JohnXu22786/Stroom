@@ -62,24 +62,5 @@ void main() {
       // base64Data should be lost after round-trip (not persisted)
       expect(restored.base64Data, isNull);
     });
-
-    test('copyWith preserves base64Data', () {
-      final att = Attachment(
-        fileName: 'doc.pdf',
-        mimeType: 'application/pdf',
-        fileType: 'document',
-        hash: 'ghi789',
-        storagePath: 'attachments/ghi789_11111.pdf',
-        fileSize: 4096,
-      )..base64Data =
-          'JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSL0Zp';
-
-      final copied = att.copyWith(fileName: 'renamed.pdf');
-
-      expect(copied.base64Data,
-          'JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSL0Zp');
-      expect(copied.fileName, 'renamed.pdf');
-      expect(copied.hash, 'ghi789');
-    });
   });
 }

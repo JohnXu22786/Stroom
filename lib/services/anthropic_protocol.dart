@@ -281,9 +281,4 @@ class AnthropicProtocol implements ChatProtocol {
       },
     ];
   }
-
-  @override
-  Map<String, dynamic> toolChoiceNoneJson() => {
-        'tool_choice': {'type': 'none'},
-      };
 }

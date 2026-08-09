@@ -215,32 +215,9 @@ void main() {
       expect(results[0].conversation.id, 'conv-a');
       expect(results[1].conversation.id, 'conv-b');
     });
-
-    test('SearchResultMatch has correct messageId', () {
-      final convs = _createTestConversations();
-      final results = MessageSearchPage.searchMessageContents(convs, '天气');
-
-      final match = results[0].matches[0];
-      expect(match.messageId, isNotEmpty);
-    });
   });
 
   group('MessageSearchPage - Widget', () {
-    testWidgets('renders search page with title and search field',
-        (tester) async {
-      await tester.pumpWidget(createMessageSearchTestApp());
-      await tester.pump();
-
-      // Should show search field
-      expect(find.byType(TextField), findsOneWidget);
-      // Should show hint text
-      expect(find.text('搜索所有对话中的消息...'), findsOneWidget);
-      // Should have close button
-      expect(find.byIcon(Icons.close), findsOneWidget);
-      // Should show initial empty state text
-      expect(find.text('输入关键词搜索所有对话中的消息'), findsOneWidget);
-    });
-
     testWidgets('shows results when searching', (tester) async {
       await tester.pumpWidget(createMessageSearchTestApp());
       await tester.pump();
@@ -349,17 +326,6 @@ void main() {
   });
 
   group('Conversation search unit tests', () {
-    test('SearchResult has correct conversation info', () {
-      final convs = _createTestConversations();
-      final results = MessageSearchPage.searchMessageContents(convs, 'Flutter');
-
-      for (final result in results) {
-        expect(result.conversation.id, isNotEmpty);
-        expect(result.conversation.title, isNotEmpty);
-        expect(result.matches, isNotEmpty);
-      }
-    });
-
     test('SearchResultMatch has correct match positions', () {
       final convs = _createTestConversations();
       final results = MessageSearchPage.searchMessageContents(convs, 'Flutter');

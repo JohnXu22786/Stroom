@@ -483,16 +483,6 @@ void main() {
   });
 
   // ==================================================================
-  // DataMigrationService delegation
-  // ==================================================================
-
-  group('DataMigrationService delegation', () {
-    test('cleanOldBackups delegates to AutoBackupService', () async {
-      await DataMigrationService.cleanOldBackups();
-    });
-  });
-
-  // ==================================================================
   // lastError tracking
   // ==================================================================
 
@@ -519,6 +509,132 @@ void main() {
       final result = await AutoBackupService.performAutoBackup();
       expect(result, isFalse);
       expect(AutoBackupService.lastError, isNull);
+    });
+  });
+
+  // ==================================================================
+  // 空间预检 — 剩余空间不足时快速失败并给出明确原因
+  // ==================================================================
+
+  group('space pre-check', () {
+    tearDown(() {
+      AutoBackupService.debugFreeSpaceOverride = null;
+      AutoBackupService.lastFailure = null;
+    });
+
+    test('fails fast with noSpace reason when free space is insufficient',
+        () async {
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+
+      // 模拟磁盘完全没空间：预检必须快速失败，而不是写入到一半 ENOSPC
+      AutoBackupService.debugFreeSpaceOverride = () async => 0;
+      final result = await AutoBackupService.performAutoBackup();
+      expect(result, isFalse, reason: '剩余空间不足时必须快速失败并返回 false');
+
+      expect(AutoBackupService.lastFailure, isNotNull);
+      expect(AutoBackupService.lastFailure!.reason, BackupFailureReason.noSpace,
+          reason: '失败原因必须是「存储空间不足」，而不是笼统的未知错误');
+      expect(AutoBackupService.lastError, contains('存储空间不足'));
+      expect(AutoBackupService.lastFailure!.requiredBytes, greaterThan(0));
+      expect(AutoBackupService.lastFailure!.freeBytes, 0);
+
+      // 预检失败不应产生任何备份文件
+      expect(await dir.exists(), isFalse, reason: '空间不足时不应开始备份（无残留文件）');
+
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+    });
+
+    test('backup succeeds when free space is sufficient', () async {
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+
+      AutoBackupService.debugFreeSpaceOverride =
+          () async => 1024 * 1024 * 1024; // 1GB
+      final result = await AutoBackupService.performAutoBackup();
+      expect(result, isTrue);
+      expect(AutoBackupService.lastFailure, isNull);
+
+      await dir.delete(recursive: true);
+    });
+
+    test('isRunning is reset after space pre-check failure', () async {
+      // 回归：预检失败发生在 try/finally 之外时 _isRunning 泄漏为 true，
+      // 之后 cancel() 会让所有后续备份在开始前被取消。
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+
+      AutoBackupService.debugFreeSpaceOverride = () async => 0;
+      final result = await AutoBackupService.performAutoBackup();
+      expect(result, isFalse);
+      expect(AutoBackupService.isRunning, isFalse,
+          reason: '预检失败后 isRunning 必须复位');
+
+      // 复位后下一次备份可正常执行（不再被残留的取消标志杀死）
+      AutoBackupService.debugFreeSpaceOverride = () async => 1024 * 1024 * 1024;
+      final retry = await AutoBackupService.performAutoBackup();
+      expect(retry, isTrue, reason: '预检失败后重试备份应正常执行');
+      expect(AutoBackupService.isRunning, isFalse);
+
+      await dir.delete(recursive: true);
+    });
+
+    test('successful backup records size for the space reminder', () async {
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+
+      AutoBackupService.debugFreeSpaceOverride = () async => 1024 * 1024 * 1024;
+      AutoBackupService.lastBackupSizeBytes = null;
+      final result = await AutoBackupService.performAutoBackup();
+      expect(result, isTrue);
+      expect(AutoBackupService.lastBackupSizeBytes, isNotNull);
+      expect(AutoBackupService.lastBackupSizeBytes!, greaterThan(0),
+          reason: '备份成功后必须记录本次备份大小（空间提醒依赖它）');
+
+      await dir.delete(recursive: true);
+    });
+
+    test('1-hour rule skip clears the size so the reminder cannot misfire',
+        () async {
+      // 回归：1 小时规则跳过时若残留上次备份的大小，启动流程会误弹
+      // 「本次自动备份大小为 X」的清理提醒（实际没有产生新备份）。
+      final root = await DataMigrationService.getExternalBackupRootPath();
+      final dir = Directory(root);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+
+      AutoBackupService.debugFreeSpaceOverride = () async => 1024 * 1024 * 1024;
+      final first = await AutoBackupService.performAutoBackup();
+      expect(first, isTrue);
+      expect(AutoBackupService.lastBackupSizeBytes, isNotNull);
+
+      // 第二次备份命中 1 小时规则 → 跳过（返回 true 但未产生新备份）
+      final second = await AutoBackupService.performAutoBackup();
+      expect(second, isTrue);
+      expect(AutoBackupService.lastBackupSizeBytes, isNull,
+          reason: '1 小时规则跳过时必须清空备份大小，否则空间提醒会误报');
+
+      // 提醒检查在无新备份时返回 null
+      AutoBackupService.debugFreeSpaceOverride = () async => 1;
+      final reminder = await AutoBackupService.checkSpaceReminder();
+      expect(reminder, isNull, reason: '跳过路径不得触发空间清理提醒');
+
+      await dir.delete(recursive: true);
     });
   });
 }

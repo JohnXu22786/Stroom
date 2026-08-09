@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/provider_config.dart';
+import '../utils/model_order.dart';
 import 'asr_model_config_page.dart';
 import 'llm_model_config_page.dart';
 import 'model_config_page.dart';
@@ -32,6 +34,44 @@ class _ProviderConfigDetailPageState
   bool get _isExistingConfig => widget.configIndex >= 0;
   final List<ModelConfig> _pendingModels = [];
 
+  /// 保存的全局模型顺序（SharedPreferences `model_order`，全部 LLM 模型
+  /// 显示名的合并顺序）。对话页面模型选择面板与这里共享同一份顺序：
+  /// 本页显示"去掉其它供应商后的剩余顺序"，拖动排序时写回全局顺序。
+  List<String>? _savedModelOrder;
+
+  /// 模型显示名与聊天面板一致："模型名 | 供应商名"。
+  String _modelDisplayName(ModelConfig model, String providerName) {
+    return '${model.name.isNotEmpty ? model.name : model.modelId}'
+        ' | $providerName';
+  }
+
+  /// 是否启用模型拖动排序（仅 LLM 已有配置：聊天面板的模型选择只展示
+  /// LLM 模型，其它类型没有可同步的全局顺序，保持普通列表）。
+  bool get _enableModelReorder => _isExistingConfig && _entry?.type == 'llm';
+
+  /// 模型列表的显示顺序：LLM 配置按全局保存顺序过滤出本配置的子序列，
+  /// 未保存过顺序时与存储顺序一致。
+  List<ModelConfig> get _displayModels {
+    final models = _models;
+    if (!_enableModelReorder) return models;
+    final config = _config;
+    if (config == null) return models;
+
+    final names =
+        models.map((m) => _modelDisplayName(m, config.providerName)).toList();
+    final orderedNames = applySavedOrder(names, _savedModelOrder);
+    // 按名字逐个配对回模型对象（处理重名：每个名字按出现顺序消费）
+    final remaining = List<ModelConfig>.of(models);
+    final ordered = <ModelConfig>[];
+    for (final name in orderedNames) {
+      final i = remaining
+          .indexWhere((m) => _modelDisplayName(m, config.providerName) == name);
+      if (i >= 0) ordered.add(remaining.removeAt(i));
+    }
+    ordered.addAll(remaining);
+    return ordered;
+  }
+
   ProviderEntry? get _entry {
     final state = ref.read(providerEntriesProvider);
     try {
@@ -59,11 +99,26 @@ class _ProviderConfigDetailPageState
   void initState() {
     super.initState();
     _loadConfig();
+    _loadSavedModelOrder();
     // For new configs, open the settings panel immediately
     if (!_isExistingConfig) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _openSettingsPanel();
       });
+    }
+  }
+
+  /// 加载对话页面保存的全局模型顺序（拖动排序的持久化数据）。
+  Future<void> _loadSavedModelOrder() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      // 若用户已在加载完成前拖动过（_savedModelOrder 已被拖动写入），
+      // 不要用旧的持久化值覆盖内存中的新顺序。
+      if (_savedModelOrder != null) return;
+      setState(() => _savedModelOrder = prefs.getStringList('model_order'));
+    } catch (e) {
+      debugPrint('Failed to load model_order: $e');
     }
   }
 
@@ -508,6 +563,59 @@ class _ProviderConfigDetailPageState
     }
   }
 
+  /// 拖动排序模型：把本配置在全局顺序中的子序列替换为拖动后的新顺序，
+  /// 其它供应商的模型保持原位，并写回 SharedPreferences `model_order`
+  /// （与对话页面模型选择面板共享的同一份顺序）。
+  Future<void> _reorderModels(int oldIndex, int newIndex) async {
+    // onReorderItem 的 newIndex 已是移除后的索引，直接使用
+    final config = _config;
+    if (config == null) return;
+
+    final models = _displayModels;
+    if (oldIndex < 0 ||
+        oldIndex >= models.length ||
+        newIndex < 0 ||
+        newIndex > models.length) {
+      return;
+    }
+    final reordered = List<ModelConfig>.of(models);
+    final item = reordered.removeAt(oldIndex);
+    reordered.insert(newIndex, item);
+
+    // 计算新的全局顺序：以全部 LLM 模型的当前合并顺序为基准
+    final entriesState = ref.read(providerEntriesProvider);
+    final llmEntry =
+        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    final allNames = <String>[];
+    if (llmEntry != null) {
+      for (final c in llmEntry.configs) {
+        for (final m in c.models) {
+          allNames.add(_modelDisplayName(m, c.providerName));
+        }
+      }
+    }
+    final currentGlobal = applySavedOrder(allNames, _savedModelOrder);
+    final thisProviderSet = config.models
+        .map((m) => _modelDisplayName(m, config.providerName))
+        .toSet();
+    final newThisOrder = reordered
+        .map((m) => _modelDisplayName(m, config.providerName))
+        .toList();
+    final newGlobal = rebuildGlobalOrder(
+      currentGlobal: currentGlobal,
+      inProvider: thisProviderSet,
+      newProviderOrder: newThisOrder,
+    );
+
+    setState(() => _savedModelOrder = newGlobal);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('model_order', newGlobal);
+    } catch (e) {
+      debugPrint('Failed to persist model_order: $e');
+    }
+  }
+
   Future<void> _deleteModel(int modelIndex) async {
     final entry = _entry;
     if (entry == null) return;
@@ -577,7 +685,8 @@ class _ProviderConfigDetailPageState
             : '编辑配置')
         : '新建$entryName配置';
 
-    final models = _models;
+    final models = _displayModels;
+    final reorderable = _enableModelReorder;
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -669,32 +778,65 @@ class _ProviderConfigDetailPageState
                 child: Text('暂无模型', style: TextStyle(color: Colors.grey)),
               ),
             )
+          else if (reorderable)
+            ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              itemCount: models.length,
+              onReorderItem: _reorderModels,
+              proxyDecorator: (child, index, animation) => Material(
+                elevation: 2,
+                borderRadius: BorderRadius.circular(8),
+                child: child,
+              ),
+              itemBuilder: (context, i) => _buildModelTile(i),
+            )
           else
-            ...List.generate(models.length, (i) {
-              final model = models[i];
-              return ListTile(
-                leading: const Icon(Icons.smart_toy),
-                title: Text(model.name.isNotEmpty ? model.name : '（未命名）'),
-                subtitle: Text('ID: ${model.modelId}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () => _deleteModel(i),
-                      tooltip: '删除模型',
-                    ),
-                    const Icon(Icons.chevron_right),
-                  ],
-                ),
-                contentPadding: EdgeInsets.zero,
-                onTap: () => _editModel(i),
-              );
-            }),
+            ...List.generate(models.length, (i) => _buildModelTile(i)),
 
           const SizedBox(height: 16),
         ],
       ),
+    );
+  }
+
+  /// 构建单个模型条目。显示顺序与存储顺序可能不同（LLM 拖动排序后），
+  /// 编辑/删除时必须使用存储索引而不是显示索引。
+  Widget _buildModelTile(int displayIndex) {
+    final displayModels = _displayModels;
+    final model = displayModels[displayIndex];
+    final config = _config;
+    final storageIndex =
+        config != null ? config.models.indexOf(model) : displayIndex;
+    final reorderable = _enableModelReorder;
+
+    return ListTile(
+      key: reorderable
+          ? ValueKey(
+              'model_${widget.entryId}_${widget.configIndex}_$displayIndex')
+          : null,
+      leading: reorderable
+          ? ReorderableDragStartListener(
+              index: displayIndex,
+              child: Icon(Icons.drag_handle, color: Colors.grey),
+            )
+          : const Icon(Icons.smart_toy),
+      title: Text(model.name.isNotEmpty ? model.name : '（未命名）'),
+      subtitle: Text('ID: ${model.modelId}'),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.delete, color: Colors.red),
+            onPressed: () => _deleteModel(storageIndex),
+            tooltip: '删除模型',
+          ),
+          const Icon(Icons.chevron_right),
+        ],
+      ),
+      contentPadding: EdgeInsets.zero,
+      onTap: () => _editModel(storageIndex),
     );
   }
 

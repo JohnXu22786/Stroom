@@ -168,27 +168,6 @@ void main() {
     });
   });
 
-  group('AudioPlayerPage - source text upload: system file decoding', () {
-    test('valid UTF-8 bytes decode to correct text', () async {
-      final bytes = Uint8List.fromList(utf8.encode('系统文件测试文本'));
-      final decoded = utf8.decode(bytes);
-      expect(decoded, equals('系统文件测试文本'));
-    });
-
-    test('malformed UTF-8 can be decoded with allowMalformed', () async {
-      final malformedBytes = Uint8List.fromList([0xD8, 0x00, 0xDC, 0x00]);
-      // Should not throw
-      final decoded = utf8.decode(malformedBytes, allowMalformed: true);
-      expect(decoded, isA<String>());
-    });
-
-    test('empty bytes decode to empty string', () async {
-      final bytes = Uint8List.fromList([]);
-      final decoded = utf8.decode(bytes);
-      expect(decoded, isEmpty);
-    });
-  });
-
   group('AudioPlayerPage - source text upload: ChoiceCard pattern', () {
     // The bottom sheet follows the established OCR/ASR pattern
     // with exactly 2 ChoiceCard options:

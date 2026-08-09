@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/startup/backup_startup_check.dart';
+import 'package:stroom/services/auto_backup_service.dart';
+import 'package:stroom/services/backup_location_manager.dart';
 import 'package:stroom/services/manifest_database.dart';
 
 void main() {
@@ -42,241 +44,196 @@ void main() {
   });
 
   // ==================================================================
-  // Backup failure dialog — no skip, must have re-authorize
+  // 真实对话框（visibleForTesting 暴露）— 失败原因分类驱动
   // ==================================================================
 
-  group('backup failure dialog', () {
-    testWidgets('has no Skip button', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) {
-              Future.microtask(() async {
-                // Use the real static method to show the dialog
-                // via a public test helper (we re-create the dialog inline)
-              });
-              return ElevatedButton(
-                onPressed: () {
-                  showDialog<bool>(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (ctx) => AlertDialog(
-                      title: Row(
-                        children: [
-                          Icon(Icons.error_outline,
-                              color: Colors.red.shade400, size: 24),
-                          const SizedBox(width: 8),
-                          const Text('自动备份失败'),
-                        ],
-                      ),
-                      content: const Text(
-                        '自动备份未能成功完成。\n\n'
-                        '请确认已授权正确的「Documents」文档目录路径，\n'
-                        '点击「重新授权」返回重新选择正确的目录；\n'
-                        '或点击「重试」再次尝试备份。',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(false),
-                          child: const Text('重新授权'),
-                        ),
-                        FilledButton(
-                          onPressed: () => Navigator.of(ctx).pop(true),
-                          child: const Text('重试'),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-                child: const Text('Show Dialog'),
-              );
-            },
-          ),
-        ),
-      );
-      await tester.pump();
-
-      await tester.tap(find.text('Show Dialog'));
-      await tester.pump();
-
-      // Verify dialog content has correct title and no Skip button
-      expect(find.text('自动备份失败'), findsOneWidget);
-      expect(find.text('重试'), findsOneWidget);
-      expect(find.text('重新授权'), findsOneWidget);
-
-      // Verify Skip button does NOT exist
-      expect(find.text('跳过'), findsNothing);
+  group('backup failed dialog (classified reasons)', () {
+    tearDown(() {
+      AutoBackupService.lastFailure = null;
     });
 
-    testWidgets('Retry returns true, Re-authorize returns false',
-        (WidgetTester tester) async {
-      bool? result;
+    Future<void> pumpAndTrigger(
+      WidgetTester tester,
+      Future<dynamic> Function(BuildContext) action,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
-            builder: (context) {
-              return ElevatedButton(
-                onPressed: () {
-                  showDialog<bool>(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('自动备份失败'),
-                      content: const Text('自动备份未能成功完成。'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(false),
-                          child: const Text('重新授权'),
-                        ),
-                        FilledButton(
-                          onPressed: () => Navigator.of(ctx).pop(true),
-                          child: const Text('重试'),
-                        ),
-                      ],
-                    ),
-                  ).then((v) => result = v);
-                },
-                child: const Text('Show Dialog'),
-              );
-            },
+            builder: (context) => ElevatedButton(
+              onPressed: () => action(context),
+              child: const Text('go'),
+            ),
           ),
         ),
       );
+      await tester.tap(find.text('go'));
       await tester.pump();
+      await tester.pump();
+    }
 
-      // Test Retry returns true
-      await tester.tap(find.text('Show Dialog'));
-      await tester.pump();
+    testWidgets('noSpace reason shows required/free sizes and no re-auth',
+        (WidgetTester tester) async {
+      AutoBackupService.lastFailure = const BackupFailure(
+        reason: BackupFailureReason.noSpace,
+        message: '存储空间不足',
+        requiredBytes: 200 * 1024 * 1024, // 200MB
+        freeBytes: 50 * 1024 * 1024, // 50MB
+      );
+      bool? result;
+      await pumpAndTrigger(
+        tester,
+        (context) =>
+            BackupStartupCheck.showBackupFailedDialog(context, showSkip: false)
+                .then((v) => result = v),
+      );
+
+      expect(find.text('自动备份失败'), findsOneWidget);
+      expect(find.textContaining('存储空间不足'), findsOneWidget);
+      expect(find.textContaining('约需 200.0 MB 空间'), findsOneWidget);
+      expect(find.textContaining('当前可用 50.0 MB'), findsOneWidget);
+      // 非 Android：无「重新授权」按钮
+      expect(find.text('重新授权'), findsNothing);
+      // 重试按钮存在且返回 true
       await tester.tap(find.text('重试'));
       await tester.pumpAndSettle();
       expect(result, isTrue);
+    });
 
-      // Test Re-authorize returns false
-      result = null;
-      await tester.tap(find.text('Show Dialog'));
-      await tester.pump();
-      await tester.tap(find.text('重新授权'));
+    testWidgets('showSkip instructs skip instead of absent retry button',
+        (WidgetTester tester) async {
+      AutoBackupService.lastFailure = const BackupFailure(
+        reason: BackupFailureReason.fileLocked,
+        message: '文件被占用',
+      );
+      bool? result;
+      await pumpAndTrigger(
+        tester,
+        (context) =>
+            BackupStartupCheck.showBackupFailedDialog(context, showSkip: true)
+                .then((v) => result = v),
+      );
+
+      expect(find.textContaining('文件被其他程序占用'), findsOneWidget);
+      expect(find.textContaining('跳过'), findsWidgets);
+      expect(find.text('重试'), findsNothing, reason: '达到最大重试次数后不应再出现「重试」按钮');
+      expect(find.text('重新授权'), findsNothing);
+      await tester.tap(find.text('跳过'));
       await tester.pumpAndSettle();
-      expect(result, isFalse);
+      expect(result, isNull); // 跳过 → null
+    });
+
+    testWidgets('permission reason shows platform-appropriate guidance',
+        (WidgetTester tester) async {
+      AutoBackupService.lastFailure = const BackupFailure(
+        reason: BackupFailureReason.permission,
+        message: '权限异常',
+      );
+      await pumpAndTrigger(
+        tester,
+        (context) =>
+            BackupStartupCheck.showBackupFailedDialog(context, showSkip: false),
+      );
+
+      expect(find.textContaining('备份目录权限异常'), findsOneWidget);
+      // 非 Android 平台：不出现「重新授权」按钮与指引
+      expect(find.text('重新授权'), findsNothing);
+      expect(find.text('重试'), findsOneWidget);
     });
   });
 
   // ==================================================================
-  // Storage access dialog
+  // 存储空间不足对话框（真实实现）
   // ==================================================================
 
-  group('storage access dialog', () {
-    testWidgets('shows dialog explaining Documents directory need',
+  group('storage space dialog (real implementation)', () {
+    testWidgets('shows the estimated required size',
         (WidgetTester tester) async {
       bool? result;
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
-            builder: (context) {
-              return ElevatedButton(
-                onPressed: () {
-                  showDialog<bool>(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (ctx) => AlertDialog(
-                      title: Row(
-                        children: [
-                          Icon(Icons.folder_open,
-                              color: Colors.orange.shade700, size: 24),
-                          const SizedBox(width: 8),
-                          const Text('备份存储授权'),
-                        ],
-                      ),
-                      content:
-                          const Text('为了确保您的数据安全，Stroom 需要您选择一个公开目录来存放自动备份文件。'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(false),
-                          child: const Text('退出应用'),
-                        ),
-                        FilledButton(
-                          onPressed: () => Navigator.of(ctx).pop(true),
-                          child: const Text('同意并选择目录'),
-                        ),
-                      ],
-                    ),
-                  ).then((v) => result = v);
-                },
-                child: const Text('Show Dialog'),
-              );
-            },
+            builder: (context) => ElevatedButton(
+              onPressed: () => BackupStartupCheck.showStorageSpaceDialog(
+                      context,
+                      requiredBytes: 5 * 1024 * 1024)
+                  .then((v) => result = v),
+              child: const Text('go'),
+            ),
           ),
         ),
       );
+      await tester.tap(find.text('go'));
       await tester.pump();
-
-      await tester.tap(find.text('Show Dialog'));
-      await tester.pump();
-
-      // Verify dialog content
-      expect(find.text('备份存储授权'), findsOneWidget);
-      expect(find.text('同意并选择目录'), findsOneWidget);
-      expect(find.text('退出应用'), findsOneWidget);
-
-      await tester.tap(find.text('同意并选择目录'));
-      await tester.pumpAndSettle();
-
-      expect(result, isTrue);
-    });
-  });
-
-  // ==================================================================
-  // Storage space dialog
-  // ==================================================================
-
-  group('storage space dialog', () {
-    testWidgets('shows space warning and retry option',
-        (WidgetTester tester) async {
-      bool? result;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) {
-              return ElevatedButton(
-                onPressed: () {
-                  showDialog<bool>(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('存储空间不足'),
-                      content: const Text('设备存储空间不足，无法正常完成自动备份。'),
-                      actions: [
-                        FilledButton(
-                          onPressed: () => Navigator.of(ctx).pop(true),
-                          child: const Text('我已清理，重试'),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(false),
-                          child: const Text('稍后处理'),
-                        ),
-                      ],
-                    ),
-                  ).then((v) => result = v);
-                },
-                child: const Text('Show Space Dialog'),
-              );
-            },
-          ),
-        ),
-      );
-      await tester.pump();
-
-      await tester.tap(find.text('Show Space Dialog'));
       await tester.pump();
 
       expect(find.text('存储空间不足'), findsOneWidget);
-      expect(find.text('我已清理，重试'), findsOneWidget);
-      expect(find.text('稍后处理'), findsOneWidget);
+      expect(find.textContaining('约需 5.0 MB 空间'), findsOneWidget);
 
       await tester.tap(find.text('我已清理，重试'));
       await tester.pumpAndSettle();
-
       expect(result, isTrue);
+    });
+  });
+
+  // ==================================================================
+  // 空间清理提醒（剩余空间 < 5× 备份大小）
+  // ==================================================================
+
+  group('space cleanup reminder', () {
+    tearDown(() {
+      AutoBackupService.lastBackupSizeBytes = null;
+      BackupLocationManager.debugFreeSpaceOverride = null;
+    });
+
+    testWidgets('shows reminder dialog when free < 5x backup size',
+        (WidgetTester tester) async {
+      AutoBackupService.lastBackupSizeBytes = 100;
+      BackupLocationManager.debugFreeSpaceOverride = () async => 400; // < 500
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () =>
+                  BackupStartupCheck.maybeShowSpaceReminder(context),
+              child: const Text('go'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('存储空间提醒'), findsOneWidget);
+      expect(find.textContaining('5 倍备份大小的空间'), findsOneWidget);
+
+      await tester.tap(find.text('知道了'));
+      await tester.pumpAndSettle();
+      expect(find.text('存储空间提醒'), findsNothing);
+    });
+
+    testWidgets('does not show reminder when free >= 5x backup size',
+        (WidgetTester tester) async {
+      AutoBackupService.lastBackupSizeBytes = 100;
+      BackupLocationManager.debugFreeSpaceOverride = () async => 600; // >= 500
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () =>
+                  BackupStartupCheck.maybeShowSpaceReminder(context),
+              child: const Text('go'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('go'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('存储空间提醒'), findsNothing);
     });
   });
 }

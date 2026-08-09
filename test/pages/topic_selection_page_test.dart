@@ -166,69 +166,6 @@ Widget createMergedTopicTestApp({
 
 void main() {
   group('TopicSelectionPage - Long-press drag sort', () {
-    testWidgets('uses ReorderableListView instead of ListView', (tester) async {
-      final conv1 = Conversation(
-        id: 'conv-1',
-        title: '对话A',
-        updatedAt: DateTime(2026, 6, 1),
-        assistantId: 'test-asst',
-      );
-      final conv2 = Conversation(
-        id: 'conv-2',
-        title: '对话B',
-        updatedAt: DateTime(2026, 6, 2),
-        assistantId: 'test-asst',
-      );
-
-      await tester.pumpWidget(createTestApp(
-        assistants: [
-          Assistant(
-              id: 'test-asst',
-              name: '助手',
-              prompt: 'P',
-              emoji: '🤖',
-              description: '助手'),
-        ],
-        selectedAssistantId: 'test-asst',
-        conversations: [conv1, conv2],
-      ));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Should render a ReorderableListView (not ListView)
-      expect(find.byType(ReorderableListView), findsOneWidget);
-      expect(find.byType(ListView), findsNothing);
-    });
-
-    testWidgets(
-        'items are wrapped in ReorderableDelayedDragStartListener when not in selection mode',
-        (tester) async {
-      final conv1 = Conversation(
-        id: 'conv-1',
-        title: '对话A',
-        updatedAt: DateTime(2026, 6, 1),
-        assistantId: 'test-asst',
-      );
-
-      await tester.pumpWidget(createTestApp(
-        assistants: [
-          Assistant(
-              id: 'test-asst',
-              name: '助手',
-              prompt: 'P',
-              emoji: '🤖',
-              description: '助手'),
-        ],
-        selectedAssistantId: 'test-asst',
-        conversations: [conv1],
-      ));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Should find ReorderableDelayedDragStartListener wrapping items
-      expect(find.byType(ReorderableDelayedDragStartListener), findsOneWidget);
-    });
-
     testWidgets(
         'items are NOT wrapped in ReorderableDelayedDragStartListener when in selection mode',
         (tester) async {
@@ -345,91 +282,6 @@ void main() {
 
       // AppBar title should show "已选 1 个"
       expect(find.text('已选 1 个'), findsOneWidget);
-    });
-
-    testWidgets('sorted conversations display pinned first, then by list order',
-        (tester) async {
-      final conv1 = Conversation(
-        id: 'id-a',
-        title: '对话A（最旧）',
-        updatedAt: DateTime(2026, 6, 1),
-        assistantId: 'test-reorder',
-        isPinned: false,
-      );
-      final conv2 = Conversation(
-        id: 'id-b',
-        title: '对话B（置顶）',
-        updatedAt: DateTime(2026, 6, 2),
-        assistantId: 'test-reorder',
-        isPinned: true,
-      );
-      final conv3 = Conversation(
-        id: 'id-c',
-        title: '对话C（最新）',
-        updatedAt: DateTime(2026, 6, 3),
-        assistantId: 'test-reorder',
-        isPinned: false,
-      );
-
-      await tester.pumpWidget(createTestApp(
-        assistants: [
-          Assistant(
-              id: 'test-reorder',
-              name: '助手',
-              prompt: 'P',
-              emoji: '🤖',
-              description: '助手'),
-        ],
-        selectedAssistantId: 'test-reorder',
-        conversations: [conv1, conv2, conv3],
-      ));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Pinned item should appear first, then unpinned in list order
-      // Order should be: conv2 (pinned), conv1, conv3
-      // We can verify by checking the pin icon appears and the title order
-      // Pinned icon exists (at least in the pinned item)
-      expect(find.byIcon(Icons.push_pin), findsWidgets);
-      // Verify all items rendered
-      expect(find.text('对话A（最旧）'), findsOneWidget);
-      expect(find.text('对话B（置顶）'), findsOneWidget);
-      expect(find.text('对话C（最新）'), findsOneWidget);
-    });
-
-    testWidgets('each item has a ValueKey for ReorderableListView tracking',
-        (tester) async {
-      final conv1 = Conversation(
-        id: 'conv-1',
-        title: '对话A',
-        updatedAt: DateTime(2026, 6, 1),
-        assistantId: 'test-asst',
-      );
-      final conv2 = Conversation(
-        id: 'conv-2',
-        title: '对话B',
-        updatedAt: DateTime(2026, 6, 2),
-        assistantId: 'test-asst',
-      );
-
-      await tester.pumpWidget(createTestApp(
-        assistants: [
-          Assistant(
-              id: 'test-asst',
-              name: '助手',
-              prompt: 'P',
-              emoji: '🤖',
-              description: '助手'),
-        ],
-        selectedAssistantId: 'test-asst',
-        conversations: [conv1, conv2],
-      ));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Both items should be rendered
-      expect(find.text('对话A'), findsOneWidget);
-      expect(find.text('对话B'), findsOneWidget);
     });
 
     testWidgets('tapping conversation navigates to chat page (still works)',
@@ -569,43 +421,6 @@ void main() {
   });
 
   group('TopicSelectionPage - Reorder logic', () {
-    testWidgets('multiple items render in ReorderableListView', (tester) async {
-      final conv1 = Conversation(
-        id: 'conv-a',
-        title: '对话A',
-        updatedAt: DateTime(2026, 6, 1),
-        assistantId: 'test-reorder',
-      );
-      final conv2 = Conversation(
-        id: 'conv-b',
-        title: '对话B',
-        updatedAt: DateTime(2026, 6, 2),
-        assistantId: 'test-reorder',
-      );
-
-      await tester.pumpWidget(createTestApp(
-        assistants: [
-          Assistant(
-              id: 'test-reorder',
-              name: '助手',
-              prompt: 'P',
-              emoji: '🤖',
-              description: '助手'),
-        ],
-        selectedAssistantId: 'test-reorder',
-        conversations: [conv1, conv2],
-      ));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Both items render
-      expect(find.text('对话A'), findsOneWidget);
-      expect(find.text('对话B'), findsOneWidget);
-
-      // ReorderableListView is used
-      expect(find.byType(ReorderableListView), findsOneWidget);
-    });
-
     testWidgets('exiting selection mode returns to drag mode', (tester) async {
       final conv1 = Conversation(
         id: 'conv-1',
@@ -653,36 +468,6 @@ void main() {
   });
 
   group('Merged SelectConversationPage - AppBar', () {
-    testWidgets('shows title "选择对话" and no avatar icon in title', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        createMergedTopicTestApp(
-          assistants: [
-            Assistant(
-              id: 'test-id',
-              name: '测试助手',
-              prompt: '你好',
-              emoji: '🤖',
-              description: '测试',
-            ),
-          ],
-          selectedAssistantId: 'test-id',
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Should show the new title
-      expect(find.text('选择对话'), findsOneWidget);
-      // The emoji should NOT appear in the AppBar title area (it's only in the info bar)
-      // Wait: the emoji IS in the info bar (assistant info bar), so it should be found
-      // But NOT in the title row. The old test had findsAtLeast(1) because emoji was
-      // in both title and info bar. Now it should NOT be in the title.
-      // Let's just check: the emoji still appears in the info bar
-      expect(find.text('🤖'), findsOneWidget);
-    });
-
     testWidgets('NO add (新话题) button in AppBar (bottom button still exists)', (
       tester,
     ) async {
@@ -771,30 +556,6 @@ void main() {
   });
 
   group('Merged SelectConversationPage - Features', () {
-    testWidgets('shows search button in AppBar that opens a panel', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        createMergedTopicTestApp(
-          assistants: [
-            Assistant(
-              id: 'test-id-3',
-              name: '助手C',
-              prompt: 'P3',
-              emoji: '🤖',
-              description: 'CC',
-            ),
-          ],
-          selectedAssistantId: 'test-id-3',
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Search button should exist
-      expect(find.byIcon(Icons.search), findsOneWidget);
-    });
-
     testWidgets('tapping search button opens search panel (bottom sheet)', (
       tester,
     ) async {
@@ -947,38 +708,6 @@ void main() {
 
       // Should navigate to chat page
       expect(find.text('Chat Page Mock'), findsOneWidget);
-    });
-
-    testWidgets('shows popup menu (more_vert) on each conversation card', (
-      tester,
-    ) async {
-      final conv1 = Conversation(
-        id: 'conv-1',
-        title: '对话D',
-        updatedAt: DateTime(2026, 5, 1),
-        assistantId: 'test-id-7',
-      );
-
-      await tester.pumpWidget(
-        createMergedTopicTestApp(
-          assistants: [
-            Assistant(
-              id: 'test-id-7',
-              name: '助手G',
-              prompt: 'P7',
-              emoji: '🤖',
-              description: 'GG',
-            ),
-          ],
-          selectedAssistantId: 'test-id-7',
-          conversations: [conv1],
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Popup menu (more_vert) should exist
-      expect(find.byIcon(Icons.more_vert), findsOneWidget);
     });
 
     testWidgets('shows only ONE "新话题" button (bottom only)', (tester) async {

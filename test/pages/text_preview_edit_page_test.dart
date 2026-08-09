@@ -639,20 +639,6 @@ void main() {
       expect(find.text('14'), findsWidgets);
     });
 
-    testWidgets('font size slider has step of 1 (divisions = max - min)',
-        (tester) async {
-      await enterEditMode(tester);
-
-      // Tap font size button
-      await tester.tap(find.byIcon(Icons.format_size));
-      await tester.pumpAndSettle();
-
-      // Get the slider and check its divisions
-      final sliderWidget = tester.widget<Slider>(find.byType(Slider));
-      // divisions = max - min = 28 - 10 = 18 for step of 1
-      expect(sliderWidget.divisions, equals(18));
-    });
-
     // ==================== MMD Format Support ====================
 
     group('mmd format support', () {

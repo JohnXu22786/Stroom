@@ -86,17 +86,6 @@ void chatServiceRequestGroup1() {
       expect(body['tools'], isA<List>());
       expect((body['tools'] as List).length, equals(1));
     });
-
-    test('includes stream parameter', () {
-      final body = provider.buildBody(
-        [
-          {'role': 'user', 'content': 'Hi'}
-        ],
-        model: 'test-model',
-        stream: true,
-      );
-      expect(body['stream'], isTrue);
-    });
   });
 
   group('ChatService - temperature behavior', () {

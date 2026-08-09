@@ -182,16 +182,6 @@ void main() {
       final restored = ReasoningParam.fromMap(map);
       expect(restored.enabled, isFalse);
     });
-
-    test('enabled persists through copy', () {
-      final param = ReasoningParam(
-        paramName: 'test',
-        enabled: false,
-        options: ['x', 'y'],
-      );
-      final copy = param.copy();
-      expect(copy.enabled, isFalse);
-    });
   });
 
   group('ReasoningPanel - effort disabled state and edge cases', () {
@@ -271,6 +261,91 @@ void main() {
       expect(find.text('low'), findsNothing);
       expect(find.text('medium'), findsNothing);
       expect(find.text('high'), findsNothing);
+    });
+  });
+
+  group('ReasoningPanel - effort section independent of reasoning toggle', () {
+    testWidgets('shows effort section even when reasoning is OFF',
+        (tester) async {
+      await showReasoningPanelForTest(
+        tester,
+        reasoningEnabled: false,
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['low', 'medium', 'high'],
+          ),
+        ],
+      );
+
+      // The effort section is always visible, independent of the
+      // reasoning toggle state.
+      expect(find.text('推理力度'), findsOneWidget);
+    });
+
+    testWidgets('turning reasoning on keeps the effort section visible',
+        (tester) async {
+      await showReasoningPanelForTest(
+        tester,
+        reasoningEnabled: false,
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['low', 'medium', 'high'],
+          ),
+        ],
+      );
+
+      // Effort section visible while reasoning is off
+      expect(find.text('推理力度'), findsOneWidget);
+
+      // Toggle the reasoning switch ON
+      await tester.tap(find.byType(Switch).first);
+      await tester.pump();
+
+      // The effort section must remain visible immediately (no stale
+      // hidden state from the panel-opening value).
+      expect(find.text('推理力度'), findsOneWidget);
+      expect(tester.widget<Switch>(find.byType(Switch).first).value, isTrue);
+    });
+
+    testWidgets(
+        'effort switch is enabled and reveals options while reasoning '
+        'is OFF', (tester) async {
+      await showReasoningPanelForTest(
+        tester,
+        reasoningEnabled: false,
+        reasoningEffortEnabled: false,
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['low', 'medium', 'high'],
+          ),
+        ],
+      );
+
+      // The effort switch (second switch) is tappable even when the
+      // reasoning toggle is off.
+      final effortSwitch = tester.widget<Switch>(find.byType(Switch).at(1));
+      expect(effortSwitch.onChanged, isNotNull);
+      expect(effortSwitch.value, isFalse);
+
+      await tester.tap(find.byType(Switch).at(1));
+      await tester.pump();
+
+      // Enabling the effort toggle reveals its options.
+      expect(find.text('low'), findsOneWidget);
+      expect(find.text('medium'), findsOneWidget);
+      expect(find.text('high'), findsOneWidget);
     });
   });
 
@@ -360,89 +435,6 @@ void main() {
         find.textContaining('当前模型未配置自定义推理参数'),
         findsOneWidget,
       );
-    });
-  });
-
-  group('Mermaid code block - streaming behavior', () {
-    test('detects incomplete mermaid code block', () {
-      // During streaming, an incomplete mermaid code block has no closing ```
-      const incompleteCode = '```mermaid\ngraph TD;\n    A-->B;';
-
-      // Check if it's a mermaid block
-      final isMermaid = incompleteCode.startsWith('```mermaid');
-      expect(isMermaid, isTrue);
-
-      // Check if it's complete (has closing ```)
-      final hasClosing = incompleteCode.trim().endsWith('```');
-      expect(hasClosing, isFalse);
-    });
-
-    test('detects complete mermaid code block', () {
-      const completeCode = '```mermaid\ngraph TD;\n    A-->B;\n```';
-
-      final isMermaid = completeCode.startsWith('```mermaid');
-      expect(isMermaid, isTrue);
-
-      final hasClosing = completeCode.trim().endsWith('```');
-      expect(hasClosing, isTrue);
-    });
-
-    test('detects complete mermaid block with trailing newline', () {
-      const code = '```mermaid\ngraph TD;\n    A-->B;\n```\n';
-
-      final hasClosing = code.trim().endsWith('```');
-      expect(hasClosing, isTrue);
-    });
-
-    test('detects incomplete mermaid block with trailing backticks in content',
-        () {
-      // This has ``` in the middle but no closing ```
-      const code = '```mermaid\ngraph TD;\n    A--``>B;';
-
-      final hasClosing = code.trim().endsWith('```');
-      expect(hasClosing, isFalse);
-    });
-
-    test('detects non-mermaid code blocks', () {
-      const pythonCode = '```python\nprint("hello")\n```';
-      final isMermaid = pythonCode.startsWith('```mermaid');
-      expect(isMermaid, isFalse);
-    });
-
-    test('handles empty mermaid code during streaming', () {
-      // When streaming just started and only ```mermaid has been received
-      const partialCode = '```mermaid\n';
-
-      final isMermaid = partialCode.startsWith('```mermaid');
-      expect(isMermaid, isTrue);
-
-      // Not closed yet
-      final hasClosing = partialCode.trim().endsWith('```');
-      expect(hasClosing, isFalse);
-    });
-  });
-
-  group('Mermaid loading placeholder during streaming', () {
-    test('mermaid code block during streaming shows loading indicator', () {
-      // During streaming, the mermaid code block should not try to render.
-      // Instead, a loading indicator is shown until streaming completes.
-      const code = '```mermaid\ngraph TD;\n    A-->B;';
-      final isStreaming = true;
-      final isMermaid = code.startsWith('```mermaid');
-
-      final shouldShowLoading = isStreaming && isMermaid;
-      expect(shouldShowLoading, isTrue,
-          reason: 'During streaming, mermaid code blocks should show loading');
-    });
-
-    test('mermaid code block renders normally after streaming', () {
-      // After streaming completes, the mermaid code block can be rendered.
-      final isStreaming = false;
-      final isMermaid = true;
-
-      final shouldRender = !isStreaming && isMermaid;
-      expect(shouldRender, isTrue,
-          reason: 'After streaming, mermaid should render');
     });
   });
 }

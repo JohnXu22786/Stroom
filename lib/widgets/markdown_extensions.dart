@@ -11,6 +11,38 @@ import 'mermaid_render_widget.dart';
 /// Tag used by the LaTeX custom generator.
 const _latexTag = 'latex';
 
+/// Custom [m.InlineSyntax] that parses HTML line-break tags (`<br>`,
+/// `<br/>`, `<br />`, `</br>`) as hard line breaks.
+///
+/// The `markdown` package's [m.InlineHtmlSyntax] passes inline HTML through
+/// as literal text, so without this syntax `<br>` in table cells (and
+/// paragraphs) would render as the characters "<br>" instead of a line
+/// break. Emitting a `br` element lets `markdown_widget`'s built-in
+/// [BrNode] render it as a newline (`\n`).
+///
+/// Attributed forms (`<br class="x">`) are not matched and keep rendering
+/// as literal text — models do not emit them, and keeping the match strict
+/// avoids false positives.
+class BrSyntax extends m.InlineSyntax {
+  BrSyntax()
+      : super(
+          // Optional leading "/" for </br>, optional whitespace before an
+          // optional self-closing "/". Case-insensitive: models also output
+          // <BR> or <Br>.
+          r'</?br\s*/?>',
+          startCharacter: _ltCharCode,
+          caseSensitive: false,
+        );
+
+  static const int _ltCharCode = 0x3C; // '<'
+
+  @override
+  bool onMatch(m.InlineParser parser, Match match) {
+    parser.addNode(m.Element.text('br', ''));
+    return true;
+  }
+}
+
 /// [SpanNodeGeneratorWithTag] that creates [LatexNode] instances when
 /// the markdown parser encounters a LaTeX element.
 final SpanNodeGeneratorWithTag latexGenerator = SpanNodeGeneratorWithTag(
@@ -365,10 +397,13 @@ PreConfig codeBlockPreConfig({
 /// `$...$` and `$$...$$` expressions in markdown content are
 /// rendered as mathematical formulas.
 ///
+/// Adds the [BrSyntax] parser so that `<br>` in table cells (and
+/// paragraphs) renders as a line break instead of literal text.
+///
 /// Created once and reused to avoid re-allocation on every
 /// [MarkdownWidget] build.
 final MarkdownGenerator markdownGenerator = MarkdownGenerator(
-  inlineSyntaxList: [LatexSyntax()],
+  inlineSyntaxList: [LatexSyntax(), BrSyntax()],
   generators: [latexGenerator],
 );
 

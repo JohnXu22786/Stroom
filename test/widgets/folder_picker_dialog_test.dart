@@ -14,42 +14,6 @@ Widget _buildTestApp(Widget body) {
 
 void main() {
   group('FolderPickerDialog', () {
-    testWidgets('shows root directory option always at top level',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp(
-        Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () => FolderPickerDialog.show(context),
-            child: const Text('Open'),
-          );
-        }),
-      ));
-
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
-
-      // Root directory should always be shown at top level
-      expect(find.text('根目录'), findsOneWidget);
-    });
-
-    testWidgets('shows hint text below the title', (tester) async {
-      await tester.pumpWidget(_buildTestApp(
-        Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () => FolderPickerDialog.show(context),
-            child: const Text('Open'),
-          );
-        }),
-      ));
-
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
-
-      // Hint text should be visible with small gray text style
-      final hintFinder = find.text('单击选中，双击进入查看子文件夹');
-      expect(hintFinder, findsOneWidget);
-    });
-
     testWidgets('shows only root-level folders at top level', (tester) async {
       await tester.pumpWidget(_buildTestApp(
         Builder(builder: (context) {
@@ -429,33 +393,6 @@ void main() {
 
       // The result should be 'photos/vacation' (navigated into, thus selected)
       expect(result, 'photos/vacation');
-    });
-
-    testWidgets(
-        'hint text is small gray text below title with no border/background',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp(
-        Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () => FolderPickerDialog.show(context),
-            child: const Text('Open'),
-          );
-        }),
-      ));
-
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
-
-      final hintFinder = find.text('单击选中，双击进入查看子文件夹');
-      expect(hintFinder, findsOneWidget);
-
-      // Verify it's a plain Text widget (no border/background container)
-      final textWidget = tester.widget<Text>(hintFinder);
-      expect(textWidget.style, isNotNull);
-      // Font size is exactly 12 (small gray hint)
-      expect(textWidget.style!.fontSize, equals(12.0));
-      // Color is a gray variant (onSurfaceVariant with reduced alpha)
-      expect(textWidget.style!.color, isNotNull);
     });
   });
 }

@@ -1,0 +1,362 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+    }
+    #viewport {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      position: relative;
+    }
+    #loading-hint {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #888;
+      font-size: 13px;
+      font-family: sans-serif;
+    }
+    #diagram-container {
+      transform-origin: 0 0;
+      display: inline-block;
+      cursor: grab;
+    }
+    #diagram-container:active {
+      cursor: grabbing;
+    }
+    .mermaid {
+      text-align: left;
+    }
+    .mermaid svg {
+      max-width: none;
+      max-height: none;
+    }
+    .error-message {
+      color: #e74c3c;
+      padding: 16px;
+      border: 1px solid #e74c3c;
+      border-radius: 8px;
+      margin: 16px;
+      background: #fdf0ef;
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div id="viewport">
+    <div id="loading-hint">å›¾è¡¨åŠ è½½ä¸­...</div>
+    <div id="diagram-container">
+      <pre class="mermaid" id="mermaid-code">
+
+      </pre>
+    </div>
+  </div>
+  <script>
+    var zoomLevel = 1;
+    var panX = 0;
+    var panY = 0;
+
+    function updateTransform() {
+      var container = document.getElementById('diagram-container');
+      container.style.transform =
+        'translate(' + panX + 'px, ' + panY + 'px) scale(' + zoomLevel + ')';
+    }
+
+    function reportError(msg) {
+      document.getElementById('viewport').innerHTML =
+        '<div class="error-message">' + msg + '</div>';
+      try {
+        if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+          window.flutter_inappwebview.callHandler('onMermaidError', msg);
+        }
+      } catch(_) {}
+    }
+
+    // Reports the current zoom + pan to Flutter so the Flutter side always
+    // mirrors the JS state (used for button anchors and gesture bases).
+    function notifyTransform() {
+      try {
+        if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+          window.flutter_inappwebview.callHandler('onTransformChanged', zoomLevel, panX, panY);
+        }
+      } catch(_) {}
+    }
+
+    // Called from Flutter or local handlers to set zoom level.
+    // When centerX / centerY are provided, the zoom is anchored at that
+    // point (in viewport coordinates) instead of the top-left corner.
+    window.setZoom = function(level, centerX, centerY) {
+      var oldZoom = zoomLevel;
+      zoomLevel = Math.max(0.1, Math.min(10, level));
+      if (centerX !== undefined && centerY !== undefined) {
+        panX = centerX - (centerX - panX) * (zoomLevel / oldZoom);
+        panY = centerY - (centerY - panY) * (zoomLevel / oldZoom);
+      }
+      updateTransform();
+      notifyTransform();
+    };
+
+    // Sets absolute pan offset and zoom level in a single call. Used by the
+    // inline widget, which tracks pan/zoom on the Flutter side and computes
+    // the zoom anchor (finger position / preview center) itself.
+    window.setPanZoom = function(x, y, level) {
+      panX = x;
+      panY = y;
+      zoomLevel = Math.max(0.1, Math.min(10, level));
+      updateTransform();
+    };
+
+    // Fits the rendered diagram into the viewport: zooms so that the WHOLE
+    // diagram is visible (contain, NOT cover) at the maximum zoom, then
+    // centers it. Called automatically once rendering completes.
+    window.fitToViewport = function() {
+      var viewport = document.getElementById('viewport');
+      var container = document.getElementById('diagram-container');
+      if (!viewport || !container) return;
+      var svg = container.querySelector('svg');
+      if (!svg) return;
+      var vw = viewport.clientWidth;
+      var vh = viewport.clientHeight;
+      if (vw <= 0 || vh <= 0) {
+        // The WebView is not laid out yet (zero-size iframe, e.g. created
+        // during a page transition). Fit again as soon as the size becomes
+        // available (e.g. after a window resize), instead of giving up.
+        window.addEventListener('resize', function onFitRetry() {
+          if (viewport.clientWidth > 0 && viewport.clientHeight > 0) {
+            window.removeEventListener('resize', onFitRetry);
+            window.fitToViewport();
+          }
+        });
+        return;
+      }
+      var sw = 0, sh = 0;
+      try {
+        var bbox = svg.getBBox();
+        sw = bbox.width;
+        sh = bbox.height;
+      } catch(_) {}
+      if (sw <= 0 || sh <= 0) {
+        var wAttr = parseFloat(svg.getAttribute('width'));
+        var hAttr = parseFloat(svg.getAttribute('height'));
+        if (!isNaN(wAttr) && !isNaN(hAttr)) {
+          sw = wAttr;
+          sh = hAttr;
+        }
+      }
+      if (sw <= 0 || sh <= 0) return;
+      // Pin the SVG to its natural content size: mermaid v11 renders the
+      // root <svg> as `width="100%"` with only an inline `max-width` style
+      // (no width/height attributes), so without explicit pixel dimensions
+      // the SVG stretches to the container width while getBBox() still
+      // reports the natural size â€” the fit math below would then
+      // double-scale the diagram (shrunk and misplaced).
+      svg.setAttribute('width', sw);
+      svg.setAttribute('height', sh);
+      zoomLevel = Math.max(0.1, Math.min(10, Math.min(vw / sw, vh / sh)));
+      panX = (vw - sw * zoomLevel) / 2;
+      panY = (vh - sh * zoomLevel) / 2;
+      updateTransform();
+      notifyTransform();
+    };
+
+
+    var isDragging = false;
+    var dragStartX = 0;
+    var dragStartY = 0;
+    var panStartX = 0;
+    var panStartY = 0;
+
+    // Drag-to-pan with mouse
+    document.addEventListener('mousedown', function(e) {
+      if (e.target.closest('#diagram-container')) {
+        isDragging = true;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        panStartX = panX;
+        panStartY = panY;
+        e.preventDefault();
+      }
+    });
+
+    document.addEventListener('mousemove', function(e) {
+      if (isDragging) {
+        panX = panStartX + (e.clientX - dragStartX);
+        panY = panStartY + (e.clientY - dragStartY);
+        updateTransform();
+        notifyTransform();
+        e.preventDefault();
+      }
+    });
+
+    document.addEventListener('mouseup', function() {
+      isDragging = false;
+    });
+
+    // Zoom with Ctrl/Meta + MouseWheel
+    document.addEventListener('wheel', function(e) {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        var rect = document.getElementById('viewport').getBoundingClientRect();
+        var centerX = e.clientX - rect.left;
+        var centerY = e.clientY - rect.top;
+        var delta = e.deltaY > 0 ? -0.1 : 0.1;
+        window.setZoom(zoomLevel + delta, centerX, centerY);
+      }
+    }, { passive: false });
+
+    // Touch events for mobile pan
+    var touchStartX, touchStartY;
+    var touchPanStartX, touchPanStartY;
+    var lastTouchDist = 0;
+
+    document.addEventListener('touchstart', function(e) {
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchPanStartX = panX;
+        touchPanStartY = panY;
+      } else if (e.touches.length === 2) {
+        lastTouchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+      }
+    });
+
+    document.addEventListener('touchmove', function(e) {
+      if (e.touches.length === 1) {
+        panX = touchPanStartX + (e.touches[0].clientX - touchStartX);
+        panY = touchPanStartY + (e.touches[0].clientY - touchStartY);
+        updateTransform();
+        notifyTransform();
+        e.preventDefault();
+      } else if (e.touches.length === 2) {
+        var dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        var scale = dist / lastTouchDist;
+        lastTouchDist = dist;
+        var midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        var midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        var rect = document.getElementById('viewport').getBoundingClientRect();
+        var centerX = midX - rect.left;
+        var centerY = midY - rect.top;
+        window.setZoom(zoomLevel * scale, centerX, centerY);
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    document.addEventListener('touchend', function(e) {
+      lastTouchDist = 0;
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchPanStartX = panX;
+        touchPanStartY = panY;
+      }
+    });
+
+    // Asset version: the mermaid code arrives via the ?code= query
+    // parameter, and mermaid.min.js is loaded from the SAME asset
+    // directory (same origin) — no CDN request, no network dependency.
+    // The library is shipped gzip-compressed (~1MB instead of 3.5MB) to
+    // keep the dev-server transfer fast; it is decompressed in the
+    // browser and executed from a blob URL. Falls back to the raw file
+    // when decompression is unavailable.
+    function initMermaid() {
+      var hint = document.getElementById('loading-hint');
+      var codeEl = document.getElementById('mermaid-code');
+      // Render watchdog: if the diagram has not appeared 15s after the
+      // library loaded, surface an error instead of a perpetual hint.
+      var renderTimer = setTimeout(function() {
+        if (hint) hint.style.display = 'none';
+        reportError('Mermaid 渲染超时');
+      }, 15000);
+      try {
+        mermaid.initialize({
+          theme: 'default',
+          securityLevel: 'loose',
+          fontFamily: 'sans-serif',
+        });
+        mermaid.run({
+          nodes: [codeEl],
+        }).then(function() {
+          clearTimeout(renderTimer);
+          if (hint) hint.style.display = 'none';
+          window.fitToViewport();
+        }).catch(function(err) {
+          clearTimeout(renderTimer);
+          if (hint) hint.style.display = 'none';
+          reportError('Mermaid render error: ' + err.message);
+        });
+      } catch(e) {
+        clearTimeout(renderTimer);
+        if (hint) hint.style.display = 'none';
+        reportError('Mermaid initialize error: ' + e.message);
+      }
+    }
+
+    function runScriptUrl(url) {
+      var script = document.createElement('script');
+      script.async = true;
+      script.onload = initMermaid;
+      script.onerror = function() {
+        reportError('Mermaid 资源加载失败: ' + url);
+      };
+      script.src = url;
+      document.head.appendChild(script);
+    }
+
+    (function loadMermaid() {
+      var hint = document.getElementById('loading-hint');
+      var codeEl = document.getElementById('mermaid-code');
+      var params = new URLSearchParams(window.location.search);
+      var code = params.get('code');
+      if (code == null || code.length === 0) {
+        codeEl.textContent = '(空 Mermaid 代码)';
+        if (hint) hint.style.display = 'none';
+        return;
+      }
+      codeEl.textContent = code;
+      try {
+        fetch('mermaid.min.js.gz')
+          .then(function(resp) {
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            return resp.blob();
+          })
+          .then(function(blob) {
+            return new Response(
+              blob.stream().pipeThrough(new DecompressionStream('gzip'))
+            ).blob();
+          })
+          .then(function(jsBlob) {
+            runScriptUrl(URL.createObjectURL(jsBlob));
+          })
+          .catch(function(err) {
+            // DecompressionStream unavailable or the gz asset missing:
+            // fall back to the raw library file.
+            runScriptUrl('mermaid.min.js');
+          });
+      } catch(e) {
+        runScriptUrl('mermaid.min.js');
+      }
+    })();
+  </script>
+</body>
+</html>

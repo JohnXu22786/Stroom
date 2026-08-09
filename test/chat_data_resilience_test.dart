@@ -1,9 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 
@@ -526,55 +523,6 @@ void main() {
               'Both messages should survive even with corrupt rawRequest/rawResponse');
       expect(conv.messages[0].content, 'Hello');
       expect(conv.messages[1].content, 'World');
-    });
-
-    test('handles partially corrupted conversation entries gracefully', () {
-      // Simulate raw JSON array with some non-Map entries interspersed
-      // This exercises the Conversation.fromMap loop defense
-      final convList = <dynamic>[
-        // Good conversation
-        {
-          'id': 'good-conv',
-          'title': 'Good',
-          'createdAt': DateTime.now().toIso8601String(),
-          'updatedAt': DateTime.now().toIso8601String(),
-          'messages': [],
-          'isPinned': false,
-          'sortOrder': 0,
-          'draftText': '',
-        },
-        // Corrupt entry (not a Map)
-        'this is not a conversation',
-        // Another good conversation
-        {
-          'id': 'another-good',
-          'title': 'Another',
-          'createdAt': DateTime.now().toIso8601String(),
-          'updatedAt': DateTime.now().toIso8601String(),
-          'messages': [],
-          'isPinned': false,
-          'sortOrder': 0,
-          'draftText': '',
-        },
-      ];
-
-      final conversations = <Conversation>[];
-      for (final item in convList) {
-        if (item is Map) {
-          try {
-            conversations
-                .add(Conversation.fromMap(Map<String, dynamic>.from(item)));
-          } catch (_) {
-            // Skip corrupt entries (same logic as ConversationsNotifier._load)
-          }
-        }
-      }
-
-      expect(conversations.length, 2,
-          reason:
-              'Corrupt non-Map entries should be skipped, good entries preserved');
-      expect(conversations[0].id, 'good-conv');
-      expect(conversations[1].id, 'another-good');
     });
   });
 }

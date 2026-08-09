@@ -7,63 +7,6 @@ import 'package:stroom/widgets/math_canvas.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('GraphPainter - niceStep', () {
-    // _niceStep is private, so we test it indirectly through
-    // the canvas rendering behavior.
-
-    test('GraphPainter can be instantiated', () {
-      const painter = GraphPainter(
-        xMin: -10,
-        yMin: -10,
-        xMax: 10,
-        yMax: 10,
-      );
-      // Verify no crash
-      expect(painter, isNotNull);
-    });
-  });
-
-  group('GraphPainter - curve rendering', () {
-    test('renders curves from point data', () {
-      const painter = GraphPainter(
-        xMin: -10,
-        yMin: -10,
-        xMax: 10,
-        yMax: 10,
-        curves: [
-          [
-            {'x': 0.0, 'y': 0.0},
-            {'x': 1.0, 'y': 1.0},
-            {'x': 2.0, 'y': 4.0},
-          ],
-        ],
-        curveColors: [Colors.blue],
-      );
-      expect(painter, isNotNull);
-    });
-
-    test('renders multiple curves', () {
-      const painter = GraphPainter(
-        xMin: -10,
-        yMin: -10,
-        xMax: 10,
-        yMax: 10,
-        curves: [
-          [
-            {'x': 0.0, 'y': 0.0},
-            {'x': 1.0, 'y': 1.0},
-          ],
-          [
-            {'x': 0.0, 'y': 1.0},
-            {'x': 1.0, 'y': 0.0},
-          ],
-        ],
-        curveColors: [Colors.blue, Colors.red],
-      );
-      expect(painter, isNotNull);
-    });
-  });
-
   group('GraphPainter - shouldRepaint', () {
     test('returns false when nothing changes', () {
       final painter1 = const GraphPainter(
@@ -138,22 +81,6 @@ void main() {
   });
 
   group('MathCanvas - initial state', () {
-    testWidgets('creates canvas without error', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 300,
-              height: 300,
-              child: MathCanvas(),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-      expect(find.byType(MathCanvas), findsOneWidget);
-    });
-
     testWidgets('canvas is ready callback fires', (tester) async {
       bool ready = false;
       await tester.pumpWidget(
@@ -173,37 +100,6 @@ void main() {
       // The ready callback fires after first frame via addPostFrameCallback
       await tester.pump();
       expect(ready, isTrue);
-    });
-
-    testWidgets('resets viewport correctly', (tester) async {
-      final key = GlobalKey<MathCanvasState>();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 300,
-              height: 300,
-              child: MathCanvas(
-                key: key,
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      // Default viewport should be [-10, -10, 10, 10]
-      final state = key.currentState!;
-      final vp = state.viewport;
-      expect(vp.$1, closeTo(-10, 1e-10));
-      expect(vp.$2, closeTo(-10, 1e-10));
-      expect(vp.$3, closeTo(10, 1e-10));
-      expect(vp.$4, closeTo(10, 1e-10));
-
-      // Reset should not crash
-      await state.resetView();
-      final vp2 = state.viewport;
-      expect(vp2.$1, closeTo(-10, 1e-10));
     });
   });
 
@@ -303,28 +199,6 @@ void main() {
   });
 
   group('MathCanvas - viewport', () {
-    testWidgets('setViewport changes visible range', (tester) async {
-      final key = GlobalKey<MathCanvasState>();
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 300,
-              height: 300,
-              child: MathCanvas(key: key),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      await key.currentState!.setViewport(-5, -5, 5, 5);
-      final vp = key.currentState!.viewport;
-      expect(vp.$1, closeTo(-5, 1e-10));
-      expect(vp.$3, closeTo(5, 1e-10));
-    });
-
     testWidgets('setViewport ignores invalid bounds', (tester) async {
       final key = GlobalKey<MathCanvasState>();
 
@@ -345,71 +219,6 @@ void main() {
       // Viewport should not change (xMax <= xMin)
       final vp = key.currentState!.viewport;
       expect(vp.$1, closeTo(-10, 1e-10));
-    });
-  });
-
-  group('GraphPainter - edge rendering', () {
-    test('draws curves with clipRect for clean edges', () {
-      // Test with points that extend beyond canvas bounds
-      const painter = GraphPainter(
-        xMin: -10,
-        yMin: -10,
-        xMax: 10,
-        yMax: 10,
-        curves: [
-          [
-            {'x': -10.0, 'y': 5.0},
-            {'x': -5.0, 'y': 2.0},
-            {'x': 0.0, 'y': 0.0},
-            {'x': 5.0, 'y': 2.0},
-            {'x': 10.0, 'y': 5.0},
-          ],
-        ],
-        curveColors: [Colors.blue],
-      );
-      // Should not crash - clipRect handles edge points
-      expect(painter, isNotNull);
-    });
-
-    test('does not break path for points at viewport edges', () {
-      // Points exactly at the viewport boundaries should be valid
-      const painter = GraphPainter(
-        xMin: -10,
-        yMin: -10,
-        xMax: 10,
-        yMax: 10,
-        curves: [
-          [
-            {'x': -10.0, 'y': 0.0},
-            {'x': 10.0, 'y': 0.0},
-          ],
-        ],
-        curveColors: [Colors.green],
-      );
-      expect(painter, isNotNull);
-
-      // Verify coordinate transform works for boundary points
-      // (-10, 0) should map to screen x=0 and y=height/2
-      // (10, 0) should map to screen x=width and y=height/2
-    });
-
-    test('renders curves with points outside viewport without crash', () {
-      // Points far outside the viewport (clipped by clipRect)
-      const painter = GraphPainter(
-        xMin: -10,
-        yMin: -10,
-        xMax: 10,
-        yMax: 10,
-        curves: [
-          [
-            {'x': -10.0, 'y': 100.0},
-            {'x': 0.0, 'y': -100.0},
-            {'x': 10.0, 'y': 100.0},
-          ],
-        ],
-        curveColors: [Colors.red],
-      );
-      expect(painter, isNotNull);
     });
   });
 

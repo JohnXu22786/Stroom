@@ -5,6 +5,18 @@ part of 'llm_model_config_page.dart';
 // inline code.
 // ignore_for_file: invalid_use_of_protected_member
 
+/// 上下文长度常用备选值（点击输入框时弹出，也可直接输入）。
+const List<String> kContextLengthSuggestions = [
+  '1024',
+  '2048',
+  '4096',
+  '8192',
+  '65536',
+  '131072',
+  '262144',
+  '1048576',
+];
+
 extension _BuildSectionsExt on _LlmModelConfigPageState {
   List<Widget> _buildBasicSettingsSection(ColorScheme cs) {
     return [
@@ -46,6 +58,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
         required: true,
         keyboardType: TextInputType.number,
         description: '模型的最大上下文窗口大小（token 数）',
+        suggestions: kContextLengthSuggestions,
       ),
       const SizedBox(height: 24),
     ];

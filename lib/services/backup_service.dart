@@ -174,17 +174,21 @@ class BackupService {
   }
 
   // ================================================================
-  // 核心：流式备份 — 逐个文件写入磁盘，store 模式，无内存积累
+  // 核心：流式备份 — 收集计划 + 后台 isolate 构建，UI 零阻塞
   // ================================================================
 
-  /// 流式创建备份：使用 [ZipEncoder] + 自定义文件流，store 模式
-  ///（不压缩）逐个文件写入磁盘。
+  /// 流式创建备份。
   ///
-  /// deflate 压缩模式下 [ZipEncoder] 会通过 [OutputMemoryStream] 将每个
-  /// 文件的压缩结果完整缓存在内存中（一个大视频文件就足以 OOM），因此此处
-  /// 使用 store 模式（[CompressionType.none]），配合自实现的
-  /// [_FileInputStream]/[_FileOutputStream]，确保文件数据直接从磁盘流
-  /// 经 ZIP 写入目标文件，不经过任何内存缓冲。
+  /// 分两个阶段：
+  /// 1. 主 isolate 收集备份计划（数据库/偏好设置/文件路径，轻量异步）；
+  /// 2. 后台 isolate 同步构建 ZIP（store 模式，磁盘到磁盘流式写入，
+  ///    不经过内存缓冲）。
+  ///
+  /// 为什么必须放后台 isolate：即使使用 store 模式流式写入，
+  /// 单个大文件（如 600MB 视频）的 CRC32 计算与分块读写仍是同步 CPU
+  /// 密集操作，在主 isolate 执行会冻结整个应用前端。放入后台 isolate
+  /// 后主 isolate 只需 await，UI 帧渲染完全不受影响（与音频分离的
+  /// [Isolate.run] 方案一致）。
   ///
   /// 峰值内存：O(最大单文件的分块读取缓冲 64KB + CRC32 计算缓冲 1MB)，
   /// 不随备份文件数量或单文件大小增长。
@@ -206,236 +210,303 @@ class BackupService {
     await _yieldToEventLoop();
     checkCancelled();
 
-    // 使用 ZipEncoder + 自定义文件输出流（store 模式，无压缩内存缓冲）
-    final output = _FileOutputStream(outputPath);
-    final encoder = ZipEncoder();
-    encoder.startEncode(output);
+    // ------------------------------------------------------------
+    // 第 1 阶段（主 isolate）：收集备份计划（轻量异步操作）。
+    // ------------------------------------------------------------
+    final plan = await _collectBackupPlan(
+      selection: selection,
+      checkCancelled: checkCancelled,
+      onProgress: onProgress,
+    );
 
-    try {
-      // 1. manifest.json
-      debugPrint('[BackupService] streaming: building manifest');
-      _addInMemoryFile(
-          encoder,
-          'manifest.json',
-          jsonEncode({
-            'version': 2,
-            'createdAt': DateTime.now().toIso8601String(),
-            'appVersion': appVersion,
-          }));
-      onProgress?.call(0.05);
-      await _yieldToEventLoop();
-      checkCancelled();
-
-      // 2. SharedPreferences — 拆分聊天记录和设置
-      if (selection.chatRecordsAndAttachments || selection.settings) {
-        debugPrint('[BackupService] streaming: reading preferences');
-        final prefs = await SharedPreferences.getInstance();
-        final chatData = <String, dynamic>{};
-        final settingsData = <String, dynamic>{};
-        for (final key in prefs.getKeys()) {
-          if (key.startsWith('flutter.')) continue;
-          if (_isChatPrefKey(key)) {
-            if (selection.chatRecordsAndAttachments) {
-              chatData[key] = prefs.get(key);
-            }
-          } else {
-            if (selection.settings) {
-              settingsData[key] = prefs.get(key);
-            }
-          }
-        }
-        if (chatData.isNotEmpty) {
-          _addInMemoryFile(encoder, 'chat_data.json', jsonEncode(chatData));
-        }
-        if (settingsData.isNotEmpty) {
-          _addInMemoryFile(encoder, 'settings.json', jsonEncode(settingsData));
-        }
+    // ------------------------------------------------------------
+    // 第 2 阶段：同步构建 ZIP。
+    // 生产环境放后台 isolate；测试环境（FakeAsync 不支持真实
+    // Isolate）在调用方 isolate 同步执行并保留逐文件取消检查。
+    // ------------------------------------------------------------
+    debugPrint('[BackupService] streaming: building archive in background');
+    onProgress?.call(0.95);
+    checkCancelled();
+    if (WebFileStore.isTestMode) {
+      _createBackupStreamingSync(
+          plan.jsonFiles, plan.memoryFiles, plan.diskFiles, outputPath,
+          isCancelled: isCancelled);
+    } else {
+      try {
+        await Isolate.run(() => _createBackupStreamingSync(
+            plan.jsonFiles, plan.memoryFiles, plan.diskFiles, outputPath));
+      } on UnsupportedError catch (e) {
+        // Isolate 不可用（受限环境）：回退主 isolate 同步执行
+        debugPrint('[BackupService] Isolate 不可用，回退同步执行: $e');
+        _createBackupStreamingSync(
+            plan.jsonFiles, plan.memoryFiles, plan.diskFiles, outputPath,
+            isCancelled: isCancelled);
       }
-      onProgress?.call(0.15);
-      await _yieldToEventLoop();
-      checkCancelled();
-
-      // 3. 任务文件 + Anki + Cookies
-      if (selection.tasks) {
-        debugPrint('[BackupService] streaming: adding task files');
-        final appDir = await AppStorage.directory;
-        await _addDiskFile(encoder, 'synthesis/tasks.json',
-            p.join(appDir, 'synthesis', 'tasks.json'));
-        await _addDiskFile(encoder, 'catcatch/tasks.json',
-            p.join(appDir, 'catcatch', 'tasks.json'));
-      }
-      if (selection.ankiData) {
-        try {
-          final appDir = await AppStorage.directory;
-          final ankiDb = p.join(appDir, 'collection.anki2');
-          if (File(ankiDb).existsSync()) {
-            await _addDiskFile(encoder, 'anki/collection.anki2', ankiDb);
-          }
-        } catch (_) {}
-      }
-      if (selection.browserCookies) {
-        try {
-          final appDir = await AppStorage.directory;
-          final cookiesFile = p.join(appDir, 'browser_cookies.json');
-          if (File(cookiesFile).existsSync()) {
-            await _addDiskFile(encoder, 'browser_cookies.json', cookiesFile);
-          }
-        } catch (_) {}
-      }
-      onProgress?.call(0.25);
-      await _yieldToEventLoop();
-      checkCancelled();
-
-      // 4. 二进制文件 — 逐个处理，用到时才加载数据库记录
-      debugPrint('[BackupService] streaming: adding binary files');
-      final appDir = await AppStorage.directory;
-      final useStreaming = !kIsWeb && !WebFileStore.isTestMode;
-      List<Map<String, dynamic>>? manifestImageRecords;
-      List<Map<String, dynamic>>? manifestAudioRecords;
-      List<Map<String, dynamic>>? manifestVideoRecords;
-      List<Map<String, dynamic>>? manifestTextRecords;
-      List<String>? manifestTextFolders;
-      List<String>? manifestAudioFolders;
-      List<String>? manifestImageFolders;
-      List<String>? manifestVideoFolders;
-
-      // 图片
-      if (selection.pictures) {
-        final records = await ManifestDatabase.getAllImageRecords();
-        manifestImageRecords = records;
-        manifestImageFolders = await ManifestDatabase.getAllFolders(
-            recordTable: ManifestTables.imageRecords);
-        for (var i = 0; i < records.length; i++) {
-          final record = records[i];
-          final hash = record['hash'] as String?;
-          final format = record['format'] as String? ?? 'jpg';
-          if (hash == null) continue;
-          await _addBinaryFile(encoder, 'pictures/$hash.$format',
-              p.join(appDir, 'pictures', '$hash.$format'), useStreaming);
-          await _addBinaryFile(encoder, 'pictures/${hash}_thumb.png',
-              p.join(appDir, 'pictures', '${hash}_thumb.png'), useStreaming);
-          if (i % 10 == 0) {
-            await _yieldToEventLoop();
-            checkCancelled();
-          }
-        }
-      }
-      onProgress?.call(0.45);
-      await _yieldToEventLoop();
-      checkCancelled();
-
-      // 音频
-      if (selection.audio) {
-        final records = await ManifestDatabase.getAllAudioRecords();
-        manifestAudioRecords = records;
-        manifestAudioFolders = await ManifestDatabase.getAllFolders(
-            recordTable: ManifestTables.audioRecords);
-        for (var i = 0; i < records.length; i++) {
-          final record = records[i];
-          final hash = record['hash'] as String?;
-          final format = record['format'] as String? ?? 'wav';
-          if (hash == null) continue;
-          await _addBinaryFile(encoder, 'tts_audio/$hash.$format',
-              p.join(appDir, 'tts_audio', '$hash.$format'), useStreaming);
-          await _addBinaryFile(encoder, 'tts_audio/$hash.txt',
-              p.join(appDir, 'tts_audio', '$hash.txt'), useStreaming);
-          if (i % 10 == 0) {
-            await _yieldToEventLoop();
-            checkCancelled();
-          }
-        }
-      }
-      onProgress?.call(0.6);
-      await _yieldToEventLoop();
-      checkCancelled();
-
-      // 视频
-      if (selection.videos) {
-        final records = await ManifestDatabase.getAllVideoRecords();
-        manifestVideoRecords = records;
-        manifestVideoFolders = await ManifestDatabase.getAllFolders(
-            recordTable: ManifestTables.videoRecords);
-        for (var i = 0; i < records.length; i++) {
-          final record = records[i];
-          final hash = record['hash'] as String?;
-          final format = record['format'] as String? ?? 'mp4';
-          if (hash == null) continue;
-          await _addBinaryFile(encoder, 'videos/$hash.$format',
-              p.join(appDir, 'videos', '$hash.$format'), useStreaming);
-          if (i % 10 == 0) {
-            await _yieldToEventLoop();
-            checkCancelled();
-          }
-        }
-      }
-      onProgress?.call(0.75);
-      await _yieldToEventLoop();
-      checkCancelled();
-
-      // 文本
-      if (selection.texts) {
-        final records = await ManifestDatabase.getAllTextRecords();
-        manifestTextRecords = records;
-        manifestTextFolders = await ManifestDatabase.getAllFolders(
-            recordTable: ManifestTables.textRecords);
-        for (var i = 0; i < records.length; i++) {
-          final record = records[i];
-          final hash = record['hash'] as String?;
-          if (hash == null) continue;
-          await _addBinaryFile(encoder, 'texts/$hash.txt',
-              p.join(appDir, 'texts', '$hash.txt'), useStreaming);
-          if (i % 10 == 0) {
-            await _yieldToEventLoop();
-            checkCancelled();
-          }
-        }
-      }
-      onProgress?.call(0.85);
-      await _yieldToEventLoop();
-      checkCancelled();
-
-      // 附件
-      if (selection.chatRecordsAndAttachments) {
-        final attachmentPaths = await collectAttachmentPaths();
-        for (final storagePath in attachmentPaths) {
-          final parts = storagePath.split('/');
-          if (parts.length < 2) continue;
-          final subDir = parts[0];
-          final fileName = parts.sublist(1).join('/');
-          await _addBinaryFile(encoder, storagePath,
-              p.join(appDir, subDir, fileName), useStreaming);
-        }
-      }
-      onProgress?.call(0.93);
-      await _yieldToEventLoop();
-      checkCancelled();
-
-      // 5. stroom_manifest.json
-      debugPrint('[BackupService] streaming: writing manifest');
-      _addInMemoryFile(
-          encoder,
-          'stroom_manifest.json',
-          jsonEncode({
-            'image_records': manifestImageRecords ?? <Map<String, dynamic>>[],
-            'audio_records': manifestAudioRecords ?? <Map<String, dynamic>>[],
-            'video_records': manifestVideoRecords ?? <Map<String, dynamic>>[],
-            'text_records': manifestTextRecords ?? <Map<String, dynamic>>[],
-            'folders': <String>[],
-            ManifestTables.textFolders: manifestTextFolders ?? <String>[],
-            ManifestTables.audioFolders: manifestAudioFolders ?? <String>[],
-            ManifestTables.imageFolders: manifestImageFolders ?? <String>[],
-            ManifestTables.videoFolders: manifestVideoFolders ?? <String>[],
-          }));
-
-      // 6. 完成编码
-      debugPrint('[BackupService] streaming: finishing archive');
-      encoder.endEncode();
-      onProgress?.call(1.0);
-    } catch (_) {
-      output.closeSync();
-      rethrow;
     }
-    await output.close();
+    onProgress?.call(1.0);
+    await _yieldToEventLoop();
+    checkCancelled();
+  }
+
+  /// 主 isolate 收集备份计划。
+  ///
+  /// 只执行轻量异步操作（数据库记录、偏好设置、附件路径收集），
+  /// 所有大文件读写都推迟到 [._createBackupStreamingSync] 执行。
+  static Future<_BackupPlan> _collectBackupPlan({
+    required BackupSelection selection,
+    required void Function() checkCancelled,
+    void Function(double progress)? onProgress,
+  }) async {
+    final jsonFiles = <String, String>{};
+    final memoryFiles = <String, Uint8List>{};
+    final diskFiles = <List<String>>[];
+    final useStreaming = !kIsWeb && !WebFileStore.isTestMode;
+
+    // 1. manifest.json
+    debugPrint('[BackupService] streaming: building manifest');
+    jsonFiles['manifest.json'] = jsonEncode({
+      'version': 2,
+      'createdAt': DateTime.now().toIso8601String(),
+      'appVersion': appVersion,
+    });
+    onProgress?.call(0.05);
+    await _yieldToEventLoop();
+    checkCancelled();
+
+    // 2. SharedPreferences — 拆分聊天记录和设置
+    if (selection.chatRecordsAndAttachments || selection.settings) {
+      debugPrint('[BackupService] streaming: reading preferences');
+      final prefs = await SharedPreferences.getInstance();
+      final chatData = <String, dynamic>{};
+      final settingsData = <String, dynamic>{};
+      for (final key in prefs.getKeys()) {
+        if (key.startsWith('flutter.')) continue;
+        if (_isChatPrefKey(key)) {
+          if (selection.chatRecordsAndAttachments) {
+            chatData[key] = prefs.get(key);
+          }
+        } else {
+          if (selection.settings) {
+            settingsData[key] = prefs.get(key);
+          }
+        }
+      }
+      if (chatData.isNotEmpty) {
+        jsonFiles['chat_data.json'] = jsonEncode(chatData);
+      }
+      if (settingsData.isNotEmpty) {
+        jsonFiles['settings.json'] = jsonEncode(settingsData);
+      }
+    }
+    onProgress?.call(0.15);
+    await _yieldToEventLoop();
+    checkCancelled();
+
+    // 3. 任务文件 + Anki + Cookies
+    if (selection.tasks) {
+      debugPrint('[BackupService] streaming: adding task files');
+      final appDir = await AppStorage.directory;
+      await _addPlanFile(diskFiles, memoryFiles, 'synthesis/tasks.json',
+          p.join(appDir, 'synthesis', 'tasks.json'), useStreaming);
+      await _addPlanFile(diskFiles, memoryFiles, 'catcatch/tasks.json',
+          p.join(appDir, 'catcatch', 'tasks.json'), useStreaming);
+    }
+    if (selection.ankiData) {
+      try {
+        final appDir = await AppStorage.directory;
+        final ankiDb = p.join(appDir, 'collection.anki2');
+        if (File(ankiDb).existsSync()) {
+          await _addPlanFile(diskFiles, memoryFiles, 'anki/collection.anki2',
+              ankiDb, useStreaming);
+        }
+      } catch (_) {}
+    }
+    if (selection.browserCookies) {
+      try {
+        final appDir = await AppStorage.directory;
+        final cookiesFile = p.join(appDir, 'browser_cookies.json');
+        if (File(cookiesFile).existsSync()) {
+          await _addPlanFile(diskFiles, memoryFiles, 'browser_cookies.json',
+              cookiesFile, useStreaming);
+        }
+      } catch (_) {}
+    }
+    onProgress?.call(0.25);
+    await _yieldToEventLoop();
+    checkCancelled();
+
+    // 4. 二进制文件 — 逐个处理，用到时才加载数据库记录
+    debugPrint('[BackupService] streaming: adding binary files');
+    final appDir = await AppStorage.directory;
+    List<Map<String, dynamic>>? manifestImageRecords;
+    List<Map<String, dynamic>>? manifestAudioRecords;
+    List<Map<String, dynamic>>? manifestVideoRecords;
+    List<Map<String, dynamic>>? manifestTextRecords;
+    List<String>? manifestTextFolders;
+    List<String>? manifestAudioFolders;
+    List<String>? manifestImageFolders;
+    List<String>? manifestVideoFolders;
+
+    // 图片
+    if (selection.pictures) {
+      final records = await ManifestDatabase.getAllImageRecords();
+      manifestImageRecords = records;
+      manifestImageFolders = await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.imageRecords);
+      for (var i = 0; i < records.length; i++) {
+        final record = records[i];
+        final hash = record['hash'] as String?;
+        final format = record['format'] as String? ?? 'jpg';
+        if (hash == null) continue;
+        await _addPlanFile(diskFiles, memoryFiles, 'pictures/$hash.$format',
+            p.join(appDir, 'pictures', '$hash.$format'), useStreaming);
+        await _addPlanFile(diskFiles, memoryFiles, 'pictures/${hash}_thumb.png',
+            p.join(appDir, 'pictures', '${hash}_thumb.png'), useStreaming);
+        if (i % 10 == 0) {
+          await _yieldToEventLoop();
+          checkCancelled();
+        }
+      }
+    }
+    onProgress?.call(0.45);
+    await _yieldToEventLoop();
+    checkCancelled();
+
+    // 音频
+    if (selection.audio) {
+      final records = await ManifestDatabase.getAllAudioRecords();
+      manifestAudioRecords = records;
+      manifestAudioFolders = await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.audioRecords);
+      for (var i = 0; i < records.length; i++) {
+        final record = records[i];
+        final hash = record['hash'] as String?;
+        final format = record['format'] as String? ?? 'wav';
+        if (hash == null) continue;
+        await _addPlanFile(diskFiles, memoryFiles, 'tts_audio/$hash.$format',
+            p.join(appDir, 'tts_audio', '$hash.$format'), useStreaming);
+        await _addPlanFile(diskFiles, memoryFiles, 'tts_audio/$hash.txt',
+            p.join(appDir, 'tts_audio', '$hash.txt'), useStreaming);
+        if (i % 10 == 0) {
+          await _yieldToEventLoop();
+          checkCancelled();
+        }
+      }
+    }
+    onProgress?.call(0.6);
+    await _yieldToEventLoop();
+    checkCancelled();
+
+    // 视频
+    if (selection.videos) {
+      final records = await ManifestDatabase.getAllVideoRecords();
+      manifestVideoRecords = records;
+      manifestVideoFolders = await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.videoRecords);
+      for (var i = 0; i < records.length; i++) {
+        final record = records[i];
+        final hash = record['hash'] as String?;
+        final format = record['format'] as String? ?? 'mp4';
+        if (hash == null) continue;
+        await _addPlanFile(diskFiles, memoryFiles, 'videos/$hash.$format',
+            p.join(appDir, 'videos', '$hash.$format'), useStreaming);
+        if (i % 10 == 0) {
+          await _yieldToEventLoop();
+          checkCancelled();
+        }
+      }
+    }
+    onProgress?.call(0.75);
+    await _yieldToEventLoop();
+    checkCancelled();
+
+    // 文本
+    if (selection.texts) {
+      final records = await ManifestDatabase.getAllTextRecords();
+      manifestTextRecords = records;
+      manifestTextFolders = await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.textRecords);
+      for (var i = 0; i < records.length; i++) {
+        final record = records[i];
+        final hash = record['hash'] as String?;
+        if (hash == null) continue;
+        await _addPlanFile(diskFiles, memoryFiles, 'texts/$hash.txt',
+            p.join(appDir, 'texts', '$hash.txt'), useStreaming);
+        if (i % 10 == 0) {
+          await _yieldToEventLoop();
+          checkCancelled();
+        }
+      }
+    }
+    onProgress?.call(0.85);
+    await _yieldToEventLoop();
+    checkCancelled();
+
+    // 附件
+    if (selection.chatRecordsAndAttachments) {
+      final attachmentPaths = await collectAttachmentPaths();
+      for (final storagePath in attachmentPaths) {
+        final parts = storagePath.split('/');
+        if (parts.length < 2) continue;
+        final subDir = parts[0];
+        final fileName = parts.sublist(1).join('/');
+        await _addPlanFile(diskFiles, memoryFiles, storagePath,
+            p.join(appDir, subDir, fileName), useStreaming);
+      }
+    }
+    onProgress?.call(0.93);
+    await _yieldToEventLoop();
+    checkCancelled();
+
+    // 5. stroom_manifest.json
+    debugPrint('[BackupService] streaming: writing manifest');
+    jsonFiles['stroom_manifest.json'] = jsonEncode({
+      'image_records': manifestImageRecords ?? <Map<String, dynamic>>[],
+      'audio_records': manifestAudioRecords ?? <Map<String, dynamic>>[],
+      'video_records': manifestVideoRecords ?? <Map<String, dynamic>>[],
+      'text_records': manifestTextRecords ?? <Map<String, dynamic>>[],
+      'folders': <String>[],
+      ManifestTables.textFolders: manifestTextFolders ?? <String>[],
+      ManifestTables.audioFolders: manifestAudioFolders ?? <String>[],
+      ManifestTables.imageFolders: manifestImageFolders ?? <String>[],
+      ManifestTables.videoFolders: manifestVideoFolders ?? <String>[],
+    });
+
+    return _BackupPlan(
+      jsonFiles: jsonFiles,
+      memoryFiles: memoryFiles,
+      diskFiles: diskFiles,
+    );
+  }
+
+  /// 将一个文件加入备份计划。
+  ///
+  /// [useStreaming] 为 true（原生生产环境）时记录磁盘路径，由后台
+  /// isolate 流式读取；false（Web/测试模式）时立即读入内存。
+  static Future<void> _addPlanFile(
+    List<List<String>> diskFiles,
+    Map<String, Uint8List> memoryFiles,
+    String archiveName,
+    String filePath,
+    bool useStreaming,
+  ) async {
+    if (useStreaming) {
+      diskFiles.add([archiveName, filePath]);
+      return;
+    }
+    // Web/测试模式：从内存读取
+    try {
+      final parts = archiveName.split('/');
+      if (parts.length < 2) return;
+      final subDir = parts[0];
+      final fileName = parts.sublist(1).join('/');
+      final data = await readBackupFile(subDir, fileName);
+      if (data != null) {
+        memoryFiles[archiveName] = data;
+      }
+    } catch (e) {
+      debugPrint('添加文件 $archiveName 失败: $e');
+    }
   }
 
   /// 添加内存中的数据到 ZIP（store 模式，数据小无需压缩）。
@@ -444,59 +515,6 @@ class BackupService {
     final af = ArchiveFile(name, data.length, data);
     af.compression = CompressionType.none;
     encoder.add(af);
-  }
-
-  /// 流式添加磁盘文件到 ZIP（store 模式，直接从磁盘读取，不加载到内存）。
-  static Future<void> _addDiskFile(
-      ZipEncoder encoder, String archiveName, String sourcePath) async {
-    try {
-      final file = File(sourcePath);
-      if (await file.exists()) {
-        final input = _FileInputStream(sourcePath);
-        final af = ArchiveFile.stream(archiveName, input);
-        af.compression = CompressionType.none;
-        encoder.add(af);
-      }
-    } catch (e) {
-      debugPrint('添加文件 $archiveName 失败: $e');
-    }
-  }
-
-  /// 流式添加二进制文件到 ZIP。
-  ///
-  /// [useStreaming] 为 true 时使用 [_FileInputStream] 从磁盘流式读取；
-  /// false 时回退到 [readBackupFile] 内存读取（Web/测试模式）。
-  static Future<void> _addBinaryFile(
-    ZipEncoder encoder,
-    String archiveName,
-    String filePath,
-    bool useStreaming,
-  ) async {
-    try {
-      if (useStreaming) {
-        final file = File(filePath);
-        if (await file.exists()) {
-          final input = _FileInputStream(filePath);
-          final af = ArchiveFile.stream(archiveName, input);
-          af.compression = CompressionType.none;
-          encoder.add(af);
-        }
-      } else {
-        // Web/测试模式：从内存读取
-        final parts = archiveName.split('/');
-        if (parts.length < 2) return;
-        final subDir = parts[0];
-        final fileName = parts.sublist(1).join('/');
-        final data = await readBackupFile(subDir, fileName);
-        if (data != null) {
-          final af = ArchiveFile(archiveName, data.length, data);
-          af.compression = CompressionType.none;
-          encoder.add(af);
-        }
-      }
-    } catch (e) {
-      debugPrint('添加文件 $archiveName 失败: $e');
-    }
   }
 
   // ================================================================
@@ -1730,6 +1748,20 @@ class BackupService {
           isCancelled: isCancelled,
           selection: selection);
 
+  /// 公开流式备份的同步构建核心供测试使用（大文件路径）。
+  ///
+  /// 生产环境该函数在后台 isolate 中执行；测试中直接同步调用，
+  /// 验证大文件 ZIP 构建的正确性与内存安全（store 模式流式写入）。
+  @visibleForTesting
+  static void createBackupStreamingSyncForTest({
+    required Map<String, String> jsonFiles,
+    required Map<String, Uint8List> memoryFiles,
+    required List<List<String>> diskFiles,
+    required String outputPath,
+  }) {
+    _createBackupStreamingSync(jsonFiles, memoryFiles, diskFiles, outputPath);
+  }
+
   /// 公开 [_restoreFromBytes] 供测试使用。
   @visibleForTesting
   static Future<void> restoreFromBytesForTest(
@@ -1747,6 +1779,112 @@ class BackupService {
   }) =>
       _restoreDatabaseFromJson(jsonDecode(json) as Map<String, dynamic>,
           selection: selection);
+}
+
+// ====================================================================
+// 备份计划 — 主 isolate 收集，后台 isolate 执行
+// ====================================================================
+
+/// 备份计划：主 isolate 收集的数据与文件清单。
+///
+/// 所有字段都必须是可发送类型（Isolate.run 的闭包捕获项），
+/// 因此磁盘文件用 [List<List<String>>]（[归档路径, 源文件路径]）而非
+/// 自定义类。
+class _BackupPlan {
+  /// 归档内的小型 JSON 文件（manifest / 偏好设置 / 数据库清单等）。
+  final Map<String, String> jsonFiles;
+
+  /// 内存字节文件（Web/测试模式下的媒体文件）。
+  final Map<String, Uint8List> memoryFiles;
+
+  /// 磁盘文件（[归档路径, 源文件路径]），写入时流式读取。
+  final List<List<String>> diskFiles;
+
+  const _BackupPlan({
+    required this.jsonFiles,
+    required this.memoryFiles,
+    required this.diskFiles,
+  });
+}
+
+/// 同步构建 ZIP（store 模式，磁盘到磁盘流式写入）。
+///
+/// 顶层函数（非方法），供 [Isolate.run] 在后台 isolate 执行 ——
+/// 大文件（数百 MB）的 CRC32 计算与分块读写都在后台完成，
+/// 主 isolate 只 await，UI 帧渲染完全不受影响。
+///
+/// [isCancelled] 仅在测试/回退路径（调用方 isolate 同步执行）时传入；
+/// 后台 isolate 模式下为 null（跨 isolate 无法共享闭包状态，取消检查
+/// 由调用方在 isolate 启动前后完成）。
+///
+/// 使用 [ZipEncoder] + 自定义文件流，store 模式（不压缩）逐个文件写入
+/// 磁盘。deflate 压缩模式下 [ZipEncoder] 会通过 [OutputMemoryStream]
+/// 将每个文件的压缩结果完整缓存在内存中（一个大视频文件就足以 OOM），
+/// 因此使用 store 模式（[CompressionType.none]）配合
+/// [_FileInputStream]/[_FileOutputStream]，确保文件数据直接从磁盘流经
+/// ZIP 写入目标文件，不经过任何内存缓冲。
+///
+/// 峰值内存：O(最大单文件的分块读取缓冲 64KB + CRC32 计算缓冲 1MB)，
+/// 不随备份文件数量或单文件大小增长。
+void _createBackupStreamingSync(
+  Map<String, String> jsonFiles,
+  Map<String, Uint8List> memoryFiles,
+  List<List<String>> diskFiles,
+  String outputPath, {
+  bool Function()? isCancelled,
+}) {
+  void checkCancelled() {
+    if (isCancelled != null && isCancelled()) {
+      throw const BackupCancelledException();
+    }
+  }
+
+  // 使用 ZipEncoder + 自定义文件输出流（store 模式，无压缩内存缓冲）
+  final output = _FileOutputStream(outputPath);
+  final encoder = ZipEncoder();
+  encoder.startEncode(output);
+
+  try {
+    // 1. 内存 JSON 文件（manifest / 偏好设置 / 数据库清单）
+    for (final entry in jsonFiles.entries) {
+      BackupService._addInMemoryFile(encoder, entry.key, entry.value);
+      checkCancelled();
+    }
+
+    // 2. 内存字节文件（Web/测试模式的媒体文件）
+    for (final entry in memoryFiles.entries) {
+      final data = entry.value;
+      final af = ArchiveFile(entry.key, data.length, data);
+      af.compression = CompressionType.none;
+      encoder.add(af);
+      checkCancelled();
+    }
+
+    // 3. 磁盘文件 — 直接从磁盘流式读取，不加载到内存
+    for (final entry in diskFiles) {
+      final archiveName = entry[0];
+      final sourcePath = entry[1];
+      try {
+        final file = File(sourcePath);
+        if (file.existsSync()) {
+          final input = _FileInputStream(sourcePath);
+          final af = ArchiveFile.stream(archiveName, input);
+          af.compression = CompressionType.none;
+          encoder.add(af);
+        }
+      } catch (e) {
+        debugPrint('添加文件 $archiveName 失败: $e');
+      }
+      checkCancelled();
+    }
+
+    // 4. 完成编码
+    encoder.endEncode();
+  } catch (_) {
+    output.closeSync();
+    rethrow;
+  }
+  output.closeSync();
 }
 
 /// 从磁盘流式读取的 [InputStream] 实现（不将整个文件加载到内存）。

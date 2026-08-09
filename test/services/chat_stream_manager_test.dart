@@ -6,7 +6,6 @@ import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
-import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_service.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
 part 'chat_stream_manager_test_p1.dart';

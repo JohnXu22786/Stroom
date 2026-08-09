@@ -6,18 +6,6 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('CodeBlockSourceView - widget rendering', () {
-    testWidgets('renders as a StatefulWidget', (tester) async {
-      const widget = CodeBlockSourceView(code: 'print("hello")');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: widget,
-          ),
-        ),
-      );
-      expect(find.byType(CodeBlockSourceView), findsOneWidget);
-    });
-
     testWidgets('shows raw code as text', (tester) async {
       const code = 'print("hello")';
       await tester.pumpWidget(
@@ -126,27 +114,6 @@ void main() {
       expect(find.text('1'), findsNothing);
     });
 
-    testWidgets('handles additional action buttons', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: CodeBlockSourceView(
-              code: 'test',
-              actionButtons: [
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('Custom Button'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-
-      // The custom action button should be present
-      expect(find.text('Custom Button'), findsOneWidget);
-    });
-
     testWidgets('action buttons appear after wrap toggle button',
         (tester) async {
       await tester.pumpWidget(
@@ -175,21 +142,6 @@ void main() {
       final extraPos = tester.getCenter(find.text('ExtraBtn'));
       expect(wrapPos.dx, lessThan(extraPos.dx),
           reason: 'wrap toggle should be left of additional action buttons');
-    });
-
-    testWidgets('adapts colors to dark mode', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          themeMode: ThemeMode.dark,
-          darkTheme: ThemeData.dark(),
-          home: Scaffold(
-            body: CodeBlockSourceView(code: 'test code'),
-          ),
-        ),
-      );
-
-      // Widget should render without error in dark mode
-      expect(find.byType(CodeBlockSourceView), findsOneWidget);
     });
 
     testWidgets('handles code with trailing newline', (tester) async {

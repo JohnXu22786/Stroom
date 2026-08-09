@@ -61,8 +61,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     // 生命周期取消备份由 Application.didChangeAppLifecycleState 统一处理。
   }
 
-  /// Resets the chat tab's nested navigator so it always shows
-  /// [AssistantSelectionPage] when the chat tab is entered.
+  /// Resets the chat tab's nested navigator to its root route
+  /// ([AssistantSelectionPage]) — triggered by double-tapping the chat tab.
   void _resetChatNavigator() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_chatNavigatorKey.currentState != null) {
@@ -144,11 +144,16 @@ class _HomePageState extends ConsumerState<HomePage> {
           children: [
             // 较宽（横向）的屏幕显示左侧导航栏
             if (!isPortrait) _buildNavigationRail(context),
-            // Page content area. Widgets are rebuilt on navigation
-            // (no IndexedStack keep-alive) because ChatStreamManager
-            // now handles background streaming independently.
+            // 页面内容区域，使用 IndexedStack 保持各页面状态（嵌套导航器
+            // 路由栈、滚动位置等），切换页面不放弃状态。ChatStreamManager
+            // 独立于页面生命周期运行，因此页面常驻不影响后台流式响应。
             Expanded(
-              child: _buildPageContent(AppPage.values[selectedPage.index]),
+              child: IndexedStack(
+                index: selectedPage.index,
+                children: AppPage.values.map((page) {
+                  return _buildPageContent(page);
+                }).toList(),
+              ),
             ),
           ],
         ),

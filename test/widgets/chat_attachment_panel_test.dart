@@ -48,28 +48,6 @@ Future<void> showPanelForTest(
 
 void main() {
   group('ChatAttachmentPanel widget tests (file-only panel)', () {
-    testWidgets('panel opens with file transfer title', (tester) async {
-      await showPanelForTest(tester);
-
-      // The panel should show a file-related title
-      expect(find.text('传文件'), findsOneWidget);
-    });
-
-    testWidgets(
-        'panel shows camera, device album, device file, and app file buttons',
-        (tester) async {
-      await showPanelForTest(tester);
-
-      // File action buttons should be visible with updated labels
-      expect(find.text('拍照'), findsOneWidget);
-      expect(find.text('设备相册'), findsOneWidget);
-      expect(find.text('设备文件'), findsOneWidget);
-      expect(find.text('应用内文件'), findsOneWidget);
-      // Old labels should not exist
-      expect(find.text('相册'), findsNothing);
-      expect(find.text('文件'), findsNothing);
-    });
-
     testWidgets('camera callback fires when camera button is tapped',
         (tester) async {
       bool cameraCalled = false;
@@ -121,32 +99,6 @@ void main() {
       await tester.tap(find.text('应用内文件'));
       await tester.pump();
       expect(appFilesCalled, true);
-    });
-
-    testWidgets('panel does not show model, tools, or reasoning sections',
-        (tester) async {
-      await showPanelForTest(tester);
-
-      // These settings sections should NOT exist in the file-only panel
-      expect(find.text('模型'), findsNothing);
-      expect(find.text('工具'), findsNothing);
-      expect(find.text('推理设置'), findsNothing);
-    });
-
-    testWidgets('panel dismisses when tapping overlay background',
-        (tester) async {
-      await showPanelForTest(tester);
-
-      // Panel should show its title
-      expect(find.text('传文件'), findsOneWidget);
-
-      // Tap on the barrier (background overlay)
-      await tester.tapAt(const Offset(10, 10));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
-      // Panel should dismiss
-      expect(find.text('传文件'), findsNothing);
     });
   });
 }

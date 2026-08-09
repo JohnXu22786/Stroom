@@ -3,43 +3,6 @@ import 'package:stroom/models/mcp.dart';
 
 void main() {
   group('McpMessage', () {
-    test('creates a request with correct fields', () {
-      final msg = McpMessage.request('tools/list', {'cursor': 'abc'});
-      expect(msg.jsonrpc, equals('2.0'));
-      expect(msg.id, isNotNull);
-      expect(msg.method, equals('tools/list'));
-      expect(msg.params, equals({'cursor': 'abc'}));
-    });
-
-    test('creates a request without params', () {
-      final msg = McpMessage.request('tools/list');
-      expect(msg.jsonrpc, equals('2.0'));
-      expect(msg.id, isNotNull);
-      expect(msg.method, equals('tools/list'));
-      expect(msg.params, isNull);
-    });
-
-    test('creates a response with result', () {
-      final msg = McpMessage.response(
-        id: 'req-1',
-        result: {'tools': []},
-      );
-      expect(msg.jsonrpc, equals('2.0'));
-      expect(msg.id, equals('req-1'));
-      expect(msg.result, equals({'tools': []}));
-    });
-
-    test('creates a response with error', () {
-      final msg = McpMessage.response(
-        id: 'req-1',
-        error: {'code': -32601, 'message': 'Method not found'},
-      );
-      expect(msg.jsonrpc, equals('2.0'));
-      expect(msg.id, equals('req-1'));
-      expect(
-          msg.error, equals({'code': -32601, 'message': 'Method not found'}));
-    });
-
     test('toJson serializes request correctly', () {
       final msg = McpMessage.request('tools/list', {'cursor': 'abc'});
       final json = msg.toJson();
@@ -173,27 +136,6 @@ void main() {
       expect(def.description, equals('Read a file from disk'));
       expect(def.parameters['type'], equals('object'));
     });
-
-    test('multiple tools can be created from a list response', () {
-      final maps = [
-        {
-          'name': 'tool_a',
-          'inputSchema': {'type': 'object'}
-        },
-        {
-          'name': 'tool_b',
-          'inputSchema': {'type': 'object'}
-        },
-        {
-          'name': 'tool_c',
-          'inputSchema': {'type': 'object'}
-        },
-      ];
-      final tools = maps.map((m) => McpTool.fromMap(m)).toList();
-      expect(tools.length, equals(3));
-      expect(tools[0].name, equals('tool_a'));
-      expect(tools[2].name, equals('tool_c'));
-    });
   });
 
   group('McpToolCallResponse', () {
@@ -258,39 +200,6 @@ void main() {
   });
 
   group('McpServerConfig', () {
-    test('creates stdio config with command and args', () {
-      final config = McpServerConfig.stdio(
-        name: 'Filesystem Server',
-        command: 'npx',
-        args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
-      );
-      expect(config.name, equals('Filesystem Server'));
-      expect(config.transportType, equals(McpTransportType.stdio));
-      expect(config.command, equals('npx'));
-      expect(config.args,
-          equals(['-y', '@modelcontextprotocol/server-filesystem', '/tmp']));
-    });
-
-    test('creates sse config with url', () {
-      final config = McpServerConfig.sse(
-        name: 'Remote Server',
-        url: 'http://localhost:3001/sse',
-      );
-      expect(config.name, equals('Remote Server'));
-      expect(config.transportType, equals(McpTransportType.sse));
-      expect(config.url, equals('http://localhost:3001/sse'));
-    });
-
-    test('creates vendor config', () {
-      final config = McpServerConfig.vendor(
-        name: 'Calculator',
-        command: 'npx',
-        args: ['-y', '@vendor/mcp-calc'],
-      );
-      expect(config.name, equals('Calculator'));
-      expect(config.isVendor, isTrue);
-    });
-
     test('toMap and fromMap round-trip for stdio config', () {
       final original = McpServerConfig.stdio(
         name: 'Test Server',

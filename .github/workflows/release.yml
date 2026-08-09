@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       app_version: ${{ steps.extract-version.outputs.app_version }}
+      release_time: ${{ steps.build-info.outputs.release_time }}
+      release_notes_b64: ${{ steps.build-info.outputs.release_notes_b64 }}
     steps:
       - id: extract-version
         run: |
@@ -24,6 +26,37 @@ jobs:
           # Strip leading 'v' if present: v1.2.3 -> 1.2.3
           VERSION="${TAG#v}"
           echo "app_version=$VERSION" >> $GITHUB_OUTPUT
+
+      # 构建信息：发布时间 + 更新内容，写入应用「版本信息」面板。
+      # - release 事件：取自 GitHub Release 的发布时间与 Release 说明。
+      # - workflow_dispatch：优先取该 tag 对应 release 的真实发布时间
+      #   与说明 —— 重建旧 tag 时，用户安装的仍是该 release 的发布时间点，
+      #   晚于它的发布才算新版本；tag 不存在（如按分支手动构建）时回退到
+      #   当前 UTC 时间、无更新内容。
+      # 更新内容经 Base64 编码后通过 --dart-define 注入，
+      # 避免换行/特殊字符破坏命令行。
+      - id: build-info
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            RELEASE_TIME="$(jq -r '.release.published_at // empty' "$GITHUB_EVENT_PATH")"
+            RELEASE_NOTES="$(jq -r '.release.body // ""' "$GITHUB_EVENT_PATH")"
+          else
+            RELEASE_TIME="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" -q '.published_at // empty' 2>/dev/null || true)"
+            if [ -z "$RELEASE_TIME" ]; then
+              RELEASE_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              RELEASE_NOTES=""
+            else
+              RELEASE_NOTES="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" -q '.body // ""' 2>/dev/null || true)"
+            fi
+          fi
+          # 限制更新内容长度：base64 后每 3 字节膨胀为 4 字符，超长的
+          # release 说明会撑爆 Windows 命令行上限（flutter.bat 经 cmd.exe
+          # 执行，上限 ~8191 字符；base64 ≈ 4000 字节 → ~5336 字符）。
+          # 按 UTF-8 字节截断：decode(errors='ignore') 丢弃末尾不完整
+          # 的多字节字符，保证输出始终是合法 UTF-8。
+          RELEASE_NOTES="$(printf '%s' "$RELEASE_NOTES" | python3 -c 'import sys; sys.stdout.buffer.write(sys.stdin.buffer.read(4000).decode("utf-8", "ignore").encode("utf-8"))')"
+          echo "release_time=$RELEASE_TIME" >> "$GITHUB_OUTPUT"
+          echo "release_notes_b64=$(printf '%s' "$RELEASE_NOTES" | base64 -w 0)" >> "$GITHUB_OUTPUT"
 
   windows:
     needs: prepare-version
@@ -36,7 +69,7 @@ jobs:
           cache: true
           pub-cache: true
       - run: flutter pub get
-      - run: flutter build windows --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
+      - run: flutter build windows --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
       - name: Create Windows installer
         shell: pwsh
         run: |
@@ -76,7 +109,7 @@ jobs:
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
       - name: Build macOS arm64
-        run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
+        run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
         env:
           FLUTTER_XCODE_ARCHS: arm64
       - name: Create macOS arm64 archive
@@ -114,7 +147,7 @@ jobs:
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
       - name: Build macOS x64
-        run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
+        run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
         env:
           FLUTTER_XCODE_ARCHS: x86_64
       - name: Create macOS x64 archive
@@ -142,7 +175,7 @@ jobs:
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev
       - run: flutter create --platforms=linux .
       - run: flutter pub get
-      - run: flutter build linux --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
+      - run: flutter build linux --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
       - name: Create Linux archive
         run: |
           cd build/linux/x64/release/bundle
@@ -163,7 +196,7 @@ jobs:
           cache: true
           pub-cache: true
       - run: flutter pub get
-      - run: flutter build web --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
+      - run: flutter build web --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
       - name: Create Web archive
         run: |
           cd build/web
@@ -196,7 +229,7 @@ jobs:
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
       - name: Build unsigned iOS app
-        run: flutter build ios --release --no-codesign --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
+        run: flutter build ios --release --no-codesign --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
       - name: Create unsigned IPA (Payload/Runner.app → zip)
         run: |
           TAG="${{ env.TAG }}"
@@ -239,7 +272,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: flutter build apk --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }}
+        run: flutter build apk --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
       - name: Rename APK
         run: mv build/app/outputs/flutter-apk/app-release.apk "stroom-android-release-$TAG.apk"
       - uses: softprops/action-gh-release@v2

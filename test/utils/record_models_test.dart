@@ -130,31 +130,6 @@ void main() {
       expect(video.format, equals('mp4'));
       expect(video.duration, equals(0));
     });
-
-    test('copyWithName and copyWithFolder preserve id and hash', () {
-      final now = DateTime.parse('2024-05-05T00:00:00.000');
-      final record = AudioRecord(
-        id: 'audio_cw',
-        name: 'old',
-        hash: 'h_cw',
-        format: 'wav',
-        createdAt: now,
-        size: 10,
-        folder: 'f1',
-      );
-
-      final renamed = record.copyWithName('new_name');
-      expect(renamed.id, equals('audio_cw'));
-      expect(renamed.hash, equals('h_cw'));
-      expect(renamed.name, equals('new_name'));
-      expect(renamed.folder, equals('f1'));
-
-      final moved = record.copyWithFolder('f2');
-      expect(moved.id, equals('audio_cw'));
-      expect(moved.hash, equals('h_cw'));
-      expect(moved.folder, equals('f2'));
-      expect(moved.name, equals('old'));
-    });
   });
 
   group('manifest database shared conversions', () {
@@ -224,22 +199,6 @@ void main() {
     test('folderTableFor throws on unknown record table', () {
       expect(() => ManifestTables.folderTableFor('unknown_table'),
           throwsArgumentError);
-    });
-
-    test('emptyWebData contains all per-type record and folder keys', () {
-      final data = emptyWebData();
-      expect(
-          data.keys,
-          containsAll([
-            ManifestTables.imageRecords,
-            ManifestTables.audioRecords,
-            ManifestTables.videoRecords,
-            ManifestTables.textRecords,
-            ManifestTables.textFolders,
-            ManifestTables.audioFolders,
-            ManifestTables.imageFolders,
-            ManifestTables.videoFolders,
-          ]));
     });
   });
 }

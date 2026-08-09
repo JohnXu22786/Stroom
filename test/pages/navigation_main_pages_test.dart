@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:stroom/models/assistant.dart';
 import 'package:stroom/pages/home_page.dart';
+import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
@@ -14,8 +16,25 @@ final _navigatorKey = GlobalKey<NavigatorState>();
 
 /// Build a test app that wraps [HomePage] inside a [Navigator] route, so that
 /// the system back button (simulated via [_navigatorKey]) triggers [PopScope].
-Widget _buildTestApp({Size? screenSize}) {
+/// When [assistants] is given, [assistantProvider] is overridden with those
+/// assistants so the chat tab's assistant selection page has entries to tap.
+Widget _buildTestApp({Size? screenSize, List<Assistant>? assistants}) {
   final app = ProviderScope(
+    overrides: [
+      if (assistants != null)
+        assistantProvider.overrideWith((ref) {
+          final notifier = AssistantsNotifier();
+          for (final a in assistants) {
+            notifier.createAssistant(
+              name: a.name,
+              prompt: a.prompt,
+              emoji: a.emoji,
+              description: a.description,
+            );
+          }
+          return notifier;
+        }),
+    ],
     child: MaterialApp(
       home: Navigator(
         key: _navigatorKey,
@@ -45,6 +64,16 @@ Widget _buildTestApp({Size? screenSize}) {
 Future<void> _simulateBackButton(WidgetTester tester) async {
   await _navigatorKey.currentState?.maybePop();
   await tester.pumpAndSettle();
+}
+
+/// Find a bottom NavigationBar destination by its label. Scoped to the
+/// NavigationBar so page content carrying the same text (e.g. the chat
+/// page's "设置" API-config button) cannot make taps ambiguous.
+Finder _navTab(String label) {
+  return find.descendant(
+    of: find.byType(NavigationBar),
+    matching: find.text(label),
+  );
 }
 
 void main() {
@@ -279,6 +308,128 @@ void main() {
       await tester.tap(find.text('对话'));
       await tester.pumpAndSettle();
       expect(find.text('选择助手'), findsOneWidget);
+    });
+
+    testWidgets(
+        'chat tab keeps topic selection page after switching away and back',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(
+        screenSize: const Size(390, 844),
+        assistants: [
+          Assistant(
+            name: '助手甲',
+            prompt: 'P1',
+            emoji: '🤖',
+            description: '第一个助手',
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Enter chat tab and drill down to topic selection
+      await tester.tap(_navTab('对话'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择助手'), findsOneWidget);
+
+      await tester.tap(find.text('助手甲'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择对话'), findsOneWidget);
+
+      // Switch to files — the chat navigator stack must stay alive (hidden)
+      await tester.tap(_navTab('文件'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('files_page')), findsOneWidget);
+      // The chat navigator stack must stay alive (hidden) — IndexedStack
+      // keeps non-selected pages in the tree, so search includes offstage.
+      expect(find.text('选择对话', skipOffstage: false), findsOneWidget,
+          reason: 'chat navigator stack must not be torn down when '
+              'switching to another main page');
+
+      // Switch back — should return to topic selection, not assistant selection
+      await tester.tap(_navTab('对话'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择对话'), findsOneWidget);
+      expect(find.text('选择助手'), findsNothing);
+    });
+
+    testWidgets(
+        'double-tap chat tab from topic selection resets to assistant selection',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(
+        screenSize: const Size(390, 844),
+        assistants: [
+          Assistant(
+            name: '助手丙',
+            prompt: 'P1',
+            emoji: '🤖',
+            description: '第三个助手',
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Drill down to topic selection
+      await tester.tap(_navTab('对话'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('助手丙'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择对话'), findsOneWidget);
+
+      // Re-tap the chat tab while already on it → reset to assistant selection
+      await tester.tap(_navTab('对话'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择助手'), findsOneWidget);
+      // The topic selection route must be gone entirely (popped, not hidden)
+      expect(find.text('选择对话', skipOffstage: false), findsNothing);
+    });
+
+    testWidgets(
+        'chat tab keeps the open chat page after switching away and back',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(
+        screenSize: const Size(390, 844),
+        assistants: [
+          Assistant(
+            name: '助手乙',
+            prompt: 'P1',
+            emoji: '🤖',
+            description: '第二个助手',
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Enter chat tab and drill down to the chat page
+      await tester.tap(_navTab('对话'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择助手'), findsOneWidget);
+
+      await tester.tap(find.text('助手乙'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择对话'), findsOneWidget);
+
+      final newTopicButtons = find.widgetWithText(FilledButton, '新话题');
+      await tester.tap(newTopicButtons.first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      // Chat page entry must not throw (bare takeException would mask it).
+      expect(tester.takeException(), isNull,
+          reason: 'entering the chat page must not throw');
+      expect(find.text('新对话'), findsWidgets);
+
+      // Switch to settings — the chat page must stay alive (hidden)
+      await tester.tap(_navTab('设置'));
+      await tester.pumpAndSettle();
+      expect(find.text('新对话', skipOffstage: false), findsWidgets,
+          reason: 'open chat page must not be torn down when switching '
+              'to another main page');
+
+      // Switch back — should still be on the chat page, not assistant selection
+      await tester.tap(_navTab('对话'));
+      await tester.pumpAndSettle();
+      expect(find.text('新对话'), findsWidgets);
+      expect(find.text('选择助手'), findsNothing);
     });
 
     testWidgets('home page module cards still work after navigation changes',

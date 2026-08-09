@@ -29,6 +29,38 @@ import BackgroundTasks
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     setupContinuedTaskChannel(with: engineBridge.pluginRegistry)
+    setupStorageChannel(with: engineBridge.pluginRegistry)
+  }
+
+  // ==========================================================================
+  // 存储信息通道（磁盘剩余空间）
+  // ==========================================================================
+  //
+  // 与 lib/services/backup_location_manager.dart 中的
+  // com.johntsui.stroom/storage 通道对应，用于自动备份的空间预检
+  // 与「剩余空间 < 5× 备份大小」的清理提醒。
+  // 注意：通道名不可与原生插件包名冲突，这里使用与应用相同的
+  // com.johntsui.stroom 前缀。
+
+  private func setupStorageChannel(with registry: FlutterPluginRegistry) {
+    let registrar = registry.registrar(forPlugin: "StorageBridge")
+    let channel = FlutterMethodChannel(
+      name: "com.johntsui.stroom/storage",
+      binaryMessenger: registrar.messenger()
+    )
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "getFreeSpace":
+        // 查询应用 Documents 所在文件系统的剩余空间
+        let attrs = try? FileManager.default.attributesOfFileSystem(
+          forPath: NSHomeDirectory()
+        )
+        let free = (attrs?[.systemFreeSize] as? NSNumber)?.int64Value ?? -1
+        result(free)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
   }
 
   /// Method channel skeleton — fully functional but every call is a no-op

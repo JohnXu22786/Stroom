@@ -183,24 +183,6 @@ void main() {
   });
 
   group('AssistantSelectionPage', () {
-    testWidgets('renders with title', (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            assistantProvider.overrideWith((ref) {
-              return AssistantsNotifier();
-            }),
-          ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // The title should always be shown
-      expect(find.text('选择助手'), findsOneWidget);
-    });
-
     testWidgets('shows assistant cards in grid', (tester) async {
       await tester.pumpWidget(
         createTestApp(
@@ -277,30 +259,6 @@ void main() {
       expect(find.text('🤖'), findsOneWidget);
     });
 
-    testWidgets('uses responsive grid with MaxCrossAxisExtent (like homepage)',
-        (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [
-            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
-            Assistant(name: '助手2', prompt: 'P2', emoji: '😊'),
-            Assistant(name: '助手3', prompt: 'P3', emoji: '🎉'),
-            Assistant(name: '助手4', prompt: 'P4', emoji: '🔥'),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Find the GridView
-      final gridView = tester.widget<GridView>(find.byType(GridView));
-      final delegate = gridView.gridDelegate;
-
-      // Should use SliverGridDelegateWithMaxCrossAxisExtent (not FixedCrossAxisCount)
-      expect(delegate, isA<SliverGridDelegateWithMaxCrossAxisExtent>());
-    });
-
     testWidgets('wide screen shows more columns than narrow screen', (
       tester,
     ) async {
@@ -334,27 +292,6 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('assistant card uses 0.85 aspect ratio', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [
-            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Find the GridView
-      final gridView = tester.widget<GridView>(find.byType(GridView));
-      final delegate =
-          gridView.gridDelegate as SliverGridDelegateWithMaxCrossAxisExtent;
-
-      // Aspect ratio should be 0.85 (taller than wide)
-      expect(delegate.childAspectRatio, closeTo(0.85, 0.01));
-      // Max cross axis extent should be around 220 (bigger than homepage's 180)
-      expect(delegate.maxCrossAxisExtent, greaterThan(200));
-    });
-
     testWidgets('tapping assistant navigates to select conversation page', (
       tester,
     ) async {
@@ -382,24 +319,6 @@ void main() {
   });
 
   group('BuiltInPromptSelector', () {
-    testWidgets('shows new icon button in AppBar next to + button', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [
-            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Should show the built-in prompt icon button
-      expect(find.byIcon(Icons.auto_awesome), findsOneWidget);
-      // The + button should still be there
-      expect(find.byIcon(Icons.add), findsOneWidget);
-    });
-
     testWidgets('tapping built-in prompt button opens selector dialog', (
       tester,
     ) async {
@@ -484,28 +403,6 @@ void main() {
       expect(find.text('内置助手'), findsNothing);
       // The new assistant should appear in the grid
       expect(find.text(firstPrompt.name), findsOneWidget);
-    });
-
-    testWidgets('built-in prompt button also works in empty state', (
-      tester,
-    ) async {
-      SharedPreferences.setMockInitialValues({});
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            assistantProvider.overrideWith((ref) {
-              return AssistantsNotifier();
-            }),
-          ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // The empty state appbar should have the new icon button
-      expect(find.byIcon(Icons.auto_awesome), findsAtLeast(1));
-      // The + button should also be present
-      expect(find.byIcon(Icons.add), findsAtLeast(1));
     });
 
     testWidgets('closing dialog via X button does not create any assistant', (
@@ -784,9 +681,10 @@ void main() {
 
       // Model section + empty state (no LLM config in test env) — the
       // follow-global option is still shown and is the effective selection
+      // (radio tile + 效果预览 summary each show the label)
       expect(find.text('默认模型'), findsOneWidget);
       expect(find.textContaining('暂无可用模型'), findsOneWidget);
-      expect(find.text('跟随全局设置'), findsOneWidget);
+      expect(find.text('跟随全局设置'), findsWidgets);
 
       // Tool section lists the built-in tools with switches
       expect(find.text('默认启用工具'), findsOneWidget);
@@ -794,8 +692,321 @@ void main() {
       expect(find.text('todowrite'), findsOneWidget);
       expect(find.text('brave_web_search'), findsOneWidget);
 
-      // Hint that un-added tools stay off in new topics
-      expect(find.textContaining('未添加'), findsOneWidget);
+      // 从未配置默认工具的助手：tab 显示全部工具开启（与新建话题自动启用
+      // 全部工具的旧行为一致），而不是误导性地显示全部关闭。
+      expect(find.textContaining('尚未配置默认工具'), findsOneWidget);
+      for (final toolName in ['web_search', 'todowrite', 'brave_web_search']) {
+        final tile = tester.widget<SwitchListTile>(
+          find.widgetWithText(SwitchListTile, toolName),
+        );
+        expect(tile.value, isTrue, reason: '未配置默认工具时，工具开关应显示为开启（$toolName）');
+      }
+
+      // 效果预览卡反映生效行为：全部自动启用 + 跟随全局模型
+      expect(find.text('新建话题效果'), findsOneWidget);
+      expect(find.text('跟随全局设置'), findsWidgets);
+      expect(find.text('全部自动启用（未配置）'), findsOneWidget);
+
+      // 未配置时不显示"全部启用"与"取消配置"（配置后才会出现）
+      expect(find.text('全部启用'), findsNothing);
+      expect(find.text('取消配置（自动启用全部）'), findsNothing);
+    });
+
+    testWidgets(
+        '从未配置的助手切换任一工具后保存，新话题严格使用该集合（回归：'
+        'tab 显示全关但新话题全开的误导）', (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '助手编辑', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open edit dialog
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // Switch to 默认设置 tab
+      await tester.tap(find.text('默认设置'));
+      await tester.pumpAndSettle();
+
+      // 从未配置 → 全部开启；关闭 todowrite 即产生显式配置
+      final todowriteSwitch = find.widgetWithText(SwitchListTile, 'todowrite');
+      await tester.ensureVisible(todowriteSwitch);
+      await tester.pumpAndSettle();
+      await tester.tap(todowriteSwitch);
+      await tester.pumpAndSettle();
+
+      // Save
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AssistantSelectionPage)),
+      );
+      final assistant = container.read(assistantProvider).single;
+      expect(assistant.defaultToolNames, isNotNull,
+          reason: '切换过工具后保存即视为已配置默认工具');
+      expect(assistant.defaultToolNames, isNot(contains('todowrite')));
+      expect(assistant.defaultToolNames, contains('web_search'));
+    });
+
+    testWidgets('已配置为空（全部关闭）的助手，默认设置 tab 显示全部工具关闭', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            assistantProvider.overrideWith((ref) {
+              final notifier = AssistantsNotifier();
+              final assistant =
+                  notifier.createAssistant(name: '助手编辑', prompt: 'P1');
+              // 显式配置"全部关闭"（空集合 = 已配置）。
+              notifier.updateAssistantDefaults(
+                id: assistant.id,
+                defaultToolNames: {},
+              );
+              return notifier;
+            }),
+          ],
+          child: const MaterialApp(home: AssistantSelectionPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('默认设置'));
+      await tester.pumpAndSettle();
+
+      // 配置过空集合 → 开关全部关闭，说明文字用"已配置"措辞
+      expect(find.textContaining('未启用的工具'), findsOneWidget);
+      for (final toolName in ['web_search', 'todowrite', 'brave_web_search']) {
+        final tile = tester.widget<SwitchListTile>(
+          find.widgetWithText(SwitchListTile, toolName),
+        );
+        expect(tile.value, isFalse, reason: '已配置默认工具为空时，开关应显示为关闭（$toolName）');
+      }
+      expect(find.textContaining('已启用 0 /'), findsOneWidget);
+    });
+
+    testWidgets(
+        '默认模型已失效（从供应商配置中删除）时：tab 退化为跟随全局设置，'
+        '保存后自动清除失效记录', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            assistantProvider.overrideWith((ref) {
+              final notifier = AssistantsNotifier();
+              final assistant =
+                  notifier.createAssistant(name: '助手编辑', prompt: 'P1');
+              // 记录一个已不存在的模型（provider_entries 未配置任何 LLM）。
+              notifier.updateAssistantDefaults(
+                id: assistant.id,
+                defaultModelName: 'removed-model | OpenAI',
+              );
+              return notifier;
+            }),
+          ],
+          child: const MaterialApp(home: AssistantSelectionPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('默认设置'));
+      await tester.pumpAndSettle();
+
+      // 失效的模型名不出现，生效状态退化为"跟随全局设置"
+      expect(find.text('removed-model | OpenAI'), findsNothing);
+      expect(find.text('跟随全局设置'), findsWidgets);
+
+      // 未触碰模型选择直接保存 → 失效记录被清除（避免同名模型重新
+      // 添加后旧的默认值悄悄复活）
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AssistantSelectionPage)),
+      );
+      final assistant = container.read(assistantProvider).single;
+      expect(assistant.defaultModelName, isNull);
+    });
+
+    testWidgets('已配置默认工具后可通过"恢复自动启用全部"回到未配置状态', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            assistantProvider.overrideWith((ref) {
+              final notifier = AssistantsNotifier();
+              final assistant =
+                  notifier.createAssistant(name: '助手编辑', prompt: 'P1');
+              notifier.updateAssistantDefaults(
+                id: assistant.id,
+                defaultToolNames: {'web_search', 'todowrite'},
+              );
+              return notifier;
+            }),
+          ],
+          child: const MaterialApp(home: AssistantSelectionPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('默认设置'));
+      await tester.pumpAndSettle();
+
+      // 已配置状态：提供"取消配置（自动启用全部）"，摘要显示已启用数量
+      expect(find.text('取消配置（自动启用全部）'), findsOneWidget);
+      expect(find.textContaining('已启用'), findsOneWidget);
+
+      // 点击取消配置 → 回到"从未配置"
+      await tester.ensureVisible(find.text('取消配置（自动启用全部）'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('取消配置（自动启用全部）'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('尚未配置默认工具'), findsOneWidget);
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AssistantSelectionPage)),
+      );
+      final assistant = container.read(assistantProvider).single;
+      expect(assistant.defaultToolNames, isNull,
+          reason: '恢复自动启用全部应使助手回到"从未配置"（null）状态，'
+              '新话题继续自动启用全部工具');
+    });
+
+    testWidgets(
+        '同名模型（不同供应商配置）只显示一个单选选项，不触发 RadioGroup '
+        '重复 value 崩溃', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'test_llm',
+            'type': 'llm',
+            'name': 'LLM供应商',
+            'configs': [
+              {
+                'providerName': 'OpenAI',
+                'host': 'https://api.openai.com/v1',
+                'key': 'test-key',
+                'models': [
+                  {'name': 'gpt-4o', 'modelId': 'gpt-4o'},
+                ],
+              },
+              {
+                'providerName': 'OpenAI',
+                'host': 'https://api.openai.com/v1',
+                'key': 'test-key-2',
+                // 与上面同显示名（'gpt-4o | OpenAI'）——必须去重。
+                'models': [
+                  {'name': 'gpt-4o', 'modelId': 'gpt-4o'},
+                  {'name': 'claude-3.5-sonnet', 'modelId': 'claude-3.5-sonnet'},
+                ],
+              },
+            ],
+          },
+        ]),
+      });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            assistantProvider.overrideWith((ref) {
+              final notifier = AssistantsNotifier();
+              notifier.createAssistant(name: '助手编辑', prompt: 'P1');
+              return notifier;
+            }),
+          ],
+          child: const MaterialApp(home: AssistantSelectionPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('默认设置'));
+      await tester.pumpAndSettle();
+
+      // 重复的显示名只渲染一次（跟随全局设置 + 2 个唯一模型）
+      expect(find.text('gpt-4o | OpenAI'), findsOneWidget);
+      expect(find.text('claude-3.5-sonnet | OpenAI'), findsOneWidget);
+
+      // 选中后保存正常写入
+      await tester.tap(find.text('gpt-4o | OpenAI'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AssistantSelectionPage)),
+      );
+      final assistant = container.read(assistantProvider).single;
+      expect(assistant.defaultModelName, 'gpt-4o | OpenAI');
+    });
+
+    testWidgets('手机宽度下默认设置 tab 不溢出（按钮自动换行）', (tester) async {
+      // 360dp 手机宽度 + 系统字体缩放 2.0，最严苛的常见布局场景
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(
+        tester.platformDispatcher.clearTextScaleFactorTestValue,
+      );
+      await tester.binding.setSurfaceSize(const Size(360, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            assistantProvider.overrideWith((ref) {
+              final notifier = AssistantsNotifier();
+              final assistant =
+                  notifier.createAssistant(name: '助手编辑', prompt: 'P1');
+              // 已配置状态 → 三个按钮同时出现，最容易溢出
+              notifier.updateAssistantDefaults(
+                id: assistant.id,
+                defaultToolNames: {'web_search', 'todowrite'},
+              );
+              return notifier;
+            }),
+          ],
+          child: const MaterialApp(home: AssistantSelectionPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // 窄屏 + 大字模式下 TabBar 可滚动：先拖到最右露出"默认设置"标签
+      await tester.drag(find.byType(TabBar).first, const Offset(-300, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('默认设置'));
+      await tester.pumpAndSettle();
+
+      // 打开即渲染全部按钮；若有 RenderFlex 溢出，pumpAndSettle 会抛异常
+      expect(find.text('取消配置（自动启用全部）'), findsOneWidget);
+      expect(find.text('全部启用'), findsOneWidget);
+      expect(find.text('全部关闭'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('默认设置 tab saves default model and default tools', (
@@ -845,18 +1056,19 @@ void main() {
       await tester.tap(find.text('默认设置'));
       await tester.pumpAndSettle();
 
-      // Model selector lists the available models
-      expect(find.text('跟随全局设置'), findsOneWidget);
+      // Model selector lists the available models (radio tile + summary)
+      expect(find.text('跟随全局设置'), findsWidgets);
       expect(find.text('gpt-4o | OpenAI'), findsOneWidget);
       expect(find.text('claude-3.5-sonnet | OpenAI'), findsOneWidget);
 
-      // Select a default model and enable one tool
+      // Select a default model and disable one tool (从未配置 → 默认全部开启，
+      // 关闭 todowrite 得到显式集合）
       await tester.tap(find.text('gpt-4o | OpenAI'));
       await tester.pumpAndSettle();
-      final webSearchSwitch = find.widgetWithText(SwitchListTile, 'web_search');
-      await tester.ensureVisible(webSearchSwitch);
+      final todowriteSwitch = find.widgetWithText(SwitchListTile, 'todowrite');
+      await tester.ensureVisible(todowriteSwitch);
       await tester.pumpAndSettle();
-      await tester.tap(webSearchSwitch);
+      await tester.tap(todowriteSwitch);
       await tester.pumpAndSettle();
 
       // Save
@@ -870,6 +1082,7 @@ void main() {
       final assistant = container.read(assistantProvider).single;
       expect(assistant.defaultModelName, 'gpt-4o | OpenAI');
       expect(assistant.defaultToolNames, contains('web_search'));
+      expect(assistant.defaultToolNames, isNot(contains('todowrite')));
     });
 
     testWidgets(

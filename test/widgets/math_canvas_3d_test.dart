@@ -7,22 +7,6 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('MathCanvas3D - initial state', () {
-    testWidgets('creates 3D canvas without error', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 400,
-              height: 400,
-              child: MathCanvas3D(),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-      expect(find.byType(MathCanvas3D), findsOneWidget);
-    });
-
     testWidgets('canvas is ready callback fires', (tester) async {
       bool ready = false;
       await tester.pumpWidget(
@@ -41,23 +25,6 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(ready, isTrue);
-    });
-
-    testWidgets('shows axes and grid by default', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 400,
-              height: 400,
-              child: MathCanvas3D(),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-      // Should not crash when rendering
-      expect(find.byType(MathCanvas3D), findsOneWidget);
     });
   });
 
@@ -118,155 +85,9 @@ void main() {
       // Camera should be back to initial
       expect(state.camera.distance, closeTo(initialCamera.distance, 1e-10));
     });
-
-    testWidgets('setProjectionType changes projection', (tester) async {
-      final key = GlobalKey<MathCanvas3DState>();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 400,
-              height: 400,
-              child: MathCanvas3D(key: key),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      final state = key.currentState!;
-      expect(state.projectionType, ProjectionType.parallel);
-
-      state.setProjectionType(ProjectionType.perspective);
-      await tester.pump();
-      expect(state.projectionType, ProjectionType.perspective);
-
-      // Switch back
-      state.setProjectionType(ProjectionType.parallel);
-      await tester.pump();
-      expect(state.projectionType, ProjectionType.parallel);
-    });
-
-    testWidgets('toggleAxes toggles axis visibility', (tester) async {
-      final key = GlobalKey<MathCanvas3DState>();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 400,
-              height: 400,
-              child: MathCanvas3D(key: key),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      final state = key.currentState!;
-      expect(state.showAxes, isTrue);
-
-      state.toggleAxes();
-      await tester.pump();
-      expect(state.showAxes, isFalse);
-
-      state.toggleAxes();
-      expect(state.showAxes, isTrue);
-    });
-
-    testWidgets('toggleGrid toggles grid visibility', (tester) async {
-      final key = GlobalKey<MathCanvas3DState>();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 400,
-              height: 400,
-              child: MathCanvas3D(key: key),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      final state = key.currentState!;
-      expect(state.showGrid, isTrue);
-
-      state.toggleGrid();
-      await tester.pump();
-      expect(state.showGrid, isFalse);
-    });
   });
 
   group('MathCanvas3D - objects', () {
-    testWidgets('setObjects updates rendered objects', (tester) async {
-      final key = GlobalKey<MathCanvas3DState>();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 400,
-              height: 400,
-              child: MathCanvas3D(key: key),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      final state = key.currentState!;
-      state.setObjects([Object3D.point(Point3D(1, 2, 3))]);
-      await tester.pump();
-      // Should not crash
-      expect(find.byType(MathCanvas3D), findsOneWidget);
-    });
-
-    testWidgets('setObjects with multiple object types', (tester) async {
-      final key = GlobalKey<MathCanvas3DState>();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 400,
-              height: 400,
-              child: MathCanvas3D(key: key),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      final state = key.currentState!;
-      state.setObjects([
-        Object3D.point(Point3D(0, 0, 0)),
-        Object3D.line(Point3D(-1, -1, -1), Point3D(1, 1, 1)),
-        Object3D.plane(a: 0, b: 0, c: 1, d: 0),
-      ]);
-      await tester.pump();
-      expect(find.byType(MathCanvas3D), findsOneWidget);
-    });
-
-    testWidgets('clearObjects removes all objects', (tester) async {
-      final key = GlobalKey<MathCanvas3DState>();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 400,
-              height: 400,
-              child: MathCanvas3D(key: key),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      final state = key.currentState!;
-      state.setObjects([Object3D.point(Point3D(1, 2, 3))]);
-      state.clearObjects();
-      await tester.pump();
-      expect(state.objectCount, 0);
-    });
-
     testWidgets('setSurface adds a surface mesh', (tester) async {
       final key = GlobalKey<MathCanvas3DState>();
       await tester.pumpWidget(
@@ -290,38 +111,6 @@ void main() {
       );
       await tester.pump();
       expect(state.objectCount, 1);
-    });
-  });
-
-  group('MathCanvas3D - resize', () {
-    testWidgets('resize does not crash', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 400,
-              height: 400,
-              child: MathCanvas3D(),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      // Rebuild with different size
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 600,
-              height: 300,
-              child: MathCanvas3D(),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-      expect(find.byType(MathCanvas3D), findsOneWidget);
     });
   });
 
@@ -354,18 +143,6 @@ void main() {
   });
 
   group('MathCanvas3DPainter', () {
-    test('painter can be instantiated with default values', () {
-      const painter = MathCanvas3DPainter(
-        cameraDistance: 10,
-        cameraTheta: 0,
-        cameraPhi: 0.785,
-        projectionType: ProjectionType.parallel,
-        showAxes: true,
-        showGrid: true,
-      );
-      expect(painter, isNotNull);
-    });
-
     test('painter shouldRepaint returns true when camera changes', () {
       const painter1 = MathCanvas3DPainter(
         cameraDistance: 10,

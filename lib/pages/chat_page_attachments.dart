@@ -68,6 +68,17 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
   }
 
   void _showAttachmentPreview(Attachment att) async {
+    // 图片附件：立即弹出预览对话框，字节由 dataLoader 在对话框内异步
+    // 加载 —— 大图（数 MB）不再阻塞弹窗前读盘，这是预览卡顿的来源
+    if (att.fileType == 'image') {
+      showImagePreviewDialog(
+        context: context,
+        fileName: att.fileName,
+        dataLoader: () => AttachmentStorage.readFile(att.storagePath),
+      );
+      return;
+    }
+
     final data = await AttachmentStorage.readFile(att.storagePath);
     if (data == null || data.isEmpty) {
       if (mounted) {
@@ -78,15 +89,12 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
       return;
     }
     if (!mounted) return;
-    final isImage = att.fileType == 'image';
     final isText = _isTextAttachment(att);
     final isPdf = _isPdfAttachment(att);
     final isAudio = att.fileType == 'audio';
     final isVideo = att.fileType == 'video';
 
-    if (isImage) {
-      _showImagePreview(att, data);
-    } else if (isText) {
+    if (isText) {
       _showTextPreview(att, data);
     } else if (isPdf) {
       _showPdfPreview(att, data);
@@ -97,15 +105,6 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
     } else {
       _showFileInfoPreview(att);
     }
-  }
-
-  /// Full-screen dark dialog with pinch-to-zoom image preview.
-  void _showImagePreview(Attachment att, Uint8List data) {
-    showImagePreviewDialog(
-      context: context,
-      fileName: att.fileName,
-      data: data,
-    );
   }
 
   /// Full-screen dark preview for non-image files (documents, audio, video).

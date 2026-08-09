@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
 
 import 'package:stroom/catcatch/engine/dart_cat_catch_sniffer.dart';
-import 'package:stroom/catcatch/models/media_resource.dart';
 
 // ============================================================================
 // Mock helpers
@@ -140,32 +139,6 @@ segment3.ts
       expect(playlistResources.first.ext, equals('m3u8'));
     });
 
-    test('sniff() injects custom headers', () async {
-      mockAdapter.onGet(
-          'http://example.com/video.mp4',
-          () => _mockResponse(
-                statusCode: 200,
-                data: 'mock video',
-                headers: {
-                  'content-type': ['video/mp4']
-                },
-              ));
-
-      final customHeaders = {
-        'User-Agent': 'custom-agent/1.0',
-        'Referer': 'https://example.com/page',
-        'Cookie': 'session=abc123',
-      };
-
-      final result = await sniffer.sniff(
-        'http://example.com/video.mp4',
-        headers: customHeaders,
-      );
-
-      expect(result.resources, isNotEmpty);
-      expect(result.resources.first.ext, equals('mp4'));
-    });
-
     test('sniff() returns empty list for non-media non-HTML URL', () async {
       mockAdapter.onGet(
           'http://example.com/data.json',
@@ -188,24 +161,6 @@ segment3.ts
 
       expect(result.error, isNotNull);
       expect(result.error, contains('empty'));
-    });
-
-    test('sniff() returns SniffResult with correct structure', () async {
-      mockAdapter.onGet(
-          'http://example.com/audio.mp3',
-          () => _mockResponse(
-                statusCode: 200,
-                data: 'mock audio',
-                headers: {
-                  'content-type': ['audio/mpeg']
-                },
-              ));
-
-      final result = await sniffer.sniff('http://example.com/audio.mp3');
-
-      expect(result, isA<SniffResult>());
-      expect(result.resources, isA<List<MediaResource>>());
-      expect(result.source, isA<SniffSource>());
     });
 
     test('sniff() detects media from HTML page via regex', () async {

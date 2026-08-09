@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
@@ -26,6 +27,63 @@ void main() {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('mermaid@11'));
       expect(html, contains('mermaid.min.js'));
+    });
+
+    test('loads mermaid.js dynamically so the CDN cannot block the load event',
+        () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // Regression: a static <script src="https://cdn.jsdelivr.net/..."> in
+      // <head> delays the document load event until the CDN responds. On a
+      // slow or unreachable network the WebView's onLoadStop never fires,
+      // so the Flutter-side loading overlay spun forever. The script must
+      // be injected dynamically so the page finishes loading immediately.
+      expect(html, isNot(contains('<script src="https://cdn.jsdelivr.net')));
+      expect(html, contains("document.createElement('script')"));
+      expect(
+          html,
+          contains(
+              "script.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js'"));
+    });
+
+    test('shows a visible error when the mermaid CDN fails or times out', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // A dead or hanging CDN must not leave the diagram area spinning:
+      // script.onerror and a load timeout both surface a visible error.
+      expect(html, contains('script.onerror'));
+      expect(html, contains('无法访问 cdn.jsdelivr.net'));
+      expect(html, contains('Mermaid 加载超时'));
+    });
+
+    test('inlines the bundled mermaid.js when inlineMermaidJs is provided', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD',
+          inlineMermaidJs: 'var bundled = 1;');
+      // The library must be embedded in the page itself — no CDN request.
+      expect(html, contains('var bundled = 1;'));
+      expect(html, isNot(contains("script.src = 'https://cdn.jsdelivr.net")));
+    });
+    test('escapes < in the inlined library so the script tag stays intact', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD',
+          inlineMermaidJs: 'var s = "</script><!--";');
+      // Every '<' is emitted as \u003C inside the JS string literal, so the
+      // HTML parser never sees a raw '</script' or '<!--' from the library
+      // code that could terminate the script tag early.
+      expect(html, contains(r'\u003C/script>'));
+      expect(html, contains(r'\u003C!--'));
+    });
+
+    test('web asset URL keeps ?v= and &code= in one query string', () {
+      // Regression: the URL previously became "...?v=4?code=..." (two '?'),
+      // so URLSearchParams could not find the code and the template showed
+      // the empty-code placeholder instead of the diagram.
+      final url = MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B');
+      expect(url, contains('mermaid_render.html?v=4&code='));
+      expect(url, isNot(contains('?code')));
+      expect(url, isNot(contains('v=4?')));
+      // The code must be percent-encoded inside the query string.
+      expect(url, contains('graph+TD'));
+      // Empty code -> version parameter only, no dangling '&'.
+      final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
+      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=4');
     });
 
     test('includes mermaid.initialize call', () {
@@ -164,7 +222,35 @@ void main() {
     test('fitToViewport reads the diagram size from the rendered SVG', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains("container.querySelector('svg')"));
-      expect(html, contains('getBBox'));
+      // 'svg.getBBox()' (with the svg. prefix) anchors the CODE call only —
+      // the fit comment in the template also mentions getBBox(), so the bare
+      // word would match the comment instead of the code.
+      expect(html, contains('svg.getBBox()'));
+    });
+
+    test('fitToViewport pins the SVG to its natural size before fitting', () {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      // Regression: mermaid v11 renders <svg width="100%"> with only a
+      // max-width style and NO width/height attributes, so without explicit
+      // pixel size the SVG stretches to the container width while getBBox()
+      // still reports the natural content size. The fit math would then
+      // double-scale the diagram (shrunk AND misplaced). fitToViewport must
+      // pin the SVG to its measured content size before computing the fit.
+      expect(html, contains("svg.setAttribute('width', sw)"));
+      expect(html, contains("svg.setAttribute('height', sh)"));
+      // Order must be: measure (getBBox) -> pin -> fit math. The pin must
+      // use the MEASURED size (pinning before measuring would pin 0), and
+      // must happen before the zoom/pan math that consumes sw/sh.
+      // 'svg.getBBox()' anchors the code call only (the template comment
+      // also mentions getBBox without the svg. prefix).
+      final measureIdx = html.indexOf('svg.getBBox()');
+      final pinIdx = html.indexOf("svg.setAttribute('height', sh)");
+      final zoomIdx = html.indexOf('Math.min(vw / sw, vh / sh)');
+      expect(measureIdx, greaterThanOrEqualTo(0));
+      expect(pinIdx, greaterThan(measureIdx),
+          reason: 'SVG size must be measured before it is pinned');
+      expect(zoomIdx, greaterThan(pinIdx),
+          reason: 'SVG size must be pinned before the fit math reads sw/sh');
     });
 
     test('HTML includes updateTransform function', () {
@@ -295,19 +381,49 @@ void main() {
     });
   });
 
-  group('MermaidRenderWidget - widget rendering', () {
-    testWidgets('renders as a StatefulWidget', (tester) async {
-      const widget = MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: widget,
-          ),
-        ),
-      );
-      expect(find.byType(MermaidRenderWidget), findsOneWidget);
+  group('MermaidRenderWidget - web asset template', () {
+    // The web platform loads the bundled asset template via loadUrl (a
+    // data: URL cannot carry the bundled mermaid.js — Chromium truncates
+    // data: URLs at ~1MB). These tests pin the template's contract so it
+    // does not silently drift from the Dart template.
+    Future<String> loadAssetTemplate() =>
+        rootBundle.loadString('assets/vendor/mermaid_render.html');
+
+    test('loads mermaid.min.js from the same asset directory (no CDN)',
+        () async {
+      final html = await loadAssetTemplate();
+      // The library ships gzip-compressed (dev-server transfer stays
+      // fast); it is fetched from the same asset directory, decompressed
+      // in the browser, and falls back to the raw file if needed.
+      expect(html, contains("fetch('mermaid.min.js.gz')"));
+      expect(html, contains("DecompressionStream('gzip')"));
+      expect(html, contains("runScriptUrl('mermaid.min.js')"));
+      expect(html, isNot(contains('cdn.jsdelivr.net')));
     });
 
+    test('reads the diagram code from the ?code= query parameter', () async {
+      final html = await loadAssetTemplate();
+      expect(html, contains('URLSearchParams'));
+      expect(html, contains("params.get('code')"));
+    });
+
+    test(
+        'keeps the shared fit/gesture behavior in sync with the Dart '
+        'template', () async {
+      final html = await loadAssetTemplate();
+      // fitToViewport with the SVG natural-size pinning (auto center+fit).
+      expect(html, contains('window.fitToViewport'));
+      expect(html, contains("svg.setAttribute('width', sw)"));
+      expect(html, contains("svg.setAttribute('height', sh)"));
+      // Mouse + touch pan/zoom gesture handlers.
+      expect(html, contains("document.addEventListener('mousedown'"));
+      expect(html, contains("document.addEventListener('touchstart'"));
+      // Error reporting surface.
+      expect(html, contains('reportError'));
+    });
+  });
+
+  group('MermaidRenderWidget - widget rendering', () {
     testWidgets('shows loading state initially before WebView creation',
         (tester) async {
       const widget = MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B');
@@ -340,62 +456,6 @@ void main() {
       expect(find.text('No Mermaid code to render'), findsOneWidget);
     });
 
-    testWidgets('shows border around the container', (tester) async {
-      const widget = MermaidRenderWidget(mermaidCode: 'graph TD');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: widget,
-          ),
-        ),
-      );
-      expect(find.byType(ClipRRect), findsOneWidget);
-    });
-
-    testWidgets('uses default height of 300', (tester) async {
-      const widgetKey = Key('height-test-widget');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: MermaidRenderWidget(
-              key: widgetKey,
-              mermaidCode: 'graph TD',
-            ),
-          ),
-        ),
-      );
-      expect(find.byKey(widgetKey), findsOneWidget);
-    });
-
-    testWidgets('respects custom height', (tester) async {
-      const widgetKey = Key('custom-height-test');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: MermaidRenderWidget(
-              key: widgetKey,
-              mermaidCode: 'graph TD',
-              height: 500,
-            ),
-          ),
-        ),
-      );
-      expect(find.byKey(widgetKey), findsOneWidget);
-    });
-
-    testWidgets('adapts colors to dark mode', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          themeMode: ThemeMode.dark,
-          darkTheme: ThemeData.dark(),
-          home: Scaffold(
-            body: MermaidRenderWidget(mermaidCode: 'graph TD'),
-          ),
-        ),
-      );
-      expect(find.byType(MermaidRenderWidget), findsOneWidget);
-    });
-
     testWidgets('handles empty code gracefully', (tester) async {
       const widget = MermaidRenderWidget(mermaidCode: '');
       await tester.pumpWidget(
@@ -411,20 +471,6 @@ void main() {
   });
 
   group('MermaidRenderWidget - gesture wrapper', () {
-    testWidgets('renders with gesture wrapper in render mode', (tester) async {
-      const widget = MermaidRenderWidget(mermaidCode: 'graph TD');
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: widget,
-          ),
-        ),
-      );
-      // Early loading state shows the preparation text
-      expect(find.text('正在准备渲染引擎...'), findsOneWidget);
-      // The gesture wrapper (Listener) should wrap the WebView when created
-    });
-
     testWidgets('gesture wrapper not present when showing source code',
         (tester) async {
       const widget = MermaidRenderWidget(

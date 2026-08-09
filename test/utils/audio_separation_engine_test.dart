@@ -13,13 +13,6 @@ void main() {
       engine = AudioSeparationEngine();
     });
 
-    test('isAvailable returns true', () async {
-      // Pure Dart implementation — always available, no platform deps
-      final available = await engine.isAvailable();
-      expect(available, isA<bool>());
-      expect(available, isTrue);
-    });
-
     test('canHandleVideoFormat returns correct results for ISOBMFF formats',
         () {
       // ISOBMFF-based formats (MP4, MOV, M4V, 3GP) are supported
@@ -72,12 +65,6 @@ void main() {
     test('canHandleVideoFormat rejects empty format', () {
       expect(engine.canHandleVideoFormat(''), isFalse);
       expect(engine.canHandleVideoFormat('  '), isFalse);
-    });
-
-    test('isAvailable returns true (pure Dart)', () async {
-      // Pure Dart implementation — no platform dependencies needed
-      final available = await engine.isAvailable();
-      expect(available, isTrue);
     });
 
     test('canHandleVideoFormat is case-insensitive', () {

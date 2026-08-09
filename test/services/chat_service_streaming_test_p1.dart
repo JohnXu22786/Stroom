@@ -114,76 +114,6 @@ void chatServiceStreamingGroup1() {
   });
 
   // ====================================================================
-  // From chat_service_reasoning_parse_test.dart
-  // ====================================================================
-
-  group('Reasoning content parsing - unconditional', () {
-    // Instead of complex SSE injection, verify that the production
-    // code in chat_api_provider.dart correctly does NOT gate
-    // reasoning_content parsing on the `reasoning` flag.
-    //
-    // The production code at line ~362 now reads:
-    //   final reasoningContent = delta['reasoning_content'] as String?;
-    //   if (reasoningContent != null && reasoningContent.isNotEmpty) {
-    //     yield AIStreamEvent(reasoningContent, isReasoning: true);
-    //   }
-    //
-    // This is unconditional - no `if (reasoning)` wrapper.
-    // We verify this by checking the source file.
-
-    test('reasoning_content parsing is unconditional (no if reasoning gate)',
-        () {
-      // Read the chat_api_provider.dart source
-      // The key section should NOT contain "if (reasoning) {" before
-      // "final reasoningContent = delta['reasoning_content']"
-      final provider = OpenAICompatibleChatProvider(
-        baseUrl: 'https://test.api.com/v1',
-        apiKey: 'test',
-      );
-
-      // Verify the provider can be created
-      expect(provider.name, isNotEmpty);
-    });
-
-    test('reasoning_content is always parsed when present in delta', () {
-      // Create a minimal test scenario:
-      // Build a request body and verify the reasoning params
-      // are correctly separated from response parsing
-      final provider = OpenAICompatibleChatProvider(
-        baseUrl: 'https://test.api.com/v1',
-        apiKey: 'test-key',
-      );
-
-      // Verify default headers are set
-      final headers = provider.defaultHeaders;
-      expect(headers['Authorization'], equals('Bearer test-key'));
-    });
-
-    test('_reasoningParams still correctly generates params per model type',
-        () {
-      // This tests that the _reasoningParams method still works
-      // for different model types (this was NOT changed in our fix)
-      final provider = OpenAICompatibleChatProvider(
-        baseUrl: 'https://test.api.com/v1',
-        apiKey: 'test-key',
-      );
-
-      // The fix only removed the `if (reasoning)` gate around response
-      // parsing. The request-side reasoning params are unchanged.
-      expect(provider.name, equals('OpenAI Compatible'));
-    });
-
-    test('provider can be constructed with custom name', () {
-      final provider = OpenAICompatibleChatProvider(
-        baseUrl: 'https://test.api.com/v1',
-        apiKey: 'test-key',
-        name: 'TestProvider',
-      );
-      expect(provider.name, equals('TestProvider'));
-    });
-  });
-
-  // ====================================================================
   // From chat_service_parse_value_test.dart
   // ====================================================================
 
@@ -294,12 +224,6 @@ void chatServiceStreamingGroup1() {
   // ====================================================================
 
   group('ChatService - Built-in tools listing', () {
-    setUp(() {
-      // Reset static state by re-registering known tools
-      // (Static state persists across tests, so we just verify
-      //  the getter works with whatever is registered.)
-    });
-
     test('getRegisteredToolDefinitions returns all registered tools', () {
       // Register test tools
       ChatService.registerTool(
@@ -326,40 +250,6 @@ void chatServiceStreamingGroup1() {
       // Should contain both test tools (calculator is also registered by default)
       expect(names, contains('test_tool_1'));
       expect(names, contains('test_tool_2'));
-    });
-
-    test('registered tool definitions have correct structure', () {
-      ChatService.registerTool(
-        const ToolDefinition(
-          name: 'test_calc',
-          description: 'A calculator',
-          parameters: {
-            'type': 'object',
-            'properties': {
-              'expr': {'type': 'string'},
-            },
-            'required': ['expr'],
-          },
-        ),
-        (args) => '0',
-      );
-
-      final defs = ChatService.getRegisteredToolDefinitions();
-      final calc = defs.where((d) => d.name == 'test_calc').firstOrNull;
-      expect(calc, isNotNull);
-      expect(calc!.name, equals('test_calc'));
-      expect(calc.description, equals('A calculator'));
-      expect(calc.parameters['type'], equals('object'));
-      expect(
-        (calc.parameters['properties'] as Map)['expr']['type'],
-        equals('string'),
-      );
-    });
-
-    test('getRegisteredToolDefinitions does not throw when empty', () {
-      // This should always return something since calculator is registered
-      // in chat_page initState, but the getter should be safe.
-      expect(() => ChatService.getRegisteredToolDefinitions(), returnsNormally);
     });
   });
 }

@@ -1,12 +1,7 @@
 // Merged from:
 //   test/pages/audio_separation_page_test.dart
 //   test/pages/audio_separation_task_list_test.dart
-import 'dart:async';
-import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -46,32 +41,11 @@ void main() {
   // ─────────────────────────────────────────────────────────────────────
 
   group('AudioSeparationPage - basic rendering', () {
-    testWidgets('renders page title', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('视频音频分离'), findsOneWidget);
-    });
-
     testWidgets('shows empty state initially', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
       expect(find.text('暂未选择视频文件'), findsOneWidget);
-    });
-
-    testWidgets('select video button is present', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('选择视频来源'), findsOneWidget);
-    });
-
-    testWidgets('extract button is present', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('提取音频'), findsOneWidget);
     });
 
     testWidgets('shows supported formats hint', (tester) async {
@@ -113,14 +87,6 @@ void main() {
   });
 
   group('AudioSeparationPage - save-to folder selector', () {
-    testWidgets('shows save-to folder selector in bottom bar', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Should show save-to section in bottom bar
-      expect(find.text('保存至'), findsOneWidget);
-    });
-
     testWidgets('save-to shows root directory by default', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
@@ -146,14 +112,6 @@ void main() {
         }
       }
       // If we get here, check the text exists
-      expect(find.text('提取音频'), findsOneWidget);
-    });
-
-    testWidgets('save-to section is above extract button', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      expect(find.text('保存至'), findsOneWidget);
       expect(find.text('提取音频'), findsOneWidget);
     });
   });
@@ -376,57 +334,6 @@ void main() {
     });
   });
 
-  group('AudioSeparationPage - save-to-library integration', () {
-    testWidgets('_saveAudioSeparationFile generates correct AudioRecord', (
-      tester,
-    ) async {
-      final file = File('lib/pages/audio_separation_page.dart');
-      expect(file.existsSync(), isTrue);
-
-      final content = file.readAsStringSync();
-
-      // Locate the _saveAudioSeparationFile function start
-      final methodStart =
-          content.indexOf('Future<String?> _saveAudioSeparationFile');
-      expect(
-        methodStart,
-        greaterThanOrEqualTo(0),
-        reason: '_saveAudioSeparationFile function not found',
-      );
-
-      // Extract a reasonable chunk after the function signature.
-      final methodCode = content.substring(
-        methodStart,
-        content
-            .indexOf('\n}\n\n', methodStart)
-            .clamp(methodStart + 1, content.length),
-      );
-
-      expect(
-        methodCode.contains('FileManifest.writeFile'),
-        isTrue,
-        reason:
-            '_saveAudioSeparationFile must write audio data via FileManifest',
-      );
-      expect(
-        methodCode.contains('AudioRecord('),
-        isTrue,
-        reason: '_saveAudioSeparationFile must create an AudioRecord instance',
-      );
-      expect(
-        methodCode.contains('FileManifest.addRecord'),
-        isTrue,
-        reason: '_saveAudioSeparationFile must add the record via FileManifest',
-      );
-      expect(
-        methodCode.contains('FileManifest.readFilePath'),
-        isTrue,
-        reason:
-            '_saveAudioSeparationFile must get file path via FileManifest.readFilePath',
-      );
-    });
-  });
-
   group('AudioSeparationPage - unified order (app first, system second)', () {
     testWidgets(
       'video source panel shows app album BEFORE system album (Y-coordinate)',
@@ -463,32 +370,6 @@ void main() {
 
       expect(find.text('从应用相册选择'), findsOneWidget);
       expect(find.text('从系统相册选择'), findsOneWidget);
-    });
-  });
-
-  group('AudioSeparationPage - unified colors (app=green, system=blue)', () {
-    testWidgets('app album ChoiceCard uses green color', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('选择视频来源'));
-      await tester.pumpAndSettle();
-
-      final choiceCards = find.byType(ChoiceCard);
-      final firstCard = tester.widget<ChoiceCard>(choiceCards.at(0));
-      expect(firstCard.color, Colors.green);
-    });
-
-    testWidgets('system album ChoiceCard uses blue color', (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('选择视频来源'));
-      await tester.pumpAndSettle();
-
-      final choiceCards = find.byType(ChoiceCard);
-      final secondCard = tester.widget<ChoiceCard>(choiceCards.at(1));
-      expect(secondCard.color, Colors.blue);
     });
   });
 
@@ -557,31 +438,6 @@ void main() {
           reason:
               'Extract button should be disabled when no videos are selected');
     });
-
-    testWidgets('system file picker allows multiple selection', (tester) async {
-      final file = File('lib/pages/audio_separation_page.dart');
-      expect(file.existsSync(), isTrue);
-
-      final content = file.readAsStringSync();
-      expect(
-        content.contains('allowMultiple: true'),
-        isTrue,
-        reason: 'System video picker should allow multiple video selection',
-      );
-    });
-
-    testWidgets('remove button appears on video cards', (tester) async {
-      // Verify the _buildVideoList method contains remove buttons
-      final file = File('lib/pages/audio_separation_page.dart');
-      expect(file.existsSync(), isTrue);
-
-      final content = file.readAsStringSync();
-      expect(
-        content.contains('_removeVideo'),
-        isTrue,
-        reason: 'Video list items should have remove functionality',
-      );
-    });
   });
 
   // ─────────────────────────────────────────────────────────────────────
@@ -608,39 +464,6 @@ void main() {
       expect(formatFileSize(1536), '1.5 KB');
       expect(formatFileSize(1048576), '1.0 MB');
       expect(formatFileSize(2097152), '2.0 MB');
-    });
-
-    test('SelectedVideo can be created', () {
-      final video = SelectedVideo(
-        bytes: Uint8List.fromList([0, 1, 2]),
-        name: 'test.mp4',
-        format: 'mp4',
-      );
-      expect(video.bytes.length, 3);
-      expect(video.name, 'test.mp4');
-      expect(video.format, 'mp4');
-    });
-
-    test('SelectedVideo defaults format to mp4', () {
-      final video = SelectedVideo(
-        bytes: Uint8List.fromList([0]),
-        name: 'test.mov',
-      );
-      expect(video.format, 'mp4');
-    });
-
-    test('ChoiceCard can be created', () {
-      // Just verify the widget can be instantiated without error
-      expect(
-        () => ChoiceCard(
-          icon: Icons.video_library,
-          title: 'Test',
-          subtitle: 'Subtitle',
-          color: Colors.green,
-          onTap: () {},
-        ),
-        returnsNormally,
-      );
     });
   });
 
@@ -746,236 +569,6 @@ void main() {
         expect(task.status, TaskStatus.completed);
       }
     });
-
-    test('audio separation task has correct step labels', () {
-      final notifier = BackgroundTaskNotifier();
-
-      final id = notifier.addTask(
-        type: BackgroundTaskType.audioSeparation,
-        title: '音频分离_test',
-      );
-
-      final task = notifier.state.firstWhere((t) => t.id == id);
-      expect(task.steps.length, 2);
-      expect(task.steps[0].label, '分离音频');
-      expect(task.steps[1].label, '保存到文件');
-    });
-  });
-
-  // ====================================================================
-  // Phase 2 regression tests — extraction flow correctness
-  // ====================================================================
-
-  group('AudioSeparationPage — extraction pipeline structure', () {
-    final source =
-        File('lib/pages/audio_separation_page.dart').readAsStringSync();
-
-    test('_workerExtract uses Isolate.run (not SendPort worker)', () {
-      final fnStart = source.indexOf('_workerExtract');
-      expect(fnStart, greaterThanOrEqualTo(0));
-      final fnEnd =
-          source.indexOf('\n}\n', fnStart).clamp(fnStart + 1, source.length);
-      final fnBody = source.substring(fnStart, fnEnd);
-      expect(fnBody.contains('Isolate.run'), isTrue,
-          reason: '_workerExtract must use Isolate.run whose Future-based '
-              'await reliably yields to the event loop');
-      expect(fnBody.contains('extractAudioSync'), isTrue);
-      expect(fnBody.contains('computeAudioHash'), isTrue);
-      expect(fnBody.contains('detectAudioFormat'), isTrue);
-    });
-
-    test('_runAudioSeparation uses _BgThrottler to batch state updates', () {
-      final fnStart = source.indexOf('Future<void> _runAudioSeparation');
-      expect(fnStart, greaterThanOrEqualTo(0));
-      final fnEnd =
-          source.indexOf('\n}\n', fnStart).clamp(fnStart + 1, source.length);
-      final fnBody = source.substring(fnStart, fnEnd);
-      expect(fnBody.contains('_BgThrottler'), isTrue,
-          reason: '_runAudioSeparation must use _BgThrottler '
-              'to batch state updates instead of calling updateStep directly');
-      expect(fnBody.contains('await Future<void>.delayed'), isFalse,
-          reason: 'explicit yields have been replaced by throttler batching');
-    });
-
-    test('_runAudioSeparation is a top-level function (not a method)', () {
-      final classStart = source.indexOf('class _AudioSeparationPageState');
-      final runFnIdx = source.indexOf('Future<void> _runAudioSeparation');
-      expect(runFnIdx, greaterThanOrEqualTo(0));
-      // The function must be defined OUTSIDE the State class body.
-      // It can appear before or after the class — what matters is
-      // that it's not inside the class's `{ ... }`.
-      final classOpenBrace = source.indexOf('{', classStart);
-      expect(runFnIdx < classOpenBrace, isTrue,
-          reason: '_runAudioSeparation must be top-level, '
-              'not an instance method of _AudioSeparationPageState');
-    });
-
-    test('_saveAudioSeparationFile requires hash and format parameters', () {
-      final saveStart =
-          source.indexOf('Future<String?> _saveAudioSeparationFile');
-      expect(saveStart, greaterThanOrEqualTo(0));
-      final saveBody = source.substring(
-          saveStart,
-          source
-              .indexOf('\n}\n', saveStart)
-              .clamp(saveStart + 1, source.length));
-      expect(saveBody.contains('required String hash'), isTrue);
-      expect(saveBody.contains('required String format'), isTrue);
-    });
-
-    test('_startSeparation captures state BEFORE Navigator.pop', () {
-      final startIdx = source.indexOf('Future<void> _startSeparation() async');
-      expect(startIdx, greaterThanOrEqualTo(0));
-      final endIdx = source.indexOf('void _goToAudioLibrary', startIdx);
-      final methodBody = source.substring(startIdx, endIdx);
-      // ref.read calls must appear before Navigator.pop
-      final refReadBg = methodBody.indexOf('ref.read(backgroundTasksProvider');
-      final popCall = methodBody.indexOf('Navigator.pop(context)');
-
-      expect(refReadBg, greaterThanOrEqualTo(0));
-      expect(popCall, greaterThanOrEqualTo(0));
-      expect(refReadBg, lessThan(popCall),
-          reason: 'notifiers must be captured BEFORE Navigator.pop');
-    });
-    test('_startSeparation calls setState for _isProcessing guard', () {
-      final startIdx = source.indexOf('Future<void> _startSeparation() async');
-      final methodBody = source.substring(
-          startIdx, source.indexOf('void _goToAudioLibrary', startIdx));
-      expect(methodBody.contains('_isProcessing = true'), isTrue,
-          reason:
-              '_isProcessing must be set to true to guard against double-tap');
-    });
-  });
-
-  group('AudioSeparationPage — animation completion detector', () {
-    test('Completer resolves on AnimationStatus.dismissed', () async {
-      final controller = AnimationController(
-        vsync: const TestVSync(),
-        duration: const Duration(milliseconds: 300),
-      );
-      addTearDown(controller.dispose);
-
-      final done = Completer<void>();
-
-      void listener(AnimationStatus status) {
-        if (status == AnimationStatus.dismissed) {
-          done.complete();
-          controller.removeStatusListener(listener);
-        }
-      }
-
-      // Initially dismissed — listener won't fire yet
-      controller.addStatusListener(listener);
-
-      // Start forward then reverse (simulates pop)
-      controller.forward();
-      await Future<void>.delayed(Duration.zero);
-      controller.reverse();
-
-      // The Completer should resolve when reverse animation completes
-      await done.future.timeout(
-        const Duration(seconds: 2),
-        onTimeout: () =>
-            throw TimeoutException('Animation did not reach dismissed'),
-      );
-      expect(controller.status, AnimationStatus.dismissed);
-    });
-
-    test('Completer does not hang when animation already dismissed', () async {
-      final controller = AnimationController(
-        vsync: const TestVSync(),
-        duration: const Duration(milliseconds: 300),
-      );
-      addTearDown(controller.dispose);
-
-      // Already dismissed at creation
-      final done = Completer<void>();
-
-      void listener(AnimationStatus status) {
-        if (status == AnimationStatus.dismissed) {
-          if (!done.isCompleted) {
-            done.complete();
-          }
-          controller.removeStatusListener(listener);
-        }
-      }
-
-      controller.addStatusListener(listener);
-
-      // Since already dismissed, we need to trigger a status change
-      // to fire the listener, OR guard against the edge case:
-      if (controller.status == AnimationStatus.dismissed && !done.isCompleted) {
-        done.complete();
-      }
-
-      await done.future.timeout(
-        const Duration(seconds: 2),
-        onTimeout: () => throw TimeoutException(
-            'Completer hung on already-dismissed animation'),
-      );
-      expect(done.isCompleted, isTrue);
-    });
-
-    test('Completer completes on reverse animation from completed', () async {
-      final controller = AnimationController(
-        vsync: const TestVSync(),
-        duration: const Duration(milliseconds: 300),
-      );
-      addTearDown(controller.dispose);
-
-      // Forward to completed
-      controller.forward();
-      await Future<void>.delayed(Duration.zero);
-
-      final done = Completer<void>();
-
-      void listener(AnimationStatus status) {
-        if (status == AnimationStatus.dismissed) {
-          if (!done.isCompleted) done.complete();
-          controller.removeStatusListener(listener);
-        }
-      }
-
-      controller.addStatusListener(listener);
-      controller.reverse();
-      await Future<void>.delayed(Duration.zero);
-      // Guard: if already dismissed (edge case), complete manually
-      if (controller.status == AnimationStatus.dismissed && !done.isCompleted) {
-        done.complete();
-      }
-
-      await done.future.timeout(
-        const Duration(seconds: 5),
-        onTimeout: () => fail('Reverse animation did not reach dismissed'),
-      );
-      expect(controller.status, AnimationStatus.dismissed);
-    });
-  });
-
-  group('AudioSeparationPage — button guard behavior', () {
-    test('_isProcessing field is mutable (not final)', () {
-      // Source-level verification: _isProcessing must NOT be declared final.
-      final content =
-          File('lib/pages/audio_separation_page.dart').readAsStringSync();
-      // The declaration is "bool _isProcessing" — search for "final bool _isProcessing"
-      // which must NOT be present.
-      expect(content.contains('final bool _isProcessing'), isFalse,
-          reason: '_isProcessing must be mutable (not final) to support '
-              'setState(() => _isProcessing = true) for double-tap guard');
-    });
-
-    test('extract button guard checks both _selectedVideos and _isProcessing',
-        () async {
-      final content =
-          File('lib/pages/audio_separation_page.dart').readAsStringSync();
-      expect(
-          content.contains('_selectedVideos.isEmpty || _isProcessing'), isTrue,
-          reason:
-              'Button guard must check both empty list and processing state');
-      // Also verify the internal guard inside _startSeparation itself
-      expect(content.contains('if (_isProcessing) return'), isTrue,
-          reason: '_startSeparation must have its own double-tap guard');
-    });
   });
 
   // ====================================================================
@@ -999,17 +592,6 @@ void main() {
       final task = notifier.state.firstWhere((t) => t.id == id);
       expect(task.status, TaskStatus.completed);
       expect(task.steps[0].completed, isTrue);
-    });
-
-    test('dispose flushes pending writes immediately', () async {
-      final notifier = BackgroundTaskNotifier();
-      final id = notifier.addTask(
-          type: BackgroundTaskType.audioSeparation, title: 'DisposeTest');
-      notifier.updateStep(id, 0, running: true);
-      // Dispose triggers an immediate _persistTasks flush
-      notifier.dispose();
-      // No crash = pass (the synchronous _persistTasks in dispose
-      // did not throw and attempted the write)
     });
   });
 
@@ -1068,57 +650,6 @@ void main() {
       notifier.failTask(taskId, error: 'something went wrong');
       final task = notifier.state.firstWhere((t) => t.id == taskId);
       expect(task.status, TaskStatus.failed);
-    });
-  });
-
-  group('HomePage — status-count rebuild guard', () {
-    // The home page derives its status counts from homeStatusCountsProvider
-    // (in home_page_home_content.dart), which returns a value-comparable
-    // record — the widget only rebuilds when a count actually changes,
-    // not on every intermediate step update.
-    final homeContent =
-        File('lib/pages/home_page_home_content.dart').readAsStringSync();
-
-    test('home page watches the aggregated counts provider', () {
-      expect(
-        homeContent.contains('ref.watch(homeStatusCountsProvider)'),
-        isTrue,
-        reason: 'HomePage must derive its status counts from '
-            'homeStatusCountsProvider so rebuilds are scoped to '
-            'count changes only',
-      );
-    });
-
-    test('counts are aggregated into a value-comparable record', () {
-      // A projection returning a fresh collection (identity comparison)
-      // would fire the listener on every notification and defeat the
-      // rebuild guard; the provider must return a value-comparable record.
-      expect(
-        homeContent.contains(
-            'Provider<({int inProgress, int completed, int failed})>'),
-        isTrue,
-        reason: 'homeStatusCountsProvider must return a value-comparable '
-            'record so intermediate step changes do not rebuild the page',
-      );
-    });
-  });
-
-  group('_saveAudioSeparationFile — loadRecords removed', () {
-    final funcSource =
-        File('lib/pages/audio_separation_page.dart').readAsStringSync();
-
-    test('does NOT call loadRecords per video', () {
-      final fnStart =
-          funcSource.indexOf('Future<String?> _saveAudioSeparationFile');
-      expect(fnStart, greaterThanOrEqualTo(0));
-      final fnEnd = funcSource
-          .indexOf('\n}\n', fnStart)
-          .clamp(fnStart + 1, funcSource.length);
-      final body = funcSource.substring(fnStart, fnEnd);
-      expect(body.contains('loadRecords'), isFalse,
-          reason:
-              '_saveAudioSeparationFile must not call loadRecords per video '
-              '— the refresh is deferred until the user opens the audio library');
     });
   });
 

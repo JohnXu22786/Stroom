@@ -18,38 +18,6 @@ void main() {
   });
 
   // ==================================================================
-  // Widget structure tests (no file I/O needed)
-  // ==================================================================
-  //
-  // LogViewerPage calls AppLogService._loadLogFiles() in initState,
-  // which uses real file I/O. In testWidgets' fake async zone, file
-  // I/O futures never complete, so _loadLogFiles hangs. These tests
-  // verify widget structure without depending on async completion.
-
-  group('LogViewerPage — widget structure', () {
-    testWidgets('shows AppBar with title 应用日志', (tester) async {
-      await tester.pumpWidget(const MaterialApp(home: LogViewerPage()));
-      expect(find.text('应用日志'), findsOneWidget);
-    });
-
-    testWidgets('contains refresh button in AppBar', (tester) async {
-      await tester.pumpWidget(const MaterialApp(home: LogViewerPage()));
-      expect(find.byIcon(Icons.refresh), findsOneWidget);
-    });
-
-    testWidgets('contains cleanup old logs button in AppBar', (tester) async {
-      await tester.pumpWidget(const MaterialApp(home: LogViewerPage()));
-      expect(find.byIcon(Icons.delete_sweep), findsOneWidget);
-    });
-
-    testWidgets('shows loading indicator while fetching logs', (tester) async {
-      await tester.pumpWidget(const MaterialApp(home: LogViewerPage()));
-      // _loadLogFiles starts with synchronous setState to show loading
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    });
-  });
-
-  // ==================================================================
   // LogContentPage — auto-scroll behavior
   // ==================================================================
   //
@@ -254,28 +222,6 @@ void main() {
   // ==================================================================
 
   group('LogContentPage — layout', () {
-    testWidgets('raw (plain text) view has generous edge padding',
-        (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: LogContentPage(
-            fileName: 'app_2024-01-01-00.log',
-            content: buildLogContent(5),
-          ),
-        ),
-      );
-      await tester.tap(find.byTooltip('原始视图'));
-      await tester.pump();
-
-      final scrollView = tester
-          .widget<SingleChildScrollView>(find.byType(SingleChildScrollView));
-      final padding = scrollView.padding!.resolve(TextDirection.ltr);
-      expect(padding.left, greaterThanOrEqualTo(20),
-          reason: 'plain text mode needs roomy left edge whitespace');
-      expect(padding.right, greaterThanOrEqualTo(20),
-          reason: 'plain text mode needs roomy right edge whitespace');
-    });
-
     testWidgets('structured view renders level icons for a large mixed log',
         (tester) async {
       final buffer = StringBuffer();

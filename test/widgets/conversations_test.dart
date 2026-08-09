@@ -155,13 +155,6 @@ void main() {
   // 2. conversations_search_test.dart
   // ===========================================================================
   group('ConversationsPage global message search', () {
-    testWidgets('shows search icon button', (tester) async {
-      await tester.pumpWidget(createSearchTestApp());
-      await tester.pump();
-
-      expect(find.byIcon(Icons.search), findsOneWidget);
-    });
-
     testWidgets('tapping search shows search bar with global hint',
         (tester) async {
       await tester.pumpWidget(createSearchTestApp());

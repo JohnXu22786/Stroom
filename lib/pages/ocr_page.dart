@@ -1346,7 +1346,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   void _onReorder(int oldIndex, int newIndex) {
     setState(() {
-      if (newIndex > oldIndex) newIndex--;
+      // onReorderItem 的 newIndex 已是移除后的索引，直接使用
       final item = _selectedImages.removeAt(oldIndex);
       _selectedImages.insert(newIndex, item);
     });

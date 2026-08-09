@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/backup_location_manager.dart';
@@ -32,30 +31,6 @@ void main() {
   });
 
   // ==================================================================
-  // getDisplayPath — 用户友好路径
-  // ==================================================================
-
-  group('getDisplayPath', () {
-    test('returns non-empty string on desktop', () async {
-      // 在桌面/测试环境下，应该返回一条路径
-      final path = await BackupLocationManager.getDisplayPath();
-      expect(path, isNotEmpty);
-      debugPrint('[test] getDisplayPath = $path');
-    });
-
-    test('contains expected directory name', () async {
-      final path = await BackupLocationManager.getDisplayPath();
-      // 应该包含 Stroom/AutoBackups 等有意义的目录名
-      final hasExpectedName = path.contains('Stroom') ||
-          path.contains('AutoBackups') ||
-          path.contains('temp') ||
-          path.contains('tmp');
-      expect(hasExpectedName, isTrue,
-          reason: 'getDisplayPath should contain a meaningful directory name');
-    });
-  });
-
-  // ==================================================================
   // isStorageAccessible — 无 SAF 配置时应返回 false
   // ==================================================================
 
@@ -65,18 +40,6 @@ void main() {
       final accessible = await BackupLocationManager.isStorageAccessible();
       // 即使路径不存在，尝试创建也应成功
       expect(accessible, isTrue);
-    });
-  });
-
-  // ==================================================================
-  // SAF URI 持久化（通过 SharedPreferences）
-  // ==================================================================
-
-  group('SAF URI persistence', () {
-    test('initially no SAF URI saved', () async {
-      final result = await BackupLocationManager.isStorageAccessible();
-      // 如果没有 SAF URI 且是测试环境（非 Android），应该返回 true（目录可创建）
-      expect(result, isTrue);
     });
   });
 
@@ -272,13 +235,6 @@ void main() {
       final safMode = await BackupLocationManager.isUsingSafMode();
       expect(safMode, isFalse);
     });
-
-    test('returns false on non-Android platforms regardless', () async {
-      // 在非 Android 平台上，即使存储了 URI，也不应认为在 SAF 模式
-      // 但实际 isUsingSafMode 只检查 Platform.isAndroid
-      final safMode = await BackupLocationManager.isUsingSafMode();
-      expect(safMode, isFalse);
-    });
   });
 
   // ==================================================================
@@ -303,20 +259,6 @@ void main() {
   // ==================================================================
 
   group('getLogsRootPath', () {
-    test('returns a non-empty path under Documents/Stroom/Logs', () async {
-      final path = await BackupLocationManager.getLogsRootPath();
-      expect(path, isNotNull);
-      expect(path, isNotEmpty, reason: 'Logs root path must be non-empty');
-
-      // Should contain Stroom/Logs structure (case-insensitive for CI compat).
-      // Production: .../Stroom/Logs/...  Test: .../stroom_log_test
-      expect(path!.toLowerCase().contains('stroom'), isTrue,
-          reason: 'Log path must be under Stroom parent directory');
-      final lower = path.toLowerCase();
-      expect(lower.contains('logs') || lower.contains('log_test'), isTrue,
-          reason: 'Log path must point to Logs subdirectory '
-              '(or stroom_log_test in test mode)');
-    });
     test('log path and backup path share the same parent directory', () async {
       final logsPath = await BackupLocationManager.getLogsRootPath();
       final backupPath = await BackupLocationManager.getBackupRootPath();

@@ -82,15 +82,17 @@ void main() {
   group('Chat showImagePreviewDialog', () {
     final validPng = _createValidPng();
 
-    testWidgets('opens and displays image with ExtendedImage', (tester) async {
+    testWidgets(
+        'shows loading indicator then image when using dataLoader '
+        '(no blocking disk read before the dialog opens)', (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () {
               showImagePreviewDialog(
                 context: context,
-                fileName: 'photo.png',
-                data: validPng,
+                fileName: 'loaded.png',
+                dataLoader: () async => validPng,
               );
             },
             child: const Text('Open Preview'),
@@ -100,24 +102,29 @@ void main() {
 
       await tester.tap(find.text('Open Preview'));
       await tester.pump();
+
+      // Dialog opens immediately with a loading indicator
+      expect(find.text('loaded.png'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      // Let the loader future complete and the image decode
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Dialog should be shown with the file name
-      expect(find.text('photo.png'), findsOneWidget);
-      // Note: No broken_image assertion here because
-      // ExtendedImage.memory may fail to decode raw PNG bytes in some
-      // CI environments, which is an environmental rather than a logic issue.
+      expect(find.text('loaded.png'), findsOneWidget);
     });
 
-    testWidgets('close button dismisses dialog', (tester) async {
+    testWidgets('shows error state when dataLoader returns null', (
+      tester,
+    ) async {
       await tester.pumpWidget(MaterialApp(
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () {
               showImagePreviewDialog(
                 context: context,
-                fileName: 'photo.png',
-                data: validPng,
+                fileName: 'failed.png',
+                dataLoader: () async => null,
               );
             },
             child: const Text('Open Preview'),
@@ -129,16 +136,60 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.text('photo.png'), findsOneWidget);
+      expect(find.byIcon(Icons.broken_image), findsOneWidget);
+      expect(find.text('无法加载图片'), findsOneWidget);
+    });
 
-      await tester.tap(find.byIcon(Icons.close));
-      // Pump multiple frames to allow dialog close animation to complete
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.pump();
+    testWidgets(
+        'synchronously-throwing dataLoader degrades to error state '
+        'instead of crashing the dialog', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () {
+              showImagePreviewDialog(
+                context: context,
+                fileName: 'throw.png',
+                dataLoader: () => throw Exception('loader boom'),
+              );
+            },
+            child: const Text('Open Preview'),
+          ),
+        ),
+      ));
 
-      // Dialog should now be dismissed
-      expect(find.text('photo.png'), findsNothing);
+      await tester.tap(find.text('Open Preview'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byIcon(Icons.broken_image), findsOneWidget);
+      expect(find.text('无法加载图片'), findsOneWidget);
+    });
+
+    testWidgets('rejected dataLoader future degrades to error state', (
+      tester,
+    ) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () {
+              showImagePreviewDialog(
+                context: context,
+                fileName: 'reject.png',
+                dataLoader: () => Future.error(Exception('read failed')),
+              );
+            },
+            child: const Text('Open Preview'),
+          ),
+        ),
+      ));
+
+      await tester.tap(find.text('Open Preview'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byIcon(Icons.broken_image), findsOneWidget);
+      expect(find.text('无法加载图片'), findsOneWidget);
     });
 
     testWidgets('shows error state for empty data', (tester) async {
