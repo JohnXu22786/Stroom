@@ -311,7 +311,11 @@ void main() {
       expect(result, {'reasoning_effort': 'low'});
     });
 
-    test('does not write a value for a disabled effort param', () {
+    test(
+        'writes the default value for a config-disabled effort param '
+        '(runtime state is the value map)', () {
+      // 配置里的 enabled 只是新建参数的默认状态；运行时开关以已选值为准，
+      // 开启即写入默认选项。
       final disabled = ReasoningParam(
         paramName: 'reasoning_effort',
         isEffortParam: true,
@@ -320,7 +324,7 @@ void main() {
       );
       final values = const <String, String>{};
       expect(ensureEffortValue([disabled], values, effortEnabled: true),
-          same(values));
+          {'reasoning_effort': 'low'});
     });
 
     test('no-op when no effort param exists', () {

@@ -84,16 +84,20 @@ extension _SaveExt on _LlmModelConfigPageState {
     }
 
     // 验证推理参数
-    // Check 1: If there are any reasoning params, the toggle must exist and be filled
-    final toggleParam = _reasoningParams.cast<ReasoningParam?>().firstWhere(
-          (p) => p?.isReasoningToggle ?? false,
-          orElse: () => null,
-        );
-    final hasNonToggleParams = _reasoningParams.any(
+    // 仅验证模型自有（非继承）参数：继承自供应商的参数由供应商保存时
+    // 校验，未修改的继承参数不写入模型。开关完备性检查基于合并视图
+    // （推理开关可来自供应商），与请求构建时的行为一致。
+    final modelOwnedParams =
+        _reasoningParams.where((p) => !p.inheritedFromProvider).toList();
+
+    // Check 1: If the model owns any reasoning params, the toggle must
+    // exist (model-owned or inherited from provider) and be filled.
+    final toggleParam = _toggleReasoningParam;
+    final hasOwnedNonToggleParams = modelOwnedParams.any(
       (p) => !p.isReasoningToggle && p.paramName.trim().isNotEmpty,
     );
 
-    if (hasNonToggleParams &&
+    if (hasOwnedNonToggleParams &&
         (toggleParam == null || !toggleParam.isFilledToggle)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -106,8 +110,8 @@ extension _SaveExt on _LlmModelConfigPageState {
 
     // Check 2: For model-level inference intensity (non-toggle), if name is filled,
     // must have at least one option value
-    for (int i = 0; i < _reasoningParams.length; i++) {
-      final param = _reasoningParams[i];
+    for (int i = 0; i < modelOwnedParams.length; i++) {
+      final param = modelOwnedParams[i];
       if (param.isReasoningToggle) continue;
       if (param.paramName.trim().isNotEmpty && param.options.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -121,8 +125,8 @@ extension _SaveExt on _LlmModelConfigPageState {
     }
 
     // Check 3: Validate each param individually
-    for (int i = 0; i < _reasoningParams.length; i++) {
-      final param = _reasoningParams[i];
+    for (int i = 0; i < modelOwnedParams.length; i++) {
+      final param = modelOwnedParams[i];
       final error = param.validationError;
       if (error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -135,10 +139,10 @@ extension _SaveExt on _LlmModelConfigPageState {
       }
     }
 
-    // Check 4: Duplicate name check across all reasoning params
+    // Check 4: Duplicate name check across model-owned reasoning params
     final reasoningSeenNames = <String>{};
-    for (int i = 0; i < _reasoningParams.length; i++) {
-      final name = _reasoningParams[i].paramName.trim();
+    for (int i = 0; i < modelOwnedParams.length; i++) {
+      final name = modelOwnedParams[i].paramName.trim();
       if (name.isEmpty) {
         continue; // Empty names are caught by validationError above
       }
@@ -154,10 +158,17 @@ extension _SaveExt on _LlmModelConfigPageState {
     }
 
     // Check 4: Cross-check duplicate names between reasoning params and custom params
+    // 覆盖全部推理参数（含继承自供应商的）：若模型自定义参数与供应商推理
+    // 参数重名，请求构建中自定义参数会覆盖推理参数的值，聊天面板上的推理
+    // 开关形同虚设 → 保存时拦截。
+    // 注意：推理参数之间的重名（继承参数 + 本页新建的同名覆盖参数）是
+    // 合法的覆盖语义，不在此拦截——只拦截「推理参数 vs 自定义参数」。
+    final reasoningNames = <String>{};
     for (final param in _reasoningParams) {
       final name = param.paramName.trim();
       if (name.isEmpty) continue;
-      if (!seenNames.add(name)) {
+      if (!reasoningNames.add(name)) continue; // 推理内部重名（合法覆盖）
+      if (seenNames.contains(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('推理参数与自定义参数存在重名: $name'),
@@ -258,7 +269,9 @@ extension _SaveExt on _LlmModelConfigPageState {
       modelId: modelId,
       typeConfig: typeConfig,
       customParams: _customParams.map((p) => p.copy()).toList(),
-      reasoningParams: _reasoningParams.map((p) => p.copy()).toList(),
+      // 只保存模型自有参数：未修改的供应商继承参数不写入模型，
+      // 保证供应商后续修改能继续同步到模型。
+      reasoningParams: modelOwnedParams.map((p) => p.copy()).toList(),
       endpointType: _overrideEndpointType ? _endpointType : null,
     );
 

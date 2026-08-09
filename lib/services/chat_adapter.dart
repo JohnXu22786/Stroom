@@ -94,11 +94,15 @@ class ChatAdapter {
   /// Whether the current model has reasoning parameters configured.
   /// A model with only an empty toggle (all fields empty) has no reasoning
   /// params configured, so the chat page should not show the reasoning toggle.
+  /// Provider-level reasoning params count too: a provider-declared toggle
+  /// or effort param is enough to enable the chat reasoning UI.
   bool get hasReasoningParams {
     final config = _cachedModelConfig;
-    if (config == null || config.reasoningParams.isEmpty) return false;
+    if (config == null) return false;
+    final merged = reasoningParams;
+    if (merged.isEmpty) return false;
     // At least one param must be actually configured (not all-empty toggle)
-    return config.reasoningParams.any((rp) {
+    return merged.any((rp) {
       if (rp.isReasoningToggle) {
         return rp.isFilledToggle;
       }
@@ -106,9 +110,39 @@ class ChatAdapter {
     });
   }
 
-  /// Gets the reasoning parameters from the current model config.
+  /// Gets the reasoning parameters for the current model, merged with the
+  /// provider-level reasoning params (model params override provider params
+  /// with the same name, mirroring the request-building merge in
+  /// ChatService._buildExtraParams). The chat UI consumes this merged view
+  /// so provider-declared params (e.g. the effort param name) work even
+  /// when the model itself doesn't define them.
+  ///
+  /// Provider-origin params are returned as copies: the chat panel toggles
+  /// `param.enabled` in place on these objects, and writing through to the
+  /// shared provider config would corrupt every model of the provider (and
+  /// the next provider-settings save). Model params keep the pre-existing
+  /// live-reference behavior (per-model cached config, replaced on model
+  /// switch).
   List<ReasoningParam> get reasoningParams {
-    return _cachedModelConfig?.reasoningParams ?? [];
+    final config = _cachedModelConfig;
+    if (config == null) return const [];
+    final providerParams = _cachedProviderConfig?.reasoningParams ?? [];
+    final providerNames = providerParams
+        .map((p) => p.paramName.trim())
+        .where((n) => n.isNotEmpty)
+        .toSet();
+    final modelNames = config.reasoningParams
+        .map((p) => p.paramName.trim())
+        .where((n) => n.isNotEmpty)
+        .toSet();
+    return mergeReasoningParams(providerParams, config.reasoningParams)
+        .map((p) {
+      final name = p.paramName.trim();
+      final isProviderOrigin = name.isNotEmpty &&
+          providerNames.contains(name) &&
+          !modelNames.contains(name);
+      return isProviderOrigin ? p.copy() : p;
+    }).toList();
   }
 
   /// 获取当前 MCP 工具定义列表
