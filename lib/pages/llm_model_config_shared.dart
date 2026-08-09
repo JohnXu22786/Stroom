@@ -82,8 +82,7 @@ class _LabeledTextFieldState extends State<LabeledTextField>
       _overlayEntry?.markNeedsBuild();
     }
     // 备选值被清空时不再保留弹层。
-    if (oldWidget.suggestions?.isNotEmpty == true &&
-        !_hasSuggestions) {
+    if (oldWidget.suggestions?.isNotEmpty == true && !_hasSuggestions) {
       _removeOverlay();
     }
   }
@@ -148,8 +147,7 @@ class _LabeledTextFieldState extends State<LabeledTextField>
     if (box is RenderBox && box.hasSize) {
       final bottom = box.localToGlobal(Offset(0, box.size.height)).dy;
       final view = View.of(context);
-      final height =
-          (view.physicalSize.height - view.viewInsets.bottom) /
+      final height = (view.physicalSize.height - view.viewInsets.bottom) /
           view.devicePixelRatio;
       _showAbove = bottom + 280 > height;
     }
@@ -163,8 +161,7 @@ class _LabeledTextFieldState extends State<LabeledTextField>
   /// Tapping a suggestion fills the field and keeps focus for further typing.
   void _selectSuggestion(String value) {
     widget.controller.text = value;
-    widget.controller.selection =
-        TextSelection.collapsed(offset: value.length);
+    widget.controller.selection = TextSelection.collapsed(offset: value.length);
     _focusNode.requestFocus();
     _removeOverlay();
   }
@@ -193,10 +190,8 @@ class _LabeledTextFieldState extends State<LabeledTextField>
       child: CompositedTransformFollower(
         link: _layerLink,
         showWhenUnlinked: false,
-        targetAnchor:
-            _showAbove ? Alignment.topLeft : Alignment.bottomLeft,
-        followerAnchor:
-            _showAbove ? Alignment.bottomLeft : Alignment.topLeft,
+        targetAnchor: _showAbove ? Alignment.topLeft : Alignment.bottomLeft,
+        followerAnchor: _showAbove ? Alignment.bottomLeft : Alignment.topLeft,
         child: Align(
           alignment: Alignment.topLeft,
           child: Material(
@@ -449,4 +444,3 @@ class LlmToggleTextField extends StatelessWidget {
     );
   }
 }
-

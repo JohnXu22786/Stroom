@@ -21,7 +21,8 @@ Future<void> pumpPage(WidgetTester tester, {ModelConfig? model}) async {
 Finder get contextField => find.byType(TextField).at(2);
 
 /// The suggestion popup's ListView (inside the overlay).
-Finder get popupList => find.byKey(const ValueKey('labeledTextFieldSuggestions'));
+Finder get popupList =>
+    find.byKey(const ValueKey('labeledTextFieldSuggestions'));
 
 /// All values currently offered by the popup, in order.
 List<String> popupValues(WidgetTester tester) {
@@ -92,7 +93,8 @@ void main() {
     expect(popupValues(tester), kExpectedSuggestions);
   });
 
-  testWidgets('after a no-match filter, re-tapping the field reopens the '
+  testWidgets(
+      'after a no-match filter, re-tapping the field reopens the '
       'full list', (tester) async {
     await pumpPage(tester);
 
@@ -200,7 +202,8 @@ void main() {
     expect(find.text('65536'), findsOneWidget);
   });
 
-  testWidgets('field keeps focus after selecting a suggestion, so typing '
+  testWidgets(
+      'field keeps focus after selecting a suggestion, so typing '
       'continues to work', (tester) async {
     await pumpPage(tester);
 
