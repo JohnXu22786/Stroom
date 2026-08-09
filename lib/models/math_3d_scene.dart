@@ -74,7 +74,8 @@ class Camera3D {
       target: target,
       distance: distance,
       theta: theta + deltaTheta,
-      phi: (phi + deltaPhi).clamp(-dart_math.pi / 2 + 0.01, dart_math.pi / 2 - 0.01),
+      phi: (phi + deltaPhi)
+          .clamp(-dart_math.pi / 2 + 0.01, dart_math.pi / 2 - 0.01),
     );
   }
 
@@ -108,11 +109,19 @@ class Camera3D {
       case StandardView.defaultView:
         return Camera3D(target: target, distance: distance);
       case StandardView.viewFromTop: // xOy
-        return Camera3D(target: target, distance: distance, theta: 0, phi: dart_math.pi / 2 - 0.001);
+        return Camera3D(
+            target: target,
+            distance: distance,
+            theta: 0,
+            phi: dart_math.pi / 2 - 0.001);
       case StandardView.viewFromFront: // xOz
         return Camera3D(target: target, distance: distance, theta: 0, phi: 0);
       case StandardView.viewFromRight: // yOz
-        return Camera3D(target: target, distance: distance, theta: dart_math.pi / 2, phi: 0);
+        return Camera3D(
+            target: target,
+            distance: distance,
+            theta: dart_math.pi / 2,
+            phi: 0);
     }
   }
 
@@ -376,7 +385,8 @@ Point3D? intersectLinePlane(Point3D a, Vector3D d, Vector3D n, double planeD) {
 }
 
 /// Möller–Trumbore ray-triangle intersection. Returns t or null.
-double? rayTriangle(Point3D origin, Vector3D dir, Point3D v0, Point3D v1, Point3D v2) {
+double? rayTriangle(
+    Point3D origin, Vector3D dir, Point3D v0, Point3D v1, Point3D v2) {
   final e1 = v1 - v0;
   final e2 = v2 - v0;
   final p = dir.cross(e2);
@@ -475,9 +485,7 @@ class Scene3D {
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     for (int round = 0; round < 100; round++) {
       for (int i = 0; i < 26; i++) {
-        final name = round == 0
-            ? letters[i]
-            : '${letters[i]}${round + 1}';
+        final name = round == 0 ? letters[i] : '${letters[i]}${round + 1}';
         if (!used.contains(name)) return name;
       }
     }
@@ -487,7 +495,9 @@ class Scene3D {
   /// Bounding box of all visible objects (null if empty).
   (Point3D, Point3D)? boundingBox({bool visibleOnly = true}) {
     var minX = double.infinity, minY = double.infinity, minZ = double.infinity;
-    var maxX = -double.infinity, maxY = -double.infinity, maxZ = -double.infinity;
+    var maxX = -double.infinity,
+        maxY = -double.infinity,
+        maxZ = -double.infinity;
     for (final o in _objects) {
       if (visibleOnly && !o.visible) continue;
       for (final p in o.samplePoints()) {
@@ -528,7 +538,8 @@ class Scene3D {
       (min.z + max.z) / 2,
     );
     // Distance such that the bounding sphere fits with margin.
-    final radius = dart_math.sqrt(size.x * size.x + size.y * size.y + size.z * size.z) / 2;
+    final radius =
+        dart_math.sqrt(size.x * size.x + size.y * size.y + size.z * size.z) / 2;
     final newDistance = (radius * 2.2).clamp(1.0, 5000.0);
     _camera = Camera3D(
       target: newTarget,
@@ -568,7 +579,8 @@ class Scene3D {
       case Object3DType.point:
         final s = proj.project(obj.pointValue);
         if (s == null || s.x.isNaN) return null;
-        final d = dart_math.sqrt((s.x - sx) * (s.x - sx) + (s.y - sy) * (s.y - sy));
+        final d =
+            dart_math.sqrt((s.x - sx) * (s.x - sx) + (s.y - sy) * (s.y - sy));
         if (d <= radius * 0.8) {
           return (obj, obj.pointValue, d);
         }
@@ -581,7 +593,8 @@ class Scene3D {
         if (a == null || b == null) return null;
         final d = _screenDistanceToSegment(sx, sy, a, b);
         if (d <= radius) {
-          final world = closestOnSegmentToRay(obj.pointAValue, obj.pointBValue, ray);
+          final world =
+              closestOnSegmentToRay(obj.pointAValue, obj.pointBValue, ray);
           return (obj, world, d);
         }
         return null;
@@ -595,8 +608,7 @@ class Scene3D {
         if (a == null || b == null) return null;
         final d = _screenDistanceToSegment(sx, sy, a, b);
         if (d <= radius) {
-          final world =
-              closestOnSegmentToRay(obj.pointAValue, end, ray);
+          final world = closestOnSegmentToRay(obj.pointAValue, end, ray);
           return (obj, world, d);
         }
         return null;
@@ -623,7 +635,8 @@ class Scene3D {
         return null;
 
       case Object3DType.polygon:
-        final hit = _pickMeshFace(ray, obj.polygonVertices, proj, sx, sy, radius);
+        final hit =
+            _pickMeshFace(ray, obj.polygonVertices, proj, sx, sy, radius);
         if (hit != null) {
           final snap = obj.inputPoint(hit.$1);
           return (obj, snap, hit.$2);
@@ -635,7 +648,8 @@ class Scene3D {
         if (hit != null) {
           final s = proj.project(hit);
           if (s == null || s.x.isNaN) return null;
-          final d = dart_math.sqrt((s.x - sx) * (s.x - sx) + (s.y - sy) * (s.y - sy));
+          final d =
+              dart_math.sqrt((s.x - sx) * (s.x - sx) + (s.y - sy) * (s.y - sy));
           if (d <= radius * 6) {
             return (obj, hit, d);
           }
@@ -661,7 +675,8 @@ class Scene3D {
           final world = ray.at(bestT);
           final s = proj.project(world);
           if (s == null || s.x.isNaN) return null;
-          final d = dart_math.sqrt((s.x - sx) * (s.x - sx) + (s.y - sy) * (s.y - sy));
+          final d =
+              dart_math.sqrt((s.x - sx) * (s.x - sx) + (s.y - sy) * (s.y - sy));
           return (obj, world, d);
         }
         return null;

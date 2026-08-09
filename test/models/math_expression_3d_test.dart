@@ -29,7 +29,8 @@ void main() {
       expect(mesh.vertices.length, 25);
       expect(mesh.indices.length, 32 * 3);
       // Corner values match z = x + y.
-      final maxVertex = mesh.vertices.reduce((a, b) => a.x + a.y > b.x + b.y ? a : b);
+      final maxVertex =
+          mesh.vertices.reduce((a, b) => a.x + a.y > b.x + b.y ? a : b);
       expect(maxVertex.z, closeTo(2, 1e-9));
     });
 
@@ -122,8 +123,8 @@ void main() {
 
   group('Expression3D.parametricSurface', () {
     test('parses 3D parametric surface', () {
-      final expr = Expression3D.parametricSurface(
-          '(cos(u)*v, sin(u)*v, v)', uMax: 6.28);
+      final expr =
+          Expression3D.parametricSurface('(cos(u)*v, sin(u)*v, v)', uMax: 6.28);
       expect(expr.isValid, true);
       expect(expr.type, Expression3DType.parametricSurface);
     });
@@ -137,8 +138,8 @@ void main() {
     });
 
     test('samples into a mesh', () {
-      final expr = Expression3D.parametricSurface(
-          '(cos(u), sin(u), v)', uMax: 6.28);
+      final expr =
+          Expression3D.parametricSurface('(cos(u), sin(u), v)', uMax: 6.28);
       final mesh = expr.sampleParametricSurface(gridU: 8, gridV: 4);
       expect(mesh.vertices.length, 9 * 5);
       expect(mesh.indices.length, 8 * 4 * 6);

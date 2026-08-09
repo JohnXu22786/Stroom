@@ -7,7 +7,10 @@ import 'package:stroom/models/math_3d_tool.dart';
 import 'package:stroom/widgets/math_canvas_3d.dart';
 
 Widget _wrap(Widget child) {
-  return MaterialApp(home: Scaffold(body: Center(child: SizedBox(width: 800, height: 600, child: child))));
+  return MaterialApp(
+      home: Scaffold(
+          body:
+              Center(child: SizedBox(width: 800, height: 600, child: child))));
 }
 
 void main() {
@@ -113,7 +116,13 @@ void main() {
       state.setExpressionObjects([
         Object3D.surface(
             MeshBuilder.fromFunction(
-                xMin: -1, xMax: 1, yMin: -1, yMax: 1, gridX: 2, gridY: 2, f: (x, y) => 0),
+                xMin: -1,
+                xMax: 1,
+                yMin: -1,
+                yMax: 1,
+                gridX: 2,
+                gridY: 2,
+                f: (x, y) => 0),
             name: 'f'),
       ]);
       await tester.pump();
@@ -312,7 +321,8 @@ void main() {
       await tester.pump();
 
       expect(state.camera.theta, isNot(closeTo(theta0, 0.001)));
-      expect(state.camera.phi, closeTo(phi0, 0.001)); // horizontal drag keeps phi
+      expect(
+          state.camera.phi, closeTo(phi0, 0.001)); // horizontal drag keeps phi
     });
 
     testWidgets('dragging vertically changes phi', (tester) async {
@@ -345,7 +355,8 @@ void main() {
       final state = tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
       // A segment along the screen-horizontal direction through the origin.
       state.addObject(Object3D.segment(
-          const Point3D(-2, 0, 0), const Point3D(2, 0, 0), name: 's'));
+          const Point3D(-2, 0, 0), const Point3D(2, 0, 0),
+          name: 's'));
       await tester.pump();
 
       // Click near the center of the segment (its midpoint is at the origin,
@@ -357,8 +368,8 @@ void main() {
       expect(state.objects.length, 2);
       final created = state.objects.last;
       expect(created.type, Object3DType.point);
-      expect(created.pointValue.distanceTo(const Point3D(0, 0, 0)),
-          lessThan(1));
+      expect(
+          created.pointValue.distanceTo(const Point3D(0, 0, 0)), lessThan(1));
     });
 
     testWidgets('area tool: clicking a polygon measures its area',
@@ -412,8 +423,7 @@ void main() {
       await tester.dragFrom(const Offset(450, 300), const Offset(-50, 0));
       await tester.pump();
       final back = state.objects.first;
-      expect(back.pointValue.distanceTo(const Point3D(0, 0, 0)),
-          lessThan(0.3));
+      expect(back.pointValue.distanceTo(const Point3D(0, 0, 0)), lessThan(0.3));
     });
 
     testWidgets('dragging keeps the object selected', (tester) async {

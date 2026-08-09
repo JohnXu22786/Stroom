@@ -121,10 +121,7 @@ class ConstructionState {
   List<Point3D> get baseVertices {
     if (inputs.isEmpty) return const [];
     // All inputs until the closing point, minus the duplicated close point.
-    final pts = inputs
-        .whereType<NewPointInput>()
-        .map((e) => e.point)
-        .toList();
+    final pts = inputs.whereType<NewPointInput>().map((e) => e.point).toList();
     if (pts.length >= 3 && _baseClosed) {
       return List<Point3D>.from(pts)..removeLast();
     }
@@ -168,7 +165,8 @@ class ConstructionState {
       final pts = previewPoints;
       if (pts.isNotEmpty && !_baseClosed) {
         final first = pts.first;
-        if (input.point.distanceTo(first) < closeDistance && inputs.length >= 2) {
+        if (input.point.distanceTo(first) < closeDistance &&
+            inputs.length >= 2) {
           // Keep the duplicated point so previews close properly.
           inputs.add(input);
           _baseClosed = true;
@@ -231,11 +229,16 @@ class ConstructionState {
 /// Creates the scene objects for a completed construction.
 class ToolFactory {
   /// Style defaults per object kind (GeoGebra-ish palette).
-  static const _pointStyle = ObjectStyle(color: 0xFFD32F2F, labelMode: LabelMode.name);
-  static const _lineStyle = ObjectStyle(color: 0xFF2962FF, labelMode: LabelMode.name);
-  static const _curveStyle = ObjectStyle(color: 0xFF2962FF, labelMode: LabelMode.name);
-  static const _solidStyle = ObjectStyle(color: 0xFF00897B, opacity: 0.75, labelMode: LabelMode.name);
-  static const _planeStyle = ObjectStyle(color: 0xFF8E24AA, opacity: 0.3, labelMode: LabelMode.name);
+  static const _pointStyle =
+      ObjectStyle(color: 0xFFD32F2F, labelMode: LabelMode.name);
+  static const _lineStyle =
+      ObjectStyle(color: 0xFF2962FF, labelMode: LabelMode.name);
+  static const _curveStyle =
+      ObjectStyle(color: 0xFF2962FF, labelMode: LabelMode.name);
+  static const _solidStyle =
+      ObjectStyle(color: 0xFF00897B, opacity: 0.75, labelMode: LabelMode.name);
+  static const _planeStyle =
+      ObjectStyle(color: 0xFF8E24AA, opacity: 0.3, labelMode: LabelMode.name);
 
   static ConstructionResult create(ConstructionState state, ToolInfo info) {
     final inputs = state.inputs;
@@ -286,7 +289,8 @@ class ToolFactory {
         final a = _pointOf(inputs[0]);
         final b = _pointOf(inputs[1]);
         return ConstructionResult(created: [
-          Object3D.vectorObj(a, b - a, name: _uniqueName('u'), style: _lineStyle),
+          Object3D.vectorObj(a, b - a,
+              name: _uniqueName('u'), style: _lineStyle),
         ]);
 
       case ConstructionTool.perpendicularLine:
@@ -310,7 +314,8 @@ class ToolFactory {
         final verts = state.baseVertices;
         if (verts.length < 3) return const ConstructionResult();
         return ConstructionResult(created: [
-          Object3D.polygon(verts, name: _uniqueName('poly'), style: _curveStyle),
+          Object3D.polygon(verts,
+              name: _uniqueName('poly'), style: _curveStyle),
         ]);
 
       case ConstructionTool.regularPolygon:
@@ -319,7 +324,8 @@ class ToolFactory {
         final n = (_numberOf(inputs[2])).round().clamp(3, 20);
         final verts = _regularPolygon(a, b, n);
         return ConstructionResult(created: [
-          Object3D.polygon(verts, name: _uniqueName('poly'), style: _curveStyle),
+          Object3D.polygon(verts,
+              name: _uniqueName('poly'), style: _curveStyle),
         ]);
 
       // ---- Circle / Arc ----
@@ -399,9 +405,10 @@ class ToolFactory {
         final height = (top - base.first).dot(n);
         if (height.abs() < 1e-9) return const ConstructionResult();
         return ConstructionResult(created: [
-          Object3D.polyhedron(MeshBuilder.prism(base, height.abs(),
-              direction: n * height.sign),
-              name: _uniqueName('P'), style: _solidStyle),
+          Object3D.polyhedron(
+              MeshBuilder.prism(base, height.abs(), direction: n * height.sign),
+              name: _uniqueName('P'),
+              style: _solidStyle),
         ]);
 
       case ConstructionTool.extrudePrism:
@@ -413,9 +420,10 @@ class ToolFactory {
         final height = (top - base.first).dot(n);
         if (height.abs() < 1e-9) return const ConstructionResult();
         return ConstructionResult(created: [
-          Object3D.polyhedron(MeshBuilder.prism(base, height.abs(),
-              direction: n * height.sign),
-              name: _uniqueName('P'), style: _solidStyle),
+          Object3D.polyhedron(
+              MeshBuilder.prism(base, height.abs(), direction: n * height.sign),
+              name: _uniqueName('P'),
+              style: _solidStyle),
         ]);
 
       case ConstructionTool.extrudePyramid:
@@ -447,7 +455,8 @@ class ToolFactory {
         final h = (top.z - c.z).abs();
         if (h < 1e-9) return const ConstructionResult();
         return ConstructionResult(created: [
-          Object3D.cylinder(c, r, h, name: _uniqueName('cyl'), style: _solidStyle),
+          Object3D.cylinder(c, r, h,
+              name: _uniqueName('cyl'), style: _solidStyle),
         ]);
 
       case ConstructionTool.tetrahedron:
@@ -497,7 +506,8 @@ class ToolFactory {
         if (area == null) return const ConstructionResult();
         return ConstructionResult(created: [
           Object3D.measurement('面积 = ${_fmt(area)}', obj.anchorPoint,
-              name: _uniqueName('m'), style: const ObjectStyle(color: 0xFF00695C)),
+              name: _uniqueName('m'),
+              style: const ObjectStyle(color: 0xFF00695C)),
         ]);
 
       case ConstructionTool.volume:
@@ -506,7 +516,8 @@ class ToolFactory {
         if (vol == null) return const ConstructionResult();
         return ConstructionResult(created: [
           Object3D.measurement('体积 = ${_fmt(vol)}', obj.anchorPoint,
-              name: _uniqueName('m'), style: const ObjectStyle(color: 0xFF00695C)),
+              name: _uniqueName('m'),
+              style: const ObjectStyle(color: 0xFF00695C)),
         ]);
 
       // ---- Transformation ----
@@ -537,8 +548,8 @@ class ToolFactory {
         final axis = _objectOf(inputs[1]);
         final angleDeg = _numberOf(inputs[2]);
         return ConstructionResult(created: [
-          obj.rotated(
-              axis.pointAValue, axis.vectorValue, angleDeg * dart_math.pi / 180),
+          obj.rotated(axis.pointAValue, axis.vectorValue,
+              angleDeg * dart_math.pi / 180),
         ]);
 
       case ConstructionTool.dilate:
@@ -655,8 +666,10 @@ class ToolFactory {
     final sinA = -h / radius; // = -cos(π/n)
     final verts = <Point3D>[];
     for (int i = 0; i < n; i++) {
-      final c = cosA * dart_math.cos(i * theta) - sinA * dart_math.sin(i * theta);
-      final s = sinA * dart_math.cos(i * theta) + cosA * dart_math.sin(i * theta);
+      final c =
+          cosA * dart_math.cos(i * theta) - sinA * dart_math.sin(i * theta);
+      final s =
+          sinA * dart_math.cos(i * theta) + cosA * dart_math.sin(i * theta);
       verts.add(center + dir * (radius * c) + u * (radius * s));
     }
     // Sanity: vertex 0 must be A and vertex 1 must be B.
@@ -696,7 +709,8 @@ class ToolFactory {
     if (circle == null) return null;
     final (center, n, r) = circle;
     final u0 = n.cross(Vector3D.unitZ);
-    final u = u0.isZero ? n.cross(Vector3D.unitX).normalized() : u0.normalized();
+    final u =
+        u0.isZero ? n.cross(Vector3D.unitX).normalized() : u0.normalized();
     final v = n.cross(u).normalized();
     double angleOf(Point3D p) {
       final rel = p - center;
@@ -796,14 +810,16 @@ class ToolFactory {
     // Point-to-line/plane distance when one input is an object.
     final obj0 = i0 is ObjectInput ? i0.object : null;
     final obj1 = i1 is ObjectInput ? i1.object : null;
-    if (obj0 != null && (obj0.type == Object3DType.line || obj0.type == Object3DType.ray)) {
+    if (obj0 != null &&
+        (obj0.type == Object3DType.line || obj0.type == Object3DType.ray)) {
       final p = _pointOf(i1);
       value = distancePointToLine(p, obj0.pointAValue, obj0.vectorValue);
       text = '距离 = ${_fmt(value)}';
       anchor = p;
       segA = p;
       segB = p.closestOnLine(obj0.pointAValue, obj0.vectorValue);
-    } else if (obj1 != null && (obj1.type == Object3DType.line || obj1.type == Object3DType.ray)) {
+    } else if (obj1 != null &&
+        (obj1.type == Object3DType.line || obj1.type == Object3DType.ray)) {
       final p = _pointOf(i0);
       value = distancePointToLine(p, obj1.pointAValue, obj1.vectorValue);
       text = '距离 = ${_fmt(value)}';
@@ -844,7 +860,9 @@ class ToolFactory {
       created.add(Object3D.segment(segA, segB,
           name: _uniqueName('d'),
           style: const ObjectStyle(
-              color: 0xFF00695C, lineStyle: LineStyle.shortDash, opacity: 0.8)));
+              color: 0xFF00695C,
+              lineStyle: LineStyle.shortDash,
+              opacity: 0.8)));
     }
     return ConstructionResult(created: created);
   }
@@ -863,10 +881,12 @@ class ToolFactory {
           name: _uniqueName('a'), style: const ObjectStyle(color: 0xFF00695C)),
       Object3D.segment(apex, p1,
           name: _uniqueName('s'),
-          style: const ObjectStyle(color: 0xFF00695C, lineStyle: LineStyle.shortDash, opacity: 0.8)),
+          style: const ObjectStyle(
+              color: 0xFF00695C, lineStyle: LineStyle.shortDash, opacity: 0.8)),
       Object3D.segment(apex, p2,
           name: _uniqueName('s'),
-          style: const ObjectStyle(color: 0xFF00695C, lineStyle: LineStyle.shortDash, opacity: 0.8)),
+          style: const ObjectStyle(
+              color: 0xFF00695C, lineStyle: LineStyle.shortDash, opacity: 0.8)),
     ]);
   }
 
@@ -893,11 +913,21 @@ class ToolFactory {
   static double? _volumeOf(Object3D obj) {
     switch (obj.type) {
       case Object3DType.sphere:
-        return 4 / 3 * dart_math.pi * dart_math.pow(obj.sphereRadius, 3).toDouble();
+        return 4 /
+            3 *
+            dart_math.pi *
+            dart_math.pow(obj.sphereRadius, 3).toDouble();
       case Object3DType.cone:
-        return dart_math.pi * obj.solidRadius * obj.solidRadius * obj.solidHeight / 3;
+        return dart_math.pi *
+            obj.solidRadius *
+            obj.solidRadius *
+            obj.solidHeight /
+            3;
       case Object3DType.cylinder:
-        return dart_math.pi * obj.solidRadius * obj.solidRadius * obj.solidHeight;
+        return dart_math.pi *
+            obj.solidRadius *
+            obj.solidRadius *
+            obj.solidHeight;
       case Object3DType.polyhedron:
         final m = obj.mesh;
         if (m == null || m.isEmpty) return null;
@@ -908,7 +938,8 @@ class ToolFactory {
           sy += v.y;
           sz += v.z;
         }
-        final p = Point3D(sx / m.vertices.length, sy / m.vertices.length, sz / m.vertices.length);
+        final p = Point3D(sx / m.vertices.length, sy / m.vertices.length,
+            sz / m.vertices.length);
         var vol = 0.0;
         for (int i = 0; i < m.indices.length; i += 3) {
           final a = m.vertices[m.indices[i]];
@@ -930,7 +961,9 @@ class ToolFactory {
     final type1 = obj1.type;
 
     bool isLineLike(Object3DType t) =>
-        t == Object3DType.line || t == Object3DType.ray || t == Object3DType.segment;
+        t == Object3DType.line ||
+        t == Object3DType.ray ||
+        t == Object3DType.segment;
     bool isPlaneLike(Object3DType t) => t == Object3DType.plane;
 
     // line × line
@@ -938,7 +971,8 @@ class ToolFactory {
       final p = intersectLineLine(
           obj0.pointAValue, _dirOf(obj0), obj1.pointAValue, _dirOf(obj1));
       if (p != null) {
-        created.add(Object3D.point(p, name: _uniqueName('I'), style: _pointStyle));
+        created
+            .add(Object3D.point(p, name: _uniqueName('I'), style: _pointStyle));
       }
       return ConstructionResult(created: created);
     }
@@ -948,7 +982,8 @@ class ToolFactory {
       final p = intersectLinePlane(
           obj0.pointAValue, _dirOf(obj0), obj1.planeNormal, obj1.planeDValue);
       if (p != null) {
-        created.add(Object3D.point(p, name: _uniqueName('I'), style: _pointStyle));
+        created
+            .add(Object3D.point(p, name: _uniqueName('I'), style: _pointStyle));
       }
       return ConstructionResult(created: created);
     }
@@ -956,15 +991,16 @@ class ToolFactory {
       final p = intersectLinePlane(
           obj1.pointAValue, _dirOf(obj1), obj0.planeNormal, obj0.planeDValue);
       if (p != null) {
-        created.add(Object3D.point(p, name: _uniqueName('I'), style: _pointStyle));
+        created
+            .add(Object3D.point(p, name: _uniqueName('I'), style: _pointStyle));
       }
       return ConstructionResult(created: created);
     }
 
     // plane × plane → intersection line
     if (isPlaneLike(type0) && isPlaneLike(type1)) {
-      final res = intersectPlanePlane(
-          obj0.planeNormal, obj0.planeDValue, obj1.planeNormal, obj1.planeDValue);
+      final res = intersectPlanePlane(obj0.planeNormal, obj0.planeDValue,
+          obj1.planeNormal, obj1.planeDValue);
       if (res != null) {
         created.add(Object3D.line(res.$1, res.$2,
             name: _uniqueName('l'), style: _lineStyle));
@@ -983,7 +1019,8 @@ class ToolFactory {
       final hit = intersectLinePlane(
           line.pointAValue, _dirOf(line), n, n.dot(c.toVector()));
       if (hit != null && hit.distanceTo(c) <= r * 1.0001) {
-        created.add(Object3D.point(hit, name: _uniqueName('I'), style: _pointStyle));
+        created.add(
+            Object3D.point(hit, name: _uniqueName('I'), style: _pointStyle));
       }
       return ConstructionResult(created: created);
     }
@@ -993,10 +1030,11 @@ class ToolFactory {
         type0 == Object3DType.sphere && isLineLike(type1)) {
       final line = isLineLike(type0) ? obj0 : obj1;
       final sphere = type0 == Object3DType.sphere ? obj0 : obj1;
-      final pts = _lineSphereIntersection(
-          line.pointAValue, _dirOf(line), sphere.sphereCenter, sphere.sphereRadius);
+      final pts = _lineSphereIntersection(line.pointAValue, _dirOf(line),
+          sphere.sphereCenter, sphere.sphereRadius);
       for (final p in pts) {
-        created.add(Object3D.point(p, name: _uniqueName('I'), style: _pointStyle));
+        created
+            .add(Object3D.point(p, name: _uniqueName('I'), style: _pointStyle));
       }
       return ConstructionResult(created: created);
     }
@@ -1009,8 +1047,8 @@ class ToolFactory {
       final n = plane.planeNormal.normalized();
       final dist = n.dot(sphere.sphereCenter.toVector()) - plane.planeDValue;
       if (dist.abs() < sphere.sphereRadius) {
-        final r = dart_math.sqrt(
-            sphere.sphereRadius * sphere.sphereRadius - dist * dist);
+        final r = dart_math
+            .sqrt(sphere.sphereRadius * sphere.sphereRadius - dist * dist);
         final center = sphere.sphereCenter + n * (-dist);
         created.add(Object3D.circle(center, n, r,
             name: _uniqueName('c'), style: _curveStyle));

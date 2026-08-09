@@ -21,7 +21,8 @@ typedef On3DReady = void Function();
 typedef On3DViewportChange = void Function();
 typedef On3DSceneChanged = void Function();
 typedef On3DToolInstruction = void Function(String instruction);
-typedef On3DNumericInput = Future<double?> Function(String prompt, double initial);
+typedef On3DNumericInput = Future<double?> Function(
+    String prompt, double initial);
 
 /// Point capturing modes (GeoGebra: Automatic / Snap to Grid / Fixed to Grid / Off).
 enum PointCapturing {
@@ -118,8 +119,7 @@ class MathCanvas3DState extends State<MathCanvas3D>
     _autoRotateTicker = createTicker((elapsed) {
       if (_autoRotating && mounted) {
         setState(() {
-          _scene.setCamera(
-              _scene.camera.orbit(deltaTheta: 0.003, deltaPhi: 0));
+          _scene.setCamera(_scene.camera.orbit(deltaTheta: 0.003, deltaPhi: 0));
         });
       }
     });
@@ -292,8 +292,7 @@ class MathCanvas3DState extends State<MathCanvas3D>
       _constCommitted = false;
       _constGroundPos = null;
     });
-    widget.onToolInstruction
-        ?.call(_construction?.currentInstruction ?? '');
+    widget.onToolInstruction?.call(_construction?.currentInstruction ?? '');
   }
 
   void selectObject(Object3D? obj) {
@@ -424,11 +423,9 @@ class MathCanvas3DState extends State<MathCanvas3D>
         }
       }
       if (_constGroundPos != null) {
-        final dy = _lastFocalPoint == null
-            ? 0.0
-            : focalPoint.dy - _lastFocalPoint!.dy;
-        _constHeight = (_constHeight - dy * 0.06)
-            .clamp(-50.0, 50.0);
+        final dy =
+            _lastFocalPoint == null ? 0.0 : focalPoint.dy - _lastFocalPoint!.dy;
+        _constHeight = (_constHeight - dy * 0.06).clamp(-50.0, 50.0);
         // Re-anchor ground x,y from pointer so the point can be dragged around.
         _constGroundPos = _groundAt(focalPoint) ?? _constGroundPos;
       }
@@ -437,7 +434,9 @@ class MathCanvas3DState extends State<MathCanvas3D>
     }
 
     // ---- Move tool: dragging a selected object ----
-    if (_tool == ConstructionTool.move && _draggingObject && _selected != null) {
+    if (_tool == ConstructionTool.move &&
+        _draggingObject &&
+        _selected != null) {
       if (details.pointerCount == 1) {
         // Moving the object means this is a drag, not a tap.
         if (_tapStart != null && (focalPoint - _tapStart!).distance > 4) {
@@ -451,17 +450,15 @@ class MathCanvas3DState extends State<MathCanvas3D>
 
     // ---- Camera navigation ----
     if (details.pointerCount == 1) {
-      final dx = _lastFocalPoint == null
-          ? 0.0
-          : (focalPoint.dx - _lastFocalPoint!.dx);
-      final dy = _lastFocalPoint == null
-          ? 0.0
-          : (focalPoint.dy - _lastFocalPoint!.dy);
+      final dx =
+          _lastFocalPoint == null ? 0.0 : (focalPoint.dx - _lastFocalPoint!.dx);
+      final dy =
+          _lastFocalPoint == null ? 0.0 : (focalPoint.dy - _lastFocalPoint!.dy);
       if (dx.abs() > 1 || dy.abs() > 1) _tapCandidate = false;
 
       setState(() {
-        _scene.setCamera(_scene.camera.orbit(
-            deltaTheta: -dx * 0.01, deltaPhi: -dy * 0.01));
+        _scene.setCamera(
+            _scene.camera.orbit(deltaTheta: -dx * 0.01, deltaPhi: -dy * 0.01));
       });
     } else if (details.pointerCount >= 2) {
       final hasScaleChange =
@@ -473,8 +470,8 @@ class MathCanvas3DState extends State<MathCanvas3D>
         // Cumulative scale from gesture start → new distance = initial × scale.
         final initial = _initialScaleDistance ?? _scene.camera.distance;
         setState(() {
-          _scene.setCamera(_scene.camera.copyWith(
-              distance: (initial * scale).clamp(0.05, 5000.0)));
+          _scene.setCamera(_scene.camera
+              .copyWith(distance: (initial * scale).clamp(0.05, 5000.0)));
         });
       } else if (hasPanMovement) {
         final dx = _lastFocalPoint == null
@@ -502,7 +499,8 @@ class MathCanvas3DState extends State<MathCanvas3D>
       final d = ray.direction;
       final anchor = obj.anchorPoint;
       if (d.x.abs() < 1e-9 && d.y.abs() < 1e-9) return; // straight top view
-      final tx = d.x.abs() > d.y.abs() ? (anchor.x - ray.origin.x) / d.x
+      final tx = d.x.abs() > d.y.abs()
+          ? (anchor.x - ray.origin.x) / d.x
           : (anchor.y - ray.origin.y) / d.y;
       final z = ray.origin.z + tx * d.z;
       final delta = Vector3D(0, 0, z - anchor.z);
@@ -537,8 +535,7 @@ class MathCanvas3DState extends State<MathCanvas3D>
         final (obj, world) = _pendingObjectHit!;
         _handleConstructionInput(ObjectInput(obj, snapPoint: world));
       } else {
-        final ground =
-            _constGroundPos ?? _groundAt(_tapStart ?? Offset.zero);
+        final ground = _constGroundPos ?? _groundAt(_tapStart ?? Offset.zero);
         if (ground != null) {
           // Z-up: the ground position supplies x/y, the drag sets the height z.
           var world = Point3D(ground.x, ground.y, _constHeight);
@@ -555,12 +552,10 @@ class MathCanvas3DState extends State<MathCanvas3D>
 
     // ---- Move tool: tap selects, second tap toggles drag mode ----
     if (_tool == ConstructionTool.move) {
-      final wasTap = _tapCandidate &&
-          _tapStart != null &&
-          details.pointerCount <= 1;
+      final wasTap =
+          _tapCandidate && _tapStart != null && details.pointerCount <= 1;
       if (wasTap) {
-        final hit =
-            _scene.pick(_tapStart!.dx, _tapStart!.dy);
+        final hit = _scene.pick(_tapStart!.dx, _tapStart!.dy);
         setState(() {
           if (hit == null) {
             _selected = null;
@@ -696,7 +691,8 @@ class MathCanvas3DState extends State<MathCanvas3D>
         // Shift + scroll: pan.
         setState(() {
           _scene.setCamera(_scene.camera.pan(
-              deltaX: -event.scrollDelta.dx * 2, deltaY: -event.scrollDelta.dy * 2));
+              deltaX: -event.scrollDelta.dx * 2,
+              deltaY: -event.scrollDelta.dy * 2));
         });
       } else {
         final zoomFactor = 1.0 + event.scrollDelta.dy * 0.002;
@@ -823,8 +819,12 @@ class _FacePrim extends _Prim {
     required this.normal,
     Paint? fillPaint,
     Paint? strokePaint,
-  })  : fillPaint = fillPaint ?? Paint()..color = color,
-        strokePaint = strokePaint ?? Paint()..style = PaintingStyle.stroke..color = color.withValues(alpha: 0.5)..strokeWidth = 0.5;
+  })  : fillPaint = fillPaint ?? Paint()
+          ..color = color,
+        strokePaint = strokePaint ?? Paint()
+          ..style = PaintingStyle.stroke
+          ..color = color.withValues(alpha: 0.5)
+          ..strokeWidth = 0.5;
 }
 
 class _LinePrim extends _Prim {
@@ -972,7 +972,9 @@ class _ScenePainter extends CustomPainter {
   double _niceStep(double worldPerPixel) {
     // Target ~70 px between lines; snap to 1/2/5 × 10^k.
     final target = 70 * worldPerPixel;
-    final pow10 = dart_math.pow(10, (dart_math.log(target) / dart_math.ln10).floor()).toDouble();
+    final pow10 = dart_math
+        .pow(10, (dart_math.log(target) / dart_math.ln10).floor())
+        .toDouble();
     for (final m in [1.0, 2.0, 5.0, 10.0]) {
       if (m * pow10 >= target) return m * pow10;
     }
@@ -1056,7 +1058,9 @@ class _ScenePainter extends CustomPainter {
     if (v.abs() < 1e-9) return '0';
     if (v.abs() >= 100) return v.round().toString();
     if ((v * 100).roundToDouble() == v * 100) {
-      return v.toStringAsFixed(v.abs() >= 10 ? 0 : 2).replaceFirst(RegExp(r'\.?0+$'), '');
+      return v
+          .toStringAsFixed(v.abs() >= 10 ? 0 : 2)
+          .replaceFirst(RegExp(r'\.?0+$'), '');
     }
     return v.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
   }
@@ -1082,9 +1086,7 @@ class _ScenePainter extends CustomPainter {
 
     // The plane lies on z = 0: use the average corner depth so it sorts
     // consistently with the grid lines and ground objects.
-    final depth = projected
-            .map((p) => p?.z ?? 0)
-            .reduce((a, b) => a + b) /
+    final depth = projected.map((p) => p?.z ?? 0).reduce((a, b) => a + b) /
         projected.length;
     prims.add(_FacePrim(
       depth: depth,
@@ -1225,11 +1227,9 @@ class _ScenePainter extends CustomPainter {
         final t = (40.0 / len).clamp(1.0, 100.0).toDouble();
         _collectSegment(
           prims,
-          Object3D.segment(
-              obj.pointAValue + obj.vectorValue * (-(t - 1) * 0.5),
+          Object3D.segment(obj.pointAValue + obj.vectorValue * (-(t - 1) * 0.5),
               obj.pointAValue + obj.vectorValue * ((t + 1) * 0.5),
-              name: obj.name,
-              style: style),
+              name: obj.name, style: style),
           strokeColor,
           style,
         );
@@ -1242,8 +1242,7 @@ class _ScenePainter extends CustomPainter {
           prims,
           Object3D.segment(
               obj.pointAValue, obj.pointAValue + obj.vectorValue * t,
-              name: obj.name,
-              style: style),
+              name: obj.name, style: style),
           strokeColor,
           style,
         );
@@ -1271,8 +1270,7 @@ class _ScenePainter extends CustomPainter {
         _collectPolygon(prims, obj, baseColor, strokeColor, style);
 
       case Object3DType.polyhedron:
-        _collectMesh(prims, obj.mesh, baseColor, strokeColor, style,
-            isSelected,
+        _collectMesh(prims, obj.mesh, baseColor, strokeColor, style, isSelected,
             owner: obj);
 
       case Object3DType.sphere:
@@ -1312,8 +1310,7 @@ class _ScenePainter extends CustomPainter {
         _collectPlaneObject(prims, obj, baseColor, strokeColor);
 
       case Object3DType.surface:
-        _collectMesh(prims, obj.mesh, baseColor, strokeColor, style,
-            isSelected,
+        _collectMesh(prims, obj.mesh, baseColor, strokeColor, style, isSelected,
             owner: obj);
 
       case Object3DType.curve:
@@ -1333,7 +1330,8 @@ class _ScenePainter extends CustomPainter {
     }
   }
 
-  void _collectSegment(List<_Prim> prims, Object3D seg, Color color, ObjectStyle style) {
+  void _collectSegment(
+      List<_Prim> prims, Object3D seg, Color color, ObjectStyle style) {
     final a = proj.project(seg.pointAValue);
     final b = proj.project(seg.pointBValue);
     if (a == null || b == null || a.x.isNaN || b.x.isNaN) return;
@@ -1345,10 +1343,12 @@ class _ScenePainter extends CustomPainter {
       width: style.lineWidth,
       style: style.lineStyle,
     ));
-    _addLabel(prims, seg, Offset((a.x + b.x) / 2, (a.y + b.y) / 2), (a.z + b.z) / 2);
+    _addLabel(
+        prims, seg, Offset((a.x + b.x) / 2, (a.y + b.y) / 2), (a.z + b.z) / 2);
   }
 
-  void _drawArrowHead(List<_Prim> prims, List<Offset> pts, Color color, double depth) {
+  void _drawArrowHead(
+      List<_Prim> prims, List<Offset> pts, Color color, double depth) {
     final from = pts[0];
     final to = pts[1];
     final dir = to - from;
@@ -1373,7 +1373,8 @@ class _ScenePainter extends CustomPainter {
     ));
   }
 
-  void _collectCircle(List<_Prim> prims, Object3D obj, Color color, ObjectStyle style) {
+  void _collectCircle(
+      List<_Prim> prims, Object3D obj, Color color, ObjectStyle style) {
     final c = obj.circleCenter ?? Point3D.origin;
     final n = (obj.circleNormal ?? Vector3D.unitZ).normalized();
     final r = obj.circleRadius ?? 1;
@@ -1452,8 +1453,8 @@ class _ScenePainter extends CustomPainter {
     }
   }
 
-  void _collectPlaneObject(List<_Prim> prims, Object3D obj, Color baseColor,
-      Color strokeColor) {
+  void _collectPlaneObject(
+      List<_Prim> prims, Object3D obj, Color baseColor, Color strokeColor) {
     // Render as a grid of lines on the plane (GeoGebra-style). The grid is
     // centered on the camera target so it follows the view.
     final n = obj.planeNormal.normalized();
@@ -1464,7 +1465,8 @@ class _ScenePainter extends CustomPainter {
 
     // Build two tangent directions.
     final ref = n.cross(Vector3D.unitZ);
-    final u = ref.isZero ? n.cross(Vector3D.unitX).normalized() : ref.normalized();
+    final u =
+        ref.isZero ? n.cross(Vector3D.unitX).normalized() : ref.normalized();
     final v = n.cross(u).normalized();
 
     final step = _niceStep(scene.camera.distance / 800);
@@ -1507,12 +1509,10 @@ class _ScenePainter extends CustomPainter {
       Color strokeColor, ObjectStyle style, bool isSelected,
       {Object3D? owner}) {
     if (mesh == null || mesh.isEmpty) return;
-    final normals = mesh.normals.length == mesh.vertices.length
-        ? mesh.normals
-        : null;
+    final normals =
+        mesh.normals.length == mesh.vertices.length ? mesh.normals : null;
     final opaque = style.opacity >= 0.99;
-    final viewDir =
-        (scene.camera.target - scene.camera.position).normalized();
+    final viewDir = (scene.camera.target - scene.camera.position).normalized();
 
     // Faces.
     for (int i = 0; i < mesh.indices.length; i += 3) {
@@ -1522,8 +1522,12 @@ class _ScenePainter extends CustomPainter {
       final p0 = proj.project(mesh.vertices[i0]);
       final p1 = proj.project(mesh.vertices[i1]);
       final p2 = proj.project(mesh.vertices[i2]);
-      if (p0 == null || p1 == null || p2 == null ||
-          p0.x.isNaN || p1.x.isNaN || p2.x.isNaN) {
+      if (p0 == null ||
+          p1 == null ||
+          p2 == null ||
+          p0.x.isNaN ||
+          p1.x.isNaN ||
+          p2.x.isNaN) {
         continue;
       }
       final path = Path()
@@ -1558,7 +1562,8 @@ class _ScenePainter extends CustomPainter {
     }
   }
 
-  void _collectCurve(List<_Prim> prims, Object3D obj, Color color, ObjectStyle style) {
+  void _collectCurve(
+      List<_Prim> prims, Object3D obj, Color color, ObjectStyle style) {
     final pts = obj.curveSamplePoints;
     if (pts.length < 2) return;
     final projected = <Offset>[];
@@ -1715,7 +1720,8 @@ class _ScenePainter extends CustomPainter {
             Offset(pos.dx + r, pos.dy - r), p.paint);
       case PointStyle.square:
         canvas.drawRect(
-            Rect.fromCenter(center: pos, width: p.size, height: p.size), p.paint);
+            Rect.fromCenter(center: pos, width: p.size, height: p.size),
+            p.paint);
       case PointStyle.diamond:
         final r = p.size / 2;
         final path = Path()

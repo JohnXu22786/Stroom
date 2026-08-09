@@ -807,8 +807,7 @@ class Expression3D {
           for (int i = 0; i < 8; i++) {
             final dx = i & 1, dy = (i >> 1) & 1, dz = (i >> 2) & 1;
             corners[i] = vertex(ix + dx, iy + dy, iz + dz);
-            cornerVals[i] =
-                values[((iz + dz) * n + (iy + dy)) * n + (ix + dx)];
+            cornerVals[i] = values[((iz + dz) * n + (iy + dy)) * n + (ix + dx)];
           }
 
           // Edge intersection cache for this cell: key = a*8+b (a<b).

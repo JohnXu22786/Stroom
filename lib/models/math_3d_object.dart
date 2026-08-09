@@ -150,7 +150,8 @@ class Vector3D {
   Vector3D operator -(Vector3D other) =>
       Vector3D(x - other.x, y - other.y, z - other.z);
 
-  Vector3D operator *(double scalar) => Vector3D(x * scalar, y * scalar, z * scalar);
+  Vector3D operator *(double scalar) =>
+      Vector3D(x * scalar, y * scalar, z * scalar);
 
   Vector3D operator -() => Vector3D(-x, -y, -z);
 
@@ -658,7 +659,8 @@ class Object3D {
   double get planeNormalB => planeB ?? 0;
   double get planeNormalC => planeC ?? 1;
   double get planeDValue => planeD ?? 0;
-  Vector3D get planeNormal => Vector3D(planeNormalA, planeNormalB, planeNormalC);
+  Vector3D get planeNormal =>
+      Vector3D(planeNormalA, planeNormalB, planeNormalC);
   List<Point3D> get polygonVertices => curvePoints ?? const [];
   List<Point3D> get curveSamplePoints => curvePoints ?? const [];
 
@@ -795,9 +797,8 @@ class Object3D {
 
   static (Vector3D, Vector3D) _circleBasis(Vector3D normal) {
     final n = normal.normalized();
-    final ref = n.dot(Vector3D.unitZ).abs() > 0.9
-        ? Vector3D.unitX
-        : Vector3D.unitZ;
+    final ref =
+        n.dot(Vector3D.unitZ).abs() > 0.9 ? Vector3D.unitX : Vector3D.unitZ;
     final u = n.cross(ref).normalized();
     final v = n.cross(u).normalized();
     return (u, v);
@@ -883,7 +884,8 @@ class Object3D {
 
   /// Reflect across the plane n·p = d.
   Object3D reflected(Vector3D n, double d) => transform(
-        (p) => p + n.normalized() * (-2 * (n.normalized().dot(p.toVector()) - d)),
+        (p) =>
+            p + n.normalized() * (-2 * (n.normalized().dot(p.toVector()) - d)),
       );
 
   /// Rotate around the axis through [axisPoint] with direction [axisDir]
@@ -935,10 +937,15 @@ class Object3D {
             obj.circleNormal ?? Vector3D.unitZ, obj.circleRadius ?? 1,
             name: name, visible: obj.visible, style: obj.style);
       case Object3DType.arc:
-        return Object3D.arc(obj.circleCenter ?? Point3D.origin,
-            obj.circleNormal ?? Vector3D.unitZ, obj.circleRadius ?? 1,
-            obj.arcStart ?? 0, obj.arcEnd ?? 0,
-            name: name, visible: obj.visible, style: obj.style);
+        return Object3D.arc(
+            obj.circleCenter ?? Point3D.origin,
+            obj.circleNormal ?? Vector3D.unitZ,
+            obj.circleRadius ?? 1,
+            obj.arcStart ?? 0,
+            obj.arcEnd ?? 0,
+            name: name,
+            visible: obj.visible,
+            style: obj.style);
       case Object3DType.polygon:
         return Object3D.polygon(obj.polygonVertices,
             name: name, visible: obj.visible, style: obj.style);
@@ -952,13 +959,18 @@ class Object3D {
         return Object3D.cone(obj.solidCenter, obj.solidRadius, obj.solidHeight,
             name: name, visible: obj.visible, style: obj.style);
       case Object3DType.cylinder:
-        return Object3D.cylinder(obj.solidCenter, obj.solidRadius, obj.solidHeight,
+        return Object3D.cylinder(
+            obj.solidCenter, obj.solidRadius, obj.solidHeight,
             name: name, visible: obj.visible, style: obj.style);
       case Object3DType.plane:
         return Object3D.plane(
-            a: obj.planeNormalA, b: obj.planeNormalB, c: obj.planeNormalC,
+            a: obj.planeNormalA,
+            b: obj.planeNormalB,
+            c: obj.planeNormalC,
             d: obj.planeDValue,
-            name: name, visible: obj.visible, style: obj.style);
+            name: name,
+            visible: obj.visible,
+            style: obj.style);
       case Object3DType.surface:
         return Object3D.surface(obj.mesh!,
             name: name, visible: obj.visible, style: obj.style);
@@ -966,7 +978,8 @@ class Object3D {
         return Object3D.curve(obj.curveSamplePoints,
             name: name, visible: obj.visible, style: obj.style);
       case Object3DType.measurement:
-        return Object3D.measurement(obj.measureText ?? '', obj.measureAnchor ?? Point3D.origin,
+        return Object3D.measurement(
+            obj.measureText ?? '', obj.measureAnchor ?? Point3D.origin,
             name: name, visible: obj.visible, style: obj.style);
     }
   }
@@ -979,7 +992,8 @@ class Object3D {
   Object3D withReplaced(bool visible, ObjectStyle style) {
     switch (type) {
       case Object3DType.point:
-        return Object3D.point(pointValue, name: name, visible: visible, style: style);
+        return Object3D.point(pointValue,
+            name: name, visible: visible, style: style);
       case Object3DType.segment:
         return Object3D.segment(pointAValue, pointBValue,
             name: name, visible: visible, style: style);
@@ -997,9 +1011,15 @@ class Object3D {
             circleNormal ?? Vector3D.unitZ, circleRadius ?? 1,
             name: name, visible: visible, style: style);
       case Object3DType.arc:
-        return Object3D.arc(circleCenter ?? Point3D.origin,
-            circleNormal ?? Vector3D.unitZ, circleRadius ?? 1, arcStart ?? 0, arcEnd ?? 0,
-            name: name, visible: visible, style: style);
+        return Object3D.arc(
+            circleCenter ?? Point3D.origin,
+            circleNormal ?? Vector3D.unitZ,
+            circleRadius ?? 1,
+            arcStart ?? 0,
+            arcEnd ?? 0,
+            name: name,
+            visible: visible,
+            style: style);
       case Object3DType.polygon:
         return Object3D.polygon(polygonVertices,
             name: name, visible: visible, style: style);
@@ -1017,8 +1037,13 @@ class Object3D {
             name: name, visible: visible, style: style);
       case Object3DType.plane:
         return Object3D.plane(
-            a: planeNormalA, b: planeNormalB, c: planeNormalC, d: planeDValue,
-            name: name, visible: visible, style: style);
+            a: planeNormalA,
+            b: planeNormalB,
+            c: planeNormalC,
+            d: planeDValue,
+            name: name,
+            visible: visible,
+            style: style);
       case Object3DType.surface:
         return Object3D.surface(mesh!,
             name: name, visible: visible, style: style);
@@ -1026,7 +1051,8 @@ class Object3D {
         return Object3D.curve(curveSamplePoints,
             name: name, visible: visible, style: style);
       case Object3DType.measurement:
-        return Object3D.measurement(measureText ?? '', measureAnchor ?? Point3D.origin,
+        return Object3D.measurement(
+            measureText ?? '', measureAnchor ?? Point3D.origin,
             name: name, visible: visible, style: style);
     }
   }
@@ -1044,10 +1070,13 @@ class Object3D {
         final a = f(pointAValue);
         final b = f(pointAValue + vectorValue);
         return type == Object3DType.line
-            ? Object3D.line(a, b - a, name: name, visible: visible, style: style)
-            : Object3D.ray(a, b - a, name: name, visible: visible, style: style);
+            ? Object3D.line(a, b - a,
+                name: name, visible: visible, style: style)
+            : Object3D.ray(a, b - a,
+                name: name, visible: visible, style: style);
       case Object3DType.vector:
-        return Object3D.vectorObj(f(pointValue), f(pointValue + vectorValue) - f(pointValue),
+        return Object3D.vectorObj(
+            f(pointValue), f(pointValue + vectorValue) - f(pointValue),
             name: name, visible: visible, style: style);
       case Object3DType.circle:
         final n0 = circleNormal ?? Vector3D.unitZ;
@@ -1065,8 +1094,10 @@ class Object3D {
         final s0 = arcStart ?? 0;
         final e0 = arcEnd ?? 2 * dart_math.pi;
         final (u0, v0) = _circleBasis(n0);
-        final pStart = c0 + u0 * (r0 * dart_math.cos(s0)) + v0 * (r0 * dart_math.sin(s0));
-        final pEnd = c0 + u0 * (r0 * dart_math.cos(e0)) + v0 * (r0 * dart_math.sin(e0));
+        final pStart =
+            c0 + u0 * (r0 * dart_math.cos(s0)) + v0 * (r0 * dart_math.sin(s0));
+        final pEnd =
+            c0 + u0 * (r0 * dart_math.cos(e0)) + v0 * (r0 * dart_math.sin(e0));
         final c1 = f(c0);
         final n1 = f(c0 + n0) - c1;
         final (u1, v1) = _circleBasis(n1);
@@ -1130,7 +1161,8 @@ class Object3D {
         return Object3D.curve([for (final p in curveSamplePoints) f(p)],
             name: name, visible: visible, style: style);
       case Object3DType.measurement:
-        return Object3D.measurement(measureText ?? '', f(measureAnchor ?? Point3D.origin),
+        return Object3D.measurement(
+            measureText ?? '', f(measureAnchor ?? Point3D.origin),
             name: name, visible: visible, style: style);
     }
   }
@@ -1142,9 +1174,8 @@ class Object3D {
     final k = dir;
     final cosA = dart_math.cos(angle);
     final sinA = dart_math.sin(angle);
-    final rotated = rel * cosA +
-        k.cross(rel) * sinA +
-        k * (k.dot(rel) * (1 - cosA));
+    final rotated =
+        rel * cosA + k.cross(rel) * sinA + k * (k.dot(rel) * (1 - cosA));
     return axisPoint + rotated;
   }
 
@@ -1273,8 +1304,8 @@ class MeshBuilder {
   }
 
   /// Generic extrusion between two parallel polygons.
-  static MeshData _extrude(List<Point3D> bottom, List<Point3D> top,
-      int vbStart, int vbEnd, int vtStart, int vtEnd) {
+  static MeshData _extrude(List<Point3D> bottom, List<Point3D> top, int vbStart,
+      int vbEnd, int vtStart, int vtEnd) {
     final vertices = <Point3D>[...bottom, ...top];
     final indices = <int>[];
     final n = bottom.length;

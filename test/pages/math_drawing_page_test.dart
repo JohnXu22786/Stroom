@@ -183,8 +183,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.check_circle_outline));
       await tester.pumpAndSettle();
 
-      final state =
-          tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
+      final state = tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
       expect(state.objects.length, 1);
       expect(state.objects.first.type, Object3DType.surface);
       expect(tester.takeException(), isNull);
@@ -203,30 +202,26 @@ void main() {
       await tester.tap(find.byIcon(Icons.check_circle_outline));
       await tester.pumpAndSettle();
 
-      final state =
-          tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
+      final state = tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
       expect(state.objects.length, 1);
       expect(state.objects.first.type, Object3DType.surface);
       expect(state.objects.first.mesh!.vertices.length, greaterThan(100));
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('plotting a parametric curve creates a curve',
-        (tester) async {
+    testWidgets('plotting a parametric curve creates a curve', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
       await tester.tap(find.text('3D'));
       await tester.pumpAndSettle();
 
-      await tester.enterText(
-          find.byType(TextField), '(cos(t), sin(t), t)');
+      await tester.enterText(find.byType(TextField), '(cos(t), sin(t), t)');
       await tester.pump();
       await tester.tap(find.byIcon(Icons.check_circle_outline));
       await tester.pumpAndSettle();
 
-      final state =
-          tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
+      final state = tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
       expect(state.objects.length, 1);
       expect(state.objects.first.type, Object3DType.curve);
       expect(tester.takeException(), isNull);
@@ -264,8 +259,7 @@ void main() {
       await tester.tap(find.text('点').last);
       await tester.pumpAndSettle();
 
-      final state =
-          tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
+      final state = tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
       expect(state.activeTool, ConstructionTool.point);
       // Instruction bar appears (contains 点击).
       expect(find.textContaining('点击'), findsOneWidget);

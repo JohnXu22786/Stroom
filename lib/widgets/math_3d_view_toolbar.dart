@@ -103,8 +103,7 @@ class Math3DViewToolbar extends StatelessWidget {
                 ('吸附到网格', Icons.gps_not_fixed),
                 ('固定到网格', Icons.push_pin_outlined),
               ],
-              onSelect: (i) =>
-                  onCapturingChanged(PointCapturing.values[i]),
+              onSelect: (i) => onCapturingChanged(PointCapturing.values[i]),
             ),
             _spacer(cs),
             // ---- Auto-rotate ----

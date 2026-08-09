@@ -74,7 +74,8 @@ void main() {
       expect(p.name, 'A');
       expect(p.style.color, 0xFF112233);
 
-      final s = Object3D.segment(const Point3D(0, 0, 0), const Point3D(1, 1, 1));
+      final s =
+          Object3D.segment(const Point3D(0, 0, 0), const Point3D(1, 1, 1));
       expect(s.type, Object3DType.segment);
       expect(s.pointAValue, const Point3D(0, 0, 0));
       expect(s.pointBValue, const Point3D(1, 1, 1));
@@ -91,8 +92,8 @@ void main() {
       // Quarter arc from 0 to π/2 on the unit circle in the xOy plane.
       // The circle basis is (u, v) = ((0,1,0), (-1,0,0)) for n = unitZ, so
       // angle 0 lies at (0,1,0) and π/2 at (-1,0,0).
-      final arc = Object3D.arc(
-          Point3D.origin, Vector3D.unitZ, 1, 0, dart_math.pi / 2);
+      final arc =
+          Object3D.arc(Point3D.origin, Vector3D.unitZ, 1, 0, dart_math.pi / 2);
       final pts = arc.samplePoints();
       expect(pts.length, 49);
       expect(pts.first.distanceTo(const Point3D(0, 1, 0)), lessThan(1e-9));
@@ -166,7 +167,8 @@ void main() {
 
   group('Object3D transforms', () {
     test('translated moves all geometry', () {
-      final seg = Object3D.segment(const Point3D(0, 0, 0), const Point3D(1, 0, 0));
+      final seg =
+          Object3D.segment(const Point3D(0, 0, 0), const Point3D(1, 0, 0));
       final moved = seg.translated(const Vector3D(0, 0, 5));
       expect(moved.pointAValue, const Point3D(0, 0, 5));
       expect(moved.pointBValue, const Point3D(1, 0, 5));
@@ -317,7 +319,8 @@ void main() {
     });
 
     test('segment input snaps to segment', () {
-      final s = Object3D.segment(const Point3D(0, 0, 0), const Point3D(4, 0, 0));
+      final s =
+          Object3D.segment(const Point3D(0, 0, 0), const Point3D(4, 0, 0));
       final snapped = s.inputPoint(const Point3D(2, 5, 1));
       expect(snapped.x, closeTo(2, 1e-9));
       expect(snapped.y, closeTo(0, 1e-9));

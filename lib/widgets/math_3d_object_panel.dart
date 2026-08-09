@@ -159,9 +159,8 @@ class Math3DObjectPanel extends StatelessWidget {
                                       ? Icons.visibility
                                       : Icons.visibility_off,
                                   size: 16,
-                                  color: obj.visible
-                                      ? cs.onSurface
-                                      : cs.outline,
+                                  color:
+                                      obj.visible ? cs.onSurface : cs.outline,
                                 ),
                                 tooltip: obj.visible ? '隐藏' : '显示',
                                 onPressed: () => onToggleVisible(obj),

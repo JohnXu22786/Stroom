@@ -75,7 +75,8 @@ void main() {
     });
 
     test('sphere center+radius uses the numeric input', () {
-      final state = ConstructionState(tool: ConstructionTool.sphereCenterRadius);
+      final state =
+          ConstructionState(tool: ConstructionTool.sphereCenterRadius);
       state.addInput(const NewPointInput(Point3D(1, 1, 1)));
       expect(state.awaitingNumber, true);
       final done = state.addInput(const NumberInput(2.5));
@@ -177,7 +178,8 @@ void main() {
       state.addInput(const NewPointInput(Point3D(0, 0, 0)));
       state.addInput(const NewPointInput(Point3D(2, 0, 0)));
       state.addInput(const NewPointInput(Point3D(2, 2, 0)));
-      expect(state.addInput(const NewPointInput(Point3D(0.05, 0.02, 0))), false);
+      expect(
+          state.addInput(const NewPointInput(Point3D(0.05, 0.02, 0))), false);
       expect(state.baseClosed, true);
       expect(state.currentInstruction, contains('顶点'));
       final done = state.addInput(const NewPointInput(Point3D(1, 1, 4)));
@@ -221,7 +223,8 @@ void main() {
 
   group('Object-input tools', () {
     test('midpoint of a segment', () {
-      final seg = Object3D.segment(const Point3D(0, 0, 0), const Point3D(4, 6, 8));
+      final seg =
+          Object3D.segment(const Point3D(0, 0, 0), const Point3D(4, 6, 8));
       final state = ConstructionState(tool: ConstructionTool.midpoint);
       final done = state.addInput(ObjectInput(seg));
       expect(done, true);

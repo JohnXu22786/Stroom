@@ -142,13 +142,11 @@ class ToolInfo {
       tooltip: '取两点或线段的中点',
       group: 1,
       steps: [
-        ToolStep('选择线段或两个点',
-            kind: InputKind.object,
-            allowedTypes: {
-              Object3DType.segment,
-              Object3DType.line,
-              Object3DType.curve,
-            }),
+        ToolStep('选择线段或两个点', kind: InputKind.object, allowedTypes: {
+          Object3DType.segment,
+          Object3DType.line,
+          Object3DType.curve,
+        }),
       ],
     ),
     ConstructionTool.intersect: ToolInfo(
@@ -158,28 +156,24 @@ class ToolInfo {
       tooltip: '求两个对象的交点',
       group: 1,
       steps: [
-        ToolStep('选择第一个对象（线/平面/球/曲面）',
-            kind: InputKind.object,
-            allowedTypes: {
-              Object3DType.line,
-              Object3DType.ray,
-              Object3DType.segment,
-              Object3DType.plane,
-              Object3DType.sphere,
-              Object3DType.circle,
-              Object3DType.polygon,
-            }),
-        ToolStep('选择第二个对象',
-            kind: InputKind.object,
-            allowedTypes: {
-              Object3DType.line,
-              Object3DType.ray,
-              Object3DType.segment,
-              Object3DType.plane,
-              Object3DType.sphere,
-              Object3DType.circle,
-              Object3DType.polygon,
-            }),
+        ToolStep('选择第一个对象（线/平面/球/曲面）', kind: InputKind.object, allowedTypes: {
+          Object3DType.line,
+          Object3DType.ray,
+          Object3DType.segment,
+          Object3DType.plane,
+          Object3DType.sphere,
+          Object3DType.circle,
+          Object3DType.polygon,
+        }),
+        ToolStep('选择第二个对象', kind: InputKind.object, allowedTypes: {
+          Object3DType.line,
+          Object3DType.ray,
+          Object3DType.segment,
+          Object3DType.plane,
+          Object3DType.sphere,
+          Object3DType.circle,
+          Object3DType.polygon,
+        }),
       ],
       isObjectTool: true,
     ),
@@ -236,9 +230,11 @@ class ToolInfo {
       tooltip: '过点作已知直线的垂线',
       group: 2,
       steps: [
-        ToolStep('选择直线或线段',
-            kind: InputKind.object,
-            allowedTypes: {Object3DType.line, Object3DType.segment, Object3DType.ray}),
+        ToolStep('选择直线或线段', kind: InputKind.object, allowedTypes: {
+          Object3DType.line,
+          Object3DType.segment,
+          Object3DType.ray
+        }),
         ToolStep('选择垂线经过的点'),
       ],
       isObjectTool: true,
@@ -250,9 +246,11 @@ class ToolInfo {
       tooltip: '过点作已知直线的平行线',
       group: 2,
       steps: [
-        ToolStep('选择直线或线段',
-            kind: InputKind.object,
-            allowedTypes: {Object3DType.line, Object3DType.segment, Object3DType.ray}),
+        ToolStep('选择直线或线段', kind: InputKind.object, allowedTypes: {
+          Object3DType.line,
+          Object3DType.segment,
+          Object3DType.ray
+        }),
         ToolStep('选择平行线经过的点'),
       ],
       isObjectTool: true,
@@ -381,8 +379,7 @@ class ToolInfo {
       group: 6,
       steps: [
         ToolStep('选择要拉伸的多边形',
-            kind: InputKind.object,
-            allowedTypes: {Object3DType.polygon}),
+            kind: InputKind.object, allowedTypes: {Object3DType.polygon}),
         ToolStep('点击确定拉伸高度'),
       ],
       isObjectTool: true,
@@ -395,8 +392,7 @@ class ToolInfo {
       group: 6,
       steps: [
         ToolStep('选择底面多边形',
-            kind: InputKind.object,
-            allowedTypes: {Object3DType.polygon}),
+            kind: InputKind.object, allowedTypes: {Object3DType.polygon}),
         ToolStep('点击棱锥顶点'),
       ],
       isObjectTool: true,
@@ -516,14 +512,12 @@ class ToolInfo {
       tooltip: '测量多面体/球/锥/柱的体积',
       group: 8,
       steps: [
-        ToolStep('选择立体对象',
-            kind: InputKind.object,
-            allowedTypes: {
-              Object3DType.polyhedron,
-              Object3DType.sphere,
-              Object3DType.cone,
-              Object3DType.cylinder,
-            }),
+        ToolStep('选择立体对象', kind: InputKind.object, allowedTypes: {
+          Object3DType.polyhedron,
+          Object3DType.sphere,
+          Object3DType.cone,
+          Object3DType.cylinder,
+        }),
       ],
       isObjectTool: true,
     ),
@@ -536,8 +530,7 @@ class ToolInfo {
       tooltip: '按向量平移对象',
       group: 9,
       steps: [
-        ToolStep('选择要平移的对象',
-            kind: InputKind.object),
+        ToolStep('选择要平移的对象', kind: InputKind.object),
         ToolStep('选择或创建起点'),
         ToolStep('选择或创建终点（构成平移向量）'),
       ],
@@ -550,8 +543,7 @@ class ToolInfo {
       tooltip: '以点为中心镜像对象',
       group: 9,
       steps: [
-        ToolStep('选择要镜像的对象',
-            kind: InputKind.object),
+        ToolStep('选择要镜像的对象', kind: InputKind.object),
         ToolStep('选择镜像中心点'),
       ],
       isObjectTool: true,
@@ -563,11 +555,9 @@ class ToolInfo {
       tooltip: '以平面为镜面镜像对象',
       group: 9,
       steps: [
-        ToolStep('选择要镜像的对象',
-            kind: InputKind.object),
+        ToolStep('选择要镜像的对象', kind: InputKind.object),
         ToolStep('选择镜像平面',
-            kind: InputKind.object,
-            allowedTypes: {Object3DType.plane}),
+            kind: InputKind.object, allowedTypes: {Object3DType.plane}),
       ],
       isObjectTool: true,
     ),
@@ -578,11 +568,12 @@ class ToolInfo {
       tooltip: '绕直线旋转对象指定角度',
       group: 9,
       steps: [
-        ToolStep('选择要旋转的对象',
-            kind: InputKind.object),
-        ToolStep('选择旋转轴（直线）',
-            kind: InputKind.object,
-            allowedTypes: {Object3DType.line, Object3DType.segment, Object3DType.ray}),
+        ToolStep('选择要旋转的对象', kind: InputKind.object),
+        ToolStep('选择旋转轴（直线）', kind: InputKind.object, allowedTypes: {
+          Object3DType.line,
+          Object3DType.segment,
+          Object3DType.ray
+        }),
         ToolStep('输入旋转角度（度）', kind: InputKind.number),
       ],
       isObjectTool: true,
@@ -594,8 +585,7 @@ class ToolInfo {
       tooltip: '以点为缩放中心按比例缩放对象',
       group: 9,
       steps: [
-        ToolStep('选择要缩放的对象',
-            kind: InputKind.object),
+        ToolStep('选择要缩放的对象', kind: InputKind.object),
         ToolStep('选择缩放中心点'),
         ToolStep('输入缩放比例', kind: InputKind.number),
       ],

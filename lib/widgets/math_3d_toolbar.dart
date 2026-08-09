@@ -57,7 +57,8 @@ class Math3DToolbar extends StatelessWidget {
                   Expanded(
                     child: Text(
                       instruction!,
-                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                      style:
+                          TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                     ),
                   ),
                   // Cancel button.
@@ -132,10 +133,8 @@ class _ToolboxButton extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(activeInfo.iconData,
-                size: 20,
-                color: isInGroup ? cs.primary : cs.onSurface),
-            Icon(Icons.arrow_drop_down,
-                size: 14, color: cs.onSurfaceVariant),
+                size: 20, color: isInGroup ? cs.primary : cs.onSurface),
+            Icon(Icons.arrow_drop_down, size: 14, color: cs.onSurfaceVariant),
           ],
         ),
       ),

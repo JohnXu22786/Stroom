@@ -17,8 +17,8 @@ void main() {
     });
 
     test('position follows spherical coordinates (z-up)', () {
-      const cam = Camera3D(
-          target: Point3D.origin, distance: 10, theta: 0, phi: 0);
+      const cam =
+          Camera3D(target: Point3D.origin, distance: 10, theta: 0, phi: 0);
       final pos = cam.position;
       // phi=0 → horizontal, theta=0 → along +X.
       expect(pos.z, closeTo(0, 1e-9));
@@ -28,7 +28,10 @@ void main() {
 
     test('view from top looks straight down', () {
       const cam = Camera3D(
-          target: Point3D.origin, distance: 10, theta: 0, phi: dart_math.pi / 2 - 0.01);
+          target: Point3D.origin,
+          distance: 10,
+          theta: 0,
+          phi: dart_math.pi / 2 - 0.01);
       final pos = cam.position;
       expect(pos.x.abs(), lessThan(0.2));
       expect(pos.y.abs(), lessThan(0.2));
@@ -59,7 +62,10 @@ void main() {
 
     test('pan moves target parallel to view plane', () {
       const cam = Camera3D(
-          target: Point3D.origin, distance: 10, theta: 0, phi: dart_math.pi / 4);
+          target: Point3D.origin,
+          distance: 10,
+          theta: 0,
+          phi: dart_math.pi / 4);
       final panned = cam.pan(deltaX: 100, deltaY: 0);
       // The target must move (along the screen-right vector).
       expect(panned.target.distanceTo(Point3D.origin), greaterThan(0.01));
@@ -83,14 +89,14 @@ void main() {
 
   group('Projection3D', () {
     const cam = Camera3D(
-        target: Point3D.origin, distance: 10, theta: dart_math.pi / 4, phi: 0.615);
+        target: Point3D.origin,
+        distance: 10,
+        theta: dart_math.pi / 4,
+        phi: 0.615);
 
     test('parallel projection centers the target', () {
       final proj = Projection3D(
-          type: ProjectionType.parallel,
-          width: 800,
-          height: 600,
-          camera: cam);
+          type: ProjectionType.parallel, width: 800, height: 600, camera: cam);
       final s = proj.project(Point3D.origin);
       expect(s, isNotNull);
       expect(s!.x, closeTo(400, 0.1));
@@ -99,10 +105,7 @@ void main() {
 
     test('perspective differs from parallel', () {
       final par = Projection3D(
-          type: ProjectionType.parallel,
-          width: 800,
-          height: 600,
-          camera: cam);
+          type: ProjectionType.parallel, width: 800, height: 600, camera: cam);
       final per = Projection3D(
           type: ProjectionType.perspective,
           width: 800,
@@ -142,12 +145,10 @@ void main() {
       expect(b.x, isNot(closeTo(400, 1)));
     });
 
-    test('screenRay and screenToGround are inverse of project for parallel', () {
+    test('screenRay and screenToGround are inverse of project for parallel',
+        () {
       final proj = Projection3D(
-          type: ProjectionType.parallel,
-          width: 800,
-          height: 600,
-          camera: cam);
+          type: ProjectionType.parallel, width: 800, height: 600, camera: cam);
       const world = Point3D(1.5, -2, 0.5);
       final s = proj.project(world)!;
       final ground = proj.screenToGround(s.x, s.y, z0: world.z);
@@ -188,11 +189,8 @@ void main() {
     });
 
     test('intersectLineLine finds the intersection', () {
-      final p = intersectLineLine(
-          Point3D.origin,
-          Vector3D.unitX,
-          const Point3D(1, -2, 0),
-          Vector3D.unitY);
+      final p = intersectLineLine(Point3D.origin, Vector3D.unitX,
+          const Point3D(1, -2, 0), Vector3D.unitY);
       expect(p, isNotNull);
       expect(p!.x, closeTo(1, 1e-9));
       expect(p.y, closeTo(0, 1e-9));
@@ -200,25 +198,24 @@ void main() {
     });
 
     test('intersectLineLine returns null for skew lines', () {
-      final p = intersectLineLine(
-          Point3D.origin,
-          Vector3D.unitX,
-          const Point3D(0, 0, 1),
-          Vector3D.unitY);
+      final p = intersectLineLine(Point3D.origin, Vector3D.unitX,
+          const Point3D(0, 0, 1), Vector3D.unitY);
       expect(p, isNull);
     });
 
     test('intersectLinePlane', () {
-      final p = intersectLinePlane(
-          Point3D.origin, Vector3D.unitZ, Vector3D.unitZ, 4);
+      final p =
+          intersectLinePlane(Point3D.origin, Vector3D.unitZ, Vector3D.unitZ, 4);
       expect(p, isNotNull);
       expect(p!.z, closeTo(4, 1e-9));
     });
 
     test('intersectPlanePlane returns the crease line', () {
       final res = intersectPlanePlane(
-          Vector3D.unitZ, 0, // z = 0
-          const Vector3D(1, 0, 0), 1 // x = 1
+          Vector3D.unitZ,
+          0, // z = 0
+          const Vector3D(1, 0, 0),
+          1 // x = 1
           );
       expect(res, isNotNull);
       final (point, dir) = res!;
@@ -232,13 +229,13 @@ void main() {
       const v0 = Point3D(0, 0, 0);
       const v1 = Point3D(1, 0, 0);
       const v2 = Point3D(0, 1, 0);
-      final t = rayTriangle(const Point3D(0.2, 0.2, 5), Vector3D.unitZ * -1,
-          v0, v1, v2);
+      final t = rayTriangle(
+          const Point3D(0.2, 0.2, 5), Vector3D.unitZ * -1, v0, v1, v2);
       expect(t, isNotNull);
       expect(t!, closeTo(5, 1e-9));
       // Ray missing the triangle returns null.
-      final miss = rayTriangle(const Point3D(5, 5, 5), Vector3D.unitZ * -1,
-          v0, v1, v2);
+      final miss =
+          rayTriangle(const Point3D(5, 5, 5), Vector3D.unitZ * -1, v0, v1, v2);
       expect(miss, isNull);
     });
   });
@@ -268,7 +265,8 @@ void main() {
     });
 
     test('byName finds objects', () {
-      final scene = Scene3D()..add(Object3D.point(const Point3D(0, 0, 0), name: 'A'));
+      final scene = Scene3D()
+        ..add(Object3D.point(const Point3D(0, 0, 0), name: 'A'));
       expect(scene.byName('A'), isNotNull);
       expect(scene.byName('B'), isNull);
     });

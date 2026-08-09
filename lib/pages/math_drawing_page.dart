@@ -186,7 +186,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
 
     if (trimmed.startsWith('(')) {
       // 3) Parametric curve (t) or parametric surface (u, v).
-      final curve = Expression3D.parametricCurve(trimmed, tMax: 2 * dart_math.pi);
+      final curve =
+          Expression3D.parametricCurve(trimmed, tMax: 2 * dart_math.pi);
       if (curve.isValid) {
         final points = curve.sampleCurve(numSamples: 150);
         if (points.isNotEmpty) {
@@ -432,8 +433,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
         content: TextField(
           controller: controller,
           autofocus: true,
-          keyboardType:
-              const TextInputType.numberWithOptions(decimal: true, signed: true),
+          keyboardType: const TextInputType.numberWithOptions(
+              decimal: true, signed: true),
           decoration: const InputDecoration(hintText: '输入数值'),
           onSubmitted: (v) => Navigator.pop(ctx, double.tryParse(v)),
         ),
@@ -443,7 +444,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             child: const Text('取消'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, double.tryParse(controller.text)),
+            onPressed: () =>
+                Navigator.pop(ctx, double.tryParse(controller.text)),
             child: const Text('确定'),
           ),
         ],
@@ -467,12 +469,12 @@ class _MathDrawingPageState extends State<MathDrawingPage>
         actions: [
           if (_currentView == ViewMode.mode3D)
             IconButton(
-              icon: Icon(_showObjectPanel
-                  ? Icons.view_list
-                  : Icons.view_list_outlined,
+              icon: Icon(
+                  _showObjectPanel ? Icons.view_list : Icons.view_list_outlined,
                   size: 20),
               tooltip: '对象列表',
-              onPressed: () => setState(() => _showObjectPanel = !_showObjectPanel),
+              onPressed: () =>
+                  setState(() => _showObjectPanel = !_showObjectPanel),
             ),
           IconButton(
             icon: const Icon(Icons.center_focus_strong, size: 20),
@@ -773,8 +775,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           showPlane: _canvas3DKey.currentState?.showPlane ?? true,
           autoRotating: _canvas3DKey.currentState?.autoRotating ?? false,
           capturing: _canvas3DKey.currentState?.capturing ?? PointCapturing.off,
-          projectionType:
-              _canvas3DKey.currentState?.projectionType ?? ProjectionType.parallel,
+          projectionType: _canvas3DKey.currentState?.projectionType ??
+              ProjectionType.parallel,
           onToggleAxes: () {
             _canvas3DKey.currentState?.toggleAxes();
             setState(() {});
@@ -820,7 +822,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           state?.selectObject(obj);
           setState(() {}); // refresh the panel highlight
         },
-        onToggleVisible: (obj) => state?.setObjectVisible(obj.name, !obj.visible),
+        onToggleVisible: (obj) =>
+            state?.setObjectVisible(obj.name, !obj.visible),
         onDelete: (obj) {
           showDialog(
             context: context,
@@ -837,8 +840,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                     Navigator.pop(ctx);
                     state?.removeObject(obj);
                   },
-                  child: Text('删除',
-                      style: TextStyle(color: cs.error)),
+                  child: Text('删除', style: TextStyle(color: cs.error)),
                 ),
               ],
             ),
