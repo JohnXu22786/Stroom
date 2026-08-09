@@ -123,12 +123,10 @@ class _MermaidPreviewDialogContentState
   Future<void> _loadCode() async {
     final ctrl = _webViewController;
     if (ctrl == null) return;
-    final code = widget.mermaidCode.trim();
-    final url = code.isEmpty
-        ? MermaidRenderWidget.webAssetTemplateUrl
-        : '${MermaidRenderWidget.webAssetTemplateUrl}'
-            '?code=${Uri.encodeQueryComponent(code)}';
-    await ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
+    await ctrl.loadUrl(
+        urlRequest: URLRequest(
+            url: WebUri(
+                MermaidRenderWidget.buildWebAssetUrl(widget.mermaidCode))));
   }
 
   /// Zoom is anchored at the CENTER of the preview area (not the top-left

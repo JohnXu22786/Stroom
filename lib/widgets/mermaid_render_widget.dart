@@ -284,11 +284,23 @@ class MermaidRenderWidget extends StatefulWidget {
   /// Web-only: absolute URL of the bundled asset template loaded via
   /// [InAppWebViewController.loadUrl]. Flutter web serves assets under
   /// `/assets/<pubspec path>`, and the template loads mermaid.min.js from
-  /// the same directory (same origin, no CDN request). The ?v= query
-  /// forces a fresh template fetch — a stale browser/iframe cache of the
-  /// old template would otherwise keep failing after an app update.
+  /// the same directory (same origin, no CDN request).
   static const webAssetTemplateUrl =
-      '/assets/assets/vendor/mermaid_render.html?v=4';
+      '/assets/assets/vendor/mermaid_render.html';
+
+  /// Web-only: builds the full template URL for [code]. The ?v= query
+  /// forces a fresh template fetch (a stale browser/iframe cache of the
+  /// old template would otherwise keep failing after an app update), and
+  /// the code travels as its own &code= parameter — both must share one
+  /// query string, or URLSearchParams cannot find the code and the
+  /// template renders the empty-code placeholder.
+  static String buildWebAssetUrl(String code) {
+    final base = '$webAssetTemplateUrl?v=4';
+    final trimmed = code.trim();
+    return trimmed.isEmpty
+        ? base
+        : '$base&code=${Uri.encodeQueryComponent(trimmed)}';
+  }
 
   /// Load-once cache of the bundled mermaid.js source, shared by every
   /// [MermaidRenderWidget] instance and the preview dialog.
@@ -745,11 +757,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       // mermaid.min.js cannot be reached from a data: page (opaque origin).
       // No ready-fallback is armed: the iframe manages its own loading
       // state (the template hides its hint the moment the diagram renders).
-      final url = code.isEmpty
-          ? MermaidRenderWidget.webAssetTemplateUrl
-          : '${MermaidRenderWidget.webAssetTemplateUrl}'
-              '?code=${Uri.encodeQueryComponent(code)}';
-      ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
+      ctrl.loadUrl(
+          urlRequest: URLRequest(
+              url: WebUri(MermaidRenderWidget.buildWebAssetUrl(code))));
       return;
     }
 

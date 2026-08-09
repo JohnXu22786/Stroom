@@ -61,7 +61,6 @@ void main() {
       expect(html, contains('var bundled = 1;'));
       expect(html, isNot(contains("script.src = 'https://cdn.jsdelivr.net")));
     });
-
     test('escapes < in the inlined library so the script tag stays intact', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD',
           inlineMermaidJs: 'var s = "</script><!--";');
@@ -70,6 +69,21 @@ void main() {
       // code that could terminate the script tag early.
       expect(html, contains(r'\u003C/script>'));
       expect(html, contains(r'\u003C!--'));
+    });
+
+    test('web asset URL keeps ?v= and &code= in one query string', () {
+      // Regression: the URL previously became "...?v=4?code=..." (two '?'),
+      // so URLSearchParams could not find the code and the template showed
+      // the empty-code placeholder instead of the diagram.
+      final url = MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B');
+      expect(url, contains('mermaid_render.html?v=4&code='));
+      expect(url, isNot(contains('?code')));
+      expect(url, isNot(contains('v=4?')));
+      // The code must be percent-encoded inside the query string.
+      expect(url, contains('graph+TD'));
+      // Empty code -> version parameter only, no dangling '&'.
+      final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
+      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=4');
     });
 
     test('includes mermaid.initialize call', () {
