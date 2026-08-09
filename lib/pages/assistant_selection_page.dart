@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/assistant.dart';
 import '../providers/assistant_provider.dart';
+import '../providers/chat_manager_provider.dart';
+import '../providers/provider_config.dart';
 import 'assistant/assistant_defaults_tab.dart';
 import 'assistant/assistant_shared.dart';
 import 'assistant/built_in_prompt_selector.dart';
