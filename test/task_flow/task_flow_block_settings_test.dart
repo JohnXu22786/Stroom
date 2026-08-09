@@ -10,6 +10,7 @@ import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/widgets/block_editor_dialog.dart';
+import 'package:stroom/task_flow/widgets/flow_block_card.dart';
 
 class _FakeEntriesNotifier extends ProviderEntriesNotifier {
   _FakeEntriesNotifier(ProviderEntriesState entries) {
@@ -354,6 +355,78 @@ void main() {
     // The hint guides re-selection; the raw id must not appear.
     expect(find.text('音色已失效，请重新选择'), findsOneWidget);
     expect(find.text('deleted-voice-id'), findsNothing);
+  });
+
+  testWidgets('block card shows friendly param names, not raw ids',
+      (tester) async {
+    final entries = ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          id: 'tts-1',
+          type: 'tts',
+          name: 'TTS',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'EdgeTTS',
+              host: 'https://example.com',
+              key: 'k',
+              models: [
+                ModelConfig(
+                  name: 'edge-a',
+                  modelId: 'edge-a',
+                  voices: [
+                    VoiceEntry(name: '晓晓', id: 'zh-CN-XiaoxiaoNeural'),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          providerEntriesProvider.overrideWith(
+            (ref) => _FakeEntriesNotifier(entries),
+          ),
+          assistantProvider.overrideWith(
+            (ref) => _FakeAssistantsNotifier([
+              Assistant(id: 'a1', name: '翻译助手', prompt: 'p', emoji: '🌐'),
+            ]),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                FlowBlockCard(
+                  block: TaskFlowBlock(
+                    typeKey: BlockType.tts,
+                    params: {'voice': 'zh-CN-XiaoxiaoNeural'},
+                  ),
+                  index: 1,
+                ),
+                FlowBlockCard(
+                  block: TaskFlowBlock(
+                    typeKey: BlockType.chat,
+                    params: {'assistantId': 'a1'},
+                  ),
+                  index: 2,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Friendly names, never raw ids.
+    expect(find.text('语音: 晓晓'), findsOneWidget);
+    expect(find.textContaining('zh-CN-XiaoxiaoNeural'), findsNothing);
+    expect(find.text('助手: 🌐 翻译助手'), findsOneWidget);
+    expect(find.textContaining('a1'), findsNothing);
   });
 
   testWidgets(
