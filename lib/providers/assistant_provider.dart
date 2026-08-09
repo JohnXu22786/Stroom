@@ -205,14 +205,20 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
   /// via copyWith.
   ///
   /// ASYMMETRY: a null [defaultToolNames] KEEPS the assistant's previous
-  /// tool-default state (there is currently no way to return a configured
-  /// assistant to "never configured"). Pass a non-null set — including an
-  /// empty one, which means "configured, all tools off" — to set it.
+  /// tool-default state. Pass a non-null set — including an empty one, which
+  /// means "configured, all tools off" — to set it. Pass [clearDefaultToolNames]
+  /// = true (with a null [defaultToolNames]) to return the assistant to
+  /// "never configured" (new topics auto-enable all tools again).
   void updateAssistantDefaults({
     required String id,
     String? defaultModelName,
     Set<String>? defaultToolNames,
+    bool clearDefaultToolNames = false,
   }) {
+    assert(
+      !(clearDefaultToolNames && defaultToolNames != null),
+      'clearDefaultToolNames 与 defaultToolNames 互斥：清除时集合应传 null',
+    );
     state = state.map((a) {
       if (a.id != id) return a;
       return Assistant(
@@ -225,10 +231,13 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
         modelId: a.modelId,
         defaultModelName: defaultModelName,
         // 拷贝一份：不持有调用方的可变 Set 实例（对话框保存后仍会复用）。
-        // 传入非 null（含空集合）即视为"已配置默认工具"。
-        defaultToolNames: defaultToolNames != null
-            ? Set<String>.from(defaultToolNames)
-            : a.defaultToolNames,
+        // 传入非 null（含空集合）即视为"已配置默认工具"；
+        // clearDefaultToolNames 显式回到"从未配置"（null）。
+        defaultToolNames: clearDefaultToolNames
+            ? null
+            : defaultToolNames != null
+                ? Set<String>.from(defaultToolNames)
+                : a.defaultToolNames,
         createdAt: a.createdAt,
         updatedAt: DateTime.now(),
       );

@@ -393,6 +393,29 @@ void main() {
       expect(other.defaultToolNames, isNull);
     });
 
+    test('updateAssistantDefaults can return to never-configured (null)', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final a1 = notifier.createAssistant(name: '助手1', prompt: 'P1');
+      notifier.updateAssistantDefaults(
+        id: a1.id,
+        defaultModelName: 'gpt-4o | OpenAI',
+        defaultToolNames: {'web_search'},
+      );
+      notifier.updateAssistantDefaults(
+        id: a1.id,
+        defaultModelName: null,
+        clearDefaultToolNames: true,
+      );
+
+      final updated = notifier.state.firstWhere((a) => a.id == a1.id);
+      expect(updated.defaultModelName, isNull);
+      expect(updated.defaultToolNames, isNull,
+          reason: 'clearDefaultToolNames 使助手回到"从未配置"（null）状态，'
+              '新话题重新自动启用全部工具');
+    });
+
     test('updateAssistantSettings with extended params', () {
       SharedPreferences.setMockInitialValues({});
       final notifier = AssistantsNotifier();

@@ -36,7 +36,10 @@ void showAssistantFullEditDialog(
     enableSeed: assistant.settings.enableSeed,
     customParameters: List.from(assistant.settings.customParameters),
     defaultModelName: assistant.defaultModelName,
-    defaultToolNames: Set<String>.from(assistant.defaultToolNames ?? const {}),
+    // null = 从未配置（保持三态语义：新话题自动启用全部工具）。
+    defaultToolNames: assistant.defaultToolNames == null
+        ? null
+        : Set<String>.from(assistant.defaultToolNames!),
   );
   final seedController =
       TextEditingController(text: vars.seed?.toString() ?? '');
@@ -146,13 +149,10 @@ void showAssistantFullEditDialog(
                           vars.defaultModelName = name;
                           vars.defaultsModelEngaged = true;
                         }),
-                        onDefaultToolToggled: (toolName, enabled) =>
-                            setDlgState(() {
-                          if (enabled) {
-                            vars.defaultToolNames.add(toolName);
-                          } else {
-                            vars.defaultToolNames.remove(toolName);
-                          }
+                        onDefaultToolsChanged: (next) => setDlgState(() {
+                          // null = 恢复"未配置"（新话题重新自动启用全部工具）。
+                          vars.defaultToolNames =
+                              next == null ? null : Set<String>.from(next);
                           vars.defaultsToolsEngaged = true;
                         }),
                       ),
@@ -210,14 +210,30 @@ void showAssistantFullEditDialog(
               // rename) must not silently convert an unconfigured assistant
               // into "configured-empty" (which would switch new topics from
               // auto-enable-all to all-tools-OFF).
+              //
+              // 记录的默认模型已失效（从供应商配置中删除）时，保存自动清空：
+              // 与 tab 的"跟随全局设置"退化显示保持一致，避免同名模型
+              // 重新添加后旧的默认值悄悄复活。
+              final adapter = ref.read(chatStreamManagerProvider).adapter;
+              final availableModelNames = adapter
+                  .availableModels(ref.read(providerEntriesProvider))
+                  .map((m) => m.displayName)
+                  .toSet();
+              final modelStale = assistant.defaultModelName != null &&
+                  !availableModelNames.contains(assistant.defaultModelName);
               ref.read(assistantProvider.notifier).updateAssistantDefaults(
                     id: assistant.id,
                     defaultModelName: vars.defaultsModelEngaged
                         ? vars.defaultModelName
-                        : assistant.defaultModelName,
+                        : modelStale
+                            ? null
+                            : assistant.defaultModelName,
                     defaultToolNames: vars.defaultsToolsEngaged
                         ? vars.defaultToolNames
                         : assistant.defaultToolNames,
+                    // "恢复自动启用全部"：engaged 但集合为 null → 回到未配置。
+                    clearDefaultToolNames: vars.defaultsToolsEngaged &&
+                        vars.defaultToolNames == null,
                   );
 
               Navigator.pop(ctx);
