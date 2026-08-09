@@ -64,12 +64,6 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   /// Called when user taps X on the edit capsule to cancel editing.
   final VoidCallback? onEditCancel;
 
-  /// Called when the input field gains/loses focus. The chat page uses the
-  /// gain event to react to the tap immediately — before the soft-keyboard
-  /// animation starts — so the message list shifts up without the usual
-  /// delay.
-  final ValueChanged<bool>? onFocusChanged;
-
   /// Whether the data-loss warning should be armed when entering edit mode.
   /// The chat page sets this when the edited message has newer messages
   /// below it (re-sending the edit would delete them). The warning is then
@@ -103,7 +97,6 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.editingMessageAttachments,
     this.onEditSend,
     this.onEditCancel,
-    this.onFocusChanged,
     this.showEditWarningOnEntry = false,
     this.editWarningArmCount = 0,
   });
@@ -188,10 +181,6 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     // Listen to app lifecycle events so drafts are saved even when the
     // app goes to background or is terminated unexpectedly.
     WidgetsBinding.instance.addObserver(this);
-
-    // Notify the chat page the moment the input gains/loses focus so it can
-    // react to the tap before the soft-keyboard animation starts.
-    _focusNode.addListener(_onFocusChanged);
 
     // Restore draft text for the current conversation, if any
     if (widget.initialDraftText.isNotEmpty) {
@@ -320,11 +309,6 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     }
   }
 
-  /// Forwards focus changes (with the current focus state) to the page.
-  void _onFocusChanged() {
-    widget.onFocusChanged?.call(_focusNode.hasFocus);
-  }
-
   /// Arms the edit data-loss warning for the current edit session.
   ///
   /// The warning only matters when re-sending the edit can delete messages
@@ -425,7 +409,6 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _focusNode.removeListener(_onFocusChanged);
     _draftTimer?.cancel();
     _editWarningTimer?.cancel();
     _editWarningFallbackTimer?.cancel();

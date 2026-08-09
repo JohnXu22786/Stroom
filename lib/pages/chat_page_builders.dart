@@ -80,19 +80,6 @@ extension _ChatPageBuildersExt on _ChatPageState {
     );
   }
 
-  /// Tracks user drags on the chat list via scroll notifications, so the
-  /// keyboard bottom-pinning never fights a finger scroll. Programmatic
-  /// scrolls (jumpTo / animateTo — e.g. the chat library's own keyboard
-  /// handling) have null [ScrollNotification.dragDetails] and are ignored.
-  bool _onChatScrollNotification(ScrollNotification notification) {
-    if (notification is ScrollStartNotification) {
-      _userIsDragging = notification.dragDetails != null;
-    } else if (notification is ScrollEndNotification) {
-      _userIsDragging = false;
-    }
-    return false;
-  }
-
   /// Chat animated list with lazy pagination and auto-scroll control.
   ///
   /// On Android (Material 3) the default overscroll indicator is a
@@ -109,6 +96,19 @@ extension _ChatPageBuildersExt on _ChatPageState {
       itemBuilder: itemBuilder,
       onEndReached: _loadMoreMessages,
       scrollController: _chatScrollController,
+      // Scrolling the list must NOT dismiss the soft keyboard — the
+      // keyboard stays up while the user reads/scrolls; it is dismissed
+      // via the keyboard's own close key or the page's dismiss button.
+      // (The library defaults to onDrag, which hides the keyboard on any
+      // drag — exactly what the user reported as unwanted.)
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
+      // The library's own debounced keyboard scroll (100ms debounce +
+      // 250ms animation) runs alongside this page's keyboard-appear
+      // scroll. Its animation is smooth (NOT Duration.zero — an instant
+      // jump there cancelled this page's scroll mid-flight, which looked
+      // like the animation disappearing); when it takes over mid-scroll
+      // it continues toward the same bottom and the two read as one
+      // continuous slide. The follow-up closes any small gap it leaves.
       // While the initial positioning pass runs (entry / conversation
       // switch), suppress the built-in jump-to-bottom — the page positions
       // the list at the last user message itself. Same-conversation reloads
