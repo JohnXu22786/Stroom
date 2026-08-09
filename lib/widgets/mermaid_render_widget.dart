@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -161,15 +163,108 @@ class MermaidRenderWidget extends StatefulWidget {
   /// false to omit these handlers (e.g., when the parent Flutter widget
   /// handles gestures and communicates via [InAppWebViewController]).
   ///
+  /// If [inlineMermaidJs] is provided (the bundled mermaid.min.js asset),
+  /// the library is inlined directly into the page so the diagram renders
+  /// fully offline, with no CDN request. Otherwise mermaid.js is loaded
+  /// dynamically from the CDN (non-blocking, with a visible error on
+  /// failure or timeout).
+  ///
   /// This is the single source of truth for the Mermaid HTML/JS template.
   /// Both [MermaidRenderWidget] and [MermaidChartPage] use this method.
   static String buildMermaidHtml(String mermaidCode,
-      {bool withJsGestures = true}) {
+      {bool withJsGestures = true, String? inlineMermaidJs}) {
     final escaped = _escapeMermaidCode(mermaidCode);
     final gestureScript = withJsGestures ? _mermaidGestureJs : '';
     return _mermaidHtmlTemplate
         .replaceFirst('GESTURE_SCRIPT_PLACEHOLDER', gestureScript)
-        .replaceFirst('MERMAID_CODE_PLACEHOLDER', escaped);
+        .replaceFirst('MERMAID_CODE_PLACEHOLDER', escaped)
+        .replaceFirst(
+            'MERMAID_LOADER_PLACEHOLDER', _buildMermaidLoader(inlineMermaidJs));
+  }
+
+  /// Builds the JavaScript that loads mermaid.js and initializes the
+  /// diagram.
+  ///
+  /// With [inlineMermaidJs] (the bundled asset) the library is inlined as
+  /// a script element, so rendering works fully offline. Without it,
+  /// mermaid.js is loaded dynamically from the CDN — dynamic injection
+  /// (not a static `<script>` in `<head>`) keeps the document load event
+  /// from being blocked by a slow/unreachable CDN, and a failure or
+  /// timeout shows a visible error instead of an endless spinner.
+  static String _buildMermaidLoader(String? inlineMermaidJs) {
+    if (inlineMermaidJs != null && inlineMermaidJs.isNotEmpty) {
+      // JSON-encode the library into a JS string literal, and additionally
+      // escape every '<' as \u003C so the HTML parser cannot terminate the
+      // script tag early (</script) or start an HTML comment (<!--) inside
+      // the inlined code.
+      final encoded = jsonEncode(inlineMermaidJs).replaceAll('<', r'\u003C');
+      return '''
+    (function loadMermaid() {
+      var hint = document.getElementById('loading-hint');
+      var script = document.createElement('script');
+      script.textContent = $encoded;
+      document.head.appendChild(script);
+      try {
+        mermaid.initialize({
+          theme: 'default',
+          securityLevel: 'loose',
+          fontFamily: 'sans-serif',
+        });
+        mermaid.run({
+          nodes: [document.getElementById('mermaid-code')],
+        }).then(function() {
+          if (hint) hint.style.display = 'none';
+          window.fitToViewport();
+        }).catch(function(err) {
+          if (hint) hint.style.display = 'none';
+          reportError('Mermaid render error: ' + err.message);
+        });
+      } catch(e) {
+        if (hint) hint.style.display = 'none';
+        reportError('Mermaid initialize error: ' + e.message);
+      }
+    })();
+''';
+    }
+    return '''
+    (function loadMermaid() {
+      var hint = document.getElementById('loading-hint');
+      var mermaidTimer = setTimeout(function() {
+        if (hint) hint.style.display = 'none';
+        reportError('Mermaid 加载超时：请检查网络连接后重试');
+      }, 20000);
+      var script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
+      script.onload = function() {
+        clearTimeout(mermaidTimer);
+        try {
+          mermaid.initialize({
+            theme: 'default',
+            securityLevel: 'loose',
+            fontFamily: 'sans-serif',
+          });
+          mermaid.run({
+            nodes: [document.getElementById('mermaid-code')],
+          }).then(function() {
+            if (hint) hint.style.display = 'none';
+            window.fitToViewport();
+          }).catch(function(err) {
+            if (hint) hint.style.display = 'none';
+            reportError('Mermaid render error: ' + err.message);
+          });
+        } catch(e) {
+          if (hint) hint.style.display = 'none';
+          reportError('Mermaid initialize error: ' + e.message);
+        }
+      };
+      script.onerror = function() {
+        clearTimeout(mermaidTimer);
+        if (hint) hint.style.display = 'none';
+        reportError('Mermaid 加载失败：无法访问 cdn.jsdelivr.net');
+      };
+      document.head.appendChild(script);
+    })();
+''';
   }
 
   /// Shared HTML-escaping logic for mermaid code.
@@ -180,6 +275,55 @@ class MermaidRenderWidget extends StatefulWidget {
         .replaceAll('>', '&gt;');
   }
 
+  /// Path of the bundled mermaid.js library. Inlined into the render
+  /// template so diagrams render fully offline on every platform — no CDN
+  /// request is ever made (CDN fallback exists only for asset-loading
+  /// failures, which do not happen in normal builds).
+  static const bundledMermaidJsAsset = 'assets/vendor/mermaid.min.js';
+
+  /// Web-only: absolute URL of the bundled asset template loaded via
+  /// [InAppWebViewController.loadUrl]. Flutter web serves assets under
+  /// `/assets/<pubspec path>`, and the template loads mermaid.min.js from
+  /// the same directory (same origin, no CDN request).
+  static const webAssetTemplateUrl =
+      '/assets/assets/vendor/mermaid_render.html';
+
+  /// Web-only: builds the full template URL for [code]. The ?v= query
+  /// forces a fresh template fetch (a stale browser/iframe cache of the
+  /// old template would otherwise keep failing after an app update), and
+  /// the code travels as its own &code= parameter — both must share one
+  /// query string, or URLSearchParams cannot find the code and the
+  /// template renders the empty-code placeholder.
+  static String buildWebAssetUrl(String code) {
+    final base = '$webAssetTemplateUrl?v=4';
+    final trimmed = code.trim();
+    return trimmed.isEmpty
+        ? base
+        : '$base&code=${Uri.encodeQueryComponent(trimmed)}';
+  }
+
+  /// Load-once cache of the bundled mermaid.js source, shared by every
+  /// [MermaidRenderWidget] instance and the preview dialog.
+  static String? _cachedInlineMermaidJs;
+  static bool _bundledJsResolved = false;
+
+  /// Loads the bundled mermaid.js source (cached after the first load).
+  /// Returns null if the asset cannot be loaded — the caller then lets the
+  /// template fall back to its CDN loader.
+  static Future<String?> loadBundledMermaidJs() async {
+    if (_bundledJsResolved) return _cachedInlineMermaidJs;
+    _bundledJsResolved = true;
+    try {
+      _cachedInlineMermaidJs =
+          await rootBundle.loadString(bundledMermaidJsAsset);
+    } catch (e) {
+      debugPrint('[MermaidRenderWidget] Failed to load bundled mermaid.js '
+          '($bundledMermaidJsAsset), falling back to CDN: $e');
+      _cachedInlineMermaidJs = null;
+    }
+    return _cachedInlineMermaidJs;
+  }
+
   /// Core HTML/CSS/JS template. [GESTURE_SCRIPT_PLACEHOLDER] is replaced
   /// with [_mermaidGestureJs] or an empty string based on [withJsGestures].
   static const _mermaidHtmlTemplate = '''
@@ -187,8 +331,6 @@ class MermaidRenderWidget extends StatefulWidget {
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js">
-  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -202,6 +344,19 @@ class MermaidRenderWidget extends StatefulWidget {
       height: 100%;
       overflow: hidden;
       position: relative;
+    }
+    #loading-hint {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #888;
+      font-size: 13px;
+      font-family: sans-serif;
     }
     #diagram-container {
       transform-origin: 0 0;
@@ -232,6 +387,7 @@ class MermaidRenderWidget extends StatefulWidget {
 </head>
 <body>
   <div id="viewport">
+    <div id="loading-hint">图表加载中...</div>
     <div id="diagram-container">
       <pre class="mermaid" id="mermaid-code">
 MERMAID_CODE_PLACEHOLDER
@@ -320,6 +476,14 @@ MERMAID_CODE_PLACEHOLDER
         }
       }
       if (sw <= 0 || sh <= 0) return;
+      // Pin the SVG to its natural content size: mermaid v11 renders the
+      // root <svg> as `width="100%"` with only an inline `max-width` style
+      // (no width/height attributes), so without explicit pixel dimensions
+      // the SVG stretches to the container width while getBBox() still
+      // reports the natural size — the fit math below would then
+      // double-scale the diagram (shrunk and misplaced).
+      svg.setAttribute('width', sw);
+      svg.setAttribute('height', sh);
       zoomLevel = Math.max(0.1, Math.min(10, Math.min(vw / sw, vh / sh)));
       panX = (vw - sw * zoomLevel) / 2;
       panY = (vh - sh * zoomLevel) / 2;
@@ -329,23 +493,7 @@ MERMAID_CODE_PLACEHOLDER
 
 GESTURE_SCRIPT_PLACEHOLDER
 
-    // Initialize mermaid
-    try {
-      mermaid.initialize({
-        theme: 'default',
-        securityLevel: 'loose',
-        fontFamily: 'sans-serif',
-      });
-      mermaid.run({
-        nodes: [document.getElementById('mermaid-code')],
-      }).then(function() {
-        window.fitToViewport();
-      }).catch(function(err) {
-        reportError('Mermaid render error: ' + err.message);
-      });
-    } catch(e) {
-      reportError('Mermaid initialize error: ' + e.message);
-    }
+MERMAID_LOADER_PLACEHOLDER
   </script>
 </body>
 </html>
@@ -466,6 +614,30 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// Whether the source code view is shown instead of the rendered diagram.
   bool _showSourceCode = false;
 
+  /// Bundled mermaid.js source, inlined into the render template so the
+  /// diagram renders fully offline (no CDN request). Null while the asset
+  /// is loading, or when the asset is unavailable (template then falls
+  /// back to its CDN loader).
+  String? _inlineMermaidJs;
+  bool _mermaidJsLoading = true;
+
+  /// Fallback timer that force-ends the loading state if [onLoadStop] never
+  /// fires (e.g. the web platform's iframe load event or its JS bridge is
+  /// unavailable). Without it the loading overlay could spin forever while
+  /// the WebView actually rendered (or failed to render) underneath.
+  Timer? _readyFallbackTimer;
+
+  /// Total fallback: if the WebView is never created (onWebViewCreated
+  /// does not fire, e.g. the platform view failed to mount), the loading
+  /// state must still end with a visible error instead of spinning
+  /// forever. "Loading forever" is structurally impossible with this.
+  Timer? _webViewCreationFallbackTimer;
+
+  /// Delays WebView creation until the page transition animation has
+  /// settled (see [initState]). Cancelled on dispose so widget tests do
+  /// not fail with a pending timer.
+  Timer? _deferredCreationTimer;
+
   /// Guard flag to prevent concurrent save operations.
   bool _isSaving = false;
 
@@ -491,12 +663,34 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       _showSourceCode = true;
       return;
     }
-    // Defer WebView creation to after the first frame so that the
-    // page transition is not blocked by platform view creation.
+    // Defer WebView creation until the page transition animation has
+    // settled: creating the platform view mid-transition can leave the
+    // iframe with a zero size (the diagram is actually rendered, but the
+    // iframe stays invisible until a window resize forces a re-layout).
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_shouldCreateWebView) {
-        setState(() => _shouldCreateWebView = true);
-      }
+      _deferredCreationTimer?.cancel();
+      _deferredCreationTimer = Timer(const Duration(milliseconds: 400), () {
+        if (mounted && !_shouldCreateWebView) {
+          setState(() => _shouldCreateWebView = true);
+          _armWebViewCreationFallback();
+        }
+      });
+    });
+    // Load the bundled mermaid.js (inlined into the page so rendering
+    // works offline). The WebView is created only after it is ready.
+    // On web the asset template loads mermaid.min.js itself (same
+    // origin), so no pre-loading is needed.
+    if (!kIsWeb) {
+      _loadMermaidAsset();
+    }
+  }
+
+  Future<void> _loadMermaidAsset() async {
+    final js = await MermaidRenderWidget.loadBundledMermaidJs();
+    if (!mounted) return;
+    setState(() {
+      _inlineMermaidJs = js;
+      _mermaidJsLoading = false;
     });
   }
 
@@ -504,7 +698,13 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   void didUpdateWidget(MermaidRenderWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.mermaidCode != widget.mermaidCode) {
-      _isReady = false;
+      // On web the loading state is managed INSIDE the iframe (the asset
+      // template shows a hint until the diagram is rendered), so _isReady
+      // stays true and the Flutter overlay never appears there. On native
+      // platforms the overlay tracks onLoadStop.
+      if (!kIsWeb) {
+        _isReady = false;
+      }
       _errorMessage = null;
       _showSourceCode = false;
       _zoomLevel = 1.0;
@@ -516,8 +716,43 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
   @override
   void dispose() {
+    _readyFallbackTimer?.cancel();
+    _webViewCreationFallbackTimer?.cancel();
+    _deferredCreationTimer?.cancel();
     _webViewController = null;
     super.dispose();
+  }
+
+  /// Arms the total fallback: 12s after the WebView creation was
+  /// requested, if the controller still does not exist (the platform view
+  /// failed to mount — onWebViewCreated never fired), show a visible error
+  /// instead of the loading placeholder spinning forever.
+  void _armWebViewCreationFallback() {
+    _webViewCreationFallbackTimer?.cancel();
+    _webViewCreationFallbackTimer = Timer(const Duration(seconds: 12), () {
+      if (mounted && _webViewController == null && _errorMessage == null) {
+        debugPrint('[MermaidRenderWidget] WebView was not created within '
+            '12s, showing an error');
+        setState(() => _errorMessage = '图表渲染引擎初始化失败，请重试');
+      }
+    });
+  }
+
+  /// Arms a fallback timer that force-ends the loading state after 3s if
+  /// [onLoadStop] has not fired yet (native platforms only). The loading
+  /// overlay must never spin forever: whatever the WebView does (rendered,
+  /// blank, or errored), the overlay is removed so the user sees the
+  /// actual iframe content (which shows its own loading hint or error
+  /// message from the HTML template).
+  void _armReadyFallback() {
+    _readyFallbackTimer?.cancel();
+    _readyFallbackTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted && !_isReady && _errorMessage == null) {
+        debugPrint('[MermaidRenderWidget] onLoadStop did not fire within 3s, '
+            'force-ending the loading state');
+        setState(() => _isReady = true);
+      }
+    });
   }
 
   void _loadMermaidCode() {
@@ -525,6 +760,20 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     if (ctrl == null) return;
 
     final code = widget.mermaidCode.trim();
+
+    if (kIsWeb) {
+      // Web: load the bundled asset template (same origin, no CDN request)
+      // with the code as a query parameter. A data: URL cannot be used
+      // here — Chromium truncates data: URLs at ~1MB, and the bundled
+      // mermaid.min.js cannot be reached from a data: page (opaque origin).
+      // No ready-fallback is armed: the iframe manages its own loading
+      // state (the template hides its hint the moment the diagram renders).
+      ctrl.loadUrl(
+          urlRequest: URLRequest(
+              url: WebUri(MermaidRenderWidget.buildWebAssetUrl(code))));
+      return;
+    }
+
     if (code.isEmpty) {
       ctrl.loadData(
         data: _emptyPlaceholderHtml,
@@ -540,7 +789,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // the JS mouse handlers act as a fallback (e.g. mobile platforms where
     // the platform view receives events directly). Sharing one template
     // keeps zoom anchoring and auto-fit behavior identical everywhere.
-    final html = MermaidRenderWidget.buildMermaidHtml(code);
+    final html = MermaidRenderWidget.buildMermaidHtml(code,
+        inlineMermaidJs: _inlineMermaidJs);
+    _armReadyFallback();
     ctrl.loadData(
       data: html,
       mimeType: 'text/html',
@@ -553,6 +804,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       _errorMessage = null;
       _isReady = false;
     });
+    if (_webViewController == null) {
+      // The WebView was never created; re-arm the creation fallback for
+      // the retry attempt so a repeated failure cannot spin forever.
+      _armWebViewCreationFallback();
+    }
     _loadMermaidCode();
   }
 
@@ -722,6 +978,13 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// the platform view receives events directly, the JS handlers act as a
   /// fallback. Zoom anchoring and auto-fit behave identically in both.
   Widget _buildGestureWrapper(Widget child) {
+    // On web the WebView is a real iframe that receives pointer events
+    // directly; a Flutter gesture overlay would swallow every event and
+    // break the template's built-in mouse/touch pan/zoom handlers. The
+    // asset template carries those handlers itself, so render the iframe
+    // without any Flutter-level gesture interception.
+    if (kIsWeb) return child;
+
     // Shared gesture arena team: when the immediate recognizer wins the arena
     // on first pointer move, the ScaleGestureRecognizer also accepts.
     final team = GestureArenaTeam();
@@ -956,8 +1219,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     if (code.isEmpty) {
       return _emptyPlaceholderHtml;
     }
-    // Same shared template as the fullscreen dialog.
-    return MermaidRenderWidget.buildMermaidHtml(code);
+    // Same shared template as the fullscreen dialog, with the bundled
+    // mermaid.js inlined (offline rendering, no CDN request).
+    return MermaidRenderWidget.buildMermaidHtml(code,
+        inlineMermaidJs: _inlineMermaidJs);
   }
 
   @override
@@ -985,7 +1250,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     }
 
     // ---- Loading placeholder (deferred WebView creation) ----
-    if (!_shouldCreateWebView) {
+    // On native platforms the WebView is created only after the bundled
+    // mermaid.js asset is loaded (so the initial HTML can inline it) AND
+    // after the first frame. On web the asset template loads the library
+    // itself, so only the first-frame deferral applies.
+    if (!_shouldCreateWebView || (!kIsWeb && _mermaidJsLoading)) {
       return _buildBorderedContainer(
         height: effectiveHeight,
         cs: cs,
@@ -1025,50 +1294,83 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 javaScriptEnabled: true,
                 transparentBackground: true,
               ),
-              initialData: InAppWebViewInitialData(
-                data: _getInitialHtml(),
-                mimeType: 'text/html',
-                encoding: 'utf8',
-              ),
+              // On web the initial page is loaded via loadUrl (the bundled
+              // asset template, same origin): a data: URL cannot carry the
+              // bundled mermaid.js (Chromium truncates data: URLs at ~1MB)
+              // and cannot reach same-origin assets from an opaque origin.
+              initialData: kIsWeb
+                  ? null
+                  : InAppWebViewInitialData(
+                      data: _getInitialHtml(),
+                      mimeType: 'text/html',
+                      encoding: 'utf8',
+                    ),
               onWebViewCreated: (ctrl) {
                 _webViewController = ctrl;
-                ctrl.addJavaScriptHandler(
-                  handlerName: 'onMermaidError',
-                  callback: (args) {
-                    if (mounted) {
-                      final msg = args.isNotEmpty ? args[0].toString() : '未知错误';
-                      setState(() => _errorMessage = msg);
-                    }
-                  },
-                );
-                ctrl.addJavaScriptHandler(
-                  handlerName: 'onTransformChanged',
-                  callback: (args) {
-                    // Mirrors the JS-side zoom + pan (set by setZoom,
-                    // fitToViewport, or the JS gesture fallback handlers)
-                    // into Flutter state, so button/wheel anchors and
-                    // gesture bases always continue from the current view
-                    // instead of jumping back to a stale position.
-                    //
-                    // No setState: these values are not read in build();
-                    // the WebView itself reflects the transform visually.
-                    if (!mounted || args.length < 3) return;
-                    final zoom = double.tryParse(args[0].toString());
-                    final px = double.tryParse(args[1].toString());
-                    final py = double.tryParse(args[2].toString());
-                    if (zoom == null || px == null || py == null) return;
-                    _zoomLevel = zoom;
-                    _panX = px;
-                    _panY = py;
-                  },
-                );
+                // On web the iframe manages its own loading state (the
+                // asset template shows a hint until the diagram renders),
+                // so the widget is immediately ready and no fallback timer
+                // is armed — the diagram appears the moment it is rendered.
+                if (kIsWeb) {
+                  _isReady = true;
+                  _loadMermaidCode();
+                } else {
+                  // The initial page (initialData) loads outside
+                  // [_loadMermaidCode], so arm the ready fallback here too.
+                  _armReadyFallback();
+                }
+                // Register the JS→Flutter message bridge (error reporting
+                // and transform sync). flutter_inappwebview's WEB platform
+                // does not implement addJavaScriptHandler and throws
+                // UnimplementedError, so on web the diagram still renders
+                // in the iframe with the template's built-in JS gesture
+                // fallbacks — only the two bridges are unavailable. Guard
+                // the registration so the WebView keeps working everywhere.
+                try {
+                  ctrl.addJavaScriptHandler(
+                    handlerName: 'onMermaidError',
+                    callback: (args) {
+                      if (mounted) {
+                        final msg =
+                            args.isNotEmpty ? args[0].toString() : '未知错误';
+                        setState(() => _errorMessage = msg);
+                      }
+                    },
+                  );
+                  ctrl.addJavaScriptHandler(
+                    handlerName: 'onTransformChanged',
+                    callback: (args) {
+                      // Mirrors the JS-side zoom + pan (set by setZoom,
+                      // fitToViewport, or the JS gesture fallback handlers)
+                      // into Flutter state, so button/wheel anchors and
+                      // gesture bases always continue from the current view
+                      // instead of jumping back to a stale position.
+                      //
+                      // No setState: these values are not read in build();
+                      // the WebView itself reflects the transform visually.
+                      if (!mounted || args.length < 3) return;
+                      final zoom = double.tryParse(args[0].toString());
+                      final px = double.tryParse(args[1].toString());
+                      final py = double.tryParse(args[2].toString());
+                      if (zoom == null || px == null || py == null) return;
+                      _zoomLevel = zoom;
+                      _panX = px;
+                      _panY = py;
+                    },
+                  );
+                } catch (e) {
+                  debugPrint(
+                      '[MermaidRenderWidget] JS handler bridge unavailable: $e');
+                }
               },
               onLoadStop: (ctrl, url) {
                 if (mounted && !_isReady) {
                   setState(() => _isReady = true);
                 }
+                _readyFallbackTimer?.cancel();
               },
               onReceivedError: (controller, request, error) {
+                _readyFallbackTimer?.cancel();
                 if (mounted && !_isReady) {
                   setState(() {
                     _isReady = true;
