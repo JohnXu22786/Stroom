@@ -987,6 +987,136 @@ void main() {
       expect(saved!.customParams.single.options, isEmpty);
     });
 
+    testWidgets('legacy custom param (defaultValue) open+back does not warn',
+        (tester) async {
+      // 旧数据：string 类型只有 defaultValue（无 options）——打开时升级
+      // 为选项块，但不应算未保存修改
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'temperature_style',
+            defaultValue: 'balanced',
+            type: 'string',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => LlmModelConfigPage(model: model),
+                  ),
+                ),
+                child: const Text('打开模型配置'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开模型配置'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('放弃修改？'), findsNothing);
+      expect(find.text('打开模型配置'), findsOneWidget);
+    });
+
+    testWidgets('unchecking all custom param options blocks save',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'temperature_style',
+            defaultValue: 'balanced',
+            type: 'string',
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('自定义参数'));
+          await tester.scrollUntilVisible(
+            find.text('balanced'),
+            200,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.pumpAndSettle();
+          // 取消勾选唯一选项
+          await tester.tap(find.text('balanced'));
+          await tester.pump();
+        },
+      );
+
+      // 保存被拦（空值参数）
+      expect(saved, isNull);
+      expect(find.text('自定义参数的参数名和值不能为空'), findsOneWidget);
+    });
+
+    testWidgets('new additional param can add values and save', (tester) async {
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'thinking.type',
+              isReasoningToggle: true,
+              onValue: 'enabled',
+              offValue: 'disabled',
+            ),
+          ],
+        ),
+        beforeSave: (tester) async {
+          // 添加新的附加参数 + 填参数名 + 值
+          await _scrollToReasoning(tester, find.text('添加推理参数'));
+          await tester.tap(find.text('添加推理参数'));
+          await tester.pump();
+          await _scrollToReasoning(tester, find.text('添加值'));
+          // 新卡片参数名输入框（最后一个 TextFormField）填名
+          await tester.enterText(
+            find.byType(TextFormField).last,
+            'max_retries',
+          );
+          await tester.pump();
+          final addValueBtn = find.text('添加值').last;
+          await tester.ensureVisible(addValueBtn);
+          await tester.pumpAndSettle();
+          await tester.tap(addValueBtn);
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField).last, 'auto');
+          await tester.pump();
+          await tester.tap(find.text('确定'));
+          await tester.pumpAndSettle();
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(
+        saved!.reasoningParams
+            .where((p) => !p.isReasoningToggle && !p.isEffortParam)
+            .single
+            .options,
+        ['auto'],
+      );
+    });
+
     testWidgets('new model with provider params still saves', (tester) async {
       ModelConfig? saved;
       await tester.pumpWidget(

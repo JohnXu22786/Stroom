@@ -411,6 +411,12 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                               if (v != null) {
                                 setState(() {
                                   param.type = v;
+                                  // 切换到 string/number：注册勾选块状态
+                                  // （json/boolean 无选项，不参与）
+                                  if (v == 'string' || v == 'number') {
+                                    _customParamSelectedValues.putIfAbsent(
+                                        param, () => param.options.toSet());
+                                  }
                                   _validateJsonField(i, param);
                                 });
                               }

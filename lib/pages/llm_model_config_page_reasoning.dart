@@ -12,14 +12,17 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
 
   void _addReasoningParam() {
     setState(() {
-      _reasoningParams.add(
-        ReasoningParam(
-          paramName: '',
-          enabled: false,
-          isEffortParam: false,
-          options: [],
-        ),
+      final param = ReasoningParam(
+        paramName: '',
+        enabled: false,
+        isEffortParam: false,
+        options: [],
       );
+      _reasoningParams.add(param);
+      // 注册勾选块状态（新参数：空块，用户添加值后可见可勾选）
+      _additionalBlockValues[param] = [];
+      _additionalSelectedValues[param] = {};
+      _providerAdditionalValues[param] = {};
     });
   }
 

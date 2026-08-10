@@ -215,7 +215,20 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // Custom params and reasoning params (simple check via serialization)
     // 用 jsonEncode 而非 toString 比较：List/Map 的 toString 不引用
     // 字符串，空选项 [''] 会与无选项 [] 混淆。
-    final originalCustom = m.customParams.map((p) => p.toMap()).toList();
+    // 基线应用与 initState 相同的升级：string/number 的 defaultValue →
+    // 首选项；boolean 的 options 清空（否则旧数据打开即误报未保存）。
+    final originalCustom = m.customParams.map((p) {
+      final copy = p.copy();
+      if (copy.type == 'string' || copy.type == 'number') {
+        if (copy.options.isEmpty && copy.defaultValue.trim().isNotEmpty) {
+          copy.options.add(copy.defaultValue);
+          copy.defaultValue = '';
+        }
+      } else if (copy.type == 'boolean') {
+        copy.options.clear();
+      }
+      return copy.toMap();
+    }).toList();
     final currentCustom = _customParams.map((p) => p.toMap()).toList();
     if (jsonEncode(originalCustom) != jsonEncode(currentCustom)) return true;
     // Reasoning params: 与「打开时的初始合并视图」比较——保存会全量写入
@@ -235,13 +248,22 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     );
     // 应用初始勾选状态（默认不选语义）：基准的力度 options = 模型已
     // 保存的 options（模型无力度参数时为空）——与 initState 的块勾选
-    // 初始值一致。
+    // 初始值一致。boolean 类型的 options 清空（与 sync 一致）。
     final initialEffort = initialReasoning
         .cast<ReasoningParam?>()
         .firstWhere((p) => p?.isEffortParam ?? false, orElse: () => null);
     if (initialEffort != null) {
-      initialEffort.options =
-          List.of(findEffortParam(m.reasoningParams)?.options ?? const []);
+      if (initialEffort.type == 'boolean') {
+        initialEffort.options.clear();
+      } else {
+        initialEffort.options =
+            List.of(findEffortParam(m.reasoningParams)?.options ?? const []);
+      }
+    }
+    for (final p in initialReasoning) {
+      if (!p.isReasoningToggle && !p.isEffortParam && p.type == 'boolean') {
+        p.options.clear();
+      }
     }
     if (jsonEncode(initialReasoning.map((p) => p.toMap()).toList()) !=
         jsonEncode(_reasoningParams.map((p) => p.toMap()).toList())) {
@@ -312,12 +334,14 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
 
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
     // 旧数据升级：string/number 类型且仅有 defaultValue（无 options）时，
-    // 把 defaultValue 作为第一个选项（新 UI 为选项值胶囊块）。
+    // 把 defaultValue 作为第一个选项并清空 defaultValue（options 为权威，
+    // 否则用户取消全部勾选后 defaultValue 仍会发送）。
     // json 用默认值输入框、boolean 无参数值，均不参与。
     for (final p in _customParams) {
       if (p.type == 'string' || p.type == 'number') {
         if (p.options.isEmpty && p.defaultValue.trim().isNotEmpty) {
           p.options.add(p.defaultValue);
+          p.defaultValue = '';
         }
       }
     }

@@ -298,6 +298,70 @@ void main() {
       );
     });
 
+    testWidgets(
+        'boolean custom param saves with empty options after type '
+        'switch', (tester) async {
+      // 类型从 string 切到 boolean 后，残留的 options 必须在保存时清空
+      // （否则请求会发送 options.first 而非默认 true）
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'verbose',
+            defaultValue: 'high',
+            type: 'string',
+          ),
+        ],
+      );
+
+      ProviderConfigItem? saved;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () async {
+                  saved = await showProviderSettingsPanel(
+                    context: context,
+                    config: config,
+                    providerType: 'llm',
+                  );
+                },
+                child: const Text('打开供应商设置'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开供应商设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('参数设置'));
+      await tester.pumpAndSettle();
+
+      // 切换到 boolean 类型（参数名行右侧的类型下拉框）
+      await tester.scrollUntilVisible(
+        find.text('verbose'),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('布尔').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      final verbose =
+          saved!.customParams.firstWhere((p) => p.paramName == 'verbose');
+      expect(verbose.type, 'boolean');
+      expect(verbose.options, isEmpty, reason: 'boolean 类型保存时清空残留 options');
+    });
+
     testWidgets('duplicate reasoning param name shows inline error',
         (tester) async {
       final config = ProviderConfigItem(

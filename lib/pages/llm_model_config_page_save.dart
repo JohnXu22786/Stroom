@@ -43,6 +43,13 @@ extension _SaveExt on _LlmModelConfigPageState {
       return;
     }
 
+    // 先同步勾选块到工作副本（勾选/排序是保存内容的一部分，验证
+    // 必须基于同步后的 options——例如全部取消勾选后 options 为空，
+    // 验证会拦截空值参数）。
+    _syncEffortOptionsFromBlocks();
+    _syncAdditionalOptionsFromBlocks();
+    _syncCustomParamOptionsFromBlocks();
+
     // 验证自定义参数：参数名和值（选项或默认值）不能为空，参数名不能
     // 重复，且 JSON 类型的默认值必须是合法 JSON
     final seenNames = <String>{};
@@ -51,7 +58,7 @@ extension _SaveExt on _LlmModelConfigPageState {
       final name = param.paramName.trim();
       // boolean 类型无参数值（聊天/请求默认发送 true），只需参数名
       final hasValue = param.type == 'boolean' ||
-          param.options.isNotEmpty ||
+          param.options.any((o) => o.trim().isNotEmpty) ||
           param.defaultValue.trim().isNotEmpty;
       if (name.isEmpty || !hasValue) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -173,14 +180,6 @@ extension _SaveExt on _LlmModelConfigPageState {
         return;
       }
     }
-
-    // 把力度勾选块同步到力度参数（勾选值按块顺序写入 options；
-    // 全取消 = options 为空，该模型不提供力度选项），
-    // 把附加参数勾选块同步到各自 options，
-    // 并把自定义参数勾选块同步到各自 options
-    _syncEffortOptionsFromBlocks();
-    _syncAdditionalOptionsFromBlocks();
-    _syncCustomParamOptionsFromBlocks();
 
     setState(() => _isSaving = true);
 
