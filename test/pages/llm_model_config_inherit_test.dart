@@ -948,8 +948,9 @@ void main() {
       expect(find.text('添加选项'), findsNothing);
     });
 
-    testWidgets('boolean custom param gets true/false pill options',
-        (tester) async {
+    testWidgets(
+        'boolean custom param has no value area (like reasoning '
+        'boolean params)', (tester) async {
       final model = ModelConfig(
         name: 'test-model',
         modelId: 'test-model',
@@ -969,20 +970,21 @@ void main() {
         beforeSave: (tester) async {
           await _scrollToReasoning(tester, find.text('自定义参数'));
           await tester.scrollUntilVisible(
-            find.text('true'),
+            find.text('verbose'),
             200,
             scrollable: find.byType(Scrollable).first,
           );
           await tester.pumpAndSettle();
-          // boolean：胶囊块预填 true/false，无「默认参数值」输入框
-          expect(find.text('true'), findsOneWidget);
-          expect(find.text('false'), findsOneWidget);
+          // boolean：无参数值区（与推理参数 boolean 一致）
+          expect(find.text('布尔类型无需配置参数值。'), findsOneWidget);
           expect(find.text('默认参数值'), findsNothing);
+          expect(find.text('添加选项'), findsNothing);
         },
       );
 
       expect(saved, isNotNull);
-      expect(saved!.customParams.single.options, ['true', 'false']);
+      // 无值区 → options 为空
+      expect(saved!.customParams.single.options, isEmpty);
     });
 
     testWidgets('new model with provider params still saves', (tester) async {

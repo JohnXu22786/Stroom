@@ -488,9 +488,9 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // 值区按类型区分（照搬本面板推理力度的行式样式）：
-                  // string/number/boolean → 选项值文本行（多值、可编辑、
-                  // 把手排序）；json → 默认参数值输入框。
+                  // 值区按类型区分（照搬本面板推理力度的处理）：
+                  // string/number → 选项值文本行（多值、可编辑、把手排序）；
+                  // json → 默认参数值输入框；boolean → 无参数值。
                   if (param.type == 'json')
                     Row(
                       children: [
@@ -543,6 +543,14 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                           },
                         ),
                       ],
+                    )
+                  else if (param.type == 'boolean')
+                    Text(
+                      '布尔类型无需配置参数值。',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                      ),
                     )
                   else
                     _buildProviderCustomParamOptionRows(param, cs),

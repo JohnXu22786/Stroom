@@ -98,8 +98,8 @@ extension _ChatServiceParamsExt on ChatService {
 
       // Provider-level custom params
       for (final cp in _providerConfig!.customParams) {
-        result[cp.paramName] = ChatService._coerceCustomParam(cp.paramName,
-            cp.type, cp.options.isNotEmpty ? cp.options.first : cp.defaultValue,
+        result[cp.paramName] = ChatService._coerceCustomParam(
+            cp.paramName, cp.type, _customParamEffectiveValue(cp),
             source: 'provider');
       }
 
@@ -186,8 +186,8 @@ extension _ChatServiceParamsExt on ChatService {
 
     // Model-level custom params
     for (final cp in _modelConfig!.customParams) {
-      result[cp.paramName] = ChatService._coerceCustomParam(cp.paramName,
-          cp.type, cp.options.isNotEmpty ? cp.options.first : cp.defaultValue,
+      result[cp.paramName] = ChatService._coerceCustomParam(
+          cp.paramName, cp.type, _customParamEffectiveValue(cp),
           source: 'model');
     }
 
@@ -269,5 +269,14 @@ extension _ChatServiceParamsExt on ChatService {
     }
 
     return ChatService._stripOmitted(result);
+  }
+
+  /// 自定义参数的生效值：options 非空取第一个选项；否则取 defaultValue；
+  /// boolean 类型无任何配置时默认发送 'true'（配置了即开启）。
+  static String _customParamEffectiveValue(CustomParam cp) {
+    if (cp.options.isNotEmpty) return cp.options.first;
+    if (cp.defaultValue.trim().isNotEmpty) return cp.defaultValue;
+    if (cp.type == 'boolean') return 'true';
+    return '';
   }
 }

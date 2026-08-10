@@ -432,9 +432,9 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                   ),
                   const SizedBox(height: 8),
                   // 值区按类型区分（与推理参数同款）：
-                  // string/number/boolean → 选项值胶囊块（可添加多个、
-                  // 删除、长按排序；boolean 预填 true/false）；
-                  // json → 默认参数值输入框。
+                  // string/number → 选项值胶囊块（可添加多个、删除、
+                  // 长按排序）；json → 默认参数值输入框；
+                  // boolean → 无参数值（只有参数名）。
                   if (param.type == 'json')
                     Row(
                       children: [
@@ -487,6 +487,14 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                           },
                         ),
                       ],
+                    )
+                  else if (param.type == 'boolean')
+                    Text(
+                      '布尔类型无需配置参数值。',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                      ),
                     )
                   else
                     _buildCustomParamOptionBlocks(param, cs),

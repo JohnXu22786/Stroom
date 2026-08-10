@@ -186,11 +186,17 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   }
 
   /// 把附加参数勾选块同步到工作副本 options（勾选值按块顺序写入）。
-  /// 幂等，保存前与 _hasUnsavedChanges 比较前调用。
+  /// string/number 生效；json 用大输入框；boolean 无参数值（清空
+  /// options，聊天面板提供开/关切换）。幂等，保存前与
+  /// _hasUnsavedChanges 比较前调用。
   void _syncAdditionalOptionsFromBlocks() {
     for (final p in _reasoningParams) {
       if (p.isReasoningToggle || p.isEffortParam) continue;
-      if (p.type == 'json' || p.type == 'boolean') continue;
+      if (p.type == 'json') continue;
+      if (p.type == 'boolean') {
+        if (p.options.isNotEmpty) p.options.clear();
+        continue;
+      }
       final blocks = _additionalBlockValues[p];
       final selected = _additionalSelectedValues[p];
       if (blocks == null || selected == null) continue;
@@ -383,11 +389,16 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   }
 
   /// 把自定义参数勾选块同步到工作副本 options（勾选值按原顺序写入；
-  /// 未勾选的选项不保存）。json 类型用默认值输入框，不参与。
-  /// 幂等，保存前与 _hasUnsavedChanges 比较前调用。
+  /// 未勾选的选项不保存）。json 类型用默认值输入框；boolean 类型
+  /// 无参数值（清空 options）。幂等，保存前与 _hasUnsavedChanges
+  /// 比较前调用。
   void _syncCustomParamOptionsFromBlocks() {
     for (final p in _customParams) {
       if (p.type == 'json') continue;
+      if (p.type == 'boolean') {
+        if (p.options.isNotEmpty) p.options.clear();
+        continue;
+      }
       final selected = _customParamSelectedValues[p];
       if (selected == null) continue;
       final synced = p.options.where((v) => selected.contains(v)).toList();
