@@ -256,9 +256,15 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   }
 
   /// 参数来源状态（参数名标签后的括号显示）：
-  /// 模型配置中已存在同名参数，或内容被编辑过（与打开时快照不同）
-  /// → 「当前：模型自定义」；否则「当前：供应商」。
+  /// 模型配置中已存在同名参数，或内容被编辑过（与打开时快照不同），
+  /// 或本会话新建的参数（无初始快照）→ 「当前：模型自定义」；
+  /// 否则「当前：供应商」。
   String _paramSourceLabel(ReasoningParam param) {
+    final snapshot = _initialParamSnapshots[param];
+    if (snapshot == null) {
+      // 本会话新建的参数（添加按钮创建，无初始快照）
+      return '当前：模型自定义';
+    }
     final m = widget.model;
     final inModel = m?.reasoningParams.any(
           (p) =>
@@ -266,9 +272,7 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
               p.paramName.trim() == param.paramName.trim(),
         ) ??
         false;
-    final snapshot = _initialParamSnapshots[param];
-    final edited = snapshot != null &&
-        jsonEncode(param.toMap()) != jsonEncode(snapshot.toMap());
+    final edited = jsonEncode(param.toMap()) != jsonEncode(snapshot.toMap());
     return (inModel || edited) ? '当前：模型自定义' : '当前：供应商';
   }
 

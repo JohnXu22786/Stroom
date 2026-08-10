@@ -99,10 +99,6 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   late List<CustomParam> _customParams;
   late List<ReasoningParam> _reasoningParams;
 
-  /// 打开页面时各推理参数工作副本的初始快照（reset 还原用，按实例
-  /// 身份索引；工作副本实例在会话内不变）。
-  late final Map<ReasoningParam, ReasoningParam> _initialParamSnapshots;
-
   final Map<int, String?> _jsonErrors = {};
 
   // ASR upload settings
@@ -156,10 +152,6 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
 
     _customParams = c.customParams.map((p) => p.copy()).toList();
     _reasoningParams = c.reasoningParams.map((p) => p.copy()).toList();
-    // 打开时快照（reset 还原用，按实例身份）
-    _initialParamSnapshots = {
-      for (final p in _reasoningParams) p: p.copy(),
-    };
     // Initialize JSON validation for existing params
     for (int i = 0; i < _customParams.length; i++) {
       _validateJsonField(i, _customParams[i]);

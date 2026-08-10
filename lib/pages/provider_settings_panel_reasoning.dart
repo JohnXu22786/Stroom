@@ -86,6 +86,127 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
     });
   }
 
+  /// 长按拖拽排序附加参数块：把 [from] 值移到 [to] 值的位置。
+  void _moveAdditionalOptionTo(ReasoningParam param, String from, String to) {
+    if (from == to) return;
+    setState(() {
+      final options = param.options;
+      final fromIndex = options.indexOf(from);
+      final toIndex = options.indexOf(to);
+      if (fromIndex < 0 || toIndex < 0) return;
+      options.removeAt(fromIndex);
+      options.insert(toIndex, from);
+    });
+  }
+
+  /// 添加附加参数值块（对话框输入）。
+  Future<void> _addAdditionalBlockWithDialog(ReasoningParam param) async {
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('添加选项值'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '如 low、medium、high',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    if (value == null || value.isEmpty || !mounted) return;
+    setState(() {
+      if (!param.options.contains(value)) {
+        param.options.add(value);
+      }
+    });
+  }
+
+  /// 附加参数值块：与推理力度同款的胶囊（长按拖拽排序，右上角删除）。
+  Widget _buildAdditionalOptionBlock(
+    ReasoningParam param,
+    String value,
+    ColorScheme cs,
+  ) {
+    final pill = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant, width: 1),
+      ),
+      child: Text(
+        value,
+        style: TextStyle(
+          fontSize: 13,
+          color: cs.onSurfaceVariant,
+        ),
+      ),
+    );
+
+    final withDelete = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        pill,
+        Positioned(
+          top: -6,
+          right: -6,
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                param.options.remove(value);
+              });
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                color: cs.errorContainer,
+                shape: BoxShape.circle,
+              ),
+              padding: const EdgeInsets.all(2),
+              child: Icon(
+                Icons.close,
+                size: 12,
+                color: cs.onErrorContainer,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => details.data != value,
+      onAcceptWithDetails: (details) =>
+          _moveAdditionalOptionTo(param, details.data, value),
+      builder: (context, candidateData, rejectedData) {
+        return LongPressDraggable<String>(
+          data: value,
+          delay: const Duration(milliseconds: 330),
+          childWhenDragging: Opacity(opacity: 0.3, child: withDelete),
+          feedback: Material(
+            color: Colors.transparent,
+            child: Opacity(opacity: 0.8, child: withDelete),
+          ),
+          child: withDelete,
+        );
+      },
+    );
+  }
+
   /// 拖拽排序把手。
   Widget _buildDragHandle({required int index}) {
     return ReorderableDragStartListener(
@@ -100,22 +221,6 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
   // ===================================================================
   // 推理参数帮助方法
   // ===================================================================
-
-  /// 还原参数到打开页面时的初始状态（reset 按钮）。
-  void _resetReasoningParam(ReasoningParam param) {
-    final snapshot = _initialParamSnapshots[param];
-    if (snapshot == null) return;
-    setState(() {
-      param.paramName = snapshot.paramName;
-      param.onValue = snapshot.onValue;
-      param.offValue = snapshot.offValue;
-      param.type = snapshot.type;
-      param.enabled = snapshot.enabled;
-      param.options
-        ..clear()
-        ..addAll(snapshot.options);
-    });
-  }
 
   /// JSON 值格式校验（json 类型参数的大输入框用）。
   bool _jsonValueError(String value) {
@@ -294,13 +399,6 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 // 参数值类型选择
                 _buildTypeDropdown(toggle, cs),
                 const SizedBox(width: 4),
-                // 还原此参数（重置为打开时的状态）
-                IconButton(
-                  icon: const Icon(Icons.refresh, size: 20),
-                  visualDensity: VisualDensity.compact,
-                  tooltip: '还原此参数',
-                  onPressed: () => _resetReasoningParam(toggle),
-                ),
                 IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                   onPressed: () =>
@@ -440,13 +538,6 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 ),
                 _buildTypeDropdown(effort, cs),
                 const SizedBox(width: 4),
-                // 还原此参数（重置为打开时的状态）
-                IconButton(
-                  icon: const Icon(Icons.refresh, size: 20),
-                  visualDensity: VisualDensity.compact,
-                  tooltip: '还原此参数',
-                  onPressed: () => _resetReasoningParam(effort),
-                ),
                 IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                   onPressed: () =>
@@ -697,11 +788,12 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               ],
             ),
             const SizedBox(height: 8),
-            // 参数值区按类型区分：string/number → 选项行；json → 大输入框；
-            // boolean → 无参数值（只有参数名）。
+            // 参数值区按类型区分：string/number → 胶囊块（与模型页
+            // 推理力度同款，无勾选——供应商定义全部值）；json →
+            // 大输入框；boolean → 无参数值。
             if (param.type == 'boolean')
               Text(
-                '布尔类型无需配置参数值，聊天面板提供开/关切换。',
+                '布尔类型无需配置参数值。',
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -733,76 +825,27 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               )
             else ...[
               Text(
-                '选项值',
+                '长按块拖拽排序，点右上角 × 删除。',
                 style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '这些选项将按顺序显示在推理面板中供选择，拖动把手排序。'
-                '启用/禁用开关在推理面板中操作。',
-                style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                 ),
               ),
               const SizedBox(height: 8),
-              // 选项值行（可拖拽排序）
-              ReorderableListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                buildDefaultDragHandles: false,
-                itemCount: param.options.length,
-                onReorderItem: (oldIndex, newIndex) =>
-                    _reorderOptionInParam(actualIndex, oldIndex, newIndex),
-                itemBuilder: (context, j) {
-                  return Padding(
-                    key: ValueKey('add-opt-$actualIndex-$j'),
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        _buildDragHandle(index: j),
-                        const SizedBox(width: 2),
-                        Expanded(
-                          child: TextFormField(
-                            initialValue: param.options[j],
-                            decoration: InputDecoration(
-                              labelText: '选项 ${j + 1}',
-                              hintText: '如 low, enabled, true, max',
-                              border: const OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            onChanged: (v) {
-                              param.options[j] = v;
-                              setState(() {});
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        if (param.options.length > 1)
-                          IconButton(
-                            icon: const Icon(
-                              Icons.remove_circle,
-                              color: Colors.red,
-                              size: 18,
-                            ),
-                            onPressed: () =>
-                                _removeOptionFromParam(actualIndex, j),
-                            tooltip: '删除选项',
-                          ),
-                      ],
-                    ),
-                  );
-                },
+              // 值块：横向胶囊排列，长按拖拽排序
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final value in param.options)
+                    _buildAdditionalOptionBlock(param, value, cs),
+                ],
               ),
               const SizedBox(height: 4),
               TextButton.icon(
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('添加选项', style: TextStyle(fontSize: 13)),
-                onPressed: () => _addOptionToParam(actualIndex),
+                label: const Text('添加值', style: TextStyle(fontSize: 13)),
+                onPressed: () => _addAdditionalBlockWithDialog(param),
               ),
             ],
           ],
