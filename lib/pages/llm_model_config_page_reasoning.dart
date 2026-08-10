@@ -12,14 +12,17 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
 
   void _addReasoningParam() {
     setState(() {
-      _reasoningParams.add(
-        ReasoningParam(
-          paramName: '',
-          enabled: false,
-          isEffortParam: false,
-          options: [],
-        ),
+      final param = ReasoningParam(
+        paramName: '',
+        enabled: false,
+        isEffortParam: false,
+        options: [],
       );
+      _reasoningParams.add(param);
+      // 注册勾选块状态（新参数：空块，用户添加值后可见可勾选）
+      _additionalBlockValues[param] = [];
+      _additionalSelectedValues[param] = {};
+      _providerAdditionalValues[param] = {};
     });
   }
 
@@ -39,104 +42,448 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
 
   void _removeReasoningParam(int index) {
     setState(() {
-      _reasoningParams.removeAt(index);
+      final removed = _reasoningParams.removeAt(index);
+      // 删除力度参数时同步清空勾选块状态（避免重新添加后残留旧块）
+      if (removed.isEffortParam) {
+        _effortBlockValues.clear();
+        _effortSelectedValues.clear();
+        _providerEffortValues.clear();
+      }
+      // 删除附加参数时清理其勾选块状态
+      _additionalBlockValues.remove(removed);
+      _additionalSelectedValues.remove(removed);
+      _providerAdditionalValues.remove(removed);
     });
   }
 
-  void _addOptionToParam(int paramIndex) {
+  // ===================================================================
+  // 推理力度参数「勾选块」操作
+  // ===================================================================
+
+  /// 点击块：勾选/取消勾选。
+  void _toggleEffortBlock(String value) {
     setState(() {
-      _reasoningParams[paramIndex].options.add('');
+      if (!_effortSelectedValues.remove(value)) {
+        _effortSelectedValues.add(value);
+      }
     });
   }
 
-  void _removeOptionFromParam(int paramIndex, int optionIndex) {
+  /// 删除自定义值块（供应商来源的块只能取消勾选，不能删除）。
+  void _removeEffortBlock(String value) {
     setState(() {
-      _reasoningParams[paramIndex].options.removeAt(optionIndex);
+      _effortBlockValues.remove(value);
+      _effortSelectedValues.remove(value);
     });
   }
 
-  /// 上移/下移附加推理参数（仅在附加参数之间交换位置，跳过开关与
-  /// 力度参数）。排序属于修改：涉及继承参数时将其认领为模型独立，
-  /// 否则排序结果不会写入模型、下次打开即失效。
-  /// 注意：此处直接清除继承标记并记入 [_forceClaimedParamsStore]（不走
-  /// _claimReasoningParam 的内容比较回退）——toMap 不包含列表位置，
-  /// 内容比较感知不到排序变化；强制认领后该参数本会话内不再回退。
-  void _moveAdditionalReasoningParam(ReasoningParam param, int delta) {
-    final additional = _additionalReasoningParams;
-    final from = additional.indexOf(param);
-    final to = from + delta;
-    if (from < 0 || to < 0 || to >= additional.length) return;
+  /// 长按拖拽排序块：把 [from] 值移到 [to] 值的位置。
+  /// 排序即修改，直接影响保存顺序（进而影响推理面板中力度选项的
+  /// 显示顺序与默认值）。
+  void _moveBlockTo(String from, String to) {
+    if (from == to) return;
     setState(() {
-      final target = additional[to];
-      final i1 = _reasoningParams.indexOf(param);
-      final i2 = _reasoningParams.indexOf(target);
-      final list = _reasoningParams;
-      final tmp = list[i1];
-      list[i1] = list[i2];
-      list[i2] = tmp;
-      // 强制转为模型自有：排序结果才能随模型保存并跨打开保持
-      param.inheritedFromProvider = false;
-      target.inheritedFromProvider = false;
-      _forceClaimedParamsStore.add(param);
-      _forceClaimedParamsStore.add(target);
+      final fromIndex = _effortBlockValues.indexOf(from);
+      final toIndex = _effortBlockValues.indexOf(to);
+      if (fromIndex < 0 || toIndex < 0) return;
+      _effortBlockValues.removeAt(fromIndex);
+      _effortBlockValues.insert(toIndex, from);
     });
   }
 
-  /// 上移/下移 [paramIndex] 参数的选项值。排序属于修改：继承参数
-  /// 会被认领为模型独立。
-  void _moveOptionInParam(int paramIndex, int optionIndex, int delta) {
-    final options = _reasoningParams[paramIndex].options;
-    final to = optionIndex + delta;
-    if (to < 0 || to >= options.length) return;
+  /// 拖拽排序附加参数（在附加参数之间移动；开关与力度参数的位置
+  /// 由类别决定，不参与排序）。
+  void _reorderAdditionalParam(int oldIndex, int newIndex) {
     setState(() {
-      final tmp = options[optionIndex];
-      options[optionIndex] = options[to];
-      options[to] = tmp;
-      _claimReasoningParam(_reasoningParams[paramIndex]);
+      final additional = _additionalReasoningParams;
+      final param = additional.removeAt(oldIndex);
+      additional.insert(newIndex, param);
+      // 重建工作副本：开关/力度保持原顺序，附加参数按新顺序
+      final rebuilt = <ReasoningParam>[
+        ..._reasoningParams
+            .where((p) => p.isReasoningToggle || p.isEffortParam),
+        ...additional,
+      ];
+      _reasoningParams
+        ..clear()
+        ..addAll(rebuilt);
     });
+  }
+
+  // ===================================================================
+  // 附加推理参数「勾选块」操作
+  // ===================================================================
+
+  /// 点击附加参数块：勾选/取消勾选。
+  void _toggleAdditionalBlock(ReasoningParam param, String value) {
+    final selected = _additionalSelectedValues[param];
+    if (selected == null) return;
+    setState(() {
+      if (!selected.remove(value)) {
+        selected.add(value);
+      }
+    });
+  }
+
+  /// 添加附加参数值块（对话框输入，默认勾选，带删除按钮）。
+  Future<void> _addAdditionalBlockWithDialog(ReasoningParam param) async {
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('添加选项值'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '如 low、medium、high',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    if (value == null || value.isEmpty || !mounted) return;
+    setState(() {
+      final blocks = _additionalBlockValues[param];
+      final selected = _additionalSelectedValues[param];
+      if (blocks == null || selected == null) return;
+      if (!blocks.contains(value)) {
+        blocks.add(value);
+        selected.add(value);
+      }
+    });
+  }
+
+  /// 删除附加参数值块（供应商来源的块只能取消勾选，不能删除）。
+  void _removeAdditionalBlock(ReasoningParam param, String value) {
+    setState(() {
+      _additionalBlockValues[param]?.remove(value);
+      _additionalSelectedValues[param]?.remove(value);
+    });
+  }
+
+  /// 长按拖拽排序附加参数块：把 [from] 移到 [to] 的位置。
+  void _moveAdditionalBlockTo(ReasoningParam param, String from, String to) {
+    if (from == to) return;
+    setState(() {
+      final blocks = _additionalBlockValues[param];
+      if (blocks == null) return;
+      final fromIndex = blocks.indexOf(from);
+      final toIndex = blocks.indexOf(to);
+      if (fromIndex < 0 || toIndex < 0) return;
+      blocks.removeAt(fromIndex);
+      blocks.insert(toIndex, from);
+    });
+  }
+
+  /// 把附加参数勾选块同步到工作副本 options（勾选值按块顺序写入）。
+  /// string/number 生效；json 用大输入框；boolean 无参数值（清空
+  /// options，聊天面板提供开/关切换）。幂等，保存前与
+  /// _hasUnsavedChanges 比较前调用。
+  void _syncAdditionalOptionsFromBlocks() {
+    for (final p in _reasoningParams) {
+      if (p.isReasoningToggle || p.isEffortParam) continue;
+      if (p.type == 'json') continue;
+      if (p.type == 'boolean') {
+        if (p.options.isNotEmpty) p.options.clear();
+        continue;
+      }
+      final blocks = _additionalBlockValues[p];
+      final selected = _additionalSelectedValues[p];
+      if (blocks == null || selected == null) continue;
+      final synced = blocks.where((v) => selected.contains(v)).toList();
+      if (jsonEncode(p.options) != jsonEncode(synced)) {
+        p.options
+          ..clear()
+          ..addAll(synced);
+      }
+    }
+  }
+
+  // ===================================================================
+  // 自定义参数（CustomParam）选项值胶囊块操作
+  // ===================================================================
+
+  /// 点击自定义参数选项块：勾选/取消勾选（照搬模型页推理力度块交互）。
+  void _toggleCustomParamOption(CustomParam param, String value) {
+    final selected = _customParamSelectedValues[param];
+    if (selected == null) return;
+    setState(() {
+      if (!selected.remove(value)) {
+        selected.add(value);
+      }
+    });
+  }
+
+  /// 长按拖拽排序自定义参数选项：把 [from] 移到 [to] 的位置。
+  void _moveCustomParamOptionTo(CustomParam param, String from, String to) {
+    if (from == to) return;
+    setState(() {
+      final options = param.options;
+      final fromIndex = options.indexOf(from);
+      final toIndex = options.indexOf(to);
+      if (fromIndex < 0 || toIndex < 0) return;
+      options.removeAt(fromIndex);
+      options.insert(toIndex, from);
+    });
+  }
+
+  /// 添加自定义参数选项值（对话框输入）。
+  Future<void> _addCustomParamOptionWithDialog(CustomParam param) async {
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('添加选项值'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '如 low、medium、high',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    if (value == null || value.isEmpty || !mounted) return;
+    setState(() {
+      if (!param.options.contains(value)) {
+        param.options.add(value);
+        // 新选项默认勾选（照搬力度块：添加即选中）
+        _customParamSelectedValues[param]?.add(value);
+      }
+    });
+  }
+
+  /// 自定义参数选项值区：胶囊块（照搬模型页推理力度同款——点击
+  /// 勾选高亮、长按拖拽排序、右上角删除；默认全选）。
+  Widget _buildCustomParamOptionBlocks(CustomParam param, ColorScheme cs) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '点击块选中/取消（选中的值将参与发送），长按块拖拽排序。',
+          style: TextStyle(
+            fontSize: 12,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final value in param.options)
+              _buildCustomParamOptionBlock(param, value, cs),
+          ],
+        ),
+        const SizedBox(height: 4),
+        TextButton.icon(
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('添加选项', style: TextStyle(fontSize: 13)),
+          onPressed: () => _addCustomParamOptionWithDialog(param),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCustomParamOptionBlock(
+    CustomParam param,
+    String value,
+    ColorScheme cs,
+  ) {
+    final selected =
+        _customParamSelectedValues[param]?.contains(value) ?? false;
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: selected ? cs.primaryContainer : Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: selected ? cs.primary : cs.outlineVariant,
+          width: selected ? 1.5 : 1,
+        ),
+      ),
+      child: Text(
+        value,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+          color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+        ),
+      ),
+    );
+
+    final withDelete = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        chip,
+        Positioned(
+          top: -6,
+          right: -6,
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                param.options.remove(value);
+                _customParamSelectedValues[param]?.remove(value);
+              });
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                color: cs.errorContainer,
+                shape: BoxShape.circle,
+              ),
+              padding: const EdgeInsets.all(2),
+              child: Icon(
+                Icons.close,
+                size: 12,
+                color: cs.onErrorContainer,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => details.data != value,
+      onAcceptWithDetails: (details) =>
+          _moveCustomParamOptionTo(param, details.data, value),
+      builder: (context, candidateData, rejectedData) {
+        return LongPressDraggable<String>(
+          data: value,
+          delay: const Duration(milliseconds: 330),
+          childWhenDragging: Opacity(opacity: 0.3, child: withDelete),
+          feedback: Material(
+            color: Colors.transparent,
+            child: Opacity(opacity: 0.8, child: withDelete),
+          ),
+          child: GestureDetector(
+            onTap: () => _toggleCustomParamOption(param, value),
+            child: withDelete,
+          ),
+        );
+      },
+    );
+  }
+
+  /// 把自定义参数勾选块同步到工作副本 options（勾选值按原顺序写入；
+  /// 未勾选的选项不保存）。json 类型用默认值输入框；boolean 类型
+  /// 无参数值（清空 options）。幂等，保存前与 _hasUnsavedChanges
+  /// 比较前调用。
+  void _syncCustomParamOptionsFromBlocks() {
+    for (final p in _customParams) {
+      if (p.type == 'json') continue;
+      if (p.type == 'boolean') {
+        if (p.options.isNotEmpty) p.options.clear();
+        continue;
+      }
+      final selected = _customParamSelectedValues[p];
+      if (selected == null) continue;
+      final synced = p.options.where((v) => selected.contains(v)).toList();
+      if (jsonEncode(p.options) != jsonEncode(synced)) {
+        p.options
+          ..clear()
+          ..addAll(synced);
+      }
+    }
   }
 
   // ===================================================================
   // 推理参数帮助方法
   // ===================================================================
 
-  /// 将 [param] 在「继承自供应商」与「模型独立」之间切换。
-  /// 供应商参数被用户编辑时调用：内容与供应商原值不一致 → 清除
-  /// inheritedFromProvider 标记（保存时写入模型）；编辑后又还原成与
-  /// 供应商原值完全一致 → 恢复标记（保持继承，不写入模型）。
-  /// 避免「改了又改回去，却因模型规则（如力度参数必须有选项值）而
-  /// 无法保存」的死局。原值按实例身份索引：只有打开页面时就是继承
-  /// 状态的参数才允许回退，新建的参数不会被误标为继承。
-  /// 被排序强制认领（[_forceClaimedParamsStore]）的参数不回退——排序结果
-  /// 没有内容载体，不能因内容还原而丢失。
-  /// 调用方需在自身的 setState 中执行。
-  void _claimReasoningParam(ReasoningParam param) {
-    if (!_forceClaimedParamsStore.contains(param)) {
-      final original = _providerOriginals[param];
-      if (original != null && _sameReasoningParamAsProvider(param, original)) {
-        param.inheritedFromProvider = true;
-        return;
+  /// 还原参数到打开页面时的初始状态（reset 按钮）。力度参数同时
+  /// 还原勾选块状态。还原后重建整个推理区（版本号 +1），让输入框
+  /// 显示还原后的值。
+  void _resetReasoningParam(ReasoningParam param) {
+    final snapshot = _initialParamSnapshots[param];
+    if (snapshot == null) return;
+    setState(() {
+      param.paramName = snapshot.paramName;
+      param.onValue = snapshot.onValue;
+      param.offValue = snapshot.offValue;
+      param.type = snapshot.type;
+      param.enabled = snapshot.enabled;
+      param.options
+        ..clear()
+        ..addAll(snapshot.options);
+      if (param.isEffortParam) {
+        _effortBlockValues = List.of(_initialBlockValues);
+        _effortSelectedValues = {..._initialSelectedValues};
+      } else if (!param.isReasoningToggle &&
+          param.type != 'json' &&
+          param.type != 'boolean') {
+        // 附加参数：还原勾选块状态
+        final providerOptions = _providerAdditionalValues[param];
+        if (providerOptions != null) {
+          _additionalBlockValues[param] = [
+            ...snapshot.options,
+            ...providerOptions.where((v) => !snapshot.options.contains(v)),
+          ];
+          _additionalSelectedValues[param] = snapshot.options.isNotEmpty
+              ? snapshot.options.toSet()
+              : {...providerOptions};
+        }
       }
-    }
-    if (param.inheritedFromProvider) {
-      param.inheritedFromProvider = false;
+      _reasoningResetVersion++;
+    });
+  }
+
+  /// JSON 值格式校验（json 类型参数的大输入框用）。
+  bool _jsonValueError(String value) {
+    if (value.trim().isEmpty) return false;
+    try {
+      jsonDecode(value.trim());
+      return false;
+    } catch (_) {
+      return true;
     }
   }
 
-  /// 与供应商原值比较（开关的空字符串与 null 视为等价，兼容旧数据）。
-  /// 注意：不能使用 toMap().toString() 直接比较——Dart 的 List/Map
-  /// toString 不引用字符串，['']（已添加但未填写的空选项）会被打印成
-  /// []，与「无选项」不可区分；jsonEncode 会正确区分 ["'"] 与 []。
-  bool _sameReasoningParamAsProvider(
-      ReasoningParam param, ReasoningParam original) {
-    Map<String, dynamic> normalized(ReasoningParam p) {
-      final map = p.toMap();
-      if (map['onValue'] == '') map.remove('onValue');
-      if (map['offValue'] == '') map.remove('offValue');
-      return map;
+  /// 参数来源状态（参数名标签后的括号显示）：
+  /// 模型配置中已存在同名参数，或内容被编辑过（与打开时快照不同），
+  /// 或本会话新建的参数（无初始快照）→ 「当前：模型自定义」；
+  /// 否则「当前：供应商」。
+  String _paramSourceLabel(ReasoningParam param) {
+    final snapshot = _initialParamSnapshots[param];
+    if (snapshot == null) {
+      // 本会话新建的参数（添加按钮创建，无初始快照）
+      return '当前：模型自定义';
     }
-
-    return jsonEncode(normalized(param)) == jsonEncode(normalized(original));
+    final m = widget.model;
+    final inModel = m?.reasoningParams.any(
+          (p) =>
+              p.paramName.trim().isNotEmpty &&
+              p.paramName.trim() == param.paramName.trim(),
+        ) ??
+        false;
+    final edited = jsonEncode(param.toMap()) != jsonEncode(snapshot.toMap());
+    return (inModel || edited) ? '当前：模型自定义' : '当前：供应商';
   }
 
   /// Returns the reasoning toggle param, or null if none exists.

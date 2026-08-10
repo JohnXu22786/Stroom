@@ -65,6 +65,21 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
   }
 
   List<Widget> _buildReasoningSection(ColorScheme cs) {
+    // 外包 KeyedSubtree：reset 还原后重建整个推理区，让输入框
+    // 显示还原后的值（TextFormField 的 internal state 不跟随
+    // initialValue 更新）。
+    return [
+      KeyedSubtree(
+        key: ValueKey('reasoning-section-$_reasoningResetVersion'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _buildReasoningSectionInner(cs),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _buildReasoningSectionInner(ColorScheme cs) {
     return [
       // ==========================================================
       // 推理参数（可开关，每个参数独立控制）
@@ -80,12 +95,12 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
       const SizedBox(height: 4),
       Text(
         '推理开关控制聊天页面中推理功能的开启和关闭，由您定义参数名和对应的开/关值。'
-        '推理力度参数有且只有一个，每个含参数名和可选项，显示在推理面板中供选择。'
+        '推理力度参数有且只有一个：点击块选中/取消值，拖动把手排序，'
+        '选中的值将按此顺序显示在聊天推理面板中供选择。'
         '您还可以通过底部按钮添加额外的推理参数。'
         '参数名支持点号嵌套（如 thinking.type 会展开为 {"thinking": {"type": "..."}}）。'
-        '供应商已配置的推理参数会直接显示在本页（标注「来自供应商」），'
-        '修改后即变为本模型独立配置；未修改的部分始终跟随供应商设置同步。'
-        '参数与选项值均可通过上移/下移按钮排序。',
+        '供应商已配置的推理参数会直接显示在本页，'
+        '每次打开都会同步供应商的最新值。参数与选项值均可拖拽排序。',
         style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
       ),
       const SizedBox(height: 12),
@@ -96,18 +111,30 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
       // 推理力度 — 有且只有一个 card（通过「添加推理力度」按钮添加）
       _buildReasoningEffortSection(cs),
 
-      // 附加推理参数（通过「添加推理参数」按钮添加）
+      // 附加推理参数（通过「添加推理参数」按钮添加，拖拽把手排序）
       if (_additionalReasoningParams.isNotEmpty)
-        ...List.generate(_additionalReasoningParams.length, (i) {
-          final param = _additionalReasoningParams[i];
-          final actualIndex = _reasoningParams.indexOf(param);
-          return _buildAdditionalReasoningParamCard(
-            param,
-            actualIndex,
-            i,
-            cs,
-          );
-        }),
+        ReorderableListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false,
+          itemCount: _additionalReasoningParams.length,
+          onReorderItem: _reorderAdditionalParam,
+          itemBuilder: (context, i) {
+            // 拖拽动画期间 framework 可能用临时索引请求构建，
+            // 越界时返回空占位，避免重建过程中的越界崩溃
+            final additional = _additionalReasoningParams;
+            if (i >= additional.length) {
+              return const SizedBox.shrink(key: ValueKey('rlv-placeholder'));
+            }
+            final param = additional[i];
+            return KeyedSubtree(
+              // ReorderableListView 要求每个 item 有 key；用实例身份
+              // 保证拖拽动画期间 key 稳定
+              key: ValueKey('add-param-${identityHashCode(param)}'),
+              child: _buildAdditionalReasoningParamCard(param, i, cs),
+            );
+          },
+        ),
       const SizedBox(height: 8),
       Center(
         child: TextButton.icon(
@@ -283,6 +310,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
   }
 
   List<Widget> _buildCustomParamsSection() {
+    final cs = Theme.of(context).colorScheme;
     return [
       // ==========================================================
       // 自定义参数（总是发送）
@@ -331,6 +359,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
@@ -382,6 +411,14 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                               if (v != null) {
                                 setState(() {
                                   param.type = v;
+                                  // 切换到 string/number：注册勾选块状态
+                                  // 并清空 defaultValue（json 的旧值不应
+                                  // 在 options 模式下继续发送）
+                                  if (v == 'string' || v == 'number') {
+                                    _customParamSelectedValues.putIfAbsent(
+                                        param, () => param.options.toSet());
+                                    param.defaultValue = '';
+                                  }
                                   _validateJsonField(i, param);
                                 });
                               }
@@ -402,58 +439,73 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          initialValue: param.defaultValue,
-                          decoration: InputDecoration(
-                            labelText: '默认参数值',
-                            hintText: param.paramType.defaultValueHint,
-                            border: const OutlineInputBorder(),
-                            errorBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: _jsonParamHasError(i)
-                                    ? Colors.red
-                                    : Colors.grey.shade400,
+                  // 值区按类型区分（与推理参数同款）：
+                  // string/number → 选项值胶囊块（可添加多个、删除、
+                  // 长按排序）；json → 默认参数值输入框；
+                  // boolean → 无参数值（只有参数名）。
+                  if (param.type == 'json')
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: param.defaultValue,
+                            decoration: InputDecoration(
+                              labelText: '默认参数值',
+                              hintText: param.paramType.defaultValueHint,
+                              border: const OutlineInputBorder(),
+                              errorBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: _jsonParamHasError(i)
+                                      ? Colors.red
+                                      : Colors.grey.shade400,
+                                ),
                               ),
-                            ),
-                            focusedErrorBorder: OutlineInputBorder(
-                              borderSide: const BorderSide(
-                                color: Colors.red,
+                              focusedErrorBorder: OutlineInputBorder(
+                                borderSide: const BorderSide(
+                                  color: Colors.red,
+                                ),
                               ),
+                              errorText: _jsonErrors[i],
+                              errorMaxLines: 3,
+                              isDense: true,
                             ),
-                            errorText: _jsonErrors[i],
-                            errorMaxLines: 3,
-                            isDense: true,
-                          ),
-                          onChanged: (v) {
-                            param.defaultValue = v;
-                            _validateJsonField(i, param);
-                            setState(() {});
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(Icons.fullscreen, size: 20),
-                        tooltip: '全屏编辑',
-                        onPressed: () {
-                          _showValueFullscreenEditor(
-                            context,
-                            param.defaultValue,
-                            (result) {
-                              param.defaultValue = result;
+                            onChanged: (v) {
+                              param.defaultValue = v;
                               _validateJsonField(i, param);
                               setState(() {});
                             },
-                            param.paramType.defaultValueHint,
-                            type: param.type,
-                          );
-                        },
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.fullscreen, size: 20),
+                          tooltip: '全屏编辑',
+                          onPressed: () {
+                            _showValueFullscreenEditor(
+                              context,
+                              param.defaultValue,
+                              (result) {
+                                param.defaultValue = result;
+                                _validateJsonField(i, param);
+                                setState(() {});
+                              },
+                              param.paramType.defaultValueHint,
+                              type: param.type,
+                            );
+                          },
+                        ),
+                      ],
+                    )
+                  else if (param.type == 'boolean')
+                    Text(
+                      '布尔类型无需配置参数值。',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                       ),
-                    ],
-                  ),
+                    )
+                  else
+                    _buildCustomParamOptionBlocks(param, cs),
                 ],
               ),
             ),

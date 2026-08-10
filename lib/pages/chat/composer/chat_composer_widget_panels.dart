@@ -133,8 +133,12 @@ extension _ChatComposerPanelsExt on ChatComposerWidgetState {
           // highlight of the first option). Write even when a (possibly
           // stale, pre-fix) value already exists — the provider change is
           // what triggers the chip rebuild; keep the existing selection.
+          // boolean 类型参数无选项：开启即写入 'true'。
           if (param.options.isNotEmpty) {
             current.putIfAbsent(param.paramName, () => param.options.first);
+            ref.read(reasoningParamValuesProvider.notifier).state = current;
+          } else if (param.type == 'boolean') {
+            current[param.paramName] = 'true';
             ref.read(reasoningParamValuesProvider.notifier).state = current;
           }
         } else {

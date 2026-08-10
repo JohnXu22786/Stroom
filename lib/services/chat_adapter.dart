@@ -117,6 +117,10 @@ class ChatAdapter {
   /// so provider-declared params (e.g. the effort param name) work even
   /// when the model itself doesn't define them.
   ///
+  /// 力度参数遮蔽：模型有自己的力度参数（含旧数据回退识别）时，
+  /// 供应商的力度参数被模型版本遮蔽——从合并视图中移除，避免
+  /// 不可见的陈旧参数（陈旧值会注入请求且 UI 无法清除）。
+  ///
   /// Provider-origin params are returned as copies: the chat panel toggles
   /// `param.enabled` in place on these objects, and writing through to the
   /// shared provider config would corrupt every model of the provider (and
@@ -127,6 +131,14 @@ class ChatAdapter {
     final config = _cachedModelConfig;
     if (config == null) return const [];
     final providerParams = _cachedProviderConfig?.reasoningParams ?? [];
+    // 力度参数模型优先（对模型列表独立解析：旧数据回退不被供应商的
+    // 现代参数干扰）
+    final modelEffort = findEffortParam(config.reasoningParams);
+    var merged = mergeReasoningParams(providerParams, config.reasoningParams);
+    if (modelEffort != null) {
+      merged =
+          merged.where((p) => !p.isEffortParam || p == modelEffort).toList();
+    }
     final providerNames = providerParams
         .map((p) => p.paramName.trim())
         .where((n) => n.isNotEmpty)
@@ -135,8 +147,7 @@ class ChatAdapter {
         .map((p) => p.paramName.trim())
         .where((n) => n.isNotEmpty)
         .toSet();
-    return mergeReasoningParams(providerParams, config.reasoningParams)
-        .map((p) {
+    return merged.map((p) {
       final name = p.paramName.trim();
       final isProviderOrigin = name.isNotEmpty &&
           providerNames.contains(name) &&
