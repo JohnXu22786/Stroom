@@ -4,7 +4,7 @@ import 'package:stroom/pages/chat/composer/composer_shared.dart';
 
 void main() {
   // ═══════════════════════════════════════════════════════════════
-  // Unit tests for truncateDisplayName (char-based, max 20 per part)
+  // Unit tests for truncateDisplayName (char-based: model 25, provider 10)
   // ═══════════════════════════════════════════════════════════════
   group('truncateDisplayName', () {
     test('short text with separator: unchanged', () {
@@ -13,19 +13,48 @@ void main() {
       expect(result, full);
     });
 
-    test('long model part: truncated with ... at 20 chars total', () {
-      // 23 chars: "abcdefghijklmnopqrstuvw"
-      // → substring(0, 17) + "..." = 20
-      const full = 'abcdefghijklmnopqrstuvw | OpenAI';
+    test('long model part: truncated with ... at 25 chars total', () {
+      // 28 chars: "abcdefghijklmnopqrstuvwxyzab"
+      // → substring(0, 22) + "..." = 25
+      const full = 'abcdefghijklmnopqrstuvwxyzab | OpenAI';
       final result = truncateDisplayName(full);
-      expect(result, 'abcdefghijklmnopq... | OpenAI');
+      expect(result, 'abcdefghijklmnopqrstuv... | OpenAI');
     });
 
-    test('no separator: simple truncation to 20 chars', () {
-      // 25 chars → substring(0, 17) + "..." = 20
-      const full = 'abcdefghijklmnopqrstuvwxy';
+    test('long provider part: truncated with ... at 10 chars total', () {
+      // Provider "OpenAIVeryLongProviderName" (26 chars)
+      // → substring(0, 7) + "..." = 10
+      const full = 'GPT-4o | OpenAIVeryLongProviderName';
       final result = truncateDisplayName(full);
-      expect(result, 'abcdefghijklmnopq...');
+      expect(result, 'GPT-4o | OpenAIV...');
+    });
+
+    test('model part exactly at limit: unchanged', () {
+      // 25 chars exactly
+      const full = 'abcdefghijklmnopqrstuvwxy | OpenAI';
+      final result = truncateDisplayName(full);
+      expect(result, full);
+    });
+
+    test('provider part exactly at limit: unchanged', () {
+      // Provider exactly 10 chars
+      const full = 'GPT-4o | OpenAI2024';
+      final result = truncateDisplayName(full);
+      expect(result, full);
+    });
+
+    test('provider part one over limit: truncated to 10 chars total', () {
+      // 11 chars → substring(0, 7) + "..." = 10
+      const full = 'GPT-4o | OpenAI20245';
+      final result = truncateDisplayName(full);
+      expect(result, 'GPT-4o | OpenAI2...');
+    });
+
+    test('no separator: simple truncation to 25 chars', () {
+      // 28 chars → substring(0, 22) + "..." = 25
+      const full = 'abcdefghijklmnopqrstuvwxyzab';
+      final result = truncateDisplayName(full);
+      expect(result, 'abcdefghijklmnopqrstuv...');
     });
 
     test('empty string: preserves empty', () {
@@ -122,9 +151,9 @@ void main() {
       ));
       await tester.pump();
 
-      // Model "Very-Long-Model-Name-That-Should-Truncate" (42 chars)
-      // → substring(0, 17) + "..." = 20 chars: "Very-Long-Model-N..."
-      expect(find.textContaining('Very-Long-Model-N...'), findsOneWidget);
+      // Model "Very-Long-Model-Name-That-Should-Truncate" (41 chars)
+      // → substring(0, 22) + "..." = 25 chars: "Very-Long-Model-Name-T..."
+      expect(find.textContaining('Very-Long-Model-Name-T...'), findsOneWidget);
     });
 
     testWidgets('shows fallback "模型" when displayName is empty',
@@ -166,9 +195,29 @@ void main() {
       expect(tapped, isTrue);
     });
 
+    testWidgets('truncates long provider name in model chip', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: ModelNameChip(
+              displayName: 'GPT-4o | SomeVeryLongProviderName',
+              color: Colors.teal,
+              onTap: () {},
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      // Provider "SomeVeryLongProviderName" (24 chars)
+      // → substring(0, 7) + "..." = 10 chars: "SomeVer..."
+      expect(find.textContaining('SomeVer...'), findsOneWidget);
+    });
+
     testWidgets('fits within constrained SizedBox width', (tester) async {
-      // With char-based truncation (20 chars max per part), the truncated
-      // text is known and checked directly regardless of parent width.
+      // With char-based truncation (25 chars max for model, 10 for provider),
+      // the truncated text is known and checked directly regardless of
+      // parent width.
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: Center(
@@ -182,9 +231,9 @@ void main() {
         ),
       ));
 
-      // Model "Some-Long-Model-Name-That-Needs-Truncation" (39 chars)
-      // → substring(0, 17) + "..." = "Some-Long-Model-N..." (20 chars)
-      expect(find.textContaining('Some-Long-Model-N...'), findsOneWidget);
+      // Model "Some-Long-Model-Name-That-Needs-Truncation" (42 chars)
+      // → substring(0, 22) + "..." = "Some-Long-Model-Name-T..." (25 chars)
+      expect(find.textContaining('Some-Long-Model-Name-T...'), findsOneWidget);
     });
 
     testWidgets('truncates text inside a ConstrainedBox', (tester) async {
@@ -192,7 +241,7 @@ void main() {
         home: Scaffold(
           body: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
+              constraints: const BoxConstraints(maxWidth: 500),
               child: ModelNameChip(
                 displayName:
                     'Very-Long-Model-Name-That-Should-Truncate-Properly | OpenAI',
@@ -204,9 +253,9 @@ void main() {
         ),
       ));
 
-      // Model "Very-Long-Model-Name-That-Should-Truncate-Properly" (45 chars)
-      // → substring(0, 17) + "..." = "Very-Long-Model-N..." (20 chars)
-      expect(find.textContaining('Very-Long-Model-N...'), findsOneWidget);
+      // Model "Very-Long-Model-Name-That-Should-Truncate-Properly" (50 chars)
+      // → substring(0, 22) + "..." = "Very-Long-Model-Name-T..." (25 chars)
+      expect(find.textContaining('Very-Long-Model-Name-T...'), findsOneWidget);
     });
 
     testWidgets('renders short text without truncation inside ConstrainedBox',

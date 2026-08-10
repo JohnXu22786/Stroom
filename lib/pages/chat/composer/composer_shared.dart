@@ -4,27 +4,30 @@ import 'package:flutter/material.dart';
 // Character-based truncation helpers
 // ═══════════════════════════════════════════════════════════════
 
-const int _maxPartLength = 20;
+const int _maxModelLength = 25;
+const int _maxProviderLength = 10;
 
-/// Truncates a single part to at most [_maxPartLength] characters,
+/// Truncates a single part to at most [maxLength] characters,
 /// with "..." counting toward the limit.
-String _truncatePart(String part) {
-  if (part.length <= _maxPartLength) return part;
-  return '${part.substring(0, _maxPartLength - 3)}...';
+String _truncatePart(String part, int maxLength) {
+  if (part.length <= maxLength) return part;
+  return '${part.substring(0, maxLength - 3)}...';
 }
 
-/// Truncates a display name in "modelName | vendorName" format so each
-/// part is at most [_maxPartLength] characters (with "..." counting toward
-/// that length). Falls back to simple truncation if no " | " separator.
+/// Truncates a display name in "modelName | providerName" format: the model
+/// part is at most [_maxModelLength] characters and the provider part at most
+/// [_maxProviderLength] characters (with "..." counting toward each limit).
+/// Falls back to model-part truncation if no " | " separator.
 String truncateDisplayName(String displayName) {
   const separator = ' | ';
   final sepIdx = displayName.lastIndexOf(separator);
-  if (sepIdx <= 0) return _truncatePart(displayName);
+  if (sepIdx <= 0) return _truncatePart(displayName, _maxModelLength);
 
   final modelPart = displayName.substring(0, sepIdx);
-  final vendorPart = displayName.substring(sepIdx + separator.length);
+  final providerPart = displayName.substring(sepIdx + separator.length);
 
-  return '${_truncatePart(modelPart)}$separator${_truncatePart(vendorPart)}';
+  return '${_truncatePart(modelPart, _maxModelLength)}'
+      '$separator${_truncatePart(providerPart, _maxProviderLength)}';
 }
 
 // ═══════════════════════════════════════════════════════════════
