@@ -426,5 +426,59 @@ void chatTypesGroup2() {
       expect(segments[4], isA<TextSegment>());
       expect((segments[4] as TextSegment).text, 'final answer');
     });
+
+    test(
+        'blocksToSegments(legacyToBlocks(...)) keeps raw section indices '
+        'when a middle round has no reasoning', () {
+      // Chain: think1 → tool A → (no think) → tool B → think3 → tool C.
+      // ReasoningSectionEndEvent fires after EVERY tool round, so round 2
+      // without reasoning leaves an interior '' placeholder:
+      // reasoningSections = ['think1', '', 'think3', ''] (the trailing ''
+      // is the placeholder for a not-yet-started round).
+      final sections = ['think1', '', 'think3', ''];
+      final textChunks = ['', '', '', ''];
+      final toolCalls = [_tc('1', 'A'), _tc('2', 'B'), _tc('3', 'C')];
+      final roundStarts = [0, 1, 2];
+
+      // Live-path segments (buildAgentChainSegments) use RAW section
+      // indices: think3 sits at raw index 2.
+      final liveSegments = buildAgentChainSegments(
+        reasoningSections: sections,
+        textChunks: textChunks,
+        toolCalls: toolCalls,
+        toolCallRoundStarts: roundStarts,
+      );
+      expect(
+        liveSegments.whereType<ReasoningSegment>().map((s) => s.sectionIndex),
+        [0, 2],
+        reason: 'live path must reference raw reasoningSections indices',
+      );
+
+      // Finalized path (legacyToBlocks + blocksToSegments, used after
+      // stream completion and on reload) must produce the SAME raw
+      // indices — otherwise the reloaded message looks up the wrong
+      // section text (or, after the empty-skip, loses think3's button).
+      final blocks = legacyToBlocks(
+        reasoningSections: sections,
+        textChunks: textChunks,
+        toolCalls: toolCalls,
+        toolCallRoundStarts: roundStarts,
+      );
+      final finalSegments = blocksToSegments(blocks);
+      expect(
+        finalSegments.whereType<ReasoningSegment>().map((s) => s.sectionIndex),
+        [0, 1, 2, 3],
+        reason: 'every reasoning section (incl. empty placeholders) must be '
+            'emitted so ordinal == raw index',
+      );
+      // The empty placeholders (1 and 3) render nothing; the real one at
+      // index 2 resolves to 'think3'.
+      expect(finalSegments.whereType<ToolCallSegment>().length, 3);
+      expect(
+        finalSegments.whereType<ToolCallSegment>().map((s) => s.data.name),
+        ['A', 'B', 'C'],
+        reason: 'tool calls must keep round order',
+      );
+    });
   });
 }

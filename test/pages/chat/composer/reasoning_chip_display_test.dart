@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/pages/chat/composer/chat_composer_widget.dart';
 import 'package:stroom/pages/chat/composer/composer_shared.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
@@ -17,12 +18,16 @@ import 'package:stroom/providers/provider_config.dart';
 ///   - When reasoning is enabled but effort toggle is off: shows '推理' (purple).
 ///   - When reasoning is enabled but 'reasoning_effort' is absent: shows '推理'.
 ///   - When reasoning is disabled: shows '推理' (grey).
+///
+/// [mcpTools] is the composer's selectable tool list; the tool chip badge
+/// only counts enabled tools that appear in it (hidden tools don't count).
 Widget createComposerTestApp({
   required bool reasoningEnabled,
   required bool reasoningEffortEnabled,
   Map<String, String> reasoningParamValues = const {},
   Set<String> enabledTools = const {},
   List<ReasoningParam> extraReasoningParams = const [],
+  List<ToolDefinition> mcpTools = const [],
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -49,6 +54,7 @@ Widget createComposerTestApp({
           onModelSelected: (idx) {},
           onEnabledToolsChanged: (tools) {},
           enabledTools: enabledTools,
+          mcpTools: mcpTools,
           reasoningParams: [
             ReasoningParam(
                 paramName: 'reasoning_effort',
@@ -272,6 +278,13 @@ void main() {
         reasoningEnabled: false,
         reasoningEffortEnabled: false,
         enabledTools: {'some_tool'},
+        mcpTools: const [
+          ToolDefinition(
+            name: 'some_tool',
+            description: '',
+            parameters: {},
+          ),
+        ],
       ));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -294,6 +307,18 @@ void main() {
         reasoningEnabled: false,
         reasoningEffortEnabled: false,
         enabledTools: {'brave_web_search', 'bocha_web_search'},
+        mcpTools: const [
+          ToolDefinition(
+            name: 'brave_web_search',
+            description: '',
+            parameters: {},
+          ),
+          ToolDefinition(
+            name: 'bocha_web_search',
+            description: '',
+            parameters: {},
+          ),
+        ],
       ));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
@@ -321,6 +346,37 @@ void main() {
       tester.takeException();
 
       expect(find.byIcon(Icons.build_outlined), findsOneWidget);
+      final toolChip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '工具',
+      );
+      expect(toolChip, findsOneWidget);
+      final chip = tester.widget<SettingsChip>(toolChip);
+      expect(chip.color, Colors.grey);
+      expect(chip.badgeCount, isNull);
+    });
+
+    testWidgets(
+        'tool chip ignores enabled tools that are not in the selectable list '
+        '(hidden MCP tools)', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(createComposerTestApp(
+        reasoningEnabled: false,
+        reasoningEffortEnabled: false,
+        // 已启用但不在可选择列表中的工具（被显示开关/总开关隐藏的 MCP
+        // 工具）不计入徽标，chip 保持灰色。
+        enabledTools: {'hidden_mcp'},
+        mcpTools: const [
+          ToolDefinition(
+            name: 'visible_tool',
+            description: '',
+            parameters: {},
+          ),
+        ],
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
       final toolChip = find.byWidgetPredicate(
         (w) => w is SettingsChip && w.label == '工具',
       );

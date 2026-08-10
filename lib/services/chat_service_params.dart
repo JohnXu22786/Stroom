@@ -99,7 +99,7 @@ extension _ChatServiceParamsExt on ChatService {
       // Provider-level custom params
       for (final cp in _providerConfig!.customParams) {
         result[cp.paramName] = ChatService._coerceCustomParam(
-            cp.paramName, cp.type, cp.defaultValue,
+            cp.paramName, cp.type, _customParamEffectiveValue(cp),
             source: 'provider');
       }
 
@@ -139,8 +139,14 @@ extension _ChatServiceParamsExt on ChatService {
       }
 
       if (reasoning) {
+        // 模型有自己的力度参数时，供应商的力度参数被模型版本遮蔽
+        // （合并视图与面板均不显示它）：跳过——陈旧值会注入请求且
+        // UI 无法清除。
+        final hasModelEffort =
+            findEffortParam(_modelConfig!.reasoningParams) != null;
         for (final rp in providerExtraParams) {
           if (rp.paramName.trim().isEmpty) continue;
+          if (hasModelEffort && rp.isEffortParam) continue;
           final selectedValue = reasoningParamValues[rp.paramName];
           if (selectedValue != null && selectedValue.isNotEmpty) {
             ChatService._setReasoningParam(
@@ -181,7 +187,7 @@ extension _ChatServiceParamsExt on ChatService {
     // Model-level custom params
     for (final cp in _modelConfig!.customParams) {
       result[cp.paramName] = ChatService._coerceCustomParam(
-          cp.paramName, cp.type, cp.defaultValue,
+          cp.paramName, cp.type, _customParamEffectiveValue(cp),
           source: 'model');
     }
 
@@ -263,5 +269,17 @@ extension _ChatServiceParamsExt on ChatService {
     }
 
     return ChatService._stripOmitted(result);
+  }
+
+  /// 自定义参数的生效值：
+  /// - json 类型始终用 defaultValue（大输入框/全屏编辑的内容）；
+  /// - string/number 优先第一个选项，其次 defaultValue；
+  /// - boolean 无参数值，默认发送 'true'（配置了即开启）。
+  static String _customParamEffectiveValue(CustomParam cp) {
+    if (cp.type == 'json') return cp.defaultValue;
+    if (cp.options.isNotEmpty) return cp.options.first;
+    if (cp.defaultValue.trim().isNotEmpty) return cp.defaultValue;
+    if (cp.type == 'boolean') return 'true';
+    return '';
   }
 }

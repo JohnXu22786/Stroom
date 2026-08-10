@@ -1,20 +1,22 @@
-// 模型配置页「供应商推理参数继承」测试：
-// - 供应商已配置的推理参数直接显示在模型页（标注「来自供应商」）
-// - 未修改的继承参数不写入模型（供应商修改可继续同步）
-// - 修改继承参数后变为模型独立配置并保存
-// - 与供应商参数同名的模型参数视为覆盖，不重复显示
+// 模型配置页「推理力度勾选块」与拖拽排序测试：
+// - 力度参数值显示为勾选块（复用推理面板 OptionChip 样式），默认全选
+// - 点击块高亮/取消（多选），选中的值按块顺序写入模型 → 影响推理面板
+// - 供应商的值不可删除（只能取消勾选）；模型添加的值带删除按钮
+// - 块可拖拽排序；附加参数卡片与选项值也可拖拽排序
+// - 每次打开同步供应商最新值（新值默认未勾选，勾一下即可使用）
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/tts_models.dart';
 import 'package:stroom/pages/llm_model_config_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 
-/// 打开模型配置页并返回保存结果（null 表示未成功保存）。
+/// 打开模型配置页；[beforeSave] 在点保存前执行；返回保存结果。
 Future<ModelConfig?> _pumpAndSave(
   WidgetTester tester, {
   ModelConfig? model,
   ProviderConfigItem? provider,
   bool tapSave = true,
+  Future<void> Function(WidgetTester tester)? beforeSave,
 }) async {
   ModelConfig? saved;
   await tester.pumpWidget(
@@ -40,6 +42,7 @@ Future<ModelConfig?> _pumpAndSave(
   await tester.tap(find.text('打开模型配置'));
   await tester.pumpAndSettle();
   if (tapSave) {
+    if (beforeSave != null) await beforeSave(tester);
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
   }
@@ -47,7 +50,6 @@ Future<ModelConfig?> _pumpAndSave(
 }
 
 /// 滚动到推理参数区域（ListView 懒构建，需先滚动到目标附近）。
-/// [delta] 为正向下滚动，为负向上滚动。
 Future<void> _scrollToReasoning(WidgetTester tester, Finder target,
     {double delta = 200}) async {
   await tester.scrollUntilVisible(
@@ -58,8 +60,8 @@ Future<void> _scrollToReasoning(WidgetTester tester, Finder target,
   await tester.pumpAndSettle();
 }
 
-/// 构造一个「开关完整 + 推理力度仅参数名」的供应商配置。
-ProviderConfigItem _providerWithNameOnlyEffort() {
+/// 构造一个「开关完整 + 推理力度带选项」的供应商配置。
+ProviderConfigItem _providerWithEffortOptions(List<String> options) {
   return ProviderConfigItem(
     providerName: 'Test Provider',
     host: 'https://api.example.com/v1',
@@ -75,37 +77,69 @@ ProviderConfigItem _providerWithNameOnlyEffort() {
         paramName: 'reasoning_effort',
         isEffortParam: true,
         enabled: true,
-        options: [],
+        options: options,
       ),
     ],
   );
 }
 
+/// 取保存结果中力度参数的选项（全量保存后 model 含开关+力度等参数）。
+List<String> _savedEffortOptions(ModelConfig m) =>
+    m.reasoningParams.firstWhere((p) => p.isEffortParam).options;
+
+/// 长按拖拽（LongPressDraggable 需要长按后移动）。
+Future<void> _longPressDrag(
+  WidgetTester tester,
+  Finder from,
+  Offset offset,
+) async {
+  final gesture = await tester.startGesture(tester.getCenter(from));
+  await tester.pump(const Duration(milliseconds: 600));
+  await gesture.moveBy(offset);
+  await tester.pump();
+  await gesture.up();
+  await tester.pumpAndSettle();
+}
+
+/// 点击力度块勾选/取消（滚动到目标后点击）。
+Future<void> _tapBlock(WidgetTester tester, String value) async {
+  await _scrollToReasoning(tester, find.text(value));
+  await tester.tap(find.text(value));
+  await tester.pump();
+}
+
 void main() {
-  group('LlmModelConfigPage provider reasoning inheritance', () {
-    testWidgets('provider effort name displays directly on the model page',
-        (tester) async {
-      await _pumpAndSave(
+  group('LlmModelConfigPage reasoning option blocks', () {
+    testWidgets(
+        'provider effort values show as blocks, none selected by '
+        'default', (tester) async {
+      final saved = await _pumpAndSave(
         tester,
         model: ModelConfig(
           name: 'test-model',
           modelId: 'test-model',
           typeConfig: {'context': 4096},
         ),
-        provider: _providerWithNameOnlyEffort(),
-        tapSave: false,
+        provider: _providerWithEffortOptions(['low', 'medium', 'high']),
+        beforeSave: (tester) async {
+          // 供应商的值以块形式显示
+          await _scrollToReasoning(tester, find.text('reasoning_effort'));
+          expect(find.text('low'), findsOneWidget);
+          expect(find.text('medium'), findsOneWidget);
+          expect(find.text('high'), findsOneWidget);
+          // 供应商来源的块没有删除按钮
+          expect(find.byIcon(Icons.close), findsNothing);
+          // 无拖拽把手（胶囊长按拖拽）
+          expect(find.byIcon(Icons.drag_handle), findsNothing);
+        },
       );
 
-      // Provider 的推理力度参数（仅参数名）直接显示，无需模型重复填写
-      await _scrollToReasoning(tester, find.text('reasoning_effort'));
-      expect(find.text('reasoning_effort'), findsOneWidget);
-      // 继承参数带「来自供应商」标记
-      expect(find.text('来自供应商'), findsWidgets);
-      // 力度参数未配置选项 → 模型页显示「添加选项」按钮（模型可只设参数值）
-      expect(find.text('添加选项'), findsOneWidget);
+      // 默认全不选 → 保存的 options 为空
+      expect(saved, isNotNull);
+      expect(_savedEffortOptions(saved!), isEmpty);
     });
 
-    testWidgets('unchanged inherited params are not written to the model',
+    testWidgets('selecting blocks saves only the selected values',
         (tester) async {
       final saved = await _pumpAndSave(
         tester,
@@ -113,321 +147,253 @@ void main() {
           name: 'test-model',
           modelId: 'test-model',
           typeConfig: {'context': 4096},
-          reasoningParams: [],
         ),
-        provider: _providerWithNameOnlyEffort(),
+        provider: _providerWithEffortOptions(['low', 'medium', 'high']),
+        beforeSave: (tester) async {
+          // 勾选 low 和 high（medium 保持不选）
+          await _tapBlock(tester, 'low');
+          await _tapBlock(tester, 'high');
+        },
       );
 
       expect(saved, isNotNull);
-      // 未修改的继承参数不写入模型 → 模型保持跟随供应商同步
-      expect(saved!.reasoningParams, isEmpty);
+      expect(_savedEffortOptions(saved!), ['low', 'high']);
     });
 
-    testWidgets(
-        'claiming an inherited effort param by adding options saves it to the model',
+    testWidgets('adding a value via dialog creates a selected removable block',
         (tester) async {
-      ModelConfig? saved;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Center(
-              child: ElevatedButton(
-                onPressed: () async {
-                  saved = await Navigator.push<ModelConfig>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => LlmModelConfigPage(
-                        model: ModelConfig(
-                          name: 'test-model',
-                          modelId: 'test-model',
-                          typeConfig: {'context': 4096},
-                        ),
-                        provider: _providerWithNameOnlyEffort(),
-                      ),
-                    ),
-                  );
-                },
-                child: const Text('打开模型配置'),
-              ),
-            ),
-          ),
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
         ),
+        provider: _providerWithEffortOptions(['low', 'high']),
+        beforeSave: (tester) async {
+          // 添加新值 max
+          await _scrollToReasoning(tester, find.text('添加值'));
+          await tester.tap(find.text('添加值'));
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField).last, 'max');
+          await tester.pump();
+          await tester.tap(find.text('确定'));
+          await tester.pumpAndSettle();
+
+          // 新块出现（默认勾选），且带删除按钮（非供应商来源）
+          expect(find.text('max'), findsOneWidget);
+          expect(find.byIcon(Icons.close), findsOneWidget);
+        },
       );
-      await tester.tap(find.text('打开模型配置'));
-      await tester.pumpAndSettle();
-
-      // 编辑前：力度参数带「来自供应商」标记
-      await _scrollToReasoning(tester, find.text('推理力度'));
-      expect(find.text('来自供应商'), findsWidgets);
-
-      // 给继承的力度参数添加选项值（参数名沿用供应商提供的名称）
-      await tester.tap(find.text('添加选项'));
-      await tester.pump();
-      await tester.enterText(
-        find.widgetWithText(TextFormField, '选项 1'),
-        'high',
-      );
-      await tester.pump();
-
-      // 编辑后：回到开关区域，开关仍继承自供应商（徽章保留 1 个），
-      // 被认领的力度参数徽章已消失
-      await _scrollToReasoning(tester, find.text('thinking.type'), delta: -200);
-      expect(find.text('来自供应商'), findsOneWidget,
-          reason: '开关仍继承自供应商，力度参数已变为模型独立');
-
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
 
       expect(saved, isNotNull);
-      expect(saved!.reasoningParams.length, 1);
-      final savedParam = saved!.reasoningParams.first;
-      // 参数名沿用供应商提供的名称，选项值为模型设置
-      expect(savedParam.paramName, 'reasoning_effort');
-      expect(savedParam.options, ['high']);
-      // 开关未修改 → 仍跟随供应商，不写入模型
+      // 默认全不选：只保存勾选的新值 max
+      expect(_savedEffortOptions(saved!), ['max']);
     });
 
-    testWidgets('model param with the same name overrides the provider one',
+    testWidgets('removing a custom block deletes it from the saved model',
         (tester) async {
-      final provider = ProviderConfigItem(
-        providerName: 'Test Provider',
-        host: 'https://api.example.com/v1',
-        key: 'sk-test',
-        reasoningParams: [
-          ReasoningParam(
-            paramName: 'reasoning_effort',
-            isEffortParam: true,
-            options: ['low', 'high'],
-          ),
-        ],
-      );
       final model = ModelConfig(
         name: 'test-model',
         modelId: 'test-model',
         typeConfig: {'context': 4096},
         reasoningParams: [
           ReasoningParam(
-            paramName: 'reasoning_effort',
-            isEffortParam: true,
-            options: ['low', 'medium', 'high'],
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
           ),
-        ],
-      );
-
-      await _pumpAndSave(tester,
-          model: model, provider: provider, tapSave: false);
-
-      // 同名模型参数覆盖供应商参数：只显示一张力度卡片，且不是继承态
-      await _scrollToReasoning(tester, find.text('reasoning_effort'));
-      expect(find.text('reasoning_effort'), findsOneWidget);
-      expect(find.text('来自供应商'), findsNothing);
-      // 模型自身的选项值显示
-      expect(find.text('low'), findsOneWidget);
-    });
-
-    testWidgets(
-        'back navigation without changes does not warn when only '
-        'inherited params exist', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Center(
-              child: ElevatedButton(
-                onPressed: () => Navigator.push<void>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => LlmModelConfigPage(
-                      model: ModelConfig(
-                        name: 'test-model',
-                        modelId: 'test-model',
-                        typeConfig: {'context': 4096},
-                      ),
-                      provider: _providerWithNameOnlyEffort(),
-                    ),
-                  ),
-                ),
-                child: const Text('打开模型配置'),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.tap(find.text('打开模型配置'));
-      await tester.pumpAndSettle();
-
-      // 返回不弹「放弃修改」确认框（继承参数不算未保存修改）
-      await tester.tap(find.byType(BackButton));
-      await tester.pumpAndSettle();
-      expect(find.text('放弃修改？'), findsNothing);
-      expect(find.text('打开模型配置'), findsOneWidget, reason: '页面应已正常返回');
-    });
-
-    testWidgets(
-        'delete button hidden for still-inherited params, visible after '
-        'claiming (delete = remove the model copy)', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Center(
-              child: ElevatedButton(
-                onPressed: () => Navigator.push<void>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => LlmModelConfigPage(
-                      model: ModelConfig(
-                        name: 'test-model',
-                        modelId: 'test-model',
-                        typeConfig: {'context': 4096},
-                      ),
-                      provider: _providerWithNameOnlyEffort(),
-                    ),
-                  ),
-                ),
-                child: const Text('打开模型配置'),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.tap(find.text('打开模型配置'));
-      await tester.pumpAndSettle();
-
-      // 继承的开关 + 力度：均无删除按钮（删除会造成「无效删除」的错觉）
-      await _scrollToReasoning(tester, find.text('推理力度'));
-      expect(find.text('来自供应商'), findsWidgets);
-
-      // 认领（添加选项）后：力度参数变为模型自有，删除按钮出现——
-      // 删除 = 撤销模型副本（下次打开恢复继承）
-      await tester.tap(find.text('添加选项'));
-      await tester.pump();
-      expect(find.byIcon(Icons.delete), findsOneWidget,
-          reason: '被认领的参数是模型自有副本，应可删除（撤销）');
-    });
-
-    testWidgets(
-        'delete button visible for model-owned params even when the '
-        'name collides with a provider param', (tester) async {
-      final provider = ProviderConfigItem(
-        providerName: 'Test Provider',
-        host: 'https://api.example.com/v1',
-        key: 'sk-test',
-        reasoningParams: [
           ReasoningParam(
             paramName: 'reasoning_effort',
             isEffortParam: true,
-            options: ['low', 'high'],
+            options: ['low', 'max'],
           ),
         ],
       );
+      final provider = _providerWithEffortOptions(['low', 'medium']);
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        provider: provider,
+        beforeSave: (tester) async {
+          // 块列表 = 供应商 [low, medium] + 模型独有 [max]；max 带删除按钮
+          await _scrollToReasoning(tester, find.text('max'));
+          expect(find.byIcon(Icons.close), findsOneWidget);
+          await tester.ensureVisible(find.byIcon(Icons.close));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byIcon(Icons.close));
+          await tester.pump();
+        },
+      );
+
+      expect(saved, isNotNull);
+      // 删除 max 后，勾选只剩 low（medium 是模型此前保存中未勾选的）
+      expect(_savedEffortOptions(saved!), ['low']);
+    });
+
+    testWidgets('long-press dragging blocks reorders the saved options',
+        (tester) async {
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+        ),
+        provider: _providerWithEffortOptions(['low', 'medium', 'high']),
+        beforeSave: (tester) async {
+          // 先勾选全部（默认全不选）
+          await _tapBlock(tester, 'low');
+          await _tapBlock(tester, 'medium');
+          await _tapBlock(tester, 'high');
+          // 长按 low 胶囊拖到 medium 上（横向排列，向右拖动）
+          await _scrollToReasoning(tester, find.text('medium'));
+          await _longPressDrag(tester, find.text('low'), const Offset(60, 0));
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(_savedEffortOptions(saved!), ['medium', 'low', 'high']);
+    });
+
+    testWidgets('provider changes appear on reopen (unchecked by default)',
+        (tester) async {
+      // 第一次：provider [low, medium] → 默认全不选，保存 options 为空
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+        ),
+        provider: _providerWithEffortOptions(['low', 'medium']),
+      );
+      expect(_savedEffortOptions(saved!), isEmpty);
+
+      // 第二次：provider 新增 high；模型打开时 high 出现（未勾选）
+      await _pumpAndSave(
+        tester,
+        model: saved,
+        provider: _providerWithEffortOptions(['low', 'medium', 'high']),
+        tapSave: false,
+      );
+      await _scrollToReasoning(tester, find.text('high'));
+      expect(find.text('high'), findsOneWidget);
+    });
+
+    testWidgets('additional params use pill blocks and are draggable and saved',
+        (tester) async {
       final model = ModelConfig(
         name: 'test-model',
         modelId: 'test-model',
         typeConfig: {'context': 4096},
         reasoningParams: [
           ReasoningParam(
-            paramName: 'reasoning_effort',
-            isEffortParam: true,
-            options: ['low', 'medium', 'high'],
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'first_param',
+            enabled: true,
+            options: ['1', '2'],
+          ),
+          ReasoningParam(
+            paramName: 'second_param',
+            enabled: true,
+            options: ['3'],
           ),
         ],
       );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Center(
-              child: ElevatedButton(
-                onPressed: () => Navigator.push<void>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => LlmModelConfigPage(
-                      model: model,
-                      provider: provider,
-                    ),
-                  ),
-                ),
-                child: const Text('打开模型配置'),
-              ),
-            ),
-          ),
-        ),
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          // 附加参数值显示为胶囊块（默认全选；无 provider 时模型
+          // 保存的值可删除 → 有删除按钮）
+          await _scrollToReasoning(tester, find.text('first_param'));
+          expect(find.text('1'), findsOneWidget);
+          expect(find.text('2'), findsOneWidget);
+
+          // 取消勾选 2 → 只保存 1
+          await _tapBlock(tester, '2');
+        },
       );
-      await tester.tap(find.text('打开模型配置'));
-      await tester.pumpAndSettle();
-
-      // 同名模型参数覆盖供应商参数 → 模型自有，删除按钮可见
-      await _scrollToReasoning(tester, find.text('推理力度'));
-      expect(find.byIcon(Icons.delete), findsOneWidget);
-    });
-
-    testWidgets(
-        'claim is reversible: reverting an edit keeps the param inherited',
-        (tester) async {
-      // 编辑又被还原成与供应商原值一致 → 参数保持继承，保存不被
-      // 「力度参数必须有选项值」拦截（避免改回去却无法保存的死局）。
-      ModelConfig? saved;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Center(
-              child: ElevatedButton(
-                onPressed: () async {
-                  saved = await Navigator.push<ModelConfig>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => LlmModelConfigPage(
-                        model: ModelConfig(
-                          name: 'test-model',
-                          modelId: 'test-model',
-                          typeConfig: {'context': 4096},
-                        ),
-                        provider: _providerWithNameOnlyEffort(),
-                      ),
-                    ),
-                  );
-                },
-                child: const Text('打开模型配置'),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.tap(find.text('打开模型配置'));
-      await tester.pumpAndSettle();
-
-      // 编辑力度参数名（认领）→ 再还原为供应商原值（回退）
-      await _scrollToReasoning(tester, find.text('reasoning_effort'));
-      await tester.enterText(
-        find.widgetWithText(TextFormField, '参数名').last,
-        'effort_x',
-      );
-      await tester.pump();
-      await tester.enterText(
-        find.widgetWithText(TextFormField, '参数名').last,
-        'reasoning_effort',
-      );
-      await tester.pump();
-
-      // 还原后仍为继承状态：徽章仍在
-      expect(find.text('来自供应商'), findsWidgets);
-
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
 
       expect(saved, isNotNull);
-      expect(saved!.reasoningParams, isEmpty, reason: '还原后的参数不写入模型，保持跟随供应商');
+      expect(
+        saved!.reasoningParams
+            .firstWhere((p) => p.paramName == 'first_param')
+            .options,
+        ['1'],
+      );
     });
 
     testWidgets(
-        'model custom param colliding with an inherited provider reasoning '
-        'param is blocked at save', (tester) async {
-      // 自定义参数与继承的供应商推理参数重名时，请求构建中自定义参数
-      // 会覆盖推理参数、聊天开关形同虚设 → 保存必须拦截。
+        'adding a value to an additional param creates a deletable block',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'first_param',
+            enabled: true,
+            options: ['1'],
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('first_param'));
+          // 添加新值 max（对话框）→ 新块出现（默认勾选）
+          await tester.tap(find.text('添加值').first);
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField).last, 'max');
+          await tester.pump();
+          await tester.tap(find.text('确定'));
+          await tester.pumpAndSettle();
+          expect(find.text('max'), findsOneWidget);
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(
+        saved!.reasoningParams
+            .firstWhere((p) => p.paramName == 'first_param')
+            .options,
+        ['1', 'max'],
+      );
+    });
+
+    testWidgets(
+        'model custom param colliding with a provider reasoning param '
+        'is blocked at save', (tester) async {
       final provider = ProviderConfigItem(
         providerName: 'Test Provider',
         host: 'https://api.example.com/v1',
         key: 'sk-test',
         reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
           ReasoningParam(
             paramName: 'reasoning_effort',
             isEffortParam: true,
@@ -453,11 +419,99 @@ void main() {
       expect(find.text('推理参数与自定义参数存在重名: reasoning_effort'), findsOneWidget);
     });
 
+    testWidgets('back navigation without changes does not warn',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => LlmModelConfigPage(
+                      model: ModelConfig(
+                        name: 'test-model',
+                        modelId: 'test-model',
+                        typeConfig: {'context': 4096},
+                      ),
+                      provider: _providerWithEffortOptions(['low', 'medium']),
+                    ),
+                  ),
+                ),
+                child: const Text('打开模型配置'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开模型配置'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('放弃修改？'), findsNothing);
+      expect(find.text('打开模型配置'), findsOneWidget, reason: '页面应已正常返回');
+    });
+
     testWidgets(
-        'new param identical to a provider param is not mistaken for '
-        'inherited', (tester) async {
-      // 新建的参数即使内容与供应商参数完全一致，也不得被标为继承
-      // （否则会被静默丢弃）。按实例身份判定继承来源。
+        'model saved order differing from provider order is not unsaved',
+        (tester) async {
+      // 模型保存的力度选项顺序与供应商顺序不同（旧数据可能如此）：
+      // 打开页面未做任何修改，返回不应弹「放弃修改」。
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['high', 'low'], // 与供应商顺序相反
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => LlmModelConfigPage(
+                      model: model,
+                      provider: _providerWithEffortOptions(['low', 'high']),
+                    ),
+                  ),
+                ),
+                child: const Text('打开模型配置'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开模型配置'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('放弃修改？'), findsNothing, reason: '模型已保存顺序与供应商不同不应算未保存修改');
+      expect(find.text('打开模型配置'), findsOneWidget);
+    });
+
+    testWidgets(
+        'shadowed provider effort param does not trigger the discard dialog',
+        (tester) async {
+      // 模型有自己命名的力度参数、供应商有异名力度参数（被遮蔽）：
+      // 打开页面未修改，返回不应弹「放弃修改」。
       final provider = ProviderConfigItem(
         providerName: 'Test Provider',
         host: 'https://api.example.com/v1',
@@ -470,34 +524,44 @@ void main() {
             offValue: 'disabled',
           ),
           ReasoningParam(
-            paramName: 'budget_tokens',
-            enabled: false,
+            paramName: 'provider.effort',
+            isEffortParam: true,
+            enabled: true,
             options: ['a', 'b'],
           ),
         ],
       );
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'model.effort',
+            isEffortParam: true,
+            options: ['x', 'y'],
+          ),
+        ],
+      );
 
-      ModelConfig? saved;
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
             builder: (context) => Center(
               child: ElevatedButton(
-                onPressed: () async {
-                  saved = await Navigator.push<ModelConfig>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => LlmModelConfigPage(
-                        model: ModelConfig(
-                          name: 'test-model',
-                          modelId: 'test-model',
-                          typeConfig: {'context': 4096},
-                        ),
-                        provider: provider,
-                      ),
-                    ),
-                  );
-                },
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        LlmModelConfigPage(model: model, provider: provider),
+                  ),
+                ),
                 child: const Text('打开模型配置'),
               ),
             ),
@@ -507,42 +571,17 @@ void main() {
       await tester.tap(find.text('打开模型配置'));
       await tester.pumpAndSettle();
 
-      // 新建一个与供应商参数内容完全一致的附加参数
-      await _scrollToReasoning(tester, find.text('添加推理参数'));
-      await tester.tap(find.text('添加推理参数'));
-      await tester.pump();
-      // 新卡片位于列表末尾：其参数名输入框是最后一个 TextFormField
-      await tester.enterText(
-        find.byType(TextFormField).last,
-        'budget_tokens',
-      );
-      await tester.pump();
-      // 「添加选项」按钮：使用最后一个（新卡片自身的）
-      await _scrollToReasoning(tester, find.text('添加选项').last);
-      await tester.tap(find.text('添加选项').last);
-      await tester.pump();
-      await tester.enterText(find.byType(TextFormField).last, 'a');
-      await tester.pump();
-      await _scrollToReasoning(tester, find.text('添加选项').last);
-      await tester.tap(find.text('添加选项').last);
-      await tester.pump();
-      await tester.enterText(find.byType(TextFormField).last, 'b');
-      await tester.pump();
-
-      await tester.tap(find.text('保存'));
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
-
-      // 新建参数是模型自有：保存进模型（而非被当作继承丢弃）
-      expect(saved, isNotNull);
-      expect(saved!.reasoningParams.map((p) => p.paramName), ['budget_tokens']);
+      expect(find.text('放弃修改？'), findsNothing, reason: '被遮蔽的供应商力度参数不应算未保存修改');
+      expect(find.text('打开模型配置'), findsOneWidget);
     });
 
     testWidgets(
-        'toggle with legacy null values: edit then clear reverts to inherited',
+        'model effort param shadows a differently-named provider effort param',
         (tester) async {
-      // 旧数据中开关的开/关值可能为 null（UI 清空时写入 ''）。
-      // 回退比较需将 '' 与 null 等价处理，否则「改了又清空」会被认领，
-      // 且因开关值缺失而无法保存。
+      // 模型有自己命名的力度参数时，供应商的力度参数被遮蔽：
+      // 模型页不显示它，保存也不应携带它（避免不可见的陈旧副本）。
       final provider = ProviderConfigItem(
         providerName: 'Test Provider',
         host: 'https://api.example.com/v1',
@@ -551,68 +590,93 @@ void main() {
           ReasoningParam(
             paramName: 'thinking.type',
             isReasoningToggle: true,
-            // onValue/offValue 为 null（旧数据形态）
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'provider.effort',
+            isEffortParam: true,
+            enabled: true,
+            options: ['a', 'b'],
+          ),
+        ],
+      );
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'model.effort',
+            isEffortParam: true,
+            options: ['x', 'y'],
           ),
         ],
       );
 
-      ModelConfig? saved;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Center(
-              child: ElevatedButton(
-                onPressed: () async {
-                  saved = await Navigator.push<ModelConfig>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => LlmModelConfigPage(
-                        model: ModelConfig(
-                          name: 'test-model',
-                          modelId: 'test-model',
-                          typeConfig: {'context': 4096},
-                        ),
-                        provider: provider,
-                      ),
-                    ),
-                  );
-                },
-                child: const Text('打开模型配置'),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.tap(find.text('打开模型配置'));
-      await tester.pumpAndSettle();
+      final saved =
+          await _pumpAndSave(tester, model: model, provider: provider);
 
-      // 编辑「开启时值」（认领）→ 再清空（还原）
-      await _scrollToReasoning(tester, find.text('thinking.type'));
-      await tester.enterText(
-        find.widgetWithText(TextFormField, '开启时值'),
-        'enabled',
-      );
-      await tester.pump();
-      await tester.enterText(
-        find.widgetWithText(TextFormField, '开启时值'),
-        '',
-      );
-      await tester.pump();
-
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
-
-      // 还原成功 → 开关仍继承，不写入模型（若未还原，会因开关值缺失
-      // 被校验拦截，saved 为 null）
       expect(saved, isNotNull);
-      expect(saved!.reasoningParams, isEmpty);
+      // 供应商的 provider.effort 未进入模型（被 model.effort 遮蔽）
+      expect(saved!.reasoningParams.map((p) => p.paramName).toList(),
+          contains('model.effort'));
+      expect(saved.reasoningParams.map((p) => p.paramName).toList(),
+          isNot(contains('provider.effort')));
+    });
+
+    testWidgets('added effort values persist across reopen', (tester) async {
+      // 添加值并保存 → 重开模型页 → 值仍在且勾选
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+        ),
+        provider: _providerWithEffortOptions(['low', 'high']),
+        beforeSave: (tester) async {
+          // 勾选 low + 添加 max（自动勾选）
+          await _tapBlock(tester, 'low');
+          await _scrollToReasoning(tester, find.text('添加值'));
+          await tester.tap(find.text('添加值'));
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField).last, 'max');
+          await tester.pump();
+          await tester.tap(find.text('确定'));
+          await tester.pumpAndSettle();
+        },
+      );
+      expect(saved, isNotNull);
+      expect(_savedEffortOptions(saved!), ['low', 'max']);
+
+      // 重开：块列表 = 模型保存顺序 ['low','max'] + provider 独有 ['high']
+      // 勾选 = 模型保存的 {'low','max'}
+      await _pumpAndSave(
+        tester,
+        model: saved,
+        provider: _providerWithEffortOptions(['low', 'high']),
+        tapSave: false,
+      );
+      await _scrollToReasoning(tester, find.text('reasoning_effort'));
+      expect(find.text('low'), findsOneWidget);
+      expect(find.text('max'), findsOneWidget);
+      expect(find.text('high'), findsOneWidget);
+      // max 是自定义值 → 有删除按钮
+      expect(find.byIcon(Icons.close), findsOneWidget);
     });
 
     testWidgets(
-        'effort values are sortable; reordering claims the param and the '
-        'new order is saved', (tester) async {
-      // 供应商提供力度参数名 + 参数值；模型页可对参数值排序（排序 =
-      // 修改 → 认领为模型独立，保存新顺序）。
+        'provider name-only effort param (no values) is not shown on the '
+        'model page', (tester) async {
+      // 供应商只填了力度参数名、未设置选项值 → 模型页不显示它
+      // （「没有就不显示」），用户可在模型页自建。
       final provider = ProviderConfigItem(
         providerName: 'Test Provider',
         host: 'https://api.example.com/v1',
@@ -628,58 +692,33 @@ void main() {
             paramName: 'reasoning_effort',
             isEffortParam: true,
             enabled: true,
-            options: ['low', 'high', 'medium'],
+            options: [],
           ),
         ],
       );
 
-      ModelConfig? saved;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Center(
-              child: ElevatedButton(
-                onPressed: () async {
-                  saved = await Navigator.push<ModelConfig>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => LlmModelConfigPage(
-                        model: ModelConfig(
-                          name: 'test-model',
-                          modelId: 'test-model',
-                          typeConfig: {'context': 4096},
-                        ),
-                        provider: provider,
-                      ),
-                    ),
-                  );
-                },
-                child: const Text('打开模型配置'),
-              ),
-            ),
-          ),
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
         ),
+        provider: provider,
+        beforeSave: (tester) async {
+          // 力度区不显示 provider 的名称式参数（无块、无参数名）
+          await _scrollToReasoning(tester, find.text('推理参数'));
+          expect(find.text('reasoning_effort'), findsNothing);
+          expect(find.text('添加推理力度'), findsOneWidget, reason: '用户仍可在模型页自建力度参数');
+        },
       );
-      await tester.tap(find.text('打开模型配置'));
-      await tester.pumpAndSettle();
 
-      // 滚动到力度参数卡，把第一个选项值（low）下移
-      await _scrollToReasoning(tester, find.text('reasoning_effort'));
-      expect(find.byIcon(Icons.arrow_downward), findsWidgets);
-      await tester.tap(find.byIcon(Icons.arrow_downward).first);
-      await tester.pump();
-
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
-
-      // 排序 = 修改 → 力度参数被认领并保存（开关未动，仍继承）
       expect(saved, isNotNull);
-      expect(saved!.reasoningParams.length, 1);
-      expect(saved!.reasoningParams.first.paramName, 'reasoning_effort');
-      expect(saved!.reasoningParams.first.options, ['high', 'low', 'medium']);
+      // provider 的名称式力度参数不写入模型
+      expect(saved!.reasoningParams.where((p) => p.isEffortParam), isEmpty);
     });
 
-    testWidgets('additional params are sortable and the order is saved',
+    testWidgets('reset button restores the effort param to its open state',
         (tester) async {
       final model = ModelConfig(
         name: 'test-model',
@@ -693,216 +732,76 @@ void main() {
             offValue: 'disabled',
           ),
           ReasoningParam(
-            paramName: 'first_param',
-            enabled: true,
-            options: ['1'],
-          ),
-          ReasoningParam(
-            paramName: 'second_param',
-            enabled: true,
-            options: ['2'],
-          ),
-        ],
-      );
-
-      ModelConfig? saved;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Center(
-              child: ElevatedButton(
-                onPressed: () async {
-                  saved = await Navigator.push<ModelConfig>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => LlmModelConfigPage(model: model),
-                    ),
-                  );
-                },
-                child: const Text('打开模型配置'),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.tap(find.text('打开模型配置'));
-      await tester.pumpAndSettle();
-
-      // 滚动到附加参数区，第一个附加参数（first_param）下移
-      await _scrollToReasoning(tester, find.text('first_param'));
-      await tester.tap(find.byIcon(Icons.arrow_downward).first);
-      await tester.pump();
-
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
-
-      expect(saved, isNotNull);
-      expect(saved!.reasoningParams.map((p) => p.paramName).toList(),
-          ['thinking.type', 'second_param', 'first_param']);
-    });
-
-    testWidgets(
-        'provider effort values can be individually kept or removed on the '
-        'model page', (tester) async {
-      // 模型页对供应商提供的参数值：可保留（选中）也可移除（认领后
-      // 仅保存保留的部分），并另行添加新值。
-      final provider = ProviderConfigItem(
-        providerName: 'Test Provider',
-        host: 'https://api.example.com/v1',
-        key: 'sk-test',
-        reasoningParams: [
-          ReasoningParam(
-            paramName: 'thinking.type',
-            isReasoningToggle: true,
-            onValue: 'enabled',
-            offValue: 'disabled',
-          ),
-          ReasoningParam(
             paramName: 'reasoning_effort',
             isEffortParam: true,
-            enabled: true,
             options: ['low', 'high'],
           ),
         ],
       );
 
-      ModelConfig? saved;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Center(
-              child: ElevatedButton(
-                onPressed: () async {
-                  saved = await Navigator.push<ModelConfig>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => LlmModelConfigPage(
-                        model: ModelConfig(
-                          name: 'test-model',
-                          modelId: 'test-model',
-                          typeConfig: {'context': 4096},
-                        ),
-                        provider: provider,
-                      ),
-                    ),
-                  );
-                },
-                child: const Text('打开模型配置'),
-              ),
-            ),
-          ),
-        ),
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('reasoning_effort'));
+          // 勾选 low 再取消 → 改为勾选 high
+          await _tapBlock(tester, 'low');
+          await _tapBlock(tester, 'high');
+          // 点 reset（力度卡头部的刷新图标）
+          final resetIcon = find
+              .descendant(
+                of: find.ancestor(
+                  of: find.text('推理力度'),
+                  matching: find.byType(Card),
+                ),
+                matching: find.byIcon(Icons.refresh),
+              )
+              .first;
+          await tester.ensureVisible(resetIcon);
+          await tester.pumpAndSettle();
+          await tester.tap(resetIcon);
+          await tester.pump();
+        },
       );
-      await tester.tap(find.text('打开模型配置'));
-      await tester.pumpAndSettle();
 
-      // 移除第二个供应商值（high）→ 保留 low
+      expect(saved, isNotNull);
+      // reset 后还原为打开时勾选（模型保存的 ['low','high']）
+      expect(_savedEffortOptions(saved!), ['low', 'high']);
+    });
+
+    testWidgets('param name label shows the source state', (tester) async {
+      // provider 提供的参数 → 「当前：供应商」；模型保存的参数 → 模型自定义
+      final provider = _providerWithEffortOptions(['low', 'medium']);
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          // 模型只保存了力度参数（无开关）→ 开关来自 provider
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['low', 'high'],
+          ),
+        ],
+      );
+
+      await _pumpAndSave(tester,
+          model: model, provider: provider, tapSave: false);
+      // 模型保存的力度参数 → 模型自定义
       await _scrollToReasoning(tester, find.text('reasoning_effort'));
-      await tester.tap(find.byIcon(Icons.remove_circle).last);
-      await tester.pump();
-
-      // 另行添加新值 medium
-      await tester.tap(find.text('添加选项'));
-      await tester.pump();
-      await tester.enterText(
-        find.widgetWithText(TextFormField, '选项 2'),
-        'medium',
-      );
-      await tester.pump();
-
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
-
-      expect(saved, isNotNull);
-      expect(saved!.reasoningParams.length, 1);
-      expect(saved!.reasoningParams.first.paramName, 'reasoning_effort');
-      expect(saved!.reasoningParams.first.options, ['low', 'medium']);
+      expect(find.textContaining('当前：模型自定义'), findsOneWidget);
+      // provider 的推理开关（模型未保存）→ 供应商（滚动到开关区）
+      await _scrollToReasoning(tester, find.text('thinking.type'), delta: -200);
+      expect(find.textContaining('当前：供应商'), findsWidgets);
     });
 
-    testWidgets(
-        'reordering inherited additional params claims them so the order '
-        'persists', (tester) async {
-      // 排序 = 修改：供应商的附加参数被排序后必须认领为模型自有，
-      // 否则排序结果不会写入模型、下次打开即按供应商顺序恢复。
-      final provider = ProviderConfigItem(
-        providerName: 'Test Provider',
-        host: 'https://api.example.com/v1',
-        key: 'sk-test',
-        reasoningParams: [
-          ReasoningParam(
-            paramName: 'thinking.type',
-            isReasoningToggle: true,
-            onValue: 'enabled',
-            offValue: 'disabled',
-          ),
-          ReasoningParam(
-            paramName: 'first_param',
-            enabled: true,
-            options: ['1'],
-          ),
-          ReasoningParam(
-            paramName: 'second_param',
-            enabled: true,
-            options: ['2'],
-          ),
-        ],
-      );
-
-      ModelConfig? saved;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Center(
-              child: ElevatedButton(
-                onPressed: () async {
-                  saved = await Navigator.push<ModelConfig>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => LlmModelConfigPage(
-                        model: ModelConfig(
-                          name: 'test-model',
-                          modelId: 'test-model',
-                          typeConfig: {'context': 4096},
-                        ),
-                        provider: provider,
-                      ),
-                    ),
-                  );
-                },
-                child: const Text('打开模型配置'),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.tap(find.text('打开模型配置'));
-      await tester.pumpAndSettle();
-
-      // 第一个继承附加参数（first_param）下移
-      await _scrollToReasoning(tester, find.text('first_param'));
-      await tester.tap(find.byIcon(Icons.arrow_downward).first);
-      await tester.pump();
-
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
-
-      // 两个继承参数都被认领并保存，顺序为排序后的结果
-      expect(saved, isNotNull);
-      expect(saved!.reasoningParams.map((p) => p.paramName).toList(),
-          ['second_param', 'first_param']);
-      expect(saved!.reasoningParams.first.options, ['2']);
-      expect(saved!.reasoningParams.last.options, ['1']);
-    });
-
-    testWidgets(
-        'force-claimed param stays model-owned after an edit+revert cycle',
+    testWidgets('json type shows a large input instead of option blocks',
         (tester) async {
-      // 排序强制认领后，即使后续把内容改回与供应商一致，也不能回退为
-      // 继承——否则排序结果（无内容载体）会随保存静默丢失。
-      final provider = ProviderConfigItem(
-        providerName: 'Test Provider',
-        host: 'https://api.example.com/v1',
-        key: 'sk-test',
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
         reasoningParams: [
           ReasoningParam(
             paramName: 'thinking.type',
@@ -911,39 +810,211 @@ void main() {
             offValue: 'disabled',
           ),
           ReasoningParam(
-            paramName: 'first_param',
-            enabled: true,
-            options: ['1'],
-          ),
-          ReasoningParam(
-            paramName: 'second_param',
-            enabled: true,
-            options: ['2'],
+            paramName: 'thinking_config',
+            isEffortParam: true,
+            type: 'json',
+            options: ['{"thinking": {"budget": 1024}}'],
           ),
         ],
       );
 
-      ModelConfig? saved;
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('thinking_config'));
+          // json 类型：大输入框 + 无勾选块/添加值按钮
+          expect(find.byType(TextField).last, findsOneWidget);
+          // 大输入框内容即保存值
+          await tester.enterText(
+            find.widgetWithText(TextFormField, 'JSON 值'),
+            '{"thinking": {"budget": 2048}}',
+          );
+          await tester.pump();
+        },
+      );
+
+      expect(saved, isNotNull);
+      final effort = saved!.reasoningParams.firstWhere((p) => p.isEffortParam);
+      expect(effort.options, ['{"thinking": {"budget": 2048}}']);
+    });
+
+    testWidgets('boolean type has no value area', (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'use_cache',
+            isEffortParam: true,
+            type: 'boolean',
+            options: [],
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('use_cache'));
+          // 布尔类型：无添加值按钮、无选项块
+          expect(find.text('添加值'), findsNothing);
+          expect(find.textContaining('无需配置参数值'), findsOneWidget);
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(_savedEffortOptions(saved!), isEmpty);
+    });
+
+    testWidgets('custom params use pill-block options (no default value box)',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'temperature_style',
+            defaultValue: 'balanced',
+            type: 'string',
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          // 旧数据升级：defaultValue → 第一个选项块
+          await _scrollToReasoning(tester, find.text('自定义参数'));
+          await tester.scrollUntilVisible(
+            find.text('balanced'),
+            200,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('balanced'), findsOneWidget);
+          // 没有「默认参数值」输入框；有「添加选项」按钮
+          expect(find.text('默认参数值'), findsNothing);
+          expect(find.text('添加选项'), findsOneWidget);
+
+          // 添加新选项 creative
+          await tester.tap(find.text('添加选项'));
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField).last, 'creative');
+          await tester.pump();
+          await tester.tap(find.text('确定'));
+          await tester.pumpAndSettle();
+          expect(find.text('creative'), findsOneWidget);
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.options, ['balanced', 'creative']);
+    });
+
+    testWidgets('json custom param keeps the default value input',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'thinking',
+            defaultValue: '{"type": "enabled"}',
+            type: 'json',
+          ),
+        ],
+      );
+
+      await _pumpAndSave(
+        tester,
+        model: model,
+        tapSave: false,
+      );
+      await _scrollToReasoning(tester, find.text('thinking'));
+      // json 类型：保留默认参数值输入框（无选项块）
+      expect(find.text('默认参数值'), findsOneWidget);
+      expect(find.text('添加选项'), findsNothing);
+    });
+
+    testWidgets(
+        'boolean custom param has no value area (like reasoning '
+        'boolean params)', (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'verbose',
+            defaultValue: '',
+            type: 'boolean',
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('自定义参数'));
+          await tester.scrollUntilVisible(
+            find.text('verbose'),
+            200,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.pumpAndSettle();
+          // boolean：无参数值区（与推理参数 boolean 一致）
+          expect(find.text('布尔类型无需配置参数值。'), findsOneWidget);
+          expect(find.text('默认参数值'), findsNothing);
+          expect(find.text('添加选项'), findsNothing);
+        },
+      );
+
+      expect(saved, isNotNull);
+      // 无值区 → options 为空
+      expect(saved!.customParams.single.options, isEmpty);
+    });
+
+    testWidgets('legacy custom param (defaultValue) open+back does not warn',
+        (tester) async {
+      // 旧数据：string 类型只有 defaultValue（无 options）——打开时升级
+      // 为选项块，但不应算未保存修改
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'temperature_style',
+            defaultValue: 'balanced',
+            type: 'string',
+          ),
+        ],
+      );
+
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
             builder: (context) => Center(
               child: ElevatedButton(
-                onPressed: () async {
-                  saved = await Navigator.push<ModelConfig>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => LlmModelConfigPage(
-                        model: ModelConfig(
-                          name: 'test-model',
-                          modelId: 'test-model',
-                          typeConfig: {'context': 4096},
-                        ),
-                        provider: provider,
-                      ),
-                    ),
-                  );
-                },
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => LlmModelConfigPage(model: model),
+                  ),
+                ),
                 child: const Text('打开模型配置'),
               ),
             ),
@@ -953,28 +1024,97 @@ void main() {
       await tester.tap(find.text('打开模型配置'));
       await tester.pumpAndSettle();
 
-      // 第一个继承附加参数（first_param）下移 → 强制认领
-      await _scrollToReasoning(tester, find.text('first_param'));
-      await tester.tap(find.byIcon(Icons.arrow_downward).first);
-      await tester.pump();
-
-      // 编辑 first_param 的选项值，再还原为供应商原值（内容回退）
-      await _scrollToReasoning(tester, find.text('first_param'));
-      final optionField = find
-          .widgetWithText(TextFormField, '选项 1')
-          .last; // 第二个卡（first_param）的选项
-      await tester.enterText(optionField, 'x');
-      await tester.pump();
-      await tester.enterText(optionField, '1');
-      await tester.pump();
-
-      await tester.tap(find.text('保存'));
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
+      expect(find.text('放弃修改？'), findsNothing);
+      expect(find.text('打开模型配置'), findsOneWidget);
+    });
 
-      // 强制认领不回退：两个参数都保存，顺序为排序后的结果
+    testWidgets('unchecking all custom param options blocks save',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'temperature_style',
+            defaultValue: 'balanced',
+            type: 'string',
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('自定义参数'));
+          await tester.scrollUntilVisible(
+            find.text('balanced'),
+            200,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.pumpAndSettle();
+          // 取消勾选唯一选项
+          await tester.tap(find.text('balanced'));
+          await tester.pump();
+        },
+      );
+
+      // 保存被拦（空值参数）
+      expect(saved, isNull);
+      expect(find.text('自定义参数的参数名和值不能为空'), findsOneWidget);
+    });
+
+    testWidgets('new additional param can add values and save', (tester) async {
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'thinking.type',
+              isReasoningToggle: true,
+              onValue: 'enabled',
+              offValue: 'disabled',
+            ),
+          ],
+        ),
+        beforeSave: (tester) async {
+          // 添加新的附加参数 + 填参数名 + 值
+          await _scrollToReasoning(tester, find.text('添加推理参数'));
+          await tester.tap(find.text('添加推理参数'));
+          await tester.pump();
+          await _scrollToReasoning(tester, find.text('添加值'));
+          // 新卡片参数名输入框（最后一个 TextFormField）填名
+          await tester.enterText(
+            find.byType(TextFormField).last,
+            'max_retries',
+          );
+          await tester.pump();
+          final addValueBtn = find.text('添加值').last;
+          await tester.ensureVisible(addValueBtn);
+          await tester.pumpAndSettle();
+          await tester.tap(addValueBtn);
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField).last, 'auto');
+          await tester.pump();
+          await tester.tap(find.text('确定'));
+          await tester.pumpAndSettle();
+        },
+      );
+
       expect(saved, isNotNull);
-      expect(saved!.reasoningParams.map((p) => p.paramName).toList(),
-          ['second_param', 'first_param']);
+      expect(
+        saved!.reasoningParams
+            .where((p) => !p.isReasoningToggle && !p.isEffortParam)
+            .single
+            .options,
+        ['auto'],
+      );
     });
 
     testWidgets('new model with provider params still saves', (tester) async {
@@ -989,7 +1129,7 @@ void main() {
                     context,
                     MaterialPageRoute(
                       builder: (_) => LlmModelConfigPage(
-                        provider: _providerWithNameOnlyEffort(),
+                        provider: _providerWithEffortOptions(['low', 'high']),
                       ),
                     ),
                   );
@@ -1014,8 +1154,8 @@ void main() {
 
       expect(saved, isNotNull);
       expect(saved!.modelId, 'test-model');
-      // 新建模型默认不写推理参数（继承参数未修改）
-      expect(saved!.reasoningParams, isEmpty);
+      // 新建模型：默认全不选 → 力度参数 options 为空（用户显式勾选）
+      expect(_savedEffortOptions(saved!), isEmpty);
     });
   });
 }

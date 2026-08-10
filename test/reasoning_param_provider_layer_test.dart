@@ -327,6 +327,60 @@ void main() {
       expect(body['thinking']['type'], 'enabled');
     });
 
+    test(
+        'provider effort param is skipped when the model has its own effort '
+        'param (stale value must not be injected)', () async {
+      // 模型有自己命名的力度参数时，供应商的力度参数被遮蔽；
+      // 即使 reasoningParamValues 里有它的陈旧值，也不得发送。
+      final service = ChatService(
+        provider: provider,
+        modelConfig: ModelConfig(
+          name: 'Test',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'model.effort',
+              isEffortParam: true,
+              options: ['x', 'y'],
+              enabled: true,
+            ),
+          ],
+        ),
+        providerConfig: providerWithReasoning(
+          toggle: ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          additional: [
+            ReasoningParam(
+              paramName: 'provider.effort',
+              isEffortParam: true,
+              options: ['a', 'b'],
+              enabled: true,
+            ),
+          ],
+        ),
+      );
+
+      await for (final _ in service.sendStream('Hi',
+          history: [],
+          reasoning: true,
+          reasoningParamValues: {
+            'provider.effort': 'a', // 陈旧值（UI 已无法清除）
+            'model.effort': 'x',
+          })) {}
+
+      final body = provider.lastRequestBody;
+      expect(body, isNotNull);
+      // 点号参数名展开为嵌套对象
+      expect((body!['model'] as Map)['effort'], 'x');
+      expect(body.containsKey('provider'), isFalse,
+          reason: '被模型力度参数遮蔽的供应商力度参数不得发送陈旧值');
+    });
+
     test('provider toggle + model toggle with the same name: model wins',
         () async {
       // 同名开关双写路径：provider 层先写、model 层后写 → 模型值生效。

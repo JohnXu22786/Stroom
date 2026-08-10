@@ -98,6 +98,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   late final TextEditingController _seedController;
   late List<CustomParam> _customParams;
   late List<ReasoningParam> _reasoningParams;
+
   final Map<int, String?> _jsonErrors = {};
 
   // ASR upload settings
@@ -150,6 +151,17 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     );
 
     _customParams = c.customParams.map((p) => p.copy()).toList();
+    // 旧数据升级：string/number 类型且仅有 defaultValue（无 options）时，
+    // 把 defaultValue 作为第一个选项并清空 defaultValue（options 为权威）。
+    // json 用默认值输入框、boolean 无参数值，均不参与。
+    for (final p in _customParams) {
+      if (p.type == 'string' || p.type == 'number') {
+        if (p.options.isEmpty && p.defaultValue.trim().isNotEmpty) {
+          p.options.add(p.defaultValue);
+          p.defaultValue = '';
+        }
+      }
+    }
     _reasoningParams = c.reasoningParams.map((p) => p.copy()).toList();
     // Initialize JSON validation for existing params
     for (int i = 0; i < _customParams.length; i++) {

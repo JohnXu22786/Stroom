@@ -6,6 +6,96 @@ part of 'provider_settings_panel.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
+  /// 自定义参数选项值区（照搬本面板推理力度的行式样式）：
+  /// 多值文本行 + 把手排序 + 删除 + 添加选项。
+  Widget _buildProviderCustomParamOptionRows(
+      CustomParam param, ColorScheme cs) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '选项值（拖动把手排序）',
+          style: TextStyle(
+            fontSize: 12,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(height: 8),
+        ReorderableListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false,
+          itemCount: param.options.length,
+          onReorderItem: (oldIndex, newIndex) {
+            setState(() {
+              final value = param.options.removeAt(oldIndex);
+              param.options.insert(newIndex, value);
+            });
+          },
+          itemBuilder: (context, j) {
+            return Padding(
+              key: ValueKey('custom-opt-$j'),
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  ReorderableDragStartListener(
+                    index: j,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 2),
+                      child:
+                          Icon(Icons.drag_handle, size: 20, color: Colors.grey),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Expanded(
+                    child: TextFormField(
+                      initialValue: param.options[j],
+                      decoration: InputDecoration(
+                        labelText: '选项 ${j + 1}',
+                        hintText: '如 low, enabled, true, max',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onChanged: (v) {
+                        param.options[j] = v;
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  if (param.options.length > 1)
+                    IconButton(
+                      icon: const Icon(
+                        Icons.remove_circle,
+                        color: Colors.red,
+                        size: 18,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          param.options.removeAt(j);
+                        });
+                      },
+                      tooltip: '删除选项',
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 4),
+        TextButton.icon(
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('添加选项', style: TextStyle(fontSize: 13)),
+          onPressed: () {
+            setState(() {
+              param.options.add('');
+            });
+          },
+        ),
+      ],
+    );
+  }
+
   void _addCustomParam() {
     setState(() {
       _customParams.insert(0, CustomParam(paramName: '', defaultValue: ''));
@@ -331,6 +421,7 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
@@ -377,6 +468,11 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                               if (v != null) {
                                 setState(() {
                                   param.type = v;
+                                  // 切换到 string/number：清空 defaultValue
+                                  // （json 的旧值不应在 options 模式下继续发送）
+                                  if (v == 'string' || v == 'number') {
+                                    param.defaultValue = '';
+                                  }
                                   _validateJsonField(i, param);
                                 });
                               }
@@ -397,58 +493,72 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          initialValue: param.defaultValue,
-                          decoration: InputDecoration(
-                            labelText: '默认参数值',
-                            hintText: param.paramType.defaultValueHint,
-                            border: const OutlineInputBorder(),
-                            errorBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: _jsonParamHasError(i)
-                                    ? Colors.red
-                                    : Colors.grey.shade400,
+                  // 值区按类型区分（照搬本面板推理力度的处理）：
+                  // string/number → 选项值文本行（多值、可编辑、把手排序）；
+                  // json → 默认参数值输入框；boolean → 无参数值。
+                  if (param.type == 'json')
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: param.defaultValue,
+                            decoration: InputDecoration(
+                              labelText: '默认参数值',
+                              hintText: param.paramType.defaultValueHint,
+                              border: const OutlineInputBorder(),
+                              errorBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: _jsonParamHasError(i)
+                                      ? Colors.red
+                                      : Colors.grey.shade400,
+                                ),
                               ),
-                            ),
-                            focusedErrorBorder: OutlineInputBorder(
-                              borderSide: const BorderSide(
-                                color: Colors.red,
+                              focusedErrorBorder: OutlineInputBorder(
+                                borderSide: const BorderSide(
+                                  color: Colors.red,
+                                ),
                               ),
+                              errorText: _jsonErrors[i],
+                              errorMaxLines: 3,
+                              isDense: true,
                             ),
-                            errorText: _jsonErrors[i],
-                            errorMaxLines: 3,
-                            isDense: true,
-                          ),
-                          onChanged: (v) {
-                            param.defaultValue = v;
-                            _validateJsonField(i, param);
-                            setState(() {});
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(Icons.fullscreen, size: 20),
-                        tooltip: '全屏编辑',
-                        onPressed: () {
-                          _showValueFullscreenEditor(
-                            context,
-                            param.defaultValue,
-                            (result) {
-                              param.defaultValue = result;
+                            onChanged: (v) {
+                              param.defaultValue = v;
                               _validateJsonField(i, param);
                               setState(() {});
                             },
-                            param.paramType.defaultValueHint,
-                            type: param.type,
-                          );
-                        },
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.fullscreen, size: 20),
+                          tooltip: '全屏编辑',
+                          onPressed: () {
+                            _showValueFullscreenEditor(
+                              context,
+                              param.defaultValue,
+                              (result) {
+                                param.defaultValue = result;
+                                _validateJsonField(i, param);
+                                setState(() {});
+                              },
+                              param.paramType.defaultValueHint,
+                              type: param.type,
+                            );
+                          },
+                        ),
+                      ],
+                    )
+                  else if (param.type == 'boolean')
+                    Text(
+                      '布尔类型无需配置参数值。',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                       ),
-                    ],
-                  ),
+                    )
+                  else
+                    _buildProviderCustomParamOptionRows(param, cs),
                 ],
               ),
             ),

@@ -286,7 +286,13 @@ List<MessageBlock> legacyToBlocks({
       : (toolCalls.isNotEmpty ? 1 : 0);
 
   for (var i = 0; i < numRounds; i++) {
-    if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
+    // Emit EVERY reasoning section — including empty '' placeholders —
+    // so blocksToSegments' ordinal sectionIndex equals the raw section
+    // index in the message's reasoningSections list. Skipping empties
+    // misaligned ordinals whenever a middle tool round had no reasoning
+    // (interior ''), making the wrong section's text render (or none).
+    // Empty blocks render nothing (ReasoningSection skips empty texts).
+    if (i < reasoningSections.length) {
       blocks.add(ReasoningBlock(text: reasoningSections[i], isComplete: true));
     }
     if (i < textChunks.length && textChunks[i].isNotEmpty) {
@@ -314,7 +320,9 @@ List<MessageBlock> legacyToBlocks({
       ? reasoningSections.length
       : textChunks.length;
   for (var i = numRounds; i < maxRemaining; i++) {
-    if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
+    // Unconditional emission keeps ordinal section indices aligned with
+    // the raw reasoningSections indices (see round loop above).
+    if (i < reasoningSections.length) {
       blocks.add(ReasoningBlock(text: reasoningSections[i], isComplete: true));
     }
     if (i < textChunks.length && textChunks[i].isNotEmpty) {
@@ -327,6 +335,47 @@ List<MessageBlock> legacyToBlocks({
 /// Shared state provider tracking which tool names are enabled by the user.
 /// Applies to both built-in and MCP tools uniformly.
 final enabledToolNamesProvider = StateProvider<Set<String>>((ref) => {});
+
+/// Filters MCP placeholder tools out of the selectable tool list when the
+/// active assistant's MCP 工具显示开关 ([Assistant.mcpToolsVisible]) is off.
+///
+/// Behavior:
+/// - [mcpToolsVisible] == true: [allTools] returned as-is.
+/// - [mcpToolsVisible] == false: every tool that appears in [mcpTools]
+///   (the adapter's current MCP placeholder definitions) is removed, so the
+///   conversation page cannot select or send MCP tools for this assistant.
+///
+/// Pure so the policy is unit-testable; the per-conversation assistant
+/// lookup and the side effects live in the chat page.
+List<ToolDefinition> selectableToolsForAssistant({
+  required List<ToolDefinition> allTools,
+  required List<ToolDefinition> mcpTools,
+  required bool mcpToolsVisible,
+}) {
+  if (mcpToolsVisible) return allTools;
+  final mcpNames = mcpTools.map((t) => t.name).toSet();
+  return allTools.where((t) => !mcpNames.contains(t.name)).toList();
+}
+
+/// Prunes enabled tool names down to the currently selectable set —
+/// a DISPLAY-TIME filter (e.g. the composer's tool-chip badge count).
+///
+/// When the MCP master switch or the assistant's MCP 工具显示开关 is off,
+/// MCP tool names must not be *counted as enabled* in the UI even if an
+/// explicit preference saved them earlier. The saved preference itself is
+/// never modified by this function: the runtime enabled set is only
+/// persisted when it differs from the saved set (send/toggle), and explicit
+/// saved sets are only ever replaced by actual user toggles — so hidden
+/// tools come back automatically when they become selectable again.
+///
+/// Pure so the policy is unit-testable.
+Set<String> pruneUnselectableToolNames({
+  required Set<String> enabledNames,
+  required List<ToolDefinition> selectableTools,
+}) {
+  final selectableNames = selectableTools.map((t) => t.name).toSet();
+  return enabledNames.where(selectableNames.contains).toSet();
+}
 
 // ============================================================================
 // 上下文统计显示格式化（opencode sidebar 风格）

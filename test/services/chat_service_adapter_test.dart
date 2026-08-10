@@ -789,6 +789,36 @@ void main() {
     });
 
     test(
+        'initializeMcpServers publishes nothing when MCP master switch is off '
+        '(ProviderEntry.enabled=false), and re-discovers after switching back '
+        'on', () async {
+      // sanity: enabled state discovers tools
+      await adapter.initializeMcpServers(_vendorState());
+      expect(adapter.mcpToolDefinitions, isNotEmpty);
+
+      // MCP总开关关闭：占位工具清空
+      final disabledState = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            enabled: false,
+            configs: _vendorState().entries.first.configs,
+          ),
+        ],
+      );
+      await adapter.initializeMcpServers(disabledState);
+      expect(adapter.mcpToolDefinitions, isEmpty,
+          reason: '总开关关闭后 MCP 工具不应再发布（助手页面与对话页都不显示）');
+
+      // 重新开启：再次发布占位工具
+      await adapter.initializeMcpServers(_vendorState());
+      expect(adapter.mcpToolDefinitions, isNotEmpty,
+          reason: '总开关重新开启后 MCP 工具应恢复发布');
+    });
+
+    test(
         'concurrent initializeMcpServers calls with the same state are '
         'serialized and both complete with tools', () async {
       // Simulates page _initialize and the provider-change listener firing

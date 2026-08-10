@@ -744,7 +744,8 @@ void showCustomReasoningParamsPanel({
                                           ),
                                         ),
                                       ),
-                                      if (param.options.isEmpty)
+                                      if (param.options.isEmpty &&
+                                          param.type != 'boolean')
                                         // 无选项值的参数（供应商仅声明参数名）：
                                         // 开关无法产生值，给出引导而非死开关
                                         Text(
@@ -761,6 +762,8 @@ void showCustomReasoningParamsPanel({
                                           // 状态存于 reasoningParamSelections）：
                                           // 面板切换通过写入/移除参数值生效，
                                           // 不依赖参数对象上可变的 enabled 标记。
+                                          // boolean 类型参数：开 = 'true'，
+                                          // 关 = 'false'（无选项也提供开关）。
                                           value:
                                               (localSelections[param.paramName]
                                                           ?.isNotEmpty ??
@@ -770,10 +773,6 @@ void showCustomReasoningParamsPanel({
                                           onChanged: localReasoningEnabled
                                               ? (value) {
                                                   setState(() {
-                                                    // 同步本地已选值，开关显示
-                                                    // 与运行状态保持一致
-                                                    // （与 onCustomParamToggle
-                                                    // 的 putIfAbsent 语义一致）
                                                     if (value) {
                                                       if (param
                                                           .options.isNotEmpty) {
@@ -783,6 +782,15 @@ void showCustomReasoningParamsPanel({
                                                                 () => param
                                                                     .options
                                                                     .first);
+                                                      } else if (param.type ==
+                                                          'boolean') {
+                                                        // 布尔参数：开 →
+                                                        // 'true'（直接写入，
+                                                        // 不走 putIfAbsent
+                                                        // 避免被旧值挡住）
+                                                        localSelections[param
+                                                                .paramName] =
+                                                            'true';
                                                       }
                                                     } else {
                                                       localSelections.remove(

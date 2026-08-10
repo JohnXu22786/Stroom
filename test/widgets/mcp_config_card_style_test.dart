@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/provider_config_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 
@@ -201,5 +202,31 @@ void main() {
       expect(color, expectedIconBox,
           reason: 'icon boxes must use the same tint for every card');
     }
+  });
+
+  testWidgets('MCP master switch renders and toggles the entry enabled flag',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await pumpPage(tester, Brightness.light);
+
+    // 总开关卡片渲染在配置列表顶部，值为 entry.enabled（默认 true）
+    final switchFinder = find.widgetWithText(SwitchListTile, 'MCP 总开关');
+    expect(switchFinder, findsOneWidget);
+    final switchTile = tester.widget<SwitchListTile>(switchFinder);
+    expect(switchTile.value, isTrue);
+
+    // 点击后写入 enabled=false，provider 状态同步更新
+    await tester.tap(find.descendant(
+      of: switchFinder,
+      matching: find.byType(Switch),
+    ));
+    await tester.pump();
+
+    final container = tester.element(switchFinder);
+    final entries = ProviderScope.containerOf(container).read(
+      providerEntriesProvider,
+    );
+    final mcpEntry = entries.entries.firstWhere((e) => e.type == 'mcp');
+    expect(mcpEntry.enabled, isFalse);
   });
 }

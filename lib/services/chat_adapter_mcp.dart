@@ -27,6 +27,9 @@ extension ChatAdapterMcpExt on ChatAdapter {
   /// 并预先创建未连接的 [McpClient] 实例。连接与工具发现延迟到工具被
   /// 实际调用时按需进行（见 chat_service_tools.dart 的 _executeTool），
   /// 避免页面进入时对每个服务器发起连接尝试（真实端点可能数十秒超时）。
+  ///
+  /// MCP 条目的 [ProviderEntry.enabled]（MCP总开关）关闭时，不发布任何
+  /// 占位工具并释放旧客户端——MCP 工具从助手页面与对话页一起消失。
   Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
     final mcpEntry =
         entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
@@ -35,9 +38,9 @@ extension ChatAdapterMcpExt on ChatAdapter {
     if (identical(_lastMcpEntry, mcpEntry)) return;
     _lastMcpEntry = mcpEntry;
 
-    if (mcpEntry == null || mcpEntry.configs.isEmpty) {
-      // 没有配置任何 MCP 服务器：发布空列表并释放旧客户端，避免上一份
-      // 配置的工具/连接残留在工具列表与客户端管理器中。
+    if (mcpEntry == null || mcpEntry.configs.isEmpty || !mcpEntry.enabled) {
+      // 没有配置任何 MCP 服务器，或 MCP总开关已关闭：发布空列表并释放
+      // 旧客户端，避免上一份配置的工具/连接残留在工具列表与客户端管理器中。
       _mcpToolDefinitions = [];
       _mcpClientManager.disposeAll();
       return;

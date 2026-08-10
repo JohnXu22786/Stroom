@@ -9,6 +9,7 @@ import 'package:stroom/models/built_in_prompts.dart';
 import 'package:stroom/pages/assistant_selection_page.dart';
 import 'package:stroom/pages/topic_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
+import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/widgets/llm/assistant_avatar.dart';
 
 /// Creates a test app wrapped in ProviderScope with optional overrides.
@@ -48,6 +49,96 @@ Widget createTestApp({
 }
 
 void main() {
+  group('MCP 工具显示开关 (assistant defaults tab)', () {
+    /// 打开编辑助手对话框并切到"默认设置"tab。
+    Future<void> openDefaultsTab(WidgetTester tester) async {
+      await tester.pumpAndSettle();
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('默认设置'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+        'master switch off: MCP display switch renders disabled with hint',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            assistantProvider.overrideWith((ref) {
+              final notifier = AssistantsNotifier();
+              notifier.createAssistant(
+                name: '测试助手',
+                prompt: 'P1',
+                emoji: '🤖',
+              );
+              return notifier;
+            }),
+            // MCP 总开关关闭
+            providerEntriesProvider.overrideWith((ref) {
+              final notifier = ProviderEntriesNotifier();
+              notifier.state = ProviderEntriesState(
+                entries: [
+                  ProviderEntry(
+                    id: 'builtin_mcp',
+                    type: 'mcp',
+                    name: 'MCP供应商',
+                    enabled: false,
+                  ),
+                ],
+              );
+              return notifier;
+            }),
+          ],
+          child: const MaterialApp(
+            home: AssistantSelectionPage(),
+          ),
+        ),
+      );
+      await openDefaultsTab(tester);
+
+      final switchFinder = find.widgetWithText(SwitchListTile, '在对话页显示 MCP 工具');
+      expect(switchFinder, findsOneWidget, reason: '总开关关闭时显示开关仍渲染（禁用态+提示）');
+      final switchTile = tester.widget<SwitchListTile>(switchFinder);
+      expect(switchTile.value, isFalse);
+      expect(switchTile.onChanged, isNull, reason: '总开关关闭时显示开关不可操作');
+      expect(find.textContaining('MCP 总开关已关闭'), findsOneWidget);
+    });
+
+    testWidgets('master switch on: MCP display switch renders enabled',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            assistantProvider.overrideWith((ref) {
+              final notifier = AssistantsNotifier();
+              notifier.createAssistant(
+                name: '测试助手',
+                prompt: 'P1',
+                emoji: '🤖',
+              );
+              return notifier;
+            }),
+          ],
+          child: const MaterialApp(
+            home: AssistantSelectionPage(),
+          ),
+        ),
+      );
+      await openDefaultsTab(tester);
+
+      final switchFinder = find.widgetWithText(SwitchListTile, '在对话页显示 MCP 工具');
+      expect(switchFinder, findsOneWidget);
+      final switchTile = tester.widget<SwitchListTile>(switchFinder);
+      expect(switchTile.value, isTrue, reason: '未切换过总开关时助手默认可见（保持原有行为）');
+      expect(switchTile.onChanged, isNotNull);
+    });
+  });
+
   group('EmojiPicker adaptive width', () {
     /// Find the emoji GridView inside the dialog (padding EdgeInsets.only(top: 4))
     Finder findEmojiGrid() {

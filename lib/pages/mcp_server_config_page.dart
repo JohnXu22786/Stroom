@@ -362,6 +362,8 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
       type: entry.type,
       name: entry.name,
       configs: configs,
+      // 保留 MCP 总开关状态：编辑服务器配置不应悄悄重置总开关。
+      enabled: entry.enabled,
     );
 
     await ref.read(providerEntriesProvider.notifier).update(entry.id, updated);

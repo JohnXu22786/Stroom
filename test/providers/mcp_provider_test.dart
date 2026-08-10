@@ -177,6 +177,34 @@ void main() {
         equals('https://mcp.example.com/sse'),
       );
     });
+
+    test('MCP entry enabled flag round-trips, legacy data defaults to true',
+        () {
+      final config = ProviderConfigItem(
+        providerName: 'Server',
+        host: '',
+        key: '',
+        models: [],
+      );
+      final entry = ProviderEntry(
+        id: 'mcp_off',
+        type: 'mcp',
+        name: 'MCP供应商',
+        configs: [config],
+        enabled: false,
+      );
+
+      final map = entry.toMap();
+      expect(map['enabled'], isFalse);
+
+      final restored = ProviderEntry.fromMap(map);
+      expect(restored.enabled, isFalse);
+
+      // 旧数据缺省为启用（无迁移步骤）
+      map.remove('enabled');
+      final legacy = ProviderEntry.fromMap(map);
+      expect(legacy.enabled, isTrue);
+    });
   });
 
   group('ProviderEntriesNotifier - MCP entry auto-migration', () {

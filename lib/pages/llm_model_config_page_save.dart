@@ -43,16 +43,27 @@ extension _SaveExt on _LlmModelConfigPageState {
       return;
     }
 
-    // 验证自定义参数：参数名和默认值不能为空，参数名不能重复，
-    // 且 JSON 类型的默认值必须是合法 JSON
+    // 先同步勾选块到工作副本（勾选/排序是保存内容的一部分，验证
+    // 必须基于同步后的 options——例如全部取消勾选后 options 为空，
+    // 验证会拦截空值参数）。
+    _syncEffortOptionsFromBlocks();
+    _syncAdditionalOptionsFromBlocks();
+    _syncCustomParamOptionsFromBlocks();
+
+    // 验证自定义参数：参数名和值（选项或默认值）不能为空，参数名不能
+    // 重复，且 JSON 类型的默认值必须是合法 JSON
     final seenNames = <String>{};
     for (int i = 0; i < _customParams.length; i++) {
       final param = _customParams[i];
       final name = param.paramName.trim();
-      if (name.isEmpty || param.defaultValue.trim().isEmpty) {
+      // boolean 类型无参数值（聊天/请求默认发送 true），只需参数名
+      final hasValue = param.type == 'boolean' ||
+          param.options.any((o) => o.trim().isNotEmpty) ||
+          param.defaultValue.trim().isNotEmpty;
+      if (name.isEmpty || !hasValue) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('自定义参数的参数名和默认值不能为空'),
+            content: Text('自定义参数的参数名和值不能为空'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -83,21 +94,14 @@ extension _SaveExt on _LlmModelConfigPageState {
       }
     }
 
-    // 验证推理参数
-    // 仅验证模型自有（非继承）参数：继承自供应商的参数由供应商保存时
-    // 校验，未修改的继承参数不写入模型。开关完备性检查基于合并视图
-    // （推理开关可来自供应商），与请求构建时的行为一致。
-    final modelOwnedParams =
-        _reasoningParams.where((p) => !p.inheritedFromProvider).toList();
-
-    // Check 1: If the model owns any reasoning params, the toggle must
-    // exist (model-owned or inherited from provider) and be filled.
+    // 验证推理参数（全量：页面工作副本即最终保存内容）
     final toggleParam = _toggleReasoningParam;
-    final hasOwnedNonToggleParams = modelOwnedParams.any(
+    final hasNonToggleParams = _reasoningParams.any(
       (p) => !p.isReasoningToggle && p.paramName.trim().isNotEmpty,
     );
 
-    if (hasOwnedNonToggleParams &&
+    // Check 1: If there are any reasoning params, the toggle must exist and be filled
+    if (hasNonToggleParams &&
         (toggleParam == null || !toggleParam.isFilledToggle)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -108,15 +112,18 @@ extension _SaveExt on _LlmModelConfigPageState {
       return;
     }
 
-    // Check 2: For model-level inference intensity (non-toggle), if name is filled,
-    // must have at least one option value
-    for (int i = 0; i < modelOwnedParams.length; i++) {
-      final param = modelOwnedParams[i];
+    // Check 2: 附加推理参数（非力度、非布尔）若填写了参数名，必须至少
+    // 有一个选项值。推理力度参数例外：勾选块允许全部取消；布尔类型
+    // 无参数值（聊天面板提供开/关切换）。
+    for (int i = 0; i < _reasoningParams.length; i++) {
+      final param = _reasoningParams[i];
       if (param.isReasoningToggle) continue;
+      if (param.isEffortParam) continue;
+      if (param.type == 'boolean') continue;
       if (param.paramName.trim().isNotEmpty && param.options.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('推理力度参数必须至少添加一个选项值'),
+            content: Text('推理参数必须至少添加一个选项值'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -125,8 +132,8 @@ extension _SaveExt on _LlmModelConfigPageState {
     }
 
     // Check 3: Validate each param individually
-    for (int i = 0; i < modelOwnedParams.length; i++) {
-      final param = modelOwnedParams[i];
+    for (int i = 0; i < _reasoningParams.length; i++) {
+      final param = _reasoningParams[i];
       final error = param.validationError;
       if (error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -139,10 +146,10 @@ extension _SaveExt on _LlmModelConfigPageState {
       }
     }
 
-    // Check 4: Duplicate name check across model-owned reasoning params
+    // Check 4: Duplicate name check across reasoning params
     final reasoningSeenNames = <String>{};
-    for (int i = 0; i < modelOwnedParams.length; i++) {
-      final name = modelOwnedParams[i].paramName.trim();
+    for (int i = 0; i < _reasoningParams.length; i++) {
+      final name = _reasoningParams[i].paramName.trim();
       if (name.isEmpty) {
         continue; // Empty names are caught by validationError above
       }
@@ -158,16 +165,11 @@ extension _SaveExt on _LlmModelConfigPageState {
     }
 
     // Check 4: Cross-check duplicate names between reasoning params and custom params
-    // 覆盖全部推理参数（含继承自供应商的）：若模型自定义参数与供应商推理
-    // 参数重名，请求构建中自定义参数会覆盖推理参数的值，聊天面板上的推理
-    // 开关形同虚设 → 保存时拦截。
-    // 注意：推理参数之间的重名（继承参数 + 本页新建的同名覆盖参数）是
-    // 合法的覆盖语义，不在此拦截——只拦截「推理参数 vs 自定义参数」。
-    final reasoningNames = <String>{};
+    // 若模型自定义参数与推理参数重名，请求构建中自定义参数会覆盖推理参数
+    // 的值，聊天面板上的推理开关形同虚设 → 保存时拦截。
     for (final param in _reasoningParams) {
       final name = param.paramName.trim();
       if (name.isEmpty) continue;
-      if (!reasoningNames.add(name)) continue; // 推理内部重名（合法覆盖）
       if (seenNames.contains(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -269,12 +271,34 @@ extension _SaveExt on _LlmModelConfigPageState {
       modelId: modelId,
       typeConfig: typeConfig,
       customParams: _customParams.map((p) => p.copy()).toList(),
-      // 只保存模型自有参数：未修改的供应商继承参数不写入模型，
-      // 保证供应商后续修改能继续同步到模型。
-      reasoningParams: modelOwnedParams.map((p) => p.copy()).toList(),
+      // 全量保存工作副本（页面显示什么就保存什么）
+      reasoningParams: _reasoningParams.map((p) => p.copy()).toList(),
       endpointType: _overrideEndpointType ? _endpointType : null,
     );
 
     Navigator.pop(context, result);
+  }
+
+  /// 把力度勾选块同步到力度参数工作副本：
+  /// 勾选的值按块顺序写入 [ReasoningParam.options]（全取消 = 空列表）。
+  /// 仅对 string/number 类型生效：json 类型的值由大输入框直接维护，
+  /// boolean 类型无参数值（清空 options，聊天面板提供开/关切换）。
+  /// 幂等，保存前与 _hasUnsavedChanges 比较前调用。
+  void _syncEffortOptionsFromBlocks() {
+    final effort = _effortReasoningParam;
+    if (effort == null) return;
+    if (effort.type == 'json') return;
+    if (effort.type == 'boolean') {
+      if (effort.options.isNotEmpty) effort.options.clear();
+      return;
+    }
+    final selected = _effortBlockValues
+        .where((v) => _effortSelectedValues.contains(v))
+        .toList();
+    if (jsonEncode(effort.options) != jsonEncode(selected)) {
+      effort.options
+        ..clear()
+        ..addAll(selected);
+    }
   }
 }

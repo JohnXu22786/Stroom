@@ -57,11 +57,17 @@ class CustomParam {
   String defaultValue;
   String type;
 
+  /// 选项值列表（与推理力度同款的胶囊块编辑）。
+  /// 空时向后兼容：请求发送 [defaultValue]（旧数据）；非空时发送
+  /// 第一个选项（排序决定默认值）。
+  List<String> options;
+
   CustomParam({
     required this.paramName,
     this.defaultValue = '',
     this.type = 'string',
-  });
+    List<String>? options,
+  }) : options = options ?? [];
 
   ParamType get paramType => ParamType.fromValue(type);
 
@@ -69,18 +75,21 @@ class CustomParam {
         'paramName': paramName,
         'defaultValue': defaultValue,
         'type': type,
+        if (options.isNotEmpty) 'options': options,
       };
 
   factory CustomParam.fromMap(Map<String, dynamic> map) => CustomParam(
         paramName: map['paramName'] as String? ?? '',
         defaultValue: map['defaultValue'] as String? ?? '',
         type: map['type'] as String? ?? 'string',
+        options: (map['options'] as List?)?.cast<String>() ?? const [],
       );
 
   CustomParam copy() => CustomParam(
         paramName: paramName,
         defaultValue: defaultValue,
         type: type,
+        options: List.of(options),
       );
 }
 
@@ -197,14 +206,6 @@ class ReasoningParam {
 
   String type; // 'string', 'number', 'boolean', 'json'
 
-  /// 模型配置页工作副本专用标记（仅内存，不序列化）。
-  ///
-  /// true 表示该参数是从供应商配置继承而来、模型尚未修改——保存时不会
-  /// 写入模型数据，供应商后续修改会同步显示。模型页首次编辑该参数会
-  /// 清除此标记，参数随即变为模型独立配置，保存时才会写入模型。
-  /// [toMap] 不持久化此字段；[copy] 也不携带（复制即"干净的序列化副本"）。
-  bool inheritedFromProvider;
-
   ReasoningParam({
     required this.paramName,
     this.enabled = true,
@@ -215,7 +216,6 @@ class ReasoningParam {
     this.offValue,
     List<String>? options,
     this.type = 'string',
-    this.inheritedFromProvider = false,
   }) : options = options ?? [];
 
   Map<String, dynamic> toMap() => {
@@ -587,11 +587,17 @@ class ProviderEntry {
   String name;
   List<ProviderConfigItem> configs;
 
+  /// 条目启用总开关。目前仅 MCP 条目使用（MCP 列表页的"MCP总开关"）：
+  /// 关闭后 MCP 服务器工具不再发布，助手页面与对话页都不再显示。
+  /// 其它类型条目不使用该字段，缺省为 true 保持原有行为。
+  final bool enabled;
+
   ProviderEntry({
     String? id,
     this.type = 'tts',
     required this.name,
     List<ProviderConfigItem>? configs,
+    this.enabled = true,
   })  : id = id ?? 'provider_${const Uuid().v4()}',
         configs = configs ?? [];
 
@@ -600,6 +606,7 @@ class ProviderEntry {
         'type': type,
         'name': name,
         'configs': configs.map((c) => c.toMap()).toList(),
+        'enabled': enabled,
       };
 
   factory ProviderEntry.fromMap(Map<String, dynamic> map) {
@@ -613,6 +620,8 @@ class ProviderEntry {
                     Map<String, dynamic>.from(e as Map)))
                 .toList() ??
             [],
+        // 旧数据缺省为启用（v3 原位演进，无需迁移步骤）。
+        enabled: map['enabled'] as bool? ?? true,
       );
     }
     final config = ProviderConfigItem(
