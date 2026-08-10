@@ -587,11 +587,17 @@ class ProviderEntry {
   String name;
   List<ProviderConfigItem> configs;
 
+  /// 条目启用总开关。目前仅 MCP 条目使用（MCP 列表页的"MCP总开关"）：
+  /// 关闭后 MCP 服务器工具不再发布，助手页面与对话页都不再显示。
+  /// 其它类型条目不使用该字段，缺省为 true 保持原有行为。
+  final bool enabled;
+
   ProviderEntry({
     String? id,
     this.type = 'tts',
     required this.name,
     List<ProviderConfigItem>? configs,
+    this.enabled = true,
   })  : id = id ?? 'provider_${const Uuid().v4()}',
         configs = configs ?? [];
 
@@ -600,6 +606,7 @@ class ProviderEntry {
         'type': type,
         'name': name,
         'configs': configs.map((c) => c.toMap()).toList(),
+        'enabled': enabled,
       };
 
   factory ProviderEntry.fromMap(Map<String, dynamic> map) {
@@ -613,6 +620,8 @@ class ProviderEntry {
                     Map<String, dynamic>.from(e as Map)))
                 .toList() ??
             [],
+        // 旧数据缺省为启用（v3 原位演进，无需迁移步骤）。
+        enabled: map['enabled'] as bool? ?? true,
       );
     }
     final config = ProviderConfigItem(

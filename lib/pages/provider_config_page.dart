@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/assistant_provider.dart';
 import '../providers/provider_config.dart';
 import 'provider_config_detail_page.dart';
 import 'mcp_server_config_page.dart';
@@ -95,6 +96,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       type: entry.type,
       name: entry.name,
       configs: configs,
+      enabled: entry.enabled,
     );
 
     await ref.read(providerEntriesProvider.notifier).update(entry.id, updated);
@@ -135,6 +137,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       type: entry.type,
       name: entry.name,
       configs: configs,
+      enabled: entry.enabled,
     );
 
     await ref.read(providerEntriesProvider.notifier).update(entry.id, updated);
@@ -164,6 +167,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         type: entry.type,
         name: entry.name,
         configs: configs,
+        enabled: entry.enabled,
       );
       await ref
           .read(providerEntriesProvider.notifier)
@@ -171,6 +175,28 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       if (!mounted) return;
       setState(() {});
     }
+  }
+
+  /// 切换 MCP 总开关。切换后：
+  /// - 写入新的 enabled 状态（关闭后 MCP 工具不再发布，助手页面与
+  ///   对话页都不再显示）；
+  /// - 标记"已切换过 MCP总开关"，并把所有助手的 MCP 工具显示开关重置为
+  ///   关闭——助手页面以关闭为默认，而不是以上一次的状态为基准。
+  Future<void> _toggleMcpEnabled(bool value) async {
+    final entry = _entry;
+    if (entry == null || entry.type != 'mcp') return;
+
+    final updated = ProviderEntry(
+      id: entry.id,
+      type: entry.type,
+      name: entry.name,
+      configs: entry.configs,
+      enabled: value,
+    );
+    await ref.read(providerEntriesProvider.notifier).update(entry.id, updated);
+    await ref.read(assistantProvider.notifier).resetMcpToolsVisibility();
+    if (!mounted) return;
+    setState(() {});
   }
 
   @override
@@ -214,6 +240,15 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   ],
                 ),
                 const SizedBox(height: 8),
+                // MCP 总开关：仅 MCP 条目显示。关闭后 MCP 服务器工具
+                // 不在助手页面显示，也无法在对话页使用。
+                if (entry.type == 'mcp') ...[
+                  _McpMasterSwitchCard(
+                    enabled: entry.enabled,
+                    onChanged: _toggleMcpEnabled,
+                  ),
+                  const SizedBox(height: 8),
+                ],
               ]),
             ),
           ),
@@ -507,6 +542,72 @@ class _McpConfigCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ====================================================================
+// _McpMasterSwitchCard — MCP 总开关卡片（MCP 列表页顶部）。
+//
+// 与下方配置卡片同风格（中性背景 + 柔和描边）。关闭后 MCP 服务器工具
+// 不再发布：助手页面的"默认设置"tab 与对话页的工具列表都看不到 MCP
+// 服务器工具，也无法使用（内置 HTTP 工具不受此开关影响）。
+// ====================================================================
+
+class _McpMasterSwitchCard extends StatelessWidget {
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+
+  const _McpMasterSwitchCard({
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color backgroundColor =
+        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.5),
+          width: 0.5,
+        ),
+      ),
+      // 裁剪到圆角：SwitchListTile 的 ink 涟漪是矩形，不裁剪会画出方角。
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Material(
+          type: MaterialType.transparency,
+          child: SwitchListTile(
+            value: enabled,
+            onChanged: onChanged,
+            activeThumbColor: cs.primary,
+            title: Text(
+              'MCP 总开关',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface,
+                fontSize: 14,
+              ),
+            ),
+            subtitle: Text(
+              enabled
+                  ? '已开启：MCP 服务器工具可用。注意：切换总开关会把各助手的"MCP 工具显示"开关重置为关闭，需在助手默认设置中重新开启。'
+                  : '已关闭：MCP 服务器工具不在助手页面与对话页中显示。注意：切换总开关会把各助手的"MCP 工具显示"开关重置为关闭。',
+              style: TextStyle(
+                fontSize: 12,
+                color: cs.onSurfaceVariant,
+              ),
             ),
           ),
         ),
