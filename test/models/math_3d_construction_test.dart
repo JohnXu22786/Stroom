@@ -186,7 +186,8 @@ void main() {
       expect(done, true);
       final obj = state.result!.created.first;
       expect(obj.type, Object3DType.polyhedron);
-      expect(obj.mesh!.vertices.length, 5);
+      // 3 unique base vertices + apex (no duplicated close point).
+      expect(obj.mesh!.vertices.length, 4);
     });
 
     test('prism extrudes from closed base', () {
@@ -198,7 +199,8 @@ void main() {
       final done = state.addInput(const NewPointInput(Point3D(1, 1, 4)));
       expect(done, true);
       final obj = state.result!.created.first;
-      expect(obj.mesh!.vertices.length, 8);
+      // 3 unique base + 3 top vertices.
+      expect(obj.mesh!.vertices.length, 6);
     });
 
     test('regularPolygon uses number of sides', () {
@@ -520,6 +522,105 @@ void main() {
         final d = verts[i].distanceTo(verts[(i + 1) % 6]);
         expect(d, closeTo(1, 1e-9));
       }
+    });
+  });
+
+  group('Review regressions (P1)', () {
+    test('pyramid with a quadrilateral base waits for the apex', () {
+      final state = ConstructionState(tool: ConstructionTool.pyramid);
+      state.addInput(const NewPointInput(Point3D(0, 0, 0)));
+      state.addInput(const NewPointInput(Point3D(2, 0, 0)));
+      state.addInput(const NewPointInput(Point3D(2, 2, 0)));
+      state.addInput(const NewPointInput(Point3D(0, 2, 0)));
+      // Closing the base must NOT complete the construction yet.
+      final closed =
+          state.addInput(const NewPointInput(Point3D(0.05, 0.02, 0)));
+      expect(closed, false);
+      expect(state.baseClosed, true);
+      expect(state.result, isNull);
+      // Now the apex input completes it with a non-degenerate pyramid.
+      final done = state.addInput(const NewPointInput(Point3D(1, 1, 4)));
+      expect(done, true);
+      final obj = state.result!.created.first;
+      expect(obj.type, Object3DType.polyhedron);
+      final verts = obj.mesh!.vertices;
+      expect(verts.length, 5); // 4 base + apex (+ no duplicate close point)
+      // Base is the first 4 vertices; no duplicated vertex pair.
+      for (int i = 0; i < 4; i++) {
+        for (int j = i + 1; j < 4; j++) {
+          expect(verts[i].distanceTo(verts[j]), greaterThan(1e-6));
+        }
+      }
+      // Apex sits above the base plane.
+      expect(verts.last.z, greaterThan(3.9));
+    });
+
+    test('prism with a quadrilateral base extrudes all base vertices', () {
+      final state = ConstructionState(tool: ConstructionTool.prism);
+      state.addInput(const NewPointInput(Point3D(0, 0, 0)));
+      state.addInput(const NewPointInput(Point3D(2, 0, 0)));
+      state.addInput(const NewPointInput(Point3D(2, 2, 0)));
+      state.addInput(const NewPointInput(Point3D(0, 2, 0)));
+      final closed =
+          state.addInput(const NewPointInput(Point3D(0.05, 0.02, 0)));
+      expect(closed, false);
+      final done = state.addInput(const NewPointInput(Point3D(1, 1, 4)));
+      expect(done, true);
+      final obj = state.result!.created.first;
+      expect(obj.mesh!.vertices.length, 8); // 4 base + 4 top, no duplicates
+    });
+
+    test('cone with an off-axis apex tilts its axis toward the apex', () {
+      final state = ConstructionState(tool: ConstructionTool.cone);
+      state.addInput(const NewPointInput(Point3D(0, 0, 0)));
+      state.addInput(const NewPointInput(Point3D(1, 0, 0)));
+      final done = state.addInput(const NewPointInput(Point3D(3, 4, 0)));
+      expect(done, true);
+      final obj = state.result!.created.first;
+      expect(obj.type, Object3DType.cone);
+      expect(obj.solidHeight, closeTo(5, 1e-9));
+      expect(obj.solidAxisValue.x, closeTo(0.6, 1e-9));
+      expect(obj.solidAxisValue.y, closeTo(0.8, 1e-9));
+      expect(obj.solidAxisValue.z, closeTo(0, 1e-9));
+    });
+
+    test('rotating around a segment axis keeps the object intact', () {
+      final point = Object3D.point(const Point3D(2, 0, 0));
+      final axis =
+          Object3D.segment(const Point3D(0, 0, -1), const Point3D(0, 0, 1));
+      final state = ConstructionState(tool: ConstructionTool.rotateLine);
+      state.addInput(ObjectInput(point));
+      state.addInput(ObjectInput(axis));
+      final done = state.addInput(const NumberInput(90));
+      expect(done, true);
+      final r = state.result!.created.first;
+      // 90° around the Z axis: (2,0,0) → (0,2,0).
+      expect(r.pointValue.x, closeTo(0, 1e-9));
+      expect(r.pointValue.y, closeTo(2, 1e-9));
+      expect(r.pointValue.z, closeTo(0, 1e-9));
+    });
+
+    test('dilate scales sphere radius and height-based solids', () {
+      final sphere = Object3D.sphere(const Point3D(1, 1, 1), 2);
+      final state = ConstructionState(tool: ConstructionTool.dilate);
+      state.addInput(ObjectInput(sphere));
+      state.addInput(const NewPointInput(Point3D.origin));
+      final done = state.addInput(const NumberInput(3));
+      expect(done, true);
+      final r = state.result!.created.first;
+      expect(r.sphereRadius, closeTo(6, 1e-9));
+      expect(r.sphereCenter, const Point3D(3, 3, 3));
+
+      final cone = Object3D.cone(const Point3D(1, 0, 0), 2, 4);
+      final s2 = ConstructionState(tool: ConstructionTool.dilate);
+      s2.addInput(ObjectInput(cone));
+      s2.addInput(const NewPointInput(Point3D.origin));
+      final done2 = s2.addInput(const NumberInput(2));
+      expect(done2, true);
+      final c = s2.result!.created.first;
+      expect(c.solidRadius, closeTo(4, 1e-9));
+      expect(c.solidHeight, closeTo(8, 1e-9));
+      expect(c.solidCenter, const Point3D(2, 0, 0));
     });
   });
 }

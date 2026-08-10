@@ -1,10 +1,10 @@
 import 'dart:math' as dart_math;
 
 // ======================================================================
-// 3D 数学模块核心对象模型
+// 3D æ•°å­¦æ¨¡å—æ ¸å¿ƒå¯¹è±¡æ¨¡åž‹
 //
-// 坐标约定（与 GeoGebra 3D 一致）：右手系，Z 轴向上，
-// xOy 平面为地面（网格、2D 联动均在此平面）。
+// åæ ‡çº¦å®šï¼ˆä¸Ž GeoGebra 3D ä¸€è‡´ï¼‰ï¼šå³æ‰‹ç³»ï¼ŒZ è½´å‘ä¸Šï¼Œ
+// xOy å¹³é¢ä¸ºåœ°é¢ï¼ˆç½‘æ ¼ã€2D è”åŠ¨å‡åœ¨æ­¤å¹³é¢ï¼‰ã€‚
 // ======================================================================
 
 /// A 3D point with x, y, z coordinates.
@@ -76,7 +76,7 @@ class Point3D {
   }
 
   /// Project this point onto the plane given by normal [n] and distance [d]
-  /// (plane equation: n · p = d).
+  /// (plane equation: n Â· p = d).
   Point3D projectedOnPlane(Vector3D n, double d) {
     final nn = n.normalized();
     return this + nn * (d - nn.dot(toVector()));
@@ -333,7 +333,7 @@ class MeshData {
 /// cylinder, sphere, surface) are rendered from their meshes.
 class Object3D {
   final Object3DType type;
-  final String name; // e.g. "A", "f", "c" — GeoGebra style label
+  final String name; // e.g. "A", "f", "c" â€” GeoGebra style label
   final bool visible;
   final ObjectStyle style;
 
@@ -345,7 +345,7 @@ class Object3D {
   final Point3D? pointA;
   final Point3D? pointB;
 
-  // Plane: a·x + b·y + c·z = d  (normal = (a, b, c))
+  // Plane: aÂ·x + bÂ·y + cÂ·z = d  (normal = (a, b, c))
   final double? planeA;
   final double? planeB;
   final double? planeC;
@@ -357,6 +357,10 @@ class Object3D {
   final double? circleRadius;
   final double? arcStart;
   final double? arcEnd;
+
+  // Solid axis: cone/cylinder base-centerâ†’apex direction (unit vector).
+  // Defaults to +Z; meshes are built along +Z and rotated into this axis.
+  final Vector3D? solidAxis;
 
   // Mesh geometry
   final MeshData? mesh;
@@ -386,6 +390,7 @@ class Object3D {
     this.circleRadius,
     this.arcStart,
     this.arcEnd,
+    this.solidAxis,
     this.mesh,
     this.curvePoints,
     this.measureText,
@@ -552,6 +557,7 @@ class Object3D {
     Point3D center,
     double radius,
     double height, {
+    Vector3D? axis,
     String name = 'cone',
     bool visible = true,
     ObjectStyle style = const ObjectStyle(),
@@ -563,12 +569,14 @@ class Object3D {
           style: style,
           circleCenter: center,
           circleRadius: radius,
-          planeA: height);
+          planeA: height,
+          solidAxis: axis);
 
   factory Object3D.cylinder(
     Point3D center,
     double radius,
     double height, {
+    Vector3D? axis,
     String name = 'cyl',
     bool visible = true,
     ObjectStyle style = const ObjectStyle(),
@@ -580,7 +588,8 @@ class Object3D {
           style: style,
           circleCenter: center,
           circleRadius: radius,
-          planeA: height);
+          planeA: height,
+          solidAxis: axis);
 
   factory Object3D.plane({
     double a = 0,
@@ -655,6 +664,29 @@ class Object3D {
   Point3D get solidCenter => circleCenter ?? Point3D.origin;
   double get solidRadius => circleRadius ?? 1;
   double get solidHeight => planeA ?? 1;
+
+  /// Unit vector from the base center toward the apex/top of a cone or
+  /// cylinder. Defaults to +Z (meshes are authored along +Z).
+  Vector3D get solidAxisValue => solidAxis ?? Vector3D.unitZ;
+
+  /// Align a +Z-authored solid mesh to [axis]: rotate every vertex so the
+  /// local +Z maps onto [axis]. The mesh stays centered at the origin; callers
+  /// then translate by the solid center.
+  static MeshData alignSolidMesh(MeshData mesh, Vector3D axis) {
+    final a = axis.normalized();
+    if (a.isZero) return mesh;
+    final k = Vector3D.unitZ.cross(a);
+    if (k.magnitudeSquared < 1e-18) {
+      // Parallel or anti-parallel with +Z.
+      return a.z < 0
+          ? mesh.transformed((p) => Point3D(-p.x, -p.y, -p.z))
+          : mesh;
+    }
+    final theta = dart_math.atan2(k.magnitude, Vector3D.unitZ.dot(a));
+    return mesh.transformed(
+        (p) => _rotatePoint(p, Point3D.origin, k.normalized(), theta));
+  }
+
   double get planeNormalA => planeA ?? 0;
   double get planeNormalB => planeB ?? 0;
   double get planeNormalC => planeC ?? 1;
@@ -748,8 +780,8 @@ class Object3D {
         final onPlane = rel - n * rel.dot(n);
         final r = circleRadius ?? 1;
         if (onPlane.magnitudeSquared < 1e-15) {
-          // Snap point projects to center — pick a fixed point on the circle.
-          return c + _circleBasis(n).$1 * r;
+          // Snap point projects to center â€” pick a fixed point on the circle.
+          return c + circleBasis(n).$1 * r;
         }
         return c + onPlane.normalized() * r;
       case Object3DType.polygon:
@@ -795,7 +827,9 @@ class Object3D {
     return n.normalized();
   }
 
-  static (Vector3D, Vector3D) _circleBasis(Vector3D normal) {
+  /// An orthonormal basis (u, v) of the plane perpendicular to [normal].
+  /// Works for any normal, including Â±Z.
+  static (Vector3D, Vector3D) circleBasis(Vector3D normal) {
     final n = normal.normalized();
     final ref =
         n.dot(Vector3D.unitZ).abs() > 0.9 ? Vector3D.unitX : Vector3D.unitZ;
@@ -861,7 +895,7 @@ class Object3D {
     final c = obj.circleCenter ?? Point3D.origin;
     final n = (obj.circleNormal ?? Vector3D.unitZ).normalized();
     final r = obj.circleRadius ?? 1;
-    final (u, v) = _circleBasis(n);
+    final (u, v) = circleBasis(n);
     // Arcs sample only [arcStart, arcEnd]; circles sample the full turn.
     final isArc = obj.type == Object3DType.arc;
     final start = isArc ? (obj.arcStart ?? 0) : 0.0;
@@ -876,13 +910,13 @@ class Object3D {
   }
 
   // ==================================================================
-  // Transformations (immutable — produce new objects)
+  // Transformations (immutable â€” produce new objects)
   // ==================================================================
 
   /// Translate by [t]. Keeps name/style/visibility.
   Object3D translated(Vector3D t) => transform((p) => p + t);
 
-  /// Reflect across the plane n·p = d.
+  /// Reflect across the plane nÂ·p = d.
   Object3D reflected(Vector3D n, double d) => transform(
         (p) =>
             p + n.normalized() * (-2 * (n.normalized().dot(p.toVector()) - d)),
@@ -957,11 +991,17 @@ class Object3D {
             name: name, visible: obj.visible, style: obj.style);
       case Object3DType.cone:
         return Object3D.cone(obj.solidCenter, obj.solidRadius, obj.solidHeight,
-            name: name, visible: obj.visible, style: obj.style);
+            axis: obj.solidAxis,
+            name: name,
+            visible: obj.visible,
+            style: obj.style);
       case Object3DType.cylinder:
         return Object3D.cylinder(
             obj.solidCenter, obj.solidRadius, obj.solidHeight,
-            name: name, visible: obj.visible, style: obj.style);
+            axis: obj.solidAxis,
+            name: name,
+            visible: obj.visible,
+            style: obj.style);
       case Object3DType.plane:
         return Object3D.plane(
             a: obj.planeNormalA,
@@ -1031,10 +1071,10 @@ class Object3D {
             name: name, visible: visible, style: style);
       case Object3DType.cone:
         return Object3D.cone(solidCenter, solidRadius, solidHeight,
-            name: name, visible: visible, style: style);
+            axis: solidAxis, name: name, visible: visible, style: style);
       case Object3DType.cylinder:
         return Object3D.cylinder(solidCenter, solidRadius, solidHeight,
-            name: name, visible: visible, style: style);
+            axis: solidAxis, name: name, visible: visible, style: style);
       case Object3DType.plane:
         return Object3D.plane(
             a: planeNormalA,
@@ -1093,14 +1133,14 @@ class Object3D {
         final r0 = circleRadius ?? 1;
         final s0 = arcStart ?? 0;
         final e0 = arcEnd ?? 2 * dart_math.pi;
-        final (u0, v0) = _circleBasis(n0);
+        final (u0, v0) = circleBasis(n0);
         final pStart =
             c0 + u0 * (r0 * dart_math.cos(s0)) + v0 * (r0 * dart_math.sin(s0));
         final pEnd =
             c0 + u0 * (r0 * dart_math.cos(e0)) + v0 * (r0 * dart_math.sin(e0));
         final c1 = f(c0);
         final n1 = f(c0 + n0) - c1;
-        final (u1, v1) = _circleBasis(n1);
+        final (u1, v1) = circleBasis(n1);
         double angleOf(Point3D p) {
           final rel = p - c1;
           return dart_math.atan2(rel.dot(v1), rel.dot(u1));
@@ -1127,20 +1167,48 @@ class Object3D {
         return Object3D.polyhedron(mesh!.transformed(f),
             name: name, visible: visible, style: style);
       case Object3DType.sphere:
-        return Object3D.sphere(f(sphereCenter), sphereRadius,
+        // Recover radius from a sampled point so dilate/scale changes it
+        // while rotate/reflect/mirror keep it (f is affine for all callers).
+        final sc = sphereCenter;
+        final sr = sphereRadius;
+        final r1 = f(sc + Vector3D(sr, 0, 0));
+        return Object3D.sphere(f(sc), r1.distanceTo(f(sc)),
             name: name, visible: visible, style: style);
       case Object3DType.cone:
-        return Object3D.cone(f(solidCenter), solidRadius, solidHeight,
-            name: name, visible: visible, style: style);
       case Object3DType.cylinder:
-        return Object3D.cylinder(f(solidCenter), solidRadius, solidHeight,
-            name: name, visible: visible, style: style);
+        // Recover axis, height and radius by sampling. For the affine f of
+        // rotate/reflect/dilate, f(c + d) - f(c) equals the linear part
+        // applied to d, so axis stays a unit vector, height/radius scale by
+        // |factor| under dilate and stay constant under rigid transforms.
+        final c0 = solidCenter;
+        final h0 = solidHeight;
+        final r0 = solidRadius;
+        final a0 = solidAxisValue;
+        final c1 = f(c0);
+        final axis1 = f(c0 + a0) - c1;
+        final perp = a0.z.abs() < 0.9
+            ? a0.cross(Vector3D.unitZ)
+            : a0.cross(Vector3D.unitX);
+        final perp1 = f(c0 + perp.normalized() * r0) - c1;
+        final h1 = (f(c0 + a0 * h0) - c1).magnitude;
+        final r1 = perp1.magnitude;
+        return type == Object3DType.cone
+            ? Object3D.cone(c1, r1, h1,
+                axis: axis1.normalized(),
+                name: name,
+                visible: visible,
+                style: style)
+            : Object3D.cylinder(c1, r1, h1,
+                axis: axis1.normalized(),
+                name: name,
+                visible: visible,
+                style: style);
       case Object3DType.plane:
         // Rebuild plane from three points.
         final n = planeNormal;
         final k = planeDValue / n.magnitudeSquared;
         final p0 = Point3D(n.x * k, n.y * k, n.z * k);
-        final basis = _circleBasis(n);
+        final basis = circleBasis(n);
         final p1 = f(p0 + basis.$1);
         final p2 = f(p0 + basis.$2);
         final p3 = f(p0);
@@ -1170,6 +1238,7 @@ class Object3D {
   static Point3D _rotatePoint(
       Point3D p, Point3D axisPoint, Vector3D axisDir, double angle) {
     final dir = axisDir.normalized();
+    if (dir.isZero) return p; // Degenerate axis: rotation is identity.
     final rel = p - axisPoint;
     final k = dir;
     final cosA = dart_math.cos(angle);
@@ -1187,7 +1256,7 @@ class Object3D {
 // Mesh builders for solids and surfaces
 // ======================================================================
 
-/// Builders for common solid meshes. All meshes are "closed" — faces are
+/// Builders for common solid meshes. All meshes are "closed" â€” faces are
 /// oriented so that outward normals point away from the interior.
 class MeshBuilder {
   /// A UV sphere centered at origin with the given [radius] and [segments].

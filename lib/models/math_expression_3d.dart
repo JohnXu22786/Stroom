@@ -212,14 +212,21 @@ class Expression3D {
     try {
       final lhs = _normalizeExpression(lhsRaw);
       final rhs = _normalizeExpression(rhsRaw);
-      final varNames = ['x', 'y', 'z'];
-      for (final key in parameterValues.keys) {
-        if (!varNames.contains(key)) varNames.add(key);
+      // Auto-detect extra variables in the equation (parameters default 1).
+      final varNames = _detectVariables('$lhs $rhs', ['x', 'y', 'z']);
+      final mergedParams = Map<String, double>.from(parameterValues);
+      for (final name in varNames) {
+        if (name != 'x' &&
+            name != 'y' &&
+            name != 'z' &&
+            !mergedParams.containsKey(name)) {
+          mergedParams[name] = 1.0;
+        }
       }
       final lhsFn = lhs.isEmpty ? null : lhs.toMultiVariableFunction(varNames);
       final rhsFn = rhs.isEmpty ? null : rhs.toMultiVariableFunction(varNames);
       evalFn = (x, y, z) {
-        final args = <String, num>{'x': x, 'y': y, 'z': z, ...parameterValues};
+        final args = <String, num>{'x': x, 'y': y, 'z': z, ...mergedParams};
         final l = lhsFn == null ? 0.0 : lhsFn(args).toDouble();
         final r = rhsFn == null ? 0.0 : rhsFn(args).toDouble();
         return l - r;
@@ -598,16 +605,19 @@ class Expression3D {
     String normalized,
     Map<String, double> parameterValues,
   ) {
-    final variableNames = ['x', 'y'];
-    for (final key in parameterValues.keys) {
-      if (!variableNames.contains(key)) {
-        variableNames.add(key);
+    // Auto-detect extra variables (a, b, k, …) like the 2D parser does;
+    // missing values default to 1.0 so e.g. z = a*x*y draws immediately.
+    final allVars = _detectVariables(normalized, ['x', 'y']);
+    final mergedParams = Map<String, double>.from(parameterValues);
+    for (final name in allVars) {
+      if (name != 'x' && name != 'y' && !mergedParams.containsKey(name)) {
+        mergedParams[name] = 1.0;
       }
     }
 
-    final multiFunc = normalized.toMultiVariableFunction(variableNames);
+    final multiFunc = normalized.toMultiVariableFunction(allVars);
     return (double x, double y) {
-      final args = Map<String, num>.from(parameterValues);
+      final args = Map<String, num>.from(mergedParams);
       args['x'] = x;
       args['y'] = y;
       return multiFunc(args).toDouble();
@@ -622,12 +632,8 @@ class Expression3D {
   ) {
     final normalized = _normalizeExpression(expr);
 
-    final allVars = <String>['t'];
-    for (final key in parameterValues.keys) {
-      if (!allVars.contains(key)) {
-        allVars.add(key);
-      }
-    }
+    // Auto-detect additional variables in the expression.
+    final allVars = _detectVariables(normalized, ['t']);
 
     final mergedParams = Map<String, double>.from(parameterValues);
     for (final name in allVars) {
@@ -774,7 +780,11 @@ class Expression3D {
         for (int ix = 0; ix < n; ix++) {
           final x = -box + ix * step;
           final v = f(x, y, z);
-          values[(iz * n + iy) * n + ix] = v.isFinite ? v : double.infinity;
+          // Exactly-zero samples are nudged to the positive side so the
+          // isosurface never passes through a lattice vertex (that would
+          // produce degenerate triangles in the tetrahedron subdivision).
+          values[(iz * n + iy) * n + ix] =
+              v.isFinite ? (v == 0 ? 1e-12 : v) : double.infinity;
         }
       }
     }
@@ -786,28 +796,53 @@ class Expression3D {
     final corners = List.generate(8, (i) => Point3D.origin);
     final cornerVals = List<double>.filled(8, 0);
 
-    // Subdivide each cell into 5 tetrahedra (standard Kuhn decomposition).
+    // Subdivide each cell into 6 tetrahedra (Kuhn/Freudenthal decomposition):
+    // a fan around the body diagonal 0–7 (corner 7 = (1,1,1)). Seen from
+    // that diagonal the six outer corners form a hexagon 1→3→2→6→4→5, and
+    // each wedge {0,7,vi,vi+1} tiles the cube exactly once with consistent
+    // face diagonal choices (e.g. every y=0 face is split along 0–5, every
+    // adjacent cell's y=1 face along its 2–7 — the same geometric diagonal).
+    // Any other fan ordering overlaps the wedges and leaves grid edges
+    // uncovered, which produces cracks against neighboring cells.
     // NOTE: some tetrahedra contain face/body diagonals, so each tetrahedron
     // interpolates its own 6 edges (shared via a cell-level cache so the
     // mesh stays watertight without duplicate vertices).
     const tetras = [
-      [0, 1, 3, 5],
-      [0, 3, 2, 5],
-      [0, 2, 6, 5],
-      [0, 6, 4, 5],
-      [0, 4, 1, 5],
+      [0, 1, 3, 7],
+      [0, 3, 2, 7],
+      [0, 2, 6, 7],
+      [0, 6, 4, 7],
+      [0, 4, 5, 7],
+      [0, 5, 1, 7],
     ];
 
     final verts = <Point3D>[];
     final indices = <int>[];
 
+    // Lazily-created global grid-vertex indices: adjacent cells share the
+    // same lattice vertices so the mesh is index-watertight, and edge
+    // intersections that land (numerically) on a corner snap to that corner
+    // instead of producing a degenerate sliver triangle.
+    final gridVertexIdx = <int, int>{};
+    int cornerVertex(int posIdx) {
+      final cached = gridVertexIdx[posIdx];
+      if (cached != null) return cached;
+      final idx = verts.length;
+      final ix = posIdx % n, iy = (posIdx ~/ n) % n, iz = posIdx ~/ (n * n);
+      verts.add(vertex(ix, iy, iz));
+      gridVertexIdx[posIdx] = idx;
+      return idx;
+    }
+
     for (int iz = 0; iz < grid; iz++) {
       for (int iy = 0; iy < grid; iy++) {
         for (int ix = 0; ix < grid; ix++) {
+          final cornerPos = List<int>.filled(8, 0);
           for (int i = 0; i < 8; i++) {
             final dx = i & 1, dy = (i >> 1) & 1, dz = (i >> 2) & 1;
             corners[i] = vertex(ix + dx, iy + dy, iz + dz);
-            cornerVals[i] = values[((iz + dz) * n + (iy + dy)) * n + (ix + dx)];
+            cornerPos[i] = ((iz + dz) * n + (iy + dy)) * n + (ix + dx);
+            cornerVals[i] = values[cornerPos[i]];
           }
 
           // Edge intersection cache for this cell: key = a*8+b (a<b).
@@ -820,6 +855,19 @@ class Expression3D {
             final fa = cornerVals[a], fb = cornerVals[b];
             if ((fa < 0 && fb >= 0) || (fa >= 0 && fb < 0)) {
               final k = fa / (fa - fb);
+              // Snap intersections within 1e-9 of a corner to the corner
+              // itself: a sliver at 1e-13 is a degenerate triangle.
+              const eps = 1e-9;
+              if (k <= eps) {
+                final idx = cornerVertex(cornerPos[a]);
+                edgeIdx[key] = idx;
+                return idx;
+              }
+              if (k >= 1 - eps) {
+                final idx = cornerVertex(cornerPos[b]);
+                edgeIdx[key] = idx;
+                return idx;
+              }
               final idx = verts.length;
               verts.add(corners[a].lerp(corners[b], k));
               edgeIdx[key] = idx;
@@ -844,6 +892,9 @@ class Expression3D {
 
             void addTri(int va, int vb, int vc) {
               if (va < 0 || vb < 0 || vc < 0) return;
+              // Drop slivers that collapsed onto a corner (isosurface
+              // grazing a lattice vertex): zero-area faces break rendering.
+              if (va == vb || vb == vc || va == vc) return;
               indices.addAll([va, vb, vc]);
             }
 

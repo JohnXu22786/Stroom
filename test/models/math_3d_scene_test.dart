@@ -189,18 +189,29 @@ void main() {
     });
 
     test('intersectLineLine finds the intersection', () {
-      final p = intersectLineLine(Point3D.origin, Vector3D.unitX,
+      final res = intersectLineLine(Point3D.origin, Vector3D.unitX,
           const Point3D(1, -2, 0), Vector3D.unitY);
-      expect(p, isNotNull);
-      expect(p!.x, closeTo(1, 1e-9));
-      expect(p.y, closeTo(0, 1e-9));
-      expect(p.z, closeTo(0, 1e-9));
+      expect(res, isNotNull);
+      expect(res!.$1.x, closeTo(1, 1e-9));
+      expect(res.$1.y, closeTo(0, 1e-9));
+      expect(res.$1.z, closeTo(0, 1e-9));
+      expect(res.$2, closeTo(1, 1e-9)); // t on line 1
+      expect(res.$3, closeTo(2, 1e-9)); // s on line 2
     });
 
     test('intersectLineLine returns null for skew lines', () {
       final p = intersectLineLine(Point3D.origin, Vector3D.unitX,
           const Point3D(0, 0, 1), Vector3D.unitY);
       expect(p, isNull);
+    });
+
+    test('paramInLineRange respects segment and ray ranges', () {
+      expect(paramInLineRange(Object3DType.segment, 0.5), isTrue);
+      expect(paramInLineRange(Object3DType.segment, 1.5), isFalse);
+      expect(paramInLineRange(Object3DType.segment, -0.1), isFalse);
+      expect(paramInLineRange(Object3DType.ray, 5), isTrue);
+      expect(paramInLineRange(Object3DType.ray, -1), isFalse);
+      expect(paramInLineRange(Object3DType.line, -7), isTrue);
     });
 
     test('intersectLinePlane', () {
@@ -363,6 +374,49 @@ void main() {
       expect(hit, isNotNull);
       expect(hit!.$1.name, 's');
       expect(hit.$2.distanceTo(Point3D.origin), lessThan(1));
+    });
+
+    test('pick hits solids away from the origin (pick mesh matches render)',
+        () {
+      for (final obj in [
+        Object3D.sphere(const Point3D(2, 1, 0), 1, name: 'S'),
+        Object3D.cylinder(const Point3D(-3, 2, 0), 1, 2, name: 'C'),
+        Object3D.cone(const Point3D(0, -3, 0), 1, 2,
+            axis: const Vector3D(1, 0, 0), name: 'K'),
+      ]) {
+        final scene = Scene3D()..setViewport(800, 600);
+        scene.add(obj);
+        final cam = Camera3D(
+            target: obj.anchorPoint,
+            distance: 8,
+            theta: dart_math.pi / 4,
+            phi: 0.6);
+        scene.setCamera(cam);
+        // The center of the solid projects to the viewport center; picking
+        // there must hit the object (regression: pick mesh was fixed at the
+        // origin while the render mesh was translated).
+        final s = scene.projection.project(obj.anchorPoint)!;
+        final hit = scene.pick(s.x, s.y);
+        expect(hit, isNotNull, reason: '${obj.type} at ${obj.anchorPoint}');
+        expect(hit!.$1.name, obj.name);
+      }
+    });
+
+    test('pick hits a tilted cone along its axis', () {
+      final scene = Scene3D()
+        ..setViewport(800, 600)
+        ..add(Object3D.cone(const Point3D(0, 0, 0), 1, 3,
+            axis: const Vector3D(1, 0, 0), name: 'K'));
+      final cam = Camera3D(
+          target: Point3D.origin,
+          distance: 8,
+          theta: 0,
+          phi: 0.2); // roughly along +X
+      scene.setCamera(cam);
+      final s = scene.projection.project(const Point3D(1.5, 0, 0))!;
+      final hit = scene.pick(s.x, s.y);
+      expect(hit, isNotNull);
+      expect(hit!.$1.name, 'K');
     });
   });
 

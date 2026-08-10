@@ -85,12 +85,12 @@ class ConstructionState {
     switch (tool) {
       case ConstructionTool.polygon:
         // steps: 1, 2, then "more + close"
-        if (inputs.length == 0) return 0;
+        if (inputs.isEmpty) return 0;
         if (inputs.length == 1) return 1;
         return 2;
       case ConstructionTool.pyramid:
       case ConstructionTool.prism:
-        if (inputs.length == 0) return 0;
+        if (inputs.isEmpty) return 0;
         if (inputs.length == 1) return 1;
         if (_baseClosed) return 3; // final step (apex / top point)
         return 2; // more base vertices
@@ -117,13 +117,18 @@ class ConstructionState {
   bool _baseClosed = false;
   bool get baseClosed => _baseClosed;
 
+  /// Number of base vertices captured before the closing click. The closing
+  /// click duplicates the first vertex, so the base is `previewPoints` minus
+  /// the duplicate; for pyramid/prism an apex/top input follows the close.
+  int _baseCount = 0;
+
   /// The base polygon vertices for pyramid/prism (closed base).
   List<Point3D> get baseVertices {
     if (inputs.isEmpty) return const [];
     // All inputs until the closing point, minus the duplicated close point.
     final pts = inputs.whereType<NewPointInput>().map((e) => e.point).toList();
-    if (pts.length >= 3 && _baseClosed) {
-      return List<Point3D>.from(pts)..removeLast();
+    if (pts.isNotEmpty && _baseClosed && _baseCount > 0) {
+      return pts.take(_baseCount).toList();
     }
     return pts;
   }
@@ -168,6 +173,7 @@ class ConstructionState {
         if (input.point.distanceTo(first) < closeDistance &&
             inputs.length >= 2) {
           // Keep the duplicated point so previews close properly.
+          _baseCount = pts.length;
           inputs.add(input);
           _baseClosed = true;
           _tryComplete();
@@ -202,7 +208,7 @@ class ConstructionState {
       case ConstructionTool.pyramid:
       case ConstructionTool.prism:
         // Base vertices + closing point + apex/top point.
-        return _baseClosed && inputs.length >= 5;
+        return _baseClosed && inputs.length >= _baseCount + 2;
       default:
         final needed = info.steps.length;
         if (inputs.length < needed) return false;
@@ -441,10 +447,14 @@ class ToolFactory {
         final rim = _pointOf(inputs[1]);
         final apex = _pointOf(inputs[2]);
         final r = (c.distanceTo(rim)).clamp(1e-6, double.infinity);
-        final h = (apex.z - c.z).abs();
+        final axisVec = apex - c;
+        final h = axisVec.magnitude;
         if (h < 1e-9) return const ConstructionResult();
         return ConstructionResult(created: [
-          Object3D.cone(c, r, h, name: _uniqueName('cone'), style: _solidStyle),
+          Object3D.cone(c, r, h,
+              axis: axisVec * (1 / h),
+              name: _uniqueName('cone'),
+              style: _solidStyle),
         ]);
 
       case ConstructionTool.cylinder:
@@ -452,11 +462,14 @@ class ToolFactory {
         final rim = _pointOf(inputs[1]);
         final top = _pointOf(inputs[2]);
         final r = (c.distanceTo(rim)).clamp(1e-6, double.infinity);
-        final h = (top.z - c.z).abs();
+        final axisVec = top - c;
+        final h = axisVec.magnitude;
         if (h < 1e-9) return const ConstructionResult();
         return ConstructionResult(created: [
           Object3D.cylinder(c, r, h,
-              name: _uniqueName('cyl'), style: _solidStyle),
+              axis: axisVec * (1 / h),
+              name: _uniqueName('cyl'),
+              style: _solidStyle),
         ]);
 
       case ConstructionTool.tetrahedron:
@@ -548,8 +561,8 @@ class ToolFactory {
         final axis = _objectOf(inputs[1]);
         final angleDeg = _numberOf(inputs[2]);
         return ConstructionResult(created: [
-          obj.rotated(axis.pointAValue, axis.vectorValue,
-              angleDeg * dart_math.pi / 180),
+          obj.rotated(
+              axis.pointAValue, _dirOf(axis), angleDeg * dart_math.pi / 180),
         ]);
 
       case ConstructionTool.dilate:
@@ -596,6 +609,14 @@ class ToolFactory {
     return obj.vectorValue;
   }
 
+  /// The line parameter t of [p] along a line-like object (p = a + t·d).
+  static double _tOf(Object3D obj, Point3D p) {
+    final d = _dirOf(obj);
+    final len2 = d.magnitudeSquared;
+    if (len2 < 1e-15) return 0;
+    return (p - obj.pointAValue).dot(d) / len2;
+  }
+
   static double _numberOf(ConstructionInput input) =>
       (input as NumberInput).value;
 
@@ -609,7 +630,7 @@ class ToolFactory {
   static int _nameCounter = 0;
   static String _uniqueName(String prefix) {
     _nameCounter++;
-    return '$prefix${_nameCounter}';
+    return '$prefix$_nameCounter';
   }
 
   static Point3D _midpointOf(Object3D obj) {
@@ -966,22 +987,26 @@ class ToolFactory {
         t == Object3DType.segment;
     bool isPlaneLike(Object3DType t) => t == Object3DType.plane;
 
-    // line × line
+    // line × line — reject intersections that lie outside a segment/ray.
     if (isLineLike(type0) && isLineLike(type1)) {
-      final p = intersectLineLine(
+      final res = intersectLineLine(
           obj0.pointAValue, _dirOf(obj0), obj1.pointAValue, _dirOf(obj1));
-      if (p != null) {
-        created
-            .add(Object3D.point(p, name: _uniqueName('I'), style: _pointStyle));
+      if (res != null &&
+          paramInLineRange(type0, res.$2) &&
+          paramInLineRange(type1, res.$3)) {
+        created.add(
+            Object3D.point(res.$1, name: _uniqueName('I'), style: _pointStyle));
       }
       return ConstructionResult(created: created);
     }
 
-    // line × plane
+    bool onLineLike(Object3D obj, double t) => paramInLineRange(obj.type, t);
+
+    // line × plane — same range check on the line parameter.
     if (isLineLike(type0) && isPlaneLike(type1)) {
       final p = intersectLinePlane(
           obj0.pointAValue, _dirOf(obj0), obj1.planeNormal, obj1.planeDValue);
-      if (p != null) {
+      if (p != null && onLineLike(obj0, _tOf(obj0, p))) {
         created
             .add(Object3D.point(p, name: _uniqueName('I'), style: _pointStyle));
       }
@@ -990,7 +1015,7 @@ class ToolFactory {
     if (isPlaneLike(type0) && isLineLike(type1)) {
       final p = intersectLinePlane(
           obj1.pointAValue, _dirOf(obj1), obj0.planeNormal, obj0.planeDValue);
-      if (p != null) {
+      if (p != null && onLineLike(obj1, _tOf(obj1, p))) {
         created
             .add(Object3D.point(p, name: _uniqueName('I'), style: _pointStyle));
       }
@@ -1018,7 +1043,9 @@ class ToolFactory {
       final r = circle.circleRadius ?? 1;
       final hit = intersectLinePlane(
           line.pointAValue, _dirOf(line), n, n.dot(c.toVector()));
-      if (hit != null && hit.distanceTo(c) <= r * 1.0001) {
+      if (hit != null &&
+          onLineLike(line, _tOf(line, hit)) &&
+          hit.distanceTo(c) <= r * 1.0001) {
         created.add(
             Object3D.point(hit, name: _uniqueName('I'), style: _pointStyle));
       }
@@ -1033,8 +1060,10 @@ class ToolFactory {
       final pts = _lineSphereIntersection(line.pointAValue, _dirOf(line),
           sphere.sphereCenter, sphere.sphereRadius);
       for (final p in pts) {
-        created
-            .add(Object3D.point(p, name: _uniqueName('I'), style: _pointStyle));
+        if (onLineLike(line, _tOf(line, p))) {
+          created.add(
+              Object3D.point(p, name: _uniqueName('I'), style: _pointStyle));
+        }
       }
       return ConstructionResult(created: created);
     }

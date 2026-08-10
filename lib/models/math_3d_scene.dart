@@ -330,7 +330,10 @@ double distancePointToSegment(Point3D p, Point3D a, Point3D b) {
 }
 
 /// Intersection of two infinite lines. Returns null if parallel/skew.
-Point3D? intersectLineLine(Point3D a1, Vector3D d1, Point3D a2, Vector3D d2) {
+/// The result includes the parameters t (on line 1) and s (on line 2) so
+/// callers can reject intersections outside segment/ray ranges.
+(Point3D, double, double)? intersectLineLine(
+    Point3D a1, Vector3D d1, Point3D a2, Vector3D d2) {
   final n = d1.cross(d2);
   final nLen2 = n.magnitudeSquared;
   if (nLen2 < 1e-18) return null;
@@ -341,7 +344,20 @@ Point3D? intersectLineLine(Point3D a1, Vector3D d1, Point3D a2, Vector3D d2) {
   final p1 = a1 + d1 * t;
   final p2 = a2 + d2 * s;
   if (p1.distanceTo(p2) > 1e-6) return null; // skew
-  return p1;
+  return (p1, t, s);
+}
+
+/// Whether a line parameter [t] lies on a line-like object of [type]
+/// (segment: [0,1], ray: [0,∞), line: anywhere).
+bool paramInLineRange(Object3DType type, double t) {
+  switch (type) {
+    case Object3DType.segment:
+      return t >= -1e-9 && t <= 1 + 1e-9;
+    case Object3DType.ray:
+      return t >= -1e-9;
+    default:
+      return true;
+  }
 }
 
 /// Intersection of line with plane n·p = d. Returns null if parallel.
@@ -485,6 +501,16 @@ class Scene3D {
   String nextCurveName() => _nextLabel('curve');
   String nextSolidName() => _nextLabel('solid');
 
+  /// Next free measurement label: m1, m2, …
+  String nextMeasurementName() {
+    final used = _objects.map((o) => o.name).toSet();
+    var i = 1;
+    while (used.contains('m$i')) {
+      i++;
+    }
+    return 'm$i';
+  }
+
   String _nextLabel(String kind) {
     final used = _objects.map((o) => o.name).toSet();
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -606,14 +632,19 @@ class Scene3D {
 
       case Object3DType.line:
       case Object3DType.ray:
-        final tMax = 40.0 / obj.vectorValue.magnitude;
-        final end = obj.pointAValue + obj.vectorValue * tMax;
-        final a = proj.project(obj.pointAValue);
+        // Pick against the same fixed-length representation the renderer
+        // draws: lines extend ±20 units both ways, rays +40 units.
+        final dir = obj.vectorValue.normalized();
+        if (dir.isZero) return null;
+        final isLine = obj.type == Object3DType.line;
+        final start = isLine ? obj.pointAValue + dir * (-20) : obj.pointAValue;
+        final end = obj.pointAValue + dir * 40;
+        final a = proj.project(start);
         final b = proj.project(end);
         if (a == null || b == null) return null;
         final d = _screenDistanceToSegment(sx, sy, a, b);
         if (d <= radius) {
-          final world = closestOnSegmentToRay(obj.pointAValue, end, ray);
+          final world = closestOnSegmentToRay(start, end, ray);
           return (obj, world, d);
         }
         return null;
@@ -767,14 +798,24 @@ class Scene3D {
     return (world, d);
   }
 
+  /// The world-space pick mesh of an object. This MUST match the rendered
+  /// geometry exactly (same rotation and translation), or the object cannot
+  /// be hit-tested where it is drawn.
   static MeshData? _meshFor(Object3D obj) {
     switch (obj.type) {
       case Object3DType.sphere:
-        return MeshBuilder.sphere(obj.sphereRadius, segments: 16);
+        return MeshBuilder.sphere(obj.sphereRadius, segments: 16)
+            .transformed((p) => p + obj.sphereCenter.toVector());
       case Object3DType.cone:
-        return MeshBuilder.cone(obj.solidRadius, obj.solidHeight);
+        return Object3D.alignSolidMesh(
+                MeshBuilder.cone(obj.solidRadius, obj.solidHeight),
+                obj.solidAxisValue)
+            .transformed((p) => p + obj.solidCenter.toVector());
       case Object3DType.cylinder:
-        return MeshBuilder.cylinder(obj.solidRadius, obj.solidHeight);
+        return Object3D.alignSolidMesh(
+                MeshBuilder.cylinder(obj.solidRadius, obj.solidHeight),
+                obj.solidAxisValue)
+            .transformed((p) => p + obj.solidCenter.toVector());
       case Object3DType.polyhedron:
       case Object3DType.surface:
         return obj.mesh;

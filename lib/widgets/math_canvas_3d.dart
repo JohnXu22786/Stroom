@@ -410,10 +410,12 @@ class MathCanvas3DState extends State<MathCanvas3D>
     final scale = details.scale;
 
     // ---- Construction: place point on ground, drag changes height ----
+    // Only single-pointer gestures place points; pinch is camera control.
     if (_tool != ConstructionTool.move &&
         _construction != null &&
         !_construction!.isComplete &&
-        !_constCommitted) {
+        !_constCommitted &&
+        details.pointerCount == 1) {
       // A drag that moves away from a hit object converts the gesture into
       // a free point placement (so users can drag near existing objects).
       if (_pendingObjectHit != null && _tapStart != null) {
@@ -528,7 +530,8 @@ class MathCanvas3DState extends State<MathCanvas3D>
     if (_tool != ConstructionTool.move &&
         _construction != null &&
         !_construction!.isComplete &&
-        !_constCommitted) {
+        !_constCommitted &&
+        details.pointerCount <= 1) {
       _constCommitted = true;
       if (_pendingObjectHit != null) {
         // Clicked an existing object: feed it as the construction input.
@@ -568,9 +571,11 @@ class MathCanvas3DState extends State<MathCanvas3D>
             _dragModeZ = false;
           }
         });
-        _notifySceneChanged();
       }
       _draggingObject = false;
+      // Dragging replaced the selected object in the scene; let the panel
+      // (and any other listener) re-read the updated object list.
+      _notifySceneChanged();
     }
 
     // Resume auto-rotation that was paused for this interaction.
@@ -669,13 +674,29 @@ class MathCanvas3DState extends State<MathCanvas3D>
   }
 
   /// Reassign GeoGebra-style labels so that construction objects never
-  /// collide with expression objects.
+  /// collide with expression objects. The new label matches the object kind
+  /// (points A/B/C…, lines l, curves/segments c, solids/surfaces their
+  /// GeoGebra names) instead of always falling back to point labels.
   Object3D _renameIfNeeded(Object3D obj) {
     if (_scene.byName(obj.name) == null) return obj;
     final name = switch (obj.type) {
       Object3DType.point => _scene.nextPointName(),
-      Object3DType.measurement => 'm${_scene.objects.length + 1}',
-      _ => _scene.nextPointName(),
+      Object3DType.measurement => _scene.nextMeasurementName(),
+      Object3DType.segment ||
+      Object3DType.line ||
+      Object3DType.ray ||
+      Object3DType.vector =>
+        _scene.nextLineName(),
+      Object3DType.circle || Object3DType.arc => _scene.nextCurveName(),
+      Object3DType.polygon => _scene.nextCurveName(),
+      Object3DType.curve => _scene.nextCurveName(),
+      Object3DType.polyhedron ||
+      Object3DType.sphere ||
+      Object3DType.cone ||
+      Object3DType.cylinder ||
+      Object3DType.plane ||
+      Object3DType.surface =>
+        _scene.nextSolidName(),
     };
     return obj.withRenamed(name);
   }
@@ -695,7 +716,8 @@ class MathCanvas3DState extends State<MathCanvas3D>
               deltaY: -event.scrollDelta.dy * 2));
         });
       } else {
-        final zoomFactor = 1.0 + event.scrollDelta.dy * 0.002;
+        // Wheel up (negative dy) zooms in, matching GeoGebra/map apps.
+        final zoomFactor = 1.0 - event.scrollDelta.dy * 0.002;
         setState(() {
           _scene.setCamera(_scene.camera.zoom(factor: zoomFactor));
         });
@@ -1221,27 +1243,24 @@ class _ScenePainter extends CustomPainter {
         _collectSegment(prims, obj, strokeColor, style);
 
       case Object3DType.line:
-        // Draw a long but clipped line.
-        final len = obj.vectorValue.magnitude;
-        if (len < 1e-12) return;
-        final t = (40.0 / len).clamp(1.0, 100.0).toDouble();
+        // Draw a long but clipped line: fixed length, extending both ways.
+        final dir = obj.vectorValue.normalized();
+        if (dir.isZero) return;
         _collectSegment(
           prims,
-          Object3D.segment(obj.pointAValue + obj.vectorValue * (-(t - 1) * 0.5),
-              obj.pointAValue + obj.vectorValue * ((t + 1) * 0.5),
+          Object3D.segment(
+              obj.pointAValue + dir * (-20), obj.pointAValue + dir * 20,
               name: obj.name, style: style),
           strokeColor,
           style,
         );
 
       case Object3DType.ray:
-        final len = obj.vectorValue.magnitude;
-        if (len < 1e-12) return;
-        final t = (40.0 / len).clamp(1.0, 100.0).toDouble();
+        final dir = obj.vectorValue.normalized();
+        if (dir.isZero) return;
         _collectSegment(
           prims,
-          Object3D.segment(
-              obj.pointAValue, obj.pointAValue + obj.vectorValue * t,
+          Object3D.segment(obj.pointAValue, obj.pointAValue + dir * 40,
               name: obj.name, style: style),
           strokeColor,
           style,
@@ -1287,7 +1306,9 @@ class _ScenePainter extends CustomPainter {
       case Object3DType.cone:
         _collectMesh(
             prims,
-            MeshBuilder.cone(obj.solidRadius, obj.solidHeight)
+            Object3D.alignSolidMesh(
+                    MeshBuilder.cone(obj.solidRadius, obj.solidHeight),
+                    obj.solidAxisValue)
                 .transformed((p) => p + obj.solidCenter.toVector()),
             baseColor,
             strokeColor,
@@ -1298,7 +1319,9 @@ class _ScenePainter extends CustomPainter {
       case Object3DType.cylinder:
         _collectMesh(
             prims,
-            MeshBuilder.cylinder(obj.solidRadius, obj.solidHeight)
+            Object3D.alignSolidMesh(
+                    MeshBuilder.cylinder(obj.solidRadius, obj.solidHeight),
+                    obj.solidAxisValue)
                 .transformed((p) => p + obj.solidCenter.toVector()),
             baseColor,
             strokeColor,
@@ -1408,8 +1431,10 @@ class _ScenePainter extends CustomPainter {
         size: 3,
       ));
     }
-    // Label at the top of the circle.
-    final top = proj.project(c + n.cross(Vector3D.unitZ).normalized() * r);
+    // Label on the circle rim: a basis point (u) is always on the circle,
+    // unlike n × ẑ which vanishes for horizontal circles.
+    final (uBasis, _) = Object3D.circleBasis(n);
+    final top = proj.project(c + uBasis * r);
     if (top != null && !top.x.isNaN) {
       _addLabel(prims, obj, Offset(top.x, top.y), top.z);
     }
