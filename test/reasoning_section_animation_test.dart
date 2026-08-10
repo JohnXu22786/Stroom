@@ -13,7 +13,9 @@ import 'package:stroom/providers/conversation_provider.dart';
 ///   1. the spinner fades out over 0.5s,
 ///   2. a checkmark pops in with a jelly (elastic) overshoot over 0.5s,
 ///   3. it holds at full scale for 1s,
-///   4. it pops out with a jelly shrink over 0.5s and the corner empties.
+///   4. it pops out with a jelly shrink over 1s — as long as the
+///      fade-out + pop-in process — and the corner empties.
+/// A panel opened after completion shows an empty corner (no checkmark).
 ///
 /// The dialog itself is private, so the tests drive it through the public
 /// [ReasoningSection] button: tap the "思考中" line, then flip the shared
@@ -54,8 +56,9 @@ Future<ProviderContainer> _openPanel(
       ),
     ),
   );
-  final container =
-      ProviderScope.containerOf(tester.element(find.byType(ReasoningSection)));
+  final container = ProviderScope.containerOf(
+    tester.element(find.byType(ReasoningSection)),
+  );
   container.read(activeConversationIdProvider.notifier).state = _convId;
   container.read(streamingReasoningSectionsProvider(_convId).notifier).state =
       const ['思考内容'];
@@ -73,87 +76,104 @@ Future<ProviderContainer> _openPanel(
 
 void main() {
   testWidgets(
-      'corner spinner fades out, checkmark pops in with jelly overshoot, '
-      'holds, then pops out and disappears', (tester) async {
-    final container = await _openPanel(
-      tester,
-      buttonLabel: '思考中',
-      streaming: true,
-      hasFirstToken: false,
-    );
+    'corner spinner fades out, checkmark pops in with jelly overshoot, '
+    'holds, then pops out and disappears',
+    (tester) async {
+      final container = await _openPanel(
+        tester,
+        buttonLabel: '思考中',
+        streaming: true,
+        hasFirstToken: false,
+      );
 
-    // Panel opens with a spinning corner indicator (no checkmark yet).
-    expect(find.byKey(_spinnerKey), findsOneWidget);
-    expect(find.byKey(_checkKey), findsNothing);
+      // Panel opens with a spinning corner indicator (no checkmark yet).
+      expect(find.byKey(_spinnerKey), findsOneWidget);
+      expect(find.byKey(_checkKey), findsNothing);
 
-    // Reasoning completes.
-    container.read(isStreamingProvider(_convId).notifier).state = false;
-    await tester.pump(); // rebuild + post-frame starts the animation
-    await tester.pump(); // first ticker tick establishes t=0
+      // Reasoning completes.
+      container.read(isStreamingProvider(_convId).notifier).state = false;
+      await tester.pump(); // rebuild + post-frame starts the animation
+      await tester.pump(); // first ticker tick establishes t=0
 
-    // 250ms in: the spinner is still present but partially faded out,
-    // and the checkmark has NOT appeared yet (it only starts after the
-    // fade completes at 500ms).
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(find.byKey(_spinnerKey), findsOneWidget);
-    final fadingOpacity =
-        tester.widget<Opacity>(find.byKey(_spinnerKey)).opacity;
-    expect(fadingOpacity, greaterThan(0.0));
-    expect(fadingOpacity, lessThan(1.0));
-    expect(find.byKey(_checkKey), findsNothing);
+      // 250ms in: the spinner is still present but partially faded out,
+      // and the checkmark has NOT appeared yet (it only starts after the
+      // fade completes at 500ms).
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byKey(_spinnerKey), findsOneWidget);
+      final fadingOpacity =
+          tester.widget<Opacity>(find.byKey(_spinnerKey)).opacity;
+      expect(fadingOpacity, greaterThan(0.0));
+      expect(fadingOpacity, lessThan(1.0));
+      expect(find.byKey(_checkKey), findsNothing);
 
-    // 600ms in: fade finished (spinner gone within 0.5s) and the
-    // checkmark is popping in with an elastic overshoot (scale > 1).
-    // Sampled at 600ms where elasticOut peaks at ~1.25 — the 500ms-550ms
-    // window is useless because elasticOut(0.1) == 1.0 analytically.
-    await tester.pump(const Duration(milliseconds: 350));
-    expect(find.byKey(_spinnerKey), findsNothing);
-    expect(find.byKey(_checkKey), findsOneWidget);
-    expect(_checkScale(tester), greaterThan(1.0));
+      // 550ms in: the fade finished at exactly 500ms (spinner gone within
+      // 0.5s — regression guard against the fade and the checkmark
+      // overlapping) and the checkmark has already popped in at full
+      // scale (elasticOut(0.1) == 1.0).
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(_spinnerKey), findsNothing);
+      expect(find.byKey(_checkKey), findsOneWidget);
 
-    // 1600ms in: hold phase — checkmark rests at full scale.
-    await tester.pump(const Duration(milliseconds: 1000));
-    expect(find.byKey(_checkKey), findsOneWidget);
-    expect(_checkScale(tester), closeTo(1.0, 0.001));
+      // 600ms in: the checkmark is popping in with an elastic overshoot
+      // (scale > 1). Sampled at 600ms where elasticOut(0.2) peaks at
+      // ~1.25 — the 500ms-550ms window can't demonstrate the overshoot
+      // because elasticOut(0) renders nothing and elasticOut(0.1) == 1.0.
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.byKey(_checkKey), findsOneWidget);
+      expect(_checkScale(tester), greaterThan(1.0));
 
-    // 2300ms in: pop-out is underway — the checkmark is shrinking
-    // (jelly exit) but still present.
-    await tester.pump(const Duration(milliseconds: 700));
-    expect(find.byKey(_checkKey), findsOneWidget);
-    expect(_checkScale(tester), lessThan(1.0));
+      // 1500ms in: hold phase — checkmark rests at full scale.
+      await tester.pump(const Duration(milliseconds: 900));
+      expect(find.byKey(_checkKey), findsOneWidget);
+      expect(_checkScale(tester), closeTo(1.0, 0.001));
 
-    // 2550ms in: pop-out finished — corner is empty again.
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(find.byKey(_checkKey), findsNothing);
-    expect(find.byKey(_spinnerKey), findsNothing);
+      // 2600ms in: the pop-out (1s, [2000ms, 3000ms] — as long as the
+      // fade-out + pop-in process) is underway: the checkmark is shrinking
+      // but still present — under the old 0.5s pop-out it would already be
+      // gone past 2500ms.
+      await tester.pump(const Duration(milliseconds: 1100));
+      expect(find.byKey(_checkKey), findsOneWidget);
+      expect(_checkScale(tester), lessThan(1.0));
 
-    // A new stream restarts (next message begins streaming, hasFirstToken
-    // resets): spinner comes back.
-    container.read(streamingHasFirstTokenProvider(_convId).notifier).state =
-        false;
-    container.read(isStreamingProvider(_convId).notifier).state = true;
-    await tester.pump();
-    expect(find.byKey(_spinnerKey), findsOneWidget);
-    expect(find.byKey(_checkKey), findsNothing);
+      // 2950ms in: pop-out has shrunk the checkmark to half size — it is
+      // still present.
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(find.byKey(_checkKey), findsOneWidget);
+      expect(_checkScale(tester), lessThan(1.0));
 
-    // Completion again replays the pop-in animation.
-    container.read(isStreamingProvider(_convId).notifier).state = false;
-    await tester.pump();
-    await tester.pump(); // first ticker tick establishes t=0
-    await tester.pump(const Duration(milliseconds: 600));
-    expect(find.byKey(_spinnerKey), findsNothing);
-    expect(find.byKey(_checkKey), findsOneWidget);
+      // 3100ms in: pop-out finished — corner is empty again.
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(find.byKey(_checkKey), findsNothing);
+      expect(find.byKey(_spinnerKey), findsNothing);
 
-    // Unmount so the button's periodic chevron timer is disposed, then
-    // flush the visibility_detector timer that MarkdownWidget (dialog
-    // content) schedules when it detaches during unmount.
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(milliseconds: 600));
-  });
+      // A new stream restarts (next message begins streaming, hasFirstToken
+      // resets): spinner comes back.
+      container.read(streamingHasFirstTokenProvider(_convId).notifier).state =
+          false;
+      container.read(isStreamingProvider(_convId).notifier).state = true;
+      await tester.pump();
+      expect(find.byKey(_spinnerKey), findsOneWidget);
+      expect(find.byKey(_checkKey), findsNothing);
+
+      // Completion again replays the pop-in animation.
+      container.read(isStreamingProvider(_convId).notifier).state = false;
+      await tester.pump();
+      await tester.pump(); // first ticker tick establishes t=0
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byKey(_spinnerKey), findsNothing);
+      expect(find.byKey(_checkKey), findsOneWidget);
+
+      // Unmount so the button's periodic chevron timer is disposed, then
+      // flush the visibility_detector timer that MarkdownWidget (dialog
+      // content) schedules when it detaches during unmount.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
 
   testWidgets(
-      'panel opened after completion shows a static checkmark without '
-      'replaying the animation', (tester) async {
+      'panel opened after completion shows an empty corner without a '
+      'checkmark or spinner', (tester) async {
     await _openPanel(
       tester,
       buttonLabel: '思考完成',
@@ -161,14 +181,15 @@ void main() {
       hasFirstToken: true,
     );
 
+    // The checkmark only plays as the spinner→complete transition; a
+    // panel re-created after completion shows nothing in the corner.
     expect(find.byKey(_spinnerKey), findsNothing);
-    expect(find.byKey(_checkKey), findsOneWidget);
-    expect(_checkScale(tester), closeTo(1.0, 0.001));
+    expect(find.byKey(_checkKey), findsNothing);
 
-    // No animation is scheduled: the checkmark stays put.
+    // No animation is scheduled: the corner stays empty.
     await tester.pump(const Duration(seconds: 3));
-    expect(find.byKey(_checkKey), findsOneWidget);
-    expect(_checkScale(tester), closeTo(1.0, 0.001));
+    expect(find.byKey(_spinnerKey), findsNothing);
+    expect(find.byKey(_checkKey), findsNothing);
 
     // Unmount and flush the visibility_detector post-detach timer.
     await tester.pumpWidget(const SizedBox.shrink());
