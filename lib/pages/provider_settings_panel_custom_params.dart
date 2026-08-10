@@ -6,158 +6,93 @@ part of 'provider_settings_panel.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
-  // ===================================================================
-  // 自定义参数（CustomParam）选项值胶囊块（与推理力度同款）
-  // ===================================================================
-
-  /// 长按拖拽排序选项：把 [from] 移到 [to] 的位置。
-  void _moveProviderCustomParamOptionTo(
-      CustomParam param, String from, String to) {
-    if (from == to) return;
-    setState(() {
-      final options = param.options;
-      final fromIndex = options.indexOf(from);
-      final toIndex = options.indexOf(to);
-      if (fromIndex < 0 || toIndex < 0) return;
-      options.removeAt(fromIndex);
-      options.insert(toIndex, from);
-    });
-  }
-
-  /// 添加选项值（对话框输入）。
-  Future<void> _addProviderCustomParamOptionWithDialog(
-      CustomParam param) async {
-    final controller = TextEditingController();
-    final value = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('添加选项值'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '如 low、medium、high',
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('确定'),
-          ),
-        ],
-      ),
-    );
-    if (value == null || value.isEmpty || !mounted) return;
-    setState(() {
-      if (!param.options.contains(value)) {
-        param.options.add(value);
-      }
-    });
-  }
-
-  /// 选项值区：胶囊块（长按拖拽排序，右上角删除）。
-  Widget _buildProviderCustomParamOptionBlocks(
+  /// 自定义参数选项值区（照搬本面板推理力度的行式样式）：
+  /// 多值文本行 + 把手排序 + 删除 + 添加选项。
+  Widget _buildProviderCustomParamOptionRows(
       CustomParam param, ColorScheme cs) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '选项值（点右上角 × 删除，长按拖拽排序）',
+          '选项值（拖动把手排序）',
           style: TextStyle(
             fontSize: 12,
             color: cs.onSurfaceVariant.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final value in param.options)
-              _buildProviderCustomParamOptionBlock(param, value, cs),
-          ],
+        ReorderableListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false,
+          itemCount: param.options.length,
+          onReorderItem: (oldIndex, newIndex) {
+            setState(() {
+              final value = param.options.removeAt(oldIndex);
+              param.options.insert(newIndex, value);
+            });
+          },
+          itemBuilder: (context, j) {
+            return Padding(
+              key: ValueKey('custom-opt-$j'),
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  ReorderableDragStartListener(
+                    index: j,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 2),
+                      child:
+                          Icon(Icons.drag_handle, size: 20, color: Colors.grey),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Expanded(
+                    child: TextFormField(
+                      initialValue: param.options[j],
+                      decoration: InputDecoration(
+                        labelText: '选项 ${j + 1}',
+                        hintText: '如 low, enabled, true, max',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onChanged: (v) {
+                        param.options[j] = v;
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  if (param.options.length > 1)
+                    IconButton(
+                      icon: const Icon(
+                        Icons.remove_circle,
+                        color: Colors.red,
+                        size: 18,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          param.options.removeAt(j);
+                        });
+                      },
+                      tooltip: '删除选项',
+                    ),
+                ],
+              ),
+            );
+          },
         ),
         const SizedBox(height: 4),
         TextButton.icon(
           icon: const Icon(Icons.add, size: 16),
           label: const Text('添加选项', style: TextStyle(fontSize: 13)),
-          onPressed: () => _addProviderCustomParamOptionWithDialog(param),
+          onPressed: () {
+            setState(() {
+              param.options.add('');
+            });
+          },
         ),
       ],
-    );
-  }
-
-  Widget _buildProviderCustomParamOptionBlock(
-    CustomParam param,
-    String value,
-    ColorScheme cs,
-  ) {
-    final pill = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.outlineVariant, width: 1),
-      ),
-      child: Text(
-        value,
-        style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
-      ),
-    );
-
-    final withDelete = Stack(
-      clipBehavior: Clip.none,
-      children: [
-        pill,
-        Positioned(
-          top: -6,
-          right: -6,
-          child: GestureDetector(
-            onTap: () {
-              setState(() {
-                param.options.remove(value);
-              });
-            },
-            child: Container(
-              decoration: BoxDecoration(
-                color: cs.errorContainer,
-                shape: BoxShape.circle,
-              ),
-              padding: const EdgeInsets.all(2),
-              child: Icon(
-                Icons.close,
-                size: 12,
-                color: cs.onErrorContainer,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-
-    return DragTarget<String>(
-      onWillAcceptWithDetails: (details) => details.data != value,
-      onAcceptWithDetails: (details) =>
-          _moveProviderCustomParamOptionTo(param, details.data, value),
-      builder: (context, candidateData, rejectedData) {
-        return LongPressDraggable<String>(
-          data: value,
-          delay: const Duration(milliseconds: 330),
-          childWhenDragging: Opacity(opacity: 0.3, child: withDelete),
-          feedback: Material(
-            color: Colors.transparent,
-            child: Opacity(opacity: 0.8, child: withDelete),
-          ),
-          child: withDelete,
-        );
-      },
     );
   }
 
@@ -486,6 +421,7 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
@@ -552,9 +488,9 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // 值区按类型区分（与推理参数同款）：
-                  // string/number/boolean → 选项值胶囊块（boolean 预填
-                  // true/false）；json → 默认参数值输入框。
+                  // 值区按类型区分（照搬本面板推理力度的行式样式）：
+                  // string/number/boolean → 选项值文本行（多值、可编辑、
+                  // 把手排序）；json → 默认参数值输入框。
                   if (param.type == 'json')
                     Row(
                       children: [
@@ -609,7 +545,7 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                       ],
                     )
                   else
-                    _buildProviderCustomParamOptionBlocks(param, cs),
+                    _buildProviderCustomParamOptionRows(param, cs),
                 ],
               ),
             ),

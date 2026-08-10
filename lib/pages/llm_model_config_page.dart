@@ -74,6 +74,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   /// 每个附加参数在供应商侧的选项值集合（删除按钮判定）。
   final Map<ReasoningParam, Set<String>> _providerAdditionalValues = {};
 
+  /// 自定义参数（CustomParam）选项的勾选集合（照搬推理力度块交互，
+  /// 默认全选；保存时 options = 勾选的选项）。
+  final Map<CustomParam, Set<String>> _customParamSelectedValues = {};
+
   /// reset 版本号：每次还原参数时 +1，用于强制重建推理区输入框
   /// （TextFormField 的 internal state 不会跟随 initialValue 更新，
   /// 必须重建才能显示还原后的值）。
@@ -221,6 +225,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // 力度勾选块先同步到工作副本，勾选/排序变化才能被检测到。
     _syncEffortOptionsFromBlocks();
     _syncAdditionalOptionsFromBlocks();
+    _syncCustomParamOptionsFromBlocks();
     final initialReasoning = _applyEffortShadowing(
       mergeReasoningParams(
         widget.provider?.reasoningParams ?? [],
@@ -322,6 +327,12 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // Initialize JSON validation for existing params
     for (int i = 0; i < _customParams.length; i++) {
       _validateJsonField(i, _customParams[i]);
+    }
+    // 自定义参数勾选块状态：默认全选（json 类型用默认值输入框，不参与）
+    _customParamSelectedValues.clear();
+    for (final p in _customParams) {
+      if (p.type == 'json') continue;
+      _customParamSelectedValues[p] = p.options.toSet();
     }
     // Reasoning params: 合并视图工作副本（供应商参数 + 模型参数，
     // 同名时模型参数覆盖供应商参数，与请求构建时的合并语义一致）。

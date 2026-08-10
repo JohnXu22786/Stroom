@@ -207,6 +207,17 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   // 自定义参数（CustomParam）选项值胶囊块操作
   // ===================================================================
 
+  /// 点击自定义参数选项块：勾选/取消勾选（照搬模型页推理力度块交互）。
+  void _toggleCustomParamOption(CustomParam param, String value) {
+    final selected = _customParamSelectedValues[param];
+    if (selected == null) return;
+    setState(() {
+      if (!selected.remove(value)) {
+        selected.add(value);
+      }
+    });
+  }
+
   /// 长按拖拽排序自定义参数选项：把 [from] 移到 [to] 的位置。
   void _moveCustomParamOptionTo(CustomParam param, String from, String to) {
     if (from == to) return;
@@ -253,17 +264,20 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     setState(() {
       if (!param.options.contains(value)) {
         param.options.add(value);
+        // 新选项默认勾选（照搬力度块：添加即选中）
+        _customParamSelectedValues[param]?.add(value);
       }
     });
   }
 
-  /// 自定义参数选项值区：胶囊块（长按拖拽排序，右上角删除）。
+  /// 自定义参数选项值区：胶囊块（照搬模型页推理力度同款——点击
+  /// 勾选高亮、长按拖拽排序、右上角删除；默认全选）。
   Widget _buildCustomParamOptionBlocks(CustomParam param, ColorScheme cs) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '选项值（点右上角 × 删除，长按拖拽排序）',
+          '点击块选中/取消（选中的值将参与发送），长按块拖拽排序。',
           style: TextStyle(
             fontSize: 12,
             color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -293,23 +307,32 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     String value,
     ColorScheme cs,
   ) {
-    final pill = Container(
+    final selected =
+        _customParamSelectedValues[param]?.contains(value) ?? false;
+    final chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.transparent,
+        color: selected ? cs.primaryContainer : Colors.transparent,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.outlineVariant, width: 1),
+        border: Border.all(
+          color: selected ? cs.primary : cs.outlineVariant,
+          width: selected ? 1.5 : 1,
+        ),
       ),
       child: Text(
         value,
-        style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+          color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+        ),
       ),
     );
 
     final withDelete = Stack(
       clipBehavior: Clip.none,
       children: [
-        pill,
+        chip,
         Positioned(
           top: -6,
           right: -6,
@@ -317,6 +340,7 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
             onTap: () {
               setState(() {
                 param.options.remove(value);
+                _customParamSelectedValues[param]?.remove(value);
               });
             },
             child: Container(
@@ -349,10 +373,30 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
             color: Colors.transparent,
             child: Opacity(opacity: 0.8, child: withDelete),
           ),
-          child: withDelete,
+          child: GestureDetector(
+            onTap: () => _toggleCustomParamOption(param, value),
+            child: withDelete,
+          ),
         );
       },
     );
+  }
+
+  /// 把自定义参数勾选块同步到工作副本 options（勾选值按原顺序写入；
+  /// 未勾选的选项不保存）。json 类型用默认值输入框，不参与。
+  /// 幂等，保存前与 _hasUnsavedChanges 比较前调用。
+  void _syncCustomParamOptionsFromBlocks() {
+    for (final p in _customParams) {
+      if (p.type == 'json') continue;
+      final selected = _customParamSelectedValues[p];
+      if (selected == null) continue;
+      final synced = p.options.where((v) => selected.contains(v)).toList();
+      if (jsonEncode(p.options) != jsonEncode(synced)) {
+        p.options
+          ..clear()
+          ..addAll(synced);
+      }
+    }
   }
 
   // ===================================================================
