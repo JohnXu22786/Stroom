@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import asyncio
+import codecs
+import ctypes
+import ctypes.wintypes
 import hashlib
 import os
 import platform
-import re
+import signal
 import socket
 import subprocess
 import sys
@@ -13,12 +16,18 @@ import time
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
+from textual.css.query import NoMatches
 from textual.widgets import Button, TextArea
 
 PORT_START = 7390
 HOST = "localhost"
 DEVICE = "chrome"
 ROOT = os.path.dirname(os.path.abspath(__file__))
+
+# Cap the on-screen output so long sessions don't eat unbounded memory.
+# The trim rebuilds the TextArea, so only run it once per this many lines.
+MAX_OUTPUT_LINES = 20000
+TRIM_SLACK = 512
 
 
 C_INFO = "\033[96m"
@@ -49,45 +58,42 @@ def pport(s):
     print(f"{C_PORT}[PORT]{C_END} {s}")
 
 
-def run_flutter(args, cwd=None, capture=True):
+def run_flutter(args, cwd=None):
+    """Run a flutter command, streaming output while still capturing it."""
     path = cwd or ROOT
     if platform.system() == "Windows":
         cmd = ["flutter.bat"] + args
     else:
         cmd = ["flutter"] + args
-    if capture:
-        # Stream output to terminal in real-time while still capturing for parsing
-        proc = subprocess.Popen(
-            cmd,
-            cwd=path,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
-        stdout_lines = []
-        for line in proc.stdout:
-            print(line, end="", flush=True)
-            stdout_lines.append(line)
-        proc.wait()
-        return subprocess.CompletedProcess(
-            cmd, proc.returncode, "".join(stdout_lines), ""
-        )
-    else:
-        return subprocess.Popen(cmd, cwd=path)
+    proc = subprocess.Popen(
+        cmd,
+        cwd=path,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
+    )
+    stdout_lines = []
+    for line in proc.stdout:
+        print(line, end="", flush=True)
+        stdout_lines.append(line)
+    proc.wait()
+    return subprocess.CompletedProcess(cmd, proc.returncode, "".join(stdout_lines), "")
 
 
 def check_flutter():
     try:
         r = run_flutter(["--version"])
-        if r.returncode == 0:
-            v = r.stdout.split(chr(10))[0]
-            info("Flutter: " + v)
-            return True
-    except:
-        pass
-    err("Flutter not found")
-    return False
+    except OSError as e:
+        err(f"Failed to run flutter: {e}")
+        return False
+    if r.returncode != 0:
+        err("Flutter not found")
+        return False
+    info("Flutter: " + (r.stdout.splitlines() or ["?"])[0])
+    return True
 
 
 def check_project():
@@ -128,35 +134,44 @@ def check_chrome():
             DEVICE = "edge"
 
 
+def deps_hash():
+    """Hash pubspec.yaml (and pubspec.lock if present) as a dep cache key."""
+    h = hashlib.md5()
+    for name in ("pubspec.yaml", "pubspec.lock"):
+        path = os.path.join(ROOT, name)
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                h.update(f.read())
+    return h.hexdigest()
+
+
 def check_deps():
     hash_file = os.path.join(ROOT, ".pub_hash")
-    pub = os.path.join(ROOT, "pubspec.yaml")
-    with open(pub, "rb") as f:
-        cur_hash = hashlib.md5(f.read()).hexdigest()
+    cur_hash = deps_hash()
     if os.path.exists(hash_file):
-        with open(hash_file, "r") as f:
-            if f.read().strip() == cur_hash:
-                info("Deps up to date")
-                return True
+        try:
+            with open(hash_file, "r") as f:
+                if f.read().strip() == cur_hash:
+                    info("Deps up to date")
+                    return True
+        except OSError:
+            pass
     info("Getting dependencies...")
     r = run_flutter(["pub", "get"], cwd=ROOT)
-    if r.returncode == 0:
-        with open(hash_file, "w") as f:
-            f.write(cur_hash)
-        ok("Deps ready")
-        return True
-    err("Failed to install deps")
-    return False
+    if r.returncode != 0:
+        err("Failed to install deps")
+        return False
+    with open(hash_file, "w") as f:
+        f.write(deps_hash())
+    ok("Deps ready")
+    return True
 
 
 def port_in_use(p):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(1)
     try:
-        r = s.connect_ex((HOST, p))
-        s.close()
-        return r == 0
-    except:
+        with socket.create_connection((HOST, p), timeout=1):
+            return True
+    except OSError:
         return False
 
 
@@ -168,31 +183,127 @@ def find_port():
     return port
 
 
+def _windows_kernel32():
+    """Return the Win32 API with proper prototypes (avoids handle truncation)."""
+    kernel32 = ctypes.windll.kernel32
+    kernel32.OpenProcess.restype = ctypes.wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = [ctypes.wintypes.DWORD, ctypes.wintypes.BOOL, ctypes.wintypes.DWORD]
+    kernel32.GetExitCodeProcess.restype = ctypes.wintypes.BOOL
+    kernel32.GetExitCodeProcess.argtypes = [ctypes.wintypes.HANDLE, ctypes.POINTER(ctypes.wintypes.DWORD)]
+    kernel32.CloseHandle.restype = ctypes.wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [ctypes.wintypes.HANDLE]
+    kernel32.QueryFullProcessImageNameW.restype = ctypes.wintypes.BOOL
+    kernel32.QueryFullProcessImageNameW.argtypes = [
+        ctypes.wintypes.HANDLE,
+        ctypes.wintypes.DWORD,
+        ctypes.wintypes.LPWSTR,
+        ctypes.POINTER(ctypes.wintypes.DWORD),
+    ]
+    return kernel32
+
+
+def process_alive(pid):
+    """Check whether a PID is still running (cross-platform)."""
+    if platform.system() == "Windows":
+        # os.kill(pid, 0) is unreliable on Windows, and OpenProcess alone
+        # can succeed on a process that has already exited but is not yet
+        # reaped, so confirm via GetExitCodeProcess (STILL_ACTIVE = 259).
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        STILL_ACTIVE = 259
+        kernel32 = _windows_kernel32()
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return False
+        try:
+            code = ctypes.wintypes.DWORD()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return True  # cannot determine: assume alive
+            return code.value == STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def _windows_process_name(pid):
+    """Executable name of a Windows process, or None if it cannot be read."""
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    kernel32 = _windows_kernel32()
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        return None
+    try:
+        size = ctypes.wintypes.DWORD(1024)
+        buf = ctypes.create_unicode_buffer(1024)
+        if not kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
+            return None
+        return os.path.basename(buf.value).lower()
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def kill_process(pid, force=False):
+    """Terminate a process.
+
+    On Windows this always kills the whole tree, because the flutter.bat
+    wrapper (cmd.exe) spawns dart.exe as a child that would otherwise linger
+    on the port, and console processes can only be terminated forcefully.
+    On POSIX, `force` decides between SIGTERM and SIGKILL.
+    """
+    if platform.system() == "Windows":
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(pid)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        try:
+            os.kill(pid, signal.SIGKILL if force else signal.SIGTERM)
+        except OSError:
+            pass
+
+
 def stop_old():
     pid_file = os.path.join(ROOT, ".flutter_pid")
-    if os.path.exists(pid_file):
-        try:
-            with open(pid_file, "r") as f:
-                pid = int(f.read().strip())
-            try:
-                os.kill(pid, 0)
-                warn("Stopping old service (PID: " + str(pid) + ")...")
-                os.kill(pid, signal.SIGTERM)
-                time.sleep(2)
-                try:
-                    os.kill(pid, 0)
-                    os.kill(pid, signal.SIGKILL)
-                except:
-                    pass
-                ok("Old service stopped")
-            except:
-                pass
-        except:
-            pass
-        try:
-            os.remove(pid_file)
-        except:
-            pass
+    if not os.path.exists(pid_file):
+        return
+    try:
+        with open(pid_file, "r") as f:
+            pid = int(f.read().strip())
+    except (ValueError, OSError):
+        pid = None
+    if pid and process_alive(pid):
+        # Windows reuses PIDs; a stale pid file must not kill an unrelated
+        # process tree, so verify the image name before doing anything.
+        if platform.system() == "Windows":
+            name = _windows_process_name(pid)
+            if name and name not in ("cmd.exe", "dart.exe") and not name.startswith("flutter"):
+                warn(f"PID {pid} now belongs to '{name}', not a previous flutter run — skipping")
+                os.remove(pid_file)
+                return
+        warn(f"Stopping old service (PID: {pid})...")
+        kill_process(pid)
+        # Wait up to ~3s for the process to go away, then force-kill (POSIX).
+        for _ in range(15):
+            if not process_alive(pid):
+                break
+            time.sleep(0.2)
+        else:
+            kill_process(pid, force=True)
+            time.sleep(0.5)
+        if process_alive(pid):
+            err(f"Failed to stop PID {pid} (protected or elevated?)")
+        else:
+            ok("Old service stopped")
+    elif pid:
+        info("Removing stale PID file")
+    try:
+        os.remove(pid_file)
+    except OSError:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -264,6 +375,9 @@ class FlutterTUI(App):
         self.flutter_proc: asyncio.subprocess.Process | None = None
         self._reader_task: asyncio.Task | None = None
         self._auto_scroll = True
+        self._exit_reported = False
+        self._alive_interval = None
+        self._scroll_interval = None
         # Plain-text log file as secondary fallback
         self._log_path = os.path.join(ROOT, ".flutter_web_output.log")
         self._log_file = open(self._log_path, "a", encoding="utf-8")
@@ -289,13 +403,33 @@ class FlutterTUI(App):
     # ---- helpers ----
 
     def _writelog(self, text: str):
-        """Write text to TextArea and append plain-text to log file."""
-        ta = self.query_one("#output", TextArea)
+        """Append a line to the log file and the TextArea (plain text).
+
+        TextArea does not parse rich markup, so all lines are written as
+        plain text to keep screen and log file identical.
+        """
+        # Log file first: it must survive even if the widget is gone.
+        try:
+            self._log_file.write(text + "\n")
+            self._log_file.flush()
+        except (OSError, ValueError):
+            pass
+        try:
+            ta = self.query_one("#output", TextArea)
+        except NoMatches:
+            return
         ta.insert(text + "\n", location=ta.document.end)
-        # Log file (plain text, stripped of markup)
-        plain = re.sub(r"\[/?[^\]]*\]", "", text)
-        self._log_file.write(plain + "\n")
-        self._log_file.flush()
+        # Keep memory bounded: drop the oldest lines past the cap. The trim
+        # rebuilds the TextArea, so allow TRIM_SLACK extra lines to amortize
+        # it. Trailing empty lines are artifacts of appending "text\n":
+        # strip them before slicing, then restore exactly one via the final
+        # "\n" so later inserts at document.end start on a fresh line.
+        if ta.document.line_count > MAX_OUTPUT_LINES + TRIM_SLACK:
+            lines = list(ta.document.lines)
+            while lines and lines[-1] == "":
+                lines.pop()
+            keep = "\n".join(lines[-MAX_OUTPUT_LINES:]) + "\n"
+            ta.load_text(keep)
         # Auto-scroll to latest if at bottom
         if self._auto_scroll:
             end = ta.document.end
@@ -334,8 +468,8 @@ class FlutterTUI(App):
         if platform.system() == "Windows":
             cmd[0] = "flutter.bat"
 
-        self._writelog(f"[bold]Starting:[/bold] {' '.join(cmd)}")
-        self._writelog(f"[dim]Log also saved to: {self._log_path}[/dim]")
+        self._writelog(f"Starting: {' '.join(cmd)}")
+        self._writelog(f"Log also saved to: {self._log_path}")
 
         try:
             self.flutter_proc = await asyncio.create_subprocess_exec(
@@ -346,7 +480,7 @@ class FlutterTUI(App):
                 stderr=asyncio.subprocess.STDOUT,
             )
         except Exception as e:
-            self._writelog(f"[red]Failed to start flutter: {e}[/red]")
+            self._writelog(f"Failed to start flutter: {e}")
             return
 
         # Save PID for external cleanup
@@ -354,12 +488,12 @@ class FlutterTUI(App):
         try:
             with open(pid_file, "w") as f:
                 f.write(str(self.flutter_proc.pid))
-        except Exception:
+        except OSError:
             pass
 
         self._reader_task = asyncio.create_task(self._reader())
-        self.set_interval(2.0, self._check_alive)
-        self.set_interval(0.3, self._check_scroll_pos)
+        self._alive_interval = self.set_interval(2.0, self._check_alive)
+        self._scroll_interval = self.set_interval(0.3, self._check_scroll_pos)
 
     async def on_unmount(self):
         """Cleanup when TUI closes."""
@@ -372,43 +506,76 @@ class FlutterTUI(App):
     # ---- flutter reader ----
 
     async def _reader(self):
+        """Stream flutter stdout to the log.
+
+        Handles carriage-return progress output (keeps only the latest
+        segment per line) and decodes incrementally so multi-byte UTF-8
+        characters split across chunk boundaries survive.
+        """
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        buf = ""
         while self.flutter_proc and self.flutter_proc.stdout:
             try:
-                line = await self.flutter_proc.stdout.readline()
-                if not line:
-                    break
-                text = line.decode("utf-8", errors="replace").rstrip()
-                self._writelog(text)
+                chunk = await self.flutter_proc.stdout.read(4096)
             except Exception:
                 break
-        self._writelog("[red]Flutter process ended.[/red]")
+            if not chunk:
+                break
+            buf += decoder.decode(chunk)
+            lines = buf.split("\n")
+            buf = lines.pop()
+            for line in lines:
+                # Tolerate CRLF line endings, and for carriage-return
+                # progress output keep only the latest segment.
+                line = line.rstrip("\r").split("\r")[-1].rstrip()
+                if line:
+                    self._writelog(line)
+        tail = buf + decoder.decode(b"", final=True)
+        tail = tail.rstrip("\r").split("\r")[-1].rstrip()
+        if tail:
+            self._writelog(tail)
+        self._report_exit("Flutter process ended.")
+
+    def _report_exit(self, msg: str):
+        """Report process exit exactly once and stop housekeeping timers."""
+        if self._exit_reported:
+            return
+        self._exit_reported = True
+        if self._alive_interval:
+            self._alive_interval.stop()
+        if self._scroll_interval:
+            self._scroll_interval.stop()
+        self._writelog(msg)
 
     def _check_alive(self):
         if self.flutter_proc and self.flutter_proc.returncode is not None:
-            self._writelog("[red]Flutter process has exited.[/red]")
+            self._report_exit("Flutter process has exited.")
 
     # ---- actions ----
 
     async def action_send_cmd(self, cmd: str):
         """Send a single-character command to flutter's stdin."""
-        if (
+        if not (
             self.flutter_proc
             and self.flutter_proc.stdin
             and self.flutter_proc.returncode is None
         ):
-            try:
-                self.flutter_proc.stdin.write(f"{cmd}\n".encode())
-                await self.flutter_proc.stdin.drain()
-            except Exception:
-                pass
+            self._writelog(f"Cannot send '{cmd}': flutter is not running.")
+            return
+        try:
+            self.flutter_proc.stdin.write(f"{cmd}\n".encode())
+            await self.flutter_proc.stdin.drain()
+        except Exception:
+            self._writelog(f"Failed to send '{cmd}' to flutter.")
 
     def action_clear(self):
         """Clear the output."""
         self.query_one("#output", TextArea).text = ""
+        self._auto_scroll = True
 
     async def action_do_quit(self):
         """Gracefully quit flutter and close the TUI."""
-        self._writelog("[yellow]Shutting down...[/yellow]")
+        self._writelog("Shutting down...")
         await self._cleanup_flutter()
         self.exit(0)
 
@@ -444,23 +611,46 @@ class FlutterTUI(App):
                 pass
             try:
                 await asyncio.wait_for(self.flutter_proc.wait(), timeout=3)
-            except (asyncio.TimeoutError, Exception):
+            except asyncio.TimeoutError:
+                pass
+            if self.flutter_proc.returncode is None:
+                # Force-kill: on Windows kill the whole tree, because
+                # flutter.bat (cmd.exe) leaves dart.exe behind on the port.
+                if platform.system() == "Windows":
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(self.flutter_proc.pid)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                else:
+                    try:
+                        self.flutter_proc.kill()
+                    except ProcessLookupError:
+                        pass
                 try:
-                    self.flutter_proc.kill()
-                    await self.flutter_proc.wait()
-                except Exception:
+                    await asyncio.wait_for(self.flutter_proc.wait(), timeout=5)
+                except asyncio.TimeoutError:
                     pass
             self.flutter_proc = None
         pid_file = os.path.join(ROOT, ".flutter_pid")
         try:
             os.remove(pid_file)
-        except Exception:
+        except OSError:
             pass
 
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
+
+def pause_on_error():
+    """Wait for Enter so the console doesn't close instantly, then exit 1."""
+    try:
+        input("Press Enter to exit...")
+    except EOFError:
+        pass
+    sys.exit(1)
 
 
 def main():
@@ -471,16 +661,13 @@ def main():
     print()
 
     if not check_flutter():
-        input("Press Enter to exit...")
-        sys.exit(1)
+        pause_on_error()
     if not check_project():
-        input("Press Enter to exit...")
-        sys.exit(1)
+        pause_on_error()
     check_chrome()
     stop_old()
     if not check_deps():
-        input("Press Enter to exit...")
-        sys.exit(1)
+        pause_on_error()
 
     port = find_port()
     pport(f"Using port: {port}")
