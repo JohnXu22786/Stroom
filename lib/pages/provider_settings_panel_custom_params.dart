@@ -553,10 +553,9 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                   ),
                   const SizedBox(height: 8),
                   // 值区按类型区分（与推理参数同款）：
-                  // string/number → 选项值胶囊块；json/boolean → 默认参数值。
-                  if (param.type == 'string' || param.type == 'number')
-                    _buildProviderCustomParamOptionBlocks(param, cs)
-                  else
+                  // string/number/boolean → 选项值胶囊块（boolean 预填
+                  // true/false）；json → 默认参数值输入框。
+                  if (param.type == 'json')
                     Row(
                       children: [
                         Expanded(
@@ -608,7 +607,9 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                           },
                         ),
                       ],
-                    ),
+                    )
+                  else
+                    _buildProviderCustomParamOptionBlocks(param, cs),
                 ],
               ),
             ),

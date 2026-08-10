@@ -20,10 +20,12 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
     final seenNames = <String>{};
     for (final param in _customParams) {
       final pn = param.paramName.trim();
-      if (pn.isEmpty || param.defaultValue.trim().isEmpty) {
+      final hasValue =
+          param.options.isNotEmpty || param.defaultValue.trim().isNotEmpty;
+      if (pn.isEmpty || !hasValue) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('自定义参数的参数名和默认值不能为空'),
+            content: Text('自定义参数的参数名和值不能为空'),
             behavior: SnackBarBehavior.floating,
           ),
         );

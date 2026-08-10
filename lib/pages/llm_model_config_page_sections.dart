@@ -431,11 +431,10 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                   ),
                   const SizedBox(height: 8),
                   // 值区按类型区分（与推理参数同款）：
-                  // string/number → 选项值胶囊块（可添加多个、删除、
-                  // 长按排序）；json/boolean → 默认参数值输入框。
-                  if (param.type == 'string' || param.type == 'number')
-                    _buildCustomParamOptionBlocks(param, cs)
-                  else
+                  // string/number/boolean → 选项值胶囊块（可添加多个、
+                  // 删除、长按排序；boolean 预填 true/false）；
+                  // json → 默认参数值输入框。
+                  if (param.type == 'json')
                     Row(
                       children: [
                         Expanded(
@@ -487,7 +486,9 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                           },
                         ),
                       ],
-                    ),
+                    )
+                  else
+                    _buildCustomParamOptionBlocks(param, cs),
                 ],
               ),
             ),

@@ -43,16 +43,18 @@ extension _SaveExt on _LlmModelConfigPageState {
       return;
     }
 
-    // 验证自定义参数：参数名和默认值不能为空，参数名不能重复，
-    // 且 JSON 类型的默认值必须是合法 JSON
+    // 验证自定义参数：参数名和值（选项或默认值）不能为空，参数名不能
+    // 重复，且 JSON 类型的默认值必须是合法 JSON
     final seenNames = <String>{};
     for (int i = 0; i < _customParams.length; i++) {
       final param = _customParams[i];
       final name = param.paramName.trim();
-      if (name.isEmpty || param.defaultValue.trim().isEmpty) {
+      final hasValue =
+          param.options.isNotEmpty || param.defaultValue.trim().isNotEmpty;
+      if (name.isEmpty || !hasValue) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('自定义参数的参数名和默认值不能为空'),
+            content: Text('自定义参数的参数名和值不能为空'),
             behavior: SnackBarBehavior.floating,
           ),
         );

@@ -948,6 +948,43 @@ void main() {
       expect(find.text('添加选项'), findsNothing);
     });
 
+    testWidgets('boolean custom param gets true/false pill options',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'verbose',
+            defaultValue: '',
+            type: 'boolean',
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('自定义参数'));
+          await tester.scrollUntilVisible(
+            find.text('true'),
+            200,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.pumpAndSettle();
+          // boolean：胶囊块预填 true/false，无「默认参数值」输入框
+          expect(find.text('true'), findsOneWidget);
+          expect(find.text('false'), findsOneWidget);
+          expect(find.text('默认参数值'), findsNothing);
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.options, ['true', 'false']);
+    });
+
     testWidgets('new model with provider params still saves', (tester) async {
       ModelConfig? saved;
       await tester.pumpWidget(
