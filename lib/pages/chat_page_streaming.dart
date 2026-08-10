@@ -230,7 +230,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
       _adapter.setAssistantSettings(null);
       _adapter.setAssistantCustomParams(null);
     }
-    final allTools = _adapter.getAllToolDefinitions();
+    final allTools = _selectableTools();
     final enabledTools = ref.read(enabledToolNamesProvider);
     final filteredTools =
         allTools.where((tool) => enabledTools.contains(tool.name)).toList();
