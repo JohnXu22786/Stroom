@@ -1155,6 +1155,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       currentFolder: _saveFolder,
       availableFolders: folders,
       title: '选择保存文件夹',
+      onCreateFolder: (name) async {
+        await TextManifest.addFolder(name);
+        return null;
+      },
+      onRefreshFolders: () async => TextManifest.getAllFolders(),
     );
     if (result != null && mounted) {
       setState(() => _saveFolder = result);
