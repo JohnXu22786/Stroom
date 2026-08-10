@@ -1,14 +1,31 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
+import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/services/chat_protocol.dart';
 import 'package:stroom/services/context_manager.dart'
     show kCompactedToolResultPlaceholder, kInterruptedToolResultPlaceholder;
+
+/// 测试用 PathProvider：把"应用文档目录"指向临时目录，让
+/// AttachmentStorage 的磁盘读写（含压缩缓存）落到真实临时文件上。
+class _FakePathProviderPlatform extends PathProviderPlatform {
+  _FakePathProviderPlatform(this.root);
+
+  final String root;
+
+  @override
+  Future<String> getApplicationDocumentsPath() async => root;
+
+  @override
+  Future<String> getTemporaryPath() async => root;
+}
 
 // ============================================================================
 // ChatProtocol 协议层测试
@@ -820,6 +837,359 @@ void main() {
           reason: 'PNG→JPEG 压缩后 media_type 必须与真实内容一致');
       final payload = base64Decode(source['data'] as String);
       expect(payload.length, lessThan(10 * 1024 * 1024));
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════
+  // 图片压缩磁盘缓存（temp_compressed/<convId>/<hash>）
+  // —— 选中即后台预压缩 + 重启后零等待复用
+  // ═════════════════════════════════════════════════════════════════════
+  group('图片压缩磁盘缓存', () {
+    late Directory tmpRoot;
+
+    /// 照片风格大 PNG 夹具（约 3.6MB），全组共享只生成一次。
+    late Uint8List bigPng;
+
+    setUpAll(() {
+      final rng = Random(7);
+      final im = img.Image(width: 1600, height: 1200, numChannels: 3);
+      for (final p in im) {
+        final dx = p.x - 800;
+        final dy = p.y - 600;
+        final d = (dx * dx + dy * dy) / (1600 * 1200);
+        p
+          ..r = (128 + 50 * (d % 1) + rng.nextInt(18)).round().clamp(0, 255)
+          ..g =
+              (100 + 80 * (p.x / 1600) + rng.nextInt(18)).round().clamp(0, 255)
+          ..b =
+              (150 + 60 * (p.y / 1200) + rng.nextInt(18)).round().clamp(0, 255);
+      }
+      bigPng = img.encodePng(im, level: 6);
+      expect(bigPng.length, greaterThan(2 * 1024 * 1024),
+          reason: '夹具 PNG 应显著大于测试上限');
+    });
+
+    setUp(() {
+      tmpRoot = Directory.systemTemp.createTempSync('stroom_chat_proto_test_');
+      PathProviderPlatform.instance = _FakePathProviderPlatform(tmpRoot.path);
+    });
+
+    tearDown(() {
+      try {
+        tmpRoot.deleteSync(recursive: true);
+      } catch (_) {
+        // 非关键清理
+      }
+    });
+
+    /// 把 [bytes] 落盘为普通附件并返回其 storagePath（模拟"附件已在
+    /// 磁盘上，内存缓存 base64Data 丢失"的重启场景）。
+    Future<String> saveOriginalFile(String fileName, Uint8List bytes) async {
+      return AttachmentStorage.saveFile(fileName, bytes);
+    }
+
+    test('preCompressImageForPendingAttachment：大图压缩并写入内存+磁盘缓存', () async {
+      const maxBytes = 500 * 1024;
+      final att = Attachment(
+        fileName: 'photo.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'pre-hash',
+        storagePath: '/nonexistent',
+        fileSize: bigPng.length,
+      );
+
+      final done = await preCompressImageForPendingAttachment(
+        att,
+        bigPng,
+        maxBytes: maxBytes,
+        conversationId: 'conv-1',
+      );
+
+      expect(done, isTrue);
+      // 内存缓存：base64Data 变为压缩产物（≤ 阈值）
+      final inMemory = base64Decode(att.base64Data!);
+      expect(inMemory.length, lessThanOrEqualTo(maxBytes));
+      expect(inMemory.length, lessThan(bigPng.length));
+      expect(img.decodeImage(inMemory), isNotNull);
+      // 磁盘缓存：按 (convId, hash) 可读回同一份字节
+      final cached = await AttachmentStorage.readCompressedImage(
+          conversationId: 'conv-1', hash: 'pre-hash');
+      expect(cached, isNotNull);
+      expect(cached!.bytes, inMemory);
+      expect(att.compressedCachePersisted, isTrue);
+    });
+
+    test('preCompressImageForPendingAttachment：阈值内/无法解码为 no-op', () async {
+      // 阈值内：不压缩，base64Data 保持 null
+      final small = img.encodePng(
+        img.Image(width: 8, height: 8, numChannels: 3),
+      );
+      final smallAtt = Attachment(
+        fileName: 'small.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'small-hash',
+        storagePath: '/nonexistent',
+        fileSize: small.length,
+      );
+      final smallDone = await preCompressImageForPendingAttachment(
+        smallAtt,
+        small,
+        maxBytes: 10 * 1024 * 1024,
+        conversationId: 'conv-1',
+      );
+      expect(smallDone, isFalse);
+      expect(smallAtt.base64Data, isNull);
+
+      // 无法解码：不写入任何缓存
+      final garbage =
+          Uint8List.fromList(List.generate(256, (i) => i * 7 % 256));
+      final garbageAtt = Attachment(
+        fileName: 'broken.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'garbage-hash',
+        storagePath: '/nonexistent',
+        fileSize: garbage.length,
+      );
+      final garbageDone = await preCompressImageForPendingAttachment(
+        garbageAtt,
+        garbage,
+        maxBytes: 128,
+        conversationId: 'conv-1',
+      );
+      expect(garbageDone, isFalse);
+      expect(garbageAtt.base64Data, isNull);
+      expect(
+          await AttachmentStorage.readCompressedImage(
+              conversationId: 'conv-1', hash: 'garbage-hash'),
+          isNull);
+    });
+
+    test('preCompressImageForPendingAttachment：附件已失效（移除/编辑）时跳过写入', () async {
+      // 回归：压缩耗时期间附件被移除/编辑（isStillRelevant 返回 false），
+      // 不得写入任何缓存——否则会把已被清理的磁盘缓存"复活"
+      // （对话已删除时成为永久孤儿目录）。
+      final att = Attachment(
+        fileName: 'photo.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'stale-hash',
+        storagePath: '/nonexistent',
+        fileSize: bigPng.length,
+      );
+
+      final done = await preCompressImageForPendingAttachment(
+        att,
+        bigPng,
+        maxBytes: 500 * 1024,
+        conversationId: 'conv-1',
+        isStillRelevant: () => false,
+      );
+
+      expect(done, isFalse);
+      expect(att.base64Data, isNull, reason: '失效后不得写入内存缓存');
+      expect(
+          await AttachmentStorage.readCompressedImage(
+              conversationId: 'conv-1', hash: 'stale-hash'),
+          isNull,
+          reason: '失效后不得写入磁盘缓存（否则复活已被清理的文件）');
+    });
+
+    test('readAttachmentBase64：重启后（无 base64Data）命中磁盘缓存，零等待复用', () async {
+      // 种子缓存故意用 q30（与压缩器 q90 输出不同）：若命中缓存则
+      // 逐字节复用，若代码回退到重新压缩则会产出 q90 字节 → 断言失败，
+      // 由此证明磁盘缓存路径没有重新压缩。
+      final decoded = img.decodeImage(bigPng)!;
+      final seeded =
+          img.encodeJpg(decoded, quality: 30, chroma: img.JpegChroma.yuv420);
+      expect(seeded.length, lessThan(500 * 1024));
+      await AttachmentStorage.saveCompressedImage(
+        conversationId: 'conv-1',
+        hash: 'restart-hash',
+        bytes: seeded,
+        mimeType: 'image/jpeg',
+      );
+      final storagePath = await saveOriginalFile('photo.png', bigPng);
+
+      // 模拟重启：新 Attachment 无 base64Data，原始文件在磁盘上
+      final att = Attachment(
+        fileName: 'photo.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'restart-hash',
+        storagePath: storagePath,
+        fileSize: bigPng.length,
+        conversationId: 'conv-1',
+      );
+
+      final outcome = await readAttachmentBase64(att, maxBytes: 500 * 1024);
+
+      expect(outcome.status, AttachmentReadStatus.ok);
+      expect(base64Decode(outcome.base64!), seeded,
+          reason: '必须逐字节复用磁盘缓存，而不是重新压缩');
+      expect(outcome.mimeType, 'image/jpeg');
+    });
+
+    test('readAttachmentBase64：发送时压缩会写入磁盘缓存，重启后直接复用', () async {
+      const maxBytes = 500 * 1024;
+      final att = Attachment(
+        fileName: 'photo.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'send-hash',
+        storagePath: '/nonexistent',
+        fileSize: bigPng.length,
+        conversationId: 'conv-1',
+      )..base64Data = base64Encode(bigPng);
+
+      final first = await readAttachmentBase64(att, maxBytes: maxBytes);
+      expect(first.status, AttachmentReadStatus.ok);
+      final firstPayload = base64Decode(first.base64!);
+      expect(firstPayload.length, lessThanOrEqualTo(maxBytes));
+
+      // 压缩产物已落盘
+      final cached = await AttachmentStorage.readCompressedImage(
+          conversationId: 'conv-1', hash: 'send-hash');
+      expect(cached, isNotNull);
+      expect(cached!.bytes, firstPayload);
+
+      // 模拟重启：同一附件的新实例（无 base64Data），原始文件在盘上
+      final storagePath = await saveOriginalFile('photo.png', bigPng);
+      final fresh = Attachment(
+        fileName: 'photo.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'send-hash',
+        storagePath: storagePath,
+        fileSize: bigPng.length,
+        conversationId: 'conv-1',
+      );
+
+      final second = await readAttachmentBase64(fresh, maxBytes: maxBytes);
+      expect(second.status, AttachmentReadStatus.ok);
+      expect(second.base64, first.base64, reason: '重启后应直接复用磁盘缓存，产出与首次发送相同的载荷');
+    });
+
+    test('缓存按对话隔离：convA 的缓存不泄露给 convB', () async {
+      // 只为 convA 写入缓存
+      final decoded = img.decodeImage(bigPng)!;
+      final seeded =
+          img.encodeJpg(decoded, quality: 30, chroma: img.JpegChroma.yuv420);
+      await AttachmentStorage.saveCompressedImage(
+        conversationId: 'conv-a',
+        hash: 'shared-hash',
+        bytes: seeded,
+        mimeType: 'image/jpeg',
+      );
+
+      // 同一 hash 在 convB：磁盘未命中 → 回退到发送时压缩（q90 输出）
+      final att = Attachment(
+        fileName: 'photo.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'shared-hash',
+        storagePath: '/nonexistent',
+        fileSize: bigPng.length,
+        conversationId: 'conv-b',
+      )..base64Data = base64Encode(bigPng);
+
+      final outcome = await readAttachmentBase64(att, maxBytes: 500 * 1024);
+
+      expect(outcome.status, AttachmentReadStatus.ok);
+      final payload = base64Decode(outcome.base64!);
+      expect(payload, isNot(equals(seeded)), reason: '对话 B 不得复用对话 A 的缓存，应重新压缩');
+      expect(payload.length, lessThanOrEqualTo(500 * 1024));
+      // 对话 B 现在有自己的缓存（互不干扰）
+      final cacheB = await AttachmentStorage.readCompressedImage(
+          conversationId: 'conv-b', hash: 'shared-hash');
+      expect(cacheB, isNotNull);
+      expect(cacheB!.bytes, payload);
+    });
+
+    test('readAttachmentBase64：内存缓存命中（选中时已预压缩）补齐磁盘缓存', () async {
+      // 场景：选中时对话尚未创建（conversationId=null），预压缩只写了
+      // 内存缓存；发送时对话已解析，首次经过发送路径应把压缩产物落盘。
+      const maxBytes = 500 * 1024;
+      final decoded = img.decodeImage(bigPng)!;
+      final preCompressed =
+          img.encodeJpg(decoded, quality: 80, chroma: img.JpegChroma.yuv420);
+      expect(preCompressed.length, lessThanOrEqualTo(maxBytes));
+
+      final att = Attachment(
+        fileName: 'photo.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'mem-hash',
+        storagePath: '/nonexistent',
+        fileSize: bigPng.length, // 原始文件仍超阈值 → 内存字节必为压缩产物
+        conversationId: 'conv-1',
+      )..base64Data = base64Encode(preCompressed);
+
+      final outcome = await readAttachmentBase64(att, maxBytes: maxBytes);
+
+      expect(outcome.status, AttachmentReadStatus.ok);
+      expect(outcome.base64, base64Encode(preCompressed),
+          reason: '内存缓存直接复用，不做无谓重压缩');
+      // 分支 2 自身不设置 mimeTypeOverride，格式覆盖来自共享的魔数
+      // 检测兜底：JPEG 载荷必须声明 image/jpeg（否则 Anthropic 400）
+      expect(outcome.mimeType, 'image/jpeg');
+      final cached = await AttachmentStorage.readCompressedImage(
+          conversationId: 'conv-1', hash: 'mem-hash');
+      expect(cached, isNotNull, reason: '首次发送路径应补齐磁盘缓存（重启后不再等待）');
+      expect(cached!.bytes, preCompressed);
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════
+  // attachmentHasReadyPayload —— 草稿快照的 base64 携带判定
+  // ═════════════════════════════════════════════════════════════════════
+  group('attachmentHasReadyPayload', () {
+    const maxBytes = 1024;
+    // 512 字节 JPEG 魔数开头的内容（≤ 阈值 → 可直接发送）
+    final smallPayload = base64Encode(List<int>.generate(512, (i) => i % 251));
+
+    Attachment att({String? b64, String fileType = 'image'}) => Attachment(
+          fileName: 'f.bin',
+          mimeType: fileType == 'image' ? 'image/jpeg' : 'application/pdf',
+          fileType: fileType,
+          hash: 'h',
+          storagePath: 'attachments/h_1.bin',
+          fileSize: 2048,
+          base64Data: b64,
+        );
+
+    test('图片 + 压缩产物（≤ 阈值）→ true（可随草稿持久化）', () {
+      expect(
+          attachmentHasReadyPayload(att(b64: smallPayload), maxBytes: maxBytes),
+          isTrue);
+    });
+
+    test('图片 + 未压缩完成的原始大 base64（> 阈值）→ false', () {
+      final big =
+          base64Encode(List<int>.generate(maxBytes * 2, (i) => i % 251));
+      expect(attachmentHasReadyPayload(att(b64: big), maxBytes: maxBytes),
+          isFalse);
+    });
+
+    test('图片 + 无 base64Data → false', () {
+      expect(attachmentHasReadyPayload(att(), maxBytes: maxBytes), isFalse);
+    });
+
+    test('非图片 + base64Data → true（文件原始编码直接可用）', () {
+      expect(
+          attachmentHasReadyPayload(
+              att(b64: smallPayload, fileType: 'document'),
+              maxBytes: maxBytes),
+          isTrue);
+    });
+
+    test('损坏的 base64 → false（不误判为可发送载荷）', () {
+      expect(
+          attachmentHasReadyPayload(att(b64: '!!!not-base64!!!'),
+              maxBytes: maxBytes),
+          isFalse);
     });
   });
 }

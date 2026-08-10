@@ -14,7 +14,11 @@ part 'llm_model_config_page_sections.dart';
 class LlmModelConfigPage extends StatefulWidget {
   final ModelConfig? model; // null = 新建, non-null = 编辑
 
-  const LlmModelConfigPage({super.key, this.model});
+  /// 所属供应商配置。供应商已配置的推理参数会实时合并显示到本页
+  /// （继承视图），模型修改后参数才变为模型独立配置。
+  final ProviderConfigItem? provider;
+
+  const LlmModelConfigPage({super.key, this.model, this.provider});
 
   @override
   State<LlmModelConfigPage> createState() => _LlmModelConfigPageState();
@@ -28,6 +32,25 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   late final TextEditingController _seedController;
   late List<CustomParam> _customParams;
   late List<ReasoningParam> _reasoningParams;
+
+  /// 打开页面时从供应商继承的参数名集合（合并视图中的继承部分，
+  /// 不含被模型同名覆盖的；随后被认领的参数名仍在此集合中）。
+  /// 用于隐藏「删除」按钮：供应商参数只能覆盖、不能删除——删除模型
+  /// 副本后参数会重新继承回来，删除按钮会造成「删除无效」的错觉。
+  late final Set<String> _providerInheritedNames;
+
+  /// 打开页面时各继承参数的工作副本 → 供应商侧原始内容（按实例身份
+  /// 索引）。用于「认领回退」：编辑又被还原成与供应商原值一致时，参数
+  /// 保持继承状态（不写入模型），避免出现「改了又改回去却无法保存」的
+  /// 死局。按身份索引保证：只有初始就是继承状态的参数可回退，且改名后
+  /// 不会误匹配到其他供应商参数。
+  late final Map<ReasoningParam, ReasoningParam> _providerOriginals;
+
+  /// 被排序操作强制认领的参数（本会话内不回退为继承）。
+  /// 排序结果没有内容载体（toMap 不含列表位置），内容还原不能撤销
+  /// 排序造成的认领，否则排序会随保存静默丢失。
+  final Set<ReasoningParam> _forceClaimedParamsStore = {};
+
   final Map<int, String?> _jsonErrors = {};
 
   // Slider values
@@ -61,7 +84,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       if (_modelIdController.text.isNotEmpty) return true;
       if (_contextController.text.isNotEmpty) return true;
       if (_customParams.any((p) => p.paramName.isNotEmpty)) return true;
-      if (_reasoningParams.any((p) => p.paramName.isNotEmpty)) return true;
+      if (_reasoningParams
+          .any((p) => !p.inheritedFromProvider && p.paramName.isNotEmpty)) {
+        return true;
+      }
       if (_enableTemperature ||
           _enableTopP ||
           _enableFrequencyPenalty ||
@@ -140,12 +166,20 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     if ((mOverride != null) != _overrideEndpointType) return true;
     if (_overrideEndpointType && _endpointType != mOverride) return true;
     // Custom params and reasoning params (simple check via serialization)
+    // 用 jsonEncode 而非 toString 比较：List/Map 的 toString 不引用
+    // 字符串，空选项 [''] 会与无选项 [] 混淆。
     final originalCustom = m.customParams.map((p) => p.toMap()).toList();
     final currentCustom = _customParams.map((p) => p.toMap()).toList();
-    if (originalCustom.toString() != currentCustom.toString()) return true;
+    if (jsonEncode(originalCustom) != jsonEncode(currentCustom)) return true;
+    // Reasoning params: 仅比较模型自有（非继承）参数。继承自供应商且
+    // 未修改的参数不写入模型，不视为改动；修改过的（已被认领）参数
+    // 会进入自有子集参与比较。
     final originalReasoning = m.reasoningParams.map((p) => p.toMap()).toList();
-    final currentReasoning = _reasoningParams.map((p) => p.toMap()).toList();
-    if (originalReasoning.toString() != currentReasoning.toString()) {
+    final currentReasoning = _reasoningParams
+        .where((p) => !p.inheritedFromProvider)
+        .map((p) => p.toMap())
+        .toList();
+    if (jsonEncode(originalReasoning) != jsonEncode(currentReasoning)) {
       return true;
     }
     return false;
@@ -201,14 +235,40 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     for (int i = 0; i < _customParams.length; i++) {
       _validateJsonField(i, _customParams[i]);
     }
-    if (m != null) {
-      _reasoningParams = m.reasoningParams.map((p) => p.copy()).toList();
-    } else {
-      // New model: start with no reasoning params.
-      // User must explicitly add toggle, effort, and additional params
-      // via the respective add buttons.
-      _reasoningParams = [];
-    }
+    // Reasoning params: 模型自身参数 + 供应商参数（继承视图，实时同步）。
+    // 与供应商参数同名的模型参数覆盖供应商参数（与请求构建时的合并
+    // 语义一致，见 mergeReasoningParams）。供应商参数以 inheritedFromProvider
+    // 标记，首次编辑即变为模型独立配置，保存时才写入模型。
+    final provider = widget.provider;
+    final modelNames = (m?.reasoningParams ?? [])
+        .map((p) => p.paramName.trim())
+        .where((n) => n.isNotEmpty)
+        .toSet();
+    // 供应商参数中未被模型同名覆盖的部分 = 继承参数
+    _providerInheritedNames = (provider?.reasoningParams ?? [])
+        .map((p) => p.paramName.trim())
+        .where((n) => n.isNotEmpty && !modelNames.contains(n))
+        .toSet();
+    _reasoningParams = mergeReasoningParams(
+      provider?.reasoningParams ?? [],
+      m?.reasoningParams ?? [],
+    ).map((p) {
+      final copy = p.copy();
+      copy.inheritedFromProvider =
+          _providerInheritedNames.contains(p.paramName.trim());
+      return copy;
+    }).toList();
+    // 记录继承参数的工作副本 → 供应商原值（按实例身份，认领回退用；
+    // 新建的参数不是 key，不会被误标为继承）
+    final providerByName = {
+      for (final p in provider?.reasoningParams ?? [])
+        if (p.paramName.trim().isNotEmpty) p.paramName.trim(): p,
+    };
+    _providerOriginals = {
+      for (final copy in _reasoningParams)
+        if (copy.inheritedFromProvider)
+          copy: providerByName[copy.paramName.trim()]!,
+    };
   }
 
   @override

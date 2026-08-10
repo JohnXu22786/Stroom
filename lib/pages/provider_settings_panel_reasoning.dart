@@ -6,13 +6,34 @@ part of 'provider_settings_panel.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
-  void _addReasoningParam({bool isToggle = false}) {
+  // ===================================================================
+  // 推理参数
+  // ===================================================================
+
+  /// 添加附加推理参数（非开关、非推理力度）。
+  void _addReasoningParam() {
     setState(() {
       _reasoningParams.add(
         ReasoningParam(
           paramName: '',
           enabled: false,
-          isReasoningToggle: isToggle,
+          isReasoningToggle: false,
+          isEffortParam: false,
+          options: [],
+        ),
+      );
+    });
+  }
+
+  /// 添加推理力度参数（有且只有一个）。
+  void _addEffortReasoningParam() {
+    setState(() {
+      _reasoningParams.add(
+        ReasoningParam(
+          paramName: '',
+          isReasoningToggle: false,
+          isEffortParam: true,
+          enabled: true,
           options: [],
         ),
       );
@@ -37,9 +58,103 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
     });
   }
 
+  /// 上移/下移附加推理参数（仅在附加参数之间交换位置，跳过开关与
+  /// 力度参数）。
+  void _moveAdditionalReasoningParam(ReasoningParam param, int delta) {
+    final additional = _additionalReasoningParams;
+    final from = additional.indexOf(param);
+    final to = from + delta;
+    if (from < 0 || to < 0 || to >= additional.length) return;
+    setState(() {
+      final target = additional[to];
+      final i1 = _reasoningParams.indexOf(param);
+      final i2 = _reasoningParams.indexOf(target);
+      final list = _reasoningParams;
+      final tmp = list[i1];
+      list[i1] = list[i2];
+      list[i2] = tmp;
+    });
+  }
+
+  /// 上移/下移 [paramIndex] 参数的选项值。
+  void _moveOptionInParam(int paramIndex, int optionIndex, int delta) {
+    final options = _reasoningParams[paramIndex].options;
+    final to = optionIndex + delta;
+    if (to < 0 || to >= options.length) return;
+    setState(() {
+      final tmp = options[optionIndex];
+      options[optionIndex] = options[to];
+      options[to] = tmp;
+    });
+  }
+
+  /// 上移/下移小按钮组（排序用）。
+  Widget _buildMoveButtons({
+    required VoidCallback? onUp,
+    required VoidCallback? onDown,
+    bool upDisabled = false,
+    bool downDisabled = false,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_upward, size: 16),
+          visualDensity: VisualDensity.compact,
+          tooltip: '上移',
+          onPressed: upDisabled ? null : onUp,
+        ),
+        IconButton(
+          icon: const Icon(Icons.arrow_downward, size: 16),
+          visualDensity: VisualDensity.compact,
+          tooltip: '下移',
+          onPressed: downDisabled ? null : onDown,
+        ),
+      ],
+    );
+  }
+
+  // ===================================================================
+  // 推理参数帮助方法
+  // ===================================================================
+
+  /// Returns the reasoning toggle param, or null if none exists.
   ReasoningParam? get _toggleReasoningParam => _reasoningParams
       .cast<ReasoningParam?>()
       .firstWhere((p) => p?.isReasoningToggle ?? false, orElse: () => null);
+
+  /// Returns the reasoning effort param (one with isEffortParam=true), or null.
+  ReasoningParam? get _effortReasoningParam => _reasoningParams
+      .cast<ReasoningParam?>()
+      .firstWhere((p) => p?.isEffortParam ?? false, orElse: () => null);
+
+  /// Returns additional reasoning params (non-toggle, excluding the effort one).
+  List<ReasoningParam> get _additionalReasoningParams {
+    final effort = _effortReasoningParam;
+    return _reasoningParams
+        .where((p) => !p.isReasoningToggle && p != effort)
+        .toList();
+  }
+
+  bool get _isToggleComplete {
+    final toggle = _toggleReasoningParam;
+    if (toggle == null) return false;
+    return toggle.paramName.trim().isNotEmpty &&
+        (toggle.onValue != null && toggle.onValue!.trim().isNotEmpty) &&
+        (toggle.offValue != null && toggle.offValue!.trim().isNotEmpty);
+  }
+
+  /// 判断 [param] 的当前参数名是否与「本供应商其他已填写参数」或
+  /// 自定义参数重名（除自身外）。
+  bool _isReasoningParamNameDuplicate(ReasoningParam param) {
+    final name = param.paramName.trim();
+    if (name.isEmpty) return false;
+    return _reasoningParams.indexWhere(
+              (p) => p.paramName.trim() == name,
+            ) !=
+            _reasoningParams.indexOf(param) ||
+        _customParams.any((p) => p.paramName.trim() == name);
+  }
 
   List<Widget> _buildReasoningParamsSection(ColorScheme cs) {
     return [
@@ -53,14 +168,35 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
       ),
       const SizedBox(height: 4),
       Text(
-        '推理开关控制聊天页面中推理功能的开启和关闭。'
-        '推理力度参数允许只填参数名而不添加选项值。',
+        '推理开关控制聊天页面中推理功能的开启和关闭，由您定义参数名和对应的开/关值。'
+        '推理力度参数有且只有一个，每个含参数名和可选项；参数名必填，'
+        '选项值可选（仅填参数名时，参数值由模型配置提供——模型可在推理'
+        '力度参数上添加自己的选项值）。'
+        '您还可以通过底部按钮添加额外的推理参数。'
+        '参数名支持点号嵌套（如 thinking.type 会展开为 {"thinking": {"type": "..."}}）。',
         style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
       ),
       const SizedBox(height: 12),
+
+      // 推理开关 — 始终在第一个位置
       _buildReasoningToggleSection(cs),
-      _buildInferenceIntensitySection(cs),
-      const SizedBox(height: 12),
+
+      // 推理力度 — 有且只有一个 card（通过「添加推理力度」按钮添加）
+      _buildReasoningEffortSection(cs),
+
+      // 附加推理参数（通过「添加推理参数」按钮添加）
+      if (_additionalReasoningParams.isNotEmpty)
+        ...List.generate(_additionalReasoningParams.length, (i) {
+          final param = _additionalReasoningParams[i];
+          final actualIndex = _reasoningParams.indexOf(param);
+          return _buildAdditionalReasoningParamCard(
+            param,
+            actualIndex,
+            i,
+            cs,
+          );
+        }),
+      const SizedBox(height: 8),
       Center(
         child: TextButton.icon(
           icon: Icon(
@@ -75,14 +211,14 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               color: _toggleReasoningParam != null ? null : Colors.grey,
             ),
           ),
-          onPressed:
-              _toggleReasoningParam != null ? () => _addReasoningParam() : null,
+          onPressed: _toggleReasoningParam != null ? _addReasoningParam : null,
         ),
       ),
       const SizedBox(height: 24),
     ];
   }
 
+  /// Builds the reasoning toggle card section (mirrors the model config page).
   Widget _buildReasoningToggleSection(ColorScheme cs) {
     final toggle = _toggleReasoningParam;
     if (toggle == null) {
@@ -92,12 +228,26 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
           child: TextButton.icon(
             icon: const Icon(Icons.add, size: 16),
             label: const Text('添加推理开关', style: TextStyle(fontSize: 13)),
-            onPressed: () => _addReasoningParam(isToggle: true),
+            onPressed: () {
+              setState(() {
+                _reasoningParams.insert(
+                  0,
+                  ReasoningParam(
+                    paramName: '',
+                    isReasoningToggle: true,
+                    onValue: '',
+                    offValue: '',
+                    options: [],
+                  ),
+                );
+              });
+            },
           ),
         ),
       );
     }
 
+    final isDuplicate = _isReasoningParamNameDuplicate(toggle);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -119,6 +269,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                     ),
                   ),
                 ),
+                // 参数值类型选择
                 _buildTypeDropdown(toggle, cs),
                 const SizedBox(width: 4),
                 IconButton(
@@ -132,11 +283,13 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
             const SizedBox(height: 8),
             TextFormField(
               initialValue: toggle.paramName,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: '参数名',
                 hintText: '如 thinking.type、reasoning',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
                 isDense: true,
+                errorText: isDuplicate ? '已存在该参数' : null,
+                errorStyle: const TextStyle(fontSize: 11),
               ),
               onChanged: (v) {
                 toggle.paramName = v;
@@ -149,10 +302,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 Expanded(
                   child: TextFormField(
                     initialValue: toggle.onValue ?? '',
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: '开启时值',
                       hintText: '如 enabled、true',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                     onChanged: (v) {
@@ -165,10 +318,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 Expanded(
                   child: TextFormField(
                     initialValue: toggle.offValue ?? '',
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: '关闭时值',
                       hintText: '如 disabled、false',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                     onChanged: (v) {
@@ -194,75 +347,47 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
     );
   }
 
-  Widget _buildInferenceIntensitySection(ColorScheme cs) {
+  /// Builds the reasoning effort section (mirrors the model config page).
+  /// If an effort param exists, shows the effort card. Otherwise, shows the
+  /// "添加推理力度" button, which is disabled (gray) when no toggle exists.
+  Widget _buildReasoningEffortSection(ColorScheme cs) {
+    final effort = _effortReasoningParam;
+    if (effort != null) {
+      return _buildReasoningEffortCard(effort, cs);
+    }
+    // No effort param — show add button (always visible, disabled if no toggle)
     final hasToggle = _toggleReasoningParam != null;
-
-    // Find existing inference intensity param (non-toggle)
-    final intensityParams =
-        _reasoningParams.where((p) => !p.isReasoningToggle).toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '推理力度',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-            color: cs.primary,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '推理力度参数支持只填参数名而不添加具体选项值'
-          '${!hasToggle ? '（需先添加推理开关后才能配置）' : ''}',
-          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-        ),
-        const SizedBox(height: 8),
-        if (intensityParams.isNotEmpty)
-          ...List.generate(intensityParams.length, (i) {
-            final param = intensityParams[i];
-            final actualIndex = _reasoningParams.indexOf(param);
-            return _buildIntensityParamCard(param, actualIndex, i, cs);
-          }),
-        const SizedBox(height: 4),
-        TextButton.icon(
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Center(
+        child: TextButton.icon(
           icon: Icon(
             Icons.add,
             size: 16,
             color: hasToggle ? null : Colors.grey,
           ),
           label: Text(
-            '添加推理力度参数',
+            '添加推理力度',
             style: TextStyle(
               fontSize: 13,
               color: hasToggle ? null : Colors.grey,
             ),
           ),
-          onPressed: hasToggle
-              ? () {
-                  final newParam = ReasoningParam(
-                    paramName: '',
-                    isReasoningToggle: false,
-                    enabled: true,
-                    options: [],
-                  );
-                  setState(() {
-                    _reasoningParams.add(newParam);
-                  });
-                }
-              : null,
+          onPressed: hasToggle ? _addEffortReasoningParam : null,
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildIntensityParamCard(
-    ReasoningParam param,
-    int actualIndex,
-    int displayIndex,
-    ColorScheme cs,
-  ) {
+  /// Builds the reasoning effort card — a single card, same style as the
+  /// toggle card. Only editable after the toggle is complete. There is
+  /// exactly one effort param. Options are optional at the provider level:
+  /// a name-only effort param defers its value to the model config /
+  /// chat panel selection.
+  Widget _buildReasoningEffortCard(ReasoningParam effort, ColorScheme cs) {
+    final toggleComplete = _isToggleComplete;
+    final isDuplicate = _isReasoningParamNameDuplicate(effort);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -272,87 +397,143 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
           children: [
             Row(
               children: [
+                Icon(Icons.tune, size: 18, color: cs.primary),
+                const SizedBox(width: 4),
                 Expanded(
-                  child: TextFormField(
-                    initialValue: param.paramName,
-                    decoration: InputDecoration(
-                      labelText: '参数名（支持点号嵌套）',
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                      hintText: '如 reasoning_effort',
+                  child: Text(
+                    '推理力度',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: cs.primary,
                     ),
-                    onChanged: (v) {
-                      param.paramName = v;
-                      setState(() {});
-                    },
                   ),
                 ),
-                const SizedBox(width: 4),
-                _buildTypeDropdown(param, cs),
+                _buildTypeDropdown(effort, cs),
                 const SizedBox(width: 4),
                 IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                  onPressed: () => _removeReasoningParam(actualIndex),
-                  tooltip: '删除参数',
+                  onPressed: () =>
+                      _removeReasoningParam(_reasoningParams.indexOf(effort)),
+                  tooltip: '删除推理力度参数',
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            TextFormField(
+              initialValue: effort.paramName,
+              readOnly: !toggleComplete,
+              decoration: InputDecoration(
+                labelText: '参数名',
+                hintText: toggleComplete ? '如 reasoning_effort' : '请先填写推理开关',
+                border: const OutlineInputBorder(),
+                isDense: true,
+                errorText: isDuplicate ? '已存在该参数' : null,
+                errorStyle: const TextStyle(fontSize: 11),
+              ),
+              onChanged: (v) {
+                effort.paramName = v;
+                setState(() {});
+              },
+            ),
+            const SizedBox(height: 8),
             Text(
-              '选项值（可选，仅填参数名时发送参数名本身）',
+              '选项值（可选，仅填参数名时参数值由模型配置提供；可上移/下移排序）',
               style: TextStyle(
                 fontSize: 12,
                 color: cs.onSurfaceVariant.withValues(alpha: 0.7),
               ),
             ),
             const SizedBox(height: 8),
-            ...List.generate(param.options.length, (j) {
+            ...List.generate(effort.options.length, (j) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(
                   children: [
                     Expanded(
                       child: TextFormField(
-                        initialValue: param.options[j],
+                        initialValue: effort.options[j],
+                        readOnly: !toggleComplete,
                         decoration: InputDecoration(
                           labelText: '选项 ${j + 1}',
-                          hintText: '如 low, medium, high',
+                          hintText: toggleComplete
+                              ? '如 low, medium, high'
+                              : '请先填写推理开关',
                           border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                         onChanged: (v) {
-                          param.options[j] = v;
+                          effort.options[j] = v;
                           setState(() {});
                         },
                       ),
                     ),
                     const SizedBox(width: 4),
-                    if (param.options.length > 1)
+                    if (effort.options.length > 1) ...[
+                      _buildMoveButtons(
+                        onUp: toggleComplete
+                            ? () => _moveOptionInParam(
+                                  _reasoningParams.indexOf(effort),
+                                  j,
+                                  -1,
+                                )
+                            : null,
+                        onDown: toggleComplete
+                            ? () => _moveOptionInParam(
+                                  _reasoningParams.indexOf(effort),
+                                  j,
+                                  1,
+                                )
+                            : null,
+                        upDisabled: j == 0,
+                        downDisabled: j == effort.options.length - 1,
+                      ),
+                      const SizedBox(width: 4),
                       IconButton(
                         icon: const Icon(
                           Icons.remove_circle,
                           color: Colors.red,
                           size: 18,
                         ),
-                        onPressed: () => _removeOptionFromParam(actualIndex, j),
+                        onPressed: toggleComplete
+                            ? () => _removeOptionFromParam(
+                                  _reasoningParams.indexOf(effort),
+                                  j,
+                                )
+                            : null,
                         tooltip: '删除选项',
                       ),
+                    ],
                   ],
                 ),
               );
             }),
             const SizedBox(height: 4),
             TextButton.icon(
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('添加选项', style: TextStyle(fontSize: 13)),
-              onPressed: () => _addOptionToParam(actualIndex),
+              icon: Icon(Icons.add, size: 16),
+              label: Text('添加选项', style: TextStyle(fontSize: 13)),
+              onPressed: toggleComplete
+                  ? () => _addOptionToParam(_reasoningParams.indexOf(effort))
+                  : null,
             ),
+            if (!toggleComplete)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '请先完整填写推理开关后再配置推理力度',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
     );
   }
 
+  /// Builds a type dropdown for a reasoning param (mirrors the model page).
   Widget _buildTypeDropdown(ReasoningParam param, ColorScheme cs) {
     return Container(
       width: 100,
@@ -380,6 +561,143 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               setState(() => param.type = v);
             }
           },
+        ),
+      ),
+    );
+  }
+
+  /// Builds a card for an additional (non-toggle, non-effort) reasoning param
+  /// (mirrors the model config page).
+  Widget _buildAdditionalReasoningParamCard(
+    ReasoningParam param,
+    int actualIndex,
+    int displayIndex,
+    ColorScheme cs,
+  ) {
+    final isDuplicate = _isReasoningParamNameDuplicate(param);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    initialValue: param.paramName,
+                    decoration: InputDecoration(
+                      labelText: '参数名（支持点号嵌套）',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      hintText: '如 thinking.type 或 budget_tokens',
+                      errorText: isDuplicate ? '已存在该参数' : null,
+                      errorStyle: const TextStyle(fontSize: 11),
+                    ),
+                    onChanged: (v) {
+                      param.paramName = v;
+                      setState(() {});
+                    },
+                  ),
+                ),
+                const SizedBox(width: 4),
+                // 尾部控件（排序/类型/删除）用 Wrap 包裹，窄屏自动换行，
+                // 避免 RenderFlex 溢出
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    // 参数排序（在附加参数之间上移/下移）
+                    _buildMoveButtons(
+                      onUp: () => _moveAdditionalReasoningParam(param, -1),
+                      onDown: () => _moveAdditionalReasoningParam(param, 1),
+                      upDisabled: displayIndex == 0,
+                      downDisabled:
+                          displayIndex == _additionalReasoningParams.length - 1,
+                    ),
+                    _buildTypeDropdown(param, cs),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon:
+                          const Icon(Icons.delete, color: Colors.red, size: 20),
+                      onPressed: () => _removeReasoningParam(actualIndex),
+                      tooltip: '删除参数',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '选项值',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '这些选项将按顺序显示在推理面板中供选择，可上移/下移排序。'
+              '启用/禁用开关在推理面板中操作。',
+              style: TextStyle(
+                fontSize: 11,
+                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...List.generate(param.options.length, (j) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        initialValue: param.options[j],
+                        decoration: InputDecoration(
+                          labelText: '选项 ${j + 1}',
+                          hintText: '如 low, enabled, true, max',
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (v) {
+                          param.options[j] = v;
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    if (param.options.length > 1) ...[
+                      _buildMoveButtons(
+                        onUp: () => _moveOptionInParam(actualIndex, j, -1),
+                        onDown: () => _moveOptionInParam(actualIndex, j, 1),
+                        upDisabled: j == 0,
+                        downDisabled: j == param.options.length - 1,
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.remove_circle,
+                          color: Colors.red,
+                          size: 18,
+                        ),
+                        onPressed: () => _removeOptionFromParam(actualIndex, j),
+                        tooltip: '删除选项',
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: 4),
+            TextButton.icon(
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('添加选项', style: TextStyle(fontSize: 13)),
+              onPressed: () => _addOptionToParam(actualIndex),
+            ),
+          ],
         ),
       ),
     );

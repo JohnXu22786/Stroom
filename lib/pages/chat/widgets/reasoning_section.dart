@@ -54,18 +54,20 @@ class ReasoningSection extends ConsumerWidget {
       final sectionIdx = sections.sectionIndices.length == sections.texts.length
           ? sections.sectionIndices[i]
           : i;
-      children.add(Padding(
-        padding: EdgeInsets.only(
-          bottom: i < sections.texts.length - 1 ? 4 : 0,
+      children.add(
+        Padding(
+          padding: EdgeInsets.only(
+            bottom: i < sections.texts.length - 1 ? 4 : 0,
+          ),
+          child: _ReasoningButton(
+            reasoningText: sections.texts[i],
+            isStreaming: sections.streaming && i == sections.texts.length - 1,
+            isMulti: sections.hasMultiple,
+            index: sectionIdx,
+            messageId: messageId,
+          ),
         ),
-        child: _ReasoningButton(
-          reasoningText: sections.texts[i],
-          isStreaming: sections.streaming && i == sections.texts.length - 1,
-          isMulti: sections.hasMultiple,
-          index: sectionIdx,
-          messageId: messageId,
-        ),
-      ));
+      );
     }
 
     // If multiple sections, show them in a column
@@ -107,16 +109,13 @@ class _ReasoningButtonState extends ConsumerState<_ReasoningButton> {
   void initState() {
     super.initState();
     if (widget.isStreaming) {
-      _chevronTimer = Timer.periodic(
-        const Duration(milliseconds: 333),
-        (_) {
-          if (mounted) {
-            setState(() {
-              _chevronCount = _chevronCount >= 3 ? 1 : _chevronCount + 1;
-            });
-          }
-        },
-      );
+      _chevronTimer = Timer.periodic(const Duration(milliseconds: 333), (_) {
+        if (mounted) {
+          setState(() {
+            _chevronCount = _chevronCount >= 3 ? 1 : _chevronCount + 1;
+          });
+        }
+      });
     }
   }
 
@@ -226,9 +225,10 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
 
   /// Drives the completion sequence for the corner status icon: spinner
   /// fades out (0.5s) → checkmark pops in with a jelly bounce (0.5s) →
-  /// holds (1s) → pops out with a jelly shrink (0.5s) → corner empty.
-  /// Total duration 2.5s, mapped by the [TweenSequence] weights below
-  /// (20/20/40/20 → 25ms per weight point).
+  /// holds (1s) → pops out with a jelly shrink (1s, as long as the
+  /// fade-out + pop-in process) → corner empty.
+  /// Total duration 3s. Both [TweenSequence]s below sum to 120 weight
+  /// points (25ms per point) so their phases stay aligned.
   late final AnimationController _completionController;
   late final Animation<double> _spinnerOpacity;
   late final Animation<double> _checkmarkScale;
@@ -239,9 +239,10 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
   bool _prevComplete = false;
 
   /// Whether the pop animation has been started for the current completion.
-  /// A panel opened after completion keeps [false] and shows a static
-  /// checkmark; once a false→true transition is observed this becomes true
-  /// and the corner rendering is driven by [_completionController].
+  /// A panel opened after completion keeps [false] and shows an empty
+  /// corner (the checkmark only plays as the spinner→complete transition);
+  /// once a false→true transition is observed this becomes true and the
+  /// corner rendering is driven by [_completionController].
   bool _completionAnimated = false;
 
   static const _spinnerKey = ValueKey('reasoning-corner-spinner');
@@ -256,35 +257,45 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
     _scrollController.addListener(_onScroll);
     _completionController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2500),
+      duration: const Duration(milliseconds: 3000),
     );
     _spinnerOpacity = TweenSequence<double>([
-      // Spinner fade-out over the first 0.5s ([0, 0.2]).
+      // Spinner fade-out over the first 0.5s ([0, 500ms]).
       TweenSequenceItem(
-        tween: Tween(begin: 1.0, end: 0.0)
-            .chain(CurveTween(curve: Curves.easeOut)),
+        tween: Tween(
+          begin: 1.0,
+          end: 0.0,
+        ).chain(CurveTween(curve: Curves.easeOut)),
         weight: 20,
       ),
-      TweenSequenceItem(tween: ConstantTween(0.0), weight: 80),
+      // Weights sum to 120 so the fade lands exactly on the same
+      // 25ms-per-point grid as [_checkmarkScale] (fade ends at 500ms,
+      // exactly when the checkmark starts popping in).
+      TweenSequenceItem(tween: ConstantTween(0.0), weight: 100),
     ]).animate(_completionController);
     _checkmarkScale = TweenSequence<double>([
       // Not visible during the fade-out.
       TweenSequenceItem(tween: ConstantTween(0.0), weight: 20),
-      // Jelly pop-in over 0.5s ([0.2, 0.4]): elasticOut overshoots past
-      // 1.0 (scale > 1) then settles, giving the 果冻弹跳 bounce.
+      // Jelly pop-in over 0.5s ([500ms, 1000ms]): elasticOut overshoots
+      // past 1.0 (scale > 1) then settles, giving the 果冻弹跳 bounce.
       TweenSequenceItem(
-        tween: Tween(begin: 0.0, end: 1.0)
-            .chain(CurveTween(curve: Curves.elasticOut)),
+        tween: Tween(
+          begin: 0.0,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.elasticOut)),
         weight: 20,
       ),
-      // Hold at full scale for 1s ([0.4, 0.8]).
+      // Hold at full scale for 1s ([1000ms, 2000ms]).
       TweenSequenceItem(tween: ConstantTween(1.0), weight: 40),
-      // Jelly pop-out over 0.5s ([0.8, 1.0]): elasticOut.flipped shrinks
-      // with a wobble and never goes negative (no mirrored blip).
+      // Jelly pop-out over 1s ([2000ms, 3000ms]): as long as the fade-out
+      // + pop-in process. elasticOut.flipped shrinks with a wobble and
+      // never goes negative (no mirrored blip).
       TweenSequenceItem(
-        tween: Tween(begin: 1.0, end: 0.0)
-            .chain(CurveTween(curve: Curves.elasticOut.flipped)),
-        weight: 20,
+        tween: Tween(
+          begin: 1.0,
+          end: 0.0,
+        ).chain(CurveTween(curve: Curves.elasticOut.flipped)),
+        weight: 40,
       ),
     ]).animate(_completionController);
   }
@@ -343,9 +354,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
       _previousTextLength = _displayText.length;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_userScrolledUp && _scrollController.hasClients) {
-          _scrollController.jumpTo(
-            _scrollController.position.maxScrollExtent,
-          );
+          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
         }
       });
     }
@@ -368,7 +377,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
 
     // Detect completion transitions to drive the corner checkmark sequence.
     // The first build only records the initial state (a panel opened after
-    // completion shows a static checkmark, no animation). On a false→true
+    // completion shows an empty corner, no animation). On a false→true
     // transition the sequence plays once; on true→false (a new stream —
     // e.g. the next message — resets hasFirstToken and restarts streaming)
     // the animation resets so the next completion can replay it. Note that
@@ -439,13 +448,15 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
                 // Corner status icon: the spinner while streaming, then on
                 // completion it fades out (0.5s) and a checkmark pops in
                 // with a jelly bounce (0.5s), holds 1s, then pops out with
-                // a jelly shrink (0.5s) leaving the corner empty. A panel
-                // opened after completion shows a static checkmark. The
-                // slot keeps a constant size so the close button never
-                // jumps during the sequence.
+                // a jelly shrink (1s — as long as the fade-out + pop-in
+                // process) leaving the corner empty. The checkmark only
+                // plays as the spinner→complete transition; a panel opened
+                // after completion shows an empty corner. The slot keeps a
+                // constant size so the close button never jumps during the
+                // sequence.
                 SizedBox(
-                  width: 14,
-                  height: 14,
+                  width: 21,
+                  height: 21,
                   child: AnimatedBuilder(
                     animation: _completionController,
                     builder: (context, _) {
@@ -461,9 +472,11 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
                         spinnerOpacity = _spinnerOpacity.value;
                         checkScale = _checkmarkScale.value;
                       } else {
+                        // Panel opened after completion: no static
+                        // checkmark — the corner stays empty.
                         showSpinner = false;
                         spinnerOpacity = 0;
-                        checkScale = 1;
+                        checkScale = 0;
                       }
                       return Stack(
                         alignment: Alignment.center,
@@ -491,8 +504,8 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
                               alignment: Alignment.center,
                               child: Icon(
                                 Icons.check,
-                                size: 14,
-                                color: Colors.orange[700],
+                                size: 21,
+                                color: Colors.green,
                               ),
                             ),
                         ],

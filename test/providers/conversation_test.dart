@@ -15,6 +15,7 @@ part 'conversation_test_p2.dart';
 part 'conversation_test_p3.dart';
 part 'conversation_test_p4.dart';
 part 'conversation_test_p5.dart';
+part 'conversation_test_p6.dart';
 
 /// Helper: create a ProviderContainer with a ConversationsNotifier that has
 /// state pre-set (bypassing async _load from SharedPreferences).
@@ -37,4 +38,5 @@ void main() {
   conversationGroup3();
   conversationGroup4();
   conversationGroup5();
+  conversationGroup6();
 }

@@ -82,7 +82,10 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
         '推理开关控制聊天页面中推理功能的开启和关闭，由您定义参数名和对应的开/关值。'
         '推理力度参数有且只有一个，每个含参数名和可选项，显示在推理面板中供选择。'
         '您还可以通过底部按钮添加额外的推理参数。'
-        '参数名支持点号嵌套（如 thinking.type 会展开为 {"thinking": {"type": "..."}}）。',
+        '参数名支持点号嵌套（如 thinking.type 会展开为 {"thinking": {"type": "..."}}）。'
+        '供应商已配置的推理参数会直接显示在本页（标注「来自供应商」），'
+        '修改后即变为本模型独立配置；未修改的部分始终跟随供应商设置同步。'
+        '参数与选项值均可通过上移/下移按钮排序。',
         style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
       ),
       const SizedBox(height: 12),
@@ -316,6 +319,9 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                         (p) => p.paramName.trim() == name,
                       ) !=
                       i ||
+                  // 与推理参数重名（含继承自供应商的）同样拦截：
+                  // 自定义参数会覆盖推理参数的值，聊天面板上的推理
+                  // 开关会失效（与保存校验一致）。
                   _reasoningParams.any(
                     (p) => p.paramName.trim() == name,
                   ));
