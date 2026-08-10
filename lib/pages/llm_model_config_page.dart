@@ -298,6 +298,16 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       m?.reasoningParams ?? [],
     );
 
+    // 「没有就不显示」：供应商的力度参数未设置任何选项值（仅参数名）
+    // 且模型也没有自己的力度参数时，模型页不显示它——力度区只在有值
+    // （供应商或模型）时出现，用户可在模型页自建。
+    final providerEffort = findEffortParam(provider?.reasoningParams ?? []);
+    final modelEffortParam = findEffortParam(m?.reasoningParams ?? []);
+    if (modelEffortParam == null &&
+        (providerEffort == null || providerEffort.options.isEmpty)) {
+      _reasoningParams.removeWhere((p) => p.isEffortParam);
+    }
+
     // 推理力度「勾选块」初始化：
     // - 块顺序：模型已保存的顺序在前（模型有力度参数时），供应商
     //   独有值追加——保证「打开即未修改」比较成立（工作副本与初始
@@ -305,9 +315,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // - 勾选 = 模型已保存的 options；模型未保存过勾选（新建模型或
     //   编辑但模型无力度参数）时默认全不选，用户显式勾选想显示的值；
     // - 供应商来源判定用于删除按钮的显隐。
-    final providerEffort = findEffortParam(provider?.reasoningParams ?? []);
     _providerEffortValues = {...providerEffort?.options ?? []};
-    final modelEffortParam = findEffortParam(m?.reasoningParams ?? []);
     final modelEffortValues = modelEffortParam?.options ?? [];
     _effortBlockValues = modelEffortParam != null
         ? [

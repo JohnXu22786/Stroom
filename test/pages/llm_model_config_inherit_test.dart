@@ -618,6 +618,93 @@ void main() {
           isNot(contains('provider.effort')));
     });
 
+    testWidgets('added effort values persist across reopen', (tester) async {
+      // 添加值并保存 → 重开模型页 → 值仍在且勾选
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+        ),
+        provider: _providerWithEffortOptions(['low', 'high']),
+        beforeSave: (tester) async {
+          // 勾选 low + 添加 max（自动勾选）
+          await _tapBlock(tester, 'low');
+          await _scrollToReasoning(tester, find.text('添加值'));
+          await tester.tap(find.text('添加值'));
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField).last, 'max');
+          await tester.pump();
+          await tester.tap(find.text('确定'));
+          await tester.pumpAndSettle();
+        },
+      );
+      expect(saved, isNotNull);
+      expect(_savedEffortOptions(saved!), ['low', 'max']);
+
+      // 重开：块列表 = 模型保存顺序 ['low','max'] + provider 独有 ['high']
+      // 勾选 = 模型保存的 {'low','max'}
+      await _pumpAndSave(
+        tester,
+        model: saved,
+        provider: _providerWithEffortOptions(['low', 'high']),
+        tapSave: false,
+      );
+      await _scrollToReasoning(tester, find.text('reasoning_effort'));
+      expect(find.text('low'), findsOneWidget);
+      expect(find.text('max'), findsOneWidget);
+      expect(find.text('high'), findsOneWidget);
+      // max 是自定义值 → 有删除按钮
+      expect(find.byIcon(Icons.close), findsOneWidget);
+    });
+
+    testWidgets(
+        'provider name-only effort param (no values) is not shown on the '
+        'model page', (tester) async {
+      // 供应商只填了力度参数名、未设置选项值 → 模型页不显示它
+      // （「没有就不显示」），用户可在模型页自建。
+      final provider = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            enabled: true,
+            options: [],
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+        ),
+        provider: provider,
+        beforeSave: (tester) async {
+          // 力度区不显示 provider 的名称式参数（无块、无参数名）
+          await _scrollToReasoning(tester, find.text('推理参数'));
+          expect(find.text('reasoning_effort'), findsNothing);
+          expect(find.text('添加推理力度'), findsOneWidget, reason: '用户仍可在模型页自建力度参数');
+        },
+      );
+
+      expect(saved, isNotNull);
+      // provider 的名称式力度参数不写入模型
+      expect(saved!.reasoningParams.where((p) => p.isEffortParam), isEmpty);
+    });
+
     testWidgets('new model with provider params still saves', (tester) async {
       ModelConfig? saved;
       await tester.pumpWidget(

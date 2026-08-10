@@ -40,7 +40,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
     final chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: selected ? cs.primary : cs.surfaceContainerHighest,
+        // 配色与聊天推理面板的 OptionChip 一致：
+        // 选中 = primaryContainer 淡底色 + 主色边框；未选 = 透明 + 灰边框
+        color: selected ? cs.primaryContainer : Colors.transparent,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: selected ? cs.primary : cs.outlineVariant,
@@ -52,7 +54,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
         style: TextStyle(
           fontSize: 13,
           fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-          color: selected ? cs.onPrimary : cs.onSurfaceVariant,
+          color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
         ),
       ),
     );
