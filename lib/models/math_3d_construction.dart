@@ -569,6 +569,9 @@ class ToolFactory {
         final obj = _objectOf(inputs[0]);
         final c = _pointOf(inputs[1]);
         final factor = _numberOf(inputs[2]);
+        // A zero factor collapses the object to a point; refuse it like
+        // GeoGebra does instead of producing a degenerate solid.
+        if (factor.abs() < 1e-12) return const ConstructionResult();
         return ConstructionResult(created: [
           obj.scaled(c, factor),
         ]);

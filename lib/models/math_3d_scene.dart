@@ -618,7 +618,6 @@ class Scene3D {
         return null;
 
       case Object3DType.segment:
-      case Object3DType.vector:
         final a = proj.project(obj.pointAValue);
         final b = proj.project(obj.pointBValue);
         if (a == null || b == null) return null;
@@ -626,6 +625,20 @@ class Scene3D {
         if (d <= radius) {
           final world =
               closestOnSegmentToRay(obj.pointAValue, obj.pointBValue, ray);
+          return (obj, world, d);
+        }
+        return null;
+
+      case Object3DType.vector:
+        // Vectors store point + vector (pointA/pointB fall back to origin,
+        // so the generic segment path above can never hit a real vector).
+        final a = proj.project(obj.pointValue);
+        final b = proj.project(obj.pointValue + obj.vectorValue);
+        if (a == null || b == null) return null;
+        final d = _screenDistanceToSegment(sx, sy, a, b);
+        if (d <= radius) {
+          final world = closestOnSegmentToRay(
+              obj.pointValue, obj.pointValue + obj.vectorValue, ray);
           return (obj, world, d);
         }
         return null;

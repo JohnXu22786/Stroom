@@ -99,6 +99,8 @@ class MathCanvas3DState extends State<MathCanvas3D>
   Offset? _tapStart;
   Point3D? _constGroundPos;
   double _constHeight = 0;
+  bool _gestureHadMultiPointer = false; // pinch started during this gesture
+  bool _gestureDragged = false; // an object was actually moved this gesture
   bool _constCommitted = false;
 
   // Canvas size
@@ -370,6 +372,8 @@ class MathCanvas3DState extends State<MathCanvas3D>
     _draggingObject = false;
     _pendingObjectHit = null;
     _prevSelected = _selected;
+    _gestureHadMultiPointer = false;
+    _gestureDragged = false;
 
     // Pause auto-rotation while interacting (resumed on scale end).
     if (_autoRotating) {
@@ -408,6 +412,7 @@ class MathCanvas3DState extends State<MathCanvas3D>
   void _onScaleUpdate(ScaleUpdateDetails details) {
     final focalPoint = details.focalPoint;
     final scale = details.scale;
+    if (details.pointerCount >= 2) _gestureHadMultiPointer = true;
 
     // ---- Construction: place point on ground, drag changes height ----
     // Only single-pointer gestures place points; pinch is camera control.
@@ -445,6 +450,7 @@ class MathCanvas3DState extends State<MathCanvas3D>
           _tapCandidate = false;
         }
         _moveSelectedObject(focalPoint);
+        _gestureDragged = true;
         _lastFocalPoint = focalPoint;
         return;
       }
@@ -527,11 +533,14 @@ class MathCanvas3DState extends State<MathCanvas3D>
 
   void _onScaleEnd(ScaleEndDetails details) {
     // ---- Construction: commit the picked object or placed point ----
+    // A pinch that started as one finger and lost the second mid-gesture
+    // must not commit a point at the pinch's final position.
     if (_tool != ConstructionTool.move &&
         _construction != null &&
         !_construction!.isComplete &&
         !_constCommitted &&
-        details.pointerCount <= 1) {
+        details.pointerCount <= 1 &&
+        !_gestureHadMultiPointer) {
       _constCommitted = true;
       if (_pendingObjectHit != null) {
         // Clicked an existing object: feed it as the construction input.
@@ -573,9 +582,11 @@ class MathCanvas3DState extends State<MathCanvas3D>
         });
       }
       _draggingObject = false;
-      // Dragging replaced the selected object in the scene; let the panel
-      // (and any other listener) re-read the updated object list.
-      _notifySceneChanged();
+      // Only a drag that actually replaced an object needs to notify the
+      // panel; a plain camera-orbit gesture must not rebuild it.
+      if (_gestureDragged) {
+        _notifySceneChanged();
+      }
     }
 
     // Resume auto-rotation that was paused for this interaction.

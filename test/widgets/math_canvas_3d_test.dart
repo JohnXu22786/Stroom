@@ -1,9 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/math_3d_object.dart';
-import 'package:stroom/models/math_3d_scene.dart' show ProjectionType;
-import 'package:stroom/models/math_3d_tool.dart';
 import 'package:stroom/widgets/math_canvas_3d.dart';
 
 Widget _wrap(Widget child) {
@@ -81,7 +79,7 @@ void main() {
 
       state.resetView();
       await tester.pump();
-      expect(state.camera.theta, closeTo(dart_math_pi_4, 0.01));
+      expect(state.camera.theta, closeTo(piOver4, 0.01));
       expect(state.camera.distance, closeTo(12, 0.01));
     });
 
@@ -175,7 +173,7 @@ void main() {
       final thetaAfter = state.camera.theta;
       state.setAutoRotate(false);
       await tester.pump(const Duration(milliseconds: 100));
-      expect(thetaAfter, isNot(closeTo(dart_math_pi_4, 0.001)));
+      expect(thetaAfter, isNot(closeTo(piOver4, 0.001)));
     });
 
     testWidgets('selectObject and keyboard movement', (tester) async {
@@ -207,7 +205,7 @@ void main() {
       await tester.pump();
 
       final state = tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
-      // Tap the canvas center → ground point at the origin.
+      // Tap the canvas center â†’ ground point at the origin.
       await tester.tap(find.byType(MathCanvas3D));
       await tester.pump();
       await tester.pump();
@@ -419,7 +417,7 @@ void main() {
       ], name: 'poly'));
       await tester.pump();
 
-      // Click exactly on vertex (0,0,0) — floating-point sign noise at the
+      // Click exactly on vertex (0,0,0) â€” floating-point sign noise at the
       // barycentric boundary must not reject the hit (regression for the
       // CI-only failure where libm produced u = -1e-16).
       final proj = state.scene.projection;
@@ -445,7 +443,7 @@ void main() {
       await tester.pump();
 
       final moved = state.objects.first;
-      // Screen +50px at default camera ≈ 0.75 world units along (-1,1,0).
+      // Screen +50px at default camera â‰ˆ 0.75 world units along (-1,1,0).
       expect(moved.pointValue.x, lessThan(-0.3));
       expect(moved.pointValue.y, greaterThan(0.3));
       expect(moved.pointValue.z, closeTo(0, 1e-9));
@@ -517,4 +515,4 @@ void main() {
   });
 }
 
-const dart_math_pi_4 = 0.7853981633974483;
+const piOver4 = 0.7853981633974483;

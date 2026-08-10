@@ -339,4 +339,40 @@ void main() {
       expect(snapped.z, closeTo(3, 1e-9));
     });
   });
+
+  group('Solid axis support', () {
+    test('anchorPoint of a tilted cone is the axis midpoint', () {
+      final cone =
+          Object3D.cone(Point3D.origin, 1, 3, axis: const Vector3D(1, 0, 0));
+      final a = cone.anchorPoint;
+      expect(a.x, closeTo(1.5, 1e-9));
+      expect(a.y, closeTo(0, 1e-9));
+      expect(a.z, closeTo(0, 1e-9));
+    });
+
+    test('samplePoints of a tilted cylinder bound its true extent', () {
+      final cyl = Object3D.cylinder(Point3D.origin, 1, 3,
+          axis: const Vector3D(1, 0, 0));
+      final pts = cyl.samplePoints();
+      var maxX = -double.infinity, minX = double.infinity;
+      var maxY = -double.infinity, minY = double.infinity;
+      var maxZ = -double.infinity, minZ = double.infinity;
+      for (final p in pts) {
+        maxX = maxX < p.x ? p.x : maxX;
+        minX = minX > p.x ? p.x : minX;
+        maxY = maxY < p.y ? p.y : maxY;
+        minY = minY > p.y ? p.y : minY;
+        maxZ = maxZ < p.z ? p.z : maxZ;
+        minZ = minZ > p.z ? p.z : minZ;
+      }
+      // Extent along the axis: 0..3 (radius 1).
+      expect(maxX, closeTo(3, 1e-9));
+      expect(minX, closeTo(0, 1e-9));
+      // Radial extent: ±1 in y/z.
+      expect(maxY, closeTo(1, 1e-9));
+      expect(minY, closeTo(-1, 1e-9));
+      expect(maxZ, closeTo(1, 1e-9));
+      expect(minZ, closeTo(-1, 1e-9));
+    });
+  });
 }

@@ -418,6 +418,42 @@ void main() {
       expect(hit, isNotNull);
       expect(hit!.$1.name, 'K');
     });
+
+    test('pick hits a vector away from the origin', () {
+      final scene = Scene3D()
+        ..setViewport(800, 600)
+        ..add(Object3D.vectorObj(
+            const Point3D(2, 3, 1), const Vector3D(3, 1, 2),
+            name: 'u'));
+      const mid = Point3D(3.5, 3.5, 2); // actual midpoint of the vector
+      final cam =
+          Camera3D(target: mid, distance: 8, theta: dart_math.pi / 4, phi: 0.6);
+      scene.setCamera(cam);
+      final s = scene.projection.project(mid)!;
+      final hit = scene.pick(s.x, s.y);
+      expect(hit, isNotNull);
+      expect(hit!.$1.name, 'u');
+    });
+
+    test('downward cone (anti-parallel axis) keeps outward normals', () {
+      // A cone whose axis points at -Z must keep outward face normals: a
+      // point reflection (-x,-y,-z) has determinant -1 and flips the
+      // winding, turning the base-disk normal inward (back-face culling
+      // would then hide the base). A 180° rotation around X preserves
+      // orientation: the base disk of the downward cone points +Z (away
+      // from the interior below it).
+      final mesh = MeshBuilder.cone(1, 3, segments: 24);
+      final flipped = Object3D.alignSolidMesh(mesh, const Vector3D(0, 0, -1));
+      // Apex lands at the -Z end.
+      expect(flipped.vertices[0].z, closeTo(-3, 1e-9));
+      // Base disk triangle (center, nextRim, prevRim): outward normal +Z.
+      final center = flipped.vertices[25];
+      final rimA = flipped.vertices[1];
+      final rimB = flipped.vertices[2];
+      final diskNormal = (rimB - center).cross(rimA - center);
+      expect(diskNormal.z, greaterThan(0),
+          reason: 'base disk normal must point away from the solid');
+    });
   });
 
   group('Scene3D projection round trip', () {

@@ -677,10 +677,12 @@ class Object3D {
     if (a.isZero) return mesh;
     final k = Vector3D.unitZ.cross(a);
     if (k.magnitudeSquared < 1e-18) {
-      // Parallel or anti-parallel with +Z.
-      return a.z < 0
-          ? mesh.transformed((p) => Point3D(-p.x, -p.y, -p.z))
-          : mesh;
+      // Parallel or anti-parallel with +Z. The flip must be a proper
+      // rotation (e.g. 180° around X: (x, y, z) → (x, -y, -z)), NOT a
+      // point reflection (-x, -y, -z): a reflection has determinant -1,
+      // which reverses triangle winding and turns outward normals inward
+      // (back-face culling then hides the solid entirely).
+      return a.z < 0 ? mesh.transformed((p) => Point3D(p.x, -p.y, -p.z)) : mesh;
     }
     final theta = dart_math.atan2(k.magnitude, Vector3D.unitZ.dot(a));
     return mesh.transformed(
@@ -720,7 +722,9 @@ class Object3D {
         return sphereCenter;
       case Object3DType.cone:
       case Object3DType.cylinder:
-        return solidCenter + Vector3D(0, 0, solidHeight / 2);
+        // Midpoint of the axis (base center + axis·h/2), works for any
+        // solid axis, not just +Z.
+        return solidCenter + solidAxisValue * (solidHeight / 2);
       case Object3DType.plane:
         // Closest point of the plane to the origin.
         final n = planeNormal;
@@ -846,12 +850,14 @@ class Object3D {
       case Object3DType.segment:
         return [pointAValue, pointBValue];
       case Object3DType.line:
-        return [
-          pointAValue + vectorValue * (-10),
-          pointAValue + vectorValue * 10,
-        ];
+        // Same fixed-length representation the renderer and picker use.
+        final dir = vectorValue.normalized();
+        if (dir.isZero) return [pointAValue];
+        return [pointAValue + dir * (-20), pointAValue + dir * 20];
       case Object3DType.ray:
-        return [pointAValue, pointAValue + vectorValue * 10];
+        final dir = vectorValue.normalized();
+        if (dir.isZero) return [pointAValue];
+        return [pointAValue, pointAValue + dir * 40];
       case Object3DType.vector:
         return [pointValue, pointValue + vectorValue];
       case Object3DType.circle:
@@ -873,14 +879,21 @@ class Object3D {
         ];
       case Object3DType.cone:
       case Object3DType.cylinder:
+        // Sample along the solid axis and perpendicular to it so the
+        // bounding box / fitToView covers the actual extent of tilted
+        // solids.
         final c = solidCenter;
         final r = solidRadius;
         final h = solidHeight;
+        final a = solidAxisValue;
+        final (u, v) = circleBasis(a);
         return [
-          c + Vector3D(-r, -r, 0),
-          c + Vector3D(r, r, 0),
-          c + Vector3D(0, 0, h),
-          c + Vector3D(r, -r, h),
+          c + u * r,
+          c + u * (-r),
+          c + v * r,
+          c + v * (-r),
+          c + a * h,
+          c,
         ];
       case Object3DType.plane:
         return const [];
@@ -1183,7 +1196,14 @@ class Object3D {
         final c0 = solidCenter;
         final h0 = solidHeight;
         final r0 = solidRadius;
-        final a0 = solidAxisValue;
+        final a0 = solidAxisValue.normalized();
+        if (a0.isZero) {
+          return type == Object3DType.cone
+              ? Object3D.cone(c0, r0, h0,
+                  name: name, visible: visible, style: style)
+              : Object3D.cylinder(c0, r0, h0,
+                  name: name, visible: visible, style: style);
+        }
         final c1 = f(c0);
         final axis1 = f(c0 + a0) - c1;
         final perp = a0.z.abs() < 0.9
