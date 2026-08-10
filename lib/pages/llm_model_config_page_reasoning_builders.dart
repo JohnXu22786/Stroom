@@ -204,6 +204,13 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 // 参数值类型选择
                 _buildTypeDropdown(toggle, cs),
                 const SizedBox(width: 4),
+                // 还原此参数（重置为打开时的状态）
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 20),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '还原此参数',
+                  onPressed: () => _resetReasoningParam(toggle),
+                ),
                 IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                   onPressed: () =>
@@ -216,7 +223,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
             TextFormField(
               initialValue: toggle.paramName,
               decoration: InputDecoration(
-                labelText: '参数名',
+                labelText: '参数名（${_paramSourceLabel(toggle)}）',
                 hintText: '如 thinking.type、reasoning',
                 border: const OutlineInputBorder(),
                 isDense: true,
@@ -342,6 +349,13 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 ),
                 _buildTypeDropdown(effort, cs),
                 const SizedBox(width: 4),
+                // 还原此参数（重置为打开时的状态，含勾选块）
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 20),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '还原此参数',
+                  onPressed: () => _resetReasoningParam(effort),
+                ),
                 IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                   onPressed: () =>
@@ -355,7 +369,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               initialValue: effort.paramName,
               readOnly: !toggleComplete,
               decoration: InputDecoration(
-                labelText: '参数名',
+                labelText: '参数名（${_paramSourceLabel(effort)}）',
                 hintText: toggleComplete ? '如 reasoning_effort' : '请先填写推理开关',
                 border: const OutlineInputBorder(),
                 isDense: true,
@@ -368,35 +382,74 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               },
             ),
             const SizedBox(height: 8),
-            Text(
-              '点击块选中/取消（选中的值将显示在聊天推理面板），'
-              '长按块拖拽排序。供应商的值不可删除，取消勾选即可隐藏。',
-              style: TextStyle(
-                fontSize: 12,
-                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+            // 参数值区按类型区分：
+            // string/number → 勾选块（多选 + 长按排序）；
+            // json → 大输入框（单个 JSON 值）；
+            // boolean → 无参数值（只有参数名）。
+            if (effort.type == 'boolean')
+              Text(
+                '布尔类型无需配置参数值，聊天面板提供开/关切换。',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
+              )
+            else if (effort.type == 'json')
+              TextFormField(
+                initialValue:
+                    effort.options.isNotEmpty ? effort.options.first : '',
+                readOnly: !toggleComplete,
+                maxLines: 5,
+                decoration: InputDecoration(
+                  labelText: 'JSON 值',
+                  hintText: '如 {"thinking": {"budget": 1024}}',
+                  border: const OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                  errorText: _jsonValueError(
+                          effort.options.isNotEmpty ? effort.options.first : '')
+                      ? 'JSON 格式不正确'
+                      : null,
+                  errorStyle: const TextStyle(fontSize: 11),
+                ),
+                onChanged: (v) {
+                  final text = v.trim();
+                  effort.options
+                    ..clear()
+                    ..addAll(text.isNotEmpty ? [text] : []);
+                  setState(() {});
+                },
+              )
+            else ...[
+              Text(
+                '点击块选中/取消（选中的值将显示在聊天推理面板），'
+                '长按块拖拽排序。供应商的值不可删除，取消勾选即可隐藏。',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            // 勾选块：横向胶囊排列，长按拖拽排序
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final value in _effortBlockValues)
-                  _buildEffortOptionBlock(
-                    value,
-                    cs,
-                    selected: _effortSelectedValues.contains(value),
-                    fromProvider: _providerEffortValues.contains(value),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            TextButton.icon(
-              icon: Icon(Icons.add, size: 16),
-              label: Text('添加值', style: TextStyle(fontSize: 13)),
-              onPressed: toggleComplete ? _addEffortBlockWithDialog : null,
-            ),
+              const SizedBox(height: 8),
+              // 勾选块：横向胶囊排列，长按拖拽排序
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final value in _effortBlockValues)
+                    _buildEffortOptionBlock(
+                      value,
+                      cs,
+                      selected: _effortSelectedValues.contains(value),
+                      fromProvider: _providerEffortValues.contains(value),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              TextButton.icon(
+                icon: Icon(Icons.add, size: 16),
+                label: Text('添加值', style: TextStyle(fontSize: 13)),
+                onPressed: toggleComplete ? _addEffortBlockWithDialog : null,
+              ),
+            ],
             if (!toggleComplete)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -473,7 +526,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                   child: TextFormField(
                     initialValue: param.paramName,
                     decoration: InputDecoration(
-                      labelText: '参数名（支持点号嵌套）',
+                      labelText: '参数名（${_paramSourceLabel(param)}）',
                       border: const OutlineInputBorder(),
                       isDense: true,
                       hintText: '如 thinking.type 或 budget_tokens',
@@ -497,80 +550,119 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               ],
             ),
             const SizedBox(height: 8),
-            Text(
-              '选项值',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: cs.onSurfaceVariant,
+            // 参数值区按类型区分：string/number → 选项行；json → 大输入框；
+            // boolean → 无参数值（只有参数名）。
+            if (param.type == 'boolean')
+              Text(
+                '布尔类型无需配置参数值，聊天面板提供开/关切换。',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
+              )
+            else if (param.type == 'json')
+              TextFormField(
+                initialValue:
+                    param.options.isNotEmpty ? param.options.first : '',
+                maxLines: 5,
+                decoration: InputDecoration(
+                  labelText: 'JSON 值',
+                  hintText: '如 {"thinking": {"budget": 1024}}',
+                  border: const OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                  errorText: _jsonValueError(
+                          param.options.isNotEmpty ? param.options.first : '')
+                      ? 'JSON 格式不正确'
+                      : null,
+                  errorStyle: const TextStyle(fontSize: 11),
+                ),
+                onChanged: (v) {
+                  final text = v.trim();
+                  param.options
+                    ..clear()
+                    ..addAll(text.isNotEmpty ? [text] : []);
+                  setState(() {});
+                },
+              )
+            else ...[
+              Text(
+                '选项值',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurfaceVariant,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '这些选项将按顺序显示在推理面板中供选择，长按拖动排序。'
-              '启用/禁用开关在推理面板中操作。',
-              style: TextStyle(
-                fontSize: 11,
-                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+              const SizedBox(height: 4),
+              Text(
+                '这些选项将按顺序显示在推理面板中供选择，长按拖动排序。'
+                '启用/禁用开关在推理面板中操作。',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            // 选项值行（长按拖拽排序）
-            ReorderableListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              buildDefaultDragHandles: true,
-              itemCount: param.options.length,
-              onReorderItem: (oldIndex, newIndex) {
-                setState(() {
-                  final value = param.options.removeAt(oldIndex);
-                  param.options.insert(newIndex, value);
-                });
-              },
-              itemBuilder: (context, j) {
-                return Row(
-                  key: ValueKey('opt-$actualIndex-$j'),
-                  children: [
-                    _buildDragHandle(index: j),
-                    const SizedBox(width: 2),
-                    Expanded(
-                      child: TextFormField(
-                        initialValue: param.options[j],
-                        decoration: InputDecoration(
-                          labelText: '选项 ${j + 1}',
-                          hintText: '如 low, enabled, true, max',
-                          border: const OutlineInputBorder(),
-                          isDense: true,
+              const SizedBox(height: 8),
+              // 选项值行（长按拖拽排序）
+              ReorderableListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                buildDefaultDragHandles: true,
+                itemCount: param.options.length,
+                onReorderItem: (oldIndex, newIndex) {
+                  setState(() {
+                    final value = param.options.removeAt(oldIndex);
+                    param.options.insert(newIndex, value);
+                  });
+                },
+                itemBuilder: (context, j) {
+                  return Padding(
+                    key: ValueKey('opt-$actualIndex-$j'),
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        _buildDragHandle(index: j),
+                        const SizedBox(width: 2),
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: param.options[j],
+                            decoration: InputDecoration(
+                              labelText: '选项 ${j + 1}',
+                              hintText: '如 low, enabled, true, max',
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onChanged: (v) {
+                              param.options[j] = v;
+                              setState(() {});
+                            },
+                          ),
                         ),
-                        onChanged: (v) {
-                          param.options[j] = v;
-                          setState(() {});
-                        },
-                      ),
+                        const SizedBox(width: 4),
+                        if (param.options.length > 1)
+                          IconButton(
+                            icon: const Icon(
+                              Icons.remove_circle,
+                              color: Colors.red,
+                              size: 18,
+                            ),
+                            onPressed: () {
+                              _removeOptionFromParam(actualIndex, j);
+                            },
+                            tooltip: '删除选项',
+                          ),
+                      ],
                     ),
-                    const SizedBox(width: 4),
-                    if (param.options.length > 1)
-                      IconButton(
-                        icon: const Icon(
-                          Icons.remove_circle,
-                          color: Colors.red,
-                          size: 18,
-                        ),
-                        onPressed: () {
-                          _removeOptionFromParam(actualIndex, j);
-                        },
-                        tooltip: '删除选项',
-                      ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 4),
-            TextButton.icon(
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('添加选项', style: TextStyle(fontSize: 13)),
-              onPressed: () => _addOptionToParam(actualIndex),
-            ),
+                  );
+                },
+              ),
+              const SizedBox(height: 4),
+              TextButton.icon(
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('添加选项', style: TextStyle(fontSize: 13)),
+                onPressed: () => _addOptionToParam(actualIndex),
+              ),
+            ],
           ],
         ),
       ),

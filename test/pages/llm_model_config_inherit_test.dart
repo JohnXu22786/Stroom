@@ -328,7 +328,7 @@ void main() {
           await tester.pumpAndSettle();
           await tester.timedDrag(
             cardHandle,
-            const Offset(0, 120),
+            const Offset(0, 300),
             const Duration(milliseconds: 300),
           );
           await tester.pumpAndSettle();
@@ -703,6 +703,163 @@ void main() {
       expect(saved, isNotNull);
       // provider 的名称式力度参数不写入模型
       expect(saved!.reasoningParams.where((p) => p.isEffortParam), isEmpty);
+    });
+
+    testWidgets('reset button restores the effort param to its open state',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['low', 'high'],
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('reasoning_effort'));
+          // 勾选 low 再取消 → 改为勾选 high
+          await _tapBlock(tester, 'low');
+          await _tapBlock(tester, 'high');
+          // 点 reset（力度卡头部的刷新图标）
+          final resetIcon = find
+              .descendant(
+                of: find.ancestor(
+                  of: find.text('推理力度'),
+                  matching: find.byType(Card),
+                ),
+                matching: find.byIcon(Icons.refresh),
+              )
+              .first;
+          await tester.ensureVisible(resetIcon);
+          await tester.pumpAndSettle();
+          await tester.tap(resetIcon);
+          await tester.pump();
+        },
+      );
+
+      expect(saved, isNotNull);
+      // reset 后还原为打开时勾选（模型保存的 ['low','high']）
+      expect(_savedEffortOptions(saved!), ['low', 'high']);
+    });
+
+    testWidgets('param name label shows the source state', (tester) async {
+      // provider 提供的参数 → 「当前：供应商」；模型保存的参数 → 模型自定义
+      final provider = _providerWithEffortOptions(['low', 'medium']);
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          // 模型只保存了力度参数（无开关）→ 开关来自 provider
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['low', 'high'],
+          ),
+        ],
+      );
+
+      await _pumpAndSave(tester,
+          model: model, provider: provider, tapSave: false);
+      // 模型保存的力度参数 → 模型自定义
+      await _scrollToReasoning(tester, find.text('reasoning_effort'));
+      expect(find.textContaining('当前：模型自定义'), findsOneWidget);
+      // provider 的推理开关（模型未保存）→ 供应商（滚动到开关区）
+      await _scrollToReasoning(tester, find.text('thinking.type'), delta: -200);
+      expect(find.textContaining('当前：供应商'), findsWidgets);
+    });
+
+    testWidgets('json type shows a large input instead of option blocks',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'thinking_config',
+            isEffortParam: true,
+            type: 'json',
+            options: ['{"thinking": {"budget": 1024}}'],
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('thinking_config'));
+          // json 类型：大输入框 + 无勾选块/添加值按钮
+          expect(find.byType(TextField).last, findsOneWidget);
+          // 大输入框内容即保存值
+          await tester.enterText(
+            find.widgetWithText(TextFormField, 'JSON 值'),
+            '{"thinking": {"budget": 2048}}',
+          );
+          await tester.pump();
+        },
+      );
+
+      expect(saved, isNotNull);
+      final effort = saved!.reasoningParams.firstWhere((p) => p.isEffortParam);
+      expect(effort.options, ['{"thinking": {"budget": 2048}}']);
+    });
+
+    testWidgets('boolean type has no value area', (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'use_cache',
+            isEffortParam: true,
+            type: 'boolean',
+            options: [],
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('use_cache'));
+          // 布尔类型：无添加值按钮、无选项块
+          expect(find.text('添加值'), findsNothing);
+          expect(find.textContaining('无需配置参数值'), findsOneWidget);
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(_savedEffortOptions(saved!), isEmpty);
     });
 
     testWidgets('new model with provider params still saves', (tester) async {

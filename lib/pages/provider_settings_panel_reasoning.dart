@@ -101,6 +101,33 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
   // 推理参数帮助方法
   // ===================================================================
 
+  /// 还原参数到打开页面时的初始状态（reset 按钮）。
+  void _resetReasoningParam(ReasoningParam param) {
+    final snapshot = _initialParamSnapshots[param];
+    if (snapshot == null) return;
+    setState(() {
+      param.paramName = snapshot.paramName;
+      param.onValue = snapshot.onValue;
+      param.offValue = snapshot.offValue;
+      param.type = snapshot.type;
+      param.enabled = snapshot.enabled;
+      param.options
+        ..clear()
+        ..addAll(snapshot.options);
+    });
+  }
+
+  /// JSON 值格式校验（json 类型参数的大输入框用）。
+  bool _jsonValueError(String value) {
+    if (value.trim().isEmpty) return false;
+    try {
+      jsonDecode(value.trim());
+      return false;
+    } catch (_) {
+      return true;
+    }
+  }
+
   /// Returns the reasoning toggle param, or null if none exists.
   ReasoningParam? get _toggleReasoningParam => _reasoningParams
       .cast<ReasoningParam?>()
@@ -267,6 +294,13 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 // 参数值类型选择
                 _buildTypeDropdown(toggle, cs),
                 const SizedBox(width: 4),
+                // 还原此参数（重置为打开时的状态）
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 20),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '还原此参数',
+                  onPressed: () => _resetReasoningParam(toggle),
+                ),
                 IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                   onPressed: () =>
@@ -406,6 +440,13 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 ),
                 _buildTypeDropdown(effort, cs),
                 const SizedBox(width: 4),
+                // 还原此参数（重置为打开时的状态）
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 20),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '还原此参数',
+                  onPressed: () => _resetReasoningParam(effort),
+                ),
                 IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                   onPressed: () =>
@@ -432,81 +473,121 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               },
             ),
             const SizedBox(height: 8),
-            Text(
-              '选项值（可选，仅填参数名时参数值由模型配置提供；拖动把手排序）',
-              style: TextStyle(
-                fontSize: 12,
-                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+            // 参数值区按类型区分：string/number → 选项行；json → 大输入框；
+            // boolean → 无参数值（只有参数名）。
+            if (effort.type == 'boolean')
+              Text(
+                '布尔类型无需配置参数值，聊天面板提供开/关切换。',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
+              )
+            else if (effort.type == 'json')
+              TextFormField(
+                initialValue:
+                    effort.options.isNotEmpty ? effort.options.first : '',
+                readOnly: !toggleComplete,
+                maxLines: 5,
+                decoration: InputDecoration(
+                  labelText: 'JSON 值',
+                  hintText: '如 {"thinking": {"budget": 1024}}',
+                  border: const OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                  errorText: _jsonValueError(
+                          effort.options.isNotEmpty ? effort.options.first : '')
+                      ? 'JSON 格式不正确'
+                      : null,
+                  errorStyle: const TextStyle(fontSize: 11),
+                ),
+                onChanged: (v) {
+                  final text = v.trim();
+                  effort.options
+                    ..clear()
+                    ..addAll(text.isNotEmpty ? [text] : []);
+                  setState(() {});
+                },
+              )
+            else ...[
+              Text(
+                '选项值（可选，仅填参数名时参数值由模型配置提供；拖动把手排序）',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            // 选项值行（可拖拽排序）
-            ReorderableListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              buildDefaultDragHandles: false,
-              itemCount: effort.options.length,
-              onReorderItem: (oldIndex, newIndex) => _reorderOptionInParam(
-                  _reasoningParams.indexOf(effort), oldIndex, newIndex),
-              itemBuilder: (context, j) {
-                return Row(
-                  key: ValueKey('effort-opt-$j'),
-                  children: [
-                    if (toggleComplete)
-                      _buildDragHandle(index: j)
-                    else
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 2),
-                        child: Icon(Icons.drag_handle,
-                            size: 20, color: Colors.grey),
-                      ),
-                    const SizedBox(width: 2),
-                    Expanded(
-                      child: TextFormField(
-                        initialValue: effort.options[j],
-                        readOnly: !toggleComplete,
-                        decoration: InputDecoration(
-                          labelText: '选项 ${j + 1}',
-                          hintText: toggleComplete
-                              ? '如 low, medium, high'
-                              : '请先填写推理开关',
-                          border: const OutlineInputBorder(),
-                          isDense: true,
+              const SizedBox(height: 8),
+              // 选项值行（可拖拽排序）
+              ReorderableListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                buildDefaultDragHandles: false,
+                itemCount: effort.options.length,
+                onReorderItem: (oldIndex, newIndex) => _reorderOptionInParam(
+                    _reasoningParams.indexOf(effort), oldIndex, newIndex),
+                itemBuilder: (context, j) {
+                  return Padding(
+                    key: ValueKey('effort-opt-$j'),
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        if (toggleComplete)
+                          _buildDragHandle(index: j)
+                        else
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 2),
+                            child: Icon(Icons.drag_handle,
+                                size: 20, color: Colors.grey),
+                          ),
+                        const SizedBox(width: 2),
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: effort.options[j],
+                            readOnly: !toggleComplete,
+                            decoration: InputDecoration(
+                              labelText: '选项 ${j + 1}',
+                              hintText: toggleComplete
+                                  ? '如 low, medium, high'
+                                  : '请先填写推理开关',
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onChanged: (v) {
+                              effort.options[j] = v;
+                              setState(() {});
+                            },
+                          ),
                         ),
-                        onChanged: (v) {
-                          effort.options[j] = v;
-                          setState(() {});
-                        },
-                      ),
+                        const SizedBox(width: 4),
+                        if (effort.options.length > 1)
+                          IconButton(
+                            icon: const Icon(
+                              Icons.remove_circle,
+                              color: Colors.red,
+                              size: 18,
+                            ),
+                            onPressed: toggleComplete
+                                ? () => _removeOptionFromParam(
+                                      _reasoningParams.indexOf(effort),
+                                      j,
+                                    )
+                                : null,
+                            tooltip: '删除选项',
+                          ),
+                      ],
                     ),
-                    const SizedBox(width: 4),
-                    if (effort.options.length > 1)
-                      IconButton(
-                        icon: const Icon(
-                          Icons.remove_circle,
-                          color: Colors.red,
-                          size: 18,
-                        ),
-                        onPressed: toggleComplete
-                            ? () => _removeOptionFromParam(
-                                  _reasoningParams.indexOf(effort),
-                                  j,
-                                )
-                            : null,
-                        tooltip: '删除选项',
-                      ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 4),
-            TextButton.icon(
-              icon: Icon(Icons.add, size: 16),
-              label: Text('添加选项', style: TextStyle(fontSize: 13)),
-              onPressed: toggleComplete
-                  ? () => _addOptionToParam(_reasoningParams.indexOf(effort))
-                  : null,
-            ),
+                  );
+                },
+              ),
+              const SizedBox(height: 4),
+              TextButton.icon(
+                icon: Icon(Icons.add, size: 16),
+                label: Text('添加选项', style: TextStyle(fontSize: 13)),
+                onPressed: toggleComplete
+                    ? () => _addOptionToParam(_reasoningParams.indexOf(effort))
+                    : null,
+              ),
+            ],
             if (!toggleComplete)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -616,74 +697,114 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               ],
             ),
             const SizedBox(height: 8),
-            Text(
-              '选项值',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: cs.onSurfaceVariant,
+            // 参数值区按类型区分：string/number → 选项行；json → 大输入框；
+            // boolean → 无参数值（只有参数名）。
+            if (param.type == 'boolean')
+              Text(
+                '布尔类型无需配置参数值，聊天面板提供开/关切换。',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
+              )
+            else if (param.type == 'json')
+              TextFormField(
+                initialValue:
+                    param.options.isNotEmpty ? param.options.first : '',
+                maxLines: 5,
+                decoration: InputDecoration(
+                  labelText: 'JSON 值',
+                  hintText: '如 {"thinking": {"budget": 1024}}',
+                  border: const OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                  errorText: _jsonValueError(
+                          param.options.isNotEmpty ? param.options.first : '')
+                      ? 'JSON 格式不正确'
+                      : null,
+                  errorStyle: const TextStyle(fontSize: 11),
+                ),
+                onChanged: (v) {
+                  final text = v.trim();
+                  param.options
+                    ..clear()
+                    ..addAll(text.isNotEmpty ? [text] : []);
+                  setState(() {});
+                },
+              )
+            else ...[
+              Text(
+                '选项值',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurfaceVariant,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '这些选项将按顺序显示在推理面板中供选择，拖动把手排序。'
-              '启用/禁用开关在推理面板中操作。',
-              style: TextStyle(
-                fontSize: 11,
-                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+              const SizedBox(height: 4),
+              Text(
+                '这些选项将按顺序显示在推理面板中供选择，拖动把手排序。'
+                '启用/禁用开关在推理面板中操作。',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            // 选项值行（可拖拽排序）
-            ReorderableListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              buildDefaultDragHandles: false,
-              itemCount: param.options.length,
-              onReorderItem: (oldIndex, newIndex) =>
-                  _reorderOptionInParam(actualIndex, oldIndex, newIndex),
-              itemBuilder: (context, j) {
-                return Row(
-                  key: ValueKey('add-opt-$actualIndex-$j'),
-                  children: [
-                    _buildDragHandle(index: j),
-                    const SizedBox(width: 2),
-                    Expanded(
-                      child: TextFormField(
-                        initialValue: param.options[j],
-                        decoration: InputDecoration(
-                          labelText: '选项 ${j + 1}',
-                          hintText: '如 low, enabled, true, max',
-                          border: const OutlineInputBorder(),
-                          isDense: true,
+              const SizedBox(height: 8),
+              // 选项值行（可拖拽排序）
+              ReorderableListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                buildDefaultDragHandles: false,
+                itemCount: param.options.length,
+                onReorderItem: (oldIndex, newIndex) =>
+                    _reorderOptionInParam(actualIndex, oldIndex, newIndex),
+                itemBuilder: (context, j) {
+                  return Padding(
+                    key: ValueKey('add-opt-$actualIndex-$j'),
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        _buildDragHandle(index: j),
+                        const SizedBox(width: 2),
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: param.options[j],
+                            decoration: InputDecoration(
+                              labelText: '选项 ${j + 1}',
+                              hintText: '如 low, enabled, true, max',
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onChanged: (v) {
+                              param.options[j] = v;
+                              setState(() {});
+                            },
+                          ),
                         ),
-                        onChanged: (v) {
-                          param.options[j] = v;
-                          setState(() {});
-                        },
-                      ),
+                        const SizedBox(width: 4),
+                        if (param.options.length > 1)
+                          IconButton(
+                            icon: const Icon(
+                              Icons.remove_circle,
+                              color: Colors.red,
+                              size: 18,
+                            ),
+                            onPressed: () =>
+                                _removeOptionFromParam(actualIndex, j),
+                            tooltip: '删除选项',
+                          ),
+                      ],
                     ),
-                    const SizedBox(width: 4),
-                    if (param.options.length > 1)
-                      IconButton(
-                        icon: const Icon(
-                          Icons.remove_circle,
-                          color: Colors.red,
-                          size: 18,
-                        ),
-                        onPressed: () => _removeOptionFromParam(actualIndex, j),
-                        tooltip: '删除选项',
-                      ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 4),
-            TextButton.icon(
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('添加选项', style: TextStyle(fontSize: 13)),
-              onPressed: () => _addOptionToParam(actualIndex),
-            ),
+                  );
+                },
+              ),
+              const SizedBox(height: 4),
+              TextButton.icon(
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('添加选项', style: TextStyle(fontSize: 13)),
+                onPressed: () => _addOptionToParam(actualIndex),
+              ),
+            ],
           ],
         ),
       ),

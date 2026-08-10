@@ -51,6 +51,19 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   /// 删除（只能取消勾选），模型自己添加的块带删除按钮。
   late Set<String> _providerEffortValues;
 
+  /// 打开页面时各推理参数工作副本的初始快照（reset 还原用，按实例
+  /// 身份索引；工作副本实例在会话内不变）。
+  late final Map<ReasoningParam, ReasoningParam> _initialParamSnapshots;
+
+  /// 打开页面时力度块状态的初始快照（reset 还原用）。
+  late List<String> _initialBlockValues;
+  late Set<String> _initialSelectedValues;
+
+  /// reset 版本号：每次还原参数时 +1，用于强制重建推理区输入框
+  /// （TextFormField 的 internal state 不会跟随 initialValue 更新，
+  /// 必须重建才能显示还原后的值）。
+  int _reasoningResetVersion = 0;
+
   final Map<int, String?> _jsonErrors = {};
 
   // Slider values
@@ -326,6 +339,13 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         : [..._providerEffortValues];
     _effortSelectedValues =
         modelEffortParam != null ? modelEffortValues.toSet() : <String>{};
+
+    // 初始快照（reset 还原用）
+    _initialParamSnapshots = {
+      for (final p in _reasoningParams) p: p.copy(),
+    };
+    _initialBlockValues = List.of(_effortBlockValues);
+    _initialSelectedValues = {..._effortSelectedValues};
   }
 
   @override

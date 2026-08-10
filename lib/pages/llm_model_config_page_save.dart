@@ -101,12 +101,14 @@ extension _SaveExt on _LlmModelConfigPageState {
       return;
     }
 
-    // Check 2: 附加推理参数（非力度）若填写了参数名，必须至少有一个选项值。
-    // 推理力度参数例外：勾选块允许全部取消（= 该模型不显示任何力度选项）。
+    // Check 2: 附加推理参数（非力度、非布尔）若填写了参数名，必须至少
+    // 有一个选项值。推理力度参数例外：勾选块允许全部取消；布尔类型
+    // 无参数值（聊天面板提供开/关切换）。
     for (int i = 0; i < _reasoningParams.length; i++) {
       final param = _reasoningParams[i];
       if (param.isReasoningToggle) continue;
       if (param.isEffortParam) continue;
+      if (param.type == 'boolean') continue;
       if (param.paramName.trim().isNotEmpty && param.options.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -272,10 +274,12 @@ extension _SaveExt on _LlmModelConfigPageState {
 
   /// 把力度勾选块同步到力度参数工作副本：
   /// 勾选的值按块顺序写入 [ReasoningParam.options]（全取消 = 空列表）。
-  /// 幂等，保存前与 _hasUnsavedChanges 比较前调用。
+  /// 仅对 string/number 类型生效：json 类型的值由大输入框直接维护，
+  /// boolean 类型无参数值。幂等，保存前与 _hasUnsavedChanges 比较前调用。
   void _syncEffortOptionsFromBlocks() {
     final effort = _effortReasoningParam;
     if (effort == null) return;
+    if (effort.type == 'json' || effort.type == 'boolean') return;
     final selected = _effortBlockValues
         .where((v) => _effortSelectedValues.contains(v))
         .toList();

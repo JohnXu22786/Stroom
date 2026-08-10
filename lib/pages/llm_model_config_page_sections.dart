@@ -65,6 +65,21 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
   }
 
   List<Widget> _buildReasoningSection(ColorScheme cs) {
+    // 外包 KeyedSubtree：reset 还原后重建整个推理区，让输入框
+    // 显示还原后的值（TextFormField 的 internal state 不跟随
+    // initialValue 更新）。
+    return [
+      KeyedSubtree(
+        key: ValueKey('reasoning-section-$_reasoningResetVersion'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _buildReasoningSectionInner(cs),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _buildReasoningSectionInner(ColorScheme cs) {
     return [
       // ==========================================================
       // 推理参数（可开关，每个参数独立控制）

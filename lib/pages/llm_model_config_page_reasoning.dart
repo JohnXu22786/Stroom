@@ -120,6 +120,57 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   // 推理参数帮助方法
   // ===================================================================
 
+  /// 还原参数到打开页面时的初始状态（reset 按钮）。力度参数同时
+  /// 还原勾选块状态。还原后重建整个推理区（版本号 +1），让输入框
+  /// 显示还原后的值。
+  void _resetReasoningParam(ReasoningParam param) {
+    final snapshot = _initialParamSnapshots[param];
+    if (snapshot == null) return;
+    setState(() {
+      param.paramName = snapshot.paramName;
+      param.onValue = snapshot.onValue;
+      param.offValue = snapshot.offValue;
+      param.type = snapshot.type;
+      param.enabled = snapshot.enabled;
+      param.options
+        ..clear()
+        ..addAll(snapshot.options);
+      if (param.isEffortParam) {
+        _effortBlockValues = List.of(_initialBlockValues);
+        _effortSelectedValues = {..._initialSelectedValues};
+      }
+      _reasoningResetVersion++;
+    });
+  }
+
+  /// JSON 值格式校验（json 类型参数的大输入框用）。
+  bool _jsonValueError(String value) {
+    if (value.trim().isEmpty) return false;
+    try {
+      jsonDecode(value.trim());
+      return false;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// 参数来源状态（参数名标签后的括号显示）：
+  /// 模型配置中已存在同名参数，或内容被编辑过（与打开时快照不同）
+  /// → 「当前：模型自定义」；否则「当前：供应商」。
+  String _paramSourceLabel(ReasoningParam param) {
+    final m = widget.model;
+    final inModel = m?.reasoningParams.any(
+          (p) =>
+              p.paramName.trim().isNotEmpty &&
+              p.paramName.trim() == param.paramName.trim(),
+        ) ??
+        false;
+    final snapshot = _initialParamSnapshots[param];
+    final edited = snapshot != null &&
+        jsonEncode(param.toMap()) != jsonEncode(snapshot.toMap());
+    return (inModel || edited) ? '当前：模型自定义' : '当前：供应商';
+  }
+
   /// Returns the reasoning toggle param, or null if none exists.
   ReasoningParam? get _toggleReasoningParam => _reasoningParams
       .cast<ReasoningParam?>()

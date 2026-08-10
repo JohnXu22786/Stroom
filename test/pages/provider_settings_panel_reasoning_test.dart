@@ -280,7 +280,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.timedDrag(
         handle,
-        const Offset(0, 120),
+        const Offset(0, 300),
         const Duration(milliseconds: 300),
       );
       await tester.pumpAndSettle();
