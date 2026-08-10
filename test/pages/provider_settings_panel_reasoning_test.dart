@@ -183,15 +183,22 @@ void main() {
       await tester.tap(find.text('参数设置'));
       await tester.pumpAndSettle();
 
-      // 滚动到力度选项区，把第一个选项值（low）下移
+      // 滚动到力度选项区，把第一个选项值（low）向下拖过第二个
       await tester.scrollUntilVisible(
         find.text('low'),
         200,
         scrollable: find.byType(Scrollable).last,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.arrow_downward).first);
-      await tester.pump();
+      final handle = find.byIcon(Icons.drag_handle).first;
+      await tester.ensureVisible(handle);
+      await tester.pumpAndSettle();
+      await tester.timedDrag(
+        handle,
+        const Offset(0, 50),
+        const Duration(milliseconds: 300),
+      );
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -253,15 +260,30 @@ void main() {
       await tester.tap(find.text('参数设置'));
       await tester.pumpAndSettle();
 
-      // 滚动到附加参数区，第一个附加参数（first_param）下移
+      // 滚动到附加参数区，第一个附加参数（first_param）向下拖
       await tester.scrollUntilVisible(
         find.text('first_param'),
         200,
         scrollable: find.byType(Scrollable).last,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.arrow_downward).first);
-      await tester.pump();
+      final handle = find
+          .descendant(
+            of: find.ancestor(
+              of: find.text('first_param'),
+              matching: find.byType(Card),
+            ),
+            matching: find.byIcon(Icons.drag_handle),
+          )
+          .first;
+      await tester.ensureVisible(handle);
+      await tester.pumpAndSettle();
+      await tester.timedDrag(
+        handle,
+        const Offset(0, 300),
+        const Duration(milliseconds: 300),
+      );
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -274,6 +296,70 @@ void main() {
             .toList(),
         ['second_param', 'first_param'],
       );
+    });
+
+    testWidgets(
+        'boolean custom param saves with empty options after type '
+        'switch', (tester) async {
+      // 类型从 string 切到 boolean 后，残留的 options 必须在保存时清空
+      // （否则请求会发送 options.first 而非默认 true）
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'verbose',
+            defaultValue: 'high',
+            type: 'string',
+          ),
+        ],
+      );
+
+      ProviderConfigItem? saved;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () async {
+                  saved = await showProviderSettingsPanel(
+                    context: context,
+                    config: config,
+                    providerType: 'llm',
+                  );
+                },
+                child: const Text('打开供应商设置'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开供应商设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('参数设置'));
+      await tester.pumpAndSettle();
+
+      // 切换到 boolean 类型（参数名行右侧的类型下拉框）
+      await tester.scrollUntilVisible(
+        find.text('verbose'),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('布尔').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      final verbose =
+          saved!.customParams.firstWhere((p) => p.paramName == 'verbose');
+      expect(verbose.type, 'boolean');
+      expect(verbose.options, isEmpty, reason: 'boolean 类型保存时清空残留 options');
     });
 
     testWidgets('duplicate reasoning param name shows inline error',

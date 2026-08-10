@@ -12,7 +12,10 @@ extension _CustomParamsExt on _LlmModelConfigPageState {
 
   void _addCustomParam() {
     setState(() {
-      _customParams.insert(0, CustomParam(paramName: '', defaultValue: ''));
+      final param = CustomParam(paramName: '', defaultValue: '');
+      _customParams.insert(0, param);
+      // 注册勾选块状态（新参数：空勾选集合）
+      _customParamSelectedValues[param] = {};
       // Shift existing error keys by +1 since a new param was inserted at 0
       final newErrors = <int, String?>{};
       for (final entry in _jsonErrors.entries) {
