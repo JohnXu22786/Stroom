@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
@@ -11,6 +12,7 @@ import '../../../providers/background_task_provider.dart';
 import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider_shared.dart';
 import '../../../utils/audio_utils.dart';
+import '../../../utils/file_manifest.dart';
 import '../../../utils/http_timeout.dart';
 import '../../../utils/provider_models.dart';
 import '../../models/block_type_definition.dart';
@@ -137,6 +139,28 @@ Future<String> _callAsrApi({
   }
 }
 
+/// Builds the ASR block's output record title from the input audio path.
+///
+/// In-app audio (TTS synthesis / audio separation products) is stored
+/// under a hash filename (`<hash>.<format>`), so the raw basename would
+/// surface as a meaningless hex string. When the input matches an
+/// [AudioRecord], the record's human-readable name is used instead —
+/// for TTS products that is the source text's first 20 chars, so a
+/// chat → tts → asr flow names its result after the text it came from.
+/// Falls back to the file basename when the input is not a known
+/// in-app audio (user files keep their own name).
+@visibleForTesting
+String asrOutputTitleFromRecords(String input, List<AudioRecord> records) {
+  final inputBasename = p.basename(input);
+  final inputHash = p.basenameWithoutExtension(inputBasename);
+  for (final r in records) {
+    if (r.hash == inputHash && r.name.trim().isNotEmpty) {
+      return '语音识别_${r.name.trim()}';
+    }
+  }
+  return '语音识别_$inputHash';
+}
+
 Future<String> executeAsrBlock({
   required TaskFlowBlock block,
   required BlockTypeDefinition def,
@@ -148,8 +172,17 @@ Future<String> executeAsrBlock({
   required ProviderEntriesState providerEntries,
   CancelToken? cancelToken,
 }) async {
-  final inputBasename = p.basename(input);
-  final title = '语音识别_${p.basenameWithoutExtension(inputBasename)}';
+  // Resolve a human-readable base for the output record name: in-app
+  // audio is stored under a hash filename — map it back to the record's
+  // name (TTS products carry the source text) so results don't surface
+  // as hex garbage. Unreadable record list → plain basename.
+  List<AudioRecord> audioRecords;
+  try {
+    audioRecords = await FileManifest.loadRecords();
+  } catch (_) {
+    audioRecords = const [];
+  }
+  final title = asrOutputTitleFromRecords(input, audioRecords);
 
   final taskId = const Uuid().v4();
   execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);

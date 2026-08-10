@@ -15,7 +15,9 @@ import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
 import 'package:stroom/task_flow/services/block_executors/chat_executor.dart';
 import 'package:stroom/task_flow/services/block_executors/shared_helpers.dart';
+import 'package:stroom/task_flow/services/block_executors/asr_executor.dart';
 import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
+import 'package:stroom/utils/file_manifest.dart';
 
 class _FakeChatStreamManager extends ChatStreamManager {
   _FakeChatStreamManager(this.onStart, {this.onCancel});
@@ -94,6 +96,62 @@ void main() {
       expect(subTaskTypeFor(BlockType.ocr), 'background');
       expect(subTaskTypeFor(BlockType.audioSeparation), 'background');
       expect(subTaskTypeFor(BlockType.custom), 'background');
+    });
+  });
+
+  group('asrOutputTitleFromRecords', () {
+    final records = [
+      AudioRecord(
+        name: '我想听一段新闻',
+        hash: 'd41d8cd98f00b204e9800998ecf8427e',
+        format: 'mp3',
+        createdAt: DateTime.now(),
+        size: 10,
+      ),
+    ];
+
+    test(
+        'input matching an in-app audio record uses the record name '
+        '(TTS product → source text), not the hash filename', () {
+      expect(
+        asrOutputTitleFromRecords(
+          '/storage/audio/d41d8cd98f00b204e9800998ecf8427e.mp3',
+          records,
+        ),
+        '语音识别_我想听一段新闻',
+      );
+    });
+
+    test('unknown input falls back to its own basename', () {
+      expect(
+        asrOutputTitleFromRecords('/storage/audio/my_voice.mp3', records),
+        '语音识别_my_voice',
+      );
+      expect(
+        asrOutputTitleFromRecords(
+          '/storage/audio/d41d8cd98f00b204e9800998ecf8427e.mp3',
+          const [],
+        ),
+        '语音识别_d41d8cd98f00b204e9800998ecf8427e',
+      );
+    });
+
+    test('record with an empty name falls back to the hash basename', () {
+      expect(
+        asrOutputTitleFromRecords(
+          '/storage/audio/d41d8cd98f00b204e9800998ecf8427e.mp3',
+          [
+            AudioRecord(
+              name: '   ',
+              hash: 'd41d8cd98f00b204e9800998ecf8427e',
+              format: 'mp3',
+              createdAt: DateTime.now(),
+              size: 10,
+            ),
+          ],
+        ),
+        '语音识别_d41d8cd98f00b204e9800998ecf8427e',
+      );
     });
   });
 

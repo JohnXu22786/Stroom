@@ -2,15 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart' show StateNotifier;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/tts_models.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/widgets/block_editor_dialog.dart';
 import 'package:stroom/task_flow/widgets/flow_block_card.dart';
+import 'package:stroom/utils/file_manifest.dart';
+import 'package:stroom/utils/text_manifest.dart';
 
 class _FakeEntriesNotifier extends ProviderEntriesNotifier {
   _FakeEntriesNotifier(ProviderEntriesState entries) {
@@ -112,6 +116,73 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认'));
     await tester.pumpAndSettle();
+  });
+
+  group('flowFolderSourceFor', () {
+    test('text-output blocks (asr/ocr/chat) list the TEXT page folders', () {
+      expect(flowFolderSourceFor(BlockType.asr, 'saveFolder'),
+          FlowFolderSource.text);
+      expect(flowFolderSourceFor(BlockType.ocr, 'saveFolder'),
+          FlowFolderSource.text);
+      expect(flowFolderSourceFor(BlockType.chat, 'saveFolder'),
+          FlowFolderSource.text);
+    });
+
+    test('audio-output blocks list the FILE page folders', () {
+      expect(flowFolderSourceFor(BlockType.tts, 'saveFolder'),
+          FlowFolderSource.file);
+      expect(flowFolderSourceFor(BlockType.audioSeparation, 'saveFolder'),
+          FlowFolderSource.file);
+      expect(flowFolderSourceFor(BlockType.catcatch, 'audioFolder'),
+          FlowFolderSource.file);
+    });
+
+    test('catcatch video folder lists the VIDEO page folders', () {
+      expect(flowFolderSourceFor(BlockType.catcatch, 'videoFolder'),
+          FlowFolderSource.video);
+    });
+  });
+
+  testWidgets(
+      'ASR block save-folder picker lists TEXT page folders, not the '
+      'audio/file page ones (records must land where the user sees them)',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    ManifestDatabase.enableTestMode();
+    FileManifest.invalidateCache();
+    TextManifest.invalidateCache();
+    // A folder that exists ONLY in the text gallery and one that exists
+    // ONLY in the file (audio) gallery.
+    await TextManifest.addRecord(TextRecord(
+      name: '笔记',
+      hash: 'txt_dir_hash',
+      format: 'txt',
+      createdAt: DateTime.now(),
+      size: 1,
+      folder: 'text_dir',
+      textLength: 1,
+    ));
+    await FileManifest.addRecord(AudioRecord(
+      name: '音频',
+      hash: 'aud_dir_hash',
+      format: 'mp3',
+      createdAt: DateTime.now(),
+      size: 1,
+      folder: 'audio_dir',
+    ));
+
+    await pumpPanel(
+      tester,
+      block: TaskFlowBlock(typeKey: BlockType.asr),
+    );
+
+    await tester.tap(find.text('选择'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('text_dir'), findsOneWidget,
+        reason: 'text-output blocks must offer the text page folders');
+    expect(find.text('audio_dir'), findsNothing,
+        reason: 'audio/page folders do not exist in the text manifest');
   });
 
   testWidgets('chat block panel shows assistant picker and input note',

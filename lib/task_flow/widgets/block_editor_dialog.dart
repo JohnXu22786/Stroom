@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,11 +11,34 @@ import '../../providers/assistant_provider.dart';
 import '../../providers/provider_config.dart';
 import '../../utils/file_manifest.dart';
 import '../../utils/provider_models.dart';
+import '../../utils/text_manifest.dart';
 import '../../utils/video_manifest.dart';
 import '../../widgets/folder_picker_dialog.dart';
 import '../models/task_flow_definition.dart';
 import '../models/block_type_definition.dart';
 import '../services/block_executors/shared_helpers.dart' show asIntParam;
+
+/// Which gallery's folders a block's save-folder param lists.
+///
+/// Text-output blocks (文字识别 / 语音识别 / 助手对话) save their
+/// records into the TEXT gallery, so their folder picker must list the
+/// text page's folders — an audio/file page folder would not exist in
+/// the text manifest and the record would be invisible there. Audio
+/// outputs live in the file gallery, video outputs in the video gallery.
+enum FlowFolderSource { text, video, file }
+
+/// Maps a block (type + param key) to the folder source of its
+/// save-folder picker.
+@visibleForTesting
+FlowFolderSource flowFolderSourceFor(BlockType typeKey, String paramKey) {
+  if (typeKey == BlockType.ocr ||
+      typeKey == BlockType.asr ||
+      typeKey == BlockType.chat) {
+    return FlowFolderSource.text;
+  }
+  if (paramKey == 'videoFolder') return FlowFolderSource.video;
+  return FlowFolderSource.file;
+}
 
 /// Opens the block settings panel for editing a [TaskFlowBlock] instance.
 ///
@@ -817,9 +841,17 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
 
   Future<void> _pickFolder(String key) async {
     final currentValue = _params[key]?.toString() ?? '';
-    final folders = key == 'videoFolder'
-        ? await VideoManifest.getAllFolders()
-        : await FileManifest.getAllFolders();
+    // The folder list must come from the manifest the block actually
+    // saves into — text-output blocks (asr/ocr/chat) list the TEXT
+    // page's folders; audio/video outputs list the file/video page's.
+    final source = _definition == null
+        ? FlowFolderSource.file
+        : flowFolderSourceFor(_definition!.typeKey, key);
+    final folders = switch (source) {
+      FlowFolderSource.text => await TextManifest.getAllFolders(),
+      FlowFolderSource.video => await VideoManifest.getAllFolders(),
+      FlowFolderSource.file => await FileManifest.getAllFolders(),
+    };
     final result = await FolderPickerDialog.show(
       context,
       currentFolder: currentValue,
