@@ -46,19 +46,10 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
         _effortSelectedValues.clear();
         _providerEffortValues.clear();
       }
-    });
-  }
-
-  /// 在 [paramIndex] 参数中添加一个选项值（空字符串，待填写）。
-  void _addOptionToParam(int paramIndex) {
-    setState(() {
-      _reasoningParams[paramIndex].options.add('');
-    });
-  }
-
-  void _removeOptionFromParam(int paramIndex, int optionIndex) {
-    setState(() {
-      _reasoningParams[paramIndex].options.removeAt(optionIndex);
+      // 删除附加参数时清理其勾选块状态
+      _additionalBlockValues.remove(removed);
+      _additionalSelectedValues.remove(removed);
+      _providerAdditionalValues.remove(removed);
     });
   }
 
@@ -117,6 +108,102 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   }
 
   // ===================================================================
+  // 附加推理参数「勾选块」操作
+  // ===================================================================
+
+  /// 点击附加参数块：勾选/取消勾选。
+  void _toggleAdditionalBlock(ReasoningParam param, String value) {
+    final selected = _additionalSelectedValues[param];
+    if (selected == null) return;
+    setState(() {
+      if (!selected.remove(value)) {
+        selected.add(value);
+      }
+    });
+  }
+
+  /// 添加附加参数值块（对话框输入，默认勾选，带删除按钮）。
+  Future<void> _addAdditionalBlockWithDialog(ReasoningParam param) async {
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('添加选项值'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '如 low、medium、high',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    if (value == null || value.isEmpty || !mounted) return;
+    setState(() {
+      final blocks = _additionalBlockValues[param];
+      final selected = _additionalSelectedValues[param];
+      if (blocks == null || selected == null) return;
+      if (!blocks.contains(value)) {
+        blocks.add(value);
+        selected.add(value);
+      }
+    });
+  }
+
+  /// 删除附加参数值块（供应商来源的块只能取消勾选，不能删除）。
+  void _removeAdditionalBlock(ReasoningParam param, String value) {
+    setState(() {
+      _additionalBlockValues[param]?.remove(value);
+      _additionalSelectedValues[param]?.remove(value);
+    });
+  }
+
+  /// 长按拖拽排序附加参数块：把 [from] 移到 [to] 的位置。
+  void _moveAdditionalBlockTo(ReasoningParam param, String from, String to) {
+    if (from == to) return;
+    setState(() {
+      final blocks = _additionalBlockValues[param];
+      if (blocks == null) return;
+      final fromIndex = blocks.indexOf(from);
+      final toIndex = blocks.indexOf(to);
+      if (fromIndex < 0 || toIndex < 0) return;
+      blocks.removeAt(fromIndex);
+      blocks.insert(toIndex, from);
+    });
+  }
+
+  /// 把附加参数勾选块同步到工作副本 options（勾选值按块顺序写入）。
+  /// 幂等，保存前与 _hasUnsavedChanges 比较前调用。
+  void _syncAdditionalOptionsFromBlocks() {
+    for (final p in _reasoningParams) {
+      if (p.isReasoningToggle || p.isEffortParam) continue;
+      if (p.type == 'json' || p.type == 'boolean') continue;
+      final blocks = _additionalBlockValues[p];
+      final selected = _additionalSelectedValues[p];
+      if (blocks == null || selected == null) continue;
+      final synced = blocks.where((v) => selected.contains(v)).toList();
+      if (jsonEncode(p.options) != jsonEncode(synced)) {
+        p.options
+          ..clear()
+          ..addAll(synced);
+      }
+    }
+  }
+
+  // ===================================================================
   // 推理参数帮助方法
   // ===================================================================
 
@@ -138,6 +225,20 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
       if (param.isEffortParam) {
         _effortBlockValues = List.of(_initialBlockValues);
         _effortSelectedValues = {..._initialSelectedValues};
+      } else if (!param.isReasoningToggle &&
+          param.type != 'json' &&
+          param.type != 'boolean') {
+        // 附加参数：还原勾选块状态
+        final providerOptions = _providerAdditionalValues[param];
+        if (providerOptions != null) {
+          _additionalBlockValues[param] = [
+            ...snapshot.options,
+            ...providerOptions.where((v) => !snapshot.options.contains(v)),
+          ];
+          _additionalSelectedValues[param] = snapshot.options.isNotEmpty
+              ? snapshot.options.toSet()
+              : {...providerOptions};
+        }
       }
       _reasoningResetVersion++;
     });

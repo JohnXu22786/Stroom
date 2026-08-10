@@ -283,7 +283,7 @@ void main() {
       expect(find.text('high'), findsOneWidget);
     });
 
-    testWidgets('additional params and their values are draggable and saved',
+    testWidgets('additional params use pill blocks and are draggable and saved',
         (tester) async {
       final model = ModelConfig(
         name: 'test-model',
@@ -313,57 +313,70 @@ void main() {
         tester,
         model: model,
         beforeSave: (tester) async {
-          // 第一个附加参数卡片下移
+          // 附加参数值显示为胶囊块（默认全选；无 provider 时模型
+          // 保存的值可删除 → 有删除按钮）
           await _scrollToReasoning(tester, find.text('first_param'));
-          final cardHandle = find
-              .descendant(
-                of: find.ancestor(
-                  of: find.text('first_param'),
-                  matching: find.byType(Card),
-                ),
-                matching: find.byIcon(Icons.drag_handle),
-              )
-              .first;
-          await tester.ensureVisible(cardHandle);
-          await tester.pumpAndSettle();
-          await tester.timedDrag(
-            cardHandle,
-            const Offset(0, 300),
-            const Duration(milliseconds: 300),
-          );
-          await tester.pumpAndSettle();
+          expect(find.text('1'), findsOneWidget);
+          expect(find.text('2'), findsOneWidget);
 
-          // 第一个参数的第一个选项值下移
-          final firstParamCard = find.ancestor(
-            of: find.text('first_param'),
-            matching: find.byType(Card),
-          );
-          final valueHandle = find
-              .descendant(
-                of: firstParamCard,
-                matching: find.byIcon(Icons.drag_handle),
-              )
-              .at(1); // 第 0 个是卡片头部把手
-          await tester.ensureVisible(valueHandle);
-          await tester.pumpAndSettle();
-          await tester.timedDrag(
-            valueHandle,
-            const Offset(0, 50),
-            const Duration(milliseconds: 300),
-          );
-          await tester.pumpAndSettle();
+          // 取消勾选 2 → 只保存 1
+          await _tapBlock(tester, '2');
         },
       );
 
       expect(saved, isNotNull);
-      expect(saved!.reasoningParams.map((p) => p.paramName).toList(),
-          ['thinking.type', 'second_param', 'first_param']);
-      final savedModel = saved;
       expect(
-        savedModel.reasoningParams
+        saved!.reasoningParams
             .firstWhere((p) => p.paramName == 'first_param')
             .options,
-        ['2', '1'],
+        ['1'],
+      );
+    });
+
+    testWidgets(
+        'adding a value to an additional param creates a deletable block',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'first_param',
+            enabled: true,
+            options: ['1'],
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('first_param'));
+          // 添加新值 max（对话框）→ 新块出现（默认勾选）
+          await tester.tap(find.text('添加值').first);
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField).last, 'max');
+          await tester.pump();
+          await tester.tap(find.text('确定'));
+          await tester.pumpAndSettle();
+          expect(find.text('max'), findsOneWidget);
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(
+        saved!.reasoningParams
+            .firstWhere((p) => p.paramName == 'first_param')
+            .options,
+        ['1', 'max'],
       );
     });
 

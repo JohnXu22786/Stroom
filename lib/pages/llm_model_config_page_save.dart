@@ -171,8 +171,10 @@ extension _SaveExt on _LlmModelConfigPageState {
     }
 
     // 把力度勾选块同步到力度参数（勾选值按块顺序写入 options；
-    // 全取消 = options 为空，该模型不提供力度选项）
+    // 全取消 = options 为空，该模型不提供力度选项），
+    // 并把附加参数勾选块同步到各自 options
     _syncEffortOptionsFromBlocks();
+    _syncAdditionalOptionsFromBlocks();
 
     setState(() => _isSaving = true);
 

@@ -59,6 +59,21 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   late List<String> _initialBlockValues;
   late Set<String> _initialSelectedValues;
 
+  // ===================================================================
+  // 附加推理参数「勾选块」状态（仅内存，不序列化）
+  // 与推理力度相同的胶囊块编辑样式：块 = 选项值，点击勾选/取消
+  // （默认全选），长按拖拽排序；供应商来源的块不可删除。
+  // ===================================================================
+
+  /// 每个附加参数（string/number 类型）的块顺序。
+  final Map<ReasoningParam, List<String>> _additionalBlockValues = {};
+
+  /// 每个附加参数的勾选集合。
+  final Map<ReasoningParam, Set<String>> _additionalSelectedValues = {};
+
+  /// 每个附加参数在供应商侧的选项值集合（删除按钮判定）。
+  final Map<ReasoningParam, Set<String>> _providerAdditionalValues = {};
+
   /// reset 版本号：每次还原参数时 +1，用于强制重建推理区输入框
   /// （TextFormField 的 internal state 不会跟随 initialValue 更新，
   /// 必须重建才能显示还原后的值）。
@@ -100,6 +115,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       // 新模型 + 供应商参数：打开即显示供应商参数不算改动，与
       // merge(provider, []) 初始态比较（默认不选 → 力度 options 为空）
       _syncEffortOptionsFromBlocks();
+      _syncAdditionalOptionsFromBlocks();
       final initialReasoning = mergeReasoningParams(
         widget.provider?.reasoningParams ?? [],
         const [],
@@ -204,6 +220,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // 参数不算改动）。
     // 力度勾选块先同步到工作副本，勾选/排序变化才能被检测到。
     _syncEffortOptionsFromBlocks();
+    _syncAdditionalOptionsFromBlocks();
     final initialReasoning = _applyEffortShadowing(
       mergeReasoningParams(
         widget.provider?.reasoningParams ?? [],
@@ -346,6 +363,34 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     };
     _initialBlockValues = List.of(_effortBlockValues);
     _initialSelectedValues = {..._effortSelectedValues};
+
+    // 附加参数「勾选块」初始化（string/number 类型）：
+    // - 块顺序：模型已保存的顺序在前，供应商独有值追加；
+    // - 勾选 = 模型已保存的 options；模型未保存过时默认全选供应商值
+    //   （附加参数保持「选项默认有效」语义，与力度参数默认不选不同）；
+    // - 供应商来源判定用于删除按钮的显隐。
+    final providerByName = {
+      for (final p in provider?.reasoningParams ?? [])
+        if (p.paramName.trim().isNotEmpty) p.paramName.trim(): p,
+    };
+    _additionalBlockValues.clear();
+    _additionalSelectedValues.clear();
+    _providerAdditionalValues.clear();
+    for (final p in _reasoningParams) {
+      if (p.isReasoningToggle || p.isEffortParam) continue;
+      if (p.type == 'json' || p.type == 'boolean') continue;
+      final providerOptions = <String>{
+        ...providerByName[p.paramName.trim()]?.options ?? const <String>[],
+      };
+      final modelOptions = p.options;
+      _providerAdditionalValues[p] = providerOptions;
+      _additionalBlockValues[p] = [
+        ...modelOptions,
+        ...providerOptions.where((v) => !modelOptions.contains(v)),
+      ];
+      _additionalSelectedValues[p] =
+          modelOptions.isNotEmpty ? modelOptions.toSet() : {...providerOptions};
+    }
   }
 
   @override

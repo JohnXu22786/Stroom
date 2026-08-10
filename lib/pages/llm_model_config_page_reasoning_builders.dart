@@ -29,6 +29,88 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
     );
   }
 
+  /// 附加参数值块：与推理力度同款的胶囊块——点击勾选/取消（默认
+  /// 全选），长按拖拽排序；供应商来源的块不可删除。
+  Widget _buildAdditionalOptionBlock(
+    ReasoningParam param,
+    String value,
+    ColorScheme cs,
+  ) {
+    final selected = _additionalSelectedValues[param]?.contains(value) ?? false;
+    final fromProvider =
+        _providerAdditionalValues[param]?.contains(value) ?? false;
+
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: selected ? cs.primaryContainer : Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: selected ? cs.primary : cs.outlineVariant,
+          width: selected ? 1.5 : 1,
+        ),
+      ),
+      child: Text(
+        value,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+          color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+        ),
+      ),
+    );
+
+    final pill = fromProvider
+        ? chip
+        : Stack(
+            clipBehavior: Clip.none,
+            children: [
+              chip,
+              Positioned(
+                top: -6,
+                right: -6,
+                child: GestureDetector(
+                  onTap: () => _removeAdditionalBlock(param, value),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: cs.errorContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    padding: const EdgeInsets.all(2),
+                    child: Icon(
+                      Icons.close,
+                      size: 12,
+                      color: cs.onErrorContainer,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => details.data != value,
+      onAcceptWithDetails: (details) =>
+          _moveAdditionalBlockTo(param, details.data, value),
+      builder: (context, candidateData, rejectedData) {
+        return LongPressDraggable<String>(
+          data: value,
+          // 长按触发时间（与力度胶囊一致，约 330ms）
+          delay: const Duration(milliseconds: 330),
+          childWhenDragging: Opacity(opacity: 0.3, child: pill),
+          feedback: Material(
+            color: Colors.transparent,
+            child: Opacity(opacity: 0.8, child: pill),
+          ),
+          child: GestureDetector(
+            onTap: () => _toggleAdditionalBlock(param, value),
+            child: pill,
+          ),
+        );
+      },
+    );
+  }
+
   /// 推理力度值块：小圆形胶囊（点击高亮/取消，多选），横向排列，
   /// 长按胶囊拖拽排序。自定义（非供应商来源）块右上角带删除按钮。
   Widget _buildEffortOptionBlock(
@@ -94,6 +176,8 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
       builder: (context, candidateData, rejectedData) {
         return LongPressDraggable<String>(
           data: value,
+          // 长按触发时间（默认约 500ms，缩短至约 330ms 更跟手）
+          delay: const Duration(milliseconds: 330),
           // 拖拽中半透明显示原位置
           childWhenDragging: Opacity(
             opacity: 0.3,
@@ -550,11 +634,12 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               ],
             ),
             const SizedBox(height: 8),
-            // 参数值区按类型区分：string/number → 选项行；json → 大输入框；
+            // 参数值区按类型区分：string/number → 勾选块（与推理力度
+            // 相同的编辑样式，无「推理力度」标签）；json → 大输入框；
             // boolean → 无参数值（只有参数名）。
             if (param.type == 'boolean')
               Text(
-                '布尔类型无需配置参数值，聊天面板提供开/关切换。',
+                '布尔类型无需配置参数值。',
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -586,81 +671,29 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               )
             else ...[
               Text(
-                '选项值',
+                '点击块选中/取消（选中的值将显示在聊天推理面板），'
+                '长按块拖拽排序。供应商的值不可删除，取消勾选即可隐藏。',
                 style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '这些选项将按顺序显示在推理面板中供选择，长按拖动排序。'
-                '启用/禁用开关在推理面板中操作。',
-                style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                 ),
               ),
               const SizedBox(height: 8),
-              // 选项值行（长按拖拽排序）
-              ReorderableListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                buildDefaultDragHandles: true,
-                itemCount: param.options.length,
-                onReorderItem: (oldIndex, newIndex) {
-                  setState(() {
-                    final value = param.options.removeAt(oldIndex);
-                    param.options.insert(newIndex, value);
-                  });
-                },
-                itemBuilder: (context, j) {
-                  return Padding(
-                    key: ValueKey('opt-$actualIndex-$j'),
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        _buildDragHandle(index: j),
-                        const SizedBox(width: 2),
-                        Expanded(
-                          child: TextFormField(
-                            initialValue: param.options[j],
-                            decoration: InputDecoration(
-                              labelText: '选项 ${j + 1}',
-                              hintText: '如 low, enabled, true, max',
-                              border: const OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            onChanged: (v) {
-                              param.options[j] = v;
-                              setState(() {});
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        if (param.options.length > 1)
-                          IconButton(
-                            icon: const Icon(
-                              Icons.remove_circle,
-                              color: Colors.red,
-                              size: 18,
-                            ),
-                            onPressed: () {
-                              _removeOptionFromParam(actualIndex, j);
-                            },
-                            tooltip: '删除选项',
-                          ),
-                      ],
-                    ),
-                  );
-                },
+              // 勾选块：横向胶囊排列，长按拖拽排序（与推理力度同款）
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final value
+                      in _additionalBlockValues[param] ?? const <String>[])
+                    _buildAdditionalOptionBlock(param, value, cs),
+                ],
               ),
               const SizedBox(height: 4),
               TextButton.icon(
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('添加选项', style: TextStyle(fontSize: 13)),
-                onPressed: () => _addOptionToParam(actualIndex),
+                icon: Icon(Icons.add, size: 16),
+                label: const Text('添加值', style: TextStyle(fontSize: 13)),
+                onPressed: () => _addAdditionalBlockWithDialog(param),
               ),
             ],
           ],
