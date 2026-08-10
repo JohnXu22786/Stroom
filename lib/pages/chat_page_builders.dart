@@ -264,6 +264,30 @@ extension _ChatPageBuildersExt on _ChatPageState {
         ),
       );
     }
+    // While the message is still in the textStream phase (no text token
+    // has arrived yet), render the live segments — tool call cards and
+    // inline reasoning buttons — exactly like the text message bubble
+    // does. Previously only the reasoning section buttons were rendered
+    // here, so a model that thought and then called tools without any
+    // text showed a pile of "思考完成" buttons and hid the tool calls
+    // until the first text token converted the message to a text message.
+    final segments = _chatSegments[message.id];
+    if (segments != null && segments.isNotEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: _buildSegmentWidgets(
+            messageId: message.id,
+            segments: segments,
+            isDark: isDark,
+            isStreaming: isStreaming,
+            hasSearchMatch: false,
+          ),
+        ),
+      );
+    }
     // Check if reasoning content exists for this
     // message. If so, render the reasoning button
     // immediately instead of a spinner, even before

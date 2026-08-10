@@ -140,6 +140,86 @@ extension _ChatPageBubblesExt on _ChatPageState {
     );
   }
 
+  /// Renders a list of [MessageSegment]s into widgets: text segments as
+  /// Markdown, tool calls as [ToolCallCard]s, and reasoning sections as
+  /// inline [ReasoningSection] buttons.
+  ///
+  /// Shared by the normal assistant bubble (text messages) and the
+  /// textStream bubble so both render tool calls and reasoning identically
+  /// during streaming.
+  List<Widget> _buildSegmentWidgets({
+    required String messageId,
+    required List<MessageSegment> segments,
+    required bool isDark,
+    required bool isStreaming,
+    required bool hasSearchMatch,
+  }) {
+    // Merge consecutive TextSegments to avoid visual breaks
+    // between arbitrary streaming chunk boundaries (e.g.
+    // throttle intervals). Each text block renders in a
+    // single MarkdownWidget for continuity.
+    final widgets = <Widget>[];
+    for (final seg in mergeConsecutiveTextSegments(segments)) {
+      switch (seg) {
+        case TextSegment s:
+          widgets.add(Padding(
+            padding: const EdgeInsets.only(
+              bottom: 4,
+            ),
+            child: hasSearchMatch
+                ? _buildHighlightedText(
+                    s.text,
+                    messageId,
+                  )
+                : MarkdownWidget(
+                    data: s.text,
+                    selectable: true,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    // Per-segment streaming config: each segment
+                    // is parsed by its OWN MarkdownWidget, so the
+                    // fence-completion check must run against that
+                    // segment's text.
+                    config: buildMessageMarkdownConfig(
+                      isDark: isDark,
+                      conversationIsStreaming: isStreaming,
+                      streamingMsgId: _streamingMsgId,
+                      messageId: messageId,
+                      streamingText: s.text,
+                    ),
+                    markdownGenerator: markdownGenerator,
+                  ),
+          ));
+        case ToolCallSegment s:
+          widgets.add(ToolCallCard(data: s.data));
+        case ReasoningSegment s:
+          // Resolve the section text by RAW index and skip empty
+          // placeholder sections entirely (no widget, no padding) —
+          // otherwise finalized messages with interior '' sections
+          // would show phantom 4px gaps the live view doesn't have.
+          final text =
+              (s.sectionIndex < (_reasoningContents[messageId]?.length ?? 0))
+                  ? _reasoningContents[messageId]![s.sectionIndex]
+                  : '';
+          if (text.isEmpty) continue;
+          widgets.add(Padding(
+            padding: const EdgeInsets.only(
+              bottom: 4,
+            ),
+            child: ReasoningSection(
+              sections: ReasoningSectionData(
+                texts: [text],
+                streaming: s.isStreaming,
+                sectionIndices: [s.sectionIndex],
+              ),
+              messageId: messageId,
+            ),
+          ));
+      }
+    }
+    return widgets;
+  }
+
   /// Bubble for a normal AI message with reasoning sections and segments.
   Widget _buildAiMessageBubble({
     required TextMessage message,
@@ -208,60 +288,12 @@ extension _ChatPageBubblesExt on _ChatPageState {
               ),
             )
           else if (segments != null && segments.isNotEmpty)
-            // Merge consecutive TextSegments to avoid visual breaks
-            // between arbitrary streaming chunk boundaries (e.g.
-            // throttle intervals). Each text block renders in a
-            // single MarkdownWidget for continuity.
-            ...mergeConsecutiveTextSegments(
-              segments,
-            ).map(
-              (seg) => switch (seg) {
-                TextSegment s => Padding(
-                    padding: const EdgeInsets.only(
-                      bottom: 4,
-                    ),
-                    child: hasSearchMatch
-                        ? _buildHighlightedText(
-                            s.text,
-                            message.id,
-                          )
-                        : MarkdownWidget(
-                            data: s.text,
-                            selectable: true,
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            // Per-segment streaming config: each segment
-                            // is parsed by its OWN MarkdownWidget, so the
-                            // fence-completion check must run against that
-                            // segment's text.
-                            config: buildMessageMarkdownConfig(
-                              isDark: isDark,
-                              conversationIsStreaming: isStreaming,
-                              streamingMsgId: _streamingMsgId,
-                              messageId: message.id,
-                              streamingText: s.text,
-                            ),
-                            markdownGenerator: markdownGenerator,
-                          ),
-                  ),
-                ToolCallSegment s => ToolCallCard(data: s.data),
-                ReasoningSegment s => Padding(
-                    padding: const EdgeInsets.only(
-                      bottom: 4,
-                    ),
-                    child: ReasoningSection(
-                      sections: ReasoningSectionData(
-                        texts: (s.sectionIndex <
-                                (_reasoningContents[message.id]?.length ?? 0))
-                            ? [_reasoningContents[message.id]![s.sectionIndex]]
-                            : [''],
-                        streaming: s.isStreaming,
-                        sectionIndices: [s.sectionIndex],
-                      ),
-                      messageId: message.id,
-                    ),
-                  ),
-              },
+            ..._buildSegmentWidgets(
+              messageId: message.id,
+              segments: segments,
+              isDark: isDark,
+              isStreaming: isStreaming,
+              hasSearchMatch: hasSearchMatch,
             )
           // Historical messages: segments may be null (loaded from
           // persistence), but reasoning sections can still exist

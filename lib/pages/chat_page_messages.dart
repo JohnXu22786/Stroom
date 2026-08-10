@@ -315,13 +315,24 @@ extension _ChatPageMessagesExt on _ChatPageState {
         // Build segments from blocks (unified path since v0.4.50).
         // If blocks are absent (periodic persist or old data), build
         // them from legacy fields on the fly.
-        final blocks = msg.blocks ??
-            legacyToBlocks(
-              reasoningSections: msg.reasoningSections ?? [],
-              textChunks: msg.textSections ?? [],
-              toolCalls: msg.toolCalls ?? [],
-              toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
-            );
+        // For roundStarts-era messages, REBUILD blocks from the legacy
+        // fields instead of trusting the persisted ones: blocks saved
+        // before the empty-section fix were built by the empty-skipping
+        // legacyToBlocks, whose ordinal ReasoningSegment indices
+        // misalign with the raw reasoningSections indices whenever a
+        // middle tool round had no reasoning (interior '' placeholder) —
+        // the reloaded message then rendered the wrong section (or none).
+        // Rebuilding is idempotent for correctly-aligned blocks
+        // (compactedAt markers are carried by the legacy toolCalls).
+        final rebuiltBlocks = legacyToBlocks(
+          reasoningSections: msg.reasoningSections ?? [],
+          textChunks: msg.textSections ?? [],
+          toolCalls: msg.toolCalls ?? [],
+          toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
+        );
+        final blocks = (msg.toolCallRoundStarts != null)
+            ? rebuiltBlocks
+            : (msg.blocks ?? rebuiltBlocks);
         final segments = blocksToSegments(blocks);
         // Fallback: no textSections, use content as single trailing block
         if (segments.isEmpty && msg.content.isNotEmpty) {
