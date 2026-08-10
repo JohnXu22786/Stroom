@@ -1,5 +1,6 @@
 .opencode/
 opencode.json
+__pycache__/
 
 # Flutter
 .flutter-plugins
