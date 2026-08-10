@@ -1224,8 +1224,7 @@ void main() {
       final result =
           await readTextAttachmentContent('big.txt', path, bytes.length);
 
-      expect(result, content,
-          reason: '文本附件内容必须逐字节完整返回，不得截断');
+      expect(result, content, reason: '文本附件内容必须逐字节完整返回，不得截断');
       expect(result, isNot(contains('[truncated]')));
     });
 
