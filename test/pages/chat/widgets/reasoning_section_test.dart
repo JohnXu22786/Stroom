@@ -275,5 +275,103 @@ void main() {
       // Empty sections should render nothing
       expect(find.text('思考完成'), findsNothing);
     });
+
+    testWidgets(
+        'trailing empty placeholder section does not render a phantom button',
+        (tester) async {
+      // ReasoningSectionEndEvent appends an empty '' placeholder for the
+      // NEXT reasoning round. While the model is calling tools without any
+      // visible text (think → tool call directly), the textStream fallback
+      // passes ALL sections — including the empty placeholder — to the
+      // ReasoningSection. Regression: each tool round must NOT add a
+      // phantom "思考完成" button for its empty placeholder.
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: ReasoningSection(
+                sections: ReasoningSectionData(
+                  texts: ['第一轮推理', ''],
+                  streaming: false,
+                ),
+                messageId: 'placeholder-msg-id',
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      // Only ONE button for the real section — the empty placeholder must
+      // be skipped entirely (no phantom "思考 2 思考完成" button).
+      expect(find.text('思考完成'), findsOneWidget,
+          reason: '空占位段落不应渲染出多余的"思考完成"按钮');
+      expect(find.textContaining('思考 2'), findsNothing,
+          reason: '空占位段落不应产生带序号的按钮');
+    });
+
+    testWidgets(
+        'trailing empty placeholder with streaming=true keeps the sealed '
+        'section at "思考完成"', (tester) async {
+      // While the model is calling tools (think → tool, no text), the
+      // reasoningSections carry the '' placeholder for the next round.
+      // If the stream is still "active" the streaming flag is true, but
+      // the section actually being streamed is the invisible placeholder
+      // — the last sealed section must keep showing "思考完成", not flip
+      // to "思考中".
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: ReasoningSection(
+                sections: ReasoningSectionData(
+                  texts: ['第一轮推理', ''],
+                  streaming: true,
+                ),
+                messageId: 'streaming-placeholder-msg-id',
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(find.text('思考完成'), findsOneWidget,
+          reason: '已结束的段落不应因空占位段而显示"思考中"');
+      expect(find.text('思考中'), findsNothing);
+    });
+
+    testWidgets(
+        'multiple real sections with a trailing empty placeholder render '
+        'exactly the real buttons', (tester) async {
+      // Two completed reasoning rounds + the '' placeholder for the next
+      // (not yet started) round: only the two real sections get buttons.
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: ReasoningSection(
+                sections: ReasoningSectionData(
+                  texts: ['第一轮推理', '第二轮推理', ''],
+                  streaming: false,
+                ),
+                messageId: 'multi-placeholder-msg-id',
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      // Both real sections render, the empty placeholder is skipped.
+      expect(find.text('思考 1 思考完成'), findsOneWidget);
+      expect(find.text('思考 2 思考完成'), findsOneWidget);
+      expect(find.textContaining('思考 3'), findsNothing,
+          reason: '空占位段落不应渲染出第三个按钮');
+      expect(find.text('思考完成'), findsNothing, reason: '多段落时按钮带序号前缀，不应出现无前缀的按钮');
+    });
   });
 }

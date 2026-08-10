@@ -22,9 +22,6 @@ class ReasoningSectionData {
     this.streaming = false,
     this.sectionIndices = const [],
   });
-
-  bool get isEmpty => texts.isEmpty;
-  bool get hasMultiple => texts.length > 1;
 }
 
 /// Reasoning section that shows clickable text line(s).
@@ -47,23 +44,41 @@ class ReasoningSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (sections.isEmpty) return const SizedBox.shrink();
+    // Skip empty placeholder texts: ReasoningSectionEndEvent appends an
+    // empty '' section for the next round. Rendering it produced phantom
+    // "思考完成" buttons whenever a round ended without any visible text
+    // (the standard think → tool call pattern), piling them up until the
+    // first text token triggered a full re-render.
+    final texts = <String>[];
+    final indices = <int>[];
+    for (var i = 0; i < sections.texts.length; i++) {
+      if (sections.texts[i].isEmpty) continue;
+      texts.add(sections.texts[i]);
+      indices.add(sections.sectionIndices.length == sections.texts.length
+          ? sections.sectionIndices[i]
+          : i);
+    }
+    if (texts.isEmpty) return const SizedBox.shrink();
 
     final children = <Widget>[];
-    for (int i = 0; i < sections.texts.length; i++) {
-      final sectionIdx = sections.sectionIndices.length == sections.texts.length
-          ? sections.sectionIndices[i]
-          : i;
+    for (int i = 0; i < texts.length; i++) {
       children.add(
         Padding(
           padding: EdgeInsets.only(
-            bottom: i < sections.texts.length - 1 ? 4 : 0,
+            bottom: i < texts.length - 1 ? 4 : 0,
           ),
           child: _ReasoningButton(
-            reasoningText: sections.texts[i],
-            isStreaming: sections.streaming && i == sections.texts.length - 1,
-            isMulti: sections.hasMultiple,
-            index: sectionIdx,
+            reasoningText: texts[i],
+            // Only mark the last section as streaming when the section
+            // actually being streamed is visible: if the trailing raw text
+            // is the empty '' placeholder (a round ended, the next one has
+            // no content yet), no visible button is streaming — the last
+            // sealed section must keep showing "思考完成".
+            isStreaming: sections.streaming &&
+                i == texts.length - 1 &&
+                sections.texts.last.isNotEmpty,
+            isMulti: texts.length > 1,
+            index: indices[i],
             messageId: messageId,
           ),
         ),
