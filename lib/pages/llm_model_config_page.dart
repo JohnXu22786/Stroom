@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../providers/provider_config.dart';
-import 'chat/composer/setting_panels_shared.dart' show OptionChip;
 import 'llm_model_config_shared.dart';
 
 part 'llm_model_config_page_custom_params.dart';
@@ -86,14 +85,21 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       if (_contextController.text.isNotEmpty) return true;
       if (_customParams.any((p) => p.paramName.isNotEmpty)) return true;
       // 新模型 + 供应商参数：打开即显示供应商参数不算改动，与
-      // merge(provider, []) 初始态比较
+      // merge(provider, []) 初始态比较（默认不选 → 力度 options 为空）
       _syncEffortOptionsFromBlocks();
       final initialReasoning = mergeReasoningParams(
         widget.provider?.reasoningParams ?? [],
         const [],
-      ).map((p) => p.toMap()).toList();
+      );
+      final initialEffort = initialReasoning
+          .cast<ReasoningParam?>()
+          .firstWhere((p) => p?.isEffortParam ?? false, orElse: () => null);
+      if (initialEffort != null) {
+        initialEffort.options = [];
+      }
       final currentReasoning = _reasoningParams.map((p) => p.toMap()).toList();
-      if (jsonEncode(initialReasoning) != jsonEncode(currentReasoning)) {
+      if (jsonEncode(initialReasoning.map((p) => p.toMap()).toList()) !=
+          jsonEncode(currentReasoning)) {
         return true;
       }
       if (_enableTemperature ||
@@ -181,8 +187,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     if (jsonEncode(originalCustom) != jsonEncode(currentCustom)) return true;
     // Reasoning params: 与「打开时的初始合并视图」比较——保存会全量写入
     // 工作副本，而打开时的工作副本 = merge(provider, model) 再应用力度
-    // 遮蔽。两者相等说明用户未做任何修改（打开即显示供应商参数不算
-    // 改动）。
+    // 遮蔽与默认勾选。两者相等说明用户未做任何修改（打开即显示供应商
+    // 参数不算改动）。
     // 力度勾选块先同步到工作副本，勾选/排序变化才能被检测到。
     _syncEffortOptionsFromBlocks();
     final initialReasoning = _applyEffortShadowing(
@@ -191,9 +197,19 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         m.reasoningParams,
       ),
       m.reasoningParams,
-    ).map((p) => p.toMap()).toList();
-    final currentReasoning = _reasoningParams.map((p) => p.toMap()).toList();
-    if (jsonEncode(initialReasoning) != jsonEncode(currentReasoning)) {
+    );
+    // 应用初始勾选状态（默认不选语义）：基准的力度 options = 模型已
+    // 保存的 options（模型无力度参数时为空）——与 initState 的块勾选
+    // 初始值一致。
+    final initialEffort = initialReasoning
+        .cast<ReasoningParam?>()
+        .firstWhere((p) => p?.isEffortParam ?? false, orElse: () => null);
+    if (initialEffort != null) {
+      initialEffort.options =
+          List.of(findEffortParam(m.reasoningParams)?.options ?? const []);
+    }
+    if (jsonEncode(initialReasoning.map((p) => p.toMap()).toList()) !=
+        jsonEncode(_reasoningParams.map((p) => p.toMap()).toList())) {
       return true;
     }
     return false;
@@ -286,7 +302,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // - 块顺序：模型已保存的顺序在前（模型有力度参数时），供应商
     //   独有值追加——保证「打开即未修改」比较成立（工作副本与初始
     //   合并视图一致）；
-    // - 勾选 = 模型已保存的 options；模型无力度参数时默认全选供应商值；
+    // - 勾选 = 模型已保存的 options；模型未保存过勾选（新建模型或
+    //   编辑但模型无力度参数）时默认全不选，用户显式勾选想显示的值；
     // - 供应商来源判定用于删除按钮的显隐。
     final providerEffort = findEffortParam(provider?.reasoningParams ?? []);
     _providerEffortValues = {...providerEffort?.options ?? []};
@@ -299,9 +316,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
                 .where((v) => !modelEffortValues.contains(v)),
           ]
         : [..._providerEffortValues];
-    _effortSelectedValues = modelEffortParam != null
-        ? modelEffortValues.toSet()
-        : {..._providerEffortValues};
+    _effortSelectedValues =
+        modelEffortParam != null ? modelEffortValues.toSet() : <String>{};
   }
 
   @override

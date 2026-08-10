@@ -83,13 +83,17 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     });
   }
 
-  /// 拖拽排序块。排序即修改，直接影响保存顺序（进而影响推理面板
-  /// 中力度选项的显示顺序与默认值）。
-  /// [newIndex] 已由 ReorderableListView 调整（onReorderItem 语义）。
-  void _reorderEffortBlock(int oldIndex, int newIndex) {
+  /// 长按拖拽排序块：把 [from] 值移到 [to] 值的位置。
+  /// 排序即修改，直接影响保存顺序（进而影响推理面板中力度选项的
+  /// 显示顺序与默认值）。
+  void _moveBlockTo(String from, String to) {
+    if (from == to) return;
     setState(() {
-      final value = _effortBlockValues.removeAt(oldIndex);
-      _effortBlockValues.insert(newIndex, value);
+      final fromIndex = _effortBlockValues.indexOf(from);
+      final toIndex = _effortBlockValues.indexOf(to);
+      if (fromIndex < 0 || toIndex < 0) return;
+      _effortBlockValues.removeAt(fromIndex);
+      _effortBlockValues.insert(toIndex, from);
     });
   }
 

@@ -87,11 +87,33 @@ ProviderConfigItem _providerWithEffortOptions(List<String> options) {
 List<String> _savedEffortOptions(ModelConfig m) =>
     m.reasoningParams.firstWhere((p) => p.isEffortParam).options;
 
+/// 长按拖拽（LongPressDraggable 需要长按后移动）。
+Future<void> _longPressDrag(
+  WidgetTester tester,
+  Finder from,
+  Offset offset,
+) async {
+  final gesture = await tester.startGesture(tester.getCenter(from));
+  await tester.pump(const Duration(milliseconds: 600));
+  await gesture.moveBy(offset);
+  await tester.pump();
+  await gesture.up();
+  await tester.pumpAndSettle();
+}
+
+/// 点击力度块勾选/取消（滚动到目标后点击）。
+Future<void> _tapBlock(WidgetTester tester, String value) async {
+  await _scrollToReasoning(tester, find.text(value));
+  await tester.tap(find.text(value));
+  await tester.pump();
+}
+
 void main() {
   group('LlmModelConfigPage reasoning option blocks', () {
-    testWidgets('provider effort values show as highlighted (selected) blocks',
-        (tester) async {
-      await _pumpAndSave(
+    testWidgets(
+        'provider effort values show as blocks, none selected by '
+        'default', (tester) async {
+      final saved = await _pumpAndSave(
         tester,
         model: ModelConfig(
           name: 'test-model',
@@ -99,21 +121,25 @@ void main() {
           typeConfig: {'context': 4096},
         ),
         provider: _providerWithEffortOptions(['low', 'medium', 'high']),
-        tapSave: false,
+        beforeSave: (tester) async {
+          // 供应商的值以块形式显示
+          await _scrollToReasoning(tester, find.text('reasoning_effort'));
+          expect(find.text('low'), findsOneWidget);
+          expect(find.text('medium'), findsOneWidget);
+          expect(find.text('high'), findsOneWidget);
+          // 供应商来源的块没有删除按钮
+          expect(find.byIcon(Icons.close), findsNothing);
+          // 无拖拽把手（胶囊长按拖拽）
+          expect(find.byIcon(Icons.drag_handle), findsNothing);
+        },
       );
 
-      await _scrollToReasoning(tester, find.text('reasoning_effort'));
-      // 供应商的值以块形式显示，默认全选（高亮）
-      expect(find.text('low'), findsOneWidget);
-      expect(find.text('medium'), findsOneWidget);
-      expect(find.text('high'), findsOneWidget);
-      // 供应商来源的块没有删除按钮
-      expect(find.byIcon(Icons.remove_circle), findsNothing);
-      // 拖动把手存在（可排序）
-      expect(find.byIcon(Icons.drag_handle), findsWidgets);
+      // 默认全不选 → 保存的 options 为空
+      expect(saved, isNotNull);
+      expect(_savedEffortOptions(saved!), isEmpty);
     });
 
-    testWidgets('unchecking a provider value excludes it from the saved model',
+    testWidgets('selecting blocks saves only the selected values',
         (tester) async {
       final saved = await _pumpAndSave(
         tester,
@@ -124,15 +150,13 @@ void main() {
         ),
         provider: _providerWithEffortOptions(['low', 'medium', 'high']),
         beforeSave: (tester) async {
-          // 取消勾选 medium（点一下高亮块）
-          await _scrollToReasoning(tester, find.text('medium'));
-          await tester.tap(find.text('medium'));
-          await tester.pump();
+          // 勾选 low 和 high（medium 保持不选）
+          await _tapBlock(tester, 'low');
+          await _tapBlock(tester, 'high');
         },
       );
 
       expect(saved, isNotNull);
-      // 取消勾选的值不写入模型；其余按原顺序保留
       expect(_savedEffortOptions(saved!), ['low', 'high']);
     });
 
@@ -158,12 +182,13 @@ void main() {
 
           // 新块出现（默认勾选），且带删除按钮（非供应商来源）
           expect(find.text('max'), findsOneWidget);
-          expect(find.byIcon(Icons.remove_circle), findsOneWidget);
+          expect(find.byIcon(Icons.close), findsOneWidget);
         },
       );
 
       expect(saved, isNotNull);
-      expect(_savedEffortOptions(saved!), ['low', 'high', 'max']);
+      // 默认全不选：只保存勾选的新值 max
+      expect(_savedEffortOptions(saved!), ['max']);
     });
 
     testWidgets('removing a custom block deletes it from the saved model',
@@ -195,8 +220,10 @@ void main() {
         beforeSave: (tester) async {
           // 块列表 = 供应商 [low, medium] + 模型独有 [max]；max 带删除按钮
           await _scrollToReasoning(tester, find.text('max'));
-          expect(find.byIcon(Icons.remove_circle), findsOneWidget);
-          await tester.tap(find.byIcon(Icons.remove_circle));
+          expect(find.byIcon(Icons.close), findsOneWidget);
+          await tester.ensureVisible(find.byIcon(Icons.close));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byIcon(Icons.close));
           await tester.pump();
         },
       );
@@ -206,7 +233,7 @@ void main() {
       expect(_savedEffortOptions(saved!), ['low']);
     });
 
-    testWidgets('dragging blocks reorders the saved effort options',
+    testWidgets('long-press dragging blocks reorders the saved options',
         (tester) async {
       final saved = await _pumpAndSave(
         tester,
@@ -217,17 +244,13 @@ void main() {
         ),
         provider: _providerWithEffortOptions(['low', 'medium', 'high']),
         beforeSave: (tester) async {
-          await _scrollToReasoning(tester, find.text('high'));
-          // 把第一个块（low）向下拖过第二个块
-          final handle = find.byIcon(Icons.drag_handle).first;
-          await tester.ensureVisible(handle);
-          await tester.pumpAndSettle();
-          await tester.timedDrag(
-            handle,
-            const Offset(0, 50),
-            const Duration(milliseconds: 300),
-          );
-          await tester.pumpAndSettle();
+          // 先勾选全部（默认全不选）
+          await _tapBlock(tester, 'low');
+          await _tapBlock(tester, 'medium');
+          await _tapBlock(tester, 'high');
+          // 长按 low 胶囊拖到 medium 上（横向排列，向右拖动）
+          await _scrollToReasoning(tester, find.text('medium'));
+          await _longPressDrag(tester, find.text('low'), const Offset(60, 0));
         },
       );
 
@@ -237,7 +260,7 @@ void main() {
 
     testWidgets('provider changes appear on reopen (unchecked by default)',
         (tester) async {
-      // 第一次：provider [low, medium] → 保存全量
+      // 第一次：provider [low, medium] → 默认全不选，保存 options 为空
       final saved = await _pumpAndSave(
         tester,
         model: ModelConfig(
@@ -247,7 +270,7 @@ void main() {
         ),
         provider: _providerWithEffortOptions(['low', 'medium']),
       );
-      expect(_savedEffortOptions(saved!), ['low', 'medium']);
+      expect(_savedEffortOptions(saved!), isEmpty);
 
       // 第二次：provider 新增 high；模型打开时 high 出现（未勾选）
       await _pumpAndSave(
@@ -632,8 +655,8 @@ void main() {
 
       expect(saved, isNotNull);
       expect(saved!.modelId, 'test-model');
-      // 新建模型：供应商力度参数全量写入（勾选的值）
-      expect(_savedEffortOptions(saved!), ['low', 'high']);
+      // 新建模型：默认全不选 → 力度参数 options 为空（用户显式勾选）
+      expect(_savedEffortOptions(saved!), isEmpty);
     });
   });
 }

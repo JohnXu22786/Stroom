@@ -17,42 +17,96 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
         _customParams.any((p) => p.paramName.trim() == name);
   }
 
-  /// 推理力度值块（复用推理面板的 OptionChip 样式：点击高亮/取消，
-  /// 多选）。块左侧为拖拽把手，自定义（非供应商来源）块右侧带删除。
+  /// 拖拽排序把手（附加参数卡片与选项值行用；力度胶囊为长按拖拽，
+  /// 无需把手）。
+  Widget _buildDragHandle({required int index}) {
+    return ReorderableDragStartListener(
+      index: index,
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 2),
+        child: Icon(Icons.drag_handle, size: 20, color: Colors.grey),
+      ),
+    );
+  }
+
+  /// 推理力度值块：小圆形胶囊（点击高亮/取消，多选），横向排列，
+  /// 长按胶囊拖拽排序。自定义（非供应商来源）块右上角带删除按钮。
   Widget _buildEffortOptionBlock(
     String value,
-    int index,
-    ColorScheme cs,
-  ) {
-    final selected = _effortSelectedValues.contains(value);
-    final fromProvider = _providerEffortValues.contains(value);
-    return Row(
-      key: ValueKey('effort-block-$value'),
-      children: [
-        // 拖拽把手
-        ReorderableDragStartListener(
-          index: index,
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 2),
-            child: Icon(Icons.drag_handle, size: 20, color: Colors.grey),
-          ),
+    ColorScheme cs, {
+    required bool selected,
+    required bool fromProvider,
+  }) {
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: selected ? cs.primary : cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: selected ? cs.primary : cs.outlineVariant,
+          width: selected ? 1.5 : 1,
         ),
-        const SizedBox(width: 2),
-        // 勾选块（点击高亮/取消）
-        Expanded(
-          child: OptionChip(
-            label: value,
-            selected: selected,
+      ),
+      child: Text(
+        value,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+          color: selected ? cs.onPrimary : cs.onSurfaceVariant,
+        ),
+      ),
+    );
+
+    final pill = fromProvider
+        ? chip
+        : Stack(
+            clipBehavior: Clip.none,
+            children: [
+              chip,
+              // 自定义值删除按钮（右上角）
+              Positioned(
+                top: -6,
+                right: -6,
+                child: GestureDetector(
+                  onTap: () => _removeEffortBlock(value),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: cs.errorContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    padding: const EdgeInsets.all(2),
+                    child: Icon(
+                      Icons.close,
+                      size: 12,
+                      color: cs.onErrorContainer,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => details.data != value,
+      onAcceptWithDetails: (details) => _moveBlockTo(details.data, value),
+      builder: (context, candidateData, rejectedData) {
+        return LongPressDraggable<String>(
+          data: value,
+          // 拖拽中半透明显示原位置
+          childWhenDragging: Opacity(
+            opacity: 0.3,
+            child: pill,
+          ),
+          feedback: Material(
+            color: Colors.transparent,
+            child: Opacity(opacity: 0.8, child: pill),
+          ),
+          child: GestureDetector(
             onTap: () => _toggleEffortBlock(value),
+            child: pill,
           ),
-        ),
-        if (!fromProvider)
-          IconButton(
-            icon: const Icon(Icons.remove_circle, color: Colors.red, size: 18),
-            onPressed: () => _removeEffortBlock(value),
-            tooltip: '删除该值',
-          ),
-      ],
+        );
+      },
     );
   }
 
@@ -314,24 +368,26 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
             const SizedBox(height: 8),
             Text(
               '点击块选中/取消（选中的值将显示在聊天推理面板），'
-              '拖动把手排序。供应商的值不可删除，取消勾选即可隐藏。',
+              '长按块拖拽排序。供应商的值不可删除，取消勾选即可隐藏。',
               style: TextStyle(
                 fontSize: 12,
                 color: cs.onSurfaceVariant.withValues(alpha: 0.7),
               ),
             ),
             const SizedBox(height: 8),
-            // 勾选块列表（可拖拽排序）
-            ReorderableListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              buildDefaultDragHandles: false,
-              itemCount: _effortBlockValues.length,
-              onReorderItem: _reorderEffortBlock,
-              itemBuilder: (context, index) {
-                final value = _effortBlockValues[index];
-                return _buildEffortOptionBlock(value, index, cs);
-              },
+            // 勾选块：横向胶囊排列，长按拖拽排序
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final value in _effortBlockValues)
+                  _buildEffortOptionBlock(
+                    value,
+                    cs,
+                    selected: _effortSelectedValues.contains(value),
+                    fromProvider: _providerEffortValues.contains(value),
+                  ),
+              ],
             ),
             const SizedBox(height: 4),
             TextButton.icon(
@@ -409,14 +465,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
             Row(
               children: [
                 // 卡片间拖拽把手（附加参数排序）
-                ReorderableDragStartListener(
-                  index: displayIndex,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 2),
-                    child:
-                        Icon(Icons.drag_handle, size: 20, color: Colors.grey),
-                  ),
-                ),
+                _buildDragHandle(index: displayIndex),
                 const SizedBox(width: 2),
                 Expanded(
                   child: TextFormField(
@@ -456,7 +505,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
             ),
             const SizedBox(height: 4),
             Text(
-              '这些选项将按顺序显示在推理面板中供选择，拖动把手排序。'
+              '这些选项将按顺序显示在推理面板中供选择，长按拖动排序。'
               '启用/禁用开关在推理面板中操作。',
               style: TextStyle(
                 fontSize: 11,
@@ -464,11 +513,11 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               ),
             ),
             const SizedBox(height: 8),
-            // 选项值行（可拖拽排序）
+            // 选项值行（长按拖拽排序）
             ReorderableListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              buildDefaultDragHandles: false,
+              buildDefaultDragHandles: true,
               itemCount: param.options.length,
               onReorderItem: (oldIndex, newIndex) {
                 setState(() {
@@ -480,14 +529,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 return Row(
                   key: ValueKey('opt-$actualIndex-$j'),
                   children: [
-                    ReorderableDragStartListener(
-                      index: j,
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 2),
-                        child: Icon(Icons.drag_handle,
-                            size: 20, color: Colors.grey),
-                      ),
-                    ),
+                    _buildDragHandle(index: j),
                     const SizedBox(width: 2),
                     Expanded(
                       child: TextFormField(
