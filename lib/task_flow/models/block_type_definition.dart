@@ -291,9 +291,9 @@ class BlockTypeDefinition {
         key: 'assistantId',
         label: '助手',
         type: BlockParamType.assistantSelector,
-        // Default: the first built-in assistant, so a new chat block
-        // always has an explicit assistant.
-        defaultValue: 'builtin:prompt_0',
+        // Default: 未指定 — 执行时使用当前选中的助手。助手块只允许
+        // 选择"我的助手"（用户自定义），不提供内置助手选项。
+        defaultValue: '',
       ),
       BlockParamDefinition(
         key: 'promptPrefix',

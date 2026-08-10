@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:stroom/models/assistant.dart';
-import 'package:stroom/models/built_in_prompts.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/background_task_provider.dart';
@@ -108,18 +107,9 @@ void main() {
     });
 
     test(
-        'built-in prompt id resolves to an Assistant with the preset '
-        'prompt and no bound model', () {
-      final a = resolveChatAssistant('builtin:prompt_0', userAssistants);
-      expect(a, isNotNull);
-      expect(a!.id, 'builtin:prompt_0');
-      expect(a.name, builtInPrompts[0].name);
-      expect(a.prompt, builtInPrompts[0].prompt);
-      expect(a.modelId, isNull,
-          reason: 'built-in assistants use the currently selected model');
-    });
-
-    test('out-of-range built-in index → null (fail loud)', () {
+        'built-in prompt ids are NOT resolvable — blocks only allow '
+        'user-defined assistants (legacy config fails loud)', () {
+      expect(resolveChatAssistant('builtin:prompt_0', userAssistants), isNull);
       expect(
         resolveChatAssistant('builtin:prompt_999', userAssistants),
         isNull,
@@ -227,6 +217,8 @@ void main() {
             role: 'assistant',
             content: '网络连接失败，请重试',
             isError: true,
+            rawRequest: const {'url': 'https://api.example.com/v1/chat'},
+            rawResponse: const {'statusCode': 500, 'error': 'server error'},
           ),
           fullReply: '网络连接失败，请重试',
         ),
@@ -249,6 +241,17 @@ void main() {
       expect(bgNotifier.state[0].status, TaskStatus.failed);
       expect(execNotifier.state[0].subTasks[0].status, TaskStatus.failed);
       expect(execNotifier.state[0].status, FlowExecutionStatus.failed);
+      // The failed background task carries the message's raw
+      // request/response so the task list shows the same
+      // "查看错误详情" dialog as the chat page.
+      expect(
+        bgNotifier.state[0].rawRequest,
+        const {'url': 'https://api.example.com/v1/chat'},
+      );
+      expect(
+        bgNotifier.state[0].rawResponse,
+        const {'statusCode': 500, 'error': 'server error'},
+      );
     });
   });
 }

@@ -12,9 +12,16 @@ void failSubTask(
   TaskFlowExecutionNotifier execNotifier,
   String execId,
   String flowSubTaskId,
-  String error,
-) {
-  bgNotifier.failTask(taskId, error: error);
+  String error, {
+  Map<String, dynamic>? rawRequest,
+  Map<String, dynamic>? rawResponse,
+}) {
+  bgNotifier.failTask(
+    taskId,
+    error: error,
+    rawRequest: rawRequest,
+    rawResponse: rawResponse,
+  );
   execNotifier.updateSubTaskStatus(execId, flowSubTaskId, TaskStatus.failed);
 }
 

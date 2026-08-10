@@ -138,20 +138,15 @@ void main() {
 
     // Input note about the user message being the previous step's output.
     expect(find.text('发送给助手的用户消息 = 上一步的输出'), findsOneWidget);
-    // The field shows the default built-in assistant by name.
-    expect(find.textContaining('通用助手'), findsOneWidget);
-    // Tapping the field opens the picker panel with built-in AND
-    // user-defined assistants.
-    await tester.tap(find.textContaining('通用助手'));
+    // The field shows 未指定（使用当前选中的助手） — no built-in default.
+    expect(find.text('未指定（使用当前选中的助手）'), findsOneWidget);
+    // Tapping the field opens the picker panel with ONLY the user's
+    // assistants — built-in prompts are not offered on blocks.
+    await tester.tap(find.text('未指定（使用当前选中的助手）'));
     await tester.pumpAndSettle();
-    expect(find.text('内置助手'), findsOneWidget);
-    expect(find.textContaining('通用助手'), findsWidgets);
-    // The user-defined section is below the fold — scroll to it.
-    await tester.scrollUntilVisible(
-      find.text('我的助手'),
-      200,
-      scrollable: find.byType(Scrollable).last,
-    );
+    expect(find.text('内置助手'), findsNothing);
+    expect(find.textContaining('通用助手'), findsNothing);
+    expect(find.text('我的助手'), findsOneWidget);
     expect(find.textContaining('翻译助手'), findsOneWidget);
     expect(find.textContaining('代码助手'), findsOneWidget);
   });
@@ -300,7 +295,7 @@ void main() {
     expect(find.text('配置的助手已删除，请重新选择'), findsNothing);
   });
 
-  testWidgets('new chat block defaults to the first built-in assistant',
+  testWidgets('new chat block defaults to 未指定 (follows current assistant)',
       (tester) async {
     await pumpPanel(
       tester,
@@ -308,10 +303,10 @@ void main() {
       assistants: const [],
     );
 
-    // The picker field shows the default built-in assistant by name
-    // (not a confusing placeholder).
-    expect(find.textContaining('通用助手'), findsOneWidget);
-    expect(find.text('（使用当前选中的助手）'), findsNothing);
+    // No built-in default — the field guides toward the current
+    // assistant instead of showing a built-in preset name.
+    expect(find.text('未指定（使用当前选中的助手）'), findsOneWidget);
+    expect(find.textContaining('通用助手'), findsNothing);
   });
 
   testWidgets(

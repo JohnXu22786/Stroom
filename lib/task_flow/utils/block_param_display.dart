@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/assistant.dart';
-import '../../models/built_in_prompts.dart';
 import '../../models/tts_models.dart';
 import '../../providers/assistant_provider.dart';
 import '../../providers/provider_config.dart';
@@ -28,8 +27,8 @@ String friendlyParamValue(
   switch (paramDef.type) {
     case BlockParamType.assistantSelector:
       if (raw.isEmpty) return '未指定';
-      final builtIn = builtInPromptById(raw);
-      if (builtIn != null) return '${builtIn.emoji} ${builtIn.name}';
+      // Only user-defined assistants are valid on blocks — legacy
+      // built-in prompt ids read as 已失效.
       final assistants = ref.read(assistantProvider);
       final a = assistants.where((a) => a.id == raw).firstOrNull;
       return a != null ? '${a.emoji} ${a.name}' : '已失效';

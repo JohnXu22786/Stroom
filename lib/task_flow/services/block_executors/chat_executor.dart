@@ -93,6 +93,12 @@ Future<String> executeChatBlock({
         execId,
         flowSubTask.id,
         '对话失败: $reply',
+        // Carry the failed message's raw request/response onto the
+        // background task — the unified task list then shows the
+        // "查看错误详情" dialog (same form as the chat page's error
+        // bubble: status code, request/response body).
+        rawRequest: result.assistantMessage?.rawRequest,
+        rawResponse: result.assistantMessage?.rawResponse,
       );
       throw BlockExecutionException(
         '对话失败: $reply',

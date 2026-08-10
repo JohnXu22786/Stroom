@@ -599,7 +599,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     Expanded(
                       child: Text(
                         display == null
-                            ? (currentId.isEmpty ? '未指定助手' : '助手不存在')
+                            ? (currentId.isEmpty
+                                ? '未指定（使用当前选中的助手）'
+                                : '助手不存在')
                             : '${display.$1} ${display.$2}',
                         style: TextStyle(
                           fontSize: 13,
@@ -831,23 +833,23 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     }
   }
 
-  /// Resolves the display (emoji, name) for an assistant id — a built-in
-  /// prompt id (`builtin:prompt_<index>`) or a user-defined assistant.
+  /// Resolves the display (emoji, name) for an assistant id — only
+  /// user-defined assistants are allowed on blocks (built-in prompt ids
+  /// are legacy configs and resolve to null → 助手不存在).
   /// Returns null when the id is empty or no longer resolvable.
   (String, String)? _assistantDisplay(
     String id,
     List<Assistant> assistants,
   ) {
     if (id.isEmpty) return null;
-    final builtIn = builtInPromptById(id);
-    if (builtIn != null) return (builtIn.emoji, builtIn.name);
     if (id.startsWith(kBuiltInPromptIdPrefix)) return null;
     final a = assistants.where((a) => a.id == id).firstOrNull;
     return a == null ? null : (a.emoji, a.name);
   }
 
-  /// Opens the assistant picker panel: built-in prompts first, then the
-  /// user's assistants. Selecting one stores its id in the param.
+  /// Opens the assistant picker panel: only the user's custom assistants
+  /// ("我的助手") are selectable — built-in prompts are not offered on
+  /// flow blocks. Selecting one stores its id in the param.
   Future<void> _showAssistantPicker(String key, String currentId) async {
     final cs = Theme.of(context).colorScheme;
     final assistants = ref.read(assistantProvider);
@@ -881,31 +883,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             const SizedBox(height: 4),
             Center(
               child: Text(
-                '内置助手直接可用，我的助手为你的自定义配置',
+                '只能选择"我的助手"（在"聊天 → 助手"中添加）',
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
             ),
-            const SizedBox(height: 12),
-            // Built-in prompts
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                '内置助手',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-            ),
-            for (var i = 0; i < builtInPrompts.length; i++)
-              _assistantTile(
-                emoji: builtInPrompts[i].emoji,
-                name: builtInPrompts[i].name,
-                subtitle: builtInPrompts[i].description,
-                selected: currentId == 'builtin:prompt_$i',
-                onTap: () => Navigator.pop(ctx, 'builtin:prompt_$i'),
-              ),
             const SizedBox(height: 12),
             // User-defined assistants
             Padding(

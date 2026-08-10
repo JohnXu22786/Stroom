@@ -55,25 +55,14 @@ String subTaskTypeFor(BlockType? typeKey) {
 
 /// Resolves a chat block's assistantId to an [Assistant]:
 /// - empty → null (the currently selected assistant is used);
-/// - `builtin:prompt_<index>` → an [Assistant] built from the built-in
-///   prompt preset (no bound model — the currently selected model is
-///   used with the preset's prompt);
 /// - any other id → the matching user-defined assistant;
-/// - unresolvable → null (callers fail loudly).
+/// - unresolvable (deleted id or a legacy `builtin:prompt_*` id — flow
+///   blocks only allow user-defined assistants) → null (callers fail
+///   loudly).
 @visibleForTesting
 Assistant? resolveChatAssistant(
     String assistantId, List<Assistant> assistants) {
   if (assistantId.isEmpty) return null;
-  final builtIn = builtInPromptById(assistantId);
-  if (builtIn != null) {
-    return Assistant(
-      id: assistantId,
-      name: builtIn.name,
-      prompt: builtIn.prompt,
-      emoji: builtIn.emoji,
-      description: builtIn.description,
-    );
-  }
   if (assistantId.startsWith(kBuiltInPromptIdPrefix)) return null;
   return assistants.where((a) => a.id == assistantId).firstOrNull;
 }
@@ -316,9 +305,9 @@ class TaskFlowExecutionService {
         );
       case BlockType.chat:
         // Resolve the block's assistantId (empty = use the currently
-        // selected assistant). Built-in prompt ids resolve to an Assistant
-        // built from the preset (no bound model → the currently selected
-        // model is used, with the preset's prompt).
+        // selected assistant). Only user-defined assistants are allowed
+        // on blocks — a legacy built-in prompt id resolves to null and
+        // fails loudly below.
         final assistantId = block.params['assistantId']?.toString() ?? '';
         final chatAssistant = resolveChatAssistant(
           assistantId,
