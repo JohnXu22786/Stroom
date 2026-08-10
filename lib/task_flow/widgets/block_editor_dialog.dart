@@ -599,9 +599,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     Expanded(
                       child: Text(
                         display == null
-                            ? (currentId.isEmpty
-                                ? '未指定（使用当前选中的助手）'
-                                : '助手不存在')
+                            ? (currentId.isEmpty ? '未指定（使用当前选中的助手）' : '助手不存在')
                             : '${display.$1} ${display.$2}',
                         style: TextStyle(
                           fontSize: 13,
