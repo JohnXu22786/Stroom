@@ -98,8 +98,8 @@ extension _ChatServiceParamsExt on ChatService {
 
       // Provider-level custom params
       for (final cp in _providerConfig!.customParams) {
-        result[cp.paramName] = ChatService._coerceCustomParam(
-            cp.paramName, cp.type, cp.defaultValue,
+        result[cp.paramName] = ChatService._coerceCustomParam(cp.paramName,
+            cp.type, cp.options.isNotEmpty ? cp.options.first : cp.defaultValue,
             source: 'provider');
       }
 
@@ -186,8 +186,8 @@ extension _ChatServiceParamsExt on ChatService {
 
     // Model-level custom params
     for (final cp in _modelConfig!.customParams) {
-      result[cp.paramName] = ChatService._coerceCustomParam(
-          cp.paramName, cp.type, cp.defaultValue,
+      result[cp.paramName] = ChatService._coerceCustomParam(cp.paramName,
+          cp.type, cp.options.isNotEmpty ? cp.options.first : cp.defaultValue,
           source: 'model');
     }
 

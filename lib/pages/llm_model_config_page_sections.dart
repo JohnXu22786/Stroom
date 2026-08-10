@@ -310,6 +310,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
   }
 
   List<Widget> _buildCustomParamsSection() {
+    final cs = Theme.of(context).colorScheme;
     return [
       // ==========================================================
       // 自定义参数（总是发送）
@@ -429,58 +430,64 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          initialValue: param.defaultValue,
-                          decoration: InputDecoration(
-                            labelText: '默认参数值',
-                            hintText: param.paramType.defaultValueHint,
-                            border: const OutlineInputBorder(),
-                            errorBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: _jsonParamHasError(i)
-                                    ? Colors.red
-                                    : Colors.grey.shade400,
+                  // 值区按类型区分（与推理参数同款）：
+                  // string/number → 选项值胶囊块（可添加多个、删除、
+                  // 长按排序）；json/boolean → 默认参数值输入框。
+                  if (param.type == 'string' || param.type == 'number')
+                    _buildCustomParamOptionBlocks(param, cs)
+                  else
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: param.defaultValue,
+                            decoration: InputDecoration(
+                              labelText: '默认参数值',
+                              hintText: param.paramType.defaultValueHint,
+                              border: const OutlineInputBorder(),
+                              errorBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: _jsonParamHasError(i)
+                                      ? Colors.red
+                                      : Colors.grey.shade400,
+                                ),
                               ),
-                            ),
-                            focusedErrorBorder: OutlineInputBorder(
-                              borderSide: const BorderSide(
-                                color: Colors.red,
+                              focusedErrorBorder: OutlineInputBorder(
+                                borderSide: const BorderSide(
+                                  color: Colors.red,
+                                ),
                               ),
+                              errorText: _jsonErrors[i],
+                              errorMaxLines: 3,
+                              isDense: true,
                             ),
-                            errorText: _jsonErrors[i],
-                            errorMaxLines: 3,
-                            isDense: true,
-                          ),
-                          onChanged: (v) {
-                            param.defaultValue = v;
-                            _validateJsonField(i, param);
-                            setState(() {});
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(Icons.fullscreen, size: 20),
-                        tooltip: '全屏编辑',
-                        onPressed: () {
-                          _showValueFullscreenEditor(
-                            context,
-                            param.defaultValue,
-                            (result) {
-                              param.defaultValue = result;
+                            onChanged: (v) {
+                              param.defaultValue = v;
                               _validateJsonField(i, param);
                               setState(() {});
                             },
-                            param.paramType.defaultValueHint,
-                            type: param.type,
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.fullscreen, size: 20),
+                          tooltip: '全屏编辑',
+                          onPressed: () {
+                            _showValueFullscreenEditor(
+                              context,
+                              param.defaultValue,
+                              (result) {
+                                param.defaultValue = result;
+                                _validateJsonField(i, param);
+                                setState(() {});
+                              },
+                              param.paramType.defaultValueHint,
+                              type: param.type,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),

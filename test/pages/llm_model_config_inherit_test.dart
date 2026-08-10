@@ -875,6 +875,79 @@ void main() {
       expect(_savedEffortOptions(saved!), isEmpty);
     });
 
+    testWidgets('custom params use pill-block options (no default value box)',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'temperature_style',
+            defaultValue: 'balanced',
+            type: 'string',
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          // 旧数据升级：defaultValue → 第一个选项块
+          await _scrollToReasoning(tester, find.text('自定义参数'));
+          await tester.scrollUntilVisible(
+            find.text('balanced'),
+            200,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('balanced'), findsOneWidget);
+          // 没有「默认参数值」输入框；有「添加选项」按钮
+          expect(find.text('默认参数值'), findsNothing);
+          expect(find.text('添加选项'), findsOneWidget);
+
+          // 添加新选项 creative
+          await tester.tap(find.text('添加选项'));
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField).last, 'creative');
+          await tester.pump();
+          await tester.tap(find.text('确定'));
+          await tester.pumpAndSettle();
+          expect(find.text('creative'), findsOneWidget);
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.options, ['balanced', 'creative']);
+    });
+
+    testWidgets('json custom param keeps the default value input',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'thinking',
+            defaultValue: '{"type": "enabled"}',
+            type: 'json',
+          ),
+        ],
+      );
+
+      await _pumpAndSave(
+        tester,
+        model: model,
+        tapSave: false,
+      );
+      await _scrollToReasoning(tester, find.text('thinking'));
+      // json 类型：保留默认参数值输入框（无选项块）
+      expect(find.text('默认参数值'), findsOneWidget);
+      expect(find.text('添加选项'), findsNothing);
+    });
+
     testWidgets('new model with provider params still saves', (tester) async {
       ModelConfig? saved;
       await tester.pumpWidget(

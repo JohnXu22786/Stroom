@@ -151,6 +151,15 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     );
 
     _customParams = c.customParams.map((p) => p.copy()).toList();
+    // 旧数据升级：string/number 类型且仅有 defaultValue（无 options）时，
+    // 把 defaultValue 作为第一个选项（新 UI 为选项值胶囊块）
+    for (final p in _customParams) {
+      if ((p.type == 'string' || p.type == 'number') &&
+          p.options.isEmpty &&
+          p.defaultValue.trim().isNotEmpty) {
+        p.options.add(p.defaultValue);
+      }
+    }
     _reasoningParams = c.reasoningParams.map((p) => p.copy()).toList();
     // Initialize JSON validation for existing params
     for (int i = 0; i < _customParams.length; i++) {

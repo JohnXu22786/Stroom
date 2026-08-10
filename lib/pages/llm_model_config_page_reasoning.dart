@@ -204,6 +204,158 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   }
 
   // ===================================================================
+  // 自定义参数（CustomParam）选项值胶囊块操作
+  // ===================================================================
+
+  /// 长按拖拽排序自定义参数选项：把 [from] 移到 [to] 的位置。
+  void _moveCustomParamOptionTo(CustomParam param, String from, String to) {
+    if (from == to) return;
+    setState(() {
+      final options = param.options;
+      final fromIndex = options.indexOf(from);
+      final toIndex = options.indexOf(to);
+      if (fromIndex < 0 || toIndex < 0) return;
+      options.removeAt(fromIndex);
+      options.insert(toIndex, from);
+    });
+  }
+
+  /// 添加自定义参数选项值（对话框输入）。
+  Future<void> _addCustomParamOptionWithDialog(CustomParam param) async {
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('添加选项值'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '如 low、medium、high',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    if (value == null || value.isEmpty || !mounted) return;
+    setState(() {
+      if (!param.options.contains(value)) {
+        param.options.add(value);
+      }
+    });
+  }
+
+  /// 自定义参数选项值区：胶囊块（长按拖拽排序，右上角删除）。
+  Widget _buildCustomParamOptionBlocks(CustomParam param, ColorScheme cs) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '选项值（点右上角 × 删除，长按拖拽排序）',
+          style: TextStyle(
+            fontSize: 12,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final value in param.options)
+              _buildCustomParamOptionBlock(param, value, cs),
+          ],
+        ),
+        const SizedBox(height: 4),
+        TextButton.icon(
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('添加选项', style: TextStyle(fontSize: 13)),
+          onPressed: () => _addCustomParamOptionWithDialog(param),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCustomParamOptionBlock(
+    CustomParam param,
+    String value,
+    ColorScheme cs,
+  ) {
+    final pill = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant, width: 1),
+      ),
+      child: Text(
+        value,
+        style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+      ),
+    );
+
+    final withDelete = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        pill,
+        Positioned(
+          top: -6,
+          right: -6,
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                param.options.remove(value);
+              });
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                color: cs.errorContainer,
+                shape: BoxShape.circle,
+              ),
+              padding: const EdgeInsets.all(2),
+              child: Icon(
+                Icons.close,
+                size: 12,
+                color: cs.onErrorContainer,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => details.data != value,
+      onAcceptWithDetails: (details) =>
+          _moveCustomParamOptionTo(param, details.data, value),
+      builder: (context, candidateData, rejectedData) {
+        return LongPressDraggable<String>(
+          data: value,
+          delay: const Duration(milliseconds: 330),
+          childWhenDragging: Opacity(opacity: 0.3, child: withDelete),
+          feedback: Material(
+            color: Colors.transparent,
+            child: Opacity(opacity: 0.8, child: withDelete),
+          ),
+          child: withDelete,
+        );
+      },
+    );
+  }
+
+  // ===================================================================
   // 推理参数帮助方法
   // ===================================================================
 

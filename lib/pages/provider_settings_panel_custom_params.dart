@@ -6,6 +6,161 @@ part of 'provider_settings_panel.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
+  // ===================================================================
+  // 自定义参数（CustomParam）选项值胶囊块（与推理力度同款）
+  // ===================================================================
+
+  /// 长按拖拽排序选项：把 [from] 移到 [to] 的位置。
+  void _moveProviderCustomParamOptionTo(
+      CustomParam param, String from, String to) {
+    if (from == to) return;
+    setState(() {
+      final options = param.options;
+      final fromIndex = options.indexOf(from);
+      final toIndex = options.indexOf(to);
+      if (fromIndex < 0 || toIndex < 0) return;
+      options.removeAt(fromIndex);
+      options.insert(toIndex, from);
+    });
+  }
+
+  /// 添加选项值（对话框输入）。
+  Future<void> _addProviderCustomParamOptionWithDialog(
+      CustomParam param) async {
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('添加选项值'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '如 low、medium、high',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    if (value == null || value.isEmpty || !mounted) return;
+    setState(() {
+      if (!param.options.contains(value)) {
+        param.options.add(value);
+      }
+    });
+  }
+
+  /// 选项值区：胶囊块（长按拖拽排序，右上角删除）。
+  Widget _buildProviderCustomParamOptionBlocks(
+      CustomParam param, ColorScheme cs) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '选项值（点右上角 × 删除，长按拖拽排序）',
+          style: TextStyle(
+            fontSize: 12,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final value in param.options)
+              _buildProviderCustomParamOptionBlock(param, value, cs),
+          ],
+        ),
+        const SizedBox(height: 4),
+        TextButton.icon(
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('添加选项', style: TextStyle(fontSize: 13)),
+          onPressed: () => _addProviderCustomParamOptionWithDialog(param),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProviderCustomParamOptionBlock(
+    CustomParam param,
+    String value,
+    ColorScheme cs,
+  ) {
+    final pill = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant, width: 1),
+      ),
+      child: Text(
+        value,
+        style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+      ),
+    );
+
+    final withDelete = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        pill,
+        Positioned(
+          top: -6,
+          right: -6,
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                param.options.remove(value);
+              });
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                color: cs.errorContainer,
+                shape: BoxShape.circle,
+              ),
+              padding: const EdgeInsets.all(2),
+              child: Icon(
+                Icons.close,
+                size: 12,
+                color: cs.onErrorContainer,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => details.data != value,
+      onAcceptWithDetails: (details) =>
+          _moveProviderCustomParamOptionTo(param, details.data, value),
+      builder: (context, candidateData, rejectedData) {
+        return LongPressDraggable<String>(
+          data: value,
+          delay: const Duration(milliseconds: 330),
+          childWhenDragging: Opacity(opacity: 0.3, child: withDelete),
+          feedback: Material(
+            color: Colors.transparent,
+            child: Opacity(opacity: 0.8, child: withDelete),
+          ),
+          child: withDelete,
+        );
+      },
+    );
+  }
+
   void _addCustomParam() {
     setState(() {
       _customParams.insert(0, CustomParam(paramName: '', defaultValue: ''));
@@ -397,58 +552,63 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          initialValue: param.defaultValue,
-                          decoration: InputDecoration(
-                            labelText: '默认参数值',
-                            hintText: param.paramType.defaultValueHint,
-                            border: const OutlineInputBorder(),
-                            errorBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: _jsonParamHasError(i)
-                                    ? Colors.red
-                                    : Colors.grey.shade400,
+                  // 值区按类型区分（与推理参数同款）：
+                  // string/number → 选项值胶囊块；json/boolean → 默认参数值。
+                  if (param.type == 'string' || param.type == 'number')
+                    _buildProviderCustomParamOptionBlocks(param, cs)
+                  else
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: param.defaultValue,
+                            decoration: InputDecoration(
+                              labelText: '默认参数值',
+                              hintText: param.paramType.defaultValueHint,
+                              border: const OutlineInputBorder(),
+                              errorBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: _jsonParamHasError(i)
+                                      ? Colors.red
+                                      : Colors.grey.shade400,
+                                ),
                               ),
-                            ),
-                            focusedErrorBorder: OutlineInputBorder(
-                              borderSide: const BorderSide(
-                                color: Colors.red,
+                              focusedErrorBorder: OutlineInputBorder(
+                                borderSide: const BorderSide(
+                                  color: Colors.red,
+                                ),
                               ),
+                              errorText: _jsonErrors[i],
+                              errorMaxLines: 3,
+                              isDense: true,
                             ),
-                            errorText: _jsonErrors[i],
-                            errorMaxLines: 3,
-                            isDense: true,
-                          ),
-                          onChanged: (v) {
-                            param.defaultValue = v;
-                            _validateJsonField(i, param);
-                            setState(() {});
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(Icons.fullscreen, size: 20),
-                        tooltip: '全屏编辑',
-                        onPressed: () {
-                          _showValueFullscreenEditor(
-                            context,
-                            param.defaultValue,
-                            (result) {
-                              param.defaultValue = result;
+                            onChanged: (v) {
+                              param.defaultValue = v;
                               _validateJsonField(i, param);
                               setState(() {});
                             },
-                            param.paramType.defaultValueHint,
-                            type: param.type,
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.fullscreen, size: 20),
+                          tooltip: '全屏编辑',
+                          onPressed: () {
+                            _showValueFullscreenEditor(
+                              context,
+                              param.defaultValue,
+                              (result) {
+                                param.defaultValue = result;
+                                _validateJsonField(i, param);
+                                setState(() {});
+                              },
+                              param.paramType.defaultValueHint,
+                              type: param.type,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),

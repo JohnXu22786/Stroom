@@ -57,11 +57,17 @@ class CustomParam {
   String defaultValue;
   String type;
 
+  /// 选项值列表（与推理力度同款的胶囊块编辑）。
+  /// 空时向后兼容：请求发送 [defaultValue]（旧数据）；非空时发送
+  /// 第一个选项（排序决定默认值）。
+  List<String> options;
+
   CustomParam({
     required this.paramName,
     this.defaultValue = '',
     this.type = 'string',
-  });
+    List<String>? options,
+  }) : options = options ?? [];
 
   ParamType get paramType => ParamType.fromValue(type);
 
@@ -69,18 +75,21 @@ class CustomParam {
         'paramName': paramName,
         'defaultValue': defaultValue,
         'type': type,
+        if (options.isNotEmpty) 'options': options,
       };
 
   factory CustomParam.fromMap(Map<String, dynamic> map) => CustomParam(
         paramName: map['paramName'] as String? ?? '',
         defaultValue: map['defaultValue'] as String? ?? '',
         type: map['type'] as String? ?? 'string',
+        options: (map['options'] as List?)?.cast<String>() ?? const [],
       );
 
   CustomParam copy() => CustomParam(
         paramName: paramName,
         defaultValue: defaultValue,
         type: type,
+        options: List.of(options),
       );
 }
 
