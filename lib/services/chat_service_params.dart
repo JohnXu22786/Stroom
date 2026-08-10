@@ -271,9 +271,12 @@ extension _ChatServiceParamsExt on ChatService {
     return ChatService._stripOmitted(result);
   }
 
-  /// 自定义参数的生效值：options 非空取第一个选项；否则取 defaultValue；
-  /// boolean 类型无任何配置时默认发送 'true'（配置了即开启）。
+  /// 自定义参数的生效值：
+  /// - json 类型始终用 defaultValue（大输入框/全屏编辑的内容）；
+  /// - string/number 优先第一个选项，其次 defaultValue；
+  /// - boolean 无参数值，默认发送 'true'（配置了即开启）。
   static String _customParamEffectiveValue(CustomParam cp) {
+    if (cp.type == 'json') return cp.defaultValue;
     if (cp.options.isNotEmpty) return cp.options.first;
     if (cp.defaultValue.trim().isNotEmpty) return cp.defaultValue;
     if (cp.type == 'boolean') return 'true';

@@ -412,10 +412,12 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                                 setState(() {
                                   param.type = v;
                                   // 切换到 string/number：注册勾选块状态
-                                  // （json/boolean 无选项，不参与）
+                                  // 并清空 defaultValue（json 的旧值不应
+                                  // 在 options 模式下继续发送）
                                   if (v == 'string' || v == 'number') {
                                     _customParamSelectedValues.putIfAbsent(
                                         param, () => param.options.toSet());
+                                    param.defaultValue = '';
                                   }
                                   _validateJsonField(i, param);
                                 });

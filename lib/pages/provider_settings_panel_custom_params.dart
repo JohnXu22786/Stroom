@@ -468,6 +468,11 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                               if (v != null) {
                                 setState(() {
                                   param.type = v;
+                                  // 切换到 string/number：清空 defaultValue
+                                  // （json 的旧值不应在 options 模式下继续发送）
+                                  if (v == 'string' || v == 'number') {
+                                    param.defaultValue = '';
+                                  }
                                   _validateJsonField(i, param);
                                 });
                               }
