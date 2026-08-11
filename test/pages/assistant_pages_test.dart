@@ -9,7 +9,6 @@ import 'package:stroom/models/built_in_prompts.dart';
 import 'package:stroom/pages/assistant_selection_page.dart';
 import 'package:stroom/pages/topic_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
-import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/widgets/llm/assistant_avatar.dart';
 
 /// Creates a test app wrapped in ProviderScope with optional overrides.
@@ -49,96 +48,6 @@ Widget createTestApp({
 }
 
 void main() {
-  group('MCP 工具显示开关 (assistant defaults tab)', () {
-    /// 打开编辑助手对话框并切到"默认设置"tab。
-    Future<void> openDefaultsTab(WidgetTester tester) async {
-      await tester.pumpAndSettle();
-      await tester.longPress(find.byType(AssistantAvatar));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('编辑'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('默认设置'));
-      await tester.pumpAndSettle();
-    }
-
-    testWidgets(
-        'master switch off: MCP display switch renders disabled with hint',
-        (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            assistantProvider.overrideWith((ref) {
-              final notifier = AssistantsNotifier();
-              notifier.createAssistant(
-                name: '测试助手',
-                prompt: 'P1',
-                emoji: '🤖',
-              );
-              return notifier;
-            }),
-            // MCP 总开关关闭
-            providerEntriesProvider.overrideWith((ref) {
-              final notifier = ProviderEntriesNotifier();
-              notifier.state = ProviderEntriesState(
-                entries: [
-                  ProviderEntry(
-                    id: 'builtin_mcp',
-                    type: 'mcp',
-                    name: 'MCP供应商',
-                    enabled: false,
-                  ),
-                ],
-              );
-              return notifier;
-            }),
-          ],
-          child: const MaterialApp(
-            home: AssistantSelectionPage(),
-          ),
-        ),
-      );
-      await openDefaultsTab(tester);
-
-      final switchFinder = find.widgetWithText(SwitchListTile, '在对话页显示 MCP 工具');
-      expect(switchFinder, findsOneWidget, reason: '总开关关闭时显示开关仍渲染（禁用态+提示）');
-      final switchTile = tester.widget<SwitchListTile>(switchFinder);
-      expect(switchTile.value, isFalse);
-      expect(switchTile.onChanged, isNull, reason: '总开关关闭时显示开关不可操作');
-      expect(find.textContaining('MCP 总开关已关闭'), findsOneWidget);
-    });
-
-    testWidgets('master switch on: MCP display switch renders enabled',
-        (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            assistantProvider.overrideWith((ref) {
-              final notifier = AssistantsNotifier();
-              notifier.createAssistant(
-                name: '测试助手',
-                prompt: 'P1',
-                emoji: '🤖',
-              );
-              return notifier;
-            }),
-          ],
-          child: const MaterialApp(
-            home: AssistantSelectionPage(),
-          ),
-        ),
-      );
-      await openDefaultsTab(tester);
-
-      final switchFinder = find.widgetWithText(SwitchListTile, '在对话页显示 MCP 工具');
-      expect(switchFinder, findsOneWidget);
-      final switchTile = tester.widget<SwitchListTile>(switchFinder);
-      expect(switchTile.value, isTrue, reason: '未切换过总开关时助手默认可见（保持原有行为）');
-      expect(switchTile.onChanged, isNotNull);
-    });
-  });
-
   group('EmojiPicker adaptive width', () {
     /// Find the emoji GridView inside the dialog (padding EdgeInsets.only(top: 4))
     Finder findEmojiGrid() {
@@ -948,8 +857,10 @@ void main() {
       expect(find.text('跟随全局设置'), findsWidgets);
       expect(find.text('全部自动启用（未配置）'), findsOneWidget);
 
-      // 未配置时不显示"全部启用"与"取消配置"（配置后才会出现）
+      // 头部右侧始终提供批量操作按钮；未配置时"全部启用"没有意义
+      // （当前已自动启用全部），不显示；"取消配置"按钮已移除。
       expect(find.text('全部启用'), findsNothing);
+      expect(find.text('全部关闭'), findsOneWidget);
       expect(find.text('取消配置（自动启用全部）'), findsNothing);
     });
 
@@ -1081,57 +992,6 @@ void main() {
       expect(assistant.defaultModelName, isNull);
     });
 
-    testWidgets('已配置默认工具后可通过"恢复自动启用全部"回到未配置状态', (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            assistantProvider.overrideWith((ref) {
-              final notifier = AssistantsNotifier();
-              final assistant =
-                  notifier.createAssistant(name: '助手编辑', prompt: 'P1');
-              notifier.updateAssistantDefaults(
-                id: assistant.id,
-                defaultToolNames: {'web_search', 'todowrite'},
-              );
-              return notifier;
-            }),
-          ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.longPress(find.byType(AssistantAvatar));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('编辑'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('默认设置'));
-      await tester.pumpAndSettle();
-
-      // 已配置状态：提供"取消配置（自动启用全部）"，摘要显示已启用数量
-      expect(find.text('取消配置（自动启用全部）'), findsOneWidget);
-      expect(find.textContaining('已启用'), findsOneWidget);
-
-      // 点击取消配置 → 回到"从未配置"
-      await tester.ensureVisible(find.text('取消配置（自动启用全部）'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('取消配置（自动启用全部）'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('尚未配置默认工具'), findsOneWidget);
-
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
-
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(AssistantSelectionPage)),
-      );
-      final assistant = container.read(assistantProvider).single;
-      expect(assistant.defaultToolNames, isNull,
-          reason: '恢复自动启用全部应使助手回到"从未配置"（null）状态，'
-              '新话题继续自动启用全部工具');
-    });
-
     testWidgets(
         '同名模型（不同供应商配置）只显示一个单选选项，不触发 RadioGroup '
         '重复 value 崩溃', (tester) async {
@@ -1202,7 +1062,7 @@ void main() {
       expect(assistant.defaultModelName, 'gpt-4o | OpenAI');
     });
 
-    testWidgets('手机宽度下默认设置 tab 不溢出（按钮自动换行）', (tester) async {
+    testWidgets('手机宽度下默认设置 tab 不溢出（标题行按钮自动换行）', (tester) async {
       // 360dp 手机宽度 + 系统字体缩放 2.0，最严苛的常见布局场景
       tester.platformDispatcher.textScaleFactorTestValue = 2.0;
       addTearDown(
@@ -1219,7 +1079,7 @@ void main() {
               final notifier = AssistantsNotifier();
               final assistant =
                   notifier.createAssistant(name: '助手编辑', prompt: 'P1');
-              // 已配置状态 → 三个按钮同时出现，最容易溢出
+              // 已配置状态 → 两个批量按钮出现在标题行右侧，最容易溢出
               notifier.updateAssistantDefaults(
                 id: assistant.id,
                 defaultToolNames: {'web_search', 'todowrite'},
@@ -1243,8 +1103,7 @@ void main() {
       await tester.tap(find.text('默认设置'));
       await tester.pumpAndSettle();
 
-      // 打开即渲染全部按钮；若有 RenderFlex 溢出，pumpAndSettle 会抛异常
-      expect(find.text('取消配置（自动启用全部）'), findsOneWidget);
+      // 打开即渲染两个批量按钮；若有 RenderFlex 溢出，pumpAndSettle 会抛异常
       expect(find.text('全部启用'), findsOneWidget);
       expect(find.text('全部关闭'), findsOneWidget);
       expect(tester.takeException(), isNull);

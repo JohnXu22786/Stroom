@@ -200,26 +200,6 @@ extension _ChatPageListenersExt on _ChatPageState {
     });
   }
 
-  /// Keeps the runtime enabled-tool set in sync when assistants change
-  /// (e.g. the assistant's MCP 工具显示开关 was toggled mid-session).
-  ///
-  /// The save guard in [_saveEnabledToolsToConversation] compares the runtime
-  /// set against the *current* auto-enable baseline; if the display switch
-  /// changed without a re-resolve, the stale set could be frozen into the
-  /// conversation's explicit prefs. Re-resolving here keeps the runtime set
-  /// aligned with the current selectable tools. The `setEquals` guard inside
-  /// the resolve prevents redundant provider writes (renames etc. are no-ops).
-  /// UI refresh is handled by the `ref.watch(assistantProvider)` in build.
-  void _registerAssistantListener() {
-    ref.listen(assistantProvider, (prev, next) {
-      if (prev == null || identical(prev, next) || !mounted) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _resolveEnabledToolsForActiveConversation();
-      });
-    });
-  }
-
   /// Re-configures the adapter when provider entries change (e.g. after
   /// load completes), re-initializing built-in and MCP tools.
   void _registerProviderEntriesListener() {

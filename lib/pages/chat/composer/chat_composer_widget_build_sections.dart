@@ -68,7 +68,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     // Tool chip: accent color (indigo) when tools enabled, grey when disabled
     // ═══════════════════════════════════════════════════════════
     const Color toolAccentColor = Color(0xFF6366F1);
-    // 徽标只统计当前可选择（显示）的工具：MCP 总开关或助手显示开关关闭时，
+    // 徽标只统计当前可选择（显示）的工具：MCP 总开关关闭时，
     // 已启用但被隐藏的 MCP 工具不计入（运行时启用集保留保存的偏好，这里
     // 仅做展示层过滤，避免把隐藏的工具从对话偏好中抹掉）。
     final visibleEnabledTools = pruneUnselectableToolNames(
