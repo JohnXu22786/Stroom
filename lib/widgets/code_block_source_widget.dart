@@ -46,6 +46,13 @@ class CodeBlockSourceView extends StatefulWidget {
 class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
   bool _wrapEnabled = false;
 
+  /// Cursor width passed to the code [SelectableText]. [RenderEditable]
+  /// wraps its text at `available width - (_kCaretGap + cursorWidth)`, so the
+  /// wrap-mode measurement below subtracts `1.0 + _selectableCursorWidth` to
+  /// stay in lock-step with the actual render. Keep both in sync if this
+  /// ever changes.
+  static const double _selectableCursorWidth = 2.0;
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -170,8 +177,6 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
   Widget _buildCodeContent(Color textColor, bool isDark) {
     final lines = widget.code.split('\n');
 
-    const lineHeight = 13.0 * 1.5;
-
     final codeStyle = TextStyle(
       fontFamily: 'monospace',
       fontSize: 13,
@@ -189,125 +194,134 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
     final digitCount = lines.length.toString().length;
     final lineNumWidth = (digitCount * 8.0 + 12.0).clamp(32.0, 80.0);
 
-    if (_wrapEnabled) {
-      return _buildWrapModeContent(
-        lines,
-        textColor,
-        lineNumWidth,
-        lineNumStyle,
-        codeStyle,
-        lineHeight,
-      );
-    } else {
-      return _buildNoWrapModeContent(
-        widget.code,
-        lines,
-        textColor,
-        lineNumWidth,
-        lineNumStyle,
-        codeStyle,
-        lineHeight,
-      );
-    }
+    return _buildCodeBlock(
+      lines: lines,
+      wrap: _wrapEnabled,
+      lineNumWidth: lineNumWidth,
+      lineNumStyle: lineNumStyle,
+      codeStyle: codeStyle,
+    );
   }
 
-  Widget _buildWrapModeContent(
+  /// Measures the actual rendered height of every logical code line when laid
+  /// out at [maxWidth] with [codeStyle]. The code is shown in a single
+  /// [SelectableText] (so a drag selection can span multiple lines), which
+  /// means the line-number gutter can no longer align per-line inside the
+  /// layout; instead each gutter entry is sized to the measured height of its
+  /// logical line. Using the same style, text scaler and width constraint as
+  /// the [SelectableText] keeps the gutter pixel-aligned with the rendered
+  /// code lines in both wrap and no-wrap modes.
+  List<double> _measureLineHeights(
     List<String> lines,
-    Color textColor,
+    TextStyle codeStyle,
+    double maxWidth,
+  ) {
+    final textScaler = MediaQuery.textScalerOf(context);
+    return lines.map((line) {
+      // An empty line still occupies one full line box in the rendered code;
+      // measuring an empty string would report zero height instead.
+      final painter = TextPainter(
+        text: TextSpan(text: line.isEmpty ? ' ' : line, style: codeStyle),
+        textDirection: TextDirection.ltr,
+        textScaler: textScaler,
+      )..layout(maxWidth: maxWidth);
+      return painter.height;
+    }).toList();
+  }
+
+  /// Builds the line-number gutter. Each entry is [height] tall with the
+  /// number pinned to its top-right, so the numbers line up with the first
+  /// visual line of the corresponding (possibly wrapped) code line.
+  Widget _buildLineNumberGutter(
+    List<double> heights,
     double lineNumWidth,
     TextStyle lineNumStyle,
-    TextStyle codeStyle,
-    double lineHeight,
   ) {
-    final lineWidgets = List<Widget>.generate(lines.length, (i) {
-      final lineNum = i + 1;
-      final line = lines[i];
-      final codeText = line.isEmpty ? ' ' : line;
-
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (var i = 0; i < heights.length; i++)
           SizedBox(
             width: lineNumWidth,
-            height: lineHeight,
-            child: Text(
-              '$lineNum',
-              textAlign: TextAlign.right,
-              style: lineNumStyle,
-              overflow: TextOverflow.clip,
+            height: heights[i],
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Text(
+                '${i + 1}',
+                textAlign: TextAlign.right,
+                style: lineNumStyle,
+                overflow: TextOverflow.clip,
+              ),
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: SelectableText(
-              codeText,
-              style: codeStyle,
-            ),
-          ),
-        ],
-      );
-    });
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.vertical,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 40, 12, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: lineWidgets,
-        ),
-      ),
+      ],
     );
   }
 
-  Widget _buildNoWrapModeContent(
-    String fullCode,
-    List<String> lines,
-    Color textColor,
-    double lineNumWidth,
-    TextStyle lineNumStyle,
-    TextStyle codeStyle,
-    double lineHeight,
-  ) {
-    final lineNumWidgets = List<Widget>.generate(lines.length, (i) {
-      return SizedBox(
-        width: lineNumWidth,
-        height: lineHeight,
-        child: Text(
-          '${i + 1}',
-          textAlign: TextAlign.right,
-          style: lineNumStyle,
-          overflow: TextOverflow.clip,
-        ),
-      );
-    });
-
-    final lineNumColumn = Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: lineNumWidgets,
-    );
-
-    final codeWidget = SelectableText(
-      fullCode,
-      style: codeStyle,
-    );
-
+  /// Builds the code area: a line-number gutter next to a single
+  /// [SelectableText] holding the whole code.
+  ///
+  /// In wrap mode the code wraps at the available width (the measurement
+  /// width comes from a [LayoutBuilder]); in no-wrap mode the code sits in a
+  /// horizontal scroll view, so every logical line is one visual line and the
+  /// measurement width is unbounded.
+  Widget _buildCodeBlock({
+    required List<String> lines,
+    required bool wrap,
+    required double lineNumWidth,
+    required TextStyle lineNumStyle,
+    required TextStyle codeStyle,
+  }) {
     return SingleChildScrollView(
       scrollDirection: Axis.vertical,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(0, 40, 12, 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            lineNumColumn,
-            const SizedBox(width: 8),
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: codeWidget,
-              ),
-            ),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // The SelectableText (RenderEditable) reserves a caret margin of
+            // _kCaretGap (1.0) + cursorWidth and wraps text at
+            // `available width - caretMargin`, so the measurement must use
+            // the same width or lines falling in that narrow band wrap in
+            // the render but not in the measurement, drifting the numbers
+            // below them.
+            final codeAreaWidth = wrap
+                ? (constraints.maxWidth -
+                        lineNumWidth -
+                        8.0 -
+                        1.0 -
+                        _selectableCursorWidth)
+                    .clamp(1.0, double.infinity)
+                    .toDouble()
+                : double.infinity;
+            final visualHeights =
+                _measureLineHeights(lines, codeStyle, codeAreaWidth);
+
+            final codeSelectable = SelectableText(
+              widget.code,
+              style: codeStyle,
+              cursorWidth: _selectableCursorWidth,
+            );
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildLineNumberGutter(
+                  visualHeights,
+                  lineNumWidth,
+                  lineNumStyle,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: wrap
+                      ? codeSelectable
+                      : SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: codeSelectable,
+                        ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/code_block_source_widget.dart';
 
@@ -210,6 +211,188 @@ void main() {
       // paint the badge over the "(empty)" placeholder.
       expect(find.text('(empty)'), findsOneWidget);
       expect(find.text('python'), findsNothing);
+    });
+  });
+
+  group('CodeBlockSourceView - multi-line selection', () {
+    testWidgets('no-wrap mode renders the whole code as ONE SelectableText',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CodeBlockSourceView(code: 'l1\nl2\nl3'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The full code (all lines) must live inside a single SelectableText so
+      // a drag selection can span multiple lines.
+      final selectables = find.byType(SelectableText);
+      expect(selectables, findsOneWidget,
+          reason: 'the whole code should be one SelectableText');
+      expect(
+        tester.widget<SelectableText>(selectables).data,
+        'l1\nl2\nl3',
+        reason: 'the single SelectableText must contain every line',
+      );
+    });
+
+    testWidgets('wrap mode renders the whole code as ONE SelectableText',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CodeBlockSourceView(code: 'l1\nl2\nl3'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Enable wrap.
+      await tester.tap(find.byIcon(Icons.wrap_text));
+      await tester.pumpAndSettle();
+
+      // Regression: wrap mode used one SelectableText per line, which made it
+      // impossible to drag-select across lines. It must be a single
+      // SelectableText holding the whole code.
+      final selectables = find.byType(SelectableText);
+      expect(selectables, findsOneWidget,
+          reason: 'wrap mode should still expose one SelectableText');
+      expect(
+        tester.widget<SelectableText>(selectables).data,
+        'l1\nl2\nl3',
+        reason: 'the single SelectableText must contain every line',
+      );
+    });
+  });
+
+  group('CodeBlockSourceView - line number alignment', () {
+    // Returns the global top of every logical code line as ACTUALLY rendered
+    // by the code's SelectableText (via RenderEditable caret rects) — ground
+    // truth independent of the widget's own gutter measurement.
+    List<double> renderedLineTops(WidgetTester tester, String code) {
+      final editable = find
+          .descendant(
+            of: find.byType(CodeBlockSourceView),
+            matching: find.byElementPredicate(
+              (e) => e.renderObject is RenderEditable,
+            ),
+          )
+          .first;
+      final renderEditable = tester.renderObject<RenderEditable>(editable);
+      final editableTop = renderEditable.localToGlobal(Offset.zero).dy;
+
+      final tops = <double>[];
+      var offset = 0;
+      for (final line in code.split('\n')) {
+        final caretRect =
+            renderEditable.getLocalRectForCaret(TextPosition(offset: offset));
+        tops.add(editableTop + caretRect.top);
+        offset += line.length + 1;
+      }
+      return tops;
+    }
+
+    // Asserts each gutter number lines up with the actual rendered line.
+    // Caret rects carry a small constant leading offset vs the text box, so
+    // compare line-to-line SPACING rather than absolute positions.
+    void expectGutterAlignsWithRender(WidgetTester tester, String code) {
+      final renderTops = renderedLineTops(tester, code);
+      final firstRenderTop = renderTops.first;
+      final firstNumTop = tester.getTopLeft(find.text('1')).dy;
+
+      for (var i = 1; i < renderTops.length; i++) {
+        final numTop = tester.getTopLeft(find.text('${i + 1}')).dy;
+        expect(
+          numTop - firstNumTop,
+          closeTo(renderTops[i] - firstRenderTop, 0.01),
+          reason: 'line number ${i + 1} must align with code line ${i + 1} '
+              '(drifts if the gutter uses a hardcoded or wrong line height)',
+        );
+      }
+    }
+
+    testWidgets('no-wrap line numbers align with code lines', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      // Use a non-trivial text scale so the rendered line height provably
+      // differs from any hardcoded constant, keeping this test meaningful
+      // regardless of the test font's metrics.
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(() =>
+          tester.platformDispatcher.clearTextScaleFactorTestValue());
+
+      const code = 'aaaa\nbbbb\ncccc\ndddd';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: CodeBlockSourceView(code: code),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expectGutterAlignsWithRender(tester, code);
+    });
+
+    testWidgets('wrap mode line numbers align with wrapped code lines',
+        (tester) async {
+      final style = TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 13,
+        height: 1.5,
+      );
+      final charWidth = (TextPainter(
+        text: TextSpan(text: 'x', style: style),
+        textDirection: TextDirection.ltr,
+      )..layout())
+          .width;
+
+      // codeAreaWidth = surfaceWidth - 1 (borders) - 12 (right padding)
+      //   - 32 (gutter) - 8 (gap) = surfaceWidth - 53.
+      // Search for a surface width where line 1 lands in the
+      // (codeAreaWidth - 3, codeAreaWidth] band: it fits the widget's
+      // measurement width but the render wraps it (RenderEditable reserves a
+      // 3px caret margin). Only such a line exposes wrap-width drift.
+      int? bandSurfaceWidth;
+      int? lineLength;
+      for (var s = 300; s <= 1200; s++) {
+        final codeAreaWidth = s - 53.0;
+        final n = (codeAreaWidth / charWidth).floor();
+        if (n < 1) continue;
+        if (n * charWidth > codeAreaWidth - 3.0) {
+          bandSurfaceWidth = s;
+          lineLength = n;
+          break;
+        }
+      }
+      expect(bandSurfaceWidth, isNotNull,
+          reason: 'a band-hitting surface width must exist for this font');
+
+      await tester.binding
+          .setSurfaceSize(Size(bandSurfaceWidth!.toDouble(), 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final code = '${'x' * lineLength!}\nshort';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: CodeBlockSourceView(code: code),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.wrap_text));
+      await tester.pumpAndSettle();
+
+      expectGutterAlignsWithRender(tester, code);
     });
   });
 
