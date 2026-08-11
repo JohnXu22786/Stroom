@@ -18,7 +18,6 @@ import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/file_manager_utils.dart';
-import '../widgets/folder_picker_dialog.dart';
 import 'files_page_shared.dart';
 import 'gallery_shared.dart';
 import 'gallery_viewer_page.dart';
@@ -144,23 +143,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   // ====================================================================
 
   Future<void> _takePhoto() async {
-    final folders = ref.read(imageFolderListProvider);
-    final selectedFolder = await FolderPickerDialog.show(
-      context,
-      currentFolder: _currentFolder,
-      availableFolders: folders,
-      title: '拍照添加至文件夹',
-      onCreateFolder: (name) async {
-        await ref.read(imageRecordsProvider.notifier).createFolder(name);
-        return null;
-      },
-      onRefreshFolders: () async {
-        await ref.read(imageFolderListProvider.notifier).loadFolders();
-        return ref.read(imageFolderListProvider);
-      },
-    );
-    if (selectedFolder == null || !mounted) return;
-
+    // 直接保存到当前正在浏览的文件夹（_currentFolder），不再弹文件夹选择
     var success = false;
     try {
       final picker = ImagePicker();
@@ -188,7 +171,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           format: format,
           createdAt: DateTime.now(),
           size: bytes.length,
-          folder: selectedFolder,
+          folder: _currentFolder,
         ),
       );
       success = true;
