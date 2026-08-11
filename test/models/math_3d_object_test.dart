@@ -89,9 +89,9 @@ void main() {
     });
 
     test('arc samples only its angular range', () {
-      // Quarter arc from 0 to Ï€/2 on the unit circle in the xOy plane.
+      // Quarter arc from 0 to π/2 on the unit circle in the xOy plane.
       // The circle basis is (u, v) = ((0,1,0), (-1,0,0)) for n = unitZ, so
-      // angle 0 lies at (0,1,0) and Ï€/2 at (-1,0,0).
+      // angle 0 lies at (0,1,0) and π/2 at (-1,0,0).
       final arc =
           Object3D.arc(Point3D.origin, Vector3D.unitZ, 1, 0, dart_math.pi / 2);
       final pts = arc.samplePoints();
@@ -214,7 +214,7 @@ void main() {
     test('plane transform rebuilds a valid plane', () {
       final pl = Object3D.plane(a: 0, b: 0, c: 1, d: 0);
       final moved = pl.translated(const Vector3D(0, 0, 3));
-      // Plane z=0 shifted up by 3 â†’ d = 3.
+      // Plane z=0 shifted up by 3 → d = 3.
       expect(moved.planeNormalC, closeTo(1, 1e-9));
       expect(moved.planeDValue, closeTo(3, 1e-9));
     });
@@ -416,9 +416,26 @@ void main() {
       final clockwise = MeshBuilder.pyramid(
           const [Point3D(0, 0, 0), Point3D(2, 2, 0), Point3D(2, 0, 0)],
           const Point3D(1, 1, 4));
-      expect(clockwise.vertices.length, 4);
-      final ok = clockwise.indices.length >= 12;
-      expect(ok, isTrue);
+      var cx2 = 0.0, cy2 = 0.0, cz2 = 0.0;
+      for (final v in clockwise.vertices) {
+        cx2 += v.x;
+        cy2 += v.y;
+        cz2 += v.z;
+      }
+      final c2 = Point3D(cx2 / clockwise.vertices.length,
+          cy2 / clockwise.vertices.length, cz2 / clockwise.vertices.length);
+      var inward2 = 0;
+      for (int i = 0; i < clockwise.indices.length; i += 3) {
+        final a = clockwise.vertices[clockwise.indices[i]];
+        final b = clockwise.vertices[clockwise.indices[i + 1]];
+        final d = clockwise.vertices[clockwise.indices[i + 2]];
+        final normal = (b - a).cross(d - a);
+        final mid = Point3D((a.x + b.x + d.x) / 3, (a.y + b.y + d.y) / 3,
+            (a.z + b.z + d.z) / 3);
+        if (normal.dot(mid - c2) < 0) inward2++;
+      }
+      expect(inward2, 0,
+          reason: 'clockwise-base pyramid has $inward2 inward faces');
     });
 
     test('transformed meshes recompute normals from the new winding', () {
@@ -487,7 +504,7 @@ void main() {
       // Extent along the axis: 0..3 (radius 1).
       expect(maxX, closeTo(3, 1e-9));
       expect(minX, closeTo(0, 1e-9));
-      // Radial extent: Â±1 in y/z.
+      // Radial extent: ±1 in y/z.
       expect(maxY, closeTo(1, 1e-9));
       expect(minY, closeTo(-1, 1e-9));
       expect(maxZ, closeTo(1, 1e-9));
