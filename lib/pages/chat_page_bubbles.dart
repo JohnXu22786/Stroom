@@ -335,6 +335,11 @@ extension _ChatPageBubblesExt on _ChatPageState {
   }) {
     final chatMsg = _history.where((m) => m.id == message.id).firstOrNull;
     final hasAttachments = chatMsg?.attachments.isNotEmpty == true;
+    // Only render the text bubble when the message actually has text:
+    // attachment-only messages (files/images without any text) would
+    // otherwise show an empty blue bubble. Whitespace-only content is
+    // treated as no text (the composer already trims before sending).
+    final hasText = message.text.trim().isNotEmpty;
     final hasSearchMatch = _isSearching &&
         _searchQuery.isNotEmpty &&
         _searchMatches.any(
@@ -346,12 +351,12 @@ extension _ChatPageBubblesExt on _ChatPageState {
           : CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (hasSearchMatch)
+        if (hasSearchMatch && hasText)
           _buildHighlightedText(
             message.text,
             message.id,
           )
-        else
+        else if (hasText)
           SimpleTextMessage(
             message: message,
             index: index,
