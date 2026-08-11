@@ -120,29 +120,46 @@ class _ReasoningButtonState extends ConsumerState<_ReasoningButton> {
   Timer? _chevronTimer;
   int _chevronCount = 1;
 
+  /// Starts (or restarts) the chevron animation timer. The chevrons cycle
+  /// › → ›› → ››› every 333ms while the section is streaming.
+  void _startChevronAnimation() {
+    _chevronTimer?.cancel();
+    _chevronCount = 1;
+    _chevronTimer = Timer.periodic(const Duration(milliseconds: 333), (_) {
+      if (mounted) {
+        setState(() {
+          _chevronCount = _chevronCount >= 3 ? 1 : _chevronCount + 1;
+        });
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     if (widget.isStreaming) {
-      _chevronTimer = Timer.periodic(const Duration(milliseconds: 333), (_) {
-        if (mounted) {
-          setState(() {
-            _chevronCount = _chevronCount >= 3 ? 1 : _chevronCount + 1;
-          });
-        }
-      });
+      _startChevronAnimation();
     }
   }
 
   @override
   void didUpdateWidget(_ReasoningButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // When streaming completes (isStreaming transitions from true to false),
-    // cancel the chevron animation timer so the ">>>" animation stops.
-    if (oldWidget.isStreaming && !widget.isStreaming) {
-      _chevronTimer?.cancel();
-      _chevronTimer = null;
-      _chevronCount = 0;
+    if (widget.isStreaming != oldWidget.isStreaming) {
+      if (widget.isStreaming) {
+        // Streaming started (a button that rendered as "思考完成" now
+        // streams again): start the chevron animation. Previously only
+        // the true→false transition was handled, so a button created as
+        // sealed and later flipped to streaming kept a single static "›"
+        // forever — the periodic timer was never started.
+        _startChevronAnimation();
+      } else {
+        // Streaming completes: cancel the chevron animation timer so the
+        // "›››" animation stops.
+        _chevronTimer?.cancel();
+        _chevronTimer = null;
+        _chevronCount = 0;
+      }
     }
   }
 
