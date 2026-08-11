@@ -77,17 +77,20 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     });
   }
 
-  /// 长按拖拽排序块：把 [from] 值移到 [to] 值的位置。
-  /// 排序即修改，直接影响保存顺序（进而影响推理面板中力度选项的
-  /// 显示顺序与默认值）。
-  void _moveBlockTo(String from, String to) {
+  /// 长按拖拽排序块：把索引 [from] 的块移到 [to]（移除后插入索引，
+  /// 与 onReorderItem 语义一致）。排序即修改，直接影响保存顺序（进而
+  /// 影响推理面板中力度选项的显示顺序与默认值）。
+  void _moveBlockTo(int from, int to) {
     if (from == to) return;
     setState(() {
-      final fromIndex = _effortBlockValues.indexOf(from);
-      final toIndex = _effortBlockValues.indexOf(to);
-      if (fromIndex < 0 || toIndex < 0) return;
-      _effortBlockValues.removeAt(fromIndex);
-      _effortBlockValues.insert(toIndex, from);
+      if (from < 0 ||
+          from >= _effortBlockValues.length ||
+          to < 0 ||
+          to >= _effortBlockValues.length) {
+        return;
+      }
+      final value = _effortBlockValues.removeAt(from);
+      _effortBlockValues.insert(to, value);
     });
   }
 
@@ -174,17 +177,20 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     });
   }
 
-  /// 长按拖拽排序附加参数块：把 [from] 移到 [to] 的位置。
-  void _moveAdditionalBlockTo(ReasoningParam param, String from, String to) {
+  /// 长按拖拽排序附加参数块：把索引 [from] 的块移到 [to]。
+  void _moveAdditionalBlockTo(ReasoningParam param, int from, int to) {
     if (from == to) return;
     setState(() {
       final blocks = _additionalBlockValues[param];
-      if (blocks == null) return;
-      final fromIndex = blocks.indexOf(from);
-      final toIndex = blocks.indexOf(to);
-      if (fromIndex < 0 || toIndex < 0) return;
-      blocks.removeAt(fromIndex);
-      blocks.insert(toIndex, from);
+      if (blocks == null ||
+          from < 0 ||
+          from >= blocks.length ||
+          to < 0 ||
+          to >= blocks.length) {
+        return;
+      }
+      final value = blocks.removeAt(from);
+      blocks.insert(to, value);
     });
   }
 
@@ -227,16 +233,19 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     });
   }
 
-  /// 长按拖拽排序自定义参数选项：把 [from] 移到 [to] 的位置。
-  void _moveCustomParamOptionTo(CustomParam param, String from, String to) {
+  /// 长按拖拽排序自定义参数选项：把索引 [from] 的选项移到 [to]。
+  void _moveCustomParamOptionTo(CustomParam param, int from, int to) {
     if (from == to) return;
     setState(() {
       final options = param.options;
-      final fromIndex = options.indexOf(from);
-      final toIndex = options.indexOf(to);
-      if (fromIndex < 0 || toIndex < 0) return;
-      options.removeAt(fromIndex);
-      options.insert(toIndex, from);
+      if (from < 0 ||
+          from >= options.length ||
+          to < 0 ||
+          to >= options.length) {
+        return;
+      }
+      final value = options.removeAt(from);
+      options.insert(to, value);
     });
   }
 
@@ -279,8 +288,9 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     });
   }
 
-  /// 自定义参数选项值区：胶囊块（照搬模型页推理力度同款——点击
-  /// 勾选高亮、长按拖拽排序、右上角删除；默认全选）。
+  /// 自定义参数选项值区：胶囊块（与推理力度同款——点击勾选高亮、
+  /// 长按拖拽排序、右上角删除；默认全选）。拖拽有目标槽位反馈与
+  /// 让位动画，松手提交排序。
   Widget _buildCustomParamOptionBlocks(CustomParam param, ColorScheme cs) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -293,13 +303,19 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
           ),
         ),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final value in param.options)
-              _buildCustomParamOptionBlock(param, value, cs),
-          ],
+        DragSortArea(
+          wrap: true,
+          values: param.options,
+          selected: (v) => _customParamSelectedValues[param]?.contains(v) ?? false,
+          deletable: (_) => true,
+          onTap: (v) => _toggleCustomParamOption(param, v),
+          onDelete: (v) {
+            setState(() {
+              param.options.remove(v);
+              _customParamSelectedValues[param]?.remove(v);
+            });
+          },
+          onReorder: (from, to) => _moveCustomParamOptionTo(param, from, to),
         ),
         const SizedBox(height: 4),
         TextButton.icon(
@@ -308,86 +324,6 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
           onPressed: () => _addCustomParamOptionWithDialog(param),
         ),
       ],
-    );
-  }
-
-  Widget _buildCustomParamOptionBlock(
-    CustomParam param,
-    String value,
-    ColorScheme cs,
-  ) {
-    final selected =
-        _customParamSelectedValues[param]?.contains(value) ?? false;
-    final chip = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: selected ? cs.primaryContainer : Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: selected ? cs.primary : cs.outlineVariant,
-          width: selected ? 1.5 : 1,
-        ),
-      ),
-      child: Text(
-        value,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-          color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
-        ),
-      ),
-    );
-
-    final withDelete = Stack(
-      clipBehavior: Clip.none,
-      children: [
-        chip,
-        Positioned(
-          top: -6,
-          right: -6,
-          child: GestureDetector(
-            onTap: () {
-              setState(() {
-                param.options.remove(value);
-                _customParamSelectedValues[param]?.remove(value);
-              });
-            },
-            child: Container(
-              decoration: BoxDecoration(
-                color: cs.errorContainer,
-                shape: BoxShape.circle,
-              ),
-              padding: const EdgeInsets.all(2),
-              child: Icon(
-                Icons.close,
-                size: 12,
-                color: cs.onErrorContainer,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-
-    return DragTarget<String>(
-      onWillAcceptWithDetails: (details) => details.data != value,
-      onAcceptWithDetails: (details) =>
-          _moveCustomParamOptionTo(param, details.data, value),
-      builder: (context, candidateData, rejectedData) {
-        return LongPressDraggable<String>(
-          data: value,
-          delay: const Duration(milliseconds: 330),
-          childWhenDragging: Opacity(opacity: 0.3, child: withDelete),
-          feedback: Material(
-            color: Colors.transparent,
-            child: Opacity(opacity: 0.8, child: withDelete),
-          ),
-          child: GestureDetector(
-            onTap: () => _toggleCustomParamOption(param, value),
-            child: withDelete,
-          ),
-        );
-      },
     );
   }
 
@@ -466,24 +402,46 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   }
 
   /// 参数来源状态（参数名标签后的括号显示）：
-  /// 模型配置中已存在同名参数，或内容被编辑过（与打开时快照不同），
-  /// 或本会话新建的参数（无初始快照）→ 「当前：模型自定义」；
-  /// 否则「当前：供应商」。
+  /// 「当前：供应商」= 参数名与定义（类型/开关值等，不含选项选择）
+  /// 均与供应商一致——模型只是选择了要显示/发送的值，参数仍属供应商；
+  /// 其它情况（本会话新建、无供应商同名参数、或参数定义被修改过）
+  /// → 「当前：模型自定义」。
   String _paramSourceLabel(ReasoningParam param) {
     final snapshot = _initialParamSnapshots[param];
     if (snapshot == null) {
       // 本会话新建的参数（添加按钮创建，无初始快照）
       return '当前：模型自定义';
     }
+    final providerByName = <String, ReasoningParam>{};
+    for (final p in widget.provider?.reasoningParams ?? []) {
+      if (p.paramName.trim().isNotEmpty) {
+        providerByName[p.paramName.trim()] = p;
+      }
+    }
+    final pp = providerByName[param.paramName.trim()];
+    if (pp == null) return '当前：模型自定义';
+    // 非选项字段一致 = 同一个「参数定义」；选项值的选择/顺序是模型
+    // 的偏好，不改变参数归属。
+    bool sameDefinition(ReasoningParam a, ReasoningParam b) =>
+        a.paramName.trim() == b.paramName.trim() &&
+        a.type == b.type &&
+        a.isReasoningToggle == b.isReasoningToggle &&
+        a.isEffortParam == b.isEffortParam &&
+        a.onValue == b.onValue &&
+        a.offValue == b.offValue &&
+        a.enabled == b.enabled;
+    if (!sameDefinition(param, pp)) return '当前：模型自定义';
+    // 模型已保存的同名参数若改变了参数定义 → 模型的参数
     final m = widget.model;
-    final inModel = m?.reasoningParams.any(
-          (p) =>
-              p.paramName.trim().isNotEmpty &&
-              p.paramName.trim() == param.paramName.trim(),
-        ) ??
-        false;
-    final edited = jsonEncode(param.toMap()) != jsonEncode(snapshot.toMap());
-    return (inModel || edited) ? '当前：模型自定义' : '当前：供应商';
+    if (m != null) {
+      for (final mp in m.reasoningParams) {
+        if (mp.paramName.trim() == param.paramName.trim() &&
+            !sameDefinition(mp, pp)) {
+          return '当前：模型自定义';
+        }
+      }
+    }
+    return '当前：供应商';
   }
 
   /// Returns the reasoning toggle param, or null if none exists.
@@ -509,6 +467,10 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   bool get _isToggleComplete {
     final toggle = _toggleReasoningParam;
     if (toggle == null) return false;
+    // boolean 类型开关只需参数名（开/关值由聊天面板提供）
+    if (toggle.type == 'boolean') {
+      return toggle.paramName.trim().isNotEmpty;
+    }
     return toggle.paramName.trim().isNotEmpty &&
         (toggle.onValue != null && toggle.onValue!.trim().isNotEmpty) &&
         (toggle.offValue != null && toggle.offValue!.trim().isNotEmpty);

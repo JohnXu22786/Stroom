@@ -770,30 +770,41 @@ void main() {
     });
 
     testWidgets('param name label shows the source state', (tester) async {
-      // provider 提供的参数 → 「当前：供应商」；模型保存的参数 → 模型自定义
+      // 与供应商同名的参数（模型只选择了值/顺序，参数定义一致）
+      // → 「当前：供应商」；模型独有的参数 → 「当前：模型自定义」。
       final provider = _providerWithEffortOptions(['low', 'medium']);
       final model = ModelConfig(
         name: 'test-model',
         modelId: 'test-model',
         typeConfig: {'context': 4096},
         reasoningParams: [
-          // 模型只保存了力度参数（无开关）→ 开关来自 provider
+          // 与供应商开关同名的模型副本（定义一致）→ 供应商
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          // 模型保存的力度参数：只改了选项选择 → 供应商
           ReasoningParam(
             paramName: 'reasoning_effort',
             isEffortParam: true,
             options: ['low', 'high'],
+          ),
+          // 模型独有的参数 → 模型自定义
+          ReasoningParam(
+            paramName: 'model_only_param',
+            options: ['x'],
           ),
         ],
       );
 
       await _pumpAndSave(tester,
           model: model, provider: provider, tapSave: false);
-      // 模型保存的力度参数 → 模型自定义
       await _scrollToReasoning(tester, find.text('reasoning_effort'));
-      expect(find.textContaining('当前：模型自定义'), findsOneWidget);
-      // provider 的推理开关（模型未保存）→ 供应商（滚动到开关区）
-      await _scrollToReasoning(tester, find.text('thinking.type'), delta: -200);
       expect(find.textContaining('当前：供应商'), findsWidgets);
+      await _scrollToReasoning(tester, find.text('model_only_param'));
+      expect(find.textContaining('当前：模型自定义'), findsOneWidget);
     });
 
     testWidgets('json type shows a large input instead of option blocks',
@@ -1156,6 +1167,203 @@ void main() {
       expect(saved!.modelId, 'test-model');
       // 新建模型：默认全不选 → 力度参数 options 为空（用户显式勾选）
       expect(_savedEffortOptions(saved!), isEmpty);
+    });
+
+    testWidgets(
+        'opening the model page never mutates the provider config '
+        '(model edits stay model-only)', (tester) async {
+      // 回归：_hasUnsavedChanges 的基线归一化曾直接修改合并结果中
+      // 供应商的共享实例（清空力度选项），导致模型页的勾选/排序泄漏
+      // 到供应商配置。打开页面（构建即评估基线）后供应商必须原样。
+      final provider = _providerWithEffortOptions(['low', 'medium', 'high']);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => LlmModelConfigPage(
+                      model: ModelConfig(
+                        name: 'test-model',
+                        modelId: 'test-model',
+                        typeConfig: {'context': 4096},
+                      ),
+                      provider: provider,
+                    ),
+                  ),
+                ),
+                child: const Text('打开模型配置'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开模型配置'));
+      await tester.pumpAndSettle();
+
+      final providerEffort =
+          provider.reasoningParams.firstWhere((p) => p.isEffortParam);
+      expect(providerEffort.options, ['low', 'medium', 'high'],
+          reason: '打开模型页不应修改供应商的力度选项');
+      expect(
+        provider.reasoningParams.firstWhere((p) => p.isReasoningToggle).onValue,
+        'enabled',
+        reason: '开关值也不应被模型页改动',
+      );
+
+      // 返回页面也不应触发任何写回
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(
+        provider.reasoningParams.firstWhere((p) => p.isEffortParam).options,
+        ['low', 'medium', 'high'],
+      );
+    });
+
+    testWidgets(
+        'saved selection reappears on reopen with provider values '
+        'unchecked and no delete badges', (tester) async {
+      // 回归：模型页勾选保存后重开，供应商的值必须重新出现（未勾选、
+      // 无删除按钮），而不是全部变成「模型自定义 + 带叉号」。
+      final provider = _providerWithEffortOptions(['low', 'medium', 'high']);
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+        ),
+        provider: provider,
+        beforeSave: (tester) async {
+          await _tapBlock(tester, 'low');
+          await _tapBlock(tester, 'high');
+        },
+      );
+      expect(saved, isNotNull);
+      expect(_savedEffortOptions(saved!), ['low', 'high']);
+
+      // 重开：未勾选的 medium 重新出现且无删除按钮（供应商值）
+      await _pumpAndSave(
+        tester,
+        model: saved,
+        provider: provider,
+        tapSave: false,
+      );
+      await _scrollToReasoning(tester, find.text('medium'));
+      expect(find.text('medium'), findsOneWidget,
+          reason: '未勾选的供应商值应重新出现');
+      expect(find.text('low'), findsOneWidget);
+      expect(find.text('high'), findsOneWidget);
+      expect(find.byIcon(Icons.close), findsNothing,
+          reason: '供应商来源的值不应带删除按钮');
+      // 参数归属仍是供应商
+      await _scrollToReasoning(tester, find.text('reasoning_effort'));
+      expect(find.textContaining('当前：供应商'), findsWidgets);
+    });
+
+    testWidgets(
+        'provider name-only effort param does not trigger the discard '
+        'dialog on back', (tester) async {
+      // 回归：供应商的名称式力度参数（仅参数名、无选项）被 initState
+      // 从工作副本移除，基线比较必须镜像同一处理，否则打开未修改
+      // 直接返回也会弹「放弃修改」。
+      final provider = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            enabled: true,
+            options: [],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => LlmModelConfigPage(
+                      model: ModelConfig(
+                        name: 'test-model',
+                        modelId: 'test-model',
+                        typeConfig: {'context': 4096},
+                      ),
+                      provider: provider,
+                    ),
+                  ),
+                ),
+                child: const Text('打开模型配置'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开模型配置'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('放弃修改？'), findsNothing,
+          reason: '名称式供应商力度参数（无选项）不应算未保存修改');
+      expect(find.text('打开模型配置'), findsOneWidget);
+    });
+
+    testWidgets(
+        'boolean reasoning toggle has no on/off inputs and saves '
+        'by name only', (tester) async {
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+        ),
+        beforeSave: (tester) async {
+          // 添加推理开关
+          await _scrollToReasoning(tester, find.text('添加推理开关'));
+          await tester.tap(find.text('添加推理开关'));
+          await tester.pump();
+          // 填参数名
+          await tester.enterText(
+            find.byType(TextFormField).first,
+            'enable_reasoning',
+          );
+          await tester.pump();
+          // 切换类型为布尔
+          await tester.tap(find.text('字符串'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('布尔').last);
+          await tester.pumpAndSettle();
+          // 与推理力度一致：没有开/关值输入框
+          expect(find.text('开启时值'), findsNothing);
+          expect(find.text('关闭时值'), findsNothing);
+          expect(find.textContaining('无需配置参数值'), findsOneWidget);
+        },
+      );
+
+      expect(saved, isNotNull);
+      final toggle =
+          saved!.reasoningParams.firstWhere((p) => p.isReasoningToggle);
+      expect(toggle.paramName, 'enable_reasoning');
+      expect(toggle.type, 'boolean');
+      expect(toggle.onValue, isEmpty);
+      expect(toggle.offValue, isEmpty);
+      expect(toggle.isFilledToggle, isTrue);
     });
   });
 }

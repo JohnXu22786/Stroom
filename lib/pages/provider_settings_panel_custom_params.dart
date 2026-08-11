@@ -7,78 +7,93 @@ part of 'provider_settings_panel.dart';
 
 extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
   /// 自定义参数选项值区（照搬本面板推理力度的行式样式）：
-  /// 多值文本行 + 把手排序 + 删除 + 添加选项。
+  /// 多值文本行 + 长按把手排序 + 删除 + 添加选项。
   Widget _buildProviderCustomParamOptionRows(
       CustomParam param, ColorScheme cs) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '选项值（拖动把手排序）',
+          '选项值（长按把手拖拽排序）',
           style: TextStyle(
             fontSize: 12,
             color: cs.onSurfaceVariant.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 8),
-        ReorderableListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          buildDefaultDragHandles: false,
-          itemCount: param.options.length,
-          onReorderItem: (oldIndex, newIndex) {
+        DragSortArea(
+          wrap: false,
+          values: param.options,
+          onReorder: (from, to) {
             setState(() {
-              final value = param.options.removeAt(oldIndex);
-              param.options.insert(newIndex, value);
+              final value = param.options.removeAt(from);
+              param.options.insert(to, value);
             });
           },
-          itemBuilder: (context, j) {
-            return Padding(
-              key: ValueKey('custom-opt-$j'),
-              padding: const EdgeInsets.only(bottom: 8),
+          itemBuilder: (context, j, value) {
+            final staticHandle = const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 2),
+              child: Icon(Icons.drag_handle, size: 20, color: Colors.grey),
+            );
+            final field = Expanded(
+              // SyncedValueField：拖拽排序后同步显示文本
+              child: SyncedValueField(
+                value: value,
+                decoration: InputDecoration(
+                  labelText: '选项 ${j + 1}',
+                  hintText: '如 low, enabled, true, max',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: (v) {
+                  param.options[j] = v;
+                  setState(() {});
+                },
+              ),
+            );
+            final removeBtn = param.options.length > 1
+                ? IconButton(
+                    icon: const Icon(
+                      Icons.remove_circle,
+                      color: Colors.red,
+                      size: 18,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        param.options.removeAt(j);
+                      });
+                    },
+                    tooltip: '删除选项',
+                  )
+                : const SizedBox.shrink();
+            final row = SizedBox(
+              height: 56,
               child: Row(
                 children: [
-                  ReorderableDragStartListener(
-                    index: j,
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 2),
-                      child:
-                          Icon(Icons.drag_handle, size: 20, color: Colors.grey),
-                    ),
-                  ),
+                  staticHandle,
                   const SizedBox(width: 2),
-                  Expanded(
-                    child: TextFormField(
-                      initialValue: param.options[j],
-                      decoration: InputDecoration(
-                        labelText: '选项 ${j + 1}',
-                        hintText: '如 low, enabled, true, max',
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      onChanged: (v) {
-                        param.options[j] = v;
-                        setState(() {});
-                      },
-                    ),
-                  ),
+                  field,
                   const SizedBox(width: 4),
-                  if (param.options.length > 1)
-                    IconButton(
-                      icon: const Icon(
-                        Icons.remove_circle,
-                        color: Colors.red,
-                        size: 18,
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          param.options.removeAt(j);
-                        });
-                      },
-                      tooltip: '删除选项',
-                    ),
+                  removeBtn,
                 ],
               ),
+            );
+            return Row(
+              children: [
+                DragSortRowHandle(
+                  index: j,
+                  feedback: Material(
+                    elevation: 2,
+                    borderRadius: BorderRadius.circular(8),
+                    child: row,
+                  ),
+                  child: staticHandle,
+                ),
+                const SizedBox(width: 2),
+                field,
+                const SizedBox(width: 4),
+                removeBtn,
+              ],
             );
           },
         ),
