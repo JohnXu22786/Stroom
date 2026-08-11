@@ -1,3 +1,5 @@
+import 'dart:math' as dart_math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/math_3d_object.dart';
 import 'package:stroom/models/math_expression_3d.dart';
@@ -150,6 +152,23 @@ void main() {
       final p = expr.evaluateCurve(2);
       expect(p.x, closeTo(2, 1e-9)); // a defaults to 1
       expect(p.y, closeTo(4, 1e-9));
+    });
+
+    test('parametric surface formula exposes u/v in parameters', () {
+      // The page routes '(' formulas to the curve parser first; it must be
+      // able to detect a two-variable parameterization (surface) through
+      // the parameters set, otherwise (cos(u)*cos(v), ...) renders as a
+      // single degenerate point with u=v=1.
+      final curve = Expression3D.parametricCurve(
+          '(cos(u)*cos(v), sin(u)*cos(v), sin(v))',
+          tMax: 2 * dart_math.pi);
+      expect(curve.parameters.contains('u'), isTrue);
+      expect(curve.parameters.contains('v'), isTrue);
+      // And a plain curve does NOT expose u/v.
+      final plain = Expression3D.parametricCurve('(cos(t), sin(t), t)',
+          tMax: 2 * dart_math.pi);
+      expect(plain.parameters.contains('u'), isFalse);
+      expect(plain.parameters.contains('v'), isFalse);
     });
 
     test('samples plane into a mesh', () {

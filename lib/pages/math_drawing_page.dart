@@ -188,7 +188,12 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       // 3) Parametric curve (t) or parametric surface (u, v).
       final curve =
           Expression3D.parametricCurve(trimmed, tMax: 2 * dart_math.pi);
-      if (curve.isValid) {
+      // A two-variable parameterization (contains u or v) is a SURFACE, not
+      // a curve — treating it as a curve would silently evaluate u=v=1 and
+      // produce a single degenerate point.
+      final isSurface =
+          curve.parameters.contains('u') || curve.parameters.contains('v');
+      if (!isSurface && curve.isValid) {
         final points = curve.sampleCurve(numSamples: 150);
         if (points.isNotEmpty) {
           return [

@@ -163,6 +163,15 @@ class ConstructionState {
           !step.allowedTypes!.contains(input.object.type)) {
         return false;
       }
+      // Dynamic narrowing: the intersect tool only implements a subset of
+      // the type pairs, so the second step must reject combinations that
+      // would silently produce nothing.
+      if (tool == ConstructionTool.intersect &&
+          inputs.length == 1 &&
+          !intersectionSupported(
+              (inputs[0] as ObjectInput).object.type, input.object.type)) {
+        return false;
+      }
     }
 
     // Polygon-style close detection: clicking near the first base vertex.
@@ -1077,7 +1086,10 @@ class ToolFactory {
       final plane = isPlaneLike(type0) ? obj0 : obj1;
       final sphere = type0 == Object3DType.sphere ? obj0 : obj1;
       final n = plane.planeNormal.normalized();
-      final dist = n.dot(sphere.sphereCenter.toVector()) - plane.planeDValue;
+      // Plane equation n·p = d with a possibly unnormalized normal:
+      // signed distance = (n̂·center - d/|n|).
+      final dist = (n.dot(sphere.sphereCenter.toVector()) - plane.planeDValue) /
+          plane.planeNormal.magnitude;
       if (dist.abs() < sphere.sphereRadius) {
         final r = dart_math
             .sqrt(sphere.sphereRadius * sphere.sphereRadius - dist * dist);
@@ -1103,4 +1115,31 @@ class ToolFactory {
     final sq = dart_math.sqrt(disc);
     return [a + d * (-b - sq), a + d * (-b + sq)];
   }
+}
+
+/// Whether the intersect tool implements the type pair (a, b).
+bool intersectionSupported(Object3DType a, Object3DType b) {
+  bool lineLike(Object3DType t) =>
+      t == Object3DType.line ||
+      t == Object3DType.ray ||
+      t == Object3DType.segment;
+  if (lineLike(a) && lineLike(b)) return true;
+  if (lineLike(a) && b == Object3DType.plane ||
+      a == Object3DType.plane && lineLike(b)) {
+    return true;
+  }
+  if (a == Object3DType.plane && b == Object3DType.plane) return true;
+  if (lineLike(a) && b == Object3DType.circle ||
+      a == Object3DType.circle && lineLike(b)) {
+    return true;
+  }
+  if (lineLike(a) && b == Object3DType.sphere ||
+      a == Object3DType.sphere && lineLike(b)) {
+    return true;
+  }
+  if (a == Object3DType.plane && b == Object3DType.sphere ||
+      a == Object3DType.sphere && b == Object3DType.plane) {
+    return true;
+  }
+  return false;
 }

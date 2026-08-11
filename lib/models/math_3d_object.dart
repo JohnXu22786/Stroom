@@ -1,10 +1,10 @@
-import 'dart:math' as dart_math;
+﻿import 'dart:math' as dart_math;
 
 // ======================================================================
-// 3D æ•°å­¦æ¨¡å—æ ¸å¿ƒå¯¹è±¡æ¨¡åž‹
+// 3D Ã¦â€¢Â°Ã¥Â­Â¦Ã¦Â¨Â¡Ã¥Ââ€”Ã¦Â Â¸Ã¥Â¿Æ’Ã¥Â¯Â¹Ã¨Â±Â¡Ã¦Â¨Â¡Ã¥Å¾â€¹
 //
-// åæ ‡çº¦å®šï¼ˆä¸Ž GeoGebra 3D ä¸€è‡´ï¼‰ï¼šå³æ‰‹ç³»ï¼ŒZ è½´å‘ä¸Šï¼Œ
-// xOy å¹³é¢ä¸ºåœ°é¢ï¼ˆç½‘æ ¼ã€2D è”åŠ¨å‡åœ¨æ­¤å¹³é¢ï¼‰ã€‚
+// Ã¥ÂÂÃ¦Â â€¡Ã§ÂºÂ¦Ã¥Â®Å¡Ã¯Â¼Ë†Ã¤Â¸Å½ GeoGebra 3D Ã¤Â¸â‚¬Ã¨â€¡Â´Ã¯Â¼â€°Ã¯Â¼Å¡Ã¥ÂÂ³Ã¦â€°â€¹Ã§Â³Â»Ã¯Â¼Å’Z Ã¨Â½Â´Ã¥Ââ€˜Ã¤Â¸Å Ã¯Â¼Å’
+// xOy Ã¥Â¹Â³Ã©ÂÂ¢Ã¤Â¸ÂºÃ¥Å“Â°Ã©ÂÂ¢Ã¯Â¼Ë†Ã§Â½â€˜Ã¦Â Â¼Ã£â‚¬Â2D Ã¨Ââ€Ã¥Å Â¨Ã¥Ââ€¡Ã¥Å“Â¨Ã¦Â­Â¤Ã¥Â¹Â³Ã©ÂÂ¢Ã¯Â¼â€°Ã£â‚¬â€š
 // ======================================================================
 
 /// A 3D point with x, y, z coordinates.
@@ -76,7 +76,7 @@ class Point3D {
   }
 
   /// Project this point onto the plane given by normal [n] and distance [d]
-  /// (plane equation: n Â· p = d).
+  /// (plane equation: n Ã‚Â· p = d).
   Point3D projectedOnPlane(Vector3D n, double d) {
     final nn = n.normalized();
     return this + nn * (d - nn.dot(toVector()));
@@ -333,7 +333,7 @@ class MeshData {
 /// cylinder, sphere, surface) are rendered from their meshes.
 class Object3D {
   final Object3DType type;
-  final String name; // e.g. "A", "f", "c" â€” GeoGebra style label
+  final String name; // e.g. "A", "f", "c" Ã¢â‚¬â€ GeoGebra style label
   final bool visible;
   final ObjectStyle style;
 
@@ -345,7 +345,7 @@ class Object3D {
   final Point3D? pointA;
   final Point3D? pointB;
 
-  // Plane: aÂ·x + bÂ·y + cÂ·z = d  (normal = (a, b, c))
+  // Plane: aÃ‚Â·x + bÃ‚Â·y + cÃ‚Â·z = d  (normal = (a, b, c))
   final double? planeA;
   final double? planeB;
   final double? planeC;
@@ -358,7 +358,7 @@ class Object3D {
   final double? arcStart;
   final double? arcEnd;
 
-  // Solid axis: cone/cylinder base-centerâ†’apex direction (unit vector).
+  // Solid axis: cone/cylinder base-centerÃ¢â€ â€™apex direction (unit vector).
   // Defaults to +Z; meshes are built along +Z and rotated into this axis.
   final Vector3D? solidAxis;
 
@@ -678,7 +678,7 @@ class Object3D {
     final k = Vector3D.unitZ.cross(a);
     if (k.magnitudeSquared < 1e-18) {
       // Parallel or anti-parallel with +Z. The flip must be a proper
-      // rotation (e.g. 180° around X: (x, y, z) → (x, -y, -z)), NOT a
+      // rotation (e.g. 180Â° around X: (x, y, z) â†’ (x, -y, -z)), NOT a
       // point reflection (-x, -y, -z): a reflection has determinant -1,
       // which reverses triangle winding and turns outward normals inward
       // (back-face culling then hides the solid entirely).
@@ -722,7 +722,7 @@ class Object3D {
         return sphereCenter;
       case Object3DType.cone:
       case Object3DType.cylinder:
-        // Midpoint of the axis (base center + axis·h/2), works for any
+        // Midpoint of the axis (base center + axisÂ·h/2), works for any
         // solid axis, not just +Z.
         return solidCenter + solidAxisValue * (solidHeight / 2);
       case Object3DType.plane:
@@ -784,7 +784,7 @@ class Object3D {
         final onPlane = rel - n * rel.dot(n);
         final r = circleRadius ?? 1;
         if (onPlane.magnitudeSquared < 1e-15) {
-          // Snap point projects to center â€” pick a fixed point on the circle.
+          // Snap point projects to center Ã¢â‚¬â€ pick a fixed point on the circle.
           return c + circleBasis(n).$1 * r;
         }
         return c + onPlane.normalized() * r;
@@ -832,7 +832,7 @@ class Object3D {
   }
 
   /// An orthonormal basis (u, v) of the plane perpendicular to [normal].
-  /// Works for any normal, including Â±Z.
+  /// Works for any normal, including Ã‚Â±Z.
   static (Vector3D, Vector3D) circleBasis(Vector3D normal) {
     final n = normal.normalized();
     final ref =
@@ -923,17 +923,22 @@ class Object3D {
   }
 
   // ==================================================================
-  // Transformations (immutable â€” produce new objects)
+  // Transformations (immutable Ã¢â‚¬â€ produce new objects)
   // ==================================================================
 
   /// Translate by [t]. Keeps name/style/visibility.
   Object3D translated(Vector3D t) => transform((p) => p + t);
 
-  /// Reflect across the plane nÂ·p = d.
-  Object3D reflected(Vector3D n, double d) => transform(
-        (p) =>
-            p + n.normalized() * (-2 * (n.normalized().dot(p.toVector()) - d)),
-      );
+  /// Reflect across the plane nÃ‚Â·p = d.
+  Object3D reflected(Vector3D n, double d) {
+    // The plane equation uses the (possibly unnormalized) normal [n], so
+    // the reflection must normalize: the plane is n̂·p = d/|n|.
+    final nn = n.normalized();
+    final dist = d / n.magnitude;
+    return transform(
+      (p) => p + nn * (-2 * (nn.dot(p.toVector()) - dist)),
+    );
+  }
 
   /// Rotate around the axis through [axisPoint] with direction [axisDir]
   /// by [angle] radians.
@@ -1132,11 +1137,16 @@ class Object3D {
             f(pointValue), f(pointValue + vectorValue) - f(pointValue),
             name: name, visible: visible, style: style);
       case Object3DType.circle:
+        // Recover the radius from a sampled point (dilate scales it like
+        // sphere/cone/cylinder; rigid transforms keep it).
         final n0 = circleNormal ?? Vector3D.unitZ;
         final c0 = circleCenter ?? Point3D.origin;
+        final r0 = circleRadius ?? 1;
+        final (u0, _) = circleBasis(n0);
         final c1 = f(c0);
         final c2 = f(c0 + n0);
-        return Object3D.circle(c1, c2 - c1, circleRadius ?? 1,
+        final rim = f(c0 + u0 * r0);
+        return Object3D.circle(c1, c2 - c1, rim.distanceTo(c1),
             name: name, visible: visible, style: style);
       case Object3DType.arc:
         // Rebuild center, normal, and recompute the start/end angles from
@@ -1171,7 +1181,10 @@ class Object3D {
             a2 -= 2 * dart_math.pi;
           }
         }
-        return Object3D.arc(c1, n1, r0, a1, a2,
+        // Recover the radius from the transformed start point (dilate
+        // scales it; rigid transforms keep it).
+        final r1 = f(pStart).distanceTo(c1);
+        return Object3D.arc(c1, n1, r1, a1, a2,
             name: name, visible: visible, style: style);
       case Object3DType.polygon:
         return Object3D.polygon([for (final p in polygonVertices) f(p)],
@@ -1276,7 +1289,7 @@ class Object3D {
 // Mesh builders for solids and surfaces
 // ======================================================================
 
-/// Builders for common solid meshes. All meshes are "closed" â€” faces are
+/// Builders for common solid meshes. All meshes are "closed" Ã¢â‚¬â€ faces are
 /// oriented so that outward normals point away from the interior.
 class MeshBuilder {
   /// A UV sphere centered at origin with the given [radius] and [segments].
@@ -1317,7 +1330,9 @@ class MeshBuilder {
     for (int j = 0; j < segments; j++) {
       final b = j + 1;
       final c = (j + 1) % segments + 1;
-      indices.addAll([0, c, b]); // side (apex 0, base rim)
+      // Side triangle (apex, rim). Order [apex, prev, next] keeps the
+      // normal pointing away from the axis (outward).
+      indices.addAll([0, b, c]); // side (apex 0, base rim)
     }
     // Base disk: add center as a separate vertex.
     final centerIdx = vertices.length;
@@ -1381,13 +1396,15 @@ class MeshBuilder {
     }
     final vertices = <Point3D>[...base, apex];
     final indices = <int>[];
+    // Base cap: outward normal points away from the apex (-base normal).
     for (int i = 0; i < base.length - 2; i++) {
-      indices.addAll([0, i + 1, i + 2]);
+      indices.addAll([0, i + 2, i + 1]);
     }
+    // Side faces: (prev rim, next rim, apex) keeps normals outward.
     for (int i = 0; i < base.length; i++) {
       final a = i;
       final b = (i + 1) % base.length;
-      indices.addAll([b, a, base.length]);
+      indices.addAll([a, b, base.length]);
     }
     return MeshData(vertices: vertices, indices: indices);
   }
@@ -1407,10 +1424,12 @@ class MeshBuilder {
       indices.addAll([b, d, c]);
     }
     for (int i = 0; i < n - 2; i++) {
-      indices.addAll([0, i + 1, i + 2]);
+      // Bottom cap: base runs CCW viewed from +Z, so outward normal is -Z.
+      indices.addAll([0, i + 2, i + 1]);
     }
     for (int i = 0; i < n - 2; i++) {
-      indices.addAll([n, n + i + 2, n + i + 1]);
+      // Top cap: mirrored winding, outward normal +Z.
+      indices.addAll([n, n + i + 1, n + i + 2]);
     }
     return MeshData(vertices: vertices, indices: indices);
   }
@@ -1437,12 +1456,12 @@ class MeshBuilder {
       Point3D(x0, y1, z1),
     ];
     const indices = [
-      0, 1, 2, 0, 2, 3, // bottom (z0)
-      4, 6, 5, 4, 7, 6, // top (z1)
-      0, 4, 5, 0, 5, 1, // front (y0)
-      3, 2, 6, 3, 6, 7, // back (y1)
-      0, 3, 7, 0, 7, 4, // left (x0)
-      1, 5, 6, 1, 6, 2, // right (x1)
+      0, 2, 1, 0, 3, 2, // bottom (z0, outward -Z)
+      4, 5, 6, 4, 6, 7, // top (z1, outward +Z)
+      0, 5, 4, 0, 1, 5, // front (y0, outward -Y)
+      3, 6, 2, 3, 7, 6, // back (y1, outward +Y)
+      0, 7, 3, 0, 4, 7, // left (x0, outward -X)
+      1, 6, 5, 1, 2, 6, // right (x1, outward +X)
     ];
     return MeshData(vertices: v, indices: indices);
   }

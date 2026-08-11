@@ -750,6 +750,15 @@ class Scene3D {
         return null;
 
       case Object3DType.measurement:
+        // Pickable like a point so the Delete/ShowHide tools and dragging
+        // work on measurement labels (the panel was the only way before).
+        final s = proj.project(obj.measureAnchor ?? Point3D.origin);
+        if (s == null || s.x.isNaN) return null;
+        final d =
+            dart_math.sqrt((s.x - sx) * (s.x - sx) + (s.y - sy) * (s.y - sy));
+        if (d <= radius) {
+          return (obj, obj.measureAnchor ?? Point3D.origin, d);
+        }
         return null;
     }
   }
@@ -817,7 +826,9 @@ class Scene3D {
   static MeshData? _meshFor(Object3D obj) {
     switch (obj.type) {
       case Object3DType.sphere:
-        return MeshBuilder.sphere(obj.sphereRadius, segments: 16)
+        // Same segment count as the renderer so the pick mesh matches the
+        // drawn silhouette exactly.
+        return MeshBuilder.sphere(obj.sphereRadius)
             .transformed((p) => p + obj.sphereCenter.toVector());
       case Object3DType.cone:
         return Object3D.alignSolidMesh(

@@ -341,6 +341,52 @@ void main() {
   });
 
   group('Solid axis support', () {
+    test('all closed meshes have outward-facing normals', () {
+      // Every face normal must point away from the solid's interior
+      // (vertex-average as interior reference). Inward winding flips
+      // shading and lets back-face culling erase opaque solids.
+      final meshes = <String, MeshData>{
+        'sphere': MeshBuilder.sphere(1),
+        'cone': MeshBuilder.cone(1, 3),
+        'cylinder': MeshBuilder.cylinder(1, 3),
+        'prism': MeshBuilder.prism(
+            const [Point3D(0, 0, 0), Point3D(2, 0, 0), Point3D(2, 2, 0)], 3),
+        'pyramid': MeshBuilder.pyramid(
+            const [Point3D(0, 0, 0), Point3D(2, 0, 0), Point3D(2, 2, 0)],
+            const Point3D(1, 1, 4)),
+        'tetrahedron': MeshBuilder.tetrahedron(const [
+          Point3D(0, 0, 0),
+          Point3D(2, 0, 0),
+          Point3D(1, 1.7, 0),
+          Point3D(1, 0.7, 2),
+        ]),
+        'cube': MeshBuilder.cube(Point3D.origin, const Point3D(1, 1, 1)),
+      };
+      meshes.forEach((name, mesh) {
+        var cx = 0.0, cy = 0.0, cz = 0.0;
+        for (final v in mesh.vertices) {
+          cx += v.x;
+          cy += v.y;
+          cz += v.z;
+        }
+        final c = Point3D(cx / mesh.vertices.length, cy / mesh.vertices.length,
+            cz / mesh.vertices.length);
+        var inward = 0;
+        for (int i = 0; i < mesh.indices.length; i += 3) {
+          final a = mesh.vertices[mesh.indices[i]];
+          final b = mesh.vertices[mesh.indices[i + 1]];
+          final d = mesh.vertices[mesh.indices[i + 2]];
+          final normal = (b - a).cross(d - a);
+          final mid = Point3D((a.x + b.x + d.x) / 3, (a.y + b.y + d.y) / 3,
+              (a.z + b.z + d.z) / 3);
+          if (normal.dot(mid - c) < 0) inward++;
+        }
+        expect(inward, 0,
+            reason: '$name has $inward inward faces '
+                '(winding flips shading/culling)');
+      });
+    });
+
     test('anchorPoint of a tilted cone is the axis midpoint', () {
       final cone =
           Object3D.cone(Point3D.origin, 1, 3, axis: const Vector3D(1, 0, 0));

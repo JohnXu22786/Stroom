@@ -675,7 +675,12 @@ class MathCanvas3DState extends State<MathCanvas3D>
       for (final o in result.modified) {
         // Match by name; rebuild with the new visibility.
         final existing = _scene.byName(o.name);
-        if (existing != null) _scene.replace(existing, o);
+        if (existing != null) {
+          _scene.replace(existing, o);
+          // Keep the selection on the updated instance so keyboard
+          // Delete / dragging still operate on the live object.
+          if (identical(_selected, existing)) _selected = o;
+        }
       }
       // Start a fresh construction for the same tool (GeoGebra behavior:
       // the tool stays active and can create multiple objects).

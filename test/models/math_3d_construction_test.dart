@@ -622,5 +622,37 @@ void main() {
       expect(c.solidHeight, closeTo(8, 1e-9));
       expect(c.solidCenter, const Point3D(2, 0, 0));
     });
+
+    test('dilate scales circle and arc radius', () {
+      final circle = Object3D.circle(Point3D.origin, Vector3D.unitZ, 2);
+      final s = ConstructionState(tool: ConstructionTool.dilate);
+      s.addInput(ObjectInput(circle));
+      s.addInput(const NewPointInput(Point3D.origin));
+      final done = s.addInput(const NumberInput(3));
+      expect(done, true);
+      final r = s.result!.created.first;
+      expect(r.circleRadius, closeTo(6, 1e-9));
+
+      final arc = Object3D.arc(Point3D.origin, Vector3D.unitZ, 2, 0, 1.2);
+      final s2 = ConstructionState(tool: ConstructionTool.dilate);
+      s2.addInput(ObjectInput(arc));
+      s2.addInput(const NewPointInput(Point3D.origin));
+      final done2 = s2.addInput(const NumberInput(0.5));
+      expect(done2, true);
+      final a = s2.result!.created.first;
+      expect(a.circleRadius, closeTo(1, 1e-9));
+    });
+
+    test('reflect across a plane with non-unit normal', () {
+      final point = Object3D.point(const Point3D(3, 0, 0));
+      final plane = Object3D.plane(a: 2, b: 0, c: 0, d: 2); // x = 1
+      final state = ConstructionState(tool: ConstructionTool.reflectPlane);
+      state.addInput(ObjectInput(point));
+      final done = state.addInput(ObjectInput(plane));
+      expect(done, true);
+      final r = state.result!.created.first;
+      // Mirror across x = 1: (3,0,0) → (-1,0,0).
+      expect(r.pointValue.x, closeTo(-1, 1e-9));
+    });
   });
 }
