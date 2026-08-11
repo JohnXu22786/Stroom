@@ -167,6 +167,104 @@ void main() {
     });
 
     testWidgets(
+        'first reasoning section shows "思考中" immediately — no stale '
+        '"思考完成" flash at stream start', (tester) async {
+      // Regression for: "对话页面还没开始思考就先显示思考完成大约1秒，然后才
+      // 恢复思考中状态" and the dead chevron animation.
+      //
+      // Root cause: ChatStreamManager.startStreaming → _pushStateToProviders
+      // re-pushes streamingTextSectionsProvider as a fresh [''], whose
+      // listener marks reasoning as completed for the new message id. When
+      // the first reasoning push then arrives, the reasoningSections
+      // listener rebuilt the live segments BEFORE resetting that flag, so
+      // the button rendered "思考完成" until the next (throttled) push —
+      // and the button created in the sealed state never started its
+      // chevron timer, leaving a single static "›".
+      final manager = _HangingStreamManager();
+      await tester.pumpWidget(_buildTestApp(manager));
+      for (int i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      await _sendMessage(tester, '请思考这个问题');
+
+      // Simulate the stream-start provider push: textSections re-pushed as
+      // a fresh [''] list (the page's listener marks reasoning completed).
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ChatPage)),
+      );
+      container
+          .read(streamingTextSectionsProvider('test-conv').notifier)
+          .state = [''];
+      await tester.pump();
+
+      // The first reasoning content arrives (throttled push). The button
+      // must render as "思考中" right away, never "思考完成".
+      container
+          .read(streamingReasoningSectionsProvider('test-conv').notifier)
+          .state = ['模型思考内容'];
+      await tester.pump();
+
+      expect(find.text('思考中'), findsOneWidget,
+          reason: '首个推理段落应立即显示"思考中"，而不是闪烁"思考完成"');
+      expect(find.text('思考完成'), findsNothing, reason: '推理仍在进行时不应显示"思考完成"');
+
+      // The chevron animation must actually run: › → ›› → ›››.
+      expect(find.text('›'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('››'), findsOneWidget, reason: '333ms 后滚动动画应推进到两个 "›"');
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('›››'), findsOneWidget, reason: '666ms 后滚动动画应推进到三个 "›"');
+
+      // Unmount to dispose the periodic chevron timer, then flush pending
+      // one-shot timers (visibility_detector, chat UI internals).
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 600));
+    });
+
+    testWidgets(
+        'a round-end placeholder append keeps the sealed section at '
+        '"思考完成"', (tester) async {
+      // Regression for the counterpart of the flash bug: the
+      // reasoningSections flag reset must be scoped to content updates.
+      // A ReasoningSectionEndEvent appends a trailing '' placeholder —
+      // the round ENDED, so the sealed section must keep "思考完成".
+      // Resetting the flag here would flip it to "思考中" (with running
+      // chevrons) until the next round's first reasoning push.
+      final manager = _HangingStreamManager();
+      await tester.pumpWidget(_buildTestApp(manager));
+      for (int i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      await _sendMessage(tester, '分两步完成');
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ChatPage)),
+      );
+
+      // Round 1 text has flowed → the textSections listener marked the
+      // reasoning as completed for this message.
+      container
+          .read(streamingTextSectionsProvider('test-conv').notifier)
+          .state = ['第一轮回答'];
+      await tester.pump();
+
+      // Round 1's reasoning section ends (ReasoningSectionEndEvent appends
+      // the '' placeholder for the next round). The sealed button must stay
+      // "思考完成" — it must not flip to "思考中".
+      container
+          .read(streamingReasoningSectionsProvider('test-conv').notifier)
+          .state = ['模型思考内容', ''];
+      await tester.pump();
+
+      expect(find.text('思考完成'), findsOneWidget, reason: '已结束的推理段落应保持"思考完成"');
+      expect(find.text('思考中'), findsNothing, reason: '推理段已结束（占位追加）时不应翻转回"思考中"');
+
+      await _flushPendingTimers(tester);
+    });
+
+    testWidgets(
         'two tool rounds each render their tool card and reasoning button',
         (tester) async {
       final manager = _HangingStreamManager();

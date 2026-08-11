@@ -95,6 +95,50 @@ void main() {
       // The label must be visible during streaming
       expect(find.text('思考中'), findsOneWidget);
     });
+
+    testWidgets(
+        'chevron animation starts when an existing button flips from '
+        '"思考完成" to streaming "思考中"', (tester) async {
+      // Regression for the dead chevron animation: only one static "›"
+      // remained because _ReasoningButtonState started its timer only in
+      // initState and didUpdateWidget only handled the true→false
+      // transition — a button rendered as "思考完成" (isStreaming=false)
+      // and then flipped to streaming never started the timer.
+      Widget build({required bool streaming}) => ProviderScope(
+            child: MaterialApp(
+              home: Scaffold(
+                body: ReasoningSection(
+                  sections: ReasoningSectionData(
+                    texts: ['推理内容'],
+                    streaming: streaming,
+                  ),
+                  messageId: 'flip-msg-id',
+                ),
+              ),
+            ),
+          );
+
+      // First render: sealed section ("思考完成", no chevrons).
+      await tester.pumpWidget(build(streaming: false));
+      expect(find.text('思考完成'), findsOneWidget);
+      expect(find.text('›'), findsNothing);
+
+      // The same button flips to streaming (didUpdateWidget path).
+      await tester.pumpWidget(build(streaming: true));
+      await tester.pump();
+      expect(find.text('思考中'), findsOneWidget);
+      expect(find.text('›'), findsOneWidget);
+
+      // The chevron timer must have started: it advances every 333ms.
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('››'), findsOneWidget,
+          reason: 'false→true 翻转后滚动动画应启动（而不是只剩单个 "›"）');
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('›››'), findsOneWidget);
+
+      // Unmount to dispose the periodic chevron timer.
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   });
 
   group('ReasoningSection (Multiple sections)', () {
