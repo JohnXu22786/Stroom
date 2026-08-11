@@ -12,9 +12,11 @@ import 'package:flutter_svg/flutter_svg.dart';
 ///
 /// For SVG images, uses [SvgPicture.memory] with [InteractiveViewer].
 ///
-/// Both the crop and edit buttons pop the dialog with `true` (indicating
-/// the user wants to edit the image). The caller is expected to open
-/// [ExtendedImageEditorPage] in response.
+/// The crop and edit buttons pop the dialog with DISTINCT results —
+/// `'crop'` and `'edit'` — so the caller can open the corresponding
+/// editor: the quick crop editor ([ExtendedImageEditorPage]) for crop
+/// and the full editor ([ImageEditorPage]) for edit, matching the OCR
+/// page's preview behavior. Closing the dialog pops with `null`.
 ///
 /// Parameters:
 ///   [imageData]   — The image bytes to display. If null or empty,
@@ -51,11 +53,13 @@ class ImagePreviewDialog extends StatelessWidget {
               ),
               child: IconButton(
                 icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                onPressed: () => Navigator.pop(context, false),
+                onPressed: () => Navigator.pop(context),
               ),
             ),
           ),
-          // Crop + Edit buttons (top right) — only for non-SVG
+          // Crop + Edit buttons (top right) — only for non-SVG.
+          // They pop with DISTINCT results ('crop' / 'edit') so callers
+          // can open the corresponding editor, like the OCR page.
           if (!_isSvg)
             Positioned(
               top: MediaQuery.of(context).padding.top + 8,
@@ -72,7 +76,7 @@ class ImagePreviewDialog extends StatelessWidget {
                       icon:
                           const Icon(Icons.crop, color: Colors.white, size: 24),
                       tooltip: '裁剪',
-                      onPressed: () => Navigator.pop(context, true),
+                      onPressed: () => Navigator.pop(context, 'crop'),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -85,7 +89,7 @@ class ImagePreviewDialog extends StatelessWidget {
                       icon:
                           const Icon(Icons.edit, color: Colors.white, size: 24),
                       tooltip: '编辑',
-                      onPressed: () => Navigator.pop(context, true),
+                      onPressed: () => Navigator.pop(context, 'edit'),
                     ),
                   ),
                 ],

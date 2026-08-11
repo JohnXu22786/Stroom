@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat/composer/chat_composer_widget.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
+import 'package:stroom/pages/image_editor_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/attachment_storage.dart';
@@ -71,12 +72,13 @@ Future<void> _pumpUntil(
   }
 }
 
-/// Opens the quick editor from the pending attachment chip.
+/// Opens an editor from the pending attachment chip: taps the preview
+/// dialog's [icon] — crop opens the quick editor, edit opens the full
+/// editor (matching the OCR page).
 ///
 /// The preview bytes load asynchronously via real file IO, so the chip
-/// tap is retried (harmlessly) until the preview dialog actually opens;
-/// then the dialog's edit button is tapped.
-Future<void> _openQuickEditor(WidgetTester tester) async {
+/// tap is retried (harmlessly) until the preview dialog actually opens.
+Future<void> _openEditor(WidgetTester tester, IconData icon) async {
   final end = DateTime.now().add(const Duration(seconds: 8));
   while (find.byType(ImagePreviewDialog).evaluate().isEmpty) {
     if (DateTime.now().isAfter(end)) {
@@ -95,7 +97,7 @@ Future<void> _openQuickEditor(WidgetTester tester) async {
   // scope the tap to the preview dialog.
   await tester.tap(find.descendant(
     of: find.byType(ImagePreviewDialog),
-    matching: find.byIcon(Icons.edit),
+    matching: find.byIcon(icon),
   ));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
@@ -187,7 +189,7 @@ void main() {
         ));
         await tester.pump();
 
-        await _openQuickEditor(tester);
+        await _openEditor(tester, Icons.crop);
 
         // Wait for the editor image to decode (engine work — real async).
         await _pumpUntil(
@@ -241,7 +243,7 @@ void main() {
         ));
         await tester.pump();
 
-        await _openQuickEditor(tester);
+        await _openEditor(tester, Icons.crop);
         await _pumpUntil(
           tester,
           () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
@@ -263,6 +265,28 @@ void main() {
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
+    });
+
+    testWidgets(
+        'edit button opens the full editor (ImageEditorPage), not the '
+        'quick editor', (tester) async {
+      final att = await saveTestAttachment(tester);
+      await tester.pumpWidget(buildComposer(
+        editingAttachments: [att],
+        onSend: (text, attachments) {},
+        onEditSend: (id, text, attachments) {},
+      ));
+      await tester.pump();
+
+      await _openEditor(tester, Icons.edit);
+
+      // The full editor page must be pushed (ProImageEditor).
+      await _pumpUntil(
+        tester,
+        () => find.byType(ImageEditorPage).evaluate().isNotEmpty,
+      );
+      // The quick editor must NOT be open underneath the full editor.
+      expect(find.byType(ExtendedImageEditorPage), findsNothing);
     });
   });
 }

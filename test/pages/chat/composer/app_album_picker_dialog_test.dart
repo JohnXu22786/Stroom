@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/chat/composer/album_picker_shared.dart';
 import 'package:stroom/pages/chat/composer/chat_album_picker_dialog.dart';
+import 'package:stroom/pages/extended_image_editor_page.dart';
+import 'package:stroom/pages/image_editor_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/image_manifest.dart';
 
@@ -113,10 +115,11 @@ void main() {
         () => find.byType(AlbumPreviewChip).evaluate().isNotEmpty,
       );
 
-      // Preview chip → preview dialog → quick editor.
+      // Preview chip → preview dialog → quick editor (crop button —
+      // the edit button opens the full editor instead).
       await tester.tap(find.byType(AlbumPreviewChip));
       await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.edit));
+      await tester.tap(find.byIcon(Icons.crop));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
@@ -149,6 +152,74 @@ void main() {
         find.byKey(const Key('album_picker_confirm_btn')),
       );
       expect(confirmBtn2.onPressed, isNotNull);
+    });
+
+    testWidgets(
+        'edit button opens the full editor (ImageEditorPage), not the '
+        'quick editor', (tester) async {
+      final png = await tester.runAsync(_createEnginePng);
+      await tester.runAsync(() async {
+        await ImageManifest.writeFile('full-edit-hash.png', png!);
+        await ImageManifest.addRecord(
+          ImageRecord(
+            name: 'full-edit-image',
+            hash: 'full-edit-hash',
+            format: 'png',
+            createdAt: DateTime.now(),
+            size: png.length,
+            folder: '',
+          ),
+        );
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) {
+                return ElevatedButton(
+                  onPressed: () {
+                    showAppAlbumPickerDialog(context);
+                  },
+                  child: const Text('Open Album'),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open Album'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await _pumpUntil(
+        tester,
+        () => find.text('full-edit-image.png').evaluate().isNotEmpty,
+      );
+
+      // Select the image — the file is read asynchronously (real IO).
+      await tester.tap(find.text('full-edit-image.png'));
+      await tester.pump();
+      await _pumpUntil(
+        tester,
+        () => find.byType(AlbumPreviewChip).evaluate().isNotEmpty,
+      );
+
+      // Preview chip → preview dialog → full editor (edit button).
+      await tester.tap(find.byType(AlbumPreviewChip));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.edit));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // The full editor page must be pushed (ProImageEditor), not the
+      // quick editor.
+      await _pumpUntil(
+        tester,
+        () => find.byType(ImageEditorPage).evaluate().isNotEmpty,
+      );
+      expect(find.byType(ExtendedImageEditorPage), findsNothing);
     });
   });
 }

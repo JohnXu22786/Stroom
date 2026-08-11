@@ -8,6 +8,7 @@ import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/widgets/image_preview_dialog.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
+import 'package:stroom/pages/image_editor_page.dart';
 import 'album_picker_shared.dart';
 
 /// Shows a dialog for selecting images from the app's internal album.
@@ -528,13 +529,15 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   /// Handle tap on a preview chip: show fullscreen preview with edit.
   /// If the user edits the image, the edited bytes are saved to temp cache
   /// and the selected item is updated in memory (original file is NOT overwritten).
+  /// Crop opens the quick editor; edit opens the full editor — matching the
+  /// OCR page.
   Future<void> _onPreviewChipTap(
     String recordKey,
     String fileName,
     Uint8List imageBytes,
   ) async {
     // Show the fullscreen preview dialog with edit button
-    final shouldEdit = await showDialog<bool>(
+    final editChoice = await showDialog<String>(
       context: context,
       builder: (ctx) => ImagePreviewDialog(
         imageData: imageBytes,
@@ -542,11 +545,87 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
       ),
     );
 
-    if (shouldEdit != true || !mounted) return;
+    if (editChoice == null || !mounted) return;
 
-    // Another edit is still processing — starting a second one could
-    // silently discard the newer edit (both pipelines resolve against
-    // the same original bytes). Ask the user to wait.
+    if (editChoice == 'crop') {
+      // Quick crop editor. Another edit is still processing — starting a
+      // second one could silently discard the newer edit (both pipelines
+      // resolve against the same original bytes). Ask the user to wait.
+      if (_editsInFlight > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('图片处理中，请稍候再编辑'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+
+      // User tapped crop — open quick editor. The editor pops immediately
+      // and processes in the background; the selection is updated from the
+      // callback once the edited bytes are ready.
+      final confirmed = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ExtendedImageEditorPage(
+            imageBytes: imageBytes,
+            fileName: fileName,
+            onProcessed: (result) async {
+              try {
+                if (result is! QuickEditProcessingSuccess) return;
+                final editedBytes = result.editedBytes;
+                if (!mounted) return;
+
+                // Save edited bytes to temp cache directory instead of
+                // overwriting original
+                try {
+                  final tempDir = await getTemporaryDirectory();
+                  final tempFileName =
+                      'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+                  final tempFile = File('${tempDir.path}/$tempFileName');
+                  await tempFile.writeAsBytes(editedBytes);
+                  _tempEditFiles.add(tempFile.path);
+                } catch (_) {
+                  // Temp file save is best-effort; we keep the bytes in
+                  // memory
+                }
+
+                // The dialog is interactive while the editor processes in
+                // the background — it may have been dismissed, or the item
+                // removed (and possibly re-added) since the edit started.
+                // Only apply the edit if it is still the same entry.
+                if (!mounted) return;
+                final current = _selectedItems[recordKey];
+                if (current == null || !identical(current.value, imageBytes)) {
+                  return;
+                }
+
+                // Update the selected item in-memory with edited bytes
+                setState(() {
+                  _selectedItems[recordKey] = MapEntry(fileName, editedBytes);
+                });
+              } finally {
+                // The pipeline always fires the callback (success or
+                // failure) — release the confirm-blocking guard here.
+                if (mounted) setState(() => _editsInFlight--);
+              }
+            },
+          ),
+        ),
+      );
+      if (confirmed == true && mounted) {
+        // The pipeline is now running — hold the confirm button until the
+        // callback releases it.
+        setState(() => _editsInFlight++);
+      }
+      return;
+    }
+
+    // User tapped edit — open the full editor. showSaveDialog=false so it
+    // directly overwrites the in-memory selection (same as the OCR page).
+    // Another edit is still processing — a second edit would race the
+    // in-flight apply and one of the two results would be silently
+    // dropped. Ask the user to wait.
     if (_editsInFlight > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -557,63 +636,23 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
       return;
     }
 
-    // User tapped edit — open quick editor. The editor pops immediately
-    // and processes in the background; the selection is updated from the
-    // callback once the edited bytes are ready.
-    final confirmed = await Navigator.push<bool>(
+    final editorResult = await Navigator.push<ImageEditorResult>(
       context,
       MaterialPageRoute(
-        builder: (_) => ExtendedImageEditorPage(
+        builder: (_) => ImageEditorPage(
           imageBytes: imageBytes,
-          fileName: fileName,
-          onProcessed: (result) async {
-            try {
-              if (result is! QuickEditProcessingSuccess) return;
-              final editedBytes = result.editedBytes;
-              if (!mounted) return;
-
-              // Save edited bytes to temp cache directory instead of
-              // overwriting original
-              try {
-                final tempDir = await getTemporaryDirectory();
-                final tempFileName =
-                    'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
-                final tempFile = File('${tempDir.path}/$tempFileName');
-                await tempFile.writeAsBytes(editedBytes);
-                _tempEditFiles.add(tempFile.path);
-              } catch (_) {
-                // Temp file save is best-effort; we keep the bytes in
-                // memory
-              }
-
-              // The dialog is interactive while the editor processes in
-              // the background — it may have been dismissed, or the item
-              // removed (and possibly re-added) since the edit started.
-              // Only apply the edit if it is still the same entry.
-              if (!mounted) return;
-              final current = _selectedItems[recordKey];
-              if (current == null || !identical(current.value, imageBytes)) {
-                return;
-              }
-
-              // Update the selected item in-memory with edited bytes
-              setState(() {
-                _selectedItems[recordKey] = MapEntry(fileName, editedBytes);
-              });
-            } finally {
-              // The pipeline always fires the callback (success or
-              // failure) — release the confirm-blocking guard here.
-              if (mounted) setState(() => _editsInFlight--);
-            }
-          },
+          showSaveDialog: false,
         ),
       ),
     );
-    if (confirmed == true && mounted) {
-      // The pipeline is now running — hold the confirm button until the
-      // callback releases it.
-      setState(() => _editsInFlight++);
-    }
+    if (editorResult == null || !mounted) return;
+    // The dialog is interactive while the editor is open — only apply the
+    // edit if it is still the same entry.
+    final current = _selectedItems[recordKey];
+    if (current == null || !identical(current.value, imageBytes)) return;
+    setState(() {
+      _selectedItems[recordKey] = MapEntry(fileName, editorResult.editedBytes);
+    });
   }
 
   String _formatSize(int bytes) {

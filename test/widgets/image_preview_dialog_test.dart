@@ -87,13 +87,13 @@ void main() {
     // Interaction: buttons
     // ================================================================
 
-    testWidgets('close button pops dialog with false', (tester) async {
-      bool? result;
+    testWidgets('close button pops dialog with null', (tester) async {
+      String? result;
       await tester.pumpWidget(MaterialApp(
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
-              result = await showDialog<bool>(
+              result = await showDialog<String>(
                 context: context,
                 builder: (_) => ImagePreviewDialog(
                   imageData: validPng,
@@ -113,16 +113,16 @@ void main() {
       await tester.tap(find.byIcon(Icons.close));
       await tester.pump();
 
-      expect(result, false);
+      expect(result, isNull);
     });
 
-    testWidgets('crop button pops dialog with true', (tester) async {
-      bool? result;
+    testWidgets('crop button pops dialog with crop', (tester) async {
+      String? result;
       await tester.pumpWidget(MaterialApp(
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
-              result = await showDialog<bool>(
+              result = await showDialog<String>(
                 context: context,
                 builder: (_) => ImagePreviewDialog(
                   imageData: validPng,
@@ -142,16 +142,16 @@ void main() {
       await tester.tap(find.byIcon(Icons.crop));
       await tester.pump();
 
-      expect(result, true);
+      expect(result, 'crop');
     });
 
-    testWidgets('edit button pops dialog with true', (tester) async {
-      bool? result;
+    testWidgets('edit button pops dialog with edit', (tester) async {
+      String? result;
       await tester.pumpWidget(MaterialApp(
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
-              result = await showDialog<bool>(
+              result = await showDialog<String>(
                 context: context,
                 builder: (_) => ImagePreviewDialog(
                   imageData: validPng,
@@ -171,18 +171,18 @@ void main() {
       await tester.tap(find.byIcon(Icons.edit));
       await tester.pump();
 
-      expect(result, true);
+      expect(result, 'edit');
     });
 
     testWidgets('crop and edit buttons are always enabled', (tester) async {
-      bool? result;
+      String? result;
       bool? dialogClosed;
 
       await tester.pumpWidget(MaterialApp(
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
-              result = await showDialog<bool>(
+              result = await showDialog<String>(
                 context: context,
                 builder: (_) => ImagePreviewDialog(
                   imageData: validPng,
@@ -208,12 +208,12 @@ void main() {
       expect(cropButton.onPressed, isNotNull,
           reason: 'Crop button should be enabled');
 
-      // Tapping crop button immediately pops dialog with true
+      // Tapping crop button immediately pops dialog with 'crop'
       await tester.tap(cropIcon);
       await tester.pump();
       expect(dialogClosed, isTrue,
           reason: 'Dialog should close immediately after tapping crop button');
-      expect(result, isTrue, reason: 'Crop button should pop with true');
+      expect(result, 'crop', reason: 'Crop button should pop with crop');
     });
 
     // ================================================================
@@ -240,7 +240,7 @@ void main() {
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () async {
-                await showDialog<bool>(
+                await showDialog<String>(
                   context: context,
                   builder: (_) => ImagePreviewDialog(
                     imageData: validPng,

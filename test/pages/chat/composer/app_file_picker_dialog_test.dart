@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/chat/composer/chat_file_picker_dialog.dart';
 import 'package:stroom/pages/chat/composer/file_picker_shared.dart';
+import 'package:stroom/pages/extended_image_editor_page.dart';
+import 'package:stroom/pages/image_editor_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/image_manifest.dart';
 
@@ -108,10 +110,11 @@ void main() {
         () => find.byType(PreviewChip).evaluate().isNotEmpty,
       );
 
-      // Preview chip → preview dialog → quick editor.
+      // Preview chip → preview dialog → quick editor (crop button —
+      // the edit button opens the full editor instead).
       await tester.tap(find.byType(PreviewChip));
       await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.edit));
+      await tester.tap(find.byIcon(Icons.crop));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
@@ -144,6 +147,71 @@ void main() {
         find.byKey(const Key('file_picker_confirm_btn')),
       );
       expect(confirmBtn2.onPressed, isNotNull);
+    });
+
+    testWidgets(
+        'edit button opens the full editor (ImageEditorPage), not the '
+        'quick editor', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final png = await tester.runAsync(_createEnginePng);
+      await tester.runAsync(() async {
+        await ImageManifest.writeFile('full-edit-hash.png', png!);
+        await ImageManifest.addRecord(
+          ImageRecord(
+            name: 'full-edit-file',
+            hash: 'full-edit-hash',
+            format: 'png',
+            createdAt: DateTime.now(),
+            size: png.length,
+            folder: '',
+          ),
+        );
+      });
+
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () => showAppFilePickerDialog(context),
+            child: const Text('Open Picker'),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('Open Picker'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Switch to the image tab and wait for its records.
+      await tester.tap(find.byKey(const Key('file_picker_tab_image')));
+      await tester.pumpAndSettle();
+      await _pumpUntil(
+        tester,
+        () => find.text('full-edit-file.png').evaluate().isNotEmpty,
+      );
+
+      // Select the image — the file is read asynchronously (real IO).
+      await tester.tap(find.byType(Checkbox), warnIfMissed: false);
+      await tester.pump();
+      await _pumpUntil(
+        tester,
+        () => find.byType(PreviewChip).evaluate().isNotEmpty,
+      );
+
+      // Preview chip → preview dialog → full editor (edit button).
+      await tester.tap(find.byType(PreviewChip));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.edit));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // The full editor page must be pushed (ProImageEditor), not the
+      // quick editor.
+      await _pumpUntil(
+        tester,
+        () => find.byType(ImageEditorPage).evaluate().isNotEmpty,
+      );
+      expect(find.byType(ExtendedImageEditorPage), findsNothing);
     });
   });
 
