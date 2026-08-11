@@ -11,6 +11,11 @@ import 'mermaid_render_widget.dart';
 /// Tag used by the LaTeX custom generator.
 const _latexTag = 'latex';
 
+/// Scale factor for block/display math (`$$...$$`) relative to the
+/// surrounding text size. Only display math is scaled; inline math
+/// (`$...$`) keeps the regular text size.
+const double _displayMathScaleFactor = 1.5;
+
 /// Custom [m.InlineSyntax] that parses HTML line-break tags (`<br>`,
 /// `<br/>`, `<br />`, `</br>`) as hard line breaks.
 ///
@@ -120,11 +125,25 @@ class LatexNode extends SpanNode {
       return TextSpan(style: style, text: textContent);
     }
 
+    // Block/display math (`$$...$$`) is rendered [_displayMathScaleFactor]
+    // larger than the surrounding text so it stands out as its own centered
+    // line. Scaling the text style's font size scales the whole equation
+    // (flutter_math_fork derives every dimension from `fontSize`), and the
+    // [WidgetSpan] then grows with it — so the line height of that line
+    // changes together with the formula. Inline math (`$...$`) keeps the
+    // plain text style.
+    final mathTextStyle = isInline
+        ? style
+        : style.copyWith(
+            fontSize: (style.fontSize ?? config.p.textStyle.fontSize ?? 16.0) *
+                _displayMathScaleFactor,
+          );
+
     // mhchem (`\ce{...}`, `\pu{...}`) is expanded to plain KaTeX first;
     // flutter_math_fork does not load the mhchem extension.
     final latex = Math.tex(
       preprocessMhchem(content),
-      textStyle: style,
+      textStyle: mathTextStyle,
       textScaleFactor: 1,
       mathStyle: MathStyle.text,
       onErrorFallback: (error) {
