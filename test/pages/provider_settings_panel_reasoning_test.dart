@@ -291,8 +291,7 @@ void main() {
           ))
           .controller!
           .text;
-      expect(firstRowText, 'high',
-          reason: '拖拽后第一行应显示 high（旧实现会残留 low）');
+      expect(firstRowText, 'high', reason: '拖拽后第一行应显示 high（旧实现会残留 low）');
       expect(secondRowText, 'low');
     });
 

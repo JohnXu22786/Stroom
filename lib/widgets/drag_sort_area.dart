@@ -202,12 +202,10 @@ class _DragSortAreaState extends State<DragSortArea> {
   }
 
   double _distanceToRect(Offset p, Rect r) {
-    final dx = p.dx < r.left
-        ? r.left - p.dx
-        : (p.dx > r.right ? p.dx - r.right : 0);
-    final dy = p.dy < r.top
-        ? r.top - p.dy
-        : (p.dy > r.bottom ? p.dy - r.bottom : 0);
+    final dx =
+        p.dx < r.left ? r.left - p.dx : (p.dx > r.right ? p.dx - r.right : 0);
+    final dy =
+        p.dy < r.top ? r.top - p.dy : (p.dy > r.bottom ? p.dy - r.bottom : 0);
     return math.sqrt(dx * dx + dy * dy);
   }
 
@@ -357,7 +355,8 @@ class _DragSortAreaState extends State<DragSortArea> {
           top: -6,
           right: -6,
           child: GestureDetector(
-            onTap: widget.onDelete == null ? null : () => widget.onDelete!(value),
+            onTap:
+                widget.onDelete == null ? null : () => widget.onDelete!(value),
             child: Container(
               decoration: BoxDecoration(
                 color: cs.errorContainer,
@@ -417,9 +416,7 @@ class _DragSortAreaState extends State<DragSortArea> {
                 // 行条目必须始终包在同一个 Opacity 里（拖拽中仅改
                 // 透明度）——若拖拽中才插入 Opacity 包装，会改变子树
                 // 根类型导致行内 LongPressDraggable 被卸载、拖拽取消。
-                !widget.wrap
-                    ? Opacity(opacity: 1.0, child: child)
-                    : child,
+                !widget.wrap ? Opacity(opacity: 1.0, child: child) : child,
               ));
             }
             // 槽位（虚线边框 + 淡底）垫在被拖项幽灵下方，指示落点
@@ -434,9 +431,7 @@ class _DragSortAreaState extends State<DragSortArea> {
             entries.add((
               _keyOf(d),
               rects[t],
-              !widget.wrap
-                  ? Opacity(opacity: 0.45, child: _item(d))
-                  : _item(d),
+              !widget.wrap ? Opacity(opacity: 0.45, child: _item(d)) : _item(d),
             ));
           } else {
             final rects = _layoutRects([
@@ -447,9 +442,7 @@ class _DragSortAreaState extends State<DragSortArea> {
               entries.add((
                 _keyOf(k),
                 rects[k],
-                !widget.wrap
-                    ? Opacity(opacity: 1.0, child: child)
-                    : child,
+                !widget.wrap ? Opacity(opacity: 1.0, child: child) : child,
               ));
             }
           }

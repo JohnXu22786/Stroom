@@ -133,8 +133,9 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
     final removeBtn = param.options.length > 1
         ? IconButton(
             icon: const Icon(Icons.remove_circle, color: Colors.red, size: 18),
-            onPressed:
-                editable ? () => _removeOptionFromParam(actualIndex, rowIndex) : null,
+            onPressed: editable
+                ? () => _removeOptionFromParam(actualIndex, rowIndex)
+                : null,
             tooltip: '删除选项',
           )
         : const SizedBox.shrink();

@@ -78,7 +78,10 @@ class _HarnessState extends State<_Harness> {
   }
 }
 
-Widget _wrap({required List<String> values, required void Function(int, int) onReorder, bool wrap = true}) {
+Widget _wrap(
+    {required List<String> values,
+    required void Function(int, int) onReorder,
+    bool wrap = true}) {
   return _Harness(initial: values, wrap: wrap, onReorder: onReorder);
 }
 
@@ -88,7 +91,8 @@ void main() {
         (tester) async {
       final reorders = <(int, int)>[];
       await tester.pumpWidget(
-        _wrap(values: ['a', 'b', 'c'], onReorder: (f, t) => reorders.add((f, t))),
+        _wrap(
+            values: ['a', 'b', 'c'], onReorder: (f, t) => reorders.add((f, t))),
       );
       await tester.pumpAndSettle();
 
@@ -101,11 +105,14 @@ void main() {
         (tester) async {
       final reorders = <(int, int)>[];
       await tester.pumpWidget(
-        _wrap(values: ['a', 'bb', 'c'], onReorder: (f, t) => reorders.add((f, t))),
+        _wrap(
+            values: ['a', 'bb', 'c'],
+            onReorder: (f, t) => reorders.add((f, t))),
       );
       await tester.pumpAndSettle();
 
-      final gesture = await tester.startGesture(tester.getCenter(find.text('a')));
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.text('a')));
       await tester.pump(const Duration(milliseconds: 600));
       // 移到 bb 上（胶囊较窄：a≈39px + 间距，+55 落在 bb 内）→ 槽位出现
       await gesture.moveBy(const Offset(55, 0));
@@ -116,8 +123,7 @@ void main() {
       // 槽位 = 被拖项的落点：幽灵条目与槽位矩形一致（无错位）
       final slotRect = tester.getRect(find.byKey(const ValueKey('drag-slot')));
       final ghostRect = tester.getRect(find.byKey(const ValueKey('pill-a')));
-      expect(slotRect, ghostRect,
-          reason: '槽位必须与被拖项的落点重合，否则松手后会回跳');
+      expect(slotRect, ghostRect, reason: '槽位必须与被拖项的落点重合，否则松手后会回跳');
       await gesture.up();
       await tester.pumpAndSettle();
       expect(reorders, isNotEmpty, reason: '松手应提交排序');
@@ -129,11 +135,11 @@ void main() {
       );
     });
 
-    testWidgets('dropping back on the origin does not reorder',
-        (tester) async {
+    testWidgets('dropping back on the origin does not reorder', (tester) async {
       final reorders = <(int, int)>[];
       await tester.pumpWidget(
-        _wrap(values: ['a', 'b', 'c'], onReorder: (f, t) => reorders.add((f, t))),
+        _wrap(
+            values: ['a', 'b', 'c'], onReorder: (f, t) => reorders.add((f, t))),
       );
       await tester.pumpAndSettle();
 
@@ -145,12 +151,14 @@ void main() {
         (tester) async {
       final reorders = <(int, int)>[];
       await tester.pumpWidget(
-        _wrap(values: ['a', 'b', 'c'], onReorder: (f, t) => reorders.add((f, t))),
+        _wrap(
+            values: ['a', 'b', 'c'], onReorder: (f, t) => reorders.add((f, t))),
       );
       await tester.pumpAndSettle();
 
       // 长按 c（第三个），向左拖过 a 的中心
-      final gesture = await tester.startGesture(tester.getCenter(find.text('c')));
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.text('c')));
       await tester.pump(const Duration(milliseconds: 600));
       await gesture.moveBy(const Offset(-140, 0));
       await tester.pump();
@@ -171,8 +179,7 @@ void main() {
   });
 
   group('DragSortArea rows (column)', () {
-    testWidgets('long-press dragging the handle reorders rows',
-        (tester) async {
+    testWidgets('long-press dragging the handle reorders rows', (tester) async {
       final reorders = <(int, int)>[];
       await tester.pumpWidget(
         _wrap(
@@ -207,8 +214,7 @@ void main() {
       expect(reorders, isEmpty);
     });
 
-    testWidgets('dragging a row upward reorders to the top',
-        (tester) async {
+    testWidgets('dragging a row upward reorders to the top', (tester) async {
       final reorders = <(int, int)>[];
       await tester.pumpWidget(
         _wrap(
@@ -227,8 +233,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 250));
       final slotRect = tester.getRect(find.byKey(const ValueKey('drag-slot')));
-      final ghostRect =
-          tester.getRect(find.byKey(const ValueKey('entry-2')));
+      final ghostRect = tester.getRect(find.byKey(const ValueKey('entry-2')));
       expect(slotRect, ghostRect, reason: '槽位与落点重合（向上拖无错位）');
       await gesture.up();
       await tester.pumpAndSettle();

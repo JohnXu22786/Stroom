@@ -1252,12 +1252,10 @@ void main() {
         tapSave: false,
       );
       await _scrollToReasoning(tester, find.text('medium'));
-      expect(find.text('medium'), findsOneWidget,
-          reason: '未勾选的供应商值应重新出现');
+      expect(find.text('medium'), findsOneWidget, reason: '未勾选的供应商值应重新出现');
       expect(find.text('low'), findsOneWidget);
       expect(find.text('high'), findsOneWidget);
-      expect(find.byIcon(Icons.close), findsNothing,
-          reason: '供应商来源的值不应带删除按钮');
+      expect(find.byIcon(Icons.close), findsNothing, reason: '供应商来源的值不应带删除按钮');
       // 参数归属仍是供应商
       await _scrollToReasoning(tester, find.text('reasoning_effort'));
       expect(find.textContaining('当前：供应商'), findsWidgets);

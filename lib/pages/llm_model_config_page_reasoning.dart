@@ -306,7 +306,8 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
         DragSortArea(
           wrap: true,
           values: param.options,
-          selected: (v) => _customParamSelectedValues[param]?.contains(v) ?? false,
+          selected: (v) =>
+              _customParamSelectedValues[param]?.contains(v) ?? false,
           deletable: (_) => true,
           onTap: (v) => _toggleCustomParamOption(param, v),
           onDelete: (v) {
