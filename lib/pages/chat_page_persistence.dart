@@ -11,14 +11,14 @@ extension _ChatPagePersistenceExt on _ChatPageState {
     final conv = convs.where((c) => c.id == convId).firstOrNull;
     if (conv == null) return;
     // 从未配置过偏好的对话：运行时集与当前自动启用基线一致（用户没有
-    // 手动偏离过）时不写入——保持"未配置"状态，MCP 工具恢复显示后
-    // 下次解析会自动重新启用；用户手动开关过（集合偏离基线，含全部
-    // 关闭）才冻结为显式偏好。否则第一次发送就会把"当时可选择"的集合
-    // 永久固化，被开关隐藏过的 MCP 工具再也不会回来。
+    // 手动偏离过）时不写入——保持"未配置"状态，MCP 总开关重新开启后
+    // 下次解析会自动重新启用 MCP 工具；用户手动开关过（集合偏离基线，
+    // 含全部关闭）才冻结为显式偏好。否则第一次发送就会把"当时可选择"
+    // 的集合永久固化，被总开关隐藏过的 MCP 工具再也不会回来。
     if (!conv.hasExplicitEnabledMcpTools &&
         setEquals(
           enabledTools,
-          _selectableTools().map((t) => t.name).toSet(),
+          _adapter.getAllToolDefinitions().map((t) => t.name).toSet(),
         )) {
       return;
     }

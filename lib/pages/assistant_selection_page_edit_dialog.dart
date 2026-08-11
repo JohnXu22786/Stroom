@@ -40,7 +40,6 @@ void showAssistantFullEditDialog(
     defaultToolNames: assistant.defaultToolNames == null
         ? null
         : Set<String>.from(assistant.defaultToolNames!),
-    mcpToolsVisible: assistant.mcpToolsVisible,
   );
   final seedController =
       TextEditingController(text: vars.seed?.toString() ?? '');
@@ -156,10 +155,6 @@ void showAssistantFullEditDialog(
                               next == null ? null : Set<String>.from(next);
                           vars.defaultsToolsEngaged = true;
                         }),
-                        mcpToolsVisible: vars.mcpToolsVisible,
-                        onMcpToolsVisibleChanged: (value) => setDlgState(() {
-                          vars.mcpToolsVisible = value;
-                        }),
                       ),
                     ],
                   ),
@@ -233,24 +228,14 @@ void showAssistantFullEditDialog(
                         : modelStale
                             ? null
                             : assistant.defaultModelName,
+                    // 默认工具集合：仅在用户改过（engaged）时写入；
+                    // 从未配置的助手保持 null（新话题自动启用全部工具）。
+                    // "恢复未配置"入口（clearDefaultToolNames）已随
+                    // 取消配置按钮移除，UI 不再产生 null 回调。
                     defaultToolNames: vars.defaultsToolsEngaged
                         ? vars.defaultToolNames
                         : assistant.defaultToolNames,
-                    // "恢复自动启用全部"：engaged 但集合为 null → 回到未配置。
-                    clearDefaultToolNames: vars.defaultsToolsEngaged &&
-                        vars.defaultToolNames == null,
                   );
-
-              // MCP 工具显示开关：未改动时不写（避免每次保存都触发一次
-              // 持久化与状态发射）。
-              if (vars.mcpToolsVisible != assistant.mcpToolsVisible) {
-                ref
-                    .read(assistantProvider.notifier)
-                    .updateAssistantMcpVisibility(
-                      id: assistant.id,
-                      mcpToolsVisible: vars.mcpToolsVisible,
-                    );
-              }
 
               Navigator.pop(ctx);
             },

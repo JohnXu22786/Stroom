@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/assistant_provider.dart';
 import '../providers/provider_config.dart';
 import 'provider_config_detail_page.dart';
 import 'mcp_server_config_page.dart';
@@ -177,11 +176,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     }
   }
 
-  /// 切换 MCP 总开关。切换后：
-  /// - 写入新的 enabled 状态（关闭后 MCP 工具不再发布，助手页面与
-  ///   对话页都不再显示）；
-  /// - 标记"已切换过 MCP总开关"，并把所有助手的 MCP 工具显示开关重置为
-  ///   关闭——助手页面以关闭为默认，而不是以上一次的状态为基准。
+  /// 切换 MCP 总开关。关闭后 MCP 工具不再发布，助手页面与对话页
+  /// 都不再显示这些工具。
   Future<void> _toggleMcpEnabled(bool value) async {
     final entry = _entry;
     if (entry == null || entry.type != 'mcp') return;
@@ -194,7 +190,6 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       enabled: value,
     );
     await ref.read(providerEntriesProvider.notifier).update(entry.id, updated);
-    await ref.read(assistantProvider.notifier).resetMcpToolsVisibility();
     if (!mounted) return;
     setState(() {});
   }
@@ -601,9 +596,7 @@ class _McpMasterSwitchCard extends StatelessWidget {
               ),
             ),
             subtitle: Text(
-              enabled
-                  ? '已开启：MCP 服务器工具可用。注意：切换总开关会把各助手的"MCP 工具显示"开关重置为关闭，需在助手默认设置中重新开启。'
-                  : '已关闭：MCP 服务器工具不在助手页面与对话页中显示。注意：切换总开关会把各助手的"MCP 工具显示"开关重置为关闭。',
+              enabled ? '已开启：MCP 服务器工具可用。' : '已关闭：MCP 服务器工具不在助手页面与对话页中显示。',
               style: TextStyle(
                 fontSize: 12,
                 color: cs.onSurfaceVariant,

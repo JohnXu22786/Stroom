@@ -191,14 +191,6 @@ class Assistant {
   /// 该字段（包括空集合）。
   final Set<String>? defaultToolNames;
 
-  /// MCP 工具显示开关（助手页面"MCP工具显示"开关）。
-  /// 开启后该助手下的对话页工具列表中会出现 MCP 工具，可选择是否使用；
-  /// 关闭后 MCP 工具不在对话页显示、无法选择。
-  ///
-  /// 在 MCP 列表页切换过 MCP总开关后，所有助手的此开关会被重置为
-  /// 关闭（而不是以上次状态为基准），之后新建的助手默认也是关闭。
-  final bool mcpToolsVisible;
-
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -212,7 +204,6 @@ class Assistant {
     this.modelId,
     this.defaultModelName,
     this.defaultToolNames,
-    this.mcpToolsVisible = true,
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : id = id ?? const Uuid().v4(),
@@ -233,7 +224,6 @@ class Assistant {
         // 非 null 时总是写出（含空集合）：区分"配置过但全关"与"从未配置"。
         if (defaultToolNames != null)
           'defaultToolNames': defaultToolNames!.toList(),
-        'mcpToolsVisible': mcpToolsVisible,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
       };
@@ -266,8 +256,6 @@ class Assistant {
               ? defaultToolsRaw.map((e) => e.toString()).toSet()
               : const <String>{})
           : null,
-      // 旧数据缺省为可见（v3 原位演进，无需迁移步骤）。
-      mcpToolsVisible: map['mcpToolsVisible'] as bool? ?? true,
       createdAt: map['createdAt'] != null
           ? DateTime.parse(map['createdAt'] as String)
           : null,
@@ -287,7 +275,6 @@ class Assistant {
     String? modelId,
     String? defaultModelName,
     Set<String>? defaultToolNames,
-    bool? mcpToolsVisible,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) =>
@@ -301,7 +288,6 @@ class Assistant {
         modelId: modelId ?? this.modelId,
         defaultModelName: defaultModelName ?? this.defaultModelName,
         defaultToolNames: defaultToolNames ?? this.defaultToolNames,
-        mcpToolsVisible: mcpToolsVisible ?? this.mcpToolsVisible,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
