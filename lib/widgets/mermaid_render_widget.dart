@@ -1523,6 +1523,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       ColorScheme cs, bool isDark, double? effectiveHeight) {
     return CodeBlockSourceView(
       code: widget.mermaidCode,
+      language: 'mermaid',
       height: effectiveHeight,
       actionButtons: [
         _buildSrcSaveButton(),

@@ -19,8 +19,13 @@ class CodeBlockSourceView extends StatefulWidget {
   final String code;
 
   /// Optional fixed height. If null, uses adaptive height capped at
-  /// roughly 4:3 aspect ratio (height = width * 3/4).
+  /// 15 visible lines.
   final double? height;
+
+  /// The language of the code (the info string after the opening fence,
+  /// e.g. `html`, `python`, `mermaid`). Shown as a small label in the
+  /// top-left corner. Hidden when empty (plain fences without a language).
+  final String language;
 
   /// Optional additional action buttons placed in the top-right button
   /// row, to the right of the built-in wrap toggle.
@@ -30,6 +35,7 @@ class CodeBlockSourceView extends StatefulWidget {
     super.key,
     required this.code,
     this.height,
+    this.language = '',
     this.actionButtons = const [],
   });
 
@@ -62,27 +68,23 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
       );
     }
 
-    // Adaptive height: cap at roughly 4:3 aspect ratio
+    // Adaptive height: cap at 15 visible lines so long code blocks do not
+    // grow unbounded; shorter blocks stay compact (fit to their content).
     const verticalPadding = 40.0 + 12.0;
+    const maxVisibleLines = 15;
     final lineCount = widget.code.isEmpty ? 0 : widget.code.split('\n').length;
+    final contentHeight =
+        lineCount > 0 ? lineCount * lineHeight + verticalPadding : 40.0;
+    final maxAllowedHeight = maxVisibleLines * lineHeight + verticalPadding;
+    final effectiveMax = maxAllowedHeight < 40.0 ? 40.0 : maxAllowedHeight;
+    final adaptiveHeight = contentHeight.clamp(40.0, effectiveMax).toDouble();
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxWidth = constraints.maxWidth;
-        final maxAllowedHeight = maxWidth * 0.75;
-        final contentHeight =
-            lineCount > 0 ? lineCount * lineHeight + verticalPadding : 40.0;
-        final effectiveMax = maxAllowedHeight < 40.0 ? 40.0 : maxAllowedHeight;
-        final adaptiveHeight = contentHeight.clamp(40.0, effectiveMax);
-
-        return _buildSizedCodeBlock(
-          height: adaptiveHeight,
-          bgColor: bgColor,
-          textColor: textColor,
-          borderColor: borderColor,
-          isDark: isDark,
-        );
-      },
+    return _buildSizedCodeBlock(
+      height: adaptiveHeight,
+      bgColor: bgColor,
+      textColor: textColor,
+      borderColor: borderColor,
+      isDark: isDark,
     );
   }
 
@@ -120,12 +122,46 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
                     )
                   : _buildCodeContent(textColor, isDark),
             ),
+            // Language label (top-left): the info string from the
+            // opening fence (e.g. `html`, `python`), shown as-is.
+            // Hidden while the code is empty so it cannot cover the
+            // "(empty)" placeholder.
+            if (widget.language.isNotEmpty && widget.code.isNotEmpty)
+              Positioned(
+                top: 8,
+                left: 12,
+                child: _buildLanguageLabel(),
+              ),
             Positioned(
               top: 4,
               right: 4,
               child: _buildButtonRow(),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Builds the small language badge shown in the top-left corner.
+  Widget _buildLanguageLabel() {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = cs.brightness == Brightness.dark;
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 120),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        widget.language,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 11,
+          color: isDark ? const Color(0xffcccccc) : const Color(0xff555555),
         ),
       ),
     );
