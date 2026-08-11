@@ -279,6 +279,62 @@ class _LabeledTextFieldState extends State<LabeledTextField>
 }
 
 // ============================================================================
+// SyncedValueField — 外部值驱动的文本输入框。
+// TextFormField 的 initialValue 只在首次构建生效：拖拽排序后行内容被
+// 重新分配索引时，旧元素的内部 controller 仍显示旧文本。本组件在外部
+// 值变化（且与输入框当前文本不一致）时同步 controller，用户输入则
+// 原样保留（不打断编辑）。
+// ============================================================================
+
+class SyncedValueField extends StatefulWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+  final InputDecoration decoration;
+  final bool readOnly;
+
+  const SyncedValueField({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    required this.decoration,
+    this.readOnly = false,
+  });
+
+  @override
+  State<SyncedValueField> createState() => _SyncedValueFieldState();
+}
+
+class _SyncedValueFieldState extends State<SyncedValueField> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.value);
+
+  @override
+  void didUpdateWidget(SyncedValueField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 外部值变化（拖拽排序、重置等）且不是用户正在输入的内容时同步。
+    if (oldWidget.value != widget.value && _controller.text != widget.value) {
+      _controller.text = widget.value;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: _controller,
+      readOnly: widget.readOnly,
+      decoration: widget.decoration,
+      onChanged: widget.onChanged,
+    );
+  }
+}
+
+// ============================================================================
 // LlmToggleSlider — slider with toggle switch
 // ============================================================================
 
