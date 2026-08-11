@@ -374,6 +374,23 @@ extension _ChatPageModelsExt on _ChatPageState {
     if (normalized != restoredValues) {
       ref.read(reasoningParamValuesProvider.notifier).state = normalized;
     }
+    // 模型当前没有可用推理参数（开关未填满 / 无选项值 / 非布尔）时，
+    // 残留的开启标记一并清除：否则每次重启都会重新持久化陈旧状态，
+    // 且配置恢复选项后会「悄悄」重新生效（与面板灰色不可用一致）。
+    // 以适配器当前模型为准（与 ensureEffortValue 相同的守卫条件）。
+    if (adapterMatchesRestoredModel) {
+      final currentParams = _adapter.reasoningParams;
+      if (!currentParams.any((p) => p.isUsable) &&
+          ref.read(reasoningEnabledProvider)) {
+        ref.read(reasoningEnabledProvider.notifier).state = false;
+      }
+      final currentEffort = findEffortParam(currentParams);
+      if (currentEffort != null &&
+          !currentEffort.isUsable &&
+          ref.read(reasoningEffortEnabledProvider)) {
+        ref.read(reasoningEffortEnabledProvider.notifier).state = false;
+      }
+    }
   }
 
   /// Loads the per-model settings map from SharedPreferences.

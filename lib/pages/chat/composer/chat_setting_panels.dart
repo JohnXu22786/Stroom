@@ -373,9 +373,15 @@ void showReasoningPanel({
   // legacy fallback for models saved before the flag existed)
   final ReasoningParam? effortParam = findEffortParam(reasoningParams);
 
-  final hasParams = reasoningParams.isNotEmpty;
+  // 推理开关「可用」：存在任一可用的推理参数（见 [ReasoningParam.isUsable]）。
+  // 仅参数名（无选项值、非布尔）的参数不可用：开关无法产生任何效果，
+  // 与力度区间的灰色关闭状态保持一致。
+  final hasParams = reasoningParams.any((p) => p.isUsable);
   final hasNonToggleParams = reasoningParams.any((p) => !p.isReasoningToggle);
   final hasEffortParam = effortParam != null;
+  // 力度参数「可用」：有选项值，或布尔类型（布尔无选项值，开关即值，
+  // 与自定义参数面板的布尔约定一致）。仅声明参数名且非布尔 → 不可用。
+  final effortUsable = hasEffortParam && effortParam.isUsable;
 
   showModalBottomSheet(
     context: context,
@@ -457,7 +463,7 @@ void showReasoningPanel({
                                   ),
                                 ),
                                 Switch(
-                                  value: localEnabled,
+                                  value: localEnabled && hasParams,
                                   activeThumbColor: cs.primary,
                                   onChanged: hasParams
                                       ? (value) {
@@ -509,12 +515,12 @@ void showReasoningPanel({
                                   ),
                                 ),
                                 Switch(
-                                  value: localEffortEnabled && hasEffortParam,
+                                  value: localEffortEnabled && effortUsable,
                                   activeThumbColor: cs.primary,
-                                  onChanged: hasEffortParam
+                                  onChanged: effortUsable
                                       ? (value) {
-                                          setState(
-                                              () => localEffortEnabled = value);
+                                          setState(() => localEffortEnabled =
+                                              value);
                                           onReasoningEffortToggle(value);
                                         }
                                       : null,
@@ -534,25 +540,29 @@ void showReasoningPanel({
                                 ),
                               ),
                             ),
-                          if (hasEffortParam && localEffortEnabled) ...[
-                            const SizedBox(height: 12),
-                            if (effortParam.options.isEmpty)
-                              // 仅声明参数名（无选项值）的力度参数：
-                              // 值由模型配置提供，给出引导而非死开关
-                              Padding(
-                                padding: const EdgeInsets.only(left: 4),
-                                child: Text(
-                                  '该参数暂无选项值，请在模型设置中添加',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: cs.onSurfaceVariant
-                                        .withValues(alpha: 0.6),
-                                  ),
+                          if (hasEffortParam &&
+                              effortParam.options.isEmpty &&
+                              effortParam.type != 'boolean')
+                            // 仅声明参数名（无选项值）的力度参数：
+                            // 开关不可用（灰色关闭），给出引导而非死开关。
+                            // 布尔类型例外：无选项值但开关即值，可正常切换。
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8, left: 4),
+                              child: Text(
+                                '该参数暂无选项值，请在模型设置中添加',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: cs.onSurfaceVariant
+                                      .withValues(alpha: 0.6),
                                 ),
-                              )
-                            else
-                              // Effort param options
-                              Wrap(
+                              ),
+                            )
+                          else if (effortUsable &&
+                              localEffortEnabled &&
+                              effortParam.options.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            // Effort param options
+                            Wrap(
                                 spacing: 8,
                                 runSpacing: 8,
                                 children: effortParam.options.map((option) {

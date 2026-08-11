@@ -244,8 +244,11 @@ void main() {
       expect(body.containsKey('reasoning_effort'), isFalse);
     });
 
-    test('provider name-only param sends the selected value when present',
-        () async {
+    test(
+        'provider name-only param (no options) is NOT sent even with a stale '
+        'value in the map', () async {
+      // 仅参数名、无选项值（非布尔）的供应商参数不可用：面板开关灰色
+      // 关闭，map 中即使残留旧值也不得发送（UI 无法再选择它）。
       final service = ChatService(
         provider: provider,
         modelConfig: plainModel(),
@@ -273,7 +276,57 @@ void main() {
 
       final body = provider.lastRequestBody;
       expect(body, isNotNull);
-      expect(body!['reasoning_effort'], 'high');
+      expect(body!['thinking']['type'], 'enabled');
+      expect(body.containsKey('reasoning_effort'), isFalse);
+    });
+
+    test(
+        'provider name-only param receives the value selected for the '
+        'model-level same-name param (deferral via model loop)', () async {
+      // 供应商仅声明参数名，模型提供同名参数（含选项值）：合并视图
+      // 以模型版本为准，选择的值经模型循环发送——deferral 语义保留。
+      final service = ChatService(
+        provider: provider,
+        modelConfig: ModelConfig(
+          name: 'Test',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'reasoning_effort',
+              isEffortParam: true,
+              options: ['low', 'medium', 'high'],
+              enabled: true,
+            ),
+          ],
+        ),
+        providerConfig: providerWithReasoning(
+          toggle: ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          additional: [
+            ReasoningParam(
+              paramName: 'reasoning_effort',
+              enabled: true,
+              options: [],
+            ),
+          ],
+        ),
+      );
+
+      await for (final _ in service.sendStream('Hi',
+          history: [],
+          reasoning: true,
+          reasoningParamValues: {'reasoning_effort': 'high'})) {}
+
+      final body = provider.lastRequestBody;
+      expect(body, isNotNull);
+      expect(body!['thinking']['type'], 'enabled');
+      // 模型层同名参数可用 → 值正常发送
+      expect(body['reasoning_effort'], 'high');
     });
 
     test('model param overrides provider param with the same name', () async {
