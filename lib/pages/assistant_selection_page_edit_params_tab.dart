@@ -23,7 +23,6 @@ class _EditDialogVars {
     required this.customParameters,
     this.defaultModelName,
     this.defaultToolNames,
-    required this.mcpToolsVisible,
   });
 
   double temperature;
@@ -51,9 +50,6 @@ class _EditDialogVars {
   /// null = 从未配置默认工具（新话题自动启用全部工具）；非 null（含空集合）
   /// = 已配置，新话题严格使用该集合。
   Set<String>? defaultToolNames;
-
-  /// MCP 工具显示开关：对话页是否显示 MCP 工具。
-  bool mcpToolsVisible;
 
   /// 用户是否在"默认设置"tab 中改过默认模型。仅当为 true 时才把
   /// [defaultModelName] 写回助手——否则（如只改了名称/提示词就保存）
