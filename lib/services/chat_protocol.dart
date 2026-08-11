@@ -435,20 +435,28 @@ const List<String> textAttachmentExtensions = [
   'dockerfile',
 ];
 
-/// 读取文本类附件的内容，超长（>4000 字节）截断（UTF-8 边界安全）。
+/// 读取文本类附件的内容，**完整返回、不截断**。
+///
+/// 超过 [maxAttachmentBytes]（10MB）硬顶的返回"文件过大已跳过"占位
+/// ——与视频/音频/文档等其余附件类型一致：内容要么完整发送、要么
+/// 明确提示跳过，绝不静默截断。超限附件按 [fileSize] 在读取前拦截，
+/// 避免把超大文件整包读入内存（与 readAttachmentBase64 一致）。
 /// 失败返回 null。
 Future<String?> readTextAttachmentContent(
   String fileName,
   String storagePath,
+  int fileSize,
 ) async {
+  if (fileSize > maxAttachmentBytes) {
+    return '[文件过大已跳过: $fileName]';
+  }
   try {
     final bytes = await AttachmentStorage.readFile(storagePath);
     if (bytes == null || bytes.isEmpty) return null;
-    final textContent = utf8.decode(bytes);
-    if (utf8.encode(textContent).length > 4000) {
-      return '${truncateUtf8(textContent, 4000)}\n... [truncated]';
+    if (bytes.length > maxAttachmentBytes) {
+      return '[文件过大已跳过: $fileName]';
     }
-    return textContent;
+    return utf8.decode(bytes);
   } catch (_) {
     return null;
   }
