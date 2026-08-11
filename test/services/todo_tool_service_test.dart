@@ -7,6 +7,74 @@ void main() {
     TodoToolService.reset();
   });
 
+  group('TodoToolService - tool definitions', () {
+    test('exposes a single todowrite tool (read/write merged)', () {
+      expect(TodoToolService.toolDefinitions, hasLength(1));
+      expect(TodoToolService.toolDefinitions.single.name, 'todowrite');
+      // 回归防护：todoread 已并入 todowrite（读写一体），不能再出现为独立工具。
+      expect(
+        TodoToolService.toolDefinitions.map((t) => t.name),
+        isNot(contains('todoread')),
+      );
+    });
+  });
+
+  group('TodoToolService - handleTodo dispatcher', () {
+    test('writes when todos is present', () async {
+      final result = await TodoToolService.handleTodo({
+        'todos': [
+          {
+            'content': 'Dispatcher task',
+            'status': 'pending',
+            'priority': 'high',
+          },
+        ],
+      });
+
+      expect(result, contains('1 todos'));
+      final readResult = await TodoToolService.handleTodo({});
+      expect(readResult, contains('Dispatcher task'));
+    });
+
+    test('reads when todos is omitted', () async {
+      await TodoToolService.handleTodo({
+        'todos': [
+          {
+            'content': 'Read via dispatcher',
+            'status': 'in_progress',
+            'priority': 'medium',
+          },
+        ],
+      });
+
+      final result = await TodoToolService.handleTodo({});
+      expect(result, contains('Read via dispatcher'));
+    });
+
+    test('reads when todos is null (no destructive wipe)', () async {
+      await TodoToolService.handleTodo({
+        'todos': [
+          {
+            'content': 'Keep me',
+            'status': 'pending',
+            'priority': 'high',
+          },
+        ],
+      });
+
+      // 模型把可选数组序列化为 null 时应视为"读取"，绝不能清空列表。
+      final result = await TodoToolService.handleTodo({'todos': null});
+      expect(result, contains('Keep me'));
+    });
+
+    test('returns error for malformed non-List todos (no silent read)',
+        () async {
+      // 类型非法（如字符串）时返回错误提示而非静默读取，让模型自行修正。
+      final result = await TodoToolService.handleTodo({'todos': 'not-a-list'});
+      expect(result, contains('todos 参数必须是数组'));
+    });
+  });
+
   group('TodoToolService - todowrite', () {
     test('creates new todos from scratch', () async {
       final result = await TodoToolService.handleTodoWrite({
