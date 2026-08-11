@@ -321,8 +321,8 @@ void main() {
       // differs from any hardcoded constant, keeping this test meaningful
       // regardless of the test font's metrics.
       tester.platformDispatcher.textScaleFactorTestValue = 2.0;
-      addTearDown(() =>
-          tester.platformDispatcher.clearTextScaleFactorTestValue());
+      addTearDown(
+          () => tester.platformDispatcher.clearTextScaleFactorTestValue());
 
       const code = 'aaaa\nbbbb\ncccc\ndddd';
       await tester.pumpWidget(
