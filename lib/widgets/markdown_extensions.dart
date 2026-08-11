@@ -135,9 +135,7 @@ class LatexNode extends SpanNode {
     final mathTextStyle = isInline
         ? style
         : style.copyWith(
-            fontSize: (style.fontSize ??
-                    config.p.textStyle.fontSize ??
-                    16.0) *
+            fontSize: (style.fontSize ?? config.p.textStyle.fontSize ?? 16.0) *
                 _displayMathScaleFactor,
           );
 

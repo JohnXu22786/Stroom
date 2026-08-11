@@ -428,8 +428,7 @@ void main() {
       final blockLineHeight =
           tester.getSize(find.byKey(const ValueKey('math-line'))).height;
 
-      expect(
-          blockLineHeight,
+      expect(blockLineHeight,
           greaterThanOrEqualTo(inlineMathHeight * 1.5 + 32 - 2),
           reason: 'the line containing a 1.5x block formula must be tall '
               'enough to fit it (1.5x the inline math height) plus the '
