@@ -1,4 +1,10 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
+import 'package:path/path.dart' as p;
+
 import '../../../models/assistant.dart';
+import '../../../models/chat_message.dart';
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/task_provider_shared.dart';
 import '../../../services/app_log_service.dart';
@@ -9,6 +15,32 @@ import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
 import 'shared_helpers.dart';
+
+/// Output record name for a chat block: 助手回复_<短名>.
+///
+/// The "短名" comes from the previous block's passed-in content — a file
+/// path uses its basename, plain text uses its first 20 chars — so the
+/// record is traceable back to what was sent to the assistant.
+///
+/// Never throws: the file check is skipped on web (dart:io File methods
+/// throw UnsupportedError there) and any file-system error falls back to
+/// the plain-text branch, so the caller can await this safely.
+@visibleForTesting
+Future<String> chatOutputTitle(String input) async {
+  if (!kIsWeb) {
+    try {
+      final file = File(input);
+      if (await file.exists()) {
+        return '助手回复_${p.basenameWithoutExtension(input)}';
+      }
+    } catch (_) {
+      // Web / unreadable path → treat as plain text below.
+    }
+  }
+  final t = input.trim();
+  final short = t.length > 20 ? t.substring(0, 20) : (t.isEmpty ? '对话' : t);
+  return '助手回复_$short';
+}
 
 /// Executes a chat (assistant conversation) block.
 ///
@@ -27,18 +59,16 @@ Future<String> executeChatBlock({
   Assistant? assistant,
   Duration maxWait = const Duration(minutes: 10),
 }) async {
-  final promptPrefix = asStringParam(block.params, 'promptPrefix', '').trim();
-  final prompt = promptPrefix.isNotEmpty ? '$promptPrefix\n\n$input' : input;
-
   // The execId prefix keeps the convId/taskId aligned with the delete
   // path's derivation (removeFlowSubTaskTasks cancels
   // 'flow_<execution.id>_<st.id>') — both sides must use the same shape.
   final taskId = 'chat_${execId}_${flowSubTask.id}';
   execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
   execNotifier.updateSubTaskStatus(execId, flowSubTask.id, TaskStatus.running);
+  final title = await chatOutputTitle(input);
   bgNotifier.addTask(
     type: BackgroundTaskType.chat,
-    title: '助手对话',
+    title: title,
     taskId: taskId,
   );
 
@@ -47,11 +77,16 @@ Future<String> executeChatBlock({
 
     final convId = 'flow_${execId}_${flowSubTask.id}';
 
+    // The previous block's output is sent VERBATIM as a role:user message
+    // (no prefix editing). The assistant's own prompt is injected by the
+    // stream manager as the system message. A fresh per-execution
+    // conversation — no prior context from other flows.
+    final userMessage = ChatMessage(role: 'user', content: input);
     final result = await chatManager
         .startStreaming(
-      text: prompt,
+      text: input,
       convId: convId,
-      history: [], // Fresh conversation – no prior context
+      history: [userMessage],
       tools: [], // No tool access in flow blocks
       assistant: assistant,
     )
@@ -142,7 +177,7 @@ Future<String> executeChatBlock({
     final textPath = await saveTextForFlow(
       reply,
       saveFolder: '',
-      title: '助手对话',
+      title: title,
       // Guard against a flow deleted mid-save (narrow race after the
       // existence check above).
       shouldCommit: () => execNotifier.state.any((e) => e.id == execId),

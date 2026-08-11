@@ -384,9 +384,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             ),
           ),
           obscureText: param.type == BlockParamType.secret,
-          // Multi-line for text prompts (e.g. the chat block's 开头提示语)
+          // Multi-line for text prompts (e.g. a custom instruction field)
           // — single-line scrolling hides long instructions.
-          maxLines: param.key == 'promptPrefix' ? 3 : 1,
+          maxLines: 1,
           style: const TextStyle(fontSize: 13),
           onChanged: (v) => _params[param.key] = v,
         );

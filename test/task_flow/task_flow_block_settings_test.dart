@@ -209,6 +209,9 @@ void main() {
 
     // Input note about the user message being the previous step's output.
     expect(find.text('发送给助手的用户消息 = 上一步的输出'), findsOneWidget);
+    // The 开头提示语 param is gone — the block sends the previous step
+    // verbatim as role:user, no prefix editing.
+    expect(find.text('开头提示语'), findsNothing);
     // The field shows 未指定（使用当前选中的助手） — no built-in default.
     expect(find.text('未指定（使用当前选中的助手）'), findsOneWidget);
     // Tapping the field opens the picker panel with ONLY the user's
@@ -493,6 +496,50 @@ void main() {
     expect(find.textContaining('zh-CN-XiaoxiaoNeural'), findsNothing);
     expect(find.text('助手: 🌐 翻译助手'), findsOneWidget);
     expect(find.textContaining('a1'), findsNothing);
+  });
+
+  testWidgets(
+      'block card shows the save folder even when it is the root folder '
+      '(empty value → 根目录, not hidden)', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          providerEntriesProvider.overrideWith(
+            (ref) => _FakeEntriesNotifier(_asrEntries()),
+          ),
+          assistantProvider.overrideWith(
+            (ref) => _FakeAssistantsNotifier(const []),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                FlowBlockCard(
+                  block: TaskFlowBlock(
+                    typeKey: BlockType.asr,
+                    params: {'saveFolder': ''},
+                  ),
+                  index: 1,
+                ),
+                FlowBlockCard(
+                  block: TaskFlowBlock(
+                    typeKey: BlockType.asr,
+                    params: {'saveFolder': 'records/会议'},
+                  ),
+                  index: 2,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Root folder must appear (it was previously filtered as "default").
+    expect(find.text('保存文件夹: 根目录'), findsOneWidget);
+    expect(find.text('保存文件夹: records/会议'), findsOneWidget);
   });
 
   testWidgets(

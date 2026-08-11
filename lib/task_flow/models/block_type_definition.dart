@@ -295,12 +295,6 @@ class BlockTypeDefinition {
         // 选择"我的助手"（用户自定义），不提供内置助手选项。
         defaultValue: '',
       ),
-      BlockParamDefinition(
-        key: 'promptPrefix',
-        label: '开头提示语',
-        type: BlockParamType.string,
-        hintText: '发送上一步的输出之前，先加上这段话（可选）',
-      ),
     ],
   );
 

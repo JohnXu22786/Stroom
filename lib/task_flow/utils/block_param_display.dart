@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../models/assistant.dart';
 import '../../models/tts_models.dart';
 import '../../providers/assistant_provider.dart';
 import '../../providers/provider_config.dart';
@@ -47,6 +46,11 @@ String friendlyParamValue(
       final c = models[idx].config;
       final name = m.name.isNotEmpty ? m.name : m.modelId;
       return '$name | ${c.providerName}';
+    case BlockParamType.filePath:
+      // An empty path = the root folder — show it explicitly so a
+      // root-folder save config is visible on the block card and in the
+      // run-mode 查看参数 panel instead of looking unset.
+      return raw.isEmpty ? '根目录' : raw;
     default:
       return raw;
   }

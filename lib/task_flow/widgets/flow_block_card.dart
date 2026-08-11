@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/block_type_definition.dart';
 import '../models/task_flow_definition.dart';
 import '../utils/block_param_display.dart';
 import 'io_type_indicator.dart';
@@ -52,6 +53,10 @@ class FlowBlockCard extends ConsumerWidget {
       final paramDef = def.params.where((p) => p.key == e.key).firstOrNull;
       if (paramDef == null) return false;
       if (e.value == null) return false;
+      // Folder params (saveFolder / videoFolder / audioFolder) ALWAYS
+      // show — including the root folder (''), which is a meaningful
+      // "save to root" config, not an unset value.
+      if (paramDef.type == BlockParamType.filePath) return true;
       final dv = paramDef.defaultValue;
       // Compare against the definition's default value
       if (dv != null && dv == e.value) return false;

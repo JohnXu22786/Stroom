@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/chat_message.dart';
@@ -8,6 +9,7 @@ import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
+import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_exception.dart';
@@ -20,10 +22,11 @@ import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
 import 'package:stroom/utils/file_manifest.dart';
 
 class _FakeChatStreamManager extends ChatStreamManager {
-  _FakeChatStreamManager(this.onStart, {this.onCancel});
+  _FakeChatStreamManager(this.onStart, {this.onCancel, this.captureHistory});
 
   final Future<StreamResult> Function() onStart;
   void Function()? onCancel;
+  List<ChatMessage>? captureHistory;
 
   @override
   Future<StreamResult> startStreaming({
@@ -37,6 +40,7 @@ class _FakeChatStreamManager extends ChatStreamManager {
     String? streamingMsgId,
     Assistant? assistant,
   }) {
+    captureHistory = history;
     return onStart();
   }
 
@@ -186,6 +190,30 @@ void main() {
     });
   });
 
+  group('chatOutputTitle', () {
+    test('plain text input → 助手回复_<first 20 chars>', () async {
+      expect(
+        await chatOutputTitle('请帮我总结这份会议记录'),
+        '助手回复_请帮我总结这份会议记录',
+      );
+      expect(
+        await chatOutputTitle('一二三四五六七八九十一二三四五六七八九十更多内容'),
+        '助手回复_一二三四五六七八九十一二三四五六七八九十',
+      );
+    });
+
+    test('empty input falls back to 对话', () async {
+      expect(await chatOutputTitle('   '), '助手回复_对话');
+    });
+
+    test('non-existent path input is treated as plain text', () async {
+      expect(
+        await chatOutputTitle(r'C:\no\such\file_abc.mp3'),
+        r'助手回复_C:\no\such\file_abc.',
+      );
+    });
+  });
+
   group('executeChatBlock', () {
     late TaskFlowExecutionNotifier execNotifier;
     late BackgroundTaskNotifier bgNotifier;
@@ -204,6 +232,47 @@ void main() {
         status: TaskStatus.waiting,
       );
       execNotifier.addSubTask(execId, flowSubTask);
+    });
+
+    test(
+        'sends the previous block output VERBATIM as a role:user message '
+        'and names the saved record 助手回复_<short name>', () async {
+      // The success path persists the text record — set up the in-memory
+      // manifest store.
+      SharedPreferences.setMockInitialValues({});
+      ManifestDatabase.enableTestMode();
+      final fakeManager = _FakeChatStreamManager(
+        () async => StreamResult(
+          history: const [],
+          assistantMessage: ChatMessage(
+            role: 'assistant',
+            content: '好的，已处理',
+          ),
+          fullReply: '好的，已处理',
+        ),
+      );
+
+      final reply = await executeChatBlock(
+        block: TaskFlowBlock(typeKey: BlockType.chat),
+        def: BlockTypeDefinition.chat,
+        input: '上一步传递的内容',
+        execId: execId,
+        execNotifier: execNotifier,
+        flowSubTask: flowSubTask,
+        bgNotifier: bgNotifier,
+        chatManager: fakeManager,
+      );
+
+      expect(reply, '好的，已处理');
+      // The previous step's content goes out as a user message — the
+      // model must receive it, not just the assistant's own system prompt.
+      expect(fakeManager.captureHistory, isNotNull);
+      expect(fakeManager.captureHistory!.length, 1);
+      expect(fakeManager.captureHistory!.single.role, 'user');
+      expect(fakeManager.captureHistory!.single.content, '上一步传递的内容');
+      // The background task + saved record use 助手回复_<short name>.
+      expect(bgNotifier.state[0].title, '助手回复_上一步传递的内容');
+      expect(bgNotifier.state[0].status, TaskStatus.completed);
     });
 
     test(
