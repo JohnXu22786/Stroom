@@ -8,8 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_chat_ui/flutter_chat_ui.dart'
-    show SimpleTextMessage;
+import 'package:flutter_chat_ui/flutter_chat_ui.dart' show SimpleTextMessage;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat_page.dart';
