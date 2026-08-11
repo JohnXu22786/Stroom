@@ -76,14 +76,82 @@ void main() {
       // so URLSearchParams could not find the code and the template showed
       // the empty-code placeholder instead of the diagram.
       final url = MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B');
-      expect(url, contains('mermaid_render.html?v=4&code='));
+      expect(url, contains('mermaid_render.html?v=5&code='));
       expect(url, isNot(contains('?code')));
-      expect(url, isNot(contains('v=4?')));
+      expect(url, isNot(contains('v=5?')));
       // The code must be percent-encoded inside the query string.
       expect(url, contains('graph+TD'));
       // Empty code -> version parameter only, no dangling '&'.
       final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
-      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=4');
+      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=5');
+    });
+
+    // ---- Inline loader caching (perf: the ~3.5MB bundled library must be
+    // JSON-encoded exactly once, not once per render / per widget rebuild) ----
+
+    test(
+        'reuses the encoded inline loader for repeated renders of the same '
+        'library', () {
+      const lib = 'var cachedLibAAA = 1;';
+      final before = MermaidRenderWidget.inlineLoaderBuildCount;
+      final html1 = MermaidRenderWidget.buildMermaidHtml('graph TD',
+          inlineMermaidJs: lib);
+      final html2 = MermaidRenderWidget.buildMermaidHtml('graph TD\nA-->B',
+          inlineMermaidJs: lib);
+      // Both diagrams embed the library, and the expensive encode step ran
+      // exactly once across the two renders (not once per diagram).
+      expect(html1, contains('var cachedLibAAA = 1;'));
+      expect(html2, contains('var cachedLibAAA = 1;'));
+      expect(MermaidRenderWidget.inlineLoaderBuildCount, before + 1);
+    });
+
+    test('does not reuse the cached inline loader across different libraries',
+        () {
+      const libA = 'var libAAA = 1;';
+      const libB = 'var libBBB = 1;';
+      final before = MermaidRenderWidget.inlineLoaderBuildCount;
+      final htmlA = MermaidRenderWidget.buildMermaidHtml('graph TD',
+          inlineMermaidJs: libA);
+      final htmlB = MermaidRenderWidget.buildMermaidHtml('graph TD',
+          inlineMermaidJs: libB);
+      final htmlA2 = MermaidRenderWidget.buildMermaidHtml('graph TD',
+          inlineMermaidJs: libA);
+      expect(htmlA, contains('var libAAA = 1;'));
+      expect(htmlA, isNot(contains('var libBBB = 1;')));
+      expect(htmlB, contains('var libBBB = 1;'));
+      expect(htmlB, isNot(contains('var libAAA = 1;')));
+      expect(htmlA2, contains('var libAAA = 1;'));
+      expect(htmlA2, isNot(contains('var libBBB = 1;')));
+      // The cache holds one library; every DIFFERENT library in a sequence
+      // re-encodes (production only ever sees the single bundled library).
+      // The point is zero cross-contamination between libraries.
+      expect(MermaidRenderWidget.inlineLoaderBuildCount, before + 3);
+    });
+
+    test('falls back to the CDN loader after an inline render', () {
+      const lib = 'var libAAA = 1;';
+      MermaidRenderWidget.buildMermaidHtml('graph TD', inlineMermaidJs: lib);
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      expect(
+          html,
+          contains(
+              "script.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js'"));
+      expect(html, isNot(contains('var libAAA = 1;')));
+    });
+
+    test('skeleton cache keeps withJsGestures independent of the loader cache',
+        () {
+      const lib = 'var libAAA = 1;';
+      final withGestures = MermaidRenderWidget.buildMermaidHtml('graph TD',
+          inlineMermaidJs: lib);
+      final withoutGestures = MermaidRenderWidget.buildMermaidHtml('graph TD',
+          inlineMermaidJs: lib, withJsGestures: false);
+      final withGesturesAgain = MermaidRenderWidget.buildMermaidHtml('graph TD',
+          inlineMermaidJs: lib);
+      expect(withGestures, contains('mousedown'));
+      expect(withoutGestures, isNot(contains('mousedown')));
+      expect(withGesturesAgain, contains('mousedown'));
+      expect(withoutGestures, contains('var libAAA = 1;'));
     });
 
     test('includes mermaid.initialize call', () {
@@ -405,6 +473,20 @@ void main() {
       final html = await loadAssetTemplate();
       expect(html, contains('URLSearchParams'));
       expect(html, contains("params.get('code')"));
+    });
+
+    test('caches the decompressed library in CacheStorage for repeat renders',
+        () async {
+      final html = await loadAssetTemplate();
+      // Every diagram opens a fresh iframe document; without a persistent
+      // cache each one would re-download the gz and re-decompress the
+      // library, so the renderer caches the decompressed blob per version.
+      expect(html, contains('caches.open'));
+      expect(html, contains('cache.match'));
+      // The cache key must be versioned: a stale key would keep serving
+      // the previous library after an update. TEMPLATE_VERSION must stay
+      // in sync with the ?v= in buildWebAssetUrl.
+      expect(html, contains("TEMPLATE_VERSION = 'v5'"));
     });
 
     test(
