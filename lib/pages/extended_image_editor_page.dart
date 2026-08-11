@@ -173,8 +173,7 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
                 debugPrint('QuickEditProcessing route removal skipped: $e');
               }
             } else {
-              debugPrint(
-                  'QuickEditProcessing: editor route missing — deferred '
+              debugPrint('QuickEditProcessing: editor route missing — deferred '
                   'destroy skipped');
             }
           }

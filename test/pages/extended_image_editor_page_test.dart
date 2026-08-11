@@ -155,8 +155,7 @@ void main() {
     // while the image is processed; only after the outcome has been
     // delivered via [onProcessed] is the page popped and destroyed.
     // ====================================================================
-    group('deferred destroy: page stays alive until the image is received',
-        () {
+    group('deferred destroy: page stays alive until the image is received', () {
       testWidgets(
           'tapping 完成 hides the editor UI, keeps the page alive while '
           'processing, delivers the bytes, then destroys the page',

@@ -443,8 +443,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
 
             // Editor delivered edited bytes — update the pending
             // attachment
-            await _updatePendingAttachmentAfterEdit(
-                index, result.editedBytes);
+            await _updatePendingAttachmentAfterEdit(index, result.editedBytes);
           } finally {
             // The pipeline always fires the callback (success or
             // failure) — release the send-blocking guard here.
