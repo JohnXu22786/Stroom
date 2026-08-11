@@ -57,12 +57,21 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
         reasoningEffortEnabled &&
         effortParam != null &&
         effortParam.paramName.trim().isNotEmpty &&
+        // 仅参数名（无选项值、非布尔）的力度参数不可用：即使 map 中
+        // 残留旧值也不显示（面板开关同样不可用，二者保持一致）。
+        effortParam.isUsable &&
         (reasoningParamValues[effortParam.paramName]?.isNotEmpty ?? false)) {
       reasoningLabel = reasoningParamValues[effortParam.paramName]!;
     } else {
       reasoningLabel = '推理';
     }
-    final reasoningColor = reasoningEnabled ? Colors.purple : Colors.grey;
+    // Reasoning chip color: purple only when reasoning is actually usable
+    // (a model with configured reasoning params AND the toggle on).
+    // 无任何可用推理参数（仅参数名/无选项值/非布尔）时与面板一致：
+    // 灰色不可用，开关即使残留开启状态也不显示为可用。
+    final hasReasoningParams = widget.reasoningParams.any((p) => p.isUsable);
+    final reasoningColor =
+        (reasoningEnabled && hasReasoningParams) ? Colors.purple : Colors.grey;
 
     // ═══════════════════════════════════════════════════════════
     // Tool chip: accent color (indigo) when tools enabled, grey when disabled
@@ -98,6 +107,9 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                   !p.isReasoningToggle &&
                   !p.isEffortParam &&
                   p.paramName.trim().isNotEmpty &&
+                  // 不可用参数（仅参数名、无选项值、非布尔）不计入：
+                  // 面板无开关可选，残留值不会被请求发送。
+                  p.isUsable &&
                   (reasoningParamValues[p.paramName]?.isNotEmpty ?? false),
             )
             .length

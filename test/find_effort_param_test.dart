@@ -343,5 +343,35 @@ void main() {
         same(values),
       );
     });
+
+    test(
+        'prunes a stale value when effort param lost its options '
+        '(unusable — panel switch is disabled)', () {
+      // 模型删除全部选项后，残留的已选值必须清除：否则请求仍会发送
+      // 该值，而面板开关已显示灰色不可用。
+      final result = ensureEffortValue(
+        [ReasoningParam(paramName: 'reasoning_effort', isEffortParam: true)],
+        const {'reasoning_effort': 'high'},
+        effortEnabled: true,
+      );
+      expect(result, isEmpty);
+    });
+
+    test(
+        'keeps boolean effort value when options are empty (switch is the '
+        'value)', () {
+      // 布尔类型无选项值但开关即值：已选值（'true'/'false'）不得被清除。
+      final boolEffort = ReasoningParam(
+        paramName: 'thinking.enabled',
+        isEffortParam: true,
+        type: 'boolean',
+      );
+      final result = ensureEffortValue(
+        [boolEffort],
+        const {'thinking.enabled': 'true'},
+        effortEnabled: true,
+      );
+      expect(result, {'thinking.enabled': 'true'});
+    });
   });
 }
