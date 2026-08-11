@@ -849,8 +849,7 @@ class _ProviderConfigDetailPageState
 
     return ListTile(
       key: reorderable
-          ? ValueKey(
-              'model_${widget.entryId}_${_configIndex}_$displayIndex')
+          ? ValueKey('model_${widget.entryId}_${_configIndex}_$displayIndex')
           : null,
       leading: reorderable
           ? ReorderableDragStartListener(
