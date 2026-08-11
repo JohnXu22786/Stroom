@@ -40,6 +40,14 @@ extension _ChatPageBuildersExt on _ChatPageState {
             // button — we provide our own overlay below.
             scrollToBottomBuilder: (context, animation, onPressed) =>
                 const SizedBox.shrink(),
+            // Custom load-more indicator driven by the page's own load
+            // state: the spinner is mounted ONLY while a pagination load
+            // is actually running. The library's default indicator is kept
+            // mounted while hidden and its visibility is driven by the
+            // library's internal notifier rather than the real load state,
+            // so a stuck notifier leaves a spinner spinning after the load
+            // finished.
+            loadMoreBuilder: (context) => _buildLoadMoreIndicator(),
             // Empty composer builder — the actual composer is
             // rendered below the Chat widget so it participates
             // in the Column layout flow instead of overlaying
@@ -96,6 +104,8 @@ extension _ChatPageBuildersExt on _ChatPageState {
       itemBuilder: itemBuilder,
       onEndReached: _loadMoreMessages,
       scrollController: _chatScrollController,
+      // 顶部"没有更多内容了"提示（用户滚到顶部且无更早历史消息时显示）。
+      topSliver: _buildNoMoreMessagesSliver(),
       // Scrolling the list must NOT dismiss the soft keyboard — the
       // keyboard stays up while the user reads/scrolls; it is dismissed
       // via the keyboard's own close key or the page's dismiss button.
@@ -131,6 +141,52 @@ extension _ChatPageBuildersExt on _ChatPageState {
       child: TransformStretchOverscroll(
         axisDirection: AxisDirection.down,
         child: list,
+      ),
+    );
+  }
+
+  /// Load-more indicator shown above the message list while older messages
+  /// are being loaded.
+  ///
+  /// Returns a zero-size box unless [_isLoadingMore] is true, so the
+  /// [CircularProgressIndicator] is not in the widget tree at all when no
+  /// pagination load is running — an indeterminate spinner cannot animate
+  /// while it is not displayed, and a library notifier stuck in the loading
+  /// state cannot keep a phantom spinner visible either.
+  Widget _buildLoadMoreIndicator() {
+    if (!_isLoadingMore) return const SizedBox.shrink();
+    return const Padding(
+      key: ValueKey('chat-load-more-indicator'),
+      padding: EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+    );
+  }
+
+  /// Top sliver with the "没有更多内容了" hint, shown once the user has
+  /// reached the top of the list while no older messages remain.
+  Widget _buildNoMoreMessagesSliver() {
+    if (!_hasReachedTopWithoutMore || _hasMoreMessages) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Center(
+          child: Text(
+            '没有更多内容了',
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? Colors.grey[400] : Colors.grey[600],
+            ),
+          ),
+        ),
       ),
     );
   }
