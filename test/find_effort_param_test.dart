@@ -357,7 +357,8 @@ void main() {
       expect(result, isEmpty);
     });
 
-    test('keeps boolean effort value when options are empty (switch is the '
+    test(
+        'keeps boolean effort value when options are empty (switch is the '
         'value)', () {
       // 布尔类型无选项值但开关即值：已选值（'true'/'false'）不得被清除。
       final boolEffort = ReasoningParam(

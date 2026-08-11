@@ -519,8 +519,8 @@ void showReasoningPanel({
                                   activeThumbColor: cs.primary,
                                   onChanged: effortUsable
                                       ? (value) {
-                                          setState(() => localEffortEnabled =
-                                              value);
+                                          setState(
+                                              () => localEffortEnabled = value);
                                           onReasoningEffortToggle(value);
                                         }
                                       : null,
@@ -563,29 +563,29 @@ void showReasoningPanel({
                             const SizedBox(height: 12),
                             // Effort param options
                             Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: effortParam.options.map((option) {
-                                  final currentValue =
-                                      localSelections[effortParam.paramName] ??
-                                          (effortParam.options.isNotEmpty
-                                              ? effortParam.options.first
-                                              : '');
-                                  final isSelected = currentValue == option;
-                                  return _OptionChip(
-                                    label: option,
-                                    selected: isSelected,
-                                    onTap: () {
-                                      setState(() {
-                                        localSelections[effortParam.paramName] =
-                                            option;
-                                      });
-                                      onReasoningParamChanged(
-                                          effortParam.paramName, option);
-                                    },
-                                  );
-                                }).toList(),
-                              ),
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: effortParam.options.map((option) {
+                                final currentValue =
+                                    localSelections[effortParam.paramName] ??
+                                        (effortParam.options.isNotEmpty
+                                            ? effortParam.options.first
+                                            : '');
+                                final isSelected = currentValue == option;
+                                return _OptionChip(
+                                  label: option,
+                                  selected: isSelected,
+                                  onTap: () {
+                                    setState(() {
+                                      localSelections[effortParam.paramName] =
+                                          option;
+                                    });
+                                    onReasoningParamChanged(
+                                        effortParam.paramName, option);
+                                  },
+                                );
+                              }).toList(),
+                            ),
                           ],
                           // No non-toggle params state (when reasoning is enabled
                           // but there are no additional params configured)
