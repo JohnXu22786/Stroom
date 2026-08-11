@@ -270,6 +270,18 @@ class ReasoningParam {
         (offValue != null && offValue!.trim().isNotEmpty);
   }
 
+  /// 该参数在聊天面板中是否「可用」（可产生请求值）：
+  /// - 开关参数：需填满 on/off 值（isFilledToggle）；
+  /// - 布尔类型：无选项值但开关即值（'true'/'false'）；
+  /// - 其他类型：需至少一个选项值。
+  ///
+  /// 仅声明参数名（无选项值、非布尔）的参数不可用：面板开关灰色关闭，
+  /// 请求层也不得发送其残留值。面板、chip、请求层共用此判定，避免漂移。
+  bool get isUsable =>
+      (isReasoningToggle && isFilledToggle) ||
+      options.isNotEmpty ||
+      type == 'boolean';
+
   String? get validationError {
     if (isReasoningToggle) {
       final nameTrimmed = paramName.trim();
@@ -365,6 +377,14 @@ Map<String, String> ensureEffortValue(
 }) {
   final effort = findEffortParam(params);
   if (effort == null) return values;
+  // 仅参数名（无选项值、非布尔）的力度参数不可用：残留的已选值一并
+  // 清除，与聊天面板的灰色关闭状态保持一致（否则请求仍会发送旧值）。
+  if (effort.options.isEmpty && effort.type != 'boolean') {
+    if (values.containsKey(effort.paramName)) {
+      return Map<String, String>.from(values)..remove(effort.paramName);
+    }
+    return values;
+  }
   if (effortEnabled) {
     if (effort.options.isNotEmpty &&
         (values[effort.paramName]?.isNotEmpty ?? false) != true) {

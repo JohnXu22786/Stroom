@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/pages/chat/composer/chat_composer_widget.dart';
+import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/pages/chat_page.dart';
@@ -94,6 +96,78 @@ void main() {
         find.textContaining('当前模型未配置推理参数'),
         findsOneWidget,
       );
+    });
+
+    testWidgets(
+        'opening reasoning panel with unusable effort param heals stale '
+        'state (prunes value + resets effort flag)', (tester) async {
+      await setupSurface(tester);
+      SharedPreferences.setMockInitialValues({});
+      final container = ProviderContainer(
+        overrides: [
+          reasoningEnabledProvider.overrideWith((ref) => true),
+          reasoningEffortEnabledProvider.overrideWith((ref) => true),
+          reasoningParamValuesProvider.overrideWith(
+            (ref) => {'reasoning_effort': 'high'},
+          ),
+          conversationsProvider.overrideWith((ref) {
+            return ConversationsNotifier(ref);
+          }),
+          activeConversationIdProvider.overrideWith(
+            (ref) => 'test-conv-id',
+          ),
+          providerEntriesProvider.overrideWith((ref) {
+            return ProviderEntriesNotifier();
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Scaffold(
+              body: ChatComposerWidget(
+                onSend: (text, attachments) {},
+                onStop: () {},
+                modelNames: ['test-model'],
+                selectedModelIndex: 0,
+                onModelSelected: (idx) {},
+                onEnabledToolsChanged: (tools) {},
+                // 力度参数仅声明参数名（无选项值、非布尔）：不可用
+                reasoningParams: [
+                  ReasoningParam(
+                    paramName: 'reasoning_effort',
+                    isEffortParam: true,
+                    options: [],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // Open the reasoning panel
+      await tester.tap(find.text('推理'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // The effort switch (second switch) is disabled AND off
+      final effortSwitch = tester.widget<Switch>(find.byType(Switch).at(1));
+      expect(effortSwitch.onChanged, isNull);
+      expect(effortSwitch.value, isFalse);
+
+      // Self-heal: stale value pruned + effort flag reset in the providers
+      expect(container.read(reasoningParamValuesProvider), isEmpty);
+      expect(container.read(reasoningEffortEnabledProvider), isFalse);
+      // No usable params → reasoning flag also reset
+      expect(container.read(reasoningEnabledProvider), isFalse);
     });
   });
 
