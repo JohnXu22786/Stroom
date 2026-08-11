@@ -710,6 +710,54 @@ void main() {
       final widget = builder('<h1>Hello</h1>', 'html');
       expect(widget, isA<HtmlCodeBlockWidget>());
     });
+
+    test('html block with an OPEN fence gets isStreaming=true', () {
+      // Same fence-completion check as mermaid: while the html fence is
+      // still open (streamingText is the unclosed tail), the card must
+      // show its "正在生成中" state.
+      final pre = codeBlockPreConfig(
+        isDark: false,
+        isStreaming: true,
+        streamingText: '```html\n<div>',
+      );
+      final widget = pre.builder!('<div>', 'html') as HtmlCodeBlockWidget;
+      expect(widget.isStreaming, isTrue);
+    });
+
+    test('html block with a CLOSED fence renders as a finished card', () {
+      // The stream continues after the closed fence, but this html block
+      // itself is complete → the card must NOT show "正在生成中".
+      final pre = codeBlockPreConfig(
+        isDark: false,
+        isStreaming: true,
+        streamingText: '```html\n<div>x</div>\n```\nmore text',
+      );
+      final widget =
+          pre.builder!('<div>x</div>', 'html') as HtmlCodeBlockWidget;
+      expect(widget.isStreaming, isFalse);
+    });
+
+    test('uppercase HTML fence renders the card with the as-is language', () {
+      // ```HTML must be treated as html (case-insensitive) and the badge
+      // must keep the original casing.
+      final pre = codeBlockPreConfig(isDark: false);
+      final widget =
+          pre.builder!('<h1>Hello</h1>', 'HTML') as HtmlCodeBlockWidget;
+      expect(widget.language, 'HTML');
+    });
+
+    test('language label is passed through to CodeBlockSourceView', () {
+      final pre = codeBlockPreConfig(isDark: false);
+      final widget =
+          pre.builder!('print("hi")', 'python') as CodeBlockSourceView;
+      expect(widget.language, 'python');
+    });
+
+    test('empty language passes an empty label to CodeBlockSourceView', () {
+      final pre = codeBlockPreConfig(isDark: false);
+      final widget = pre.builder!('some code', '') as CodeBlockSourceView;
+      expect(widget.language, '');
+    });
   });
 
   group('BrSyntax - HTML <br> line breaks', () {

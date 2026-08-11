@@ -161,7 +161,151 @@ void main() {
     });
   });
 
+  group('CodeBlockSourceView - language label', () {
+    testWidgets('shows the language label in the top-left corner',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CodeBlockSourceView(code: 'print("hi")', language: 'python'),
+          ),
+        ),
+      );
+
+      // The language string from the opening fence is shown as-is.
+      expect(find.text('python'), findsOneWidget);
+    });
+
+    testWidgets('hides the language label when language is empty',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CodeBlockSourceView(code: 'plain block'),
+          ),
+        ),
+      );
+
+      // Plain fences (no info string) must not show a phantom label.
+      expect(find.text('python'), findsNothing);
+      // A phantom empty badge (empty Text) must not render either.
+      expect(find.text(''), findsNothing);
+      // The label badge container only exists when a language is set:
+      // the code content and toolbar are still rendered.
+      expect(find.text('plain block'), findsOneWidget);
+      expect(find.byIcon(Icons.wrap_text), findsOneWidget);
+    });
+
+    testWidgets('hides the language label while the code is empty',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CodeBlockSourceView(code: '', language: 'python'),
+          ),
+        ),
+      );
+
+      // Regression: an empty tagged block (transient mid-stream) must not
+      // paint the badge over the "(empty)" placeholder.
+      expect(find.text('(empty)'), findsOneWidget);
+      expect(find.text('python'), findsNothing);
+    });
+  });
+
   group('CodeBlockSourceView - height behavior', () {
+    testWidgets('no-wrap mode scrolls horizontally, wrap mode does not',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(400, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      const code = 'line1\nline2\nline3';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: CodeBlockSourceView(code: code),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final horizontalScrollables = find.byWidgetPredicate(
+          (w) => w is Scrollable && w.axis == Axis.horizontal);
+      expect(horizontalScrollables, findsWidgets,
+          reason: 'No-wrap mode should have horizontal scroll');
+
+      await tester.tap(find.byIcon(Icons.wrap_text));
+      await tester.pumpAndSettle();
+
+      final horizontalScrollablesAfter = find.byWidgetPredicate(
+          (w) => w is Scrollable && w.axis == Axis.horizontal);
+      expect(horizontalScrollablesAfter, findsNothing,
+          reason: 'Wrap mode should have no horizontal scroll');
+    });
+
+    testWidgets('caps height at 15 visible lines for tall code',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      // 50 lines — far beyond the 15-line cap. lineHeight = 13 * 1.5,
+      // top toolbar padding 40 + bottom 12.
+      final code = List.generate(50, (i) => 'line $i').join('\n');
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: CodeBlockSourceView(code: code),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 50 lines — far beyond the 15-line cap. lineHeight = 13 * 1.5,
+      // top toolbar padding 40 + bottom 12.
+      final sizedBox = find
+          .descendant(
+            of: find.byType(CodeBlockSourceView),
+            matching: find.byType(SizedBox),
+          )
+          .first;
+      final sizedBoxWidget = tester.widget<SizedBox>(sizedBox);
+      const expected = 15 * 13.0 * 1.5 + 40.0 + 12.0;
+      expect(sizedBoxWidget.height, equals(expected),
+          reason: 'Height should be capped at 15 lines (was 4:3 aspect)');
+    });
+
+    testWidgets('short code stays compact (not padded to 15 lines)',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: CodeBlockSourceView(code: 'one line'),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 1 line: 19.5 + 52 padding — far below the 15-line cap.
+      final sizedBox = find
+          .descendant(
+            of: find.byType(CodeBlockSourceView),
+            matching: find.byType(SizedBox),
+          )
+          .first;
+      final sizedBoxWidget = tester.widget<SizedBox>(sizedBox);
+      expect(sizedBoxWidget.height, equals(1 * 13.0 * 1.5 + 40.0 + 12.0),
+          reason: 'Short code must not be stretched to the 15-line cap');
+    });
+
     testWidgets('respects explicit height property', (tester) async {
       await tester.binding.setSurfaceSize(const Size(800, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
