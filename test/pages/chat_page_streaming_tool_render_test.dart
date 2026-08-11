@@ -207,17 +207,14 @@ void main() {
 
       expect(find.text('思考中'), findsOneWidget,
           reason: '首个推理段落应立即显示"思考中"，而不是闪烁"思考完成"');
-      expect(find.text('思考完成'), findsNothing,
-          reason: '推理仍在进行时不应显示"思考完成"');
+      expect(find.text('思考完成'), findsNothing, reason: '推理仍在进行时不应显示"思考完成"');
 
       // The chevron animation must actually run: › → ›› → ›››.
       expect(find.text('›'), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.text('››'), findsOneWidget,
-          reason: '333ms 后滚动动画应推进到两个 "›"');
+      expect(find.text('››'), findsOneWidget, reason: '333ms 后滚动动画应推进到两个 "›"');
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.text('›››'), findsOneWidget,
-          reason: '666ms 后滚动动画应推进到三个 "›"');
+      expect(find.text('›››'), findsOneWidget, reason: '666ms 后滚动动画应推进到三个 "›"');
 
       // Unmount to dispose the periodic chevron timer, then flush pending
       // one-shot timers (visibility_detector, chat UI internals).
@@ -261,10 +258,8 @@ void main() {
           .state = ['模型思考内容', ''];
       await tester.pump();
 
-      expect(find.text('思考完成'), findsOneWidget,
-          reason: '已结束的推理段落应保持"思考完成"');
-      expect(find.text('思考中'), findsNothing,
-          reason: '推理段已结束（占位追加）时不应翻转回"思考中"');
+      expect(find.text('思考完成'), findsOneWidget, reason: '已结束的推理段落应保持"思考完成"');
+      expect(find.text('思考中'), findsNothing, reason: '推理段已结束（占位追加）时不应翻转回"思考中"');
 
       await _flushPendingTimers(tester);
     });
