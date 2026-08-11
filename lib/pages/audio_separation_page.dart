@@ -778,6 +778,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       currentFolder: _saveFolder,
       availableFolders: folders,
       title: '选择保存文件夹',
+      onCreateFolder: (name) async {
+        await FileManifest.addFolder(name);
+        return null;
+      },
+      onRefreshFolders: () async => FileManifest.getAllFolders(),
     );
     if (result != null && mounted) {
       setState(() => _saveFolder = result);

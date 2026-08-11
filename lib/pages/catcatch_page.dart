@@ -665,6 +665,11 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
       currentFolder: _videoFolder,
       availableFolders: folders,
       title: '视频保存至文件夹',
+      onCreateFolder: (name) async {
+        await VideoManifest.addFolder(name);
+        return null;
+      },
+      onRefreshFolders: () async => VideoManifest.getAllFolders(),
     );
     if (result != null && mounted) {
       setState(() => _videoFolder = result);
@@ -679,6 +684,11 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
       currentFolder: _audioFolder,
       availableFolders: folders,
       title: '音频保存至文件夹',
+      onCreateFolder: (name) async {
+        await FileManifest.addFolder(name);
+        return null;
+      },
+      onRefreshFolders: () async => FileManifest.getAllFolders(),
     );
     if (result != null && mounted) {
       setState(() => _audioFolder = result);
