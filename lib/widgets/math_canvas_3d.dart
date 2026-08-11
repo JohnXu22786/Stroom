@@ -1563,7 +1563,16 @@ class _ScenePainter extends CustomPainter {
       final p0 = proj.project(mesh.vertices[i0]);
       final p1 = proj.project(mesh.vertices[i1]);
       final p2 = proj.project(mesh.vertices[i2]);
-      if (p0 == null ||
+      // Skip triangles with non-finite vertices (e.g. formula surfaces
+      // hitting a singularity like z=1/x): they project to garbage and
+      // produce NaN normals that crash shading below.
+      final v0 = mesh.vertices[i0];
+      final v1 = mesh.vertices[i1];
+      final v2 = mesh.vertices[i2];
+      if (!v0.isFinite ||
+          !v1.isFinite ||
+          !v2.isFinite ||
+          p0 == null ||
           p1 == null ||
           p2 == null ||
           p0.x.isNaN ||
@@ -1799,6 +1808,7 @@ class _ScenePainter extends CustomPainter {
 
   Color _shaded(Color color, Vector3D normal) {
     final n = normal.normalized();
+    if (!n.isFinite) return color; // NaN/Inf normal: skip shading.
     final diff = dart_math.max(0.0, n.dot(_lightDir));
     final shade = 0.45 + 0.55 * diff;
     int ch(double v) => (v * shade).round().clamp(0, 255);

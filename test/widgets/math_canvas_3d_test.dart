@@ -2,6 +2,7 @@
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/math_3d_object.dart';
+import 'package:stroom/models/math_expression_3d.dart';
 import 'package:stroom/widgets/math_canvas_3d.dart';
 
 Widget _wrap(Widget child) {
@@ -15,6 +16,29 @@ void main() {
   group('MathCanvas3D basics', () {
     testWidgets('creates 3D canvas without error', (tester) async {
       await tester.pumpWidget(_wrap(const MathCanvas3D()));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('surface with a singularity (z=1/x) renders without crash',
+        (tester) async {
+      await tester.pumpWidget(_wrap(MathCanvas3D()));
+      await tester.pump();
+      final state = tester.state<MathCanvas3DState>(find.byType(MathCanvas3D));
+      // The sample grid hits x=0 exactly, producing infinite vertices; the
+      // renderer must skip those triangles instead of crashing on NaN
+      // shading (regression: UnsupportedError in _shaded's .round()).
+      final expr = Expression3D.surface('z = 1/x');
+      expect(expr.isValid, isTrue);
+      final mesh = expr.sampleSurfaceGrid(
+        xMin: -5,
+        xMax: 5,
+        yMin: -5,
+        yMax: 5,
+        gridX: 36,
+        gridY: 36,
+      );
+      state.addObject(Object3D.surface(mesh, name: 'f1'));
       await tester.pump();
       expect(tester.takeException(), isNull);
     });
