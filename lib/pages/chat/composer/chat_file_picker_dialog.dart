@@ -797,61 +797,62 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       return;
     }
 
-    // Open quick editor. The editor pops immediately and processes in
-    // the background; the selection is updated from the callback once
-    // the edited bytes are ready.
-    final confirmed = await Navigator.push<bool>(
+    // Open quick editor. The editor hides its UI on confirm but stays
+    // alive while the image processes in the background (deferred
+    // destroy); the route is non-opaque so the picker shows through. The
+    // selection is updated from the callback once the edited bytes are
+    // ready.
+    await Navigator.push<bool>(
       context,
-      MaterialPageRoute(
-        builder: (_) => ExtendedImageEditorPage(
-          imageBytes: imageBytes,
-          fileName: fileName,
-          onProcessed: (result) async {
+      buildQuickEditEditorRoute(
+        imageBytes: imageBytes,
+        fileName: fileName,
+        onSubmitted: () {
+          // The user confirmed — hold the confirm button NOW. The
+          // selection still holds the unedited bytes until the edit
+          // callback applies them; released in onProcessed.
+          if (mounted) setState(() => _editsInFlight++);
+        },
+        onProcessed: (result) async {
+          try {
+            if (result is! QuickEditProcessingSuccess) return;
+            final editedBytes = result.editedBytes;
+            if (!mounted) return;
+
+            // Save edited bytes to temp cache directory (do NOT
+            // overwrite original)
             try {
-              if (result is! QuickEditProcessingSuccess) return;
-              final editedBytes = result.editedBytes;
-              if (!mounted) return;
-
-              // Save edited bytes to temp cache directory (do NOT
-              // overwrite original)
-              try {
-                final tempDir = await getTemporaryDirectory();
-                final tempFileName =
-                    'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
-                final tempFile = File('${tempDir.path}/$tempFileName');
-                await tempFile.writeAsBytes(editedBytes);
-                _tempEditFiles.add(tempFile.path);
-              } catch (_) {
-                // Temp file save is best-effort; keep bytes in memory
-              }
-
-              // Update the selected item in-memory with edited bytes
-              try {
-                final key = _selectedItems.entries
-                    .firstWhere((e) => e.value == entry)
-                    .key;
-                if (mounted) {
-                  setState(() {
-                    _selectedItems[key] = MapEntry(fileName, editedBytes);
-                  });
-                }
-              } catch (_) {
-                // Item was removed while editor was open — silently
-                // ignore
-              }
-            } finally {
-              // The pipeline always fires the callback (success or
-              // failure) — release the confirm-blocking guard here.
-              if (mounted) setState(() => _editsInFlight--);
+              final tempDir = await getTemporaryDirectory();
+              final tempFileName =
+                  'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+              final tempFile = File('${tempDir.path}/$tempFileName');
+              await tempFile.writeAsBytes(editedBytes);
+              _tempEditFiles.add(tempFile.path);
+            } catch (_) {
+              // Temp file save is best-effort; keep bytes in memory
             }
-          },
-        ),
+
+            // Update the selected item in-memory with edited bytes
+            try {
+              final key = _selectedItems.entries
+                  .firstWhere((e) => e.value == entry)
+                  .key;
+              if (mounted) {
+                setState(() {
+                  _selectedItems[key] = MapEntry(fileName, editedBytes);
+                });
+              }
+            } catch (_) {
+              // Item was removed while editor was open — silently
+              // ignore
+            }
+          } finally {
+            // The pipeline always fires the callback (success or
+            // failure) — release the confirm-blocking guard here.
+            if (mounted) setState(() => _editsInFlight--);
+          }
+        },
       ),
     );
-    if (confirmed == true && mounted) {
-      // The pipeline is now running — hold the confirm button until the
-      // callback releases it.
-      setState(() => _editsInFlight++);
-    }
   }
 }

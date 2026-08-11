@@ -126,8 +126,10 @@ void main() {
         () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
       );
 
-      // Confirm the edit — the editor pops immediately and the image
-      // processing continues in the background.
+      // Confirm the edit — the editor hides its UI immediately and the
+      // image processing continues in the background (deferred destroy).
+      // The picker's in-flight guard is armed synchronously via
+      // onSubmitted.
       await tester.tap(find.text('完成'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
