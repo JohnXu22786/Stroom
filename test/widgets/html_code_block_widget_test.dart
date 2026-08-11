@@ -1,12 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/widgets/code_block_source_widget.dart';
 import 'package:stroom/widgets/html_code_block_widget.dart';
+
+/// Helper: taps the "查看代码" card button to reveal the raw source view.
+Future<void> _showCodeView(WidgetTester tester) async {
+  await tester.tap(find.text('查看代码'));
+  await tester.pumpAndSettle();
+}
+
+/// The root sizing SizedBox of the code block display (first descendant
+/// box of [CodeBlockSourceView], independent of unrelated boxes above it).
+Finder _codeBlockSizeBox() => find
+    .descendant(
+      of: find.byType(CodeBlockSourceView),
+      matching: find.byType(SizedBox),
+    )
+    .first;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('HtmlCodeBlockWidget - widget rendering', () {
-    testWidgets('shows raw HTML code as text, not rendered', (tester) async {
+  group('HtmlCodeBlockWidget - card preview (default)', () {
+    testWidgets('shows a card with language badge and three action buttons',
+        (tester) async {
       const html = '<h1>Hello World</h1>';
       await tester.pumpWidget(
         MaterialApp(
@@ -16,12 +33,157 @@ void main() {
         ),
       );
 
-      // The raw HTML source should be visible as text
-      expect(find.text('<h1>Hello World</h1>'), findsOneWidget);
+      // The language badge (the fence info string) is shown top-left.
+      expect(find.text('html'), findsOneWidget);
+      // The three action buttons.
+      expect(find.text('标题'), findsOneWidget);
+      expect(find.text('全屏查看'), findsOneWidget);
+      expect(find.text('查看代码'), findsOneWidget);
+      // The raw HTML is NOT shown by default — the card replaces the code.
+      expect(find.text('<h1>Hello World</h1>'), findsNothing);
     });
 
-    testWidgets('shows fullscreen preview and wrap toggle as pure icons',
+    testWidgets('while generating shows 正在生成中 and disables 全屏查看',
         (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(
+              htmlCode: '<h1>Hello</h1>',
+              isStreaming: true,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('正在生成中'), findsOneWidget);
+
+      // 全屏查看 is disabled while generating; 标题/查看代码 stay enabled.
+      final fullscreenBtn = tester.widget<OutlinedButton>(
+        find.widgetWithText(OutlinedButton, '全屏查看'),
+      );
+      expect(fullscreenBtn.onPressed, isNull,
+          reason: 'full-screen preview must be disabled while generating');
+      final titleBtn = tester.widget<OutlinedButton>(
+        find.widgetWithText(OutlinedButton, '标题'),
+      );
+      expect(titleBtn.onPressed, isNotNull);
+      final codeBtn = tester.widget<OutlinedButton>(
+        find.widgetWithText(OutlinedButton, '查看代码'),
+      );
+      expect(codeBtn.onPressed, isNotNull);
+    });
+
+    testWidgets('finished card shows no 正在生成中 and enables 全屏查看',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: '<h1>Hello</h1>'),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('正在生成中'), findsNothing);
+      final fullscreenBtn = tester.widget<OutlinedButton>(
+        find.widgetWithText(OutlinedButton, '全屏查看'),
+      );
+      expect(fullscreenBtn.onPressed, isNotNull);
+    });
+
+    testWidgets('card does not overflow in a narrow bubble', (tester) async {
+      // Narrow surface (~phone width): the three buttons must wrap onto a
+      // second row instead of overflowing the card.
+      await tester.binding.setSurfaceSize(const Size(320, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: '<h1>Hello</h1>'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull,
+          reason: 'no RenderFlex/overflow exception in a narrow bubble');
+      expect(find.text('标题'), findsOneWidget);
+      expect(find.text('全屏查看'), findsOneWidget);
+      expect(find.text('查看代码'), findsOneWidget);
+    });
+
+    testWidgets('badge shows the fence language as-is', (tester) async {
+      // ```HTML (uppercase) must render as a card with an "HTML" badge,
+      // not a plain code block.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(
+              htmlCode: '<h1>Hello</h1>',
+              language: 'HTML',
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('HTML'), findsOneWidget);
+      expect(find.text('html'), findsNothing);
+    });
+
+    testWidgets('finished empty card shows the (empty) hint directly',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: ''),
+          ),
+        ),
+      );
+
+      // A finalized empty html block must hint emptiness without requiring
+      // the user to open the code view.
+      expect(find.text('(empty)'), findsOneWidget);
+      // And while generating, the streaming indicator wins over the hint.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: '', isStreaming: true),
+          ),
+        ),
+      );
+      expect(find.text('(empty)'), findsNothing);
+      expect(find.textContaining('正在生成中'), findsOneWidget);
+    });
+  });
+
+  group('HtmlCodeBlockWidget - code view toggle', () {
+    testWidgets('查看代码 reveals the raw code with an EYE preview icon',
+        (tester) async {
+      const html = '<h1>Hello World</h1>';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: html),
+          ),
+        ),
+      );
+
+      await _showCodeView(tester);
+
+      // Raw code is now visible.
+      expect(find.text(html), findsOneWidget);
+      // HTML code view uses the EYE icon (preview), not fullscreen.
+      expect(find.byIcon(Icons.visibility), findsOneWidget);
+      expect(find.byIcon(Icons.fullscreen), findsNothing,
+          reason: 'HTML-only: the code view preview must be an eye icon');
+      // A way back to the card exists.
+      expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+      // Card buttons are gone.
+      expect(find.text('标题'), findsNothing);
+    });
+
+    testWidgets('eye icon carries the 预览 semantic label', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -30,18 +192,13 @@ void main() {
         ),
       );
 
-      // Regression: toolbar buttons are icon-only — no text labels.
-      expect(find.text('全屏预览'), findsNothing);
-      expect(find.text('换行显示'), findsNothing);
-      expect(find.text('取消换行'), findsNothing);
-      // The fullscreen icon should be present
-      expect(find.byIcon(Icons.fullscreen), findsOneWidget);
-      // The wrap toggle icon should be present
-      expect(find.byIcon(Icons.wrap_text), findsOneWidget);
+      await _showCodeView(tester);
+
+      final eyeIcon = tester.widget<Icon>(find.byIcon(Icons.visibility));
+      expect(eyeIcon.semanticLabel, '预览');
     });
 
-    testWidgets('wrap toggle icon is positioned left of fullscreen icon',
-        (tester) async {
+    testWidgets('返回卡片 switches back to the card view', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -50,44 +207,94 @@ void main() {
         ),
       );
 
-      // Find both buttons by their icons
-      final wrapPos = tester.getCenter(find.byIcon(Icons.wrap_text));
-      final fullscreenPos = tester.getCenter(find.byIcon(Icons.fullscreen));
+      await _showCodeView(tester);
+      expect(find.text('查看代码'), findsNothing);
 
-      // Wrap toggle should be to the left of fullscreen button
-      expect(wrapPos.dx, lessThan(fullscreenPos.dx),
-          reason: 'Wrap toggle should be left of the fullscreen button');
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(find.text('查看代码'), findsOneWidget);
+      expect(find.text('标题'), findsOneWidget);
+      expect(find.byIcon(Icons.visibility), findsNothing);
     });
 
-    testWidgets('wrap toggle switches between wrap and no-wrap state',
+    testWidgets('code view survives a streaming -> finished rebuild',
         (tester) async {
+      // While the user is viewing the raw code, the stream finishes and
+      // the widget rebuilds with isStreaming: false. The code view must
+      // NOT silently reset back to the card.
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: HtmlCodeBlockWidget(htmlCode: '<p>test</p>'),
+            body: HtmlCodeBlockWidget(
+              htmlCode: '<p>growing</p>',
+              isStreaming: true,
+            ),
           ),
         ),
       );
 
-      // Initially wrap is OFF — semantic label '换行显示'
+      await _showCodeView(tester);
+      expect(find.byIcon(Icons.visibility), findsOneWidget);
+
+      // Simulate the stream finishing: same widget position, new flags.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(
+              htmlCode: '<p>growing</p>',
+              isStreaming: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.visibility), findsOneWidget,
+          reason: 'code view must persist across a streaming->finished '
+              'rebuild');
+      expect(find.text('查看代码'), findsNothing);
+    });
+  });
+
+  group('HtmlCodeBlockWidget - code view behavior (regressions)', () {
+    testWidgets('wrap toggle still works in the code view', (tester) async {
+      const html = '<div>\n  <p>Line 1</p>\n</div>';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: html),
+          ),
+        ),
+      );
+
+      await _showCodeView(tester);
+
       var wrapIcon = tester.widget<Icon>(find.byIcon(Icons.wrap_text));
       expect(wrapIcon.semanticLabel, '换行显示');
 
-      // Tap the wrap toggle icon
       await tester.tap(find.byIcon(Icons.wrap_text));
       await tester.pumpAndSettle();
 
-      // After tap, wrap is ON — semantic label '取消换行'
       wrapIcon = tester.widget<Icon>(find.byIcon(Icons.wrap_text));
       expect(wrapIcon.semanticLabel, '取消换行');
+    });
 
-      // Tap the wrap toggle icon again
-      await tester.tap(find.byIcon(Icons.wrap_text));
-      await tester.pumpAndSettle();
+    testWidgets('line numbers are shown in the code view', (tester) async {
+      const html = '<div>\n  <p>Line 1</p>\n</div>';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: html),
+          ),
+        ),
+      );
 
-      // Should be back to '换行显示'
-      wrapIcon = tester.widget<Icon>(find.byIcon(Icons.wrap_text));
-      expect(wrapIcon.semanticLabel, '换行显示');
+      await _showCodeView(tester);
+
+      expect(find.text('1'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+      expect(find.text('3'), findsOneWidget);
     });
 
     testWidgets('shows (empty) for empty HTML code', (tester) async {
@@ -99,230 +306,86 @@ void main() {
         ),
       );
 
+      await _showCodeView(tester);
+
       expect(find.text('(empty)'), findsOneWidget);
-      // No line numbers for empty code
       expect(find.text('1'), findsNothing);
     });
+  });
 
-    testWidgets('shows line numbers for multiline code (no-wrap default)',
+  group('HtmlCodeBlockWidget - title button', () {
+    testWidgets('标题 shows the extracted document title', (tester) async {
+      const html = '<html><head><title>My Cool Page</title></head>'
+          '<body><h1>Hi</h1></body></html>';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: html),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('标题'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('My Cool Page'), findsOneWidget);
+      expect(find.text('标题'), findsWidgets); // button + dialog title
+    });
+
+    testWidgets('标题 falls back when the HTML has no title', (tester) async {
+      const html = '<body><p>no title here</p></body>';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(htmlCode: html),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('标题'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('（无标题）'), findsOneWidget);
+    });
+  });
+
+  group('HtmlCodeBlockWidget.extractHtmlTitle', () {
+    test('extracts a plain title tag', () {
+      expect(
+        HtmlCodeBlockWidget.extractHtmlTitle(
+            '<html><head><title>My Page</title></head></html>'),
+        'My Page',
+      );
+    });
+
+    test('trims surrounding whitespace', () {
+      expect(
+        HtmlCodeBlockWidget.extractHtmlTitle('<title>   Spaced   </title>'),
+        'Spaced',
+      );
+    });
+
+    test('is case-insensitive', () {
+      expect(
+        HtmlCodeBlockWidget.extractHtmlTitle('<TiTlE>Case Insensitive</tItLe>'),
+        'Case Insensitive',
+      );
+    });
+
+    test('returns empty when no title exists', () {
+      expect(HtmlCodeBlockWidget.extractHtmlTitle('<body>no title</body>'), '');
+      expect(HtmlCodeBlockWidget.extractHtmlTitle('<title>unclosed'), '');
+      expect(HtmlCodeBlockWidget.extractHtmlTitle(''), '');
+    });
+  });
+
+  group('HtmlCodeBlockWidget - height behavior', () {
+    testWidgets('caps the code view height at 15 visible lines',
         (tester) async {
-      const html = '<div>\n  <p>Line 1</p>\n</div>';
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HtmlCodeBlockWidget(htmlCode: html),
-          ),
-        ),
-      );
-
-      // In no-wrap mode, code is a single SelectableText with full text
-      expect(find.text(html), findsOneWidget);
-
-      // Should have line numbers 1, 2, 3
-      expect(find.text('1'), findsOneWidget);
-      expect(find.text('2'), findsOneWidget);
-      expect(find.text('3'), findsOneWidget);
-    });
-
-    testWidgets('shows individual code lines in wrap mode', (tester) async {
-      const html = '<div>\n  <p>Line 1</p>\n</div>';
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HtmlCodeBlockWidget(htmlCode: html),
-          ),
-        ),
-      );
-
-      // Switch to wrap mode first
-      await tester.tap(find.byIcon(Icons.wrap_text));
-      await tester.pumpAndSettle();
-
-      // In wrap mode, each line is a separate SelectableText
-      expect(find.text('<div>'), findsOneWidget);
-      expect(find.text('  <p>Line 1</p>'), findsOneWidget);
-      expect(find.text('</div>'), findsOneWidget);
-
-      // Should have line numbers 1, 2, 3
-      expect(find.text('1'), findsOneWidget);
-      expect(find.text('2'), findsOneWidget);
-      expect(find.text('3'), findsOneWidget);
-    });
-
-    testWidgets('shows line number 1 for single line code', (tester) async {
-      const html = '<p>Hello</p>';
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HtmlCodeBlockWidget(htmlCode: html),
-          ),
-        ),
-      );
-
-      // Should show the code
-      expect(find.text('<p>Hello</p>'), findsOneWidget);
-      // Should show line number 1
-      expect(find.text('1'), findsOneWidget);
-    });
-
-    testWidgets('shows multiline code with correct line numbers in wrap mode',
-        (tester) async {
-      const html = '<div>\n  <p>Line 1</p>\n  <p>Line 2</p>\n</div>';
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HtmlCodeBlockWidget(htmlCode: html),
-          ),
-        ),
-      );
-
-      // Switch to wrap mode
-      await tester.tap(find.byIcon(Icons.wrap_text));
-      await tester.pumpAndSettle();
-
-      // Verify the raw multi-line code is displayed as individual lines
-      expect(find.text('<div>'), findsOneWidget);
-      expect(find.text('  <p>Line 1</p>'), findsOneWidget);
-      expect(find.text('  <p>Line 2</p>'), findsOneWidget);
-      expect(find.text('</div>'), findsOneWidget);
-
-      // Verify line numbers 1-4
-      expect(find.text('1'), findsOneWidget);
-      expect(find.text('2'), findsOneWidget);
-      expect(find.text('3'), findsOneWidget);
-      expect(find.text('4'), findsOneWidget);
-    });
-
-    testWidgets('fullscreen button is present and tappable', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HtmlCodeBlockWidget(htmlCode: '<p>test</p>'),
-          ),
-        ),
-      );
-
-      // The fullscreen icon should be present with an accessibility label
-      expect(find.byIcon(Icons.fullscreen), findsOneWidget);
-      final fullscreenIcon = tester.widget<Icon>(find.byIcon(Icons.fullscreen));
-      expect(fullscreenIcon.semanticLabel, isNotNull);
-
-      // Tapping should not throw (the dialog requires InAppWebView
-      // which is a platform widget; we verify the gesture is wired)
-      await tester.tap(find.byIcon(Icons.fullscreen));
-      // Just pump once — dialog opening will be handled in integration tests
-      // with real platform support
-    });
-
-    testWidgets('wrap toggle button is present and tappable', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HtmlCodeBlockWidget(htmlCode: '<p>test</p>'),
-          ),
-        ),
-      );
-
-      // The wrap toggle icon should be present
-      expect(find.byIcon(Icons.wrap_text), findsOneWidget);
-
-      // Tapping should toggle wrap state without throwing
-      await tester.tap(find.byIcon(Icons.wrap_text));
-      await tester.pumpAndSettle();
-
-      final wrapIcon = tester.widget<Icon>(find.byIcon(Icons.wrap_text));
-      expect(wrapIcon.semanticLabel, '取消换行');
-    });
-
-    testWidgets('handles code with trailing newline', (tester) async {
-      const html = '<div>\n</div>\n';
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HtmlCodeBlockWidget(htmlCode: html),
-          ),
-        ),
-      );
-
-      // Should show full code including trailing newline
-      expect(find.text(html), findsOneWidget);
-
-      // Three lines: '<div>', '</div>', ''
-      expect(find.text('1'), findsOneWidget);
-      expect(find.text('2'), findsOneWidget);
-      expect(find.text('3'), findsOneWidget);
-    });
-
-    testWidgets('wrap mode changes scroll configuration', (tester) async {
-      const html = '<div>\n  <p>long line</p>\n</div>';
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HtmlCodeBlockWidget(htmlCode: html),
-          ),
-        ),
-      );
-
-      // In no-wrap mode (default): horizontal Scrollable should exist
-      final horizontalScrollables = find.byWidgetPredicate(
-          (w) => w is Scrollable && w.axis == Axis.horizontal);
-      expect(horizontalScrollables, findsWidgets,
-          reason: 'No-wrap mode should have horizontal scroll');
-
-      // Switch to wrap mode
-      await tester.tap(find.byIcon(Icons.wrap_text));
-      await tester.pumpAndSettle();
-
-      // In wrap mode: no horizontal Scrollable should exist
-      // (Only vertical scrollable remains)
-      final horizontalScrollablesAfter = find.byWidgetPredicate(
-          (w) => w is Scrollable && w.axis == Axis.horizontal);
-      expect(horizontalScrollablesAfter, findsNothing,
-          reason: 'Wrap mode should have no horizontal scroll');
-    });
-
-    // ---- Adaptive height tests (4:3 aspect ratio) ----
-
-    testWidgets('uses adaptive height: small content is not taller than needed',
-        (tester) async {
-      // Single line of code in a wide screen
       await tester.binding.setSurfaceSize(const Size(800, 600));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
-      const html = '<p>Hello</p>';
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: HtmlCodeBlockWidget(htmlCode: html),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Find the SizedBox with the adaptive height / Container
-      final containerFinder = find.byType(Container).first;
-      final container = tester.widget<Container>(containerFinder);
-      final containerConstraints = container.constraints;
-
-      // Content height for 1 line = ~20px (13*1.5) + padding (40px top + 12px bottom)
-      // Should be less than 4:3 max height which is ~600 (800*0.75)
-      // So the widget should be sized to fit content (not capped)
-      // The SizedBox height should reflect the actual content
-      final sizedBoxFinder = find.byType(SizedBox);
-      expect(sizedBoxFinder, findsWidgets,
-          reason: 'SizedBox should exist for adaptive sizing');
-    });
-
-    testWidgets('caps height at roughly 4:3 aspect ratio for tall content',
-        (tester) async {
-      // 50 lines of code — should be capped at ~75% of width
-      await tester.binding.setSurfaceSize(const Size(500, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       final lines = List.generate(50, (i) => '<p>Line $i</p>').join('\n');
-
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -332,128 +395,59 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
 
-      // The widget is inside a Scaffold which applies padding.
-      // The available width should be roughly 500 minus padding.
-      // Max height should be capped at available_width * 0.75.
-      // 50 lines * ~20px per line = ~1000px content height
-      // 500px width * 0.75 = 375px max height
-      // So the widget should be ~375px tall
-      final sizedBox = find.byType(SizedBox).first;
-      final sizedBoxWidget = tester.widget<SizedBox>(sizedBox);
+      await _showCodeView(tester);
 
-      expect(sizedBoxWidget.height, lessThan(500),
-          reason:
-              'Height should be capped, not matching the full 50 lines of content');
-      expect(sizedBoxWidget.height, greaterThan(0),
-          reason: 'Height should be positive');
+      final sizedBoxWidget = tester.widget<SizedBox>(_codeBlockSizeBox());
+      const expected = 15 * 13.0 * 1.5 + 40.0 + 12.0;
+      expect(sizedBoxWidget.height, equals(expected),
+          reason: 'Tall HTML should be capped at 15 lines, not 4:3 of width');
     });
 
-    testWidgets(
-        'tall code block content scrolls vertically within capped height',
-        (tester) async {
-      // Many lines to ensure scrolling is needed
-      await tester.binding.setSurfaceSize(const Size(400, 600));
+    testWidgets('short code stays compact in the code view', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      final lines = List.generate(80, (i) => 'Line number $i').join('\n');
-
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: SingleChildScrollView(
-              child: HtmlCodeBlockWidget(htmlCode: lines),
+              child: HtmlCodeBlockWidget(htmlCode: '<p>Hello</p>'),
             ),
           ),
         ),
       );
-      await tester.pumpAndSettle();
 
-      // Find vertical scrollable — should exist and allow scrolling
-      final verticalScrollables = find
-          .byWidgetPredicate((w) => w is Scrollable && w.axis == Axis.vertical);
-      expect(verticalScrollables, findsWidgets,
-          reason: 'Vertical scrollable should exist for tall content');
+      await _showCodeView(tester);
+
+      final sizedBoxWidget = tester.widget<SizedBox>(_codeBlockSizeBox());
+      expect(sizedBoxWidget.height, equals(1 * 13.0 * 1.5 + 40.0 + 12.0),
+          reason: 'Short code must not be stretched to the 15-line cap');
     });
 
-    testWidgets('respects custom height property even when content is short',
+    testWidgets('respects custom height property in the code view',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(800, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      // Single line, but with a custom height of 200
-      const html = '<p>Hello</p>';
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: SingleChildScrollView(
               child: HtmlCodeBlockWidget(
-                htmlCode: html,
+                htmlCode: '<p>Hello</p>',
                 height: 200,
               ),
             ),
           ),
         ),
       );
-      await tester.pumpAndSettle();
 
-      // The custom height should override adaptive sizing
-      // Find SizedBox — should use 200
-      final sizedBox = find.byType(SizedBox).first;
-      final sizedBoxWidget = tester.widget<SizedBox>(sizedBox);
+      await _showCodeView(tester);
 
+      final sizedBoxWidget = tester.widget<SizedBox>(_codeBlockSizeBox());
       expect(sizedBoxWidget.height, equals(200),
-          reason: 'Custom height property should be respected');
-    });
-
-    testWidgets('respects custom height property with tall content',
-        (tester) async {
-      await tester.binding.setSurfaceSize(const Size(400, 600));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
-      final lines = List.generate(50, (i) => 'Line $i').join('\n');
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: HtmlCodeBlockWidget(
-                htmlCode: lines,
-                height: 500,
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Custom height of 500 should be used, even though it exceeds 4:3 ratio
-      final sizedBox = find.byType(SizedBox).first;
-      final sizedBoxWidget = tester.widget<SizedBox>(sizedBox);
-
-      expect(sizedBoxWidget.height, equals(500),
-          reason: 'Custom height property should override adaptive cap');
-    });
-
-    testWidgets('empty code block uses default adaptive height',
-        (tester) async {
-      await tester.binding.setSurfaceSize(const Size(600, 600));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: HtmlCodeBlockWidget(htmlCode: ''),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Should show empty placeholder
-      expect(find.text('(empty)'), findsOneWidget);
+          reason: 'Custom height should override adaptive sizing');
     });
   });
 }

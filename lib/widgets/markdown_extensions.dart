@@ -223,11 +223,13 @@ class _MermaidLoadingWidget extends StatelessWidget {
 /// even if the stream continues after it. This avoids repeatedly loading
 /// the WebView on each incremental streaming update.
 /// If [language] is `'html'`, renders the code using [HtmlCodeBlockWidget]
-/// (which shows the raw HTML source without inline rendering; the user must
-/// tap the full-screen button to render the HTML in a dialog).
+/// which shows an HTML card (with full-screen preview / view-code actions)
+/// while streaming and a compact card with action buttons once the block
+/// finishes generating; the user must tap "查看代码" to see the raw HTML
+/// source (where the preview button renders the HTML in a dialog).
 /// Otherwise, renders the code using [CodeBlockSourceView] which provides
-/// a unified code display area with line numbers and a wrap toggle (matching
-/// the HTML code block's UI form).
+/// a unified code display area with line numbers, a wrap toggle and the
+/// language label in the top-left corner.
 Widget _buildCodeBlock(
   String code,
   String language,
@@ -251,14 +253,23 @@ Widget _buildCodeBlock(
     return MermaidRenderWidget(mermaidCode: code);
   }
 
-  if (language == 'html') {
-    return HtmlCodeBlockWidget(htmlCode: code);
+  if (language.toLowerCase() == 'html') {
+    // The same fence-completion check as mermaid: the HTML card shows its
+    // "正在生成中" state only while the block's fence is still open, so a
+    // closed block renders as a finished card even mid-stream.
+    final stillGenerating = isStreaming &&
+        (streamingText == null || isStreamingMermaidTail(code, streamingText));
+    return HtmlCodeBlockWidget(
+      htmlCode: code,
+      language: language,
+      isStreaming: stillGenerating,
+    );
   }
 
   // Fallback: render using the unified source code display widget
-  // ([CodeBlockSourceView]) with line numbers, same as the HTML code
-  // block style.
-  return CodeBlockSourceView(code: code);
+  // ([CodeBlockSourceView]) with line numbers, a wrap toggle and the
+  // language label (from the opening fence's info string).
+  return CodeBlockSourceView(code: code, language: language);
 }
 
 /// Returns the content of the still-OPEN trailing fenced code block in
@@ -371,13 +382,13 @@ bool _isClosingFenceLine(String line, String char, int openingLength) {
 /// [MermaidRenderWidget].
 ///
 /// HTML code blocks (```` ```html ````) are rendered using
-/// [HtmlCodeBlockWidget] to show the raw HTML source without inline
-/// rendering; the user must tap the full-screen button to render the
-/// HTML in a dialog.
+/// [HtmlCodeBlockWidget] which shows an HTML card (with full-screen preview
+/// and view-code actions) instead of the raw source by default; the user
+/// must tap the "查看代码" button to see the raw HTML source.
 ///
 /// All other code blocks are rendered using [CodeBlockSourceView] which
-/// provides a unified code display area with line numbers and a wrap
-/// toggle, matching the HTML code block's UI form.
+/// provides a unified code display area with line numbers, a wrap toggle
+/// and the language label (from the opening fence) in the top-left corner.
 PreConfig codeBlockPreConfig({
   required bool isDark,
   bool isStreaming = false,
