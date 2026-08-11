@@ -82,6 +82,18 @@ class TextRecord
         textLength: textLength,
       );
 
+  /// 修改文件格式（重命名时通过下拉框切换扩展名）
+  TextRecord copyWithFormat(String format) => TextRecord(
+        id: id,
+        name: name,
+        hash: hash,
+        format: format,
+        createdAt: createdAt,
+        size: size,
+        folder: folder,
+        textLength: textLength,
+      );
+
   @override
   TextRecord copyWithFolder(String folder) => TextRecord(
         id: id,
