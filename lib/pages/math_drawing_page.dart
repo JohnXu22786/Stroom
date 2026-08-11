@@ -466,66 +466,82 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             ),
           ),
 
-          const SizedBox(width: 12),
-
-          // ---- Eye / eye-off toggle ----
-          IconButton(
-            icon: Icon(
-              f.visible ? Icons.visibility : Icons.visibility_off,
-              size: 20,
-              color: f.visible ? cs.onSurface : cs.onSurfaceVariant,
-            ),
+          // ---- Action buttons ----
+          // Each button carries a uniform 12px leading gap so the spacing
+          // stays identical whether or not a row shows the add/remove
+          // buttons. The 12px gap also matches the left side's gap between
+          // the color circle and the input, which is the intended rhythm.
+          _buildActionButton(
+            icon: f.visible ? Icons.visibility : Icons.visibility_off,
+            iconSize: 20,
+            color: f.visible ? cs.onSurface : cs.onSurfaceVariant,
             tooltip: f.visible ? '隐藏公式' : '显示公式',
             onPressed: () => _toggleVisibility(index),
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(
-                minWidth: 24, maxWidth: 24, minHeight: 24, maxHeight: 24),
           ),
-
-          const SizedBox(width: 12),
 
           // ---- Add formula (+) button (first row only) ----
           if (index == 0)
-            IconButton(
-              icon: Icon(Icons.add_circle, size: 18, color: cs.primary),
+            _buildActionButton(
+              icon: Icons.add_circle,
+              iconSize: 18,
+              color: cs.primary,
               tooltip: '添加公式',
               onPressed: _addFormula,
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints(
-                  minWidth: 24, maxWidth: 24, minHeight: 24, maxHeight: 24),
             ),
 
           // ---- Remove formula (X) button ----
           if (_formulas.length > 1)
-            IconButton(
-              icon: Icon(Icons.remove_circle_outline,
-                  size: 16, color: cs.error.withValues(alpha: 0.7)),
+            _buildActionButton(
+              icon: Icons.remove_circle_outline,
+              iconSize: 16,
+              color: cs.error.withValues(alpha: 0.7),
               tooltip: '删除公式',
               onPressed: () => _confirmRemove(index),
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints(
-                  minWidth: 24, maxWidth: 24, minHeight: 24, maxHeight: 24),
             ),
 
           // ---- Plot (✓) button ----
-          IconButton(
-            icon: Icon(
-              Icons.check_circle_outline,
-              size: 20,
-              color:
-                  hasChanged ? cs.primary : cs.onSurface.withValues(alpha: 0.2),
-            ),
+          _buildActionButton(
+            icon: Icons.check_circle_outline,
+            iconSize: 20,
+            color:
+                hasChanged ? cs.primary : cs.onSurface.withValues(alpha: 0.2),
             tooltip: '绘制',
             onPressed: _canPlot ? _plotAll : null,
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(
-                minWidth: 24, maxWidth: 24, minHeight: 24, maxHeight: 24),
           ),
         ],
+      ),
+    );
+  }
+
+  /// A compact 24x24 action button for a formula row, with a uniform 12px
+  /// leading gap.
+  ///
+  /// Uses [MaterialTapTargetSize.shrinkWrap] + `fixedSize` instead of the
+  /// `constraints` parameter: with Material 3, `constraints` is translated
+  /// into the style's minimum/maximum size, while the button's outer block
+  /// is padded up to the tap-target minimum (48dp minus the visual-density
+  /// adjustment), so a `constraints`-only 24x24 still occupies a 40x40
+  /// block and silently widens the right side of every formula row.
+  Widget _buildActionButton({
+    required IconData icon,
+    required double iconSize,
+    required Color color,
+    required String tooltip,
+    required VoidCallback? onPressed,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 12),
+      child: IconButton(
+        icon: Icon(icon, size: iconSize, color: color),
+        tooltip: tooltip,
+        onPressed: onPressed,
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+        style: IconButton.styleFrom(
+          minimumSize: const Size(24, 24),
+          fixedSize: const Size(24, 24),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
       ),
     );
   }
