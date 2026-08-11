@@ -279,6 +279,59 @@
     // keep the dev-server transfer fast; it is decompressed in the
     // browser and executed from a blob URL. Falls back to the raw file
     // when decompression is unavailable.
+    //
+    // Bump TEMPLATE_VERSION (and the ?v= in buildWebAssetUrl) whenever
+    // this template or the bundled library changes: the version keys the
+    // CacheStorage entry, so a stale version would keep serving the
+    // previous library.
+    var TEMPLATE_VERSION = 'v5';
+    var LIB_CACHE_NAME = 'mermaid-render-' + TEMPLATE_VERSION;
+    var LIB_CACHE_KEY = 'mermaid-lib-' + TEMPLATE_VERSION;
+
+    // Loads the mermaid library blob. Every diagram opens a fresh iframe
+    // document, so without a persistent cache each one would re-download
+    // the gz and re-decompress the library; the decompressed blob is
+    // cached in CacheStorage (origin-wide, survives between iframes) so
+    // only the FIRST diagram pays that cost. Any cache failure falls back
+    // to the plain gz path.
+    function loadLibrary() {
+      function fromGz() {
+        return fetch('mermaid.min.js.gz').then(function(resp) {
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          return resp.blob();
+        }).then(function(blob) {
+          return new Response(
+            blob.stream().pipeThrough(new DecompressionStream('gzip'))
+          ).blob();
+        }).then(function(jsBlob) {
+          // Persist for the next diagram; a storage failure must not
+          // break the current render.
+          try {
+            if (window.caches) {
+              caches.open(LIB_CACHE_NAME).then(function(cache) {
+                return cache.put(LIB_CACHE_KEY, new Response(jsBlob));
+              }).catch(function() {});
+            }
+          } catch(_) {}
+          return jsBlob;
+        });
+      }
+      if (!window.caches) return fromGz();
+      return caches.open(LIB_CACHE_NAME).then(function(cache) {
+        return cache.match(LIB_CACHE_KEY);
+      }).then(function(hit) {
+        return hit ? hit.blob() : null;
+      }).catch(function() {
+        // CacheStorage unavailable or errored (including a corrupt cache
+        // entry): fall back to the plain gz path. A gz-path failure must
+        // NOT land here (it would re-fetch the gz redundantly) — it
+        // propagates to the caller, which then uses the raw file.
+        return null;
+      }).then(function(blob) {
+        return blob || fromGz();
+      });
+    }
+
     function initMermaid() {
       var hint = document.getElementById('loading-hint');
       var codeEl = document.getElementById('mermaid-code');
@@ -335,24 +388,13 @@
       }
       codeEl.textContent = code;
       try {
-        fetch('mermaid.min.js.gz')
-          .then(function(resp) {
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            return resp.blob();
-          })
-          .then(function(blob) {
-            return new Response(
-              blob.stream().pipeThrough(new DecompressionStream('gzip'))
-            ).blob();
-          })
-          .then(function(jsBlob) {
-            runScriptUrl(URL.createObjectURL(jsBlob));
-          })
-          .catch(function(err) {
-            // DecompressionStream unavailable or the gz asset missing:
-            // fall back to the raw library file.
-            runScriptUrl('mermaid.min.js');
-          });
+        loadLibrary().then(function(jsBlob) {
+          runScriptUrl(URL.createObjectURL(jsBlob));
+        }).catch(function(err) {
+          // DecompressionStream unavailable or the gz asset missing:
+          // fall back to the raw library file.
+          runScriptUrl('mermaid.min.js');
+        });
       } catch(e) {
         runScriptUrl('mermaid.min.js');
       }

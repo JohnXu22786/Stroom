@@ -106,6 +106,12 @@ class _MermaidPreviewDialogContentState
     });
   }
 
+  /// HTML for the initial page load, memoized: [InAppWebView] reads
+  /// `initialData` only when the WebView is created, so rebuilding the
+  /// multi-megabyte document on every dialog rebuild would be pure waste
+  /// (it used to run inside [build] on every setState).
+  String? _initialHtml;
+
   String _buildHtml() {
     final code = widget.mermaidCode.trim();
     if (code.isEmpty) {
@@ -113,7 +119,7 @@ class _MermaidPreviewDialogContentState
     }
     // Same shared template as the inline widget, with the bundled
     // mermaid.js inlined (offline rendering, no CDN request).
-    return MermaidRenderWidget.buildMermaidHtml(code,
+    return _initialHtml ??= MermaidRenderWidget.buildMermaidHtml(code,
         inlineMermaidJs: _inlineMermaidJs);
   }
 
