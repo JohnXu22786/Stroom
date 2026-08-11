@@ -139,8 +139,10 @@ FileManagerView<_TestFileRecord> _buildFileManagerView({
 }
 
 void main() {
-  group('Selection bottom bar label visibility', () {
-    testWidgets('hides labels on small screens (<400dp)', (tester) async {
+  group('Selection bottom bar icon-only buttons', () {
+    testWidgets('shows icon-only buttons with no labels on small screens', (
+      tester,
+    ) async {
       // Set screen width to 360dp (small phone)
       await tester.pumpWidget(
         _buildTestApp(
@@ -154,20 +156,22 @@ void main() {
       await tester.longPress(fileItem);
       await tester.pumpAndSettle();
 
-      // The selection action bar should be visible
+      // All five action buttons are present
       expect(find.byKey(const Key('fm_selection_copy_btn')), findsOneWidget);
       expect(find.byKey(const Key('fm_selection_move_btn')), findsOneWidget);
+      expect(find.byKey(const Key('fm_selection_rename_btn')), findsOneWidget);
       expect(find.byKey(const Key('fm_selection_export_btn')), findsOneWidget);
       expect(find.byKey(const Key('fm_selection_delete_btn')), findsOneWidget);
 
-      // On small screen, the labels should NOT be visible
+      // Labels are never rendered — icons only
       expect(find.text('复制'), findsNothing);
       expect(find.text('移动'), findsNothing);
+      expect(find.text('重命名'), findsNothing);
       expect(find.text('导出'), findsNothing);
       expect(find.text('删除'), findsNothing);
     });
 
-    testWidgets('shows labels on large screens (>=400dp)', (tester) async {
+    testWidgets('labels stay hidden on large screens too', (tester) async {
       // Set screen width to 800dp (large screen)
       await tester.pumpWidget(
         _buildTestApp(
@@ -181,16 +185,20 @@ void main() {
       await tester.longPress(fileItem);
       await tester.pumpAndSettle();
 
-      // On large screen, the labels should be visible
-      expect(find.text('复制'), findsOneWidget);
-      expect(find.text('移动'), findsOneWidget);
-      expect(find.text('导出'), findsOneWidget);
-      expect(find.text('删除'), findsOneWidget);
+      // Labels are never shown regardless of width
+      expect(find.text('复制'), findsNothing);
+      expect(find.text('移动'), findsNothing);
+      expect(find.text('重命名'), findsNothing);
+      expect(find.text('导出'), findsNothing);
+      expect(find.text('删除'), findsNothing);
+
+      // Buttons still render icons
+      expect(find.byIcon(Icons.copy), findsOneWidget);
+      expect(find.byIcon(Icons.drive_file_rename_outline), findsOneWidget);
+      expect(find.byIcon(Icons.delete_outline), findsOneWidget);
     });
 
-    testWidgets('buttons still work when labels are hidden on small screen', (
-      tester,
-    ) async {
+    testWidgets('buttons still work with icon-only layout', (tester) async {
       await tester.pumpWidget(
         _buildTestApp(
           _buildFileManagerView(),
@@ -203,9 +211,10 @@ void main() {
       await tester.longPress(fileItem);
       await tester.pumpAndSettle();
 
-      // Verify buttons are tappable (just checking they exist)
+      // Verify all buttons are present and tappable
       expect(find.byKey(const Key('fm_selection_copy_btn')), findsOneWidget);
       expect(find.byKey(const Key('fm_selection_move_btn')), findsOneWidget);
+      expect(find.byKey(const Key('fm_selection_rename_btn')), findsOneWidget);
       expect(find.byKey(const Key('fm_selection_export_btn')), findsOneWidget);
       expect(find.byKey(const Key('fm_selection_delete_btn')), findsOneWidget);
     });

@@ -2,9 +2,11 @@ import 'dart:collection';
 
 import 'package:flutter/material.dart';
 
+import '../utils/batch_rename.dart';
 import '../utils/file_record.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/sort_config.dart';
+import 'batch_rename_dialog.dart';
 import 'file_manager_config.dart';
 import 'file_manager_utils.dart';
 
@@ -340,6 +342,18 @@ class _FileManagerViewState<T extends FileRecord>
                     const SizedBox(width: 12),
                     Expanded(
                       child: _buildSelectionActionButton(
+                        key: const Key('fm_selection_rename_btn'),
+                        onPressed: _renameSelected,
+                        icon: const Icon(
+                          Icons.drive_file_rename_outline,
+                          size: 20,
+                        ),
+                        label: '重命名',
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildSelectionActionButton(
                         key: const Key('fm_selection_export_btn'),
                         onPressed: _exportSelected,
                         icon: const Icon(
@@ -360,7 +374,6 @@ class _FileManagerViewState<T extends FileRecord>
                           size: 20,
                         ),
                         label: '删除',
-                        labelStyle: const TextStyle(color: Colors.red),
                       ),
                     ),
                   ],
@@ -371,24 +384,25 @@ class _FileManagerViewState<T extends FileRecord>
     );
   }
 
-  /// Build a selection-mode action button that hides the label on narrow
-  /// screens (<400dp) to prevent text overflow / vertical wrapping.
+  /// 选择模式操作按钮：仅图标 + 长按提示，不显示文字标签。
+  /// 图标按钮在窄屏（手机）与宽屏（桌面）上都保持一致的紧凑布局。
   Widget _buildSelectionActionButton({
     required Key key,
     required VoidCallback? onPressed,
     required Widget icon,
     required String label,
-    TextStyle? labelStyle,
   }) {
-    final showLabel = MediaQuery.of(context).size.width >= 400;
-    return OutlinedButton.icon(
-      key: key,
-      onPressed: onPressed,
-      icon: icon,
-      label: showLabel
-          ? Text(label,
-              style: labelStyle, overflow: TextOverflow.ellipsis, maxLines: 1)
-          : const SizedBox.shrink(),
+    return Tooltip(
+      message: label,
+      child: OutlinedButton(
+        key: key,
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          minimumSize: const Size(0, 40),
+        ),
+        child: icon,
+      ),
     );
   }
 
@@ -1989,6 +2003,66 @@ class _FileManagerViewState<T extends FileRecord>
     }
     _exitSelectionMode();
     if (mounted) setState(() {});
+  }
+
+  Future<void> _renameSelected() async {
+    if (_selectedIds.isEmpty) return;
+
+    final fileIds = <String>[];
+    final folderNames = <String>[];
+    for (final id in _selectedIds) {
+      if (widget.folders.contains(id)) {
+        folderNames.add(id);
+      } else {
+        fileIds.add(id);
+      }
+    }
+    final selectedFiles =
+        widget.sortedRecords.where((r) => fileIds.contains(r.id)).toList();
+
+    final plan = await showBatchRenameDialog<T>(
+      context: context,
+      selectedFiles: selectedFiles,
+      selectedFolders: folderNames,
+      allRecords: widget.sortedRecords,
+      allFolders: widget.folders,
+      bridge: widget.manifestBridge,
+      initialSort: widget.sortConfig,
+    );
+    if (plan == null || !mounted) return;
+    await _applyBatchRenamePlan(plan);
+  }
+
+  /// 按计划应用批量重命名。文件夹先于文件执行（计划已排好安全顺序）。
+  Future<void> _applyBatchRenamePlan(BatchRenamePlan plan) async {
+    var applied = 0;
+    var failed = 0;
+    for (final entry in plan.folderEntries) {
+      try {
+        await widget.onRenameFolder(entry.id, entry.newBaseName);
+        applied++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    for (final entry in plan.fileEntries) {
+      try {
+        await widget.onRenameFile(entry.id, entry.newBaseName);
+        applied++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    if (!mounted) return;
+    _exitSelectionMode();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          failed == 0 ? '已重命名 $applied 项' : '重命名完成：成功 $applied 项，失败 $failed 项',
+        ),
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   // ====================================================================
