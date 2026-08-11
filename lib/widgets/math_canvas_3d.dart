@@ -1560,19 +1560,17 @@ class _ScenePainter extends CustomPainter {
       final i0 = mesh.indices[i];
       final i1 = mesh.indices[i + 1];
       final i2 = mesh.indices[i + 2];
-      final p0 = proj.project(mesh.vertices[i0]);
-      final p1 = proj.project(mesh.vertices[i1]);
-      final p2 = proj.project(mesh.vertices[i2]);
       // Skip triangles with non-finite vertices (e.g. formula surfaces
-      // hitting a singularity like z=1/x): they project to garbage and
-      // produce NaN normals that crash shading below.
+      // hitting a singularity like z=1/x) BEFORE projecting: they produce
+      // NaN normals that crash shading below.
       final v0 = mesh.vertices[i0];
       final v1 = mesh.vertices[i1];
       final v2 = mesh.vertices[i2];
-      if (!v0.isFinite ||
-          !v1.isFinite ||
-          !v2.isFinite ||
-          p0 == null ||
+      if (!v0.isFinite || !v1.isFinite || !v2.isFinite) continue;
+      final p0 = proj.project(v0);
+      final p1 = proj.project(v1);
+      final p2 = proj.project(v2);
+      if (p0 == null ||
           p1 == null ||
           p2 == null ||
           p0.x.isNaN ||

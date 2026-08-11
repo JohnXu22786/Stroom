@@ -38,7 +38,12 @@ void main() {
         gridX: 36,
         gridY: 36,
       );
-      state.addObject(Object3D.surface(mesh, name: 'f1'));
+      // Transparent style is REQUIRED to exercise the crash path: opaque
+      // faces are back-face culled (NaN normal fails the facing test) and
+      // the parallel projection filters NaN — only translucent surfaces
+      // reach _shaded with a NaN normal.
+      state.addObject(Object3D.surface(mesh,
+          name: 'f1', style: const ObjectStyle(opacity: 0.5)));
       await tester.pump();
       expect(tester.takeException(), isNull);
     });
