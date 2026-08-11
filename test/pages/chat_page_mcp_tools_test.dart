@@ -6,6 +6,7 @@ import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/chat_service.dart';
 
 /// Regression test for the "sometimes 7 tools, sometimes 12 tools" bug:
 ///
@@ -80,16 +81,20 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
-    // The enabled set must include the discovered MCP tool, not just the 7
-    // built-in tools.
+    // The enabled set must include the discovered MCP tool, not just the
+    // built-in tools. 内置工具数可能随内置工具增删变化（如 todowrite 与
+    // todoread 合并），因此以当前注册的内置工具数 + 1（MCP 占位）为基准，
+    // 而不是硬编码具体数字。
     final container =
         ProviderScope.containerOf(tester.element(find.byType(ChatPage)));
     final enabled = container.read(enabledToolNamesProvider);
     expect(enabled, contains('exa_mcp'),
         reason: 'MCP tool discovered during page init must be auto-enabled '
             '(badge/list must show the full count, not built-in-only)');
-    expect(enabled.length, greaterThan(7),
-        reason: 'the tool badge count must include MCP tools');
+    final builtinCount = ChatService.getRegisteredToolDefinitions().length;
+    expect(enabled.length, greaterThan(builtinCount),
+        reason: 'the tool badge count must include MCP tools '
+            '(built-in-only: $builtinCount)');
 
     // The tools panel must list the MCP tool alongside the built-ins.
     // The panel is a lazy ListView — scroll it to reveal the MCP tool
