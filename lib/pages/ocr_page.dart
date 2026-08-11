@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -11,6 +10,7 @@ import 'package:extended_image/extended_image.dart';
 
 import '../providers/provider_config.dart';
 import '../providers/background_task_provider.dart';
+import '../providers/ocr_instructions_provider.dart';
 import '../providers/text_provider.dart';
 import '../services/ocr_service.dart';
 import '../utils/data_sanitizer.dart';
@@ -19,6 +19,7 @@ import '../widgets/folder_picker_dialog.dart';
 import 'chat/composer/chat_album_picker_dialog.dart';
 import 'extended_image_editor_page.dart';
 import 'image_editor_page.dart';
+import 'ocr/ocr_instruction_dialog.dart';
 import 'ocr/ocr_shared.dart';
 import 'provider_config_page.dart';
 export 'ocr/ocr_shared.dart';
@@ -73,24 +74,27 @@ String? _getFirstOcrEntryId(WidgetRef ref) {
   return null;
 }
 
-/// Writes the content of the instruction at [instructionIndex] into
+/// Writes the content of the generic instruction at [instructionIndex] into
 /// [typeConfig]['userInstruction'] — the key the OCR service sends as the
-/// user-message text part. Returns the (possibly unchanged) typeConfig.
+/// user-message text part. Returns the (possibly changed) typeConfig.
 ///
-/// Out-of-range or default (-1) selections leave the config untouched so
-/// the request stays images-only.
+/// Out-of-range or default (-1) selections remove any 'userInstruction'
+/// from the request copy: the request must stay images-only even when the
+/// copied typeConfig still carries a legacy per-model instruction (kept in
+/// storage for the one-shot generic-store migration).
 @visibleForTesting
 Map<String, dynamic> applySelectedOcrInstruction(
   Map<String, dynamic> typeConfig,
-  List<Map<String, dynamic>> instructions,
+  List<OcrInstruction> instructions,
   int instructionIndex,
 ) {
   if (instructionIndex >= 0 && instructionIndex < instructions.length) {
-    final content =
-        (instructions[instructionIndex]['content'] as String?)?.trim() ?? '';
+    final content = instructions[instructionIndex].content.trim();
     if (content.isNotEmpty) {
       typeConfig['userInstruction'] = content;
     }
+  } else {
+    typeConfig.remove('userInstruction');
   }
   return typeConfig;
 }
@@ -121,9 +125,25 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   String? _errorMessage;
   int _selectedModelIndex = 0;
 
-  /// Index into the selected model's user instructions, or -1 for the
-  /// default behavior (images only, no instruction).
+  /// Index into the generic user instructions, or -1 for the default
+  /// behavior (images only, no instruction).
   int _selectedInstructionIndex = -1;
+
+  /// Instruction index restored from retry data, pending until the generic
+  /// instruction list finishes loading. The provider's initial state is
+  /// empty until its async load completes, so without this a restored
+  /// index would be clamped to the default before the list arrives.
+  int? _pendingRetryInstructionIndex;
+
+  /// Content of the retry's selected instruction (new retryData format).
+  /// When present, the restore matches by content — robust against the
+  /// list changing between the task failure and the retry, where an
+  /// index-based restore could land on a different instruction.
+  String? _pendingRetryInstructionContent;
+
+  /// Whether [_startOcr] is inside its retry-instruction resolve await —
+  /// blocks a second tap from starting a duplicate OCR during that gap.
+  bool _ocrStarting = false;
 
   /// Number of quick image edits still processing in the background.
   /// While non-zero, starting OCR is blocked — it would otherwise run
@@ -182,51 +202,44 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         }
       }
     }
-
     if (data['modelIndex'] is int) {
       _selectedModelIndex = data['modelIndex'] as int;
     }
     if (data['instructionIndex'] is int) {
-      _selectedInstructionIndex = data['instructionIndex'] as int;
+      _pendingRetryInstructionIndex = data['instructionIndex'] as int;
+      final content = data['instructionContent'] as String?;
+      _pendingRetryInstructionContent =
+          (content != null && content.trim().isNotEmpty)
+              ? content.trim()
+              : null;
+      unawaited(_resolvePendingRetryInstruction());
     }
   }
 
-  /// Returns the user instructions of a model as a list of {name, content}
-  /// maps, normalized (trimmed, blank-content entries dropped — a blank
-  /// instruction has nothing to send). Falls back to the legacy
-  /// single-string 'userInstruction' key.
-  ///
-  /// The same normalization feeds both the selector and the injection in
-  /// [_startOcr], keeping indices aligned.
-  List<Map<String, dynamic>> _getModelInstructions(_ModelOption option) {
-    final raw = option.model.typeConfig['userInstructions'];
-    if (raw is List) {
-      return raw
-          .whereType<Map>()
-          .map((e) => {
-                'name': (e['name']?.toString() ?? '').trim(),
-                'content': (e['content']?.toString() ?? '').trim(),
-              })
-          .where((m) => (m['content'] as String).isNotEmpty)
-          .toList();
+  /// Applies the retry instruction once the generic instruction list has
+  /// been loaded, falling back to the default (-1) when it cannot be
+  /// resolved. New retry data matches by content; pre-upgrade retry data
+  /// (index only) falls back to the index — resolved to the default when
+  /// out of range, never to a different instruction.
+  Future<void> _resolvePendingRetryInstruction() async {
+    final pending = _pendingRetryInstructionIndex;
+    if (pending == null) return;
+    await ref.read(ocrInstructionsProvider.notifier).load();
+    if (!mounted || _pendingRetryInstructionIndex == null) return;
+    _pendingRetryInstructionIndex = null;
+    final content = _pendingRetryInstructionContent;
+    _pendingRetryInstructionContent = null;
+    final instructions = ref.read(ocrInstructionsProvider);
+    final int idx;
+    if (content != null) {
+      idx = instructions.indexWhere((i) => i.content == content);
+    } else {
+      idx = (pending >= 0 && pending < instructions.length) ? pending : -1;
     }
-    final legacy = option.model.typeConfig['userInstruction'];
-    if (legacy is String && legacy.trim().isNotEmpty) {
-      return [
-        {'name': '', 'content': legacy.trim()}
-      ];
-    }
-    return [];
-  }
-
-  /// Display label for an instruction: its name, or the first line of the
-  /// content when unnamed (truncated to 20 chars).
-  String _instructionLabel(Map<String, dynamic> instruction) {
-    final name = (instruction['name'] as String?)?.trim() ?? '';
-    if (name.isNotEmpty) return name;
-    final content = (instruction['content'] as String?)?.trim() ?? '';
-    final firstLine = content.split('\n').first.trim();
-    return firstLine.length > 20 ? '${firstLine.substring(0, 20)}…' : firstLine;
+    // Always rebuild: while the restore was pending, the dropdown may be
+    // displaying the pending-derived value — it must reflect the resolved
+    // index even when it equals the current selection.
+    setState(() => _selectedInstructionIndex = idx);
   }
 
   @override
@@ -367,7 +380,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         if (mounted) {
           setState(() {
             _selectedModelIndex = clampedIndex;
-            _selectedInstructionIndex = -1;
           });
         }
       });
@@ -377,14 +389,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              cs.primaryContainer.withValues(alpha: 0.6),
-              cs.secondaryContainer.withValues(alpha: 0.3),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: cs.surface.withValues(alpha: 0.7),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
         ),
@@ -398,7 +403,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 color: cs.primary.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(Icons.tune, size: 16, color: cs.primary),
+              // 机器人图标，与对话页面输入框的模型标识一致
+              child:
+                  Icon(Icons.smart_toy_outlined, size: 16, color: cs.primary),
             ),
             const SizedBox(width: 10),
             Text(
@@ -440,8 +447,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       if (idx == null || idx >= modelOptions.length) return;
                       setState(() {
                         _selectedModelIndex = idx;
-                        // Instructions are per-model — reset the selection.
-                        _selectedInstructionIndex = -1;
                       });
                     },
                     items: List.generate(modelOptions.length, (i) {
@@ -470,25 +475,26 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     );
   }
 
-  /// Instruction selector shown below the model selector. Hidden when the
-  /// selected model has no user instructions.
+  /// Instruction selector shown below the model selector. Always visible
+  /// (regardless of whether any instruction is configured); managing the
+  /// generic instruction list happens here, on the OCR page.
   Widget _buildInstructionSelector(ColorScheme cs) {
     final modelOptions = _getOcrModelOptions(ref);
     if (modelOptions.isEmpty || _selectedModelIndex >= modelOptions.length) {
       return const SizedBox.shrink();
     }
-    final instructions =
-        _getModelInstructions(modelOptions[_selectedModelIndex]);
-    if (instructions.isEmpty) return const SizedBox.shrink();
+    final instructions = ref.watch(ocrInstructionsProvider);
 
     // Out-of-range selection (e.g. restored retry data whose instruction
     // list changed) falls back to the default (images only) — never to a
-    // different instruction.
-    final clamped = (_selectedInstructionIndex >= 0 &&
-            _selectedInstructionIndex < instructions.length)
-        ? _selectedInstructionIndex
-        : -1;
-    if (clamped != _selectedInstructionIndex) {
+    // different instruction. While a retry restore is pending (the list
+    // may still be loading), only the display is adjusted — the pending
+    // index itself is kept until [_resolvePendingRetryInstruction] lands.
+    final pending = _pendingRetryInstructionIndex;
+    final rawIndex = pending ?? _selectedInstructionIndex;
+    final clamped =
+        (rawIndex >= 0 && rawIndex < instructions.length) ? rawIndex : -1;
+    if (pending == null && clamped != _selectedInstructionIndex) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) setState(() => _selectedInstructionIndex = clamped);
       });
@@ -499,13 +505,21 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       child: Container(
         decoration: BoxDecoration(
           color: cs.surface.withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         child: Row(
           children: [
-            Icon(Icons.edit_note, size: 16, color: cs.primary),
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: cs.primary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.edit_note, size: 16, color: cs.primary),
+            ),
             const SizedBox(width: 10),
             Text(
               '识别指令',
@@ -544,7 +558,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     ),
                     onChanged: (idx) {
                       if (idx == null) return;
-                      setState(() => _selectedInstructionIndex = idx);
+                      setState(() {
+                        _selectedInstructionIndex = idx;
+                        // An explicit user choice wins over a pending
+                        // retry restore.
+                        _pendingRetryInstructionIndex = null;
+                      });
                     },
                     items: [
                       const DropdownMenuItem<int>(
@@ -558,7 +577,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                         return DropdownMenuItem<int>(
                           value: i,
                           child: Text(
-                            _instructionLabel(instructions[i]),
+                            ocrInstructionLabel(instructions[i]),
                             overflow: TextOverflow.ellipsis,
                           ),
                         );
@@ -567,6 +586,29 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   ),
                 ),
               ),
+            ),
+            // 在 OCR 页面管理通用识别指令
+            IconButton(
+              key: const Key('ocr_instruction_manage_btn'),
+              icon: Icon(
+                Icons.settings_outlined,
+                size: 18,
+                color: cs.onSurfaceVariant,
+              ),
+              tooltip: '管理识别指令',
+              // Keep the row height aligned with the model card (the
+              // default 48px tap target would inflate the card).
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: 32,
+                minHeight: 32,
+              ),
+              onPressed: () {
+                showDialog<void>(
+                  context: context,
+                  builder: (_) => const OcrInstructionManageDialog(),
+                );
+              },
             ),
           ],
         ),
@@ -1577,6 +1619,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   // ==================================================================
 
   Future<void> _startOcr() async {
+    if (_ocrStarting) return;
     if (_selectedImages.isEmpty) return;
     // A quick image edit is still processing — starting now would run
     // OCR on the unedited bytes.
@@ -1604,11 +1647,29 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           selectedOption.model.customParams.map((p) => p.copy()).toList(),
     );
 
-    // Inject the selected instruction into the request (service reads
-    // typeConfig['userInstruction']); unselected = default images-only.
+    // A retry instruction restore may still be pending (the generic list
+    // was still loading) — resolve it so the request carries the restored
+    // instruction instead of silently dropping it. Guarded so a second tap
+    // during the async load cannot start a duplicate OCR.
+    if (_pendingRetryInstructionIndex != null) {
+      _ocrStarting = true;
+      try {
+        await _resolvePendingRetryInstruction();
+      } finally {
+        _ocrStarting = false;
+      }
+    }
+
+    // The page may have been disposed while the restore load was in
+    // flight (e.g. back-press) — stop rather than using a dead [ref].
+    if (!mounted) return;
+
+    // Inject the selected generic instruction into the request (service
+    // reads typeConfig['userInstruction']); unselected = images-only.
+    final instructions = ref.read(ocrInstructionsProvider);
     applySelectedOcrInstruction(
       effectiveConfig.typeConfig,
-      _getModelInstructions(selectedOption),
+      instructions,
       _selectedInstructionIndex,
     );
 
@@ -1642,8 +1703,22 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     );
 
     // Step 3: Fire-and-forget retryData computation (only needed for retry).
-    unawaited(_computeOcrRetryData(taskId, imageBytesList, imageFormatList,
-        imageNameList, modelIndex, _selectedInstructionIndex, bgNotifier));
+    // Carries the selected instruction's content so the retry restore can
+    // match by content — an index could land on a different instruction
+    // if the generic list changed between the failure and the retry.
+    final instructionContent = (_selectedInstructionIndex >= 0 &&
+            _selectedInstructionIndex < instructions.length)
+        ? instructions[_selectedInstructionIndex].content
+        : null;
+    unawaited(_computeOcrRetryData(
+        taskId,
+        imageBytesList,
+        imageFormatList,
+        imageNameList,
+        modelIndex,
+        _selectedInstructionIndex,
+        instructionContent,
+        bgNotifier));
 
     // Step 4: Execute OCR immediately.
     try {
@@ -1663,6 +1738,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     List<String?> imageNameList,
     int modelIndex,
     int instructionIndex,
+    String? instructionContent,
     BackgroundTaskNotifier bgNotifier,
   ) async {
     try {
@@ -1680,6 +1756,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           'images': images,
           'modelIndex': modelIndex,
           'instructionIndex': instructionIndex,
+          if (instructionContent != null)
+            'instructionContent': instructionContent,
         };
       });
       bgNotifier.setRetryData(taskId, retryData);
@@ -1699,6 +1777,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           'images': images,
           'modelIndex': modelIndex,
           'instructionIndex': instructionIndex,
+          if (instructionContent != null)
+            'instructionContent': instructionContent,
         };
         bgNotifier.setRetryData(taskId, retryData);
       } catch (retryError) {
