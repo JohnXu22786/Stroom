@@ -1086,10 +1086,10 @@ class ToolFactory {
       final plane = isPlaneLike(type0) ? obj0 : obj1;
       final sphere = type0 == Object3DType.sphere ? obj0 : obj1;
       final n = plane.planeNormal.normalized();
-      // Plane equation n·p = d with a possibly unnormalized normal:
-      // signed distance = (n̂·center - d/|n|).
-      final dist = (n.dot(sphere.sphereCenter.toVector()) - plane.planeDValue) /
-          plane.planeNormal.magnitude;
+      // Plane equation N·p = d with a possibly unnormalized normal N:
+      // signed distance = N̂·center - d/|N| (NOT (N̂·center - d)/|N|).
+      final dist = n.dot(sphere.sphereCenter.toVector()) -
+          plane.planeDValue / plane.planeNormal.magnitude;
       if (dist.abs() < sphere.sphereRadius) {
         final r = dart_math
             .sqrt(sphere.sphereRadius * sphere.sphereRadius - dist * dist);

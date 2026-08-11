@@ -1,10 +1,10 @@
-﻿import 'dart:math' as dart_math;
+import 'dart:math' as dart_math;
 
 // ======================================================================
-// 3D Ã¦â€¢Â°Ã¥Â­Â¦Ã¦Â¨Â¡Ã¥Ââ€”Ã¦Â Â¸Ã¥Â¿Æ’Ã¥Â¯Â¹Ã¨Â±Â¡Ã¦Â¨Â¡Ã¥Å¾â€¹
+// 3D 数学模块核心对象模型
 //
-// Ã¥ÂÂÃ¦Â â€¡Ã§ÂºÂ¦Ã¥Â®Å¡Ã¯Â¼Ë†Ã¤Â¸Å½ GeoGebra 3D Ã¤Â¸â‚¬Ã¨â€¡Â´Ã¯Â¼â€°Ã¯Â¼Å¡Ã¥ÂÂ³Ã¦â€°â€¹Ã§Â³Â»Ã¯Â¼Å’Z Ã¨Â½Â´Ã¥Ââ€˜Ã¤Â¸Å Ã¯Â¼Å’
-// xOy Ã¥Â¹Â³Ã©ÂÂ¢Ã¤Â¸ÂºÃ¥Å“Â°Ã©ÂÂ¢Ã¯Â¼Ë†Ã§Â½â€˜Ã¦Â Â¼Ã£â‚¬Â2D Ã¨Ââ€Ã¥Å Â¨Ã¥Ââ€¡Ã¥Å“Â¨Ã¦Â­Â¤Ã¥Â¹Â³Ã©ÂÂ¢Ã¯Â¼â€°Ã£â‚¬â€š
+// 坐标约定（与 GeoGebra 3D 一致）：右手系，Z 轴向上，
+// xOy 平面为地面（网格、2D 联动均在此平面）。
 // ======================================================================
 
 /// A 3D point with x, y, z coordinates.
@@ -76,7 +76,7 @@ class Point3D {
   }
 
   /// Project this point onto the plane given by normal [n] and distance [d]
-  /// (plane equation: n Ã‚Â· p = d).
+  /// (plane equation: n · p = d).
   Point3D projectedOnPlane(Vector3D n, double d) {
     final nn = n.normalized();
     return this + nn * (d - nn.dot(toVector()));
@@ -320,10 +320,14 @@ class MeshData {
   }
 
   /// Transform all vertices by [transform].
+  ///
+  /// Stored normals are DROPPED: they are direction vectors and cannot be
+  /// carried through an arbitrary point transform (rotate/reflect/dilate
+  /// change them, and a reflection reverses them). The polyhedron/surface
+  /// factories recompute them from the transformed winding.
   MeshData transformed(Point3D Function(Point3D) transform) => MeshData(
         vertices: [for (final v in vertices) transform(v)],
         indices: indices,
-        normals: normals,
       );
 }
 
@@ -333,7 +337,7 @@ class MeshData {
 /// cylinder, sphere, surface) are rendered from their meshes.
 class Object3D {
   final Object3DType type;
-  final String name; // e.g. "A", "f", "c" Ã¢â‚¬â€ GeoGebra style label
+  final String name; // e.g. "A", "f", "c" — GeoGebra style label
   final bool visible;
   final ObjectStyle style;
 
@@ -345,7 +349,7 @@ class Object3D {
   final Point3D? pointA;
   final Point3D? pointB;
 
-  // Plane: aÃ‚Â·x + bÃ‚Â·y + cÃ‚Â·z = d  (normal = (a, b, c))
+  // Plane: a·x + b·y + c·z = d  (normal = (a, b, c))
   final double? planeA;
   final double? planeB;
   final double? planeC;
@@ -358,7 +362,7 @@ class Object3D {
   final double? arcStart;
   final double? arcEnd;
 
-  // Solid axis: cone/cylinder base-centerÃ¢â€ â€™apex direction (unit vector).
+  // Solid axis: cone/cylinder base-center→apex direction (unit vector).
   // Defaults to +Z; meshes are built along +Z and rotated into this axis.
   final Vector3D? solidAxis;
 
@@ -678,7 +682,7 @@ class Object3D {
     final k = Vector3D.unitZ.cross(a);
     if (k.magnitudeSquared < 1e-18) {
       // Parallel or anti-parallel with +Z. The flip must be a proper
-      // rotation (e.g. 180Â° around X: (x, y, z) â†’ (x, -y, -z)), NOT a
+      // rotation (e.g. 180° around X: (x, y, z) → (x, -y, -z)), NOT a
       // point reflection (-x, -y, -z): a reflection has determinant -1,
       // which reverses triangle winding and turns outward normals inward
       // (back-face culling then hides the solid entirely).
@@ -722,7 +726,7 @@ class Object3D {
         return sphereCenter;
       case Object3DType.cone:
       case Object3DType.cylinder:
-        // Midpoint of the axis (base center + axisÂ·h/2), works for any
+        // Midpoint of the axis (base center + axis·h/2), works for any
         // solid axis, not just +Z.
         return solidCenter + solidAxisValue * (solidHeight / 2);
       case Object3DType.plane:
@@ -784,7 +788,7 @@ class Object3D {
         final onPlane = rel - n * rel.dot(n);
         final r = circleRadius ?? 1;
         if (onPlane.magnitudeSquared < 1e-15) {
-          // Snap point projects to center Ã¢â‚¬â€ pick a fixed point on the circle.
+          // Snap point projects to center — pick a fixed point on the circle.
           return c + circleBasis(n).$1 * r;
         }
         return c + onPlane.normalized() * r;
@@ -832,7 +836,7 @@ class Object3D {
   }
 
   /// An orthonormal basis (u, v) of the plane perpendicular to [normal].
-  /// Works for any normal, including Ã‚Â±Z.
+  /// Works for any normal, including ±Z.
   static (Vector3D, Vector3D) circleBasis(Vector3D normal) {
     final n = normal.normalized();
     final ref =
@@ -923,13 +927,13 @@ class Object3D {
   }
 
   // ==================================================================
-  // Transformations (immutable Ã¢â‚¬â€ produce new objects)
+  // Transformations (immutable — produce new objects)
   // ==================================================================
 
   /// Translate by [t]. Keeps name/style/visibility.
   Object3D translated(Vector3D t) => transform((p) => p + t);
 
-  /// Reflect across the plane nÃ‚Â·p = d.
+  /// Reflect across the plane n·p = d.
   Object3D reflected(Vector3D n, double d) {
     // The plane equation uses the (possibly unnormalized) normal [n], so
     // the reflection must normalize: the plane is n̂·p = d/|n|.
@@ -1171,14 +1175,34 @@ class Object3D {
 
         var a1 = angleOf(f(pStart));
         var a2 = angleOf(f(pEnd));
-        // Keep the sweep direction of the original arc.
-        if (e0 >= s0) {
-          while (a2 - a1 < 0) {
-            a2 += 2 * dart_math.pi;
+        // Mirroring transforms (reflectPlane, negative dilate) have a
+        // linear part with determinant < 0 and reverse the sweep direction.
+        // Detect it by sampling the ORIGINAL basis vectors through f (the
+        // rebuilt circleBasis is always right-handed, so it cannot tell).
+        final u0v = f(c0 + u0) - c1;
+        final v0v = f(c0 + v0) - c1;
+        final flips = (u0v.cross(v0v)).dot(n1) < 0;
+        if (!flips) {
+          // Orientation-preserving transform: keep the sweep direction.
+          if (e0 >= s0) {
+            while (a2 - a1 < 0) {
+              a2 += 2 * dart_math.pi;
+            }
+          } else {
+            while (a2 - a1 > 0) {
+              a2 -= 2 * dart_math.pi;
+            }
           }
         } else {
-          while (a2 - a1 > 0) {
-            a2 -= 2 * dart_math.pi;
+          // Mirror: the sweep direction reverses.
+          if (e0 >= s0) {
+            while (a2 - a1 > 0) {
+              a2 -= 2 * dart_math.pi;
+            }
+          } else {
+            while (a2 - a1 < 0) {
+              a2 += 2 * dart_math.pi;
+            }
           }
         }
         // Recover the radius from the transformed start point (dilate
@@ -1289,7 +1313,7 @@ class Object3D {
 // Mesh builders for solids and surfaces
 // ======================================================================
 
-/// Builders for common solid meshes. All meshes are "closed" Ã¢â‚¬â€ faces are
+/// Builders for common solid meshes. All meshes are "closed" — faces are
 /// oriented so that outward normals point away from the interior.
 class MeshBuilder {
   /// A UV sphere centered at origin with the given [radius] and [segments].
@@ -1385,8 +1409,12 @@ class MeshBuilder {
     }
     final n = (base[1] - base[0]).cross(base[2] - base[0]).normalized();
     final dir = (direction ?? n).normalized() * height;
-    final top = [for (final p in base) p + dir];
-    return _extrude(base, top, 0, base.length, base.length, base.length * 2);
+    // The cap/side windings assume the extrusion goes to the +n side; when
+    // the caller extrudes downward (or clicked the base clockwise), reverse
+    // the base so every face still winds outward.
+    final b = dir.dot(n) < 0 ? base.reversed.toList() : base;
+    final top = [for (final p in b) p + dir];
+    return _extrude(b, top, 0, b.length, b.length, b.length * 2);
   }
 
   /// A pyramid from a base polygon [base] and apex [apex].
@@ -1394,17 +1422,21 @@ class MeshBuilder {
     if (base.length < 3) {
       return const MeshData(vertices: [], indices: []);
     }
-    final vertices = <Point3D>[...base, apex];
+    // Normalize the base winding so the apex sits on the +n side (the cap
+    // and side windings below assume that); otherwise every face is inward.
+    final n = (base[1] - base[0]).cross(base[2] - base[0]);
+    final b = n.dot(apex - base[0]) < 0 ? base.reversed.toList() : base;
+    final vertices = <Point3D>[...b, apex];
     final indices = <int>[];
     // Base cap: outward normal points away from the apex (-base normal).
-    for (int i = 0; i < base.length - 2; i++) {
+    for (int i = 0; i < b.length - 2; i++) {
       indices.addAll([0, i + 2, i + 1]);
     }
     // Side faces: (prev rim, next rim, apex) keeps normals outward.
-    for (int i = 0; i < base.length; i++) {
+    for (int i = 0; i < b.length; i++) {
       final a = i;
-      final b = (i + 1) % base.length;
-      indices.addAll([a, b, base.length]);
+      final c = (i + 1) % b.length;
+      indices.addAll([a, c, b.length]);
     }
     return MeshData(vertices: vertices, indices: indices);
   }
@@ -1437,8 +1469,14 @@ class MeshBuilder {
   /// A tetrahedron from 4 vertices.
   static MeshData tetrahedron(List<Point3D> v) {
     assert(v.length == 4);
-    const indices = [0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3];
-    return MeshData(vertices: v, indices: indices);
+    // Pick the winding by the orientation of the base triangle against the
+    // apex so the mesh is outward for any handedness of the caller's
+    // vertex layout (the tool's _tetrahedron and test fixtures differ).
+    final n = (v[1] - v[0]).cross(v[2] - v[0]);
+    const base = [0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3];
+    const flipped = [0, 1, 2, 0, 3, 1, 0, 2, 3, 1, 3, 2];
+    return MeshData(
+        vertices: v, indices: n.dot(v[3] - v[0]) < 0 ? flipped : base);
   }
 
   /// A cube (axis-aligned) with one corner at [min] and the opposite at [max].

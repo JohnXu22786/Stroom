@@ -89,9 +89,9 @@ void main() {
     });
 
     test('arc samples only its angular range', () {
-      // Quarter arc from 0 to π/2 on the unit circle in the xOy plane.
+      // Quarter arc from 0 to Ï€/2 on the unit circle in the xOy plane.
       // The circle basis is (u, v) = ((0,1,0), (-1,0,0)) for n = unitZ, so
-      // angle 0 lies at (0,1,0) and π/2 at (-1,0,0).
+      // angle 0 lies at (0,1,0) and Ï€/2 at (-1,0,0).
       final arc =
           Object3D.arc(Point3D.origin, Vector3D.unitZ, 1, 0, dart_math.pi / 2);
       final pts = arc.samplePoints();
@@ -214,7 +214,7 @@ void main() {
     test('plane transform rebuilds a valid plane', () {
       final pl = Object3D.plane(a: 0, b: 0, c: 1, d: 0);
       final moved = pl.translated(const Vector3D(0, 0, 3));
-      // Plane z=0 shifted up by 3 → d = 3.
+      // Plane z=0 shifted up by 3 â†’ d = 3.
       expect(moved.planeNormalC, closeTo(1, 1e-9));
       expect(moved.planeDValue, closeTo(3, 1e-9));
     });
@@ -387,6 +387,79 @@ void main() {
       });
     });
 
+    test('pyramid with apex below the base is still outward', () {
+      // The tool allows clicking the apex below the base (or the base
+      // clockwise); the mesh must adapt its winding.
+      final mesh = MeshBuilder.pyramid(
+          const [Point3D(0, 0, 0), Point3D(2, 0, 0), Point3D(2, 2, 0)],
+          const Point3D(1, 1, -2));
+      var cx = 0.0, cy = 0.0, cz = 0.0;
+      for (final v in mesh.vertices) {
+        cx += v.x;
+        cy += v.y;
+        cz += v.z;
+      }
+      final c = Point3D(cx / mesh.vertices.length, cy / mesh.vertices.length,
+          cz / mesh.vertices.length);
+      var inward = 0;
+      for (int i = 0; i < mesh.indices.length; i += 3) {
+        final a = mesh.vertices[mesh.indices[i]];
+        final b = mesh.vertices[mesh.indices[i + 1]];
+        final d = mesh.vertices[mesh.indices[i + 2]];
+        final normal = (b - a).cross(d - a);
+        final mid = Point3D((a.x + b.x + d.x) / 3, (a.y + b.y + d.y) / 3,
+            (a.z + b.z + d.z) / 3);
+        if (normal.dot(mid - c) < 0) inward++;
+      }
+      expect(inward, 0, reason: 'downward pyramid has $inward inward faces');
+
+      final clockwise = MeshBuilder.pyramid(
+          const [Point3D(0, 0, 0), Point3D(2, 2, 0), Point3D(2, 0, 0)],
+          const Point3D(1, 1, 4));
+      expect(clockwise.vertices.length, 4);
+      final ok = clockwise.indices.length >= 12;
+      expect(ok, isTrue);
+    });
+
+    test('transformed meshes recompute normals from the new winding', () {
+      // Rotating/reflecting a polyhedron must update its normals: the
+      // stored ones would be stale direction vectors.
+      final cube = Object3D.polyhedron(
+          MeshBuilder.cube(Point3D.origin, const Point3D(1, 1, 1)));
+      expect(cube.mesh!.normals.length, cube.mesh!.vertices.length);
+
+      final rotated = cube.rotated(Point3D.origin, Vector3D.unitX, 1.2);
+      final n = rotated.mesh!.normals;
+      expect(n.length, rotated.mesh!.vertices.length);
+      // A rotated cube still has outward normals: for each face, the
+      // average vertex normal must agree with the geometric face normal.
+      for (int i = 0; i < rotated.mesh!.indices.length; i += 3) {
+        final i0 = rotated.mesh!.indices[i];
+        final i1 = rotated.mesh!.indices[i + 1];
+        final i2 = rotated.mesh!.indices[i + 2];
+        final v = rotated.mesh!.vertices;
+        final geo = (v[i1] - v[i0]).cross(v[i2] - v[i0]);
+        final avg = (n[i0] + n[i1] + n[i2]).normalized();
+        expect(geo.dot(avg), greaterThan(0),
+            reason: 'stale normal after rotate at face $i');
+      }
+
+      final reflected = cube.reflected(const Vector3D(0, 0, 1), 0.5);
+      for (int i = 0; i < reflected.mesh!.indices.length; i += 3) {
+        final i0 = reflected.mesh!.indices[i];
+        final i1 = reflected.mesh!.indices[i + 1];
+        final i2 = reflected.mesh!.indices[i + 2];
+        final v = reflected.mesh!.vertices;
+        final geo = (v[i1] - v[i0]).cross(v[i2] - v[i0]);
+        final avg = (reflected.mesh!.normals[i0] +
+                reflected.mesh!.normals[i1] +
+                reflected.mesh!.normals[i2])
+            .normalized();
+        expect(geo.dot(avg), greaterThan(0),
+            reason: 'stale normal after reflect at face $i');
+      }
+    });
+
     test('anchorPoint of a tilted cone is the axis midpoint', () {
       final cone =
           Object3D.cone(Point3D.origin, 1, 3, axis: const Vector3D(1, 0, 0));
@@ -414,7 +487,7 @@ void main() {
       // Extent along the axis: 0..3 (radius 1).
       expect(maxX, closeTo(3, 1e-9));
       expect(minX, closeTo(0, 1e-9));
-      // Radial extent: ±1 in y/z.
+      // Radial extent: Â±1 in y/z.
       expect(maxY, closeTo(1, 1e-9));
       expect(minY, closeTo(-1, 1e-9));
       expect(maxZ, closeTo(1, 1e-9));

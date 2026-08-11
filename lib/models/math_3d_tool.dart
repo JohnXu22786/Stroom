@@ -156,14 +156,13 @@ class ToolInfo {
       tooltip: '求两个对象的交点',
       group: 1,
       steps: [
-        ToolStep('选择第一个对象（线/平面/球/曲面）', kind: InputKind.object, allowedTypes: {
+        ToolStep('选择第一个对象（线/平面/球/圆）', kind: InputKind.object, allowedTypes: {
           Object3DType.line,
           Object3DType.ray,
           Object3DType.segment,
           Object3DType.plane,
           Object3DType.sphere,
           Object3DType.circle,
-          Object3DType.polygon,
         }),
         ToolStep('选择第二个对象', kind: InputKind.object, allowedTypes: {
           Object3DType.line,
@@ -172,7 +171,6 @@ class ToolInfo {
           Object3DType.plane,
           Object3DType.sphere,
           Object3DType.circle,
-          Object3DType.polygon,
         }),
       ],
       isObjectTool: true,
