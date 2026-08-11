@@ -6,14 +6,14 @@ import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:image/image.dart' as img;
 
-import '../utils/pop_animation.dart';
-
 /// Outcome of the quick editor's background processing.
 ///
-/// The editor pops immediately on confirm; processing continues in the
-/// background and [ExtendedImageEditorPage.onProcessed] is invoked with
-/// the outcome — ALWAYS, on success and on failure — after the page has
-/// been disposed.
+/// The editor keeps the page alive until processing finishes: the UI is
+/// hidden on confirm (so the caller's page shows through — the route must
+/// be pushed non-opaque), processing runs while the page is still
+/// mounted, and only after [ExtendedImageEditorPage.onProcessed] has
+/// delivered the outcome does the page pop (deferred destroy). The
+/// callback fires ALWAYS, on success and on failure.
 sealed class QuickEditProcessingResult {
   const QuickEditProcessingResult();
 }
@@ -39,31 +39,51 @@ class QuickEditProcessingFailure extends QuickEditProcessingResult {
 ///
 /// Provides crop, rotate, and flip operations.
 ///
-/// When the user confirms editing (完成), the page pops IMMEDIATELY and
-/// the edited image is processed in the background — the user is never
-/// blocked by the (potentially slow) decode → crop → rotate → re-encode
-/// pipeline. The outcome is delivered via [onProcessed], which fires
-/// after the page has been disposed, so callers must not capture widget
-/// state (only plain values and their own `State` via `mounted` checks).
+/// When the user confirms editing (完成), the editor page does NOT pop
+/// away and get destroyed while the image is being processed. Instead:
+///
+/// 1. The editor UI is removed immediately (the page below becomes
+///    visible — the caller must push the route with `opaque: false`),
+///    but the page itself stays mounted. The route's modal barrier keeps
+///    the page below visible-but-frozen while the image processes; the
+///    caller's own gating UI (processing banner / disabled buttons)
+///    communicates the state.
+/// 2. The decode → crop → rotate → re-encode pipeline runs while the
+///    page is still alive; the user is never blocked by it and the edit
+///    is never lost.
+/// 3. Only after [onProcessed] has delivered the outcome (success or
+///    failure) does the page pop itself — the deferred destroy.
+///
+/// The page pops with `true` as the route result once the outcome has
+/// been delivered, or with `null` when the user closes the editor without
+/// confirming (no processing runs in that case).
 class ExtendedImageEditorPage extends StatefulWidget {
   final Uint8List imageBytes;
   final String fileName;
 
   /// Called with the processing outcome after the user confirms editing.
   ///
-  /// The editor pops immediately on confirm and pops with `true` as the
-  /// route result; image processing continues in the background
-  /// (decoupled from the widget lifecycle — all needed state is captured
-  /// before the pop) and this callback fires when it completes. It fires
-  /// on BOTH success and failure, but is NOT called when the user closes
-  /// the editor without confirming.
+  /// Fires when the background pipeline completes — on BOTH success and
+  /// failure — while the editor page is still alive. The page pops only
+  /// AFTER this callback returns (deferred destroy), so the edited image
+  /// is already received by the caller when the page is destroyed. It is
+  /// NOT called when the user closes the editor without confirming.
   final FutureOr<void> Function(QuickEditProcessingResult result) onProcessed;
+
+  /// Called synchronously the moment the user confirms editing (完成),
+  /// before processing starts.
+  ///
+  /// Callers use this to hold their in-flight guard (blocking send /
+  /// confirm while the pipeline runs) and release it in [onProcessed].
+  /// Not called when the user closes the editor without confirming.
+  final VoidCallback? onSubmitted;
 
   const ExtendedImageEditorPage({
     super.key,
     required this.imageBytes,
     required this.fileName,
     required this.onProcessed,
+    this.onSubmitted,
   });
 
   @override
@@ -75,7 +95,9 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
   final GlobalKey<ExtendedImageEditorState> _editorKey =
       GlobalKey<ExtendedImageEditorState>();
 
-  /// Guards against double-taps on 完成 while the exit transition runs.
+  /// Guards against double-taps on 完成 and marks the editor as
+  /// "submitted" — the UI is hidden while the pipeline runs and the page
+  /// is destroyed only after the result has been delivered.
   bool _submitting = false;
 
   Future<void> _onSave() async {
@@ -91,42 +113,93 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
       return;
     }
 
-    // Capture EVERYTHING the background pipeline needs BEFORE pop.
-    // After the route is disposed, `editorState` and `context` are
-    // invalid — only plain values are safe to use afterwards.
+    // Capture EVERYTHING the processing pipeline needs BEFORE the editor
+    // UI is replaced. Only plain values are safe for the pipeline to read
+    // afterwards.
     final action = editorState.editAction;
     final cropRect = editorState.getCropRect();
     final rawData = editorState.rawImageData;
     final messenger = ScaffoldMessenger.of(context);
     final onProcessed = widget.onProcessed;
+    // The editor's own route — the deferred destroy removes THIS route by
+    // identity, never "whatever happens to be on top".
     final route = ModalRoute.of(context);
 
-    _submitting = true;
+    // The user confirmed — hold the caller's in-flight guard NOW so send
+    // / confirm actions stay blocked while the pipeline runs. A throwing
+    // guard must not abort the submit: the caller's guard would be held
+    // with no pipeline to release it.
+    try {
+      widget.onSubmitted?.call();
+    } catch (e) {
+      debugPrint('QuickEditProcessing onSubmitted threw: $e');
+    }
 
-    // Pop IMMEDIATELY — the user is not blocked by image processing.
-    // Pop with `true` so callers can tell "confirmed" from "closed"
-    // without waiting for the background pipeline.
-    Navigator.pop(context, true);
+    setState(() => _submitting = true);
 
-    // Wait for the pop transition to finish BEFORE starting the
-    // pipeline: decode/rasterize work competes with the transition
-    // frames and would freeze the pop animation mid-flight.
-    await waitForPopAnimation(route);
-
-    // Route transition is complete — fire-and-forget the pipeline.
-    // It is a top-level function with no access to `this` or `context`,
-    // so it's safe to run after the widget is disposed.
-    unawaited(runQuickEditProcessing(
+    // Run the pipeline while the page is still alive (deferred destroy).
+    // The editor UI is now hidden; because the route was pushed
+    // non-opaque, the caller's page below is visible — its modal barrier
+    // blocks input until processing finishes (the caller's own gating UI,
+    // e.g. the processing banner, shows the state).
+    await runQuickEditProcessing(
       rawData: rawData,
       cropRect: cropRect,
       action: action,
       messenger: messenger,
-      onProcessed: onProcessed,
-    ));
+      onProcessed: (result) async {
+        try {
+          // 1) Deliver the outcome to the caller FIRST — the edited
+          //    image (or the failure) is now received by the caller.
+          await onProcessed(result);
+        } catch (e) {
+          // A throwing caller callback must never surface as an
+          // unhandled async error nor block the deferred destroy.
+          debugPrint('QuickEditProcessing onProcessed threw: $e');
+        } finally {
+          // 2) Only now destroy the editor page (deferred destroy).
+          //    Remove the editor ROUTE by identity — `Navigator.pop`
+          //    would pop whatever route is on top (the gallery pushes its
+          //    save dialog while the editor is hidden, and a route the
+          //    caller pushed could otherwise be popped instead, leaving a
+          //    zombie editor that swallows every system back press).
+          if (mounted) {
+            if (route != null) {
+              try {
+                Navigator.of(context).removeRoute(route, true);
+              } catch (e) {
+                // The route was already removed (e.g. an in-progress back
+                // swipe completed) — nothing left to destroy.
+                debugPrint('QuickEditProcessing route removal skipped: $e');
+              }
+            } else {
+              debugPrint(
+                  'QuickEditProcessing: editor route missing — deferred '
+                  'destroy skipped');
+            }
+          }
+        }
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    // After the user confirms, the page is kept alive (deferred destroy)
+    // but its UI is removed: the route below becomes visible again (the
+    // caller pushed the route with `opaque: false`). The route's modal
+    // barrier still absorbs input, so the caller's page is visible but
+    // not interactive while the image processes — the caller's own gating
+    // UI (processing banner / disabled buttons) communicates the state.
+    // System back is blocked so nothing can destroy the page before the
+    // pipeline delivers.
+    if (_submitting) {
+      return const PopScope(
+        canPop: false,
+        child: SizedBox.shrink(),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -139,10 +212,10 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () {
-            // Runtime check — same pattern as _onSave: the exiting route
-            // is not rebuilt, so the closure captured at build time stays
-            // live. Once EITHER button popped the route, a second pop
-            // would target the page BELOW the editor instead.
+            // Runtime guard: a stale close closure captured before a
+            // rebuild (e.g. from the frame where 完成 was just tapped)
+            // must never pop the page BELOW the editor. Once `_submitting`
+            // is set — by either button — every later handler is a no-op.
             if (_submitting) return;
             _submitting = true;
             Navigator.pop(context, null);
@@ -256,19 +329,20 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
 // ====================================================================
 // Background processing pipeline — decoupled from the widget lifecycle.
 //
-// All inputs are plain values captured before the editor pops, so this
-// can safely run after the page has been disposed.
+// All inputs are plain values captured before the editor UI is hidden,
+// so it is safe to run regardless of whether the editor page is still
+// mounted (it is — until the outcome is delivered).
 // ====================================================================
 
-/// Runs the crop/rotate/flip pipeline in the background and delivers the
-/// outcome via [onProcessed] — ALWAYS, on success and on failure.
+/// Runs the crop/rotate/flip pipeline and delivers the outcome via
+/// [onProcessed] — ALWAYS, on success and on failure.
 ///
 /// Errors are also reported via a snackbar on [messenger] (captured
-/// before the pop). The callback is invoked AFTER the try/catch so a
-/// throwing callback is the caller's bug, not a processing failure.
+/// before the UI is hidden). The callback is invoked AFTER the try/catch
+/// so a throwing callback is the caller's bug, not a processing failure.
 ///
-/// Top-level and parameterized so it can run after the editor page is
-/// disposed; exposed for direct testing of the delivery contract.
+/// Top-level and parameterized so it can run regardless of the editor
+/// page's lifecycle; exposed for direct testing of the delivery contract.
 Future<void> runQuickEditProcessing({
   required Uint8List rawData,
   required Rect? cropRect,
@@ -416,4 +490,60 @@ Future<Uint8List?> _processImage({
 /// JPEG 源（FFD8FF 魔数）→ 输出 JPEG q90。
 bool _isJpegPhotoSource(Uint8List bytes) {
   return bytes.length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8;
+}
+
+// ====================================================================
+// Transparent editor route
+//
+// The editor's deferred-destroy flow (hide UI on confirm, keep the page
+// alive until the result is delivered) only works if the route below is
+// painted once the editor's own UI is gone. [MaterialPageRoute] is always
+// opaque in current Flutter, so the editor is presented through this
+// non-opaque Material route instead.
+// ====================================================================
+
+/// A [MaterialPageRoute]-style route that is transparent (`opaque: false`).
+///
+/// [ExtendedImageEditorPage] relies on this: after the user confirms, the
+/// editor removes its own UI while the page stays alive — a non-opaque
+/// route lets the caller's page (chat / picker / gallery / OCR) show
+/// through while the image processes. The route keeps its default modal
+/// barrier, so the caller's page stays visible-but-frozen during that
+/// window (its own gating UI communicates the state).
+class QuickEditEditorRoute extends PageRoute<bool>
+    with MaterialRouteTransitionMixin<bool> {
+  QuickEditEditorRoute({required this.builder});
+
+  final WidgetBuilder builder;
+
+  @override
+  Widget buildContent(BuildContext context) => builder(context);
+
+  @override
+  bool get maintainState => true;
+
+  @override
+  bool get opaque => false;
+}
+
+/// Builds the route used to present the quick editor.
+///
+/// Every caller MUST push through this helper: the route is non-opaque,
+/// which is what lets the caller's page become visible again the moment
+/// the editor hides its UI on confirm (deferred destroy).
+Route<bool> buildQuickEditEditorRoute({
+  required Uint8List imageBytes,
+  required String fileName,
+  required FutureOr<void> Function(QuickEditProcessingResult result)
+      onProcessed,
+  VoidCallback? onSubmitted,
+}) {
+  return QuickEditEditorRoute(
+    builder: (_) => ExtendedImageEditorPage(
+      imageBytes: imageBytes,
+      fileName: fileName,
+      onProcessed: onProcessed,
+      onSubmitted: onSubmitted,
+    ),
+  );
 }

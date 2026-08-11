@@ -417,41 +417,42 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
 
     // User tapped edit — open the ExtendedImage quick editor
     // (no save dialog needed for chat page attachments).
-    // The editor pops immediately and processes in the background;
-    // the pending attachment is updated from the callback once ready.
-    final confirmed = await Navigator.push<bool>(
+    // The editor hides its UI on confirm but stays alive while the image
+    // processes in the background (deferred destroy); the route is
+    // non-opaque so the composer shows through. The pending attachment is
+    // updated from the callback once the edited bytes are ready.
+    await Navigator.push<bool>(
       context,
-      MaterialPageRoute(
-        builder: (_) => ExtendedImageEditorPage(
-          imageBytes: imageBytes,
-          fileName: att.fileName,
-          onProcessed: (result) async {
-            try {
-              if (result is! QuickEditProcessingSuccess) return;
-              if (!mounted) return;
-              if (index >= _pendingAttachments.length) return;
-              // Verify the attachment at this index is still the same
-              // one we tapped
-              if (_pendingAttachments[index].id != att.id) return;
+      buildQuickEditEditorRoute(
+        imageBytes: imageBytes,
+        fileName: att.fileName,
+        onSubmitted: () {
+          // The user confirmed — hold the send button NOW. The pending
+          // attachment still holds the unedited bytes until the edit
+          // callback applies them; releasing happens in onProcessed.
+          if (mounted) setState(() => _editsInFlight++);
+        },
+        onProcessed: (result) async {
+          try {
+            if (result is! QuickEditProcessingSuccess) return;
+            if (!mounted) return;
+            if (index >= _pendingAttachments.length) return;
+            // Verify the attachment at this index is still the same
+            // one we tapped
+            if (_pendingAttachments[index].id != att.id) return;
 
-              // Editor delivered edited bytes — update the pending
-              // attachment
-              await _updatePendingAttachmentAfterEdit(
-                  index, result.editedBytes);
-            } finally {
-              // The pipeline always fires the callback (success or
-              // failure) — release the send-blocking guard here.
-              if (mounted) setState(() => _editsInFlight--);
-            }
-          },
-        ),
+            // Editor delivered edited bytes — update the pending
+            // attachment
+            await _updatePendingAttachmentAfterEdit(
+                index, result.editedBytes);
+          } finally {
+            // The pipeline always fires the callback (success or
+            // failure) — release the send-blocking guard here.
+            if (mounted) setState(() => _editsInFlight--);
+          }
+        },
       ),
     );
-    if (confirmed == true && mounted) {
-      // The pipeline is now running — hold the send button until the
-      // callback releases it.
-      setState(() => _editsInFlight++);
-    }
   }
 
   /// Updates the pending attachment at [index] with [editedBytes].
@@ -462,10 +463,11 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     int index,
     Uint8List editedBytes,
   ) async {
-    // The composer is interactive while the editor processes in the
-    // background — the attachment at [index] may have been removed or
-    // reordered since the edit started. Bail out BEFORE any file I/O
-    // so we never delete the file of an attachment that is still in use.
+    // The editor's modal barrier keeps the composer frozen while the
+    // image processes, but the composer may still be disposed (leaving
+    // the chat) or switched to another conversation mid-pipeline. Bail
+    // out BEFORE any file I/O so we never delete the file of an
+    // attachment that is still in use.
     if (index >= _pendingAttachments.length) return;
     final oldAtt = _pendingAttachments[index];
 
@@ -494,10 +496,9 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         base64Data: newBase64,
       );
 
-      // The composer is interactive while the editor processes in the
-      // background — the attachment at [index] may have been removed or
-      // reordered during the awaits above. Re-validate BEFORE any
-      // destructive file I/O so we never delete the file of an
+      // Defense-in-depth: the composer may be disposed or switched to
+      // another conversation during the awaits above. Re-validate BEFORE
+      // any destructive file I/O so we never delete the file of an
       // attachment that is still in the list.
       if (!mounted ||
           index >= _pendingAttachments.length ||

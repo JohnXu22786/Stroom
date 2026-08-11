@@ -195,8 +195,11 @@ void main() {
           () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
         );
 
-        // Confirm the edit — the editor pops immediately and the image
-        // processing continues in the background.
+        // Confirm the edit — the editor hides its UI immediately and the
+        // image processing continues in the background (deferred destroy:
+        // the page stays alive until the result is delivered). The
+        // composer's in-flight guard is armed synchronously via
+        // onSubmitted.
         await tester.tap(find.text('完成'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
@@ -208,8 +211,12 @@ void main() {
             of: find.byTooltip('发送'), matching: find.byType(IconButton)));
         expect(sendBtn.onPressed, isNull);
 
-        // Focus the text field and press Enter — must not send.
-        await tester.tap(find.byType(TextField));
+        // Focus the text field and press Enter — must not send. The
+        // editor's hidden modal barrier blocks hit-testing while it sits
+        // on top, so focus is acquired programmatically via enterText
+        // (which bypasses hit-testing); the in-flight guard in
+        // _handleSubmitted is what must stop the send.
+        await tester.enterText(find.byType(TextField), 'hello');
         await tester.pump();
         await tester.sendKeyEvent(LogicalKeyboardKey.enter);
         await tester.pump();

@@ -557,63 +557,63 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
       return;
     }
 
-    // User tapped edit — open quick editor. The editor pops immediately
-    // and processes in the background; the selection is updated from the
-    // callback once the edited bytes are ready.
-    final confirmed = await Navigator.push<bool>(
+    // User tapped edit — open quick editor. The editor hides its UI on
+    // confirm but stays alive while the image processes in the background
+    // (deferred destroy); the route is non-opaque so the picker shows
+    // through. The selection is updated from the callback once the
+    // edited bytes are ready.
+    await Navigator.push<bool>(
       context,
-      MaterialPageRoute(
-        builder: (_) => ExtendedImageEditorPage(
-          imageBytes: imageBytes,
-          fileName: fileName,
-          onProcessed: (result) async {
+      buildQuickEditEditorRoute(
+        imageBytes: imageBytes,
+        fileName: fileName,
+        onSubmitted: () {
+          // The user confirmed — hold the confirm button NOW. The
+          // selection still holds the unedited bytes until the edit
+          // callback applies them; released in onProcessed.
+          if (mounted) setState(() => _editsInFlight++);
+        },
+        onProcessed: (result) async {
+          try {
+            if (result is! QuickEditProcessingSuccess) return;
+            final editedBytes = result.editedBytes;
+            if (!mounted) return;
+
+            // Save edited bytes to temp cache directory instead of
+            // overwriting original
             try {
-              if (result is! QuickEditProcessingSuccess) return;
-              final editedBytes = result.editedBytes;
-              if (!mounted) return;
-
-              // Save edited bytes to temp cache directory instead of
-              // overwriting original
-              try {
-                final tempDir = await getTemporaryDirectory();
-                final tempFileName =
-                    'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
-                final tempFile = File('${tempDir.path}/$tempFileName');
-                await tempFile.writeAsBytes(editedBytes);
-                _tempEditFiles.add(tempFile.path);
-              } catch (_) {
-                // Temp file save is best-effort; we keep the bytes in
-                // memory
-              }
-
-              // The dialog is interactive while the editor processes in
-              // the background — it may have been dismissed, or the item
-              // removed (and possibly re-added) since the edit started.
-              // Only apply the edit if it is still the same entry.
-              if (!mounted) return;
-              final current = _selectedItems[recordKey];
-              if (current == null || !identical(current.value, imageBytes)) {
-                return;
-              }
-
-              // Update the selected item in-memory with edited bytes
-              setState(() {
-                _selectedItems[recordKey] = MapEntry(fileName, editedBytes);
-              });
-            } finally {
-              // The pipeline always fires the callback (success or
-              // failure) — release the confirm-blocking guard here.
-              if (mounted) setState(() => _editsInFlight--);
+              final tempDir = await getTemporaryDirectory();
+              final tempFileName =
+                  'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+              final tempFile = File('${tempDir.path}/$tempFileName');
+              await tempFile.writeAsBytes(editedBytes);
+              _tempEditFiles.add(tempFile.path);
+            } catch (_) {
+              // Temp file save is best-effort; we keep the bytes in
+              // memory
             }
-          },
-        ),
+
+            // Defense-in-depth: the picker may be dismissed while the
+            // pipeline runs. Only apply the edit if it is still the
+            // same entry.
+            if (!mounted) return;
+            final current = _selectedItems[recordKey];
+            if (current == null || !identical(current.value, imageBytes)) {
+              return;
+            }
+
+            // Update the selected item in-memory with edited bytes
+            setState(() {
+              _selectedItems[recordKey] = MapEntry(fileName, editedBytes);
+            });
+          } finally {
+            // The pipeline always fires the callback (success or
+            // failure) — release the confirm-blocking guard here.
+            if (mounted) setState(() => _editsInFlight--);
+          }
+        },
       ),
     );
-    if (confirmed == true && mounted) {
-      // The pipeline is now running — hold the confirm button until the
-      // callback releases it.
-      setState(() => _editsInFlight++);
-    }
   }
 
   String _formatSize(int bytes) {
