@@ -1192,4 +1192,95 @@ void main() {
           isFalse);
     });
   });
+
+  // ═════════════════════════════════════════════════════════════════════
+  // readTextAttachmentContent —— 文本附件发送内容读取
+  // ═════════════════════════════════════════════════════════════════════
+  group('readTextAttachmentContent', () {
+    late Directory tmpRoot;
+
+    setUp(() {
+      tmpRoot = Directory.systemTemp.createTempSync('stroom_txt_att_test_');
+      PathProviderPlatform.instance = _FakePathProviderPlatform(tmpRoot.path);
+    });
+
+    tearDown(() {
+      try {
+        tmpRoot.deleteSync(recursive: true);
+      } catch (_) {
+        // 非关键清理
+      }
+    });
+
+    test('超过 4000 字节的文本附件完整返回、不截断（回归）', () async {
+      // 回归：发送前曾把文本附件截断到 4000 字节并追加
+      // "... [truncated]"，模型只能看到文件开头——现在任何文本
+      // 都必须完整发送。
+      final content = List.generate(8000, (i) => 'a${i % 10}').join();
+      expect(utf8.encode(content).length, greaterThan(4000));
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      final path = await AttachmentStorage.saveFile('big.txt', bytes);
+
+      final result =
+          await readTextAttachmentContent('big.txt', path, bytes.length);
+
+      expect(result, content, reason: '文本附件内容必须逐字节完整返回，不得截断');
+      expect(result, isNot(contains('[truncated]')));
+    });
+
+    test('4000 字节以内的文本附件原样返回', () async {
+      final content = '短文本内容';
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      final path = await AttachmentStorage.saveFile('short.txt', bytes);
+
+      final result =
+          await readTextAttachmentContent('short.txt', path, bytes.length);
+
+      expect(result, content);
+    });
+
+    test('超过 10MB 硬顶的文本附件返回"文件过大已跳过"占位（不静默截断）', () async {
+      // 与视频/音频/文档等其余附件类型一致：内容要么完整发送、
+      // 要么明确提示跳过，绝不发送被悄悄切掉的部分。
+      final content = 'x' * (10 * 1024 * 1024 + 1);
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      final path = await AttachmentStorage.saveFile('huge.txt', bytes);
+
+      final result =
+          await readTextAttachmentContent('huge.txt', path, bytes.length);
+
+      expect(result, '[文件过大已跳过: huge.txt]');
+    });
+
+    test('fileSize 超限时在读取前拦截（不加载超大文件进内存）', () async {
+      // 与 readAttachmentBase64 一致：附件元数据 fileSize 超硬顶时
+      // 直接返回占位，绝不把超大文件整包读入内存再丢弃。
+      final bytes = Uint8List.fromList(utf8.encode('小文件'));
+      final path = await AttachmentStorage.saveFile('tiny.txt', bytes);
+
+      final result = await readTextAttachmentContent(
+          'tiny.txt', path, maxAttachmentBytes + 1);
+
+      expect(result, '[文件过大已跳过: tiny.txt]');
+    });
+
+    test('fileSize 元数据滞后（旧草稿为 0）时按实际字节硬顶拦截', () async {
+      // 回归：旧草稿恢复的附件 fileSize 可能为 0，预检查放行后必须
+      // 由读取后的实际字节数兜底拦截——否则 10MB 硬顶形同虚设。
+      final content = 'x' * (10 * 1024 * 1024 + 1);
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      final path = await AttachmentStorage.saveFile('stale.txt', bytes);
+
+      final result = await readTextAttachmentContent('stale.txt', path, 0);
+
+      expect(result, '[文件过大已跳过: stale.txt]');
+    });
+
+    test('文件不存在返回 null（调用方渲染"无法读取"占位）', () async {
+      final result = await readTextAttachmentContent(
+          'ghost.txt', 'attachments/ghost_1.txt', 1024);
+
+      expect(result, isNull);
+    });
+  });
 }

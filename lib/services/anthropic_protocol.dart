@@ -127,7 +127,7 @@ class AnthropicProtocol implements ChatProtocol {
             // ── 文本类文件：读取内容 ──
             if (isTextAttachment(att)) {
               final textContent = await readTextAttachmentContent(
-                  att.fileName, att.storagePath);
+                  att.fileName, att.storagePath, att.fileSize);
               if (textContent != null) {
                 parts.add({
                   'type': 'text',
