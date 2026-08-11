@@ -17,8 +17,8 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
         _customParams.any((p) => p.paramName.trim() == name);
   }
 
-  /// 拖拽排序把手（附加参数卡片与选项值行用；力度胶囊为长按拖拽，
-  /// 无需把手）。
+  /// 拖拽排序把手（附加参数卡片用；力度/附加/自定义参数胶囊为长按
+  /// 拖拽，无需把手）。
   Widget _buildDragHandle({required int index}) {
     return ReorderableDragStartListener(
       index: index,
@@ -26,173 +26,6 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
         padding: EdgeInsets.symmetric(horizontal: 2),
         child: Icon(Icons.drag_handle, size: 20, color: Colors.grey),
       ),
-    );
-  }
-
-  /// 附加参数值块：与推理力度同款的胶囊块——点击勾选/取消（默认
-  /// 全选），长按拖拽排序；供应商来源的块不可删除。
-  Widget _buildAdditionalOptionBlock(
-    ReasoningParam param,
-    String value,
-    ColorScheme cs,
-  ) {
-    final selected = _additionalSelectedValues[param]?.contains(value) ?? false;
-    final fromProvider =
-        _providerAdditionalValues[param]?.contains(value) ?? false;
-
-    final chip = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: selected ? cs.primaryContainer : Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: selected ? cs.primary : cs.outlineVariant,
-          width: selected ? 1.5 : 1,
-        ),
-      ),
-      child: Text(
-        value,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-          color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
-        ),
-      ),
-    );
-
-    final pill = fromProvider
-        ? chip
-        : Stack(
-            clipBehavior: Clip.none,
-            children: [
-              chip,
-              Positioned(
-                top: -6,
-                right: -6,
-                child: GestureDetector(
-                  onTap: () => _removeAdditionalBlock(param, value),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: cs.errorContainer,
-                      shape: BoxShape.circle,
-                    ),
-                    padding: const EdgeInsets.all(2),
-                    child: Icon(
-                      Icons.close,
-                      size: 12,
-                      color: cs.onErrorContainer,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-
-    return DragTarget<String>(
-      onWillAcceptWithDetails: (details) => details.data != value,
-      onAcceptWithDetails: (details) =>
-          _moveAdditionalBlockTo(param, details.data, value),
-      builder: (context, candidateData, rejectedData) {
-        return LongPressDraggable<String>(
-          data: value,
-          // 长按触发时间（与力度胶囊一致，约 330ms）
-          delay: const Duration(milliseconds: 330),
-          childWhenDragging: Opacity(opacity: 0.3, child: pill),
-          feedback: Material(
-            color: Colors.transparent,
-            child: Opacity(opacity: 0.8, child: pill),
-          ),
-          child: GestureDetector(
-            onTap: () => _toggleAdditionalBlock(param, value),
-            child: pill,
-          ),
-        );
-      },
-    );
-  }
-
-  /// 推理力度值块：小圆形胶囊（点击高亮/取消，多选），横向排列，
-  /// 长按胶囊拖拽排序。自定义（非供应商来源）块右上角带删除按钮。
-  Widget _buildEffortOptionBlock(
-    String value,
-    ColorScheme cs, {
-    required bool selected,
-    required bool fromProvider,
-  }) {
-    final chip = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        // 配色与聊天推理面板的 OptionChip 一致：
-        // 选中 = primaryContainer 淡底色 + 主色边框；未选 = 透明 + 灰边框
-        color: selected ? cs.primaryContainer : Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: selected ? cs.primary : cs.outlineVariant,
-          width: selected ? 1.5 : 1,
-        ),
-      ),
-      child: Text(
-        value,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-          color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
-        ),
-      ),
-    );
-
-    final pill = fromProvider
-        ? chip
-        : Stack(
-            clipBehavior: Clip.none,
-            children: [
-              chip,
-              // 自定义值删除按钮（右上角）
-              Positioned(
-                top: -6,
-                right: -6,
-                child: GestureDetector(
-                  onTap: () => _removeEffortBlock(value),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: cs.errorContainer,
-                      shape: BoxShape.circle,
-                    ),
-                    padding: const EdgeInsets.all(2),
-                    child: Icon(
-                      Icons.close,
-                      size: 12,
-                      color: cs.onErrorContainer,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-
-    return DragTarget<String>(
-      onWillAcceptWithDetails: (details) => details.data != value,
-      onAcceptWithDetails: (details) => _moveBlockTo(details.data, value),
-      builder: (context, candidateData, rejectedData) {
-        return LongPressDraggable<String>(
-          data: value,
-          // 长按触发时间（默认约 500ms，缩短至约 330ms 更跟手）
-          delay: const Duration(milliseconds: 330),
-          // 拖拽中半透明显示原位置
-          childWhenDragging: Opacity(
-            opacity: 0.3,
-            child: pill,
-          ),
-          feedback: Material(
-            color: Colors.transparent,
-            child: Opacity(opacity: 0.8, child: pill),
-          ),
-          child: GestureDetector(
-            onTap: () => _toggleEffortBlock(value),
-            child: pill,
-          ),
-        );
-      },
     );
   }
 
@@ -320,50 +153,62 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               },
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    initialValue: toggle.onValue ?? '',
-                    decoration: InputDecoration(
-                      labelText: '开启时值',
-                      hintText: '如 enabled、true',
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    onChanged: (v) {
-                      toggle.onValue = v;
-                      setState(() {});
-                    },
-                  ),
+            // 布尔类型开关与推理力度一致：无需配置开/关值，聊天面板
+            // 提供开/关切换（请求按开关状态发送 'true'/'false'）。
+            if (toggle.type == 'boolean')
+              Text(
+                '布尔类型无需配置参数值，聊天面板提供开/关切换。',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: toggle.offValue ?? '',
-                    decoration: InputDecoration(
-                      labelText: '关闭时值',
-                      hintText: '如 disabled、false',
-                      border: const OutlineInputBorder(),
-                      isDense: true,
+              )
+            else ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      initialValue: toggle.onValue ?? '',
+                      decoration: InputDecoration(
+                        labelText: '开启时值',
+                        hintText: '如 enabled、true',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onChanged: (v) {
+                        toggle.onValue = v;
+                        setState(() {});
+                      },
                     ),
-                    onChanged: (v) {
-                      toggle.offValue = v;
-                      setState(() {});
-                    },
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '推理开关打开时发送「${toggle.onValue ?? ''}」，'
-              '关闭时发送「${toggle.offValue ?? ''}」',
-              style: TextStyle(
-                fontSize: 11,
-                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      initialValue: toggle.offValue ?? '',
+                      decoration: InputDecoration(
+                        labelText: '关闭时值',
+                        hintText: '如 disabled、false',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onChanged: (v) {
+                        toggle.offValue = v;
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                '推理开关打开时发送「${toggle.onValue ?? ''}」，'
+                '关闭时发送「${toggle.offValue ?? ''}」',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -513,19 +358,16 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 ),
               ),
               const SizedBox(height: 8),
-              // 勾选块：横向胶囊排列，长按拖拽排序
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final value in _effortBlockValues)
-                    _buildEffortOptionBlock(
-                      value,
-                      cs,
-                      selected: _effortSelectedValues.contains(value),
-                      fromProvider: _providerEffortValues.contains(value),
-                    ),
-                ],
+              // 勾选块：横向胶囊排列，长按拖拽排序。拖拽时其余块自动
+              // 让位并显示目标槽位，松手后平滑滑入目标位置。
+              DragSortArea(
+                wrap: true,
+                values: _effortBlockValues,
+                selected: (v) => _effortSelectedValues.contains(v),
+                deletable: (v) => !_providerEffortValues.contains(v),
+                onTap: _toggleEffortBlock,
+                onDelete: _removeEffortBlock,
+                onReorder: _moveBlockTo,
               ),
               const SizedBox(height: 4),
               TextButton.icon(
@@ -679,15 +521,19 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 ),
               ),
               const SizedBox(height: 8),
-              // 勾选块：横向胶囊排列，长按拖拽排序（与推理力度同款）
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final value
-                      in _additionalBlockValues[param] ?? const <String>[])
-                    _buildAdditionalOptionBlock(param, value, cs),
-                ],
+              // 勾选块：横向胶囊排列，长按拖拽排序（与推理力度同款，
+              // 含目标槽位反馈与让位动画）
+              DragSortArea(
+                wrap: true,
+                values: _additionalBlockValues[param] ?? const <String>[],
+                selected: (v) =>
+                    _additionalSelectedValues[param]?.contains(v) ?? false,
+                deletable: (v) =>
+                    !(_providerAdditionalValues[param]?.contains(v) ?? false),
+                onTap: (v) => _toggleAdditionalBlock(param, v),
+                onDelete: (v) => _removeAdditionalBlock(param, v),
+                onReorder: (from, to) =>
+                    _moveAdditionalBlockTo(param, from, to),
               ),
               const SizedBox(height: 4),
               TextButton.icon(

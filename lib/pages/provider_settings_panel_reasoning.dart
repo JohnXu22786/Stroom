@@ -97,6 +97,81 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
     );
   }
 
+  /// 选项值行（把手 + 输入框 + 删除按钮）。把手 = [DragSortRowHandle]：
+  /// 长按把手拖拽整行排序（与胶囊的长按交互一致，拖拽时显示目标
+  /// 槽位反馈与让位动画）。[feedback] 为拖拽时跟随手指的整行副本。
+  Widget _buildOptionRow(
+    int rowIndex,
+    String value,
+    ReasoningParam param,
+    ColorScheme cs, {
+    required bool editable,
+  }) {
+    final actualIndex = _reasoningParams.indexOf(param);
+    final staticHandle = const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 2),
+      child: Icon(Icons.drag_handle, size: 20, color: Colors.grey),
+    );
+    final field = Expanded(
+      // SyncedValueField：拖拽排序后行索引与值重新对应，外部值变化
+      // 时同步显示文本（initialValue 不会跟随重建更新）
+      child: SyncedValueField(
+        value: value,
+        readOnly: !editable,
+        decoration: InputDecoration(
+          labelText: '选项 ${rowIndex + 1}',
+          hintText: editable ? '如 low, medium, high' : '请先填写推理开关',
+          border: const OutlineInputBorder(),
+          isDense: true,
+        ),
+        onChanged: (v) {
+          param.options[rowIndex] = v;
+          setState(() {});
+        },
+      ),
+    );
+    final removeBtn = param.options.length > 1
+        ? IconButton(
+            icon: const Icon(Icons.remove_circle, color: Colors.red, size: 18),
+            onPressed: editable
+                ? () => _removeOptionFromParam(actualIndex, rowIndex)
+                : null,
+            tooltip: '删除选项',
+          )
+        : const SizedBox.shrink();
+    // 拖拽反馈：整行副本（含静态把手图标）
+    final row = SizedBox(
+      height: 56,
+      child: Row(
+        children: [
+          staticHandle,
+          const SizedBox(width: 2),
+          field,
+          const SizedBox(width: 4),
+          removeBtn,
+        ],
+      ),
+    );
+    return Row(
+      children: [
+        DragSortRowHandle(
+          index: rowIndex,
+          enabled: editable,
+          feedback: Material(
+            elevation: 2,
+            borderRadius: BorderRadius.circular(8),
+            child: row,
+          ),
+          child: staticHandle,
+        ),
+        const SizedBox(width: 2),
+        field,
+        const SizedBox(width: 4),
+        removeBtn,
+      ],
+    );
+  }
+
   // ===================================================================
   // 推理参数帮助方法
   // ===================================================================
@@ -133,6 +208,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
   bool get _isToggleComplete {
     final toggle = _toggleReasoningParam;
     if (toggle == null) return false;
+    // boolean 类型开关只需参数名（开/关值由聊天面板提供）
+    if (toggle.type == 'boolean') {
+      return toggle.paramName.trim().isNotEmpty;
+    }
     return toggle.paramName.trim().isNotEmpty &&
         (toggle.onValue != null && toggle.onValue!.trim().isNotEmpty) &&
         (toggle.offValue != null && toggle.offValue!.trim().isNotEmpty);
@@ -303,50 +382,62 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               },
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    initialValue: toggle.onValue ?? '',
-                    decoration: InputDecoration(
-                      labelText: '开启时值',
-                      hintText: '如 enabled、true',
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    onChanged: (v) {
-                      toggle.onValue = v;
-                      setState(() {});
-                    },
-                  ),
+            // 布尔类型开关与推理力度一致：无需配置开/关值，聊天面板
+            // 提供开/关切换（请求按开关状态发送 'true'/'false'）。
+            if (toggle.type == 'boolean')
+              Text(
+                '布尔类型无需配置参数值，聊天面板提供开/关切换。',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: toggle.offValue ?? '',
-                    decoration: InputDecoration(
-                      labelText: '关闭时值',
-                      hintText: '如 disabled、false',
-                      border: const OutlineInputBorder(),
-                      isDense: true,
+              )
+            else ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      initialValue: toggle.onValue ?? '',
+                      decoration: InputDecoration(
+                        labelText: '开启时值',
+                        hintText: '如 enabled、true',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onChanged: (v) {
+                        toggle.onValue = v;
+                        setState(() {});
+                      },
                     ),
-                    onChanged: (v) {
-                      toggle.offValue = v;
-                      setState(() {});
-                    },
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '推理开关打开时发送「${toggle.onValue ?? ''}」，'
-              '关闭时发送「${toggle.offValue ?? ''}」',
-              style: TextStyle(
-                fontSize: 11,
-                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      initialValue: toggle.offValue ?? '',
+                      decoration: InputDecoration(
+                        labelText: '关闭时值',
+                        hintText: '如 disabled、false',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onChanged: (v) {
+                        toggle.offValue = v;
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                '推理开关打开时发送「${toggle.onValue ?? ''}」，'
+                '关闭时发送「${toggle.offValue ?? ''}」',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -480,74 +571,30 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               )
             else ...[
               Text(
-                '选项值（可选，仅填参数名时参数值由模型配置提供；拖动把手排序）',
+                '选项值（可选，仅填参数名时参数值由模型配置提供；'
+                '长按把手拖拽排序）',
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                 ),
               ),
               const SizedBox(height: 8),
-              // 选项值行（可拖拽排序）
-              ReorderableListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                buildDefaultDragHandles: false,
-                itemCount: effort.options.length,
-                onReorderItem: (oldIndex, newIndex) => _reorderOptionInParam(
-                    _reasoningParams.indexOf(effort), oldIndex, newIndex),
-                itemBuilder: (context, j) {
-                  return Padding(
-                    key: ValueKey('effort-opt-$j'),
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        if (toggleComplete)
-                          _buildDragHandle(index: j)
-                        else
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 2),
-                            child: Icon(Icons.drag_handle,
-                                size: 20, color: Colors.grey),
-                          ),
-                        const SizedBox(width: 2),
-                        Expanded(
-                          child: TextFormField(
-                            initialValue: effort.options[j],
-                            readOnly: !toggleComplete,
-                            decoration: InputDecoration(
-                              labelText: '选项 ${j + 1}',
-                              hintText: toggleComplete
-                                  ? '如 low, medium, high'
-                                  : '请先填写推理开关',
-                              border: const OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            onChanged: (v) {
-                              effort.options[j] = v;
-                              setState(() {});
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        if (effort.options.length > 1)
-                          IconButton(
-                            icon: const Icon(
-                              Icons.remove_circle,
-                              color: Colors.red,
-                              size: 18,
-                            ),
-                            onPressed: toggleComplete
-                                ? () => _removeOptionFromParam(
-                                      _reasoningParams.indexOf(effort),
-                                      j,
-                                    )
-                                : null,
-                            tooltip: '删除选项',
-                          ),
-                      ],
-                    ),
-                  );
-                },
+              // 选项值行（长按把手拖拽排序，含目标槽位反馈与让位动画）
+              DragSortArea(
+                wrap: false,
+                values: effort.options,
+                onReorder: (from, to) => _reorderOptionInParam(
+                  _reasoningParams.indexOf(effort),
+                  from,
+                  to,
+                ),
+                itemBuilder: (context, j, value) => _buildOptionRow(
+                  j,
+                  value,
+                  effort,
+                  cs,
+                  editable: toggleComplete,
+                ),
               ),
               const SizedBox(height: 4),
               TextButton.icon(
@@ -704,7 +751,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               )
             else ...[
               Text(
-                '选项值（拖动把手排序）',
+                '选项值（长按把手拖拽排序）',
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -712,52 +759,13 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               ),
               const SizedBox(height: 8),
               // 选项值行（照搬推理力度行样式：把手 + 输入框 + 删除）
-              ReorderableListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                buildDefaultDragHandles: false,
-                itemCount: param.options.length,
-                onReorderItem: (oldIndex, newIndex) =>
-                    _reorderOptionInParam(actualIndex, oldIndex, newIndex),
-                itemBuilder: (context, j) {
-                  return Padding(
-                    key: ValueKey('add-opt-$actualIndex-$j'),
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        _buildDragHandle(index: j),
-                        const SizedBox(width: 2),
-                        Expanded(
-                          child: TextFormField(
-                            initialValue: param.options[j],
-                            decoration: InputDecoration(
-                              labelText: '选项 ${j + 1}',
-                              hintText: '如 low, enabled, true, max',
-                              border: const OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            onChanged: (v) {
-                              param.options[j] = v;
-                              setState(() {});
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        if (param.options.length > 1)
-                          IconButton(
-                            icon: const Icon(
-                              Icons.remove_circle,
-                              color: Colors.red,
-                              size: 18,
-                            ),
-                            onPressed: () =>
-                                _removeOptionFromParam(actualIndex, j),
-                            tooltip: '删除选项',
-                          ),
-                      ],
-                    ),
-                  );
-                },
+              DragSortArea(
+                wrap: false,
+                values: param.options,
+                onReorder: (from, to) =>
+                    _reorderOptionInParam(actualIndex, from, to),
+                itemBuilder: (context, j, value) =>
+                    _buildOptionRow(j, value, param, cs, editable: true),
               ),
               const SizedBox(height: 4),
               TextButton.icon(

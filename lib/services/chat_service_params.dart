@@ -128,9 +128,13 @@ extension _ChatServiceParamsExt on ChatService {
       }
 
       if (providerToggleParam != null && providerToggleParam.isFilledToggle) {
+        // boolean 类型开关没有开/关值（输入框隐藏）：空值按
+        // 'true'/'false' 发送。
+        final onValue = providerToggleParam.onValue;
+        final offValue = providerToggleParam.offValue;
         final toggleValue = reasoning
-            ? (providerToggleParam.onValue ?? 'true')
-            : (providerToggleParam.offValue ?? 'false');
+            ? ((onValue?.trim().isNotEmpty ?? false) ? onValue! : 'true')
+            : ((offValue?.trim().isNotEmpty ?? false) ? offValue! : 'false');
         ChatService._setReasoningParam(
           result,
           providerToggleParam,
@@ -223,9 +227,13 @@ extension _ChatServiceParamsExt on ChatService {
 
     // Only send reasoning toggle if it exists AND is filled (has a paramName)
     if (toggleParam != null && toggleParam.isFilledToggle) {
+      // boolean 类型开关没有开/关值（输入框隐藏）：空值按
+      // 'true'/'false' 发送。
+      final onValue = toggleParam.onValue;
+      final offValue = toggleParam.offValue;
       final toggleValue = reasoning
-          ? (toggleParam.onValue ?? 'true')
-          : (toggleParam.offValue ?? 'false');
+          ? ((onValue?.trim().isNotEmpty ?? false) ? onValue! : 'true')
+          : ((offValue?.trim().isNotEmpty ?? false) ? offValue! : 'false');
       ChatService._setReasoningParam(
         result,
         toggleParam,

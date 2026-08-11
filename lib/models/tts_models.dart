@@ -265,7 +265,11 @@ class ReasoningParam {
 
   bool get isFilledToggle {
     if (!isReasoningToggle) return false;
-    return paramName.trim().isNotEmpty &&
+    final nameOk = paramName.trim().isNotEmpty;
+    // boolean 类型开关无需开/关值：聊天面板提供开/关切换，
+    // 请求构建按开启/关闭自动写入 'true'/'false'。
+    if (type == 'boolean') return nameOk;
+    return nameOk &&
         (onValue != null && onValue!.trim().isNotEmpty) &&
         (offValue != null && offValue!.trim().isNotEmpty);
   }
@@ -291,8 +295,11 @@ class ReasoningParam {
       if (nameTrimmed.isEmpty && !hasOnValue && !hasOffValue) return null;
 
       if (nameTrimmed.isEmpty) return '推理开关参数名不能为空';
-      if (!hasOnValue) return '推理开关开启值不能为空';
-      if (!hasOffValue) return '推理开关关闭值不能为空';
+      // boolean 类型开关只需参数名（开/关值由聊天面板提供）
+      if (type != 'boolean') {
+        if (!hasOnValue) return '推理开关开启值不能为空';
+        if (!hasOffValue) return '推理开关关闭值不能为空';
+      }
 
       return null;
     }

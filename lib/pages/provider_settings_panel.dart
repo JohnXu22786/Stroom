@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../providers/provider_config.dart';
 import '../services/asr_service.dart';
+import '../widgets/drag_sort_area.dart';
 import 'llm_model_config_shared.dart';
 
 part 'provider_settings_panel_custom_params.dart';
