@@ -374,6 +374,23 @@ extension _ChatPageModelsExt on _ChatPageState {
     if (normalized != restoredValues) {
       ref.read(reasoningParamValuesProvider.notifier).state = normalized;
     }
+    // 模型当前没有可用推理参数（开关未填满 / 无选项值 / 非布尔）时，
+    // 残留的开启标记一并清除：否则每次重启都会重新持久化陈旧状态，
+    // 且配置恢复选项后会「悄悄」重新生效（与面板灰色不可用一致）。
+    // 以适配器当前模型为准（与 ensureEffortValue 相同的守卫条件）。
+    if (adapterMatchesRestoredModel) {
+      final currentParams = _adapter.reasoningParams;
+      if (!currentParams.any((p) => p.isUsable) &&
+          ref.read(reasoningEnabledProvider)) {
+        ref.read(reasoningEnabledProvider.notifier).state = false;
+      }
+      final currentEffort = findEffortParam(currentParams);
+      if (currentEffort != null &&
+          !currentEffort.isUsable &&
+          ref.read(reasoningEffortEnabledProvider)) {
+        ref.read(reasoningEffortEnabledProvider.notifier).state = false;
+      }
+    }
   }
 
   /// Loads the per-model settings map from SharedPreferences.
@@ -408,7 +425,7 @@ extension _ChatPageModelsExt on _ChatPageState {
       onSend: _onMessageSend,
       onStop: _stopStreaming,
       onPreviewAttachment: _showAttachmentPreview,
-      mcpTools: _selectableTools(),
+      mcpTools: _adapter.getAllToolDefinitions(),
       enabledTools: ref.watch(enabledToolNamesProvider),
       onEnabledToolsChanged: (tools) {
         ref.read(enabledToolNamesProvider.notifier).state = tools;
@@ -427,36 +444,5 @@ extension _ChatPageModelsExt on _ChatPageState {
       showEditWarningOnEntry: _showEditWarningOnEntry,
       editWarningArmCount: _editWarningArmCount,
     );
-  }
-
-  /// 当前对话可选择/发送的工具列表。
-  ///
-  /// MCP 总开关（adapter 层已把 mcpToolDefinitions 清空）与当前对话所属
-  /// 助手的 MCP 工具显示开关（[Assistant.mcpToolsVisible]）关闭时，
-  /// MCP 占位工具被过滤掉——对话页工具面板不再显示 MCP 工具，请求也
-  /// 不会发送它们。
-  List<ToolDefinition> _selectableTools() {
-    return selectableToolsForAssistant(
-      allTools: _adapter.getAllToolDefinitions(),
-      mcpTools: _adapter.mcpToolDefinitions,
-      mcpToolsVisible: _mcpToolsVisibleForActiveConversation(),
-    );
-  }
-
-  /// 当前对话所属助手的 MCP 工具显示开关。对话无助手（旧数据）时视为
-  /// 可见（保持原有行为）。
-  bool _mcpToolsVisibleForActiveConversation() {
-    final activeId = ref.read(activeConversationIdProvider);
-    if (activeId == null) return true;
-    final conv = ref
-        .read(conversationsProvider)
-        .where((c) => c.id == activeId)
-        .firstOrNull;
-    if (conv == null || conv.assistantId == null) return true;
-    final assistant = ref
-        .read(assistantProvider)
-        .where((a) => a.id == conv.assistantId)
-        .firstOrNull;
-    return assistant?.mcpToolsVisible ?? true;
   }
 }

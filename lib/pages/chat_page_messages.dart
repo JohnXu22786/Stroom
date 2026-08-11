@@ -76,14 +76,31 @@ extension _ChatPageMessagesExt on _ChatPageState {
     await AppLogService.info('ChatPage', '[STREAM-INIT] _initialize complete');
   }
 
+  /// Marks that the user reached the top of the list with no older messages
+  /// left, making the "没有更多内容了" hint appear. Idempotent.
+  void _markNoMoreMessagesReached() {
+    if (_hasReachedTopWithoutMore) return;
+    _hasReachedTopWithoutMore = true;
+    if (mounted) setState(() {});
+  }
+
   /// Loads the previous page of older messages and prepends them to the
   /// chat controller. Called by [ChatAnimatedList.onEndReached] when the user
   /// scrolls near the top of the message list.
   Future<void> _loadMoreMessages() async {
-    if (_isLoadingMore || !_hasMoreMessages) return;
+    if (_isLoadingMore) return;
+    if (!_hasMoreMessages) {
+      // 顶部没有更早的历史消息：提示"没有更多内容了"。
+      _markNoMoreMessagesReached();
+      return;
+    }
 
     _isLoadingMore = true;
     if (mounted) setState(() {});
+    // 记录加载起点：即使数据瞬间就绪，加载指示器也要至少显示 0.5 秒，
+    // 避免动画一闪而过。
+    final loadStartedAt = DateTime.now();
+    final loadGeneration = ++_loadMoreGeneration;
 
     try {
       final newStart = _loadedUpToIndex >= _ChatPageState._pageSize
@@ -103,23 +120,39 @@ extension _ChatPageMessagesExt on _ChatPageState {
           )
           .toList();
 
+      // 最少显示时长放在插入之前：本方法同时是库的 onEndReached 回调，
+      // 库要等它返回后才执行锚点校正（把视口拉回加载前可见的锚点消息）。
+      // 若延迟放在插入之后，快速加载时新插入的旧消息会先闪现 0.5 秒，
+      // 再被锚点拉回，产生可见跳动。先转满 0.5 秒再插入，指示器与内容
+      // 就位保持同步，锚点校正的时机也与修复前一致。
+      final remaining = _ChatPageState._loadMoreMinDisplayDuration -
+          DateTime.now().difference(loadStartedAt);
+      if (remaining > Duration.zero) {
+        await Future<void>.delayed(remaining);
+      }
+      // 延迟期间可能已切换对话（_loadMoreGeneration 已推进）：放弃本批。
+      if (loadGeneration != _loadMoreGeneration) return;
+
       // Guard: controller might have been disposed during the async gap
-      // (e.g., conversation switched). Only update state if still valid
-      // and the load hasn't been invalidated by a conversation switch.
-      if (_controller != null && _isLoadingMore) {
+      // (e.g., conversation switched).
+      if (_controller != null) {
         // Prepend all messages at the beginning (index 0) of the controller
         await _controller!.insertAllMessages(msgs, index: 0);
         // Re-check after await: conversation might have switched during the
-        // insertion, which would have reset _isLoadingMore to false.
-        if (_isLoadingMore) {
+        // insertion.
+        if (loadGeneration == _loadMoreGeneration) {
           _loadedUpToIndex = newStart;
         }
       }
     } catch (e, s) {
       debugPrint('[ChatPage] _loadMoreMessages error: $e\n$s');
     } finally {
-      _isLoadingMore = false;
-      if (mounted) setState(() {});
+      // 只清理本代加载的状态：对话切换后新对话的加载可能已在本延迟
+      // 期间开始，旧加载的 finally 不能清掉新加载的 _isLoadingMore。
+      if (loadGeneration == _loadMoreGeneration) {
+        _isLoadingMore = false;
+        if (mounted) setState(() {});
+      }
     }
   }
 
@@ -145,6 +178,10 @@ extension _ChatPageMessagesExt on _ChatPageState {
     _expandedErrors.clear();
     _loadedUpToIndex = 0;
     _isLoadingMore = false;
+    // 使进行中的加载（可能正卡在 0.5 秒最少显示延迟里）失效：
+    // 其插入与 finally 清理都会被 generation 检查跳过。
+    _loadMoreGeneration++;
+    _hasReachedTopWithoutMore = false;
     // Abort any in-flight initial positioning pass — the view is being
     // cleared, there is nothing left to position.
     _pendingInitialScrollAdjustment = false;
@@ -445,6 +482,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
       _editingMessageAttachments = null;
       _showEditWarningOnEntry = false;
       _isLoadingMore = false;
+      // 使进行中的加载（可能正卡在 0.5 秒最少显示延迟里）失效。
+      _loadMoreGeneration++;
+      _hasReachedTopWithoutMore = false;
       _loadedUpToIndex = loadedUpToIndex;
       final oldCtrl = _controller;
       _controller = newCtrl;
@@ -543,6 +583,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
     if (conv != null && ref.read(activeConversationIdProvider) == convId) {
       _history.clear();
       _history.addAll(conv.messages);
+      // _history 被整体替换：使进行中的加载失效，并同步清除其加载标志。
+      _isLoadingMore = false;
+      _loadMoreGeneration++;
     }
   }
 
@@ -557,13 +600,6 @@ extension _ChatPageMessagesExt on _ChatPageState {
   /// completes in [_initialize], so that MCP tools discovered asynchronously
   /// are immediately visible and enabled (badge/list show the full count)
   /// instead of staying OFF until the next conversation switch.
-  ///
-  /// MCP 总开关或助手显示开关关闭时，解析基于 [_selectableTools]（不含被
-  /// 隐藏的 MCP 工具）：新建话题的自动启用集不再包含它们。**显式保存过的
-  /// 偏好集合保持原样**（含被隐藏的 MCP 工具名）——运行时启用集只在
-  /// 与保存集不一致时才会被持久化，隐藏与恢复由显示/发送层过滤处理
-  /// （见 selectableToolsForAssistant / 工具徽标），不会把隐藏的工具从
-  /// 对话偏好中抹掉。
   void _resolveEnabledToolsForActiveConversation() {
     final activeId = ref.read(activeConversationIdProvider);
     if (activeId == null) return;
@@ -573,15 +609,10 @@ extension _ChatPageMessagesExt on _ChatPageState {
         ? Set<String>.from(conv.enabledMcpToolNames)
         : <String>{};
     final hasExplicitPrefs = conv?.hasExplicitEnabledMcpTools ?? false;
-    final next = resolveEnabledToolNames(
-      allTools: _selectableTools(),
+    ref.read(enabledToolNamesProvider.notifier).state = resolveEnabledToolNames(
+      allTools: _adapter.getAllToolDefinitions(),
       savedEnabledNames: convEnabled,
       hasExplicitSavedPrefs: hasExplicitPrefs,
     );
-    // 集合未变时不写 provider，避免无谓的重建（重复解析、无关的助手
-    // 变更等）。
-    if (!setEquals(next, ref.read(enabledToolNamesProvider))) {
-      ref.read(enabledToolNamesProvider.notifier).state = next;
-    }
   }
 }

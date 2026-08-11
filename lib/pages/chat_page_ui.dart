@@ -49,6 +49,16 @@ extension _ChatPageUiExt on _ChatPageState {
       }
     } else if (notification is ScrollEndNotification) {
       _userIsDragging = false;
+    } else if (notification is UserScrollNotification &&
+        notification.direction == ScrollDirection.forward &&
+        notification.metrics.pixels <= 4.0 &&
+        !_hasMoreMessages &&
+        !_isLoadingMore) {
+      // 用户在顶部继续向下拖动（滚向顶部方向，像素不再变化时
+      // _onChatScroll 收不到回调）且没有更早的历史消息：
+      // 提示"没有更多内容了"。metrics 判定防止在列表中部滚动时
+      // 过早置位（提示会瞬间把内容下推 ~40px）。
+      _markNoMoreMessagesReached();
     }
     return false;
   }
@@ -158,6 +168,17 @@ extension _ChatPageUiExt on _ChatPageState {
     final maxScroll = _chatScrollController.position.maxScrollExtent;
     final currentScroll = _chatScrollController.position.pixels;
     final isAtBottom = (maxScroll - currentScroll) <= 80;
+
+    // 用户滚动到顶部且没有更早的历史消息：提示"没有更多内容了"。
+    // 仅在用户滚动活动期间（拖动或惯性滚动）判定——程序化跳转
+    // （进场定位、锚点校正、键盘恢复等）以及进场定位完成时的直接
+    // 回调不会误触发，短对话进场时不会闪现提示。
+    if (currentScroll <= 4.0 &&
+        !_hasMoreMessages &&
+        !_isLoadingMore &&
+        _chatScrollController.position.isScrollingNotifier.value) {
+      _markNoMoreMessagesReached();
+    }
 
     if (isAtBottom) {
       // At bottom — user sees latest messages

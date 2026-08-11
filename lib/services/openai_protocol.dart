@@ -134,7 +134,7 @@ class OpenAIProtocol implements ChatProtocol {
           } else {
             if (isTextAttachment(att)) {
               final textContent = await readTextAttachmentContent(
-                  att.fileName, att.storagePath);
+                  att.fileName, att.storagePath, att.fileSize);
               if (textContent != null) {
                 parts.add({
                   'type': 'text',

@@ -128,6 +128,11 @@ extension _ChatPageEditingExt on _ChatPageState {
           }
           // Safety: keep pagination index within bounds
           _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
+          // 历史被截断：使进行中的加载失效（其 0.5 秒最少显示延迟
+          // 结束后不能把旧历史批次插回被编辑过的会话），并同步清除
+          // 其加载标志，避免幽灵指示器与分页卡死。
+          _isLoadingMore = false;
+          _loadMoreGeneration++;
         }
       } catch (e) {
         debugPrint('[ChatPage] _editUserMessageWithText remove failed: $e');
@@ -177,6 +182,11 @@ extension _ChatPageEditingExt on _ChatPageState {
           }
           // Safety: keep pagination index within bounds
           _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
+          // 历史被截断：使进行中的加载失效（其 0.5 秒最少显示延迟
+          // 结束后不能把旧历史批次插回被编辑过的会话），并同步清除
+          // 其加载标志，避免幽灵指示器与分页卡死。
+          _isLoadingMore = false;
+          _loadMoreGeneration++;
         }
       } catch (e) {
         debugPrint('[ChatPage] _retryAssistantMessage remove failed: $e');
@@ -249,6 +259,9 @@ extension _ChatPageEditingExt on _ChatPageState {
       if (index < _loadedUpToIndex && _loadedUpToIndex > 0) {
         _loadedUpToIndex = _loadedUpToIndex > 0 ? _loadedUpToIndex - 1 : 0;
       }
+      // 历史被截断：使进行中的加载失效，并同步清除其加载标志。
+      _isLoadingMore = false;
+      _loadMoreGeneration++;
     });
 
     final msgToRemove =

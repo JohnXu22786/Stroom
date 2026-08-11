@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
@@ -240,6 +242,163 @@ void main() {
       expect(find.text('vacation'), findsNothing);
     });
 
+    testWidgets('input row is hidden by default, create button shown instead',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(
+        Builder(builder: (context) {
+          return ElevatedButton(
+            onPressed: () => FolderPickerDialog.show(
+              context,
+              availableFolders: {'photos'},
+              onCreateFolder: (name) async => null,
+            ),
+            child: const Text('Open'),
+          );
+        }),
+      ));
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      // No input row by default — only the trigger button
+      expect(
+        find.byKey(const Key('folder_picker_start_create_btn')),
+        findsOneWidget,
+      );
+      expect(find.byType(TextField), findsNothing);
+      expect(find.byIcon(Icons.add), findsNothing);
+      expect(find.byIcon(Icons.close), findsNothing);
+
+      // Tapping the button reveals the input row (TextField + plus + X)
+      await tester.tap(find.byKey(const Key('folder_picker_start_create_btn')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.byIcon(Icons.add), findsOneWidget);
+      expect(
+        find.byKey(const Key('folder_picker_cancel_create_btn')),
+        findsOneWidget,
+      );
+      // Trigger button is replaced while editing
+      expect(
+        find.byKey(const Key('folder_picker_start_create_btn')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('X button abandons creation and clears the input',
+        (tester) async {
+      final createdNames = <String>[];
+      await tester.pumpWidget(_buildTestApp(
+        Builder(builder: (context) {
+          return ElevatedButton(
+            onPressed: () => FolderPickerDialog.show(
+              context,
+              availableFolders: {'photos'},
+              onCreateFolder: (name) async {
+                createdNames.add(name);
+                return null;
+              },
+            ),
+            child: const Text('Open'),
+          );
+        }),
+      ));
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      // Start creating, type a name, then abandon with X
+      await tester.tap(find.byKey(const Key('folder_picker_start_create_btn')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'cancel_me');
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(const Key('folder_picker_cancel_create_btn')));
+      await tester.pumpAndSettle();
+
+      // Back to the trigger button, input hidden, nothing was created
+      expect(
+        find.byKey(const Key('folder_picker_start_create_btn')),
+        findsOneWidget,
+      );
+      expect(find.byType(TextField), findsNothing);
+      expect(createdNames, isEmpty);
+
+      // Reopening the input starts from a clean empty field
+      await tester.tap(find.byKey(const Key('folder_picker_start_create_btn')));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsOneWidget);
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      expect(textField.controller!.text, isEmpty);
+    });
+
+    testWidgets('buttons are disabled while a folder creation is in flight',
+        (tester) async {
+      final completer = Completer<String?>();
+      final folders = <String>{'photos'};
+      await tester.pumpWidget(_buildTestApp(
+        Builder(builder: (context) {
+          return ElevatedButton(
+            onPressed: () => FolderPickerDialog.show(
+              context,
+              availableFolders: folders,
+              onCreateFolder: (name) => completer.future,
+              onRefreshFolders: () async {
+                folders.addAll({'photos', 'new_folder'});
+                return Set.from(folders);
+              },
+            ),
+            child: const Text('Open'),
+          );
+        }),
+      ));
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      // Reveal the input row and submit a name
+      await tester.tap(find.byKey(const Key('folder_picker_start_create_btn')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'new_folder');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pump();
+
+      // In-flight: plus, X and 确定 must all be disabled
+      final plusButton = tester.widget<ElevatedButton>(
+        find.byKey(const Key('folder_picker_create_confirm_btn')),
+      );
+      expect(plusButton.onPressed, isNull);
+      final cancelCreateButton = tester.widget<IconButton>(find.byKey(
+        const Key('folder_picker_cancel_create_btn'),
+      ));
+      expect(cancelCreateButton.onPressed, isNull);
+      final confirmButton = tester.widget<FilledButton>(find.ancestor(
+        of: find.text('确定'),
+        matching: find.byType(FilledButton),
+      ));
+      expect(confirmButton.onPressed, isNull);
+      final cancelButton = tester.widget<TextButton>(find.ancestor(
+        of: find.text('取消'),
+        matching: find.byType(TextButton),
+      ));
+      expect(cancelButton.onPressed, isNull);
+
+      // Complete the creation: everything re-enables and input clears
+      completer.complete(null);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ElevatedButton>(find.byKey(
+              const Key('folder_picker_create_confirm_btn'),
+            ))
+            .onPressed,
+        isNotNull,
+      );
+      expect(find.text('new_folder'), findsOneWidget); // 创建成功并出现在列表中
+    });
+
     testWidgets('creating new folder refreshes the folder list',
         (tester) async {
       final initialFolders = <String>{'photos'};
@@ -269,6 +428,10 @@ void main() {
       // Should initially show 'photos' only
       expect(find.text('photos'), findsOneWidget);
       expect(find.text('new_folder'), findsNothing);
+
+      // Reveal the input row via the create button
+      await tester.tap(find.byKey(const Key('folder_picker_start_create_btn')));
+      await tester.pumpAndSettle();
 
       // Enter new folder name
       await tester.enterText(find.byType(TextField), 'new_folder');
@@ -322,6 +485,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Create a new folder while inside 'photos'
+      await tester.tap(find.byKey(const Key('folder_picker_start_create_btn')));
+      await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'new_folder');
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.add));
@@ -354,6 +519,12 @@ void main() {
 
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
+
+      // Without onCreateFolder the dialog must not advertise creation
+      expect(
+        find.byKey(const Key('folder_picker_start_create_btn')),
+        findsNothing,
+      );
 
       // Tap cancel button
       await tester.tap(find.text('取消'));

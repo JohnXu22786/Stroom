@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:markdown_widget/markdown_widget.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/mermaid_chart_page.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import '../widgets/markdown_extensions.dart';
@@ -38,10 +39,16 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
   final List<String> _redoStack = [];
   bool _isUndoingOrRedoing = false;
 
-  // 字号设置
-  double _fontSize = 14;
+  // 字号设置（全局持久化，查看/编辑模式共用，跨页面与重启保持）
+  static const double _defaultFontSize = 14;
+  static const String _fontSizePrefKey = 'text_preview_font_size';
+  double _fontSize = _defaultFontSize;
   static const double _minFontSize = 10;
   static const double _maxFontSize = 28;
+
+  /// 用户是否已手动调整过字号；若持久化值加载完成前用户已调整，则跳过加载，
+  /// 避免异步加载结果覆盖用户刚做的调整
+  bool _fontSizeAdjustedByUser = false;
 
   @override
   void initState() {
@@ -49,6 +56,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
     _originalContent = widget.initialContent ?? '';
     _contentController = TextEditingController(text: _originalContent);
     _contentController.addListener(_onContentChanged);
+    _loadPersistedFontSize();
   }
 
   @override
@@ -173,10 +181,38 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
     }
   }
 
+  /// 从 SharedPreferences 加载上次使用的字号（限幅到合法范围）
+  Future<void> _loadPersistedFontSize() async {
+    double loaded;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      loaded = prefs.getDouble(_fontSizePrefKey) ?? _defaultFontSize;
+    } catch (_) {
+      return;
+    }
+    // 加载完成前用户已手动调整过字号，则不覆盖用户的操作
+    if (!mounted || _fontSizeAdjustedByUser) return;
+    setState(() {
+      // 持久化值可能被外部写入非整数/非有限值，四舍五入并限幅到合法范围；
+      // 非法值回退到默认字号
+      _fontSize = loaded.isFinite
+          ? loaded.roundToDouble().clamp(_minFontSize, _maxFontSize).toDouble()
+          : _defaultFontSize;
+    });
+  }
+
+  /// 将当前字号写入 SharedPreferences
+  Future<void> _persistFontSize() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_fontSizePrefKey, _fontSize);
+    } catch (_) {}
+  }
+
   /// 字号调节弹窗（数字在上，滑块在下，支持恢复默认）
   void _showFontSizePopup() {
     double temp = _fontSize;
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
@@ -202,9 +238,12 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
                     label: '${temp.toInt()}',
                     onChanged: (v) {
                       temp = v.roundToDouble();
+                      _fontSizeAdjustedByUser = true;
                       setDialogState(() {});
                       setState(() => _fontSize = temp);
                     },
+                    // 拖动结束时才持久化一次，避免拖动过程中频繁写盘
+                    onChangeEnd: (_) => _persistFontSize(),
                   ),
                 ),
               ],
@@ -213,9 +252,11 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
           actions: [
             TextButton(
               onPressed: () {
-                temp = 14;
+                temp = _defaultFontSize;
+                _fontSizeAdjustedByUser = true;
                 setDialogState(() {});
                 setState(() => _fontSize = temp);
+                _persistFontSize();
               },
               child: const Text('恢复默认'),
             ),
@@ -226,7 +267,12 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
           ],
         ),
       ),
-    );
+      // 弹窗关闭时再兜底持久化一次：若在拖动过程中弹窗被
+      // 点外部/返回键关闭，onChangeEnd 不会触发，避免丢失调整；
+      // 仅在用户实际调整过时写入，避免覆盖尚未加载完的持久化值
+    ).whenComplete(() {
+      if (_fontSizeAdjustedByUser) _persistFontSize();
+    });
   }
 
   /// 保存内容到文本文件
@@ -278,14 +324,17 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
 
   /// 构建 AppBar 操作按钮（仅图标）
   List<Widget> _buildAppBarActions() {
+    // Markdown 渲染不随字号设置变化，不显示字号调整按钮
+    final isMarkdown = widget.file.format == 'md';
     if (_isEditMode) {
       return [
-        // 字号调整按钮
-        IconButton(
-          icon: const Icon(Icons.format_size, size: 20),
-          tooltip: '字号调整',
-          onPressed: _showFontSizePopup,
-        ),
+        // 字号调整按钮（Markdown 不显示）
+        if (!isMarkdown)
+          IconButton(
+            icon: const Icon(Icons.format_size, size: 20),
+            tooltip: '字号调整',
+            onPressed: _showFontSizePopup,
+          ),
         // 撤销按钮
         IconButton(
           icon: const Icon(Icons.undo, size: 20),
@@ -321,12 +370,13 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
     }
     // 查看模式：字号 + 编辑按钮（仅图标）+ mmd格式额外显示图表编辑按钮
     return [
-      // 字号调整按钮（查看模式下也可用）
-      IconButton(
-        icon: const Icon(Icons.format_size, size: 20),
-        tooltip: '字号调整',
-        onPressed: _showFontSizePopup,
-      ),
+      // 字号调整按钮（查看模式下也可用，Markdown 不显示）
+      if (!isMarkdown)
+        IconButton(
+          icon: const Icon(Icons.format_size, size: 20),
+          tooltip: '字号调整',
+          onPressed: _showFontSizePopup,
+        ),
       if (widget.file.format == 'mmd')
         IconButton(
           icon: const Icon(Icons.account_tree, size: 20),

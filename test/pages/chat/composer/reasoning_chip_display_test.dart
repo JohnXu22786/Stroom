@@ -689,5 +689,123 @@ void main() {
       expect(find.text('high'), findsOneWidget);
       expect(find.text('推理'), findsNothing);
     });
+
+    testWidgets(
+        'chip shows 推理 (not stale value) when effort param has no options',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            reasoningEnabledProvider.overrideWith((ref) => true),
+            reasoningEffortEnabledProvider.overrideWith((ref) => true),
+            reasoningParamValuesProvider.overrideWith(
+              (ref) => {'reasoning_effort': 'high'},
+            ),
+            conversationsProvider.overrideWith((ref) {
+              return ConversationsNotifier(ref);
+            }),
+            activeConversationIdProvider.overrideWith(
+              (ref) => 'test-conv-id',
+            ),
+            providerEntriesProvider.overrideWith((ref) {
+              return ProviderEntriesNotifier();
+            }),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ChatComposerWidget(
+                onSend: (text, attachments) {},
+                onStop: () {},
+                modelNames: ['test-model'],
+                selectedModelIndex: 0,
+                onModelSelected: (idx) {},
+                onEnabledToolsChanged: (tools) {},
+                // 力度参数仅声明参数名（无选项值）：即使 map 残留旧值，
+                // 面板开关灰色不可用，chip 同样不得显示该旧值。
+                reasoningParams: [
+                  ReasoningParam(
+                    paramName: 'reasoning_effort',
+                    isEffortParam: true,
+                    options: [],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      // 无选项值 → 不可用：显示「推理」（灰色），不显示残留的 'high'
+      expect(find.text('推理'), findsOneWidget);
+      expect(find.text('high'), findsNothing);
+      final chip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '推理',
+      );
+      expect(chip, findsOneWidget);
+      expect(tester.widget<SettingsChip>(chip).color, Colors.grey);
+    });
+
+    testWidgets(
+        'chip shows 推理 (grey) when no usable reasoning params even if '
+        'reasoning flag is on', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            reasoningEnabledProvider.overrideWith((ref) => true),
+            reasoningEffortEnabledProvider.overrideWith((ref) => false),
+            reasoningParamValuesProvider.overrideWith(
+              (ref) => {'reasoning_effort': 'high'},
+            ),
+            conversationsProvider.overrideWith((ref) {
+              return ConversationsNotifier(ref);
+            }),
+            activeConversationIdProvider.overrideWith(
+              (ref) => 'test-conv-id',
+            ),
+            providerEntriesProvider.overrideWith((ref) {
+              return ProviderEntriesNotifier();
+            }),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ChatComposerWidget(
+                onSend: (text, attachments) {},
+                onStop: () {},
+                modelNames: ['test-model'],
+                selectedModelIndex: 0,
+                onModelSelected: (idx) {},
+                onEnabledToolsChanged: (tools) {},
+                // 唯一参数是仅声明参数名（无选项值、非布尔）的力度参数：
+                // 没有可用设置 → chip 灰色不可用（推理开启标记不生效）。
+                reasoningParams: [
+                  ReasoningParam(
+                    paramName: 'reasoning_effort',
+                    isEffortParam: true,
+                    options: [],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      tester.takeException();
+
+      expect(find.text('推理'), findsOneWidget);
+      final chip = find.byWidgetPredicate(
+        (w) => w is SettingsChip && w.label == '推理',
+      );
+      expect(chip, findsOneWidget);
+      expect(tester.widget<SettingsChip>(chip).color, Colors.grey);
+    });
   });
 }

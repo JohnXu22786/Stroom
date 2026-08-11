@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, setEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
@@ -20,7 +21,7 @@ import '../utils/model_order.dart';
 
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
-import '../models/tool_call.dart' show ToolCallData, ToolDefinition;
+import '../models/tool_call.dart' show ToolCallData;
 import '../services/app_log_service.dart';
 import '../services/chat_adapter.dart';
 import '../providers/conversation_provider.dart';
@@ -28,8 +29,7 @@ import '../providers/chat_stream_provider.dart';
 import '../providers/chat_manager_provider.dart';
 import '../services/chat_stream_manager.dart' show StreamResult;
 import '../providers/provider_config.dart';
-import '../providers/assistant_provider.dart'
-    show assistantProvider, selectedAssistantProvider;
+import '../providers/assistant_provider.dart' show selectedAssistantProvider;
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
 import 'message_search_page.dart';
@@ -299,6 +299,24 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Whether a pagination load is currently in progress.
   bool _isLoadingMore = false;
 
+  /// True once the user has reached the top of the list while no older
+  /// messages remain — shows the "没有更多内容了" hint above the first
+  /// message. Reset when the conversation view is cleared or reloaded.
+  bool _hasReachedTopWithoutMore = false;
+
+  /// Bumped when a pagination load starts. The load's `finally` only clears
+  /// [_isLoadingMore] if its captured generation is still current — a stale
+  /// load that outlived a conversation switch (its 500ms minimum-display
+  /// delay is still pending) must not clear the flag of a load that started
+  /// in the new conversation.
+  int _loadMoreGeneration = 0;
+
+  /// Minimum display duration of the top load-more indicator. The spinner
+  /// must stay up for at least this long even when the page loads
+  /// instantly, otherwise it flashes for a single frame.
+  static const Duration _loadMoreMinDisplayDuration =
+      Duration(milliseconds: 500);
+
   /// Guards against concurrent calls to [_loadConversationMessages].
   /// Prevents race conditions where message loading is triggered from
   /// multiple sources (init, provider listeners) simultaneously, which
@@ -344,6 +362,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // 使进行中的加载失效：卡在 0.5 秒最少显示延迟里的加载在延迟结束后
+    // 不得再向已 dispose 的控制器插入消息。
+    _loadMoreGeneration++;
     // The ChatStreamManager owns the adapter lifecycle. We do NOT cancel
     // or dispose it here — if streaming is active, it continues in the
     // background and saves results when complete. The adapter is cleaned
@@ -436,16 +457,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _registerConversationsListener();
     // Re-configure adapter when provider entries change.
     _registerProviderEntriesListener();
-    // Keep the runtime enabled set in sync with assistant changes (MCP 显示开关).
-    _registerAssistantListener();
     // Auto-save reasoning settings when they change (per-model persistence).
     _registerReasoningListeners();
 
     final adapterConfigured = _adapter.isConfigured;
     final controller = _controller;
-
-    // 监听助手数据（MCP 工具显示开关等）：编辑助手后工具列表即时刷新。
-    ref.watch(assistantProvider);
 
     // Get conversation title
     final conversations = ref.watch(conversationsProvider);

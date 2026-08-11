@@ -184,6 +184,52 @@ void main() {
     });
   });
 
+  group('ReasoningPanel - disabled switch when no options/no settings', () {
+    testWidgets(
+        'effort switch is disabled and off when effort param has no option '
+        'values', (tester) async {
+      await showReasoningPanelForTest(
+        tester,
+        reasoningEnabled: true,
+        reasoningEffortEnabled: true,
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: [],
+          ),
+        ],
+      );
+
+      // The effort switch (second switch) must be disabled AND off even
+      // though reasoningEffortEnabled was passed as true — with no option
+      // values there is nothing to select, so the switch is unavailable.
+      final effortSwitch = tester.widget<Switch>(find.byType(Switch).at(1));
+      expect(effortSwitch.onChanged, isNull);
+      expect(effortSwitch.value, isFalse);
+
+      // The hint explains why the effort section is unavailable.
+      expect(find.textContaining('该参数暂无选项值'), findsOneWidget);
+    });
+
+    testWidgets(
+        'reasoning toggle is disabled and off when no params exist even if '
+        'reasoning was enabled before', (tester) async {
+      // Simulate a stale state: reasoning was enabled for a previous model
+      // that had params, but the current model has no reasoning params.
+      await showReasoningPanelForTest(
+        tester,
+        reasoningEnabled: true,
+        reasoningParams: [],
+      );
+
+      // The reasoning toggle (first switch) must be disabled AND off.
+      final reasoningSwitch = tester.widget<Switch>(find.byType(Switch).at(0));
+      expect(reasoningSwitch.onChanged, isNull);
+      expect(reasoningSwitch.value, isFalse);
+    });
+  });
+
   group('ReasoningPanel - effort disabled state and edge cases', () {
     testWidgets('shows effort section disabled when no effort param exists',
         (tester) async {

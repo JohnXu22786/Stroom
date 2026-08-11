@@ -639,6 +639,121 @@ void main() {
       expect(find.text('14'), findsWidgets);
     });
 
+    // ==================== Font Size Persistence ====================
+
+    testWidgets('font size persists across page reopen', (tester) async {
+      await enterEditMode(tester);
+
+      // Adjust font size and close the popup
+      await tester.tap(find.byIcon(Icons.format_size));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(Slider), const Offset(100, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('关闭'));
+      await tester.pumpAndSettle();
+
+      // Record the adjusted size and verify it was persisted
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      final adjustedSize = textField.style?.fontSize;
+      expect(adjustedSize, greaterThan(14));
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getDouble('text_preview_font_size'), adjustedSize);
+
+      // Go back and reopen the page
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      await navigateToEditor(tester);
+      await tester.pump();
+
+      // View mode should restore the persisted font size
+      final selectable =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(selectable.style?.fontSize, adjustedSize);
+    });
+
+    testWidgets('font size reset persists default across page reopen',
+        (tester) async {
+      await enterEditMode(tester);
+
+      // Increase font size first
+      await tester.tap(find.byIcon(Icons.format_size));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(Slider), const Offset(100, 0));
+      await tester.pumpAndSettle();
+
+      // Reset to default
+      await tester.tap(find.text('恢复默认'));
+      await tester.pumpAndSettle();
+      expect(find.text('14'), findsWidgets);
+
+      // Close popup, go back and reopen the page
+      await tester.tap(find.text('关闭'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      await navigateToEditor(tester);
+      await tester.pump();
+
+      // View mode should restore the default 14
+      final selectable =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(selectable.style?.fontSize, 14);
+    });
+
+    testWidgets('out-of-range persisted font size is clamped on load',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({'text_preview_font_size': 999.0});
+
+      await tester.pumpWidget(_buildTestApp(testFile, testContent));
+      await navigateToEditor(tester);
+      await tester.pump();
+
+      final selectable =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(selectable.style?.fontSize, 28);
+    });
+
+    testWidgets('non-finite persisted font size falls back to default',
+        (tester) async {
+      SharedPreferences.setMockInitialValues(
+          {'text_preview_font_size': double.nan});
+
+      await tester.pumpWidget(_buildTestApp(testFile, testContent));
+      await navigateToEditor(tester);
+      await tester.pump();
+
+      final selectable =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(selectable.style?.fontSize, 14);
+    });
+
+    testWidgets(
+        'font size adjusted mid-drag is persisted when dialog dismissed',
+        (tester) async {
+      await enterEditMode(tester);
+
+      // Open the popup and start a slider drag without releasing the pointer
+      await tester.tap(find.byIcon(Icons.format_size));
+      await tester.pumpAndSettle();
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.byType(Slider)));
+      await gesture.moveBy(const Offset(100, 0));
+      await tester.pump();
+
+      // Dismiss the dialog mid-drag by tapping the barrier with a second
+      // pointer, so Slider's onChangeEnd never fires
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      await gesture.cancel();
+      await tester.pumpAndSettle();
+
+      // The adjusted size must still have been persisted
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getDouble('text_preview_font_size');
+      expect(saved, isNotNull);
+      expect(saved, greaterThan(14));
+    });
+
     // ==================== MMD Format Support ====================
 
     group('mmd format support', () {
@@ -684,6 +799,48 @@ void main() {
 
         // Should show the chart editor button in view mode
         expect(find.byIcon(Icons.account_tree), findsOneWidget);
+      });
+    });
+
+    // ==================== Markdown Format ====================
+
+    group('markdown format', () {
+      const mdContent = '# 标题\n\n这是**加粗**文本。';
+      late TextRecord mdFile;
+
+      setUp(() async {
+        final bytes = Uint8List.fromList(utf8.encode(mdContent));
+        final hash = computeTextHash(bytes);
+        final storageFileName = '$hash.txt';
+        await TextManifest.writeText(storageFileName, mdContent);
+
+        mdFile = TextRecord(
+          name: 'readme',
+          hash: hash,
+          format: 'md',
+          createdAt: DateTime.now(),
+          size: bytes.length,
+          textLength: mdContent.length,
+        );
+        await TextManifest.addRecord(mdFile);
+      });
+
+      testWidgets('markdown hides font size button in view and edit mode',
+          (tester) async {
+        await tester.pumpWidget(_buildTestApp(mdFile, mdContent));
+        await navigateToEditor(tester);
+
+        // Title shows filename.md
+        expect(find.text('readme.md'), findsOneWidget);
+
+        // View mode: no font size adjustment button
+        expect(find.byIcon(Icons.format_size), findsNothing);
+
+        // Edit mode: still no font size adjustment button
+        await tester.tap(find.byIcon(Icons.edit));
+        await tester.pumpAndSettle();
+        expect(find.byIcon(Icons.format_size), findsNothing);
+        expect(find.byIcon(Icons.save), findsOneWidget);
       });
     });
   });

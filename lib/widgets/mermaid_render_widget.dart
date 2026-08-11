@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -169,18 +169,36 @@ class MermaidRenderWidget extends StatefulWidget {
   /// dynamically from the CDN (non-blocking, with a visible error on
   /// failure or timeout).
   ///
+  /// Perf: the ~3.5MB library is JSON-encoded into the loader script
+  /// exactly once per library instance ([_buildMermaidLoader] caches it),
+  /// and the multi-megabyte skeleton (template + gestures + loader) is
+  /// built once and reused ([_buildMermaidSkeleton] caches it). Each
+  /// render only pays a single pass over the skeleton to splice in the
+  /// (small) diagram code.
+  ///
   /// This is the single source of truth for the Mermaid HTML/JS template.
   /// Both [MermaidRenderWidget] and [MermaidChartPage] use this method.
   static String buildMermaidHtml(String mermaidCode,
       {bool withJsGestures = true, String? inlineMermaidJs}) {
     final escaped = _escapeMermaidCode(mermaidCode);
-    final gestureScript = withJsGestures ? _mermaidGestureJs : '';
-    return _mermaidHtmlTemplate
-        .replaceFirst('GESTURE_SCRIPT_PLACEHOLDER', gestureScript)
-        .replaceFirst('MERMAID_CODE_PLACEHOLDER', escaped)
-        .replaceFirst(
-            'MERMAID_LOADER_PLACEHOLDER', _buildMermaidLoader(inlineMermaidJs));
+    final loader = _buildMermaidLoader(inlineMermaidJs);
+    final skeleton = _buildMermaidSkeleton(withJsGestures, loader);
+    return skeleton.replaceFirst('MERMAID_CODE_PLACEHOLDER', escaped);
   }
+
+  /// Test-only counter of full inline-loader builds (JSON-encoding of the
+  /// inlined library). Pins the caching behavior: repeated renders with
+  /// the same library must not re-encode the ~3.5MB source.
+  @visibleForTesting
+  static int inlineLoaderBuildCount = 0;
+
+  /// The library most recently seen by [_buildMermaidLoader], paired with
+  /// its fully built loader script. The bundled mermaid.js never changes
+  /// at runtime, so the expensive JSON-encoding + '<'-escaping runs once
+  /// instead of on every [buildMermaidHtml] call (which used to run on the
+  /// UI thread for every render and every rebuild of every diagram).
+  static String? _cachedLoaderLibraryJs;
+  static String? _cachedLoaderScriptJs;
 
   /// Builds the JavaScript that loads mermaid.js and initializes the
   /// diagram.
@@ -193,12 +211,16 @@ class MermaidRenderWidget extends StatefulWidget {
   /// timeout shows a visible error instead of an endless spinner.
   static String _buildMermaidLoader(String? inlineMermaidJs) {
     if (inlineMermaidJs != null && inlineMermaidJs.isNotEmpty) {
+      if (identical(inlineMermaidJs, _cachedLoaderLibraryJs) &&
+          _cachedLoaderScriptJs != null) {
+        return _cachedLoaderScriptJs!;
+      }
       // JSON-encode the library into a JS string literal, and additionally
       // escape every '<' as \u003C so the HTML parser cannot terminate the
       // script tag early (</script) or start an HTML comment (<!--) inside
       // the inlined code.
       final encoded = jsonEncode(inlineMermaidJs).replaceAll('<', r'\u003C');
-      return '''
+      final loader = '''
     (function loadMermaid() {
       var hint = document.getElementById('loading-hint');
       var script = document.createElement('script');
@@ -225,8 +247,47 @@ class MermaidRenderWidget extends StatefulWidget {
       }
     })();
 ''';
+      inlineLoaderBuildCount++;
+      _cachedLoaderLibraryJs = inlineMermaidJs;
+      _cachedLoaderScriptJs = loader;
+      return loader;
     }
-    return '''
+    return _cdnLoaderScript;
+  }
+
+  /// The last skeleton built by [_buildMermaidSkeleton], keyed by the
+  /// loader script it embeds and the gesture flag. Building the skeleton
+  /// means replacing the gesture and loader placeholders in the template —
+  /// with the inline library the loader IS the ~3.5MB script, so this is
+  /// the expensive part of [buildMermaidHtml] and must run once per
+  /// combination, not once per render.
+  static String? _cachedSkeletonLoaderJs;
+  static bool? _cachedSkeletonWithGestures;
+  static String? _cachedSkeletonHtml;
+
+  /// Builds the HTML template with the gesture script and the mermaid
+  /// loader already spliced in (cached), leaving only the small
+  /// [MERMAID_CODE_PLACEHOLDER] to be replaced per render.
+  static String _buildMermaidSkeleton(bool withJsGestures, String loader) {
+    final cached = _cachedSkeletonHtml;
+    if (cached != null &&
+        identical(loader, _cachedSkeletonLoaderJs) &&
+        withJsGestures == _cachedSkeletonWithGestures) {
+      return cached;
+    }
+    final skeleton = _mermaidHtmlTemplate
+        .replaceFirst('GESTURE_SCRIPT_PLACEHOLDER',
+            withJsGestures ? _mermaidGestureJs : '')
+        .replaceFirst('MERMAID_LOADER_PLACEHOLDER', loader);
+    _cachedSkeletonLoaderJs = loader;
+    _cachedSkeletonWithGestures = withJsGestures;
+    _cachedSkeletonHtml = skeleton;
+    return skeleton;
+  }
+
+  /// CDN loader script (constant): the same string instance every time, so
+  /// [_buildMermaidSkeleton] can cache the CDN skeleton keyed by identity.
+  static const _cdnLoaderScript = '''
     (function loadMermaid() {
       var hint = document.getElementById('loading-hint');
       var mermaidTimer = setTimeout(function() {
@@ -265,7 +326,6 @@ class MermaidRenderWidget extends StatefulWidget {
       document.head.appendChild(script);
     })();
 ''';
-  }
 
   /// Shared HTML-escaping logic for mermaid code.
   static String _escapeMermaidCode(String code) {
@@ -294,8 +354,13 @@ class MermaidRenderWidget extends StatefulWidget {
   /// the code travels as its own &code= parameter — both must share one
   /// query string, or URLSearchParams cannot find the code and the
   /// template renders the empty-code placeholder.
+  ///
+  /// Bump ?v= whenever assets/vendor/mermaid_render.html changes (and keep
+  /// the template's TEMPLATE_VERSION in sync: it keys the decompressed
+  /// library's CacheStorage entry, so a stale version would serve the
+  /// previous library forever).
   static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=4';
+    final base = '$webAssetTemplateUrl?v=5';
     final trimmed = code.trim();
     return trimmed.isEmpty
         ? base
@@ -698,6 +763,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   void didUpdateWidget(MermaidRenderWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.mermaidCode != widget.mermaidCode) {
+      // Invalidate the memoized initial HTML: a recreated WebView (e.g.
+      // after the source-code view was shown, which unmounts the platform
+      // view) reads initialData again and must see the NEW code. While the
+      // WebView stays alive the code change goes through loadData below.
+      _initialHtml = null;
       // On web the loading state is managed INSIDE the iframe (the asset
       // template shows a hint until the diagram is rendered), so _isReady
       // stays true and the Flutter overlay never appears there. On native
@@ -719,6 +789,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     _readyFallbackTimer?.cancel();
     _webViewCreationFallbackTimer?.cancel();
     _deferredCreationTimer?.cancel();
+    // Release the multi-megabyte initial HTML with the widget: a chat list
+    // with several live diagram widgets must not pin one 3.6MB copy each.
+    _initialHtml = null;
     _webViewController = null;
     super.dispose();
   }
@@ -1214,6 +1287,13 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 </body>
 </html>''';
 
+  /// HTML for the initial page load, memoized: [InAppWebView] reads
+  /// `initialData` only when the WebView is created, and later code
+  /// changes go through [loadData] ([_loadMermaidCode]), so rebuilding
+  /// the multi-megabyte document on every widget rebuild would be pure
+  /// waste (it used to run inside [build] on every setState).
+  String? _initialHtml;
+
   String _getInitialHtml() {
     final code = widget.mermaidCode.trim();
     if (code.isEmpty) {
@@ -1221,7 +1301,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     }
     // Same shared template as the fullscreen dialog, with the bundled
     // mermaid.js inlined (offline rendering, no CDN request).
-    return MermaidRenderWidget.buildMermaidHtml(code,
+    return _initialHtml ??= MermaidRenderWidget.buildMermaidHtml(code,
         inlineMermaidJs: _inlineMermaidJs);
   }
 

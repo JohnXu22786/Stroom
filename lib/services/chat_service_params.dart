@@ -109,10 +109,11 @@ extension _ChatServiceParamsExt on ChatService {
       //   is on, offValue when off. Sending the off value explicitly lets
       //   the API disable reasoning instead of leaving the toggle absent.
       // - Additional reasoning params are only sent when reasoning is ON
-      //   and a value was selected for them. Name-only params (no options)
-      //   defer the value to the model level / chat panel selection:
-      //   nothing is sent when no value was chosen (sending the param name
-      //   itself would inject garbage into the request body).
+      //   and a value was selected for them AND the param is usable
+      //   ([ReasoningParam.isUsable]): a name-only param (no options,
+      //   non-boolean) has no selectable value in the panel — a map entry
+      //   for it can only be stale, so it must not be sent (sending the
+      //   param name itself would inject garbage into the request body).
       //   注意：供应商层的运行时开关以「已选值是否存在」为准（聊天面板
       //   切换通过写入/移除参数值生效，不修改共享的供应商配置对象），
       //   因此这里不检查 rp.enabled。
@@ -127,9 +128,13 @@ extension _ChatServiceParamsExt on ChatService {
       }
 
       if (providerToggleParam != null && providerToggleParam.isFilledToggle) {
+        // boolean 类型开关没有开/关值（输入框隐藏）：空值按
+        // 'true'/'false' 发送。
+        final onValue = providerToggleParam.onValue;
+        final offValue = providerToggleParam.offValue;
         final toggleValue = reasoning
-            ? (providerToggleParam.onValue ?? 'true')
-            : (providerToggleParam.offValue ?? 'false');
+            ? ((onValue?.trim().isNotEmpty ?? false) ? onValue! : 'true')
+            : ((offValue?.trim().isNotEmpty ?? false) ? offValue! : 'false');
         ChatService._setReasoningParam(
           result,
           providerToggleParam,
@@ -147,6 +152,15 @@ extension _ChatServiceParamsExt on ChatService {
         for (final rp in providerExtraParams) {
           if (rp.paramName.trim().isEmpty) continue;
           if (hasModelEffort && rp.isEffortParam) continue;
+          // 模型有同名参数时，合并视图以模型版本为准（模型参数在前，
+          // 供应商同名参数被遮蔽）：由模型循环负责发送，这里跳过。
+          if (_modelConfig!.reasoningParams
+              .any((m) => m.paramName == rp.paramName)) {
+            continue;
+          }
+          // 不可用参数（仅参数名、无选项值、非布尔）没有可选值，面板
+          // 开关不可用；map 中即使残留旧值也不得发送（UI 无法再选择它）。
+          if (!rp.isUsable) continue;
           final selectedValue = reasoningParamValues[rp.paramName];
           if (selectedValue != null && selectedValue.isNotEmpty) {
             ChatService._setReasoningParam(
@@ -213,9 +227,13 @@ extension _ChatServiceParamsExt on ChatService {
 
     // Only send reasoning toggle if it exists AND is filled (has a paramName)
     if (toggleParam != null && toggleParam.isFilledToggle) {
+      // boolean 类型开关没有开/关值（输入框隐藏）：空值按
+      // 'true'/'false' 发送。
+      final onValue = toggleParam.onValue;
+      final offValue = toggleParam.offValue;
       final toggleValue = reasoning
-          ? (toggleParam.onValue ?? 'true')
-          : (toggleParam.offValue ?? 'false');
+          ? ((onValue?.trim().isNotEmpty ?? false) ? onValue! : 'true')
+          : ((offValue?.trim().isNotEmpty ?? false) ? offValue! : 'false');
       ChatService._setReasoningParam(
         result,
         toggleParam,
@@ -232,6 +250,9 @@ extension _ChatServiceParamsExt on ChatService {
     if (reasoning) {
       for (final rp in extraParams) {
         if (rp.paramName.trim().isEmpty) continue;
+        // 不可用参数（仅参数名、无选项值、非布尔）没有可选值，面板
+        // 开关不可用；map 中即使残留旧值也不得发送（UI 无法再选择它）。
+        if (!rp.isUsable) continue;
         final selectedValue = reasoningParamValues[rp.paramName];
         if (selectedValue != null && selectedValue.isNotEmpty) {
           ChatService._setReasoningParam(

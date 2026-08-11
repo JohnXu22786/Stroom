@@ -33,14 +33,8 @@ class AssistantDefaultsTab extends ConsumerWidget {
   final ValueChanged<String?> onDefaultModelChanged;
 
   /// 用户改动任何工具开关（或使用"全部启用/全部关闭"）时，回调完整的
-  /// 新默认工具集合；传 null 表示"恢复未配置"（新话题重新自动启用全部工具）。
+  /// 新默认工具集合。tab 本身不再产生 null（"恢复未配置"按钮已移除）。
   final ValueChanged<Set<String>?> onDefaultToolsChanged;
-
-  /// 该助手的 MCP 工具显示开关（对话页是否显示 MCP 工具）。
-  final bool mcpToolsVisible;
-
-  /// 用户切换 MCP 工具显示开关时的回调。
-  final ValueChanged<bool> onMcpToolsVisibleChanged;
 
   const AssistantDefaultsTab({
     super.key,
@@ -48,8 +42,6 @@ class AssistantDefaultsTab extends ConsumerWidget {
     required this.defaultToolNames,
     required this.onDefaultModelChanged,
     required this.onDefaultToolsChanged,
-    required this.mcpToolsVisible,
-    required this.onMcpToolsVisibleChanged,
   });
 
   /// All tools the user can pick from: the built-in tools plus any MCP
@@ -60,12 +52,9 @@ class AssistantDefaultsTab extends ConsumerWidget {
   /// panel), falling back to the static service definitions when the
   /// registry is still empty (dialog opened before the chat page ever ran).
   ///
-  /// MCP 占位工具仅在 [mcpToolsVisible]（MCP 总开关开启且该助手的显示
-  /// 开关开启）时列出。
-  List<ToolDefinition> _availableTools(
-    WidgetRef ref, {
-    required bool mcpToolsVisible,
-  }) {
+  /// MCP 工具始终列出（MCP 总开关由 adapter 层控制：总开关关闭时
+  /// adapter 已清空 mcpToolDefinitions，这里自然不显示）。
+  List<ToolDefinition> _availableTools(WidgetRef ref) {
     final adapter = ref.read(chatStreamManagerProvider).adapter;
     final registered = ChatService.getRegisteredToolDefinitions();
     final builtins = registered.isNotEmpty
@@ -77,9 +66,7 @@ class AssistantDefaultsTab extends ConsumerWidget {
           ];
     final seen = <String>{};
     final tools = <ToolDefinition>[];
-    final mcpTools =
-        mcpToolsVisible ? adapter.mcpToolDefinitions : const <ToolDefinition>[];
-    for (final t in [...builtins, ...mcpTools]) {
+    for (final t in [...builtins, ...adapter.mcpToolDefinitions]) {
       if (seen.add(t.name)) tools.add(t);
     }
     return tools;
@@ -90,12 +77,6 @@ class AssistantDefaultsTab extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final entriesState = ref.watch(providerEntriesProvider);
     final adapter = ref.read(chatStreamManagerProvider).adapter;
-    // MCP 总开关（MCP 列表页设置）：关闭时 MCP 工具不在助手页面显示，
-    // 显示开关随之禁用。
-    final mcpEntry =
-        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
-    final mcpMasterEnabled = mcpEntry?.enabled ?? true;
-    final effectiveMcpToolsVisible = mcpToolsVisible && mcpMasterEnabled;
     // 按显示名去重：两个供应商配置同名模型时只保留第一个（与聊天页
     // "first match wins" 的约定一致），否则 RadioGroup 会因重复 value 崩溃。
     final seenModelNames = <String>{};
@@ -103,17 +84,16 @@ class AssistantDefaultsTab extends ConsumerWidget {
       for (final m in adapter.availableModels(entriesState))
         if (seenModelNames.add(m.displayName)) m,
     ];
-    final tools = _availableTools(
-      ref,
-      mcpToolsVisible: effectiveMcpToolsVisible,
-    );
+    final tools = _availableTools(ref);
     final allToolNames = tools.map((t) => t.name).toSet();
-    // 清理用的"有效工具名"：除当前显示的工具外，还包含被隐藏的 MCP 工具
-    // （显示开关或总开关关闭时）。它们只是被隐藏、并未失效——单次开关/
-    // 全部启用不应把它们从默认配置中静默清除，恢复显示后默认配置保留。
+    // 清理用的"有效工具名"：除当前显示的工具外，还包含被 MCP 总开关
+    // 隐藏的 MCP 工具。它们只是被隐藏、并未失效——单次开关/全部启用
+    // 不应把它们从默认配置中静默清除，恢复显示后默认配置保留。
     // 注意从**配置**推导（而非 adapter 的占位列表）：总开关关闭时 adapter
     // 已清空占位工具，只有配置里还能拿到这些名字。
     final validMcpToolNames = <String>{};
+    final mcpEntry =
+        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
     for (final c in mcpEntry?.configs ?? const <ProviderConfigItem>[]) {
       final typeConfig = c.models.isNotEmpty ? c.models[0].typeConfig : null;
       if (typeConfig?['isHttpTool'] == true) continue;
@@ -175,38 +155,6 @@ class AssistantDefaultsTab extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 16),
-
-          // ── MCP 工具显示开关 ──
-          // 与下方"默认启用工具"的逐工具开关相互独立：这里控制 MCP 工具
-          // 是否显示在对话页的工具列表中（能否选择使用）；下面的逐工具
-          // 开关控制新话题默认启用哪些工具。
-          _SectionCard(
-            icon: Icons.extension_outlined,
-            title: 'MCP 工具显示',
-            subtitle: mcpMasterEnabled
-                ? (mcpToolsVisible
-                    ? '开启：MCP 工具会显示在对话页的工具列表中，可选择是否使用。'
-                    : '关闭：MCP 工具不在对话页显示，无法选择使用。')
-                : 'MCP 总开关已关闭，请先在 MCP 设置页开启。',
-            child: SwitchListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              title: Text(
-                '在对话页显示 MCP 工具',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: cs.onSurface,
-                ),
-              ),
-              value: effectiveMcpToolsVisible,
-              activeThumbColor: cs.primary,
-              onChanged: mcpMasterEnabled
-                  ? (value) => onMcpToolsVisibleChanged(value)
-                  : null,
-            ),
-          ),
-          const SizedBox(height: 12),
 
           // ── 默认模型 ──
           _SectionCard(
@@ -275,12 +223,34 @@ class AssistantDefaultsTab extends ConsumerWidget {
           const SizedBox(height: 12),
 
           // ── 默认启用工具 ──
+          // 头部右侧放"全部启用/全部关闭"两个批量操作按钮；逐个工具的
+          // 开关仍在下方列表中。
           _SectionCard(
             icon: Icons.build_outlined,
             title: '默认启用工具',
             subtitle: isToolsConfigured
                 ? '未启用的工具，在该助手的新话题中不会自动开启。'
                 : '尚未配置默认工具，新话题将自动启用全部工具。',
+            trailing: tools.isEmpty
+                ? null
+                : Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 4,
+                    children: [
+                      // 未配置时"全部启用"没有意义（当前已自动启用全部），
+                      // 且会悄悄把集合冻结为今天的工具列表——不显示。
+                      if (isToolsConfigured)
+                        TextButton(
+                          onPressed: () =>
+                              onDefaultToolsChanged(validToolNames),
+                          child: const Text('全部启用'),
+                        ),
+                      TextButton(
+                        onPressed: () => onDefaultToolsChanged(const {}),
+                        child: const Text('全部关闭'),
+                      ),
+                    ],
+                  ),
             child: tools.isEmpty
                 ? Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -321,7 +291,7 @@ class AssistantDefaultsTab extends ConsumerWidget {
                           onChanged: (enabled) {
                             // 只保留当前仍有效的工具：已失效的工具名
                             // （如被删除的 MCP 服务器）在单次开关时顺带
-                            // 清理；被显示开关隐藏的 MCP 工具不在
+                            // 清理；被 MCP 总开关隐藏的工具不在
                             // allToolNames 中但在 validToolNames 中，
                             // 不会被清理（见 validToolNames 注释）。
                             final next = Set<String>.from(
@@ -335,32 +305,6 @@ class AssistantDefaultsTab extends ConsumerWidget {
                             onDefaultToolsChanged(next);
                           },
                         ),
-                      const Divider(height: 1),
-                      // Wrap（而非 Row）：手机宽度下按钮放不下时自动换行，
-                      // 避免 RenderFlex 溢出。
-                      Wrap(
-                        alignment: WrapAlignment.end,
-                        spacing: 4,
-                        children: [
-                          if (isToolsConfigured)
-                            TextButton(
-                              onPressed: () => onDefaultToolsChanged(null),
-                              child: const Text('取消配置（自动启用全部）'),
-                            ),
-                          // 未配置时"全部启用"没有意义（当前已自动启用全部），
-                          // 且会悄悄把集合冻结为今天的工具列表——不显示。
-                          if (isToolsConfigured)
-                            TextButton(
-                              onPressed: () =>
-                                  onDefaultToolsChanged(validToolNames),
-                              child: const Text('全部启用'),
-                            ),
-                          TextButton(
-                            onPressed: () => onDefaultToolsChanged(const {}),
-                            child: const Text('全部关闭'),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
           ),
@@ -430,17 +374,21 @@ class AssistantDefaultsTab extends ConsumerWidget {
 const _followGlobalSentinel = '\u0000__follow_global__';
 
 /// 配置区块卡片：图标 + 标题 + 说明 + 内容。
+/// [trailing] 渲染在标题行右侧（右对齐），用于放置区块级操作按钮
+/// （如"全部启用/全部关闭"）；窄屏下自动换行，不溢出。
 class _SectionCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
   final Widget child;
+  final Widget? trailing;
 
   const _SectionCard({
     required this.icon,
     required this.title,
     required this.subtitle,
     required this.child,
+    this.trailing,
   });
 
   @override
@@ -493,6 +441,14 @@ class _SectionCard extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (trailing != null) ...[
+                    const SizedBox(width: 8),
+                    // Expanded + Wrap：按钮占满标题行剩余空间，右对齐；
+                    // 空间不足时按钮换行，避免 RenderFlex 溢出。
+                    Expanded(
+                      child: trailing!,
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 8),

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../providers/provider_config.dart';
+import '../widgets/drag_sort_area.dart';
 import 'llm_model_config_shared.dart';
 
 part 'llm_model_config_page_custom_params.dart';
@@ -117,19 +118,23 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       if (_contextController.text.isNotEmpty) return true;
       if (_customParams.any((p) => p.paramName.isNotEmpty)) return true;
       // 新模型 + 供应商参数：打开即显示供应商参数不算改动，与
-      // merge(provider, []) 初始态比较（默认不选 → 力度 options 为空）
+      // merge(provider, []) 初始态比较（默认不选 → 力度 options 为空）。
+      // 注意：merge 结果可能包含供应商的共享实例，归一化前必须拷贝，
+      // 否则会把「默认不选」写回供应商配置（模型改动污染供应商）。
       _syncEffortOptionsFromBlocks();
       _syncAdditionalOptionsFromBlocks();
       final initialReasoning = mergeReasoningParams(
         widget.provider?.reasoningParams ?? [],
         const [],
-      );
+      ).map((p) => p.copy()).toList();
       final initialEffort = initialReasoning
           .cast<ReasoningParam?>()
           .firstWhere((p) => p?.isEffortParam ?? false, orElse: () => null);
       if (initialEffort != null) {
         initialEffort.options = [];
       }
+      // 镜像 initState：名称式供应商力度参数（无选项）不参与比较
+      _removeNameOnlyProviderEffort(initialReasoning);
       final currentReasoning = _reasoningParams.map((p) => p.toMap()).toList();
       if (jsonEncode(initialReasoning.map((p) => p.toMap()).toList()) !=
           jsonEncode(currentReasoning)) {
@@ -239,13 +244,15 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     _syncEffortOptionsFromBlocks();
     _syncAdditionalOptionsFromBlocks();
     _syncCustomParamOptionsFromBlocks();
+    // 归一化前拷贝合并结果：merged 中未被子模型覆盖的供应商参数是
+    // 共享实例，直接改 options 会把模型的勾选状态写进供应商配置。
     final initialReasoning = _applyEffortShadowing(
       mergeReasoningParams(
         widget.provider?.reasoningParams ?? [],
         m.reasoningParams,
       ),
       m.reasoningParams,
-    );
+    ).map((p) => p.copy()).toList();
     // 应用初始勾选状态（默认不选语义）：基准的力度 options = 模型已
     // 保存的 options（模型无力度参数时为空）——与 initState 的块勾选
     // 初始值一致。boolean 类型的 options 清空（与 sync 一致）。
@@ -265,11 +272,26 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         p.options.clear();
       }
     }
+    // 镜像 initState：名称式供应商力度参数（无选项）不参与比较
+    _removeNameOnlyProviderEffort(initialReasoning);
     if (jsonEncode(initialReasoning.map((p) => p.toMap()).toList()) !=
         jsonEncode(_reasoningParams.map((p) => p.toMap()).toList())) {
       return true;
     }
     return false;
+  }
+
+  /// 与 initState 的「没有就不显示」一致：供应商的名称式力度参数
+  /// （仅参数名、无选项值）且模型没有自己的力度参数时，把它从列表
+  /// 中移除。基线比较必须镜像工作副本的同一处理，否则打开未修改
+  /// 的页面也会弹「放弃修改」。
+  void _removeNameOnlyProviderEffort(List<ReasoningParam> params) {
+    final providerEffort =
+        findEffortParam(widget.provider?.reasoningParams ?? []);
+    if (providerEffort == null || providerEffort.options.isNotEmpty) return;
+    final modelEffort = findEffortParam(widget.model?.reasoningParams ?? []);
+    if (modelEffort != null) return;
+    params.removeWhere((p) => p.isEffortParam);
   }
 
   /// 应用「力度参数遮蔽」：模型有自己的力度参数时，移除供应商的

@@ -256,6 +256,88 @@ void main() {
       expect(body!.containsKey('thinking'), false);
     });
 
+    test(
+        'name-only effort param (no options) is NOT sent even with a stale '
+        'value in the map', () async {
+      // 模型删除全部选项后，map 中残留的旧值不得注入请求：面板开关
+      // 已显示灰色不可用，请求必须与之保持一致。
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Test',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: [],
+          ),
+        ],
+      );
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      await for (final _ in service.sendStream('Hi',
+          history: [],
+          reasoning: true,
+          reasoningParamValues: {
+            'reasoning_effort': 'high', // stale value from before
+          })) {}
+
+      final body = provider.lastRequestBody;
+      expect(body, isNotNull);
+      // Toggle still sent (it is usable)
+      expect(body!['thinking']['type'], 'enabled');
+      // Stale effort value NOT sent
+      expect(body.containsKey('reasoning_effort'), false);
+    });
+
+    test(
+        'boolean effort param with empty options IS sent (switch is the '
+        'value)', () async {
+      // 布尔类型无选项值但开关即值：与面板可用状态一致，值照常发送。
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Test',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'thinking.enabled',
+            isEffortParam: true,
+            type: 'boolean',
+            options: [],
+          ),
+        ],
+      );
+
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      await for (final _ in service.sendStream('Hi',
+          history: [],
+          reasoning: true,
+          reasoningParamValues: {
+            'thinking.enabled': 'true',
+          })) {}
+
+      final body = provider.lastRequestBody;
+      expect(body, isNotNull);
+      expect(body!['thinking']['type'], 'enabled');
+      expect(body['thinking']['enabled'], true);
+    });
+
     test('supports Anthropic thinking format via reasoning selections',
         () async {
       final provider = _MockProvider();

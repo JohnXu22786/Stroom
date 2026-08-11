@@ -43,12 +43,6 @@ final assistantProvider =
 class AssistantsNotifier extends StateNotifier<List<Assistant>> {
   AssistantsNotifier() : super([]);
 
-  /// 用户是否在 MCP 列表页（Provider 页）切换过 MCP总开关。
-  /// 切换过之后，新建助手的 MCP 工具显示开关默认关闭
-  /// （而不是以上一次状态为基准）。由 _load 读取持久化标记，
-  /// 切换时通过 [resetMcpToolsVisibility] 同步更新。
-  bool _mcpMasterSwitchToggled = false;
-
   // --------------------------------------------------------------------------
   // Persistence
   // --------------------------------------------------------------------------
@@ -61,8 +55,6 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
         final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
         state = list.map((m) => Assistant.fromMap(m)).toList();
       }
-      _mcpMasterSwitchToggled =
-          prefs.getBool('mcp_master_switch_toggled') ?? false;
     } catch (e) {
       debugPrint('Failed to load assistants: $e');
     }
@@ -125,9 +117,6 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
       description: description,
       settings: settings,
       modelId: modelId,
-      // 在 Provider 页切换过 MCP总开关后，新建助手的 MCP 工具显示
-      // 开关默认关闭（见 _mcpMasterSwitchToggled 注释）。
-      mcpToolsVisible: !_mcpMasterSwitchToggled,
     );
     state = [...state, assistant];
     _persist();
@@ -220,6 +209,10 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
   /// means "configured, all tools off" — to set it. Pass [clearDefaultToolNames]
   /// = true (with a null [defaultToolNames]) to return the assistant to
   /// "never configured" (new topics auto-enable all tools again).
+  ///
+  /// 注意：编辑助手对话框的"取消配置"按钮已移除，UI 不再产生
+  /// [clearDefaultToolNames] = true 的调用；该参数保留给测试与
+  /// 未来入口使用。
   void updateAssistantDefaults({
     required String id,
     String? defaultModelName,
@@ -249,42 +242,11 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
             : defaultToolNames != null
                 ? Set<String>.from(defaultToolNames)
                 : a.defaultToolNames,
-        // 保留 MCP 工具显示开关：默认值更新不应把它重置回默认可见。
-        mcpToolsVisible: a.mcpToolsVisible,
         createdAt: a.createdAt,
         updatedAt: DateTime.now(),
       );
     }).toList();
     _persist();
-  }
-
-  /// 更新单个助手的 MCP 工具显示开关（助手页面"默认设置"tab）。
-  void updateAssistantMcpVisibility({
-    required String id,
-    required bool mcpToolsVisible,
-  }) {
-    state = state.map((a) {
-      if (a.id != id) return a;
-      return a.copyWith(mcpToolsVisible: mcpToolsVisible);
-    }).toList();
-    _persist();
-  }
-
-  /// 重置全部助手的 MCP 工具显示开关为关闭，并标记"已切换过 MCP总开关"
-  /// （后续新建助手默认也关闭）。
-  ///
-  /// 在 MCP 列表页（Provider 页）切换 MCP总开关后调用：助手页面的显示
-  /// 开关以关闭为基准，而不是以上一次的状态为基准。
-  Future<void> resetMcpToolsVisibility() async {
-    _mcpMasterSwitchToggled = true;
-    state = state.map((a) => a.copyWith(mcpToolsVisible: false)).toList();
-    await _persist();
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('mcp_master_switch_toggled', true);
-    } catch (e) {
-      debugPrint('Failed to persist mcp_master_switch_toggled: $e');
-    }
   }
 
   /// Deletes an assistant by [id].
