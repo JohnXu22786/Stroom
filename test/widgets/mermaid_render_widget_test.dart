@@ -89,7 +89,8 @@ void main() {
     // ---- Inline loader caching (perf: the ~3.5MB bundled library must be
     // JSON-encoded exactly once, not once per render / per widget rebuild) ----
 
-    test('reuses the encoded inline loader for repeated renders of the same '
+    test(
+        'reuses the encoded inline loader for repeated renders of the same '
         'library', () {
       const lib = 'var cachedLibAAA = 1;';
       final before = MermaidRenderWidget.inlineLoaderBuildCount;

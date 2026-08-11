@@ -276,8 +276,8 @@ class MermaidRenderWidget extends StatefulWidget {
       return cached;
     }
     final skeleton = _mermaidHtmlTemplate
-        .replaceFirst(
-            'GESTURE_SCRIPT_PLACEHOLDER', withJsGestures ? _mermaidGestureJs : '')
+        .replaceFirst('GESTURE_SCRIPT_PLACEHOLDER',
+            withJsGestures ? _mermaidGestureJs : '')
         .replaceFirst('MERMAID_LOADER_PLACEHOLDER', loader);
     _cachedSkeletonLoaderJs = loader;
     _cachedSkeletonWithGestures = withJsGestures;
