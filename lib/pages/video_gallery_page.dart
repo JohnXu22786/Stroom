@@ -19,7 +19,6 @@ import '../utils/sort_config.dart';
 import '../utils/manifest_bridge.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/file_manager_utils.dart';
-import '../widgets/folder_picker_dialog.dart';
 import 'files_page_shared.dart';
 
 class VideoGalleryPage extends ConsumerStatefulWidget {
@@ -117,24 +116,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
   // ====================================================================
 
   Future<void> _recordVideo() async {
-    final folders = ref.read(videoFolderListProvider);
-    final folder = await FolderPickerDialog.show(
-      context,
-      currentFolder: _currentFolder,
-      availableFolders: folders,
-      title: '录像添加至文件夹',
-      onCreateFolder: (name) async {
-        // addFolder internally calls loadFolders()
-        await ref.read(videoFolderListProvider.notifier).addFolder(name);
-        return null;
-      },
-      onRefreshFolders: () async {
-        // Provider state already updated by addFolder() above
-        return ref.read(videoFolderListProvider);
-      },
-    );
-    if (folder == null || !mounted) return;
-
+    // 直接保存到当前正在浏览的文件夹（_currentFolder），不再弹文件夹选择
     // 记录加载对话框是否弹出：异常发生在弹窗之前（如系统相机抛错）
     // 或成功弹出之后（如 loadRecords 抛错）时，catch 中的 pop 会误弹
     // 下层路由（应用根路由），因此必须带条件执行
@@ -214,7 +196,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
             format: format,
             createdAt: DateTime.now(),
             size: bytes.length,
-            folder: folder,
+            folder: _currentFolder,
             duration: videoDurationMs,
           ),
         );
