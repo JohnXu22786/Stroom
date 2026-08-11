@@ -596,9 +596,7 @@ class _McpMasterSwitchCard extends StatelessWidget {
               ),
             ),
             subtitle: Text(
-              enabled
-                  ? '已开启：MCP 服务器工具可用。'
-                  : '已关闭：MCP 服务器工具不在助手页面与对话页中显示。',
+              enabled ? '已开启：MCP 服务器工具可用。' : '已关闭：MCP 服务器工具不在助手页面与对话页中显示。',
               style: TextStyle(
                 fontSize: 12,
                 color: cs.onSurfaceVariant,
