@@ -87,7 +87,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
   /// Loads the previous page of older messages and prepends them to the
   /// chat controller. Called by [ChatAnimatedList.onEndReached] when the user
   /// scrolls near the top of the message list.
-  Future<void> _loadMoreMessages() async {
+  Future<void> _loadMoreMessages({bool skipMinDisplayDelay = false}) async {
     if (_isLoadingMore) return;
     if (!_hasMoreMessages) {
       // 顶部没有更早的历史消息：提示"没有更多内容了"。
@@ -127,7 +127,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
       // 就位保持同步，锚点校正的时机也与修复前一致。
       final remaining = _ChatPageState._loadMoreMinDisplayDuration -
           DateTime.now().difference(loadStartedAt);
-      if (remaining > Duration.zero) {
+      // Search navigation skips the minimum-display delay so jumping to an
+      // old match does not stall 500 ms per loaded batch.
+      if (remaining > Duration.zero && !skipMinDisplayDelay) {
         await Future<void>.delayed(remaining);
       }
       // 延迟期间可能已切换对话（_loadMoreGeneration 已推进）：放弃本批。

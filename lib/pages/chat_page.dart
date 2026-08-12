@@ -261,6 +261,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final TextEditingController _searchTextController = TextEditingController();
   final Map<String, GlobalKey> _messageKeys = {};
 
+  /// In-flight search navigation (may be loading older paginated messages).
+  /// Serializes rapid up/down taps so a newer tap waits for the previous
+  /// one's loads instead of racing them (load-more refuses concurrent runs).
+  Future<void>? _pendingSearchScroll;
+
   bool _developerMode = false;
   final Map<String, bool> _expandedErrors = {};
 
