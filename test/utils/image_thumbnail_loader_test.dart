@@ -175,20 +175,6 @@ void main() {
       expect(result!.sublist(0, 4), [0x89, 0x50, 0x4E, 0x47]);
     });
 
-    testWidgets('peek returns cached bytes synchronously without disk access',
-        (tester) async {
-      final record = _makeRecord(hash: 'peek');
-      final thumb = Uint8List.fromList([5, 6, 7, 8]);
-      await tester.runAsync(() async {
-        await ImageManifest.writeFile('${record.hash}_thumb.png', thumb);
-      });
-
-      // 未加载 → peek 返回 null（不触发磁盘读）
-      expect(ImageThumbnailLoader.peek(record), isNull);
-      await ImageThumbnailLoader.loadThumbnail(record);
-      expect(ImageThumbnailLoader.peek(record), equals(thumb));
-    });
-
     testWidgets(
         'undecodable full image: returns null, writes no thumb file, '
         'and the negative cache prevents repeated full-image reads',
@@ -203,8 +189,8 @@ void main() {
         () => ImageThumbnailLoader.loadThumbnail(record),
       );
       expect(first, isNull);
-      // 原图字节绝不能进入缓存
-      expect(ImageThumbnailLoader.peek(record), isNull);
+      // 原图字节绝不能进入缓存：若缓存了原图，下面的第二次调用会直接命中
+      // 并返回非 null，而不是走负缓存返回 null
       // 也没有写出孤儿缩略图文件
       await tester.runAsync(() async {
         expect(
@@ -229,7 +215,8 @@ void main() {
           reason: 'invalidate 后允许重试');
     });
 
-    testWidgets('clear() resets memory state including the negative cache',
+    testWidgets(
+        'clear() resets the in-memory cache so the next call re-reads disk',
         (tester) async {
       final record = _makeRecord(hash: 'clear_test');
       final thumb = Uint8List.fromList([1, 2, 3]);
@@ -238,12 +225,22 @@ void main() {
       });
 
       await ImageThumbnailLoader.loadThumbnail(record);
-      expect(ImageThumbnailLoader.peek(record), isNotNull);
-
       ImageThumbnailLoader.clear();
-      expect(ImageThumbnailLoader.peek(record), isNull);
+
+      // 删掉磁盘文件：若 clear() 没清空内存缓存，这里仍会命中并返回 thumb；
+      // 返回 null 才证明内存状态已被重置、重新走了磁盘读
+      await tester.runAsync(() async {
+        await ImageManifest.deleteFile('${record.hash}_thumb.png');
+      });
+      expect(await ImageThumbnailLoader.loadThumbnail(record), isNull,
+          reason: 'clear() 必须重置内存缓存（陈旧缓存会返回非 null）');
+
+      // 恢复磁盘文件：clear() 后下一次调用应重新从磁盘读取
+      await tester.runAsync(() async {
+        await ImageManifest.writeFile('${record.hash}_thumb.png', thumb);
+      });
       expect(await ImageThumbnailLoader.loadThumbnail(record), equals(thumb),
-          reason: 'clear 后重新从磁盘加载');
+          reason: 'clear() 后重新从磁盘加载');
     });
   });
 }
