@@ -158,6 +158,36 @@ extension _ChatPageUiExt on _ChatPageState {
     });
   }
 
+  /// Recomputes the scroll-to-bottom button visibility from the CURRENT
+  /// list metrics ("is the user at the bottom?"), not from the last scroll
+  /// action. Scroll events can be swallowed or never fire at all for
+  /// metric-only changes — a viewport resize from the keyboard (the pixels
+  /// often do not move; an idle ScrollPosition does not notify its
+  /// controller listeners), the composer growing, a content-extent
+  /// correction — so the button would go stale if it only listened to
+  /// scroll events. This runs after every [ScrollMetricsNotification]
+  /// (which fires for every metric change) and after keyboard transitions,
+  /// keeping the button truthful at all times. Idempotent: no setState
+  /// when nothing changed.
+  ///
+  /// Deliberately touches ONLY [_showScrollToBottomButton], never
+  /// [_autoScrollEnabled]: the auto-scroll flag is owned by the scroll
+  /// path ([_onChatScroll]) so the content-growth follow can converge on
+  /// the true bottom over the sliver's estimate-correction frames — a
+  /// recompute here must not turn it off mid-convergence (the list would
+  /// drift forever).
+  void _updateScrollToBottomState() {
+    if (_pendingInitialScrollAdjustment) return;
+    if (!_chatScrollController.hasClients) return;
+    final pos = _chatScrollController.position;
+    final isAtBottom =
+        (pos.maxScrollExtent - pos.pixels) <=
+        _ChatPageState._atBottomWindowPx;
+    final showButton = !isAtBottom;
+    if (showButton == _showScrollToBottomButton) return;
+    setState(() => _showScrollToBottomButton = showButton);
+  }
+
   /// Handles chat list scroll events to track auto-scroll state.
   void _onChatScroll() {
     // While the initial positioning pass runs the list is hidden and all
@@ -167,7 +197,8 @@ extension _ChatPageUiExt on _ChatPageState {
     if (!_chatScrollController.hasClients) return;
     final maxScroll = _chatScrollController.position.maxScrollExtent;
     final currentScroll = _chatScrollController.position.pixels;
-    final isAtBottom = (maxScroll - currentScroll) <= 80;
+    final isAtBottom =
+        (maxScroll - currentScroll) <= _ChatPageState._atBottomWindowPx;
 
     // 用户滚动到顶部且没有更早的历史消息：提示"没有更多内容了"。
     // 仅在用户滚动活动期间（拖动或惯性滚动）判定——程序化跳转
@@ -723,62 +754,57 @@ extension _ChatPageUiExt on _ChatPageState {
     );
   }
 
-  /// Scroll-to-bottom overlay button shown when the user scrolls up.
+  /// Scroll-to-bottom overlay button shown when the user is not at the
+  /// bottom. Positioned/animated by the caller (bottom-right corner);
+  /// returns just the button.
   Widget _buildScrollToBottomButton({required bool isDark}) {
-    return Positioned(
-      right: 16,
-      bottom: 16,
-      child: Material(
-        elevation: 4,
-        shape: const CircleBorder(),
-        color: isDark ? Colors.grey[700] : Colors.grey[300],
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: _onScrollToBottomTap,
-          child: Container(
-            width: 36,
-            height: 36,
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.arrow_downward,
-              size: 20,
-              color: isDark ? Colors.grey[200] : Colors.grey[700],
-            ),
+    return Material(
+      elevation: 4,
+      shape: const CircleBorder(),
+      color: isDark ? Colors.grey[700] : Colors.grey[300],
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: _onScrollToBottomTap,
+        child: Container(
+          width: _ChatPageState._overlayButtonSize,
+          height: _ChatPageState._overlayButtonSize,
+          alignment: Alignment.center,
+          child: Icon(
+            Icons.arrow_downward,
+            size: 20,
+            color: isDark ? Colors.grey[200] : Colors.grey[700],
           ),
         ),
       ),
     );
   }
 
-  /// Dismisses the soft keyboard, bottom-LEFT (symmetric to the
-  /// scroll-to-bottom button on the bottom-right), visible while the
-  /// keyboard is open. The keyboard otherwise stays up while the user
-  /// reads/scrolls (the list's [ScrollViewKeyboardDismissBehavior.manual]):
-  /// it is closed either via the keyboard's own close key or this button.
+  /// Dismisses the soft keyboard. Bottom-right, LEFT of the scroll-to-
+  /// bottom button while that button is visible; it takes over the corner
+  /// slot when the scroll button is hidden. The keyboard otherwise stays
+  /// up while the user reads/scrolls (the list's
+  /// [ScrollViewKeyboardDismissBehavior.manual]): it is closed either via
+  /// the keyboard's own close key or this button.
   Widget _buildKeyboardDismissButton({required bool isDark}) {
-    return Positioned(
-      left: 16,
-      bottom: 16,
-      child: Material(
-        elevation: 4,
-        shape: const CircleBorder(),
-        color: isDark ? Colors.grey[700] : Colors.grey[300],
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: () {
-            // Hide the soft keyboard; the keyboard-close transition in
-            // didChangeMetrics restores the reading position.
-            FocusScope.of(context).unfocus();
-          },
-          child: Container(
-            width: 36,
-            height: 36,
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.keyboard_hide,
-              size: 20,
-              color: isDark ? Colors.grey[200] : Colors.grey[700],
-            ),
+    return Material(
+      elevation: 4,
+      shape: const CircleBorder(),
+      color: isDark ? Colors.grey[700] : Colors.grey[300],
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: () {
+          // Hide the soft keyboard; the keyboard-close transition in
+          // didChangeMetrics restores the reading position.
+          FocusScope.of(context).unfocus();
+        },
+        child: Container(
+          width: _ChatPageState._overlayButtonSize,
+          height: _ChatPageState._overlayButtonSize,
+          alignment: Alignment.center,
+          child: Icon(
+            Icons.keyboard_hide,
+            size: 20,
+            color: isDark ? Colors.grey[200] : Colors.grey[700],
           ),
         ),
       ),
