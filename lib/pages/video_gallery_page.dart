@@ -244,11 +244,10 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     // 相册抛错）或成功弹出之后（如 loadRecords 抛错）时，catch 中的
     // pop 会误弹下层路由（应用根路由），因此必须带条件执行
     var dialogShown = false;
-    var videoImported = false;
     try {
       final picker = ImagePicker();
-      final pickedFile = await picker.pickVideo(source: ImageSource.gallery);
-      if (pickedFile == null) {
+      final pickedFiles = await picker.pickMultiVideo();
+      if (pickedFiles.isEmpty) {
         _isImporting = false;
         return;
       }
@@ -275,20 +274,25 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       );
       dialogShown = true;
 
-      final bytes = await pickedFile.readAsBytes();
-      if (bytes.isNotEmpty) {
+      final records = ref.read(videoRecordsProvider);
+      final usedInBatch = <String>{};
+      var count = 0;
+      for (final pickedFile in pickedFiles) {
+        final bytes = await pickedFile.readAsBytes();
+        if (bytes.isEmpty) continue;
+
         final hash = computeVideoHash(bytes);
         final rawName = sanitizeFileName(pickedFile.name);
         final ext = p.extension(rawName).replaceAll('.', '').toLowerCase();
         final format = ext.isNotEmpty ? ext : 'mp4';
         final storageFileName = '$hash.$format';
 
-        final records = ref.read(videoRecordsProvider);
         final displayName = _uniqueVideoName(
           p.basenameWithoutExtension(rawName),
           records,
-          <String>{},
+          usedInBatch,
         );
+        usedInBatch.add(displayName);
 
         final videoPath = await VideoManifest.writeFile(
           storageFileName,
@@ -327,7 +331,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
             duration: videoDurationMs,
           ),
         );
-        videoImported = true;
+        count++;
       }
 
       // Close loading indicator
@@ -338,12 +342,12 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
 
       await ref.read(videoRecordsProvider.notifier).loadRecords();
       await ref.read(videoFolderListProvider.notifier).loadFolders();
-      // 只有真正保存了记录才提示成功（空字节时没有保存任何内容）
-      if (mounted && videoImported) {
+      // 没有任何视频被导入（如全部跳过）时不显示成功提示
+      if (mounted && count > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('已导入视频'),
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Text('已导入 $count 个视频'),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
