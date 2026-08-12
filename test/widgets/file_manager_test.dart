@@ -2714,4 +2714,381 @@ void main() {
       }
     });
   });
+
+  // ===========================================================================
+  // Current-folder breadcrumb title (basename + ancestor dropdown) and the
+  // full-path label (front-truncated) on the in-list back item.
+  // ===========================================================================
+
+  /// True when [value] contains no lone surrogates — every high surrogate is
+  /// immediately followed by its low half (i.e. no split surrogate pairs).
+  bool hasNoLoneSurrogates(String value) {
+    for (var i = 0; i < value.length; i++) {
+      final unit = value.codeUnitAt(i);
+      if (unit >= 0xDC00 && unit <= 0xDFFF) return false; // lone low surrogate
+      if (unit >= 0xD800 && unit <= 0xDBFF) {
+        if (i + 1 >= value.length) return false; // high surrogate without pair
+        final next = value.codeUnitAt(i + 1);
+        if (next < 0xDC00 || next > 0xDFFF) return false;
+        i++; // skip the completed pair
+      }
+    }
+    return true;
+  }
+
+  group('FileManagerView current-folder breadcrumb title', () {
+    /// Helper: a FileManagerView wrapped for tests with the nested bridge.
+    Widget buildBreadcrumbFM({
+      required Set<String> folders,
+      required FileManagerConfig<_TestFileRecord> config,
+      List<_TestFileRecord> records = const [],
+    }) {
+      return _buildTestApp(
+        FileManagerView<_TestFileRecord>(
+          sortedRecords: records,
+          folders: folders,
+          sortConfig: sortConfig,
+          config: config,
+          onRefresh: () async {},
+          onRenameFile: (_, __) async {},
+          onMoveFile: (_, __) async {},
+          onCopyFile: (_, __) async {},
+          onDeleteFile: (_) async {},
+          onDeleteFiles: (_) async {},
+          onDeleteFolders: (_) async {},
+          onMoveFiles: (_, __) async {},
+          onMoveFolders: (_, __) async {},
+          onExportFile: (_) async {},
+          onRenameFolder: (_, __) async {},
+          onMoveFolder: (_, __) async {},
+          onCopyFolder: (_, __) async {},
+          onDeleteFolder: (_) async {},
+          onCreateFolder: (_) async {},
+          onToggleSort: (_) {},
+          manifestBridge: fileManagerNavManifestBridge,
+        ),
+      );
+    }
+
+    FileManagerConfig<_TestFileRecord> breadcrumbConfig({
+      void Function(String)? onCurrentFolderChanged,
+    }) {
+      return FileManagerConfig<_TestFileRecord>(
+        title: 'Test',
+        fileIconBuilder: (_) =>
+            const Icon(Icons.videocam, key: Key('fallback_icon')),
+        onFileTap: (_) {},
+        onCurrentFolderChanged: onCurrentFolderChanged,
+      );
+    }
+
+    testWidgets(
+      'AppBar shows the current folder basename with a dropdown instead of the full path',
+      (tester) async {
+        await tester.pumpWidget(
+          buildBreadcrumbFM(
+            folders: {'photos', 'photos/vacation'},
+            config: breadcrumbConfig(),
+          ),
+        );
+
+        // At root the plain config title is shown — no dropdown
+        expect(find.byKey(const Key('fm_folder_breadcrumb_btn')), findsNothing);
+
+        await tester.tap(find.text('photos'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('vacation'));
+        await tester.pumpAndSettle();
+
+        // Title shows only the current folder basename + dropdown arrow,
+        // never the full path
+        expect(
+          find.byKey(const Key('fm_folder_breadcrumb_btn')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('fm_folder_breadcrumb_btn')),
+            matching: find.text('vacation'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('photos/vacation'), findsNothing);
+        expect(find.byIcon(Icons.arrow_drop_down), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'breadcrumb dropdown lists only ancestor folders in root-to-current order',
+      (tester) async {
+        await tester.pumpWidget(
+          buildBreadcrumbFM(
+            folders: {'photos', 'photos/vacation', 'photos/other'},
+            config: breadcrumbConfig(),
+          ),
+        );
+
+        await tester.tap(find.text('photos'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('vacation'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('fm_folder_breadcrumb_btn')));
+        await tester.pumpAndSettle();
+
+        // Chain: 根目录 → photos → vacation (current)
+        expect(find.text('根目录'), findsOneWidget);
+        expect(find.text('photos'), findsOneWidget);
+        final vacationMenuItem = find.descendant(
+          of: find.bySubtype<PopupMenuItem<String>>(),
+          matching: find.text('vacation'),
+        );
+        expect(vacationMenuItem, findsOneWidget);
+        // 'photos/other' is a sibling of the current folder — must be excluded
+        expect(find.text('other'), findsNothing);
+
+        // Ordered root → current (top to bottom)
+        final rootY = tester.getTopLeft(find.text('根目录')).dy;
+        final photosY = tester.getTopLeft(find.text('photos')).dy;
+        final vacationY = tester.getTopLeft(vacationMenuItem).dy;
+        expect(rootY, lessThan(photosY));
+        expect(photosY, lessThan(vacationY));
+      },
+    );
+
+    testWidgets(
+      'tapping an ancestor in the breadcrumb dropdown navigates to it',
+      (tester) async {
+        String? capturedFolder;
+
+        await tester.pumpWidget(
+          buildBreadcrumbFM(
+            folders: {'photos', 'photos/vacation'},
+            config: breadcrumbConfig(onCurrentFolderChanged: (f) {
+              capturedFolder = f;
+            }),
+          ),
+        );
+
+        await tester.tap(find.text('photos'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('vacation'));
+        await tester.pumpAndSettle();
+        expect(capturedFolder, 'photos/vacation');
+
+        // The current-folder item is disabled — tapping it does not navigate
+        await tester.tap(find.byKey(const Key('fm_folder_breadcrumb_btn')));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: find.bySubtype<PopupMenuItem<String>>(),
+            matching: find.text('vacation'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(capturedFolder, 'photos/vacation');
+
+        // Jump to the root from the dropdown
+        await tester.tap(find.text('根目录'));
+        await tester.pumpAndSettle();
+        expect(capturedFolder, '');
+
+        // Re-enter and jump to the direct parent
+        await tester.tap(find.text('photos'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('vacation'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_folder_breadcrumb_btn')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('photos'));
+        await tester.pumpAndSettle();
+        expect(capturedFolder, 'photos');
+      },
+    );
+
+    testWidgets(
+      'back item right side shows the full current folder path',
+      (tester) async {
+        await tester.pumpWidget(
+          buildBreadcrumbFM(
+            folders: {'photos', 'photos/vacation'},
+            config: breadcrumbConfig(),
+            // 'photos/vacation' needs content for the in-list back item to render
+            records: [
+              _TestFileRecord(
+                id: 'beach',
+                name: 'beach',
+                format: 'mp4',
+                folder: 'photos/vacation',
+              ),
+            ],
+          ),
+        );
+
+        await tester.tap(find.text('photos'));
+        await tester.pumpAndSettle();
+        // One level deep — the right side shows the full path ('photos')
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('fm_back_item')),
+            matching: find.text('photos'),
+          ),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.text('vacation'));
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('fm_back_item')),
+            matching: find.text('photos/vacation'),
+          ),
+          findsOneWidget,
+        );
+        // The previous "当前：" prefix is gone
+        expect(find.textContaining('当前：'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'back item grey path truncates from the front when it does not fit',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(340, 640));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        // 5 levels deep with a long deepest name — the full path cannot fit
+        // on a 340px-wide screen next to the blue "返回:" label. Short
+        // intermediate names keep the blue label short so the kept tail is
+        // comfortably large (the test must not sit at the keep==0 boundary).
+        const fullPath = 'a/b/c/d/eeeeeeeeeeeeeeee';
+        await tester.pumpWidget(
+          buildBreadcrumbFM(
+            folders: {'a', 'a/b', 'a/b/c', 'a/b/c/d', fullPath},
+            config: breadcrumbConfig(),
+            records: [
+              _TestFileRecord(
+                id: 'beach',
+                name: 'beach',
+                format: 'mp4',
+                folder: fullPath,
+              ),
+            ],
+          ),
+        );
+
+        for (final level in ['a', 'b', 'c', 'd', 'eeeeeeeeeeeeeeee']) {
+          await tester.tap(find.text(level));
+          await tester.pumpAndSettle();
+        }
+
+        // The full path is not shown as a single text inside the back item
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('fm_back_item')),
+            matching: find.text(fullPath),
+          ),
+          findsNothing,
+        );
+        // Instead a front-truncated variant is shown: starts with "…" and
+        // keeps a tail of the path so the deepest folder stays readable.
+        final truncated = find.descendant(
+          of: find.byKey(const Key('fm_back_item')),
+          matching: find.textContaining('…'),
+        );
+        expect(truncated, findsOneWidget);
+        final data = tester.widget<Text>(truncated).data!;
+        expect(data.startsWith('…'), isTrue);
+        // The visible tail is a non-empty suffix of the full path
+        // (front-truncation keeps the end, not the start)
+        expect(data.length, greaterThan(1));
+        expect(fullPath.endsWith(data.substring(1)), isTrue);
+      },
+    );
+
+    testWidgets(
+      'truncation never splits surrogate pairs (emoji folder names stay intact)',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(340, 640));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        // The deepest folder name is a run of emoji (surrogate pairs).
+        // When the grey path is front-truncated, the cut must never land
+        // in the middle of a pair: a rendered lone surrogate shows as a
+        // garbled U+FFFD, and measuring a half pair is rejected by the
+        // text engine. `hasNoLoneSurrogates` below is the load-bearing
+        // check — it fails if the tail starts with a lone low surrogate.
+        const deepest = '😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀'; // 16 emoji
+        const fullPath = 'a/b/c/d/$deepest';
+        await tester.pumpWidget(
+          buildBreadcrumbFM(
+            folders: {'a', 'a/b', 'a/b/c', 'a/b/c/d', fullPath},
+            config: breadcrumbConfig(),
+            records: [
+              _TestFileRecord(
+                id: 'beach',
+                name: 'beach',
+                format: 'mp4',
+                folder: fullPath,
+              ),
+            ],
+          ),
+        );
+
+        for (final level in ['a', 'b', 'c', 'd', deepest]) {
+          await tester.tap(find.text(level));
+          await tester.pumpAndSettle();
+        }
+
+        final truncated = find.descendant(
+          of: find.byKey(const Key('fm_back_item')),
+          matching: find.textContaining('…'),
+        );
+        expect(truncated, findsOneWidget);
+        final data = tester.widget<Text>(truncated).data!;
+        expect(data.startsWith('…'), isTrue);
+        // The rendered tail is valid UTF-16 — no lone surrogates anywhere
+        expect(hasNoLoneSurrogates(data), isTrue, reason: 'data=$data');
+        // The deepest folder (the emoji run) is fully preserved at the end
+        expect(data.endsWith('😀'), isTrue, reason: 'data=$data');
+        // The cut is aligned to a surrogate-pair boundary: the first unit
+        // of the kept tail is never a lone low surrogate
+        expect(data.length, greaterThan(1));
+        final cut = fullPath.length - (data.length - 1);
+        final cutUnit = fullPath.codeUnitAt(cut);
+        expect(cutUnit < 0xDC00 || cutUnit > 0xDFFF, isTrue,
+            reason: 'data=$data cut=$cut');
+      },
+    );
+
+    testWidgets(
+      'selection mode replaces the breadcrumb title with the selection count',
+      (tester) async {
+        await tester.pumpWidget(
+          buildBreadcrumbFM(
+            folders: {'photos', 'photos/vacation'},
+            config: breadcrumbConfig(),
+            records: [
+              _TestFileRecord(
+                id: 'beach',
+                name: 'beach',
+                format: 'mp4',
+                folder: 'photos/vacation',
+              ),
+            ],
+          ),
+        );
+
+        await tester.tap(find.text('photos'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('vacation'));
+        await tester.pumpAndSettle();
+
+        await tester.longPress(find.byKey(const Key('fm_file_beach')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('已选择 1 项'), findsOneWidget);
+        expect(find.byKey(const Key('fm_folder_breadcrumb_btn')), findsNothing);
+      },
+    );
+  });
 }

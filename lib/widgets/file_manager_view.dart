@@ -13,6 +13,133 @@ import 'folder_picker_dialog.dart';
 
 export 'file_manager_config.dart';
 
+/// 单行文本：可用宽度不足时从「开头」省略（保留末尾），
+/// 用省略号代替被省略的前半部分，避免与前面的文字重叠。
+/// Flutter 原生 [Text] 只能从末尾省略，此组件用于需要
+/// 保留路径尾部（最深一级文件夹）的场景。
+class _FrontEllipsisText extends StatelessWidget {
+  final String text;
+  final TextStyle? style;
+  final TextAlign textAlign;
+
+  const _FrontEllipsisText({
+    required this.text,
+    this.style,
+    this.textAlign = TextAlign.start,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth;
+        if (maxWidth <= 0 || text.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        // 必须与渲染端 [Text] 完全一致：Text 内部会用 DefaultTextStyle
+        // 合并 style，并按 MediaQuery 的 textScaler 缩放；无障碍「粗体
+        // 文字」开关还会把字重强制为 bold。测量端不这样做时，系统
+        // 字体放大/粗体（无障碍）会让实际渲染比测量更宽，导致尾部
+        // 溢出、开头的省略号被裁掉。
+        var effectiveStyle = DefaultTextStyle.of(context).style.merge(style);
+        if (MediaQuery.boldTextOf(context)) {
+          effectiveStyle = effectiveStyle.copyWith(fontWeight: FontWeight.bold);
+        }
+        final textDirection = Directionality.of(context);
+        final textScaler = MediaQuery.textScalerOf(context);
+
+        const ellipsis = '…';
+        if (_measureWidth(
+              ellipsis,
+              effectiveStyle,
+              textScaler,
+              textDirection,
+            ) >=
+            maxWidth) {
+          // 连省略号都放不下，只显示省略号
+          return _buildText(ellipsis, textAlign);
+        }
+        if (_measureWidth(
+              text,
+              effectiveStyle,
+              textScaler,
+              textDirection,
+            ) <=
+            maxWidth) {
+          // 完整文本放得下，直接显示
+          return _buildText(text, textAlign);
+        }
+        // 二分查找能放下的最长尾部。测量「省略号 + 尾部」的整体宽度
+        // （与最终渲染的字符串一致，避免拼接处宽度偏差）。若切点落在
+        // 代理对（emoji）中间，[_pairAlignedTail] 会从代理对起点开始，
+        // 保证不测量/渲染不完整的 UTF-16 字符串。
+        var lo = 0; // 保留 0 个尾部字符（仅省略号）
+        var hi = text.length;
+        while (lo < hi) {
+          final mid = (lo + hi + 1) >> 1;
+          final tail = _pairAlignedTail(text, mid);
+          final joinedWidth = _measureWidth(
+            '$ellipsis$tail',
+            effectiveStyle,
+            textScaler,
+            textDirection,
+          );
+          if (joinedWidth <= maxWidth) {
+            lo = mid;
+          } else {
+            hi = mid - 1;
+          }
+        }
+        final tail = _pairAlignedTail(text, lo);
+        return _buildText(
+          tail.isEmpty ? ellipsis : '$ellipsis$tail',
+          textAlign,
+        );
+      },
+    );
+  }
+
+  /// 取 [text] 末尾 [units] 个码元；若切点落在代理对中间，
+  /// 从代理对起点（高位代理）开始，保证返回的字符串是合法的 UTF-16。
+  static String _pairAlignedTail(String text, int units) {
+    final start = text.length - units;
+    if (start <= 0 || start >= text.length) return text.substring(start);
+    final first = text.codeUnitAt(start);
+    if (first >= 0xDC00 && first <= 0xDFFF) {
+      // 切点落在低位代理上 → 回退一位，包含完整代理对
+      return text.substring(start - 1);
+    }
+    return text.substring(start);
+  }
+
+  /// 按与渲染端 [Text] 相同的 [style]/[textScaler]/[textDirection]
+  /// 测量单行文本的像素宽度。
+  static double _measureWidth(
+    String value,
+    TextStyle style,
+    TextScaler textScaler,
+    TextDirection textDirection,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(text: value, style: style),
+      maxLines: 1,
+      textDirection: textDirection,
+      textScaler: textScaler,
+    )..layout();
+    return painter.width;
+  }
+
+  Widget _buildText(String value, TextAlign align) {
+    return Text(
+      value,
+      style: style,
+      maxLines: 1,
+      textAlign: align,
+      overflow: TextOverflow.clip,
+    );
+  }
+}
+
 // ====================================================================
 // FileManagerView — reusable file-manager stateful widget
 // ====================================================================
@@ -414,16 +541,94 @@ class _FileManagerViewState<T extends FileRecord>
     );
   }
 
+  /// 当前文件夹的祖先链（含根目录），按「根目录 → 当前文件夹」排序。
+  /// 只包含各级父文件夹，不包含与父级并列的文件夹。
+  /// 返回的路径列表可用于面包屑跳转（如 ['', 'a', 'a/b', 'a/b/c']）。
+  List<String> _ancestorFolderChain() {
+    final chain = <String>[''];
+    if (_currentFolder.isEmpty) return chain;
+    final reversed = <String>[];
+    var folder = _currentFolder;
+    // 防呆：最多迭代 64 层，避免异常桥接实现产生死循环
+    for (var i = 0; folder.isNotEmpty && i < 64; i++) {
+      reversed.add(folder);
+      final parent = widget.manifestBridge.getParentFolderPath(folder);
+      if (parent == folder) break; // 异常实现自环保护
+      folder = parent;
+    }
+    chain.addAll(reversed.reversed);
+    return chain;
+  }
+
+  /// 顶部标题：显示当前文件夹名字（而非完整路径）+ 下拉箭头。
+  /// 点击后弹出按顺序排列的祖先文件夹（根目录 → 当前），
+  /// 选择任意一级即可跳转。
+  Widget _buildFolderBreadcrumbTitle() {
+    final chain = _ancestorFolderChain();
+    return PopupMenuButton<String>(
+      key: const Key('fm_folder_breadcrumb_btn'),
+      tooltip: '祖先文件夹',
+      onSelected: (value) => _setCurrentFolder(value),
+      itemBuilder: (context) => [
+        for (final folderPath in chain)
+          PopupMenuItem<String>(
+            value: folderPath,
+            // 当前文件夹已是所在位置，禁用以避免无意义跳转
+            enabled: folderPath != _currentFolder,
+            child: Row(
+              children: [
+                Icon(
+                  folderPath.isEmpty
+                      ? Icons.home_outlined
+                      : folderPath == _currentFolder
+                          ? Icons.check
+                          : Icons.folder_outlined,
+                  size: 18,
+                  color: Colors.grey[600],
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    folderPath.isEmpty
+                        ? '根目录'
+                        : widget.manifestBridge.getFolderBaseName(folderPath),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: folderPath == _currentFolder
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              widget.manifestBridge.getFolderBaseName(_currentFolder),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const Icon(Icons.arrow_drop_down),
+        ],
+      ),
+    );
+  }
+
   PreferredSizeWidget _buildAppBar(Map<String, List<T>> grouped) {
     return AppBar(
       primary: false,
-      title: Text(
-        _selectionMode
-            ? '已选择 ${_selectedIds.length} 项'
-            : _currentFolder.isNotEmpty
-                ? _currentFolder
-                : widget.config.title,
-      ),
+      title: _selectionMode
+          ? Text('已选择 ${_selectedIds.length} 项')
+          : _currentFolder.isNotEmpty
+              ? _buildFolderBreadcrumbTitle()
+              : Text(widget.config.title),
       centerTitle: true,
       leading: _selectionMode
           ? IconButton(
@@ -619,10 +824,15 @@ class _FileManagerViewState<T extends FileRecord>
                     : '返回: ${widget.manifestBridge.getFolderBaseName(parentFolder)}',
                 style: TextStyle(fontSize: 15, color: Colors.blue[700]),
               ),
-              const Spacer(),
-              Text(
-                widget.manifestBridge.getFolderBaseName(_currentFolder),
-                style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+              const SizedBox(width: 8),
+              // 右侧灰色字显示当前文件夹完整路径；空间不足时从开头
+              // 省略（保留末尾），避免与前面的蓝字重叠
+              Expanded(
+                child: _FrontEllipsisText(
+                  text: _currentFolder,
+                  style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                  textAlign: TextAlign.end,
+                ),
               ),
             ],
           ),
