@@ -392,16 +392,94 @@ class _FileManagerViewState<T extends FileRecord>
     );
   }
 
+  /// 当前文件夹的祖先链（含根目录），按「根目录 → 当前文件夹」排序。
+  /// 只包含各级父文件夹，不包含与父级并列的文件夹。
+  /// 返回的路径列表可用于面包屑跳转（如 ['', 'a', 'a/b', 'a/b/c']）。
+  List<String> _ancestorFolderChain() {
+    final chain = <String>[''];
+    if (_currentFolder.isEmpty) return chain;
+    final reversed = <String>[];
+    var folder = _currentFolder;
+    // 防呆：最多迭代 64 层，避免异常桥接实现产生死循环
+    for (var i = 0; folder.isNotEmpty && i < 64; i++) {
+      reversed.add(folder);
+      final parent = widget.manifestBridge.getParentFolderPath(folder);
+      if (parent == folder) break; // 异常实现自环保护
+      folder = parent;
+    }
+    chain.addAll(reversed.reversed);
+    return chain;
+  }
+
+  /// 顶部标题：显示当前文件夹名字（而非完整路径）+ 下拉箭头。
+  /// 点击后弹出按顺序排列的祖先文件夹（根目录 → 当前），
+  /// 选择任意一级即可跳转。
+  Widget _buildFolderBreadcrumbTitle() {
+    final chain = _ancestorFolderChain();
+    return PopupMenuButton<String>(
+      key: const Key('fm_folder_breadcrumb_btn'),
+      tooltip: '祖先文件夹',
+      onSelected: (value) => _setCurrentFolder(value),
+      itemBuilder: (context) => [
+        for (final folderPath in chain)
+          PopupMenuItem<String>(
+            value: folderPath,
+            // 当前文件夹已是所在位置，禁用以避免无意义跳转
+            enabled: folderPath != _currentFolder,
+            child: Row(
+              children: [
+                Icon(
+                  folderPath.isEmpty
+                      ? Icons.home_outlined
+                      : folderPath == _currentFolder
+                          ? Icons.check
+                          : Icons.folder_outlined,
+                  size: 18,
+                  color: Colors.grey[600],
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    folderPath.isEmpty
+                        ? '根目录'
+                        : widget.manifestBridge.getFolderBaseName(folderPath),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: folderPath == _currentFolder
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              widget.manifestBridge.getFolderBaseName(_currentFolder),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const Icon(Icons.arrow_drop_down),
+        ],
+      ),
+    );
+  }
+
   PreferredSizeWidget _buildAppBar(Map<String, List<T>> grouped) {
     return AppBar(
       primary: false,
-      title: Text(
-        _selectionMode
-            ? '已选择 ${_selectedIds.length} 项'
-            : _currentFolder.isNotEmpty
-                ? _currentFolder
-                : widget.config.title,
-      ),
+      title: _selectionMode
+          ? Text('已选择 ${_selectedIds.length} 项')
+          : _currentFolder.isNotEmpty
+              ? _buildFolderBreadcrumbTitle()
+              : Text(widget.config.title),
       centerTitle: true,
       leading: _selectionMode
           ? IconButton(
@@ -599,7 +677,7 @@ class _FileManagerViewState<T extends FileRecord>
               ),
               const Spacer(),
               Text(
-                widget.manifestBridge.getFolderBaseName(_currentFolder),
+                '当前：${widget.manifestBridge.getFolderBaseName(_currentFolder)}',
                 style: TextStyle(fontSize: 13, color: Colors.grey[500]),
               ),
             ],
