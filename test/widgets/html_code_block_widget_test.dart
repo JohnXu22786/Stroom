@@ -22,7 +22,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('HtmlCodeBlockWidget - card preview (default)', () {
-    testWidgets('shows a card with language badge, inline title and two '
+    testWidgets(
+        'shows a card with language badge, inline title and two '
         'action buttons', (tester) async {
       const html = '<html><head><title>My Cool Page</title></head>'
           '<body><h1>Hello World</h1></body></html>';
@@ -316,7 +317,8 @@ void main() {
   });
 
   group('HtmlCodeBlockWidget - title display', () {
-    testWidgets('shows the extracted document title as a centered single '
+    testWidgets(
+        'shows the extracted document title as a centered single '
         'line', (tester) async {
       const html = '<html><head><title>My Cool Page</title></head>'
           '<body><h1>Hi</h1></body></html>';
