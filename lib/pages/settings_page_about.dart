@@ -19,52 +19,36 @@ extension _SettingsPageAboutExt on _SettingsPageState {
 
   Widget _buildAboutHeader(ThemeData theme) {
     return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: _showVersionInfoDialog,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-          child: Column(
-            children: [
-              Icon(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        child: Column(
+          children: [
+            // 仅图标区域可点击，点击弹出版本信息面板
+            InkWell(
+              onTap: _showVersionInfoDialog,
+              borderRadius: BorderRadius.circular(12),
+              child: Icon(
                 Icons.auto_awesome,
                 size: 56,
+                semanticLabel: '查看版本信息',
                 color: theme.colorScheme.primary,
               ),
-              const SizedBox(height: 12),
-              Text(
-                'Stroom',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Stroom',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
               ),
-              const SizedBox(height: 4),
-              Text(
-                '版本 $appVersion',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '版本 $appVersion',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    size: 14,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '点击查看版本信息',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
