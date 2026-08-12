@@ -18,7 +18,6 @@ import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/widgets/chat_attachment_panel.dart';
 import 'package:stroom/widgets/image_preview_dialog.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
-import 'package:stroom/pages/image_editor_page.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/services/chat_protocol.dart';
@@ -120,11 +119,6 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   final List<Attachment> _pendingAttachments = [];
   final Map<String, Uint8List> _pendingImageBytes = {};
   final GlobalKey _composerKey = GlobalKey();
-
-  /// Number of quick image edits still processing in the background.
-  /// While non-zero, sending is blocked — the pending attachments still
-  /// hold the unedited bytes until the edit callback applies them.
-  int _editsInFlight = 0;
 
   // ── Edit data-loss warning state ──
   /// Whether the warning is armed for the current edit session. Armed only
@@ -551,8 +545,6 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
               _editWarningVisible
                   ? _buildEditWarningPill(cs: cs)
                   : _buildEditModeCapsule(cs: cs),
-            // ── Quick-edit processing banner ──
-            if (_editsInFlight > 0) _buildProcessingBanner(cs: cs),
             // ── Input row ──
             _buildInputRow(
               cs: cs,

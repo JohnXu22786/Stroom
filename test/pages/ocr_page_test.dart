@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/ocr_page.dart';
+import 'package:stroom/pages/extended_image_editor_page.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/ocr_instructions_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -1860,11 +1861,14 @@ void main() {
   });
 
   // ====================================================================
-  // Quick-edit background processing: start-button gating
+  // Quick-edit flow: the editor processes the image in place (the page
+  // stays open while processing) and the edited bytes are applied once
+  // it pops.
   // ====================================================================
-  group('OcrPage - quick edit background gating', () {
-    testWidgets('start button is disabled while a quick edit processes',
-        (tester) async {
+  group('OcrPage - quick edit flow', () {
+    testWidgets(
+        'the quick editor processes in place, then the edited bytes are '
+        'applied to the selected image', (tester) async {
       // Engine-generated PNG — the quick editor only builds after the
       // image decodes, which needs a real-async window.
       final png = await tester.runAsync(_createEnginePng);
@@ -1885,31 +1889,49 @@ void main() {
         () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
       );
 
-      // Confirm the edit — the editor hides its UI immediately and the
-      // image processing continues in the background (deferred destroy).
-      // The start-button guard is armed synchronously via onSubmitted.
+      // Confirm the edit — the editor must NOT close immediately: it
+      // processes the image in place with a spinner until the pipeline
+      // finishes.
       await tester.tap(find.text('完成'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
-      // Gating: while processing, the start button is disabled and
-      // shows the processing label — starting OCR now would run on the
-      // unedited bytes.
-      expect(find.text('图片处理中...'), findsOneWidget);
-      final startBtn = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, '图片处理中...'),
+      expect(find.byType(ExtendedImageEditorPage), findsOneWidget,
+          reason: 'the editor must stay on screen while processing');
+      expect(
+        find.descendant(
+          of: find.byType(ExtendedImageEditorPage),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+        reason: 'a processing spinner must be visible',
       );
-      expect(startBtn.onPressed, isNull);
 
-      // Once the background pipeline finishes, the button re-enables.
+      // Only after the pipeline finishes does the editor pop back to the
+      // OCR page.
       await _pumpUntil(
         tester,
-        () => find.text('图片处理中...').evaluate().isEmpty,
+        () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty,
       );
-      final startBtn2 = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, '开始识别'),
+
+      // Re-open the preview and the quick editor — it must now show the
+      // EDITED bytes (a new instance), proving the edit was applied to
+      // the selected image.
+      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.crop));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpUntil(
+        tester,
+        () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
       );
-      expect(startBtn2.onPressed, isNotNull);
+
+      final editorWidget = tester.widget<ExtendedImageEditorPage>(
+        find.byType(ExtendedImageEditorPage),
+      );
+      expect(editorWidget.imageBytes, isNot(same(png)),
+          reason: 'the selected image must hold the edited bytes');
     });
   });
 }
