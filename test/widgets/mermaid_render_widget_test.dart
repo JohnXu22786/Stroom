@@ -822,5 +822,50 @@ void main() {
       // Empty code should show the placeholder, not the code view
       expect(find.text('No Mermaid code to render'), findsOneWidget);
     });
+
+    testWidgets('source code mode keeps the render layer mounted underneath',
+        (tester) async {
+      // Regression: toggling to the source code view must NOT unmount the
+      // render layer (the loading placeholder here — the WebView platform
+      // view in production). Previously the source view REPLACED the
+      // render tree, destroying the platform view; toggling back to
+      // preview then re-created it from scratch, producing a blank flash
+      // followed by a loading animation. The chart page (home page entry)
+      // avoids this by keeping the preview mounted while the code editor
+      // is visible — the inline widget must do the same.
+      //
+      // The render layer must keep the SAME element across the toggle:
+      // if its root widget type changed between modes, Flutter would tear
+      // down and re-inflate the whole subtree (disposing the platform
+      // view) even though both modes render the loading placeholder.
+      const widget = MermaidRenderWidget(
+        mermaidCode: 'graph TD\nA-->B',
+        testOnlyShowSourceCode: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: widget,
+          ),
+        ),
+      );
+
+      // Source code view is shown...
+      expect(find.text('graph TD\nA-->B'), findsOneWidget);
+      // ...and the render layer is still mounted underneath it (covered
+      // by the source view's opaque background, but alive in the tree).
+      final renderLayerText = find.text('正在准备渲染引擎...');
+      expect(renderLayerText, findsOneWidget);
+      final renderLayerElement = tester.element(renderLayerText);
+
+      // Toggle back to preview: the render layer stays mounted — the very
+      // SAME element (identity, not just presence) survives the toggle.
+      await tester.tap(find.byIcon(Icons.image));
+      await tester.pump();
+      expect(find.byIcon(Icons.image), findsNothing);
+      expect(renderLayerText, findsOneWidget);
+      expect(tester.element(renderLayerText), same(renderLayerElement));
+      expect(tester.takeException(), isNull);
+    });
   });
 }

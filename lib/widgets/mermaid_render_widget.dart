@@ -763,10 +763,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   void didUpdateWidget(MermaidRenderWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.mermaidCode != widget.mermaidCode) {
-      // Invalidate the memoized initial HTML: a recreated WebView (e.g.
-      // after the source-code view was shown, which unmounts the platform
-      // view) reads initialData again and must see the NEW code. While the
-      // WebView stays alive the code change goes through loadData below.
+      // Invalidate the memoized initial HTML: if the WebView is recreated
+      // (e.g. the widget was unmounted and mounted again) it reads
+      // initialData anew and must see the NEW code. While the WebView
+      // stays alive the code change goes through loadData below. (The
+      // source-code toggle keeps the WebView mounted — see [build].)
       _initialHtml = null;
       // On web the loading state is managed INSIDE the iframe (the asset
       // template shows a hint until the diagram is rendered), so _isReady
@@ -1321,14 +1322,46 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       );
     }
 
-    // ---- Source code mode: show raw code without WebView ----
-    // Uses CodeBlockSourceView directly (which provides its own border,
-    // background, line numbers, and wrap toggle) so we do NOT wrap it
-    // in _buildBorderedContainer to avoid double borders.
-    if (_showSourceCode) {
+    // ---- Source code mode on web ----
+    // On web the WebView is an iframe (HtmlElementView) that the engine
+    // composites ABOVE the Flutter canvas, so a Flutter overlay cannot
+    // reliably cover it. Unmount the iframe as before — re-creation is
+    // cheap on web (no platform-view teardown), and the source view
+    // renders unconditionally.
+    if (_showSourceCode && kIsWeb) {
       return _buildSourceCodeView(cs, isDark, effectiveHeight);
     }
 
+    // ---- Render layer + source-code overlay (stable root) ----
+    // The render layer is ALWAYS the Stack's base child, so its element —
+    // and with it the InAppWebView platform view on native — keeps the
+    // same tree slot across source↔preview toggles. The source code view
+    // is drawn ON TOP of the live render layer only while the source is
+    // shown; toggling back just removes the overlay and the
+    // already-rendered diagram is visible instantly — no blank flash, no
+    // loading animation, no platform-view re-creation. This mirrors
+    // MermaidChartPage's split mode, which keeps the preview mounted while
+    // the code editor is visible.
+    //
+    // CodeBlockSourceView provides its own border, background, line
+    // numbers, and wrap toggle, so the source view needs no extra border
+    // container — it sits directly on top of the render layer.
+    return Stack(
+      children: [
+        _buildRenderLayer(cs, effectiveHeight),
+        if (_showSourceCode)
+          Positioned.fill(
+            child: _buildSourceCodeView(cs, isDark, effectiveHeight),
+          ),
+      ],
+    );
+  }
+
+  /// Builds the render layer: the deferred-creation loading placeholder
+  /// (before the WebView exists), or the WebView with its overlays and
+  /// button row. Kept mounted underneath the source code view when
+  /// [_showSourceCode] is true (see [build]).
+  Widget _buildRenderLayer(ColorScheme cs, double? effectiveHeight) {
     // ---- Loading placeholder (deferred WebView creation) ----
     // On native platforms the WebView is created only after the bundled
     // mermaid.js asset is loaded (so the initial HTML can inline it) AND
