@@ -16,6 +16,10 @@ const _latexTag = 'latex';
 /// (`$...$`) keeps the regular text size.
 const double _displayMathScaleFactor = 1.5;
 
+/// Char code of '<', the start character of the HTML-like inline syntaxes
+/// ([BrSyntax], [USyntax]).
+const int _ltCharCode = 0x3C;
+
 /// Custom [m.InlineSyntax] that parses HTML line-break tags (`<br>`,
 /// `<br/>`, `<br />`, `</br>`) as hard line breaks.
 ///
@@ -39,8 +43,6 @@ class BrSyntax extends m.InlineSyntax {
           caseSensitive: false,
         );
 
-  static const int _ltCharCode = 0x3C; // '<'
-
   @override
   bool onMatch(m.InlineParser parser, Match match) {
     parser.addNode(m.Element.text('br', ''));
@@ -48,12 +50,71 @@ class BrSyntax extends m.InlineSyntax {
   }
 }
 
+/// Custom [m.InlineSyntax] that parses HTML underline tags (`<u>text</u>`)
+/// into a `u` element.
+///
+/// The `markdown` package's [m.InlineHtmlSyntax] passes inline HTML through
+/// as literal text, so without this syntax `<u>下划线文本</u>` would render
+/// as the characters "<u>下划线文本</u>" instead of underlined text.
+///
+/// The inner content is re-parsed with the document's inline syntaxes, so
+/// nested markdown (`<u>**加粗**</u>`) keeps rendering inside the
+/// underline. Only the plain paired form is matched: attributed
+/// (`<u class="x">`) and unclosed tags keep rendering as literal text —
+/// models do not emit attributes, and keeping the match strict avoids
+/// false positives.
+///
+/// Known limitation (CommonMark HTML-block rule): an opening `<u>` alone on
+/// a line at block start (document start or right after a blank line)
+/// begins an HTML block and renders literally. Everywhere else — including
+/// `<u>text</u>` at the start of a line, or on a line following paragraph
+/// text (an HTML block cannot interrupt a paragraph) — it underlines
+/// normally.
+class USyntax extends m.InlineSyntax {
+  USyntax()
+      : super(
+          // Case-insensitive: models also output <U> or </U>. The inner
+          // group is re-parsed by [m.Document.parseInline] in [onMatch].
+          r'<u>([\s\S]*?)</u>',
+          startCharacter: _ltCharCode,
+          caseSensitive: false,
+        );
+
+  @override
+  bool onMatch(m.InlineParser parser, Match match) {
+    // Parse the inner content with the same inline syntaxes as the rest of
+    // the document so markdown inside the underline keeps working.
+    final content = match.group(1) ?? '';
+    final el = m.Element('u', parser.document.parseInline(content));
+    parser.addNode(el);
+    return true;
+  }
+}
+
+/// A [SpanNode] that renders its children with an underline
+/// ([TextDecoration.underline]), mirroring how `markdown_widget`'s
+/// [DelNode] renders strikethrough for `<del>`.
+class UNode extends ElementNode {
+  @override
+  TextStyle get style => parentStyle?.merge(_defaultUStyle) ?? _defaultUStyle;
+}
+
+/// See [UNode].
+const _defaultUStyle = TextStyle(decoration: TextDecoration.underline);
+
 /// [SpanNodeGeneratorWithTag] that creates [LatexNode] instances when
 /// the markdown parser encounters a LaTeX element.
 final SpanNodeGeneratorWithTag latexGenerator = SpanNodeGeneratorWithTag(
   tag: _latexTag,
   generator: (e, config, visitor) =>
       LatexNode(e.attributes, e.textContent, config),
+);
+
+/// [SpanNodeGeneratorWithTag] that creates [UNode] instances when
+/// the markdown parser encounters a `u` (underline) element.
+final SpanNodeGeneratorWithTag uGenerator = SpanNodeGeneratorWithTag(
+  tag: 'u',
+  generator: (e, config, visitor) => UNode(),
 );
 
 /// Custom [m.InlineSyntax] that parses LaTeX math expressions written
@@ -430,11 +491,14 @@ PreConfig codeBlockPreConfig({
 /// Adds the [BrSyntax] parser so that `<br>` in table cells (and
 /// paragraphs) renders as a line break instead of literal text.
 ///
+/// Adds the [USyntax] parser and [uGenerator] so that `<u>text</u>`
+/// renders as underlined text instead of literal characters.
+///
 /// Created once and reused to avoid re-allocation on every
 /// [MarkdownWidget] build.
 final MarkdownGenerator markdownGenerator = MarkdownGenerator(
-  inlineSyntaxList: [LatexSyntax(), BrSyntax()],
-  generators: [latexGenerator],
+  inlineSyntaxList: [LatexSyntax(), BrSyntax(), USyntax()],
+  generators: [latexGenerator, uGenerator],
 );
 
 /// Counts case-insensitive occurrences of [lowerQuery] in [text].
