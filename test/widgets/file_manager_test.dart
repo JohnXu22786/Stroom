@@ -1708,7 +1708,8 @@ void main() {
         await tester.pumpAndSettle();
 
         // Start inline creation with an existing folder name
-        await tester.tap(find.byKey(const Key('folder_picker_start_create_btn')));
+        await tester
+            .tap(find.byKey(const Key('folder_picker_start_create_btn')));
         await tester.pumpAndSettle();
         await tester.enterText(
           find.byType(TextField).last,
