@@ -117,9 +117,8 @@ void main() {
         tester,
         () => find.byType(AlbumPreviewChip).evaluate().isNotEmpty,
       );
-      final originalChipBytes = tester
-          .widget<AlbumPreviewChip>(find.byType(AlbumPreviewChip))
-          .bytes;
+      final originalChipBytes =
+          tester.widget<AlbumPreviewChip>(find.byType(AlbumPreviewChip)).bytes;
 
       // Preview chip → preview dialog → quick editor.
       await tester.tap(find.byType(AlbumPreviewChip));
@@ -163,7 +162,8 @@ void main() {
       // shows a NEW bytes instance.
       await _pumpUntil(
         tester,
-        () => tester
+        () =>
+            tester
                 .widget<AlbumPreviewChip>(find.byType(AlbumPreviewChip))
                 .bytes !=
             originalChipBytes,

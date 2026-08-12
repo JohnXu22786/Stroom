@@ -251,7 +251,8 @@ void main() {
       expect(sent!.single.hash, isNot('orig-hash'));
     });
 
-    testWidgets('closing the editor without confirming does not modify the '
+    testWidgets(
+        'closing the editor without confirming does not modify the '
         'attachment', (tester) async {
       final att = await saveTestAttachment(tester);
       List<Attachment>? sent;

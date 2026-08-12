@@ -197,8 +197,8 @@ void main() {
         await pumpUntil(tester, () => popResult != null);
 
         // The 8x8 input PNG should come back as a valid 8x8 image.
-        final codec = await tester
-            .runAsync(() => ui.instantiateImageCodec(popResult!));
+        final codec =
+            await tester.runAsync(() => ui.instantiateImageCodec(popResult!));
         final frame = await tester.runAsync(() => codec!.getNextFrame());
         expect(frame!.image.width, 8);
         expect(frame.image.height, 8);
@@ -223,7 +223,8 @@ void main() {
         expect(find.byType(ExtendedImageEditorPage), findsNothing);
       });
 
-      testWidgets('invalid image data shows an error snackbar and the page '
+      testWidgets(
+          'invalid image data shows an error snackbar and the page '
           'stays on screen', (tester) async {
         // Invalid image data — the editor image never loads, so the
         // editor state is never created and confirming reports an error
@@ -295,7 +296,8 @@ void main() {
             reason: '完成 must be disabled while processing');
       });
 
-      testWidgets('double-tapping close cannot pop the page below the '
+      testWidgets(
+          'double-tapping close cannot pop the page below the '
           'editor', (tester) async {
         final png = await tester.runAsync(createTestImage);
         Uint8List? popResult;
@@ -326,11 +328,11 @@ void main() {
     // 直接调用顶层处理管线（与 widget 生命周期解耦），比走完整
     // 编辑器 UI 更稳定（不依赖编辑器状态就绪时序）。
     group('output format selection', () {
-      testWidgets('PNG 源输出可解码的 PNG（不能是 raw RGBA 像素）',
-          (tester) async {
+      testWidgets('PNG 源输出可解码的 PNG（不能是 raw RGBA 像素）', (tester) async {
         final png = await tester.runAsync(createTestImage);
         final bytes = await tester.runAsync(
-          () => processQuickEditImage(rawData: png!, cropRect: null, action: null),
+          () => processQuickEditImage(
+              rawData: png!, cropRect: null, action: null),
         );
 
         expect(img.decodeImage(bytes!), isNotNull,
@@ -339,8 +341,7 @@ void main() {
         expect(bytes[1], 0x50, reason: 'PNG 源应保持无损 PNG 输出');
       });
 
-      testWidgets('JPEG 源输出可解码的 JPEG（修复 4MB→12MB 膨胀）',
-          (tester) async {
+      testWidgets('JPEG 源输出可解码的 JPEG（修复 4MB→12MB 膨胀）', (tester) async {
         final bytes = await tester.runAsync(
           () => processQuickEditImage(
             rawData: _createSmallJpeg(),
@@ -352,8 +353,7 @@ void main() {
         expect(img.decodeImage(bytes!), isNotNull,
             reason: 'JPEG 源编辑结果必须是可解码的图片');
         expect(bytes[0], 0xFF);
-        expect(bytes[1], 0xD8,
-            reason: 'JPEG 照片源应输出 JPEG（旧实现输出 PNG 导致体积暴涨）');
+        expect(bytes[1], 0xD8, reason: 'JPEG 照片源应输出 JPEG（旧实现输出 PNG 导致体积暴涨）');
       });
     });
   });

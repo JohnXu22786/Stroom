@@ -1108,9 +1108,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _selectedImages.isEmpty || _isProcessing
-                    ? null
-                    : _startOcr,
+                onPressed:
+                    _selectedImages.isEmpty || _isProcessing ? null : _startOcr,
                 icon: _isProcessing
                     ? const SizedBox(
                         width: 18,

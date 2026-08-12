@@ -160,7 +160,8 @@ void main() {
       // shows a NEW bytes instance.
       await _pumpUntil(
         tester,
-        () => tester.widget<PreviewChip>(find.byType(PreviewChip)).bytes !=
+        () =>
+            tester.widget<PreviewChip>(find.byType(PreviewChip)).bytes !=
             originalChipBytes,
       );
 

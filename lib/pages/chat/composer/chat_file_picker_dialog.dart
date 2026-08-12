@@ -268,9 +268,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                   Navigator.of(context).pop(result);
                 },
                 icon: const Icon(Icons.check, size: 18),
-                label: Text(hasSelection
-                    ? '确定 (${_selectedItems.length})'
-                    : '确定'),
+                label:
+                    Text(hasSelection ? '确定 (${_selectedItems.length})' : '确定'),
               ),
             ),
           ),
