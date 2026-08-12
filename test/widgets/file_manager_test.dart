@@ -2296,8 +2296,25 @@ void main() {
 
   // ===========================================================================
   // Current-folder breadcrumb title (basename + ancestor dropdown) and the
-  // "当前：" label on the in-list back item.
+  // full-path label (front-truncated) on the in-list back item.
   // ===========================================================================
+
+  /// True when [value] contains no lone surrogates — every high surrogate is
+  /// immediately followed by its low half (i.e. no split surrogate pairs).
+  bool hasNoLoneSurrogates(String value) {
+    for (var i = 0; i < value.length; i++) {
+      final unit = value.codeUnitAt(i);
+      if (unit >= 0xDC00 && unit <= 0xDFFF) return false; // lone low surrogate
+      if (unit >= 0xD800 && unit <= 0xDBFF) {
+        if (i + 1 >= value.length) return false; // high surrogate without pair
+        final next = value.codeUnitAt(i + 1);
+        if (next < 0xDC00 || next > 0xDFFF) return false;
+        i++; // skip the completed pair
+      }
+    }
+    return true;
+  }
+
   group('FileManagerView current-folder breadcrumb title', () {
     /// Helper: a FileManagerView wrapped for tests with the nested bridge.
     Widget buildBreadcrumbFM({
@@ -2469,7 +2486,7 @@ void main() {
     );
 
     testWidgets(
-      'back item right side shows "当前：" prefix with the current folder basename',
+      'back item right side shows the full current folder path',
       (tester) async {
         await tester.pumpWidget(
           buildBreadcrumbFM(
@@ -2489,12 +2506,136 @@ void main() {
 
         await tester.tap(find.text('photos'));
         await tester.pumpAndSettle();
-        // One level deep — current folder is 'photos'
-        expect(find.text('当前：photos'), findsOneWidget);
+        // One level deep — the right side shows the full path ('photos')
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('fm_back_item')),
+            matching: find.text('photos'),
+          ),
+          findsOneWidget,
+        );
 
         await tester.tap(find.text('vacation'));
         await tester.pumpAndSettle();
-        expect(find.text('当前：vacation'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('fm_back_item')),
+            matching: find.text('photos/vacation'),
+          ),
+          findsOneWidget,
+        );
+        // The previous "当前：" prefix is gone
+        expect(find.textContaining('当前：'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'back item grey path truncates from the front when it does not fit',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(340, 640));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        // 5 levels deep with a long deepest name — the full path cannot fit
+        // on a 340px-wide screen next to the blue "返回:" label. Short
+        // intermediate names keep the blue label short so the kept tail is
+        // comfortably large (the test must not sit at the keep==0 boundary).
+        const fullPath = 'a/b/c/d/eeeeeeeeeeeeeeee';
+        await tester.pumpWidget(
+          buildBreadcrumbFM(
+            folders: {'a', 'a/b', 'a/b/c', 'a/b/c/d', fullPath},
+            config: breadcrumbConfig(),
+            records: [
+              _TestFileRecord(
+                id: 'beach',
+                name: 'beach',
+                format: 'mp4',
+                folder: fullPath,
+              ),
+            ],
+          ),
+        );
+
+        for (final level in ['a', 'b', 'c', 'd', 'eeeeeeeeeeeeeeee']) {
+          await tester.tap(find.text(level));
+          await tester.pumpAndSettle();
+        }
+
+        // The full path is not shown as a single text inside the back item
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('fm_back_item')),
+            matching: find.text(fullPath),
+          ),
+          findsNothing,
+        );
+        // Instead a front-truncated variant is shown: starts with "…" and
+        // keeps a tail of the path so the deepest folder stays readable.
+        final truncated = find.descendant(
+          of: find.byKey(const Key('fm_back_item')),
+          matching: find.textContaining('…'),
+        );
+        expect(truncated, findsOneWidget);
+        final data = tester.widget<Text>(truncated).data!;
+        expect(data.startsWith('…'), isTrue);
+        // The visible tail is a non-empty suffix of the full path
+        // (front-truncation keeps the end, not the start)
+        expect(data.length, greaterThan(1));
+        expect(fullPath.endsWith(data.substring(1)), isTrue);
+      },
+    );
+
+    testWidgets(
+      'truncation never splits surrogate pairs (emoji folder names stay intact)',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(340, 640));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        // The deepest folder name is a run of emoji (surrogate pairs).
+        // When the grey path is front-truncated, the cut must never land
+        // in the middle of a pair: a rendered lone surrogate shows as a
+        // garbled U+FFFD, and measuring a half pair is rejected by the
+        // text engine. `hasNoLoneSurrogates` below is the load-bearing
+        // check — it fails if the tail starts with a lone low surrogate.
+        const deepest = '😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀'; // 16 emoji
+        const fullPath = 'a/b/c/d/$deepest';
+        await tester.pumpWidget(
+          buildBreadcrumbFM(
+            folders: {'a', 'a/b', 'a/b/c', 'a/b/c/d', fullPath},
+            config: breadcrumbConfig(),
+            records: [
+              _TestFileRecord(
+                id: 'beach',
+                name: 'beach',
+                format: 'mp4',
+                folder: fullPath,
+              ),
+            ],
+          ),
+        );
+
+        for (final level in ['a', 'b', 'c', 'd', deepest]) {
+          await tester.tap(find.text(level));
+          await tester.pumpAndSettle();
+        }
+
+        final truncated = find.descendant(
+          of: find.byKey(const Key('fm_back_item')),
+          matching: find.textContaining('…'),
+        );
+        expect(truncated, findsOneWidget);
+        final data = tester.widget<Text>(truncated).data!;
+        expect(data.startsWith('…'), isTrue);
+        // The rendered tail is valid UTF-16 — no lone surrogates anywhere
+        expect(hasNoLoneSurrogates(data), isTrue, reason: 'data=$data');
+        // The deepest folder (the emoji run) is fully preserved at the end
+        expect(data.endsWith('😀'), isTrue, reason: 'data=$data');
+        // The cut is aligned to a surrogate-pair boundary: the first unit
+        // of the kept tail is never a lone low surrogate
+        expect(data.length, greaterThan(1));
+        final cut = fullPath.length - (data.length - 1);
+        final cutUnit = fullPath.codeUnitAt(cut);
+        expect(cutUnit < 0xDC00 || cutUnit > 0xDFFF, isTrue,
+            reason: 'data=$data cut=$cut');
       },
     );
 
