@@ -42,6 +42,18 @@ class McpMessage {
     );
   }
 
+  /// 创建一个 JSON-RPC 通知（无 id）。
+  ///
+  /// MCP 规范要求 `notifications/*` 消息不带 id（服务端不返回响应）。
+  /// 带 id 的"通知"会被服务端当成普通请求，可能等待响应或拒绝。
+  factory McpMessage.notification(String method,
+      [Map<String, dynamic>? params]) {
+    return McpMessage._(
+      method: method,
+      params: params,
+    );
+  }
+
   /// 创建一个 JSON-RPC 响应
   factory McpMessage.response({
     required String id,

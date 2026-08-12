@@ -131,10 +131,13 @@ void main() {
       expect(decoded['params']['protocolVersion'], equals('2024-11-05'));
     });
 
-    test('builds notifications/initialized request (no params)', () {
-      final json = JsonRpcUtils.buildRequest('notifications/initialized');
+    test('builds notifications/initialized notification (id-less, no params)',
+        () {
+      final json = JsonRpcUtils.buildNotification('notifications/initialized');
       final decoded = jsonDecode(json) as Map<String, dynamic>;
       expect(decoded['method'], equals('notifications/initialized'));
+      expect(decoded.containsKey('id'), isFalse,
+          reason: 'MCP 规范要求 notifications/* 不带 id（服务端不返回响应）');
       expect(decoded.containsKey('params'), isFalse);
     });
   });
