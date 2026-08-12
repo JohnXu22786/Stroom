@@ -181,8 +181,7 @@ extension _ChatPageUiExt on _ChatPageState {
     if (!_chatScrollController.hasClients) return;
     final pos = _chatScrollController.position;
     final isAtBottom =
-        (pos.maxScrollExtent - pos.pixels) <=
-        _ChatPageState._atBottomWindowPx;
+        (pos.maxScrollExtent - pos.pixels) <= _ChatPageState._atBottomWindowPx;
     final showButton = !isAtBottom;
     if (showButton == _showScrollToBottomButton) return;
     setState(() => _showScrollToBottomButton = showButton);

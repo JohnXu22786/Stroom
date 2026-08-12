@@ -494,8 +494,7 @@ void main() {
 
     testWidgets(
         'the keyboard-dismiss button unfocuses the input and sits '
-        'bottom-right, LEFT of the scroll-to-bottom button',
-        (tester) async {
+        'bottom-right, LEFT of the scroll-to-bottom button', (tester) async {
       await pumpChat(tester);
       await scrollToBottom(tester);
       await scrollUp(tester);
