@@ -520,19 +520,17 @@ String stripSearchIrrelevantMarkdown(String text) {
   // renderer treats them as literal text too, so search and rendering stay
   // consistent.
   final paragraphs = withoutFences.split('\n\n');
-  final inlineStripped = paragraphs
-      .map((paragraph) {
-        final buffer = StringBuffer();
-        var last = 0;
-        for (final match in _codeSpanPattern.allMatches(paragraph)) {
-          if (match.start > 0 && paragraph[match.start - 1] == '`') continue;
-          buffer.write(paragraph.substring(last, match.start));
-          last = match.end;
-        }
-        buffer.write(paragraph.substring(last));
-        return buffer.toString();
-      })
-      .join('\n\n');
+  final inlineStripped = paragraphs.map((paragraph) {
+    final buffer = StringBuffer();
+    var last = 0;
+    for (final match in _codeSpanPattern.allMatches(paragraph)) {
+      if (match.start > 0 && paragraph[match.start - 1] == '`') continue;
+      buffer.write(paragraph.substring(last, match.start));
+      last = match.end;
+    }
+    buffer.write(paragraph.substring(last));
+    return buffer.toString();
+  }).join('\n\n');
   return inlineStripped.replaceAll(_displayMathPattern, '');
 }
 

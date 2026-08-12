@@ -312,10 +312,11 @@ void main() {
       );
       final span = node.build() as TextSpan;
       final highlights = span.children!.whereType<TextSpan>().where(
-        (s) => s.style?.backgroundColor == Colors.yellow,
-      );
+            (s) => s.style?.backgroundColor == Colors.yellow,
+          );
       expect(highlights.length, 2);
-      final plain = span.children!.whereType<TextSpan>().map((s) => s.text ?? '').join();
+      final plain =
+          span.children!.whereType<TextSpan>().map((s) => s.text ?? '').join();
       expect(plain, 'aaa term bbb term ccc');
     });
 

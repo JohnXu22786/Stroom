@@ -102,7 +102,8 @@ void main() {
   group('ChatPage search keeps markdown and highlights matches', () {
     testWidgets('search does not flatten markdown into plain text',
         (tester) async {
-      await _pumpChat(tester, messages: _messages(), initialSearchQuery: 'term');
+      await _pumpChat(tester,
+          messages: _messages(), initialSearchQuery: 'term');
 
       // Search bar is active.
       expect(find.text('搜索当前对话...'), findsOneWidget);
@@ -126,7 +127,8 @@ void main() {
 
     testWidgets('up/down buttons move the current match counter',
         (tester) async {
-      await _pumpChat(tester, messages: _messages(), initialSearchQuery: 'term');
+      await _pumpChat(tester,
+          messages: _messages(), initialSearchQuery: 'term');
 
       expect(find.text('1/3'), findsOneWidget);
 
