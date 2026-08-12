@@ -18,6 +18,7 @@ import 'package:stroom/utils/manifest_bridge.dart';
 import 'package:stroom/utils/sort_config.dart';
 import 'package:stroom/widgets/file_manager_view.dart';
 import 'package:stroom/widgets/file_preview.dart';
+import 'package:stroom/widgets/folder_picker_dialog.dart';
 
 // =============================================================================
 // Test fixtures shared by file_manager_view_test.dart and
@@ -1283,7 +1284,7 @@ void main() {
     }
 
     Finder inPicker(Finder matching) => find.descendant(
-          of: find.byKey(const Key('fm_folder_picker_dialog')),
+          of: find.byType(FolderPickerDialog),
           matching: matching,
         );
 
@@ -1303,7 +1304,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.byKey(const Key('fm_folder_picker_dialog')),
+          find.byType(FolderPickerDialog),
           findsOneWidget,
         );
         // 'c' remains available as a target; the selected folder 'a' is gone.
@@ -1328,7 +1329,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.byKey(const Key('fm_folder_picker_dialog')),
+          find.byType(FolderPickerDialog),
           findsOneWidget,
         );
         expect(inPicker(find.text('c')), findsOneWidget);
@@ -1374,7 +1375,7 @@ void main() {
 
         await tester.tap(inPicker(find.text('c')));
         await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const Key('fm_select_folder_btn')));
+        await tester.tap(find.text('确定'));
         await tester.pumpAndSettle();
 
         expect(movedFiles, ['f1']);
@@ -1596,7 +1597,7 @@ void main() {
         // 在面板中选中文件夹 a
         await tester.tap(inPicker(find.text('a')));
         await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const Key('fm_select_folder_btn')));
+        await tester.tap(find.text('确定'));
         await tester.pumpAndSettle();
 
         expect(moved, isEmpty);
@@ -1649,7 +1650,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(inPicker(find.text('c')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('fm_select_folder_btn')));
+      await tester.tap(find.text('确定'));
       await tester.pumpAndSettle();
 
       // 文件夹复制失败后文件复制不得执行
@@ -1680,7 +1681,7 @@ void main() {
         // 'x' 下已存在 'x/a'，把 a 移入 x 会合并 → 必须被拒绝
         await tester.tap(inPicker(find.text('x')));
         await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const Key('fm_select_folder_btn')));
+        await tester.tap(find.text('确定'));
         await tester.pumpAndSettle();
 
         expect(movedFolders, isEmpty);
@@ -1711,18 +1712,76 @@ void main() {
         await tester.pumpAndSettle();
 
         // Start inline creation with an existing folder name
-        await tester.tap(find.byKey(const Key('fm_add_folder_btn')));
+        await tester
+            .tap(find.byKey(const Key('folder_picker_start_create_btn')));
         await tester.pumpAndSettle();
         await tester.enterText(
           find.byType(TextField).last,
           'c',
         );
-        await tester.tap(find.byKey(const Key('fm_picker_create_confirm_btn')));
+        await tester
+            .tap(find.byKey(const Key('folder_picker_create_confirm_btn')));
         await tester.pumpAndSettle();
 
         // No folder must be created, and a duplicate-name warning is shown.
         expect(created, isEmpty);
         expect(find.text('文件夹已存在'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'batch move accepts a folder created inside the picker as target',
+      (tester) async {
+        final movedFiles = <String>[];
+        final movedFolders = <String>[];
+        String? fileTarget;
+        String? folderTarget;
+        final created = <String>[];
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [_TestFileRecord(id: 'f1', name: 'one')],
+              folders: {'a', 'c'},
+              onCreateFolder: (name) async => created.add(name),
+              onMoveFiles: (ids, t) async {
+                movedFiles.addAll(ids);
+                fileTarget = t;
+              },
+              onMoveFolders: (names, t) async {
+                movedFolders.addAll(names);
+                folderTarget = t;
+              },
+            ),
+          ),
+        );
+
+        await tester.longPress(find.byKey(const Key('fm_folder_a')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_file_f1')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('fm_selection_move_btn')));
+        await tester.pumpAndSettle();
+
+        // Create a new folder inside the picker, then confirm it as target.
+        await tester
+            .tap(find.byKey(const Key('folder_picker_start_create_btn')));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField).last, 'd');
+        await tester.pumpAndSettle();
+        await tester
+            .tap(find.byKey(const Key('folder_picker_create_confirm_btn')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pumpAndSettle();
+
+        // 新建的文件夹被创建且被用作批量移动的目标
+        expect(created, ['d']);
+        expect(movedFiles, ['f1']);
+        expect(movedFolders, ['a']);
+        expect(fileTarget, 'd');
+        expect(folderTarget, 'd');
       },
     );
 
