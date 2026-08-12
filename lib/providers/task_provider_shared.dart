@@ -34,6 +34,10 @@ class SynthesisTask {
 
   final String? downloadedFilePath; // File path for "open file" button
 
+  /// 生成的音频保存到的文件夹路径（空字符串表示根目录）。
+  /// 由语音合成页面选择，重试时沿用。
+  final String folder;
+
   SynthesisTask({
     required this.id,
     required this.title,
@@ -50,6 +54,7 @@ class SynthesisTask {
     this.originalRequest,
     this.originalResponse,
     this.downloadedFilePath,
+    this.folder = '',
   }) : createdAt = createdAt ?? DateTime.now();
 
   SynthesisTask copyWith({
@@ -61,6 +66,7 @@ class SynthesisTask {
     String? originalResponse,
     String? downloadedFilePath,
     bool clearDownloadedFilePath = false,
+    String? folder,
   }) {
     final newStatus = status ?? this.status;
     final newStatusChangedAt = statusChangedAt ??
@@ -85,6 +91,7 @@ class SynthesisTask {
       downloadedFilePath: clearDownloadedFilePath
           ? null
           : (downloadedFilePath ?? this.downloadedFilePath),
+      folder: folder ?? this.folder,
     );
   }
 
@@ -105,6 +112,7 @@ class SynthesisTask {
         'originalResponse': originalResponse,
         if (downloadedFilePath != null)
           'downloadedFilePath': downloadedFilePath,
+        'folder': folder,
       };
 
   factory SynthesisTask.fromMap(Map<String, dynamic> map) => SynthesisTask(
@@ -133,5 +141,6 @@ class SynthesisTask {
         originalRequest: map['originalRequest'] as String?,
         originalResponse: map['originalResponse'] as String?,
         downloadedFilePath: map['downloadedFilePath'] as String?,
+        folder: map['folder'] as String? ?? '',
       );
 }

@@ -318,6 +318,8 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           initialText: sourceText.isNotEmpty ? sourceText : null,
           isOverwrite: true,
           originalTitle: originalName,
+          // 沿用原音频所在的文件夹，重新生成的音频落回原位
+          initialFolder: file.folder.isNotEmpty ? file.folder : null,
         ),
       ),
     );
