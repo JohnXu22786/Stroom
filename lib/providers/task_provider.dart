@@ -45,6 +45,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     required ModelConfig modelConfig,
     Map<String, String>? customParams,
     Map<String, dynamic>? trimPreset,
+    String folder = '',
   }) {
     final id = _uuid.v4();
     final task = SynthesisTask(
@@ -55,6 +56,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       modelConfig: modelConfig,
       customParams: customParams,
       trimPreset: trimPreset,
+      folder: folder,
     );
 
     state = [task, ...state];
@@ -133,6 +135,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         actualFormat,
         task.text,
         name: task.title,
+        folder: task.folder,
       );
 
       // 更新任务为完成
@@ -355,6 +358,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     String format,
     String text, {
     String name = '',
+    String folder = '',
   }) async {
     final hash = computeAudioHash(audioData);
     // 如果未提供标题，使用文本的前几个字
@@ -378,6 +382,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       createdAt: DateTime.now(),
       size: audioData.length,
       sourceText: text,
+      folder: folder,
     );
 
     await FileManifest.addRecord(record);

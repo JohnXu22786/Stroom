@@ -6,14 +6,20 @@ import '../providers/tts_state_provider.dart';
 import '../providers/provider_config.dart';
 import '../providers/tts_config.dart';
 import '../providers/task_provider.dart';
+import '../utils/file_manifest.dart';
+import '../widgets/folder_picker_dialog.dart';
 import 'provider_config_page.dart';
 import 'tts_create_shared.dart';
 
 /// TTS创建页面 - 用于文本转语音转换
+///
+/// 布局与 OCR / 音频转写（ASR）页面保持一致：
+/// 顶部模型选择器、中间滚动输入/配置区、底部保存位置选择器 + 生成按钮。
 class TTSCreatePage extends ConsumerStatefulWidget {
   final String? initialText;
   final bool isOverwrite;
   final String? originalTitle;
+  final String? initialFolder;
   final SynthesisTask? retryTask;
 
   const TTSCreatePage(
@@ -21,6 +27,7 @@ class TTSCreatePage extends ConsumerStatefulWidget {
       this.initialText,
       this.isOverwrite = false,
       this.originalTitle,
+      this.initialFolder,
       this.retryTask});
 
   @override
@@ -61,6 +68,25 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   // 覆盖生成时是否使用原标题
   bool _useOriginalTitle = true;
 
+  /// 表单校验错误（显示在底部错误横幅中，样式与 OCR/ASR 页面一致）
+  String? _errorMessage;
+
+  /// "请输入要转换的文本" 错误横幅是否正在显示。用标志位而不是
+  /// 字符串比较，避免文案改动后自动收起逻辑静默失效。
+  bool _textErrorShown = false;
+
+  /// 生成的音频保存到的文件夹路径（空字符串表示根目录）
+  String _saveFolder = '';
+
+  /// 重试任务预设的模型 ID。provider 异步加载完成前，_refreshModels
+  /// 可能先以空条目集运行 —— 保留该 ID 以便加载完成后仍能匹配到
+  /// 重试任务的模型（否则会静默回退到第一个模型）。
+  String? _retryModelId;
+
+  /// 重试任务预设的 instruction 文本。_refreshModels 会在模型列表
+  /// 刷新时清空输入框，需在首次刷新后重新恢复。
+  String? _retryInstruction;
+
   @override
   void initState() {
     super.initState();
@@ -73,7 +99,12 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         _useOriginalTitle) {
       _titleController.text = widget.originalTitle!;
     }
+    // 覆盖生成时沿用原音频所在的文件夹（重试任务在 _initTaskData 中恢复）
+    if (widget.initialFolder != null && widget.initialFolder!.isNotEmpty) {
+      _saveFolder = widget.initialFolder!;
+    }
     _textController.addListener(_onTextChanged);
+    _titleController.addListener(_onTextChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         ref.read(ttsStateProvider.notifier).clearError();
@@ -90,15 +121,32 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     }
     // 预设 modelConfig 和 customParams，等 _refreshModels 加载后自动匹配选中
     _modelConfig = task.modelConfig;
+    _retryModelId = task.modelConfig.modelId;
+    // 语速/音量限制随模型变化，越界值会导致 Slider 断言失败
+    _clampSpeedVolume(task.modelConfig);
     for (final p in task.modelConfig.customParams) {
       final override = task.customParams?[p.paramName];
       _customParamControllers[p.paramName] =
           TextEditingController(text: override ?? p.defaultValue);
     }
+    // 重试时沿用原任务选择的保存文件夹
+    if (task.folder.isNotEmpty) {
+      _saveFolder = task.folder;
+    }
+    // 恢复 instruction（生成时保存在 customParams['instructions'] 中）
+    final instruction = task.customParams?['instructions'];
+    if (instruction != null && instruction.trim().isNotEmpty) {
+      _instructionController.text = instruction;
+      _retryInstruction = instruction;
+    }
   }
 
   void _onTextChanged() {
-    // 触发 UI 刷新字数统计
+    // 触发 UI 刷新字数统计；文本已非空时收起"请输入要转换的文本"横幅
+    if (_textErrorShown && _textController.text.trim().isNotEmpty) {
+      _textErrorShown = false;
+      _errorMessage = null;
+    }
     setState(() {});
   }
 
@@ -107,13 +155,17 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     final ttsEntry =
         entriesState.entries.where((e) => e.name == 'TTS供应商').firstOrNull;
 
-    // 未找到 TTS 条目时不做任何事（UI 会显示未配置提示）
+    // 未找到 TTS 条目时不做任何事（UI 会显示未配置提示）。
+    // 重试预设的 _modelConfig 保留，避免 provider 异步加载期间（条目
+    // 暂时为空）丢失重试任务的模型选择。
     if (ttsEntry == null) {
       setState(() {
         _ttsEntryId = null;
-        _modelConfig = null;
-        _selectedModelIndex = null;
         _availableModels = [];
+        if (_retryModelId == null) {
+          _modelConfig = null;
+          _selectedModelIndex = null;
+        }
       });
       return;
     }
@@ -135,33 +187,61 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     setState(() {
       _ttsEntryId = ttsEntry.id;
       if (allModels.isEmpty) {
-        // 模型列表变空 → 清空当前选择
+        // 模型列表变空 → 清空当前选择。重试预设期间保留自定义参数
+        // 控制器（其中保存着重试任务的参数覆盖值），等模型恢复后沿用
         _modelConfig = null;
         _selectedModelIndex = null;
         _availableModels = [];
-        _customParamControllers.clear();
+        if (_retryModelId == null) {
+          _disposeCustomParamControllers();
+        }
       } else {
         // 如果之前选的模型在列表中，保留选择
-        final prevModelId = _modelConfig?.modelId;
+        final prevSelectedModelId = _modelConfig?.modelId;
+        final prevModelId = _modelConfig?.modelId ?? _retryModelId;
         final stillExists = prevModelId != null &&
             allModels.any((o) => o.config.modelId == prevModelId);
         if (!stillExists) {
-          _modelConfig = null;
-          _selectedModelIndex = null;
+          // 自动选中第一个模型（与 OCR/ASR 页面行为一致）
+          _applyModelSelection(allModels.first, 0);
         } else {
+          final matched = allModels[
+              allModels.indexWhere((o) => o.config.modelId == prevModelId)];
           _selectedModelIndex =
               allModels.indexWhere((o) => o.config.modelId == prevModelId);
-          if (_modelConfig!.voices.isNotEmpty) {
-            _selectedVoice = _modelConfig!.voices.first.id;
+          _maxWordsLimit = matched.config.maxWordsPerRequest;
+          // _modelConfig 可能在模型列表为空的分支被清空（重试预设
+          // 期间），此时按匹配到的模型重建，避免空解引用崩溃
+          final mc = _modelConfig ?? matched.config;
+          if (mc.voices.isNotEmpty) {
+            _selectedVoice = mc.voices.first.id;
           }
+          _modelConfig = mc;
+          // 以 Slider 实际渲染所用实例（mc）为基准限制语速/音量
+          _clampSpeedVolume(mc);
         }
+        final retryInstruction = _retryInstruction;
+        _retryModelId = null;
+        // 首次成功同步后不再保留重试指令：文本要么未经过清空（保留在
+        // 输入框中），要么已在下方分支恢复 —— 避免后续模型列表变化时
+        // 重新注入原始指令覆盖用户后续输入
+        _retryInstruction = null;
         _availableModels = allModels;
-        // 清理多余的 controller
+        // 清理多余的 controller（释放被移除的）
         final keptKeys =
             _modelConfig?.customParams.map((p) => p.paramName).toSet() ?? {};
-        _customParamControllers.removeWhere((k, _) => !keptKeys.contains(k));
-        // 如果切换了模型，清空 instruction 输入
-        _instructionController.clear();
+        final removed =
+            _customParamControllers.keys.where((k) => !keptKeys.contains(k));
+        for (final k in removed) {
+          _customParamControllers.remove(k)?.dispose();
+        }
+        // 仅在选中模型确实发生变化时清空 instruction（重试恢复的除外）
+        if (_modelConfig?.modelId != prevSelectedModelId) {
+          _instructionController.clear();
+          if (retryInstruction != null) {
+            _instructionController.text = retryInstruction;
+          }
+        }
       }
     });
   }
@@ -191,6 +271,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   @override
   void dispose() {
     _textController.removeListener(_onTextChanged);
+    _titleController.removeListener(_onTextChanged);
     _textController.dispose();
     _titleController.dispose();
     _focusNode.dispose();
@@ -205,43 +286,24 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     return _modelConfig != null;
   }
 
-  void _showNotConfiguredWarning() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('供应商未配置'),
-        content: const Text('请先在设置页面配置TTS供应商和API密钥'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _navigateToProviderConfig();
-            },
-            child: const Text('去配置'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _generateSpeech() {
-    if (!_isTTSConfigured()) {
-      _showNotConfiguredWarning();
+    if (!_isTTSConfigured() ||
+        _availableModels.isEmpty ||
+        _selectedModelIndex == null ||
+        _selectedModelIndex! >= _availableModels.length) {
+      setState(() {
+        _errorMessage = '请先在设置中配置语音合成供应商和模型';
+        _textErrorShown = false;
+      });
       return;
     }
 
     final text = _textController.text.trim();
     if (text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('请输入要转换的文本'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      setState(() {
+        _errorMessage = '请输入要转换的文本';
+        _textErrorShown = true;
+      });
       return;
     }
 
@@ -290,6 +352,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           modelConfig: modelOption.config,
           customParams: customParams,
           trimPreset: trimPreset,
+          folder: _saveFolder,
         );
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -310,36 +373,265 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     // 响应式刷新模型列表（每次 provider 数据变化时自动重建）
     _refreshModels(entriesState);
 
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('生成录音'),
+        title: const Text('语音合成'),
         centerTitle: true,
+        actions: [
+          if (_textController.text.isNotEmpty ||
+              _titleController.text.isNotEmpty)
+            TextButton.icon(
+              onPressed: _clearAll,
+              icon: const Icon(Icons.clear_all, size: 18),
+              label: const Text('清空'),
+            ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      body: Column(
+        children: [
+          // 模型选择器（样式与 OCR/ASR 页面一致）
+          _buildModelSelector(cs),
+
+          // 滚动区：输入 + 合成配置
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 覆盖提示横幅
+                  if (widget.isOverwrite) _buildOverwriteBanner(),
+                  if (widget.isOverwrite) const SizedBox(height: 16),
+
+                  // 标题 + 文本输入区域（合并）
+                  _buildCombinedInputSection(),
+                  const SizedBox(height: 16),
+
+                  // 配置区域
+                  _buildConfigSection(),
+                ],
+              ),
+            ),
+          ),
+
+          // 表单校验错误
+          if (_errorMessage != null) _buildErrorBanner(cs),
+
+          // 底部：保存位置选择 + 生成按钮
+          _buildBottomBar(cs),
+        ],
+      ),
+    );
+  }
+
+  void _clearAll() {
+    // 重置重试预设与指令输入：清空后不再把重试的模型/指令/自定义参数
+    // 重新套用（模型本身的选择保留，仅不再回退到重试预设）
+    _retryModelId = null;
+    _retryInstruction = null;
+    _instructionController.clear();
+    _textController.clear();
+    _titleController.clear();
+    setState(() {
+      _errorMessage = null;
+      _textErrorShown = false;
+    });
+  }
+
+  // ==================================================================
+  // 模型选择器 — 与 OCR/ASR 页面一致的胶囊式下拉框
+  // ==================================================================
+
+  Widget _buildModelSelector(ColorScheme cs) {
+    // 未配置任何模型 → 显示去配置提示（与 OCR/ASR 页面一致）
+    if (_availableModels.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: cs.errorContainer.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: cs.error.withValues(alpha: 0.3),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, size: 20, color: cs.error),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '合成模型',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              TextButton(
+                onPressed: _navigateToProviderConfig,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  foregroundColor: cs.error,
+                ),
+                child: const Text(
+                  '去配置',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final clampedIndex =
+        (_selectedModelIndex ?? 0).clamp(0, _availableModels.length - 1);
+    if (clampedIndex != _selectedModelIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _selectedModelIndex = clampedIndex;
+          });
+        }
+      });
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              cs.primaryContainer.withValues(alpha: 0.6),
+              cs.secondaryContainer.withValues(alpha: 0.3),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Row(
           children: [
-            // 覆盖提示横幅
-            if (widget.isOverwrite) _buildOverwriteBanner(),
-            if (widget.isOverwrite) const SizedBox(height: 16),
-
-            // 标题 + 文本输入区域（合并）
-            _buildCombinedInputSection(),
-            const SizedBox(height: 24),
-
-            // 配置区域
-            _buildConfigSection(),
-
-            const SizedBox(height: 24),
-
-            // 生成按钮
-            _buildGenerateButton(),
-            const SizedBox(height: 16),
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: cs.primary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.record_voice_over, size: 16, color: cs.primary),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              '合成模型',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                height: 34,
+                decoration: BoxDecoration(
+                  color: cs.surface.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.3),
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: clampedIndex,
+                    isDense: true,
+                    isExpanded: true,
+                    icon: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: cs.primary,
+                    ),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                    onChanged: (idx) {
+                      if (idx == null || idx >= _availableModels.length) return;
+                      _onModelSelected(idx);
+                    },
+                    items: List.generate(_availableModels.length, (i) {
+                      final opt = _availableModels[i];
+                      final modelName = opt.config.name.isNotEmpty
+                          ? opt.config.name
+                          : opt.config.modelId;
+                      final displayText = opt
+                              .providerConfig.providerName.isNotEmpty
+                          ? '$modelName | ${opt.providerConfig.providerName}'
+                          : modelName;
+                      return DropdownMenuItem<int>(
+                        value: i,
+                        child: Text(
+                          displayText,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  /// 应用某个模型的选中状态（初始化音色、字数限制与自定义参数控制器）
+  void _applyModelSelection(ModelOption opt, int index) {
+    final model = opt.config;
+    _modelConfig = model;
+    _selectedModelIndex = index;
+    _maxWordsLimit = model.maxWordsPerRequest;
+    if (model.voices.isNotEmpty) {
+      _selectedVoice = model.voices.first.id;
+    }
+    // 语速/音量限制随模型变化，越界值会导致 Slider 断言失败
+    _clampSpeedVolume(model);
+    _disposeCustomParamControllers();
+    for (final p in model.customParams) {
+      _customParamControllers[p.paramName] =
+          TextEditingController(text: p.defaultValue);
+    }
+  }
+
+  /// 将当前语速/音量限制在模型的允许范围内
+  void _clampSpeedVolume(ModelConfig model) {
+    _speed = _speed.clamp(model.speedMin, model.speedMax);
+    _volume = _volume.clamp(model.volumeMin, model.volumeMax);
+  }
+
+  /// 释放并清空所有自定义参数控制器，避免页面存活期间累积泄漏
+  void _disposeCustomParamControllers() {
+    for (final c in _customParamControllers.values) {
+      c.dispose();
+    }
+    _customParamControllers.clear();
   }
 
   Widget _buildOverwriteBanner() {
@@ -518,39 +810,9 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   Widget _buildConfigSection() {
     final model = _modelConfig;
 
-    // 没有可用模型 → 显示引导卡片
-    if (_availableModels.isEmpty) {
-      return SizedBox(
-        width: double.infinity,
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              children: [
-                const Icon(Icons.warning_amber_rounded,
-                    size: 48, color: Colors.orange),
-                const SizedBox(height: 16),
-                const Text(
-                  '未检测到可用模型',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  '请先在供应商设置中添加模型，然后再返回此处选择。',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: _navigateToProviderConfig,
-                  icon: const Icon(Icons.settings),
-                  label: const Text('去配置供应商'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+    // 未配置模型时由顶部"合成模型"选择器显示配置引导，这里不再重复提示
+    if (_availableModels.isEmpty || model == null) {
+      return const SizedBox.shrink();
     }
 
     return Card(
@@ -565,107 +827,63 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             ),
             const SizedBox(height: 16),
 
-            // 模型选择下拉列表
-            _buildModelSelector(),
-            const SizedBox(height: 16),
-
-            // 选择了模型后才显示该模型的参数
-            if (model != null) ...[
-              // 音色选择（有条件）
-              if (model.voices.isNotEmpty) ...[
-                _buildVoiceSelector(model),
-                const SizedBox(height: 16),
-              ],
-
-              // 语速控制（有条件）
-              if (model.hasSpeed) ...[
-                _buildSpeedSlider(model),
-                const SizedBox(height: 16),
-              ],
-
-              // 音量控制（有条件）
-              if (model.hasVolume) ...[
-                _buildVolumeSlider(model),
-                const SizedBox(height: 16),
-              ],
-
-              // instruction 参数（有条件）
-              if (model.supportInstruction) ...[
-                _buildInstructionField(),
-                const SizedBox(height: 16),
-              ],
-
-              // 自定义参数（有条件）
-              if (model.customParams.isNotEmpty) ...[
-                _buildCustomParamsSection(model),
-                const SizedBox(height: 16),
-              ],
-
-              // 跳转到供应商配置页面
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  RichText(
-                    text: TextSpan(
-                      style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-                      children: [
-                        const TextSpan(text: '在'),
-                        TextSpan(
-                          text: 'TTS供应商设置',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.primary,
-                            decoration: TextDecoration.underline,
-                          ),
-                          recognizer: (TapGestureRecognizer()
-                            ..onTap = _navigateToProviderConfig),
-                        ),
-                        const TextSpan(text: '页面设置更多参数'),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+            // 音色选择（有条件）
+            if (model.voices.isNotEmpty) ...[
+              _buildVoiceSelector(model),
+              const SizedBox(height: 16),
             ],
+
+            // 语速控制（有条件）
+            if (model.hasSpeed) ...[
+              _buildSpeedSlider(model),
+              const SizedBox(height: 16),
+            ],
+
+            // 音量控制（有条件）
+            if (model.hasVolume) ...[
+              _buildVolumeSlider(model),
+              const SizedBox(height: 16),
+            ],
+
+            // instruction 参数（有条件）
+            if (model.supportInstruction) ...[
+              _buildInstructionField(),
+              const SizedBox(height: 16),
+            ],
+
+            // 自定义参数（有条件）
+            if (model.customParams.isNotEmpty) ...[
+              _buildCustomParamsSection(model),
+              const SizedBox(height: 16),
+            ],
+
+            // 跳转到供应商配置页面
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                RichText(
+                  text: TextSpan(
+                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                    children: [
+                      const TextSpan(text: '在'),
+                      TextSpan(
+                        text: 'TTS供应商设置',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          decoration: TextDecoration.underline,
+                        ),
+                        recognizer: (TapGestureRecognizer()
+                          ..onTap = _navigateToProviderConfig),
+                      ),
+                      const TextSpan(text: '页面设置更多参数'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildModelSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '选择模型',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-        ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<int>(
-          initialValue: _selectedModelIndex,
-          key: ValueKey('model_$_selectedModelIndex'),
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            hintText: '请选择一个模型',
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
-          items: List.generate(_availableModels.length, (i) {
-            final opt = _availableModels[i];
-            final label = opt.providerConfig.providerName.isNotEmpty
-                ? opt.providerConfig.providerName
-                : '供应商';
-            return DropdownMenuItem<int>(
-              value: i,
-              child: Text('${opt.config.name} | $label'),
-            );
-          }),
-          onChanged: (index) {
-            if (index != null) {
-              _onModelSelected(index);
-            }
-          },
-        ),
-      ],
     );
   }
 
@@ -716,20 +934,8 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
 
   void _onModelSelected(int index) {
     final opt = _availableModels[index];
-    final model = opt.config;
     setState(() {
-      _selectedModelIndex = index;
-      _modelConfig = model;
-      _maxWordsLimit = model.maxWordsPerRequest;
-      if (model.voices.isNotEmpty) {
-        _selectedVoice = model.voices.first.id;
-      }
-      // 初始化自定义参数控制器
-      _customParamControllers.clear();
-      for (final p in model.customParams) {
-        _customParamControllers[p.paramName] =
-            TextEditingController(text: p.defaultValue);
-      }
+      _applyModelSelection(opt, index);
     });
   }
 
@@ -933,25 +1139,168 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     );
   }
 
-  Widget _buildGenerateButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: _generateSpeech,
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+  // ==================================================================
+  // 底部：保存位置选择 + 生成按钮（与 OCR/ASR 页面一致）
+  // ==================================================================
+
+  Widget _buildBottomBar(ColorScheme cs) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
         ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.audio_file),
-            SizedBox(width: 12),
-            Text('生成录音', style: TextStyle(fontSize: 16)),
+            // 保存位置选择器（生成按钮上方）
+            _buildSaveToSelector(cs),
+            const SizedBox(height: 4),
+            // 生成文件的路径预览（标题/文本非空时显示完整路径）
+            if (_textController.text.trim().isNotEmpty ||
+                _titleController.text.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  _filePathPreview(),
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton.icon(
+                onPressed: _generateSpeech,
+                icon: const Icon(Icons.audio_file, size: 20),
+                label: const Text(
+                  '生成录音',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 生成文件的保存路径预览：{文件夹}/{标题或文本摘要}.{格式}
+  /// 文件夹为应用内音频库（tts_audio）中的 manifest 分组路径。
+  String _filePathPreview() {
+    final folder = _saveFolder.isEmpty ? '根目录' : _saveFolder;
+    final title = _titleController.text.trim();
+    final text = _textController.text.trim();
+    final name = title.isNotEmpty
+        ? title
+        : (text.isEmpty
+            ? '录音'
+            : (text.length > 20 ? text.substring(0, 20) : text));
+    final format = ref.read(synthesisConfigProvider).format;
+    return '将保存为: $folder/$name.$format';
+  }
+
+  Widget _buildSaveToSelector(ColorScheme cs) {
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: _pickSaveFolder,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              Icon(Icons.folder_outlined, size: 16, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(
+                '保存至',
+                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  _saveFolder.isEmpty ? '根目录' : _saveFolder,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: cs.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Icon(Icons.chevron_right, size: 16, color: cs.onSurfaceVariant),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickSaveFolder() async {
+    final folders = await FileManifest.getAllFolders();
+    if (!mounted) return;
+    final result = await FolderPickerDialog.show(
+      context,
+      currentFolder: _saveFolder,
+      availableFolders: folders,
+      title: '选择保存文件夹',
+      onCreateFolder: (name) async {
+        await FileManifest.addFolder(name);
+        return null;
+      },
+      onRefreshFolders: () async => FileManifest.getAllFolders(),
+    );
+    if (result != null && mounted) {
+      setState(() => _saveFolder = result);
+    }
+  }
+
+  // ==================================================================
+  // 错误横幅（与 OCR/ASR 页面一致）
+  // ==================================================================
+
+  Widget _buildErrorBanner(ColorScheme cs) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      color: cs.errorContainer,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              Icons.error_outline,
+              color: cs.onErrorContainer,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _errorMessage!,
+              style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
+            ),
+          ),
+          IconButton(
+            icon: Icon(Icons.close, color: cs.onErrorContainer, size: 18),
+            onPressed: () => setState(() {
+              _errorMessage = null;
+              _textErrorShown = false;
+            }),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
       ),
     );
   }
