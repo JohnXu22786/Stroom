@@ -96,8 +96,7 @@ class USyntax extends m.InlineSyntax {
 /// [DelNode] renders strikethrough for `<del>`.
 class UNode extends ElementNode {
   @override
-  TextStyle get style =>
-      parentStyle?.merge(_defaultUStyle) ?? _defaultUStyle;
+  TextStyle get style => parentStyle?.merge(_defaultUStyle) ?? _defaultUStyle;
 }
 
 /// See [UNode].

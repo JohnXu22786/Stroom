@@ -1008,8 +1008,10 @@ void main() {
           reason: '<u>...</u> must be parsed into a u element');
       expect(u!.textContent, '下划线文本');
       // No literal "<u>" / "</u>" text anywhere in the AST.
-      expect(_collectPlainText(nodes).any((t) => t.contains('<u>') ||
-          t.contains('</u>')), isFalse,
+      expect(
+          _collectPlainText(nodes)
+              .any((t) => t.contains('<u>') || t.contains('</u>')),
+          isFalse,
           reason: 'the tags must not survive as literal text');
     });
 
@@ -1042,8 +1044,7 @@ void main() {
       expect(_collectPlainText(nodes).join(), '<u>\ntext\n</u>');
     });
 
-    test('similar tags (<ul>, <u class="x">) are not treated as underline',
-        () {
+    test('similar tags (<ul>, <u class="x">) are not treated as underline', () {
       const md = 'a <ul> b <u class="x">c</u> d';
       final nodes = _parseLikeMarkdownGenerator(md);
       expect(_findElement(nodes, 'u'), isNull,
@@ -1116,8 +1117,7 @@ void main() {
           reason: 'nested **bold** must keep the bold weight');
       expect(boldLeaf.style?.decoration, TextDecoration.underline,
           reason: 'nested **bold** inside <u> must keep the underline');
-      expect(
-          _leafSpanWithText(rootSpan.textSpan!, '普通与')!.style?.decoration,
+      expect(_leafSpanWithText(rootSpan.textSpan!, '普通与')!.style?.decoration,
           TextDecoration.underline,
           reason: 'non-bold text inside <u> stays underlined');
     });
