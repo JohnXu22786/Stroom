@@ -22,9 +22,10 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('HtmlCodeBlockWidget - card preview (default)', () {
-    testWidgets('shows a card with language badge and three action buttons',
-        (tester) async {
-      const html = '<h1>Hello World</h1>';
+    testWidgets('shows a card with language badge, inline title and two '
+        'action buttons', (tester) async {
+      const html = '<html><head><title>My Cool Page</title></head>'
+          '<body><h1>Hello World</h1></body></html>';
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -35,8 +36,15 @@ void main() {
 
       // The language badge (the fence info string) is shown top-left.
       expect(find.text('html'), findsOneWidget);
-      // The three action buttons.
-      expect(find.text('标题'), findsOneWidget);
+      // The extracted <title> is displayed inline as a centered line ABOVE
+      // the action buttons (no separate 标题 button anymore).
+      expect(find.text('My Cool Page'), findsOneWidget);
+      final titleY = tester.getTopLeft(find.text('My Cool Page')).dy;
+      final fullscreenY =
+          tester.getTopLeft(find.widgetWithText(OutlinedButton, '全屏查看')).dy;
+      expect(titleY, lessThan(fullscreenY));
+      // The two remaining action buttons.
+      expect(find.text('标题'), findsNothing);
       expect(find.text('全屏查看'), findsOneWidget);
       expect(find.text('查看代码'), findsOneWidget);
       // The raw HTML is NOT shown by default — the card replaces the code.
@@ -58,16 +66,12 @@ void main() {
 
       expect(find.textContaining('正在生成中'), findsOneWidget);
 
-      // 全屏查看 is disabled while generating; 标题/查看代码 stay enabled.
+      // 全屏查看 is disabled while generating; 查看代码 stays enabled.
       final fullscreenBtn = tester.widget<OutlinedButton>(
         find.widgetWithText(OutlinedButton, '全屏查看'),
       );
       expect(fullscreenBtn.onPressed, isNull,
           reason: 'full-screen preview must be disabled while generating');
-      final titleBtn = tester.widget<OutlinedButton>(
-        find.widgetWithText(OutlinedButton, '标题'),
-      );
-      expect(titleBtn.onPressed, isNotNull);
       final codeBtn = tester.widget<OutlinedButton>(
         find.widgetWithText(OutlinedButton, '查看代码'),
       );
@@ -92,8 +96,8 @@ void main() {
     });
 
     testWidgets('card does not overflow in a narrow bubble', (tester) async {
-      // Narrow surface (~phone width): the three buttons must wrap onto a
-      // second row instead of overflowing the card.
+      // Narrow surface (~phone width): the two buttons must fit (wrapping
+      // onto a second row if needed) instead of overflowing the card.
       await tester.binding.setSurfaceSize(const Size(320, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -108,7 +112,6 @@ void main() {
 
       expect(tester.takeException(), isNull,
           reason: 'no RenderFlex/overflow exception in a narrow bubble');
-      expect(find.text('标题'), findsOneWidget);
       expect(find.text('全屏查看'), findsOneWidget);
       expect(find.text('查看代码'), findsOneWidget);
     });
@@ -180,7 +183,7 @@ void main() {
       // A way back to the card exists.
       expect(find.byIcon(Icons.arrow_back), findsOneWidget);
       // Card buttons are gone.
-      expect(find.text('标题'), findsNothing);
+      expect(find.text('查看代码'), findsNothing);
     });
 
     testWidgets('eye icon carries the 预览 semantic label', (tester) async {
@@ -214,7 +217,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('查看代码'), findsOneWidget);
-      expect(find.text('标题'), findsOneWidget);
       expect(find.byIcon(Icons.visibility), findsNothing);
     });
 
@@ -313,8 +315,9 @@ void main() {
     });
   });
 
-  group('HtmlCodeBlockWidget - title button', () {
-    testWidgets('标题 shows the extracted document title', (tester) async {
+  group('HtmlCodeBlockWidget - title display', () {
+    testWidgets('shows the extracted document title as a centered single '
+        'line', (tester) async {
       const html = '<html><head><title>My Cool Page</title></head>'
           '<body><h1>Hi</h1></body></html>';
       await tester.pumpWidget(
@@ -325,14 +328,16 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('标题'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('My Cool Page'), findsOneWidget);
-      expect(find.text('标题'), findsWidgets); // button + dialog title
+      final titleText = tester.widget<Text>(find.text('My Cool Page'));
+      expect(titleText.textAlign, TextAlign.center);
+      expect(titleText.maxLines, 1);
+      expect(titleText.overflow, TextOverflow.ellipsis);
+      // The old 标题 button is gone.
+      expect(find.text('标题'), findsNothing);
     });
 
-    testWidgets('标题 falls back when the HTML has no title', (tester) async {
+    testWidgets('shows no title line when the HTML has no title',
+        (tester) async {
       const html = '<body><p>no title here</p></body>';
       await tester.pumpWidget(
         MaterialApp(
@@ -342,10 +347,30 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('标题'));
-      await tester.pumpAndSettle();
+      expect(find.text('（无标题）'), findsNothing,
+          reason: 'no fallback placeholder for a missing title');
+      expect(find.text('标题'), findsNothing);
+      // The two action buttons still render.
+      expect(find.text('全屏查看'), findsOneWidget);
+      expect(find.text('查看代码'), findsOneWidget);
+    });
 
-      expect(find.text('（无标题）'), findsOneWidget);
+    testWidgets('long titles are ellipsized instead of wrapping',
+        (tester) async {
+      final longTitle = List.filled(30, 'title').join(' ');
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HtmlCodeBlockWidget(
+              htmlCode: '<title>$longTitle</title>',
+            ),
+          ),
+        ),
+      );
+
+      final titleText = tester.widget<Text>(find.text(longTitle));
+      expect(titleText.maxLines, 1);
+      expect(titleText.overflow, TextOverflow.ellipsis);
     });
   });
 
