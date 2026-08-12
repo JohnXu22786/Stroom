@@ -1239,10 +1239,12 @@ void main() {
       Future<void> Function(String, String)? onMoveFolder,
       Future<void> Function(String, String)? onRenameFolder,
       Future<void> Function(String, String)? onRenameFile,
+      Future<void> Function(String, String, String)? onRenameFileWithFormat,
       Future<void> Function(String)? onCreateFolder,
       Future<void> Function(String, String)? onMoveFile,
       Future<void> Function(String, String)? onCopyFile,
       Future<void> Function(String, String)? onCopyFolder,
+      List<String>? renameFormatOptions,
     }) {
       return FileManagerView<_TestFileRecord>(
         sortedRecords: records,
@@ -1254,10 +1256,12 @@ void main() {
               const Icon(Icons.videocam, key: Key('fallback_icon')),
           onFileTap: (_) {},
           onCurrentFolderChanged: onCurrentFolderChanged,
+          renameFormatOptions: renameFormatOptions,
         ),
         isActiveTab: isActiveTab,
         onRefresh: onRefresh ?? () async {},
         onRenameFile: onRenameFile ?? (_, __) async {},
+        onRenameFileWithFormat: onRenameFileWithFormat,
         onMoveFile: onMoveFile ?? (_, __) async {},
         onCopyFile: onCopyFile ?? (_, __) async {},
         onDeleteFile: (_) async {},
@@ -2028,6 +2032,364 @@ void main() {
 
           expect(renamed, isEmpty,
               reason: '确认未修改时不得把 report.txt 误判为重命名为 report');
+        },
+      );
+
+      // =========================================================================
+      // 文本类型文件重命名：格式下拉框（与创建页一致，仅限几种格式）
+      // =========================================================================
+
+      testWidgets(
+        'file rename shows a format dropdown for listed text formats',
+        (tester) async {
+          await tester.pumpWidget(
+            _buildTestApp(
+              buildBatchFM(
+                records: [
+                  _TestFileRecord(id: 'f1', name: 'one', format: 'txt'),
+                ],
+                folders: {},
+                renameFormatOptions: const ['txt', 'md', 'mmd'],
+                onRenameFileWithFormat: (_, __, ___) async {},
+              ),
+            ),
+          );
+
+          await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('重命名'));
+          await tester.pumpAndSettle();
+
+          expect(
+            find.byKey(const Key('fm_rename_file_format_dropdown')),
+            findsOneWidget,
+          );
+        },
+      );
+
+      testWidgets(
+        'file rename hides the format dropdown for formats not in the list',
+        (tester) async {
+          await tester.pumpWidget(
+            _buildTestApp(
+              buildBatchFM(
+                // json 不在可切换格式列表中 → 不显示下拉框
+                records: [
+                  _TestFileRecord(id: 'f1', name: 'one', format: 'json'),
+                ],
+                folders: {},
+                renameFormatOptions: const ['txt', 'md', 'mmd'],
+              ),
+            ),
+          );
+
+          await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('重命名'));
+          await tester.pumpAndSettle();
+
+          expect(
+            find.byKey(const Key('fm_rename_file_format_dropdown')),
+            findsNothing,
+          );
+        },
+      );
+
+      testWidgets(
+        'file rename passes the new format when the dropdown selection changes',
+        (tester) async {
+          final renamed = <String>[];
+          await tester.pumpWidget(
+            _buildTestApp(
+              buildBatchFM(
+                records: [
+                  _TestFileRecord(id: 'f1', name: 'one', format: 'txt'),
+                ],
+                folders: {},
+                renameFormatOptions: const ['txt', 'md', 'mmd'],
+                onRenameFileWithFormat: (id, newName, format) async {
+                  renamed.add('$id->$newName|$format');
+                },
+              ),
+            ),
+          );
+
+          await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('重命名'));
+          await tester.pumpAndSettle();
+
+          // 选择 md
+          await tester.tap(find.byType(DropdownButtonFormField<String>));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('md').last);
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byKey(const Key('fm_rename_confirm_btn')));
+          await tester.pumpAndSettle();
+
+          expect(renamed, ['f1->one|md']);
+        },
+      );
+
+      testWidgets(
+        'file rename with only the format changed renames with the unchanged name',
+        (tester) async {
+          final renamed = <String>[];
+          await tester.pumpWidget(
+            _buildTestApp(
+              buildBatchFM(
+                records: [
+                  _TestFileRecord(id: 'f1', name: 'one', format: 'txt'),
+                ],
+                folders: {},
+                renameFormatOptions: const ['txt', 'md', 'mmd'],
+                onRenameFileWithFormat: (id, newName, format) async {
+                  renamed.add('$id->$newName|$format');
+                },
+              ),
+            ),
+          );
+
+          await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('重命名'));
+          await tester.pumpAndSettle();
+
+          // 名称保持不变，仅把格式从 txt 切到 mmd
+          await tester.tap(find.byType(DropdownButtonFormField<String>));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('mmd').last);
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byKey(const Key('fm_rename_confirm_btn')));
+          await tester.pumpAndSettle();
+
+          expect(renamed, ['f1->one|mmd']);
+        },
+      );
+
+      testWidgets(
+        'file rename confirming with name and format unchanged is a no-op',
+        (tester) async {
+          final renamed = <String>[];
+          await tester.pumpWidget(
+            _buildTestApp(
+              buildBatchFM(
+                records: [
+                  _TestFileRecord(id: 'f1', name: 'one', format: 'txt'),
+                ],
+                folders: {},
+                renameFormatOptions: const ['txt', 'md', 'mmd'],
+                onRenameFileWithFormat: (id, newName, format) async {
+                  renamed.add('$id->$newName|$format');
+                },
+              ),
+            ),
+          );
+
+          await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('重命名'));
+          await tester.pumpAndSettle();
+
+          // 不修改名称、不修改格式，直接确认 → 无操作
+          await tester.tap(find.byKey(const Key('fm_rename_confirm_btn')));
+          await tester.pumpAndSettle();
+
+          expect(renamed, isEmpty);
+        },
+      );
+
+      testWidgets(
+        'file rename keeps an imported stored name intact when only the format changes',
+        (tester) async {
+          final renamed = <String>[];
+          await tester.pumpWidget(
+            _buildTestApp(
+              buildBatchFM(
+                // 导入 report.txt.txt 时存储名为 report.txt、格式为 txt：
+                // 名称里的 .txt 是名字的一部分，只切换格式时不能被剥掉
+                records: [
+                  _TestFileRecord(id: 'f1', name: 'report.txt', format: 'txt'),
+                ],
+                folders: {},
+                renameFormatOptions: const ['txt', 'md', 'mmd'],
+                onRenameFileWithFormat: (id, newName, format) async {
+                  renamed.add('$id->$newName|$format');
+                },
+              ),
+            ),
+          );
+
+          await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('重命名'));
+          await tester.pumpAndSettle();
+
+          // 名称保持不变，仅把格式从 txt 切到 md
+          await tester.tap(find.byType(DropdownButtonFormField<String>));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('md').last);
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byKey(const Key('fm_rename_confirm_btn')));
+          await tester.pumpAndSettle();
+
+          expect(renamed, ['f1->report.txt|md']);
+        },
+      );
+
+      testWidgets(
+        'file rename strips a typed extension that matches the newly selected format',
+        (tester) async {
+          final renamed = <String>[];
+          await tester.pumpWidget(
+            _buildTestApp(
+              buildBatchFM(
+                records: [
+                  _TestFileRecord(id: 'f1', name: 'one', format: 'txt'),
+                ],
+                folders: {},
+                renameFormatOptions: const ['txt', 'md', 'mmd'],
+                onRenameFileWithFormat: (id, newName, format) async {
+                  renamed.add('$id->$newName|$format');
+                },
+              ),
+            ),
+          );
+
+          await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('重命名'));
+          await tester.pumpAndSettle();
+
+          // 输入 report.md 并把格式切到 md → 显示名应为 report.md 而不是 report.md.md
+          await tester.enterText(
+            find.byKey(const Key('fm_rename_file_input')),
+            'report.md',
+          );
+          await tester.tap(find.byType(DropdownButtonFormField<String>));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('md').last);
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byKey(const Key('fm_rename_confirm_btn')));
+          await tester.pumpAndSettle();
+
+          expect(renamed, ['f1->report|md']);
+        },
+      );
+
+      testWidgets(
+        'file rename hides the format dropdown when no onRenameFileWithFormat is provided',
+        (tester) async {
+          await tester.pumpWidget(
+            _buildTestApp(
+              buildBatchFM(
+                records: [
+                  _TestFileRecord(id: 'f1', name: 'one', format: 'txt'),
+                ],
+                folders: {},
+                // 只配置了可选格式列表，但没有 onRenameFileWithFormat →
+                // 下拉框不显示，避免格式变更被静默丢弃
+                renameFormatOptions: const ['txt', 'md', 'mmd'],
+              ),
+            ),
+          );
+
+          await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('重命名'));
+          await tester.pumpAndSettle();
+
+          expect(
+            find.byKey(const Key('fm_rename_file_format_dropdown')),
+            findsNothing,
+          );
+        },
+      );
+
+      testWidgets(
+        'file rename conflict check is format-aware: same name different format is allowed',
+        (tester) async {
+          final renamed = <String>[];
+          await tester.pumpWidget(
+            _buildTestApp(
+              buildBatchFM(
+                // 已有 report.txt；把 notes 改名为 report 并切到 md →
+                // 显示名 report.md 与 report.txt 不冲突，应允许
+                records: [
+                  _TestFileRecord(id: 'f1', name: 'notes', format: 'txt'),
+                  _TestFileRecord(id: 'f2', name: 'report', format: 'txt'),
+                ],
+                folders: {},
+                renameFormatOptions: const ['txt', 'md', 'mmd'],
+                onRenameFileWithFormat: (id, newName, format) async {
+                  renamed.add('$id->$newName|$format');
+                },
+              ),
+            ),
+          );
+
+          await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('重命名'));
+          await tester.pumpAndSettle();
+
+          await tester.enterText(
+            find.byKey(const Key('fm_rename_file_input')),
+            'report',
+          );
+          await tester.tap(find.byType(DropdownButtonFormField<String>));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('md').last);
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byKey(const Key('fm_rename_confirm_btn')));
+          await tester.pumpAndSettle();
+
+          expect(renamed, ['f1->report|md']);
+        },
+      );
+
+      testWidgets(
+        'file rename conflict check blocks a same name and format collision',
+        (tester) async {
+          final renamed = <String>[];
+          await tester.pumpWidget(
+            _buildTestApp(
+              buildBatchFM(
+                // 已有 report.md；把 report(txt) 切到 md → 显示名都是
+                // report.md，必须被拒绝
+                records: [
+                  _TestFileRecord(id: 'f1', name: 'report', format: 'txt'),
+                  _TestFileRecord(id: 'f2', name: 'report', format: 'md'),
+                ],
+                folders: {},
+                renameFormatOptions: const ['txt', 'md', 'mmd'],
+                onRenameFileWithFormat: (id, newName, format) async {
+                  renamed.add('$id->$newName|$format');
+                },
+              ),
+            ),
+          );
+
+          await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('重命名'));
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byType(DropdownButtonFormField<String>));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('md').last);
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byKey(const Key('fm_rename_confirm_btn')));
+          await tester.pumpAndSettle();
+
+          expect(renamed, isEmpty);
+          expect(find.text('文件 "report.md" 已存在'), findsOneWidget);
         },
       );
     });

@@ -1535,30 +1535,31 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
 
       // Quick edit — directly opens crop editor, no choice dialog needed.
-      // The editor pops immediately and processes in the background;
-      // the edited bytes are applied from the callback once ready.
-      final confirmed = await Navigator.push<bool>(
+      // The editor hides its UI on confirm but stays alive while the image
+      // processes in the background (deferred destroy); the route is
+      // non-opaque so the OCR page shows through. The edited bytes are
+      // applied from the callback once ready.
+      await Navigator.push<bool>(
         context,
-        MaterialPageRoute(
-          builder: (_) => ExtendedImageEditorPage(
-            imageBytes: currentImage.bytes,
-            fileName: '图片_${index + 1}.${currentImage.format}',
-            onProcessed: (result) {
-              try {
-                if (result is! QuickEditProcessingSuccess) return;
-                _applyEditedImage(index, currentImage, result.editedBytes);
-              } finally {
-                if (mounted) setState(() => _editsInFlight--);
-              }
-            },
-          ),
+        buildQuickEditEditorRoute(
+          imageBytes: currentImage.bytes,
+          fileName: '图片_${index + 1}.${currentImage.format}',
+          onSubmitted: () {
+            // The user confirmed — hold the start button NOW (starting
+            // OCR would run on the unedited bytes). Released in the
+            // onProcessed finally, which always fires.
+            if (mounted) setState(() => _editsInFlight++);
+          },
+          onProcessed: (result) {
+            try {
+              if (result is! QuickEditProcessingSuccess) return;
+              _applyEditedImage(index, currentImage, result.editedBytes);
+            } finally {
+              if (mounted) setState(() => _editsInFlight--);
+            }
+          },
         ),
       );
-      if (confirmed == true && mounted) {
-        // The pipeline is now running — hold the start button until the
-        // callback (which always fires) releases it.
-        setState(() => _editsInFlight++);
-      }
     } else {
       // Full editor — opens with showSaveDialog=false so it directly
       // overwrites the in-memory data without asking the user

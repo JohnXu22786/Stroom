@@ -190,6 +190,143 @@ Stream<String> sseStream(
   yield* controller.stream;
 }
 
+/// MCP streamable HTTP 传输：POST 一条 JSON-RPC 消息并逐行产出响应的
+/// SSE 行（含 `event:` / `data:` / 空行 / 裸 JSON 行）。
+///
+/// 与 [sseStream] 的区别：产出**所有**行而非只产出 `data:` 行。
+/// MCP streamable HTTP 的响应既有 `event: message` + `data: {...}` 帧，
+/// 也可能是 application/json 的裸 JSON 体，调用方需要看到完整行自行解析。
+Stream<String> ssePostLines(
+  String url,
+  Map<String, String> headers,
+  String body, {
+  CancelToken? cancelToken,
+
+  /// Callback invoked with the initial HTTP response headers, if available.
+  void Function(Map<String, List<String>> headers)? onResponseHeaders,
+}) async* {
+  final controller = StreamController<String>();
+  int processedLines = 0;
+
+  final xhr = html.HttpRequest();
+  xhr.open('POST', url);
+  headers.forEach((k, v) => xhr.setRequestHeader(k, v));
+  xhr.responseType = 'text';
+  // 连接阶段超时保护：30 秒内无任何响应视为失败。
+  xhr.timeout = 30000;
+
+  // 响应开始后（收到响应头）禁用活动超时：MCP 工具调用（如长研究任务）
+  // 可能较慢，总时长超时会在响应中途掐断连接。
+  // 同时在 HEADERS_RECEIVED 时捕获响应头——MCP 客户端在解析出响应数据后
+  // 会立即取消订阅（触发 abort，loadEnd 的 status 变为 0），若等到 loadEnd
+  // 再回调 onResponseHeaders，`mcp-session-id` 将永远捕获不到。
+  var headersCaptured = false;
+  final readyStateSub = xhr.onReadyStateChange.listen((_) {
+    if (xhr.readyState >= html.HttpRequest.HEADERS_RECEIVED) {
+      xhr.timeout = 0;
+      if (!headersCaptured &&
+          onResponseHeaders != null &&
+          xhr.status != null &&
+          xhr.status! != 0) {
+        headersCaptured = true;
+        final headerMap = <String, List<String>>{};
+        final allHeaders = xhr.getAllResponseHeaders();
+        if (allHeaders.isNotEmpty) {
+          for (final line in allHeaders.split('\n')) {
+            final colonPos = line.indexOf(':');
+            if (colonPos > 0) {
+              final key = line.substring(0, colonPos).trim().toLowerCase();
+              final value = line.substring(colonPos + 1).trim();
+              headerMap.putIfAbsent(key, () => []).add(value);
+            }
+          }
+        }
+        onResponseHeaders(headerMap);
+      }
+    }
+  });
+
+  final progressSub = xhr.onProgress.listen((_) {
+    final fullText = xhr.responseText ?? '';
+    final lines = fullText.split('\n');
+    // 最后一行可能不完整，只处理前面完整的行（responseText 是累积的，
+    // 必须用 processedLines 去重，否则同一行会被重复产出）。
+    final completeCount = lines.length - 1;
+    if (completeCount <= processedLines) return;
+    for (var i = processedLines; i < completeCount; i++) {
+      if (!controller.isClosed) controller.add(lines[i]);
+    }
+    processedLines = completeCount;
+  });
+
+  final errorSub = xhr.onError.listen((event) {
+    if (!controller.isClosed) {
+      final statusCode = xhr.status;
+      final statusText = xhr.statusText;
+      final errorMsg = statusCode != 0
+          ? '网络请求失败 (HTTP $statusCode${(statusText ?? '').isNotEmpty ? ": $statusText" : ""})'
+          : '网络请求失败: 无法连接到服务器';
+      controller.addError(Exception(errorMsg));
+    }
+  });
+
+  final loadEndSub = xhr.onLoadEnd.listen((_) {
+    // HTTP 错误必须上抛（与 IO 端 DioException 行为一致），
+    // 不能当作"干净的空流结束"——否则 405/401 在 UI 上毫无提示。
+    final status = xhr.status;
+    if (status != null && status >= 400) {
+      final statusText = xhr.statusText ?? '';
+      if (!controller.isClosed) {
+        controller.addError(Exception(
+            '网络请求失败 (HTTP $status${statusText.isNotEmpty ? ': $statusText' : ''})'));
+      }
+      controller.close();
+      progressSub.cancel();
+      errorSub.cancel();
+      readyStateSub.cancel();
+      xhr.abort();
+      return;
+    }
+    // Process all remaining lines (don't drop the last complete line)
+    final remainingText = xhr.responseText ?? '';
+    if (remainingText.isNotEmpty && !controller.isClosed) {
+      final allLines = remainingText.split('\n');
+      for (var i = processedLines; i < allLines.length; i++) {
+        controller.add(allLines[i]);
+      }
+    }
+    if (!controller.isClosed) controller.close();
+    progressSub.cancel();
+    errorSub.cancel();
+    readyStateSub.cancel();
+    xhr.abort();
+  });
+
+  void cleanupSubs() {
+    progressSub.cancel();
+    errorSub.cancel();
+    loadEndSub.cancel();
+    readyStateSub.cancel();
+  }
+
+  cancelToken?.whenCancel.then((_) {
+    if (!controller.isClosed) {
+      cleanupSubs();
+      xhr.abort();
+      controller.close();
+    }
+  });
+
+  controller.onCancel = () {
+    cleanupSubs();
+    xhr.abort();
+  };
+
+  xhr.send(body);
+
+  yield* controller.stream;
+}
+
 /// Web 平台的 SSE 事件流式客户端（带事件名）。
 ///
 /// 与 [sseStream] 相同的传输方式，但保留 `event:` 事件名，

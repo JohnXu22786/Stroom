@@ -57,22 +57,24 @@ Future<void> _pushEditor(
   required Uint8List imageBytes,
   required FutureOr<void> Function(QuickEditProcessingResult result)
       onProcessed,
+  VoidCallback? onSubmitted,
+  ValueChanged<bool?>? onPopResult,
   bool waitForEditorReady = true,
 }) async {
   await tester.pumpWidget(MaterialApp(
     home: Builder(
       builder: (context) => ElevatedButton(
-        onPressed: () {
-          Navigator.push(
+        onPressed: () async {
+          final result = await Navigator.push<bool>(
             context,
-            MaterialPageRoute(
-              builder: (_) => ExtendedImageEditorPage(
-                imageBytes: imageBytes,
-                fileName: 'test.png',
-                onProcessed: onProcessed,
-              ),
+            buildQuickEditEditorRoute(
+              imageBytes: imageBytes,
+              fileName: 'test.png',
+              onProcessed: onProcessed,
+              onSubmitted: onSubmitted,
             ),
           );
+          onPopResult?.call(result);
         },
         child: const Text('Open'),
       ),
@@ -146,18 +148,21 @@ void main() {
     });
 
     // ====================================================================
-    // Immediate pop + background processing
+    // Deferred destroy
     //
-    // The editor must pop as soon as the user taps 完成 and process the
-    // image in the background — the edit result must survive the widget
-    // being disposed (delivered via [onProcessed] afterwards).
+    // On 完成 the editor hides its UI immediately (the caller's page
+    // shows through — the route is non-opaque) but the page STAYS ALIVE
+    // while the image is processed; only after the outcome has been
+    // delivered via [onProcessed] is the page popped and destroyed.
     // ====================================================================
-    group('immediate pop + background processing', () {
+    group('deferred destroy: page stays alive until the image is received', () {
       testWidgets(
-          'tapping 完成 pops the editor before processing runs, then '
-          'delivers the processed bytes', (tester) async {
+          'tapping 完成 hides the editor UI, keeps the page alive while '
+          'processing, delivers the bytes, then destroys the page',
+          (tester) async {
         final png = await tester.runAsync(createTestImage);
         Uint8List? delivered;
+        bool? popResult;
         await _pushEditor(
           tester,
           imageBytes: png!,
@@ -166,35 +171,38 @@ void main() {
               delivered = result.editedBytes;
             }
           },
+          onPopResult: (r) => popResult = r,
         );
 
-        // Tap 完成 — the editor pops immediately.
+        // Tap 完成 — the editor UI is hidden immediately.
         await tester.tap(find.text('完成'));
         await tester.pump();
 
-        // Mid-transition sanity check: nothing can have been delivered
-        // yet (the pipeline waits for the pop animation, and engine work
-        // cannot complete without a real-async window anyway).
-        await tester.pump(const Duration(milliseconds: 100));
-        expect(delivered, isNull,
-            reason: 'processing must not run during the pop transition');
+        // The user is back on the caller's page: the editor's own UI
+        // (AppBar, 完成 button) is gone…
+        expect(find.text('完成'), findsNothing,
+            reason: 'editor UI must be hidden on confirm');
+        // …but the editor PAGE is still alive — nothing has been
+        // delivered yet (engine work cannot complete without a real-async
+        // window) and it must NOT have been popped/destroyed.
+        expect(delivered, isNull);
+        expect(find.byType(ExtendedImageEditorPage), findsOneWidget,
+            reason: 'the editor page must stay alive while processing');
+        expect(popResult, isNull);
 
-        // The route completes its exit — the editor widget is disposed.
+        // The edit result is delivered while the page is still alive.
+        await pumpUntil(tester, () => delivered != null);
+        expect(delivered, isNotNull);
+        expect(delivered!.isNotEmpty, isTrue);
+
+        // Only AFTER the delivery is the page destroyed (deferred
+        // destroy), popping with `true`.
         await pumpUntil(
           tester,
           () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty,
         );
-        // REAL GATE: by the time the widget is gone the pipeline has had
-        // real-async windows — if the pop-animation wait were dropped the
-        // bytes would already be delivered here.
-        expect(delivered, isNull,
-            reason: 'processing must start only after the pop animation');
-
-        // The edit result is NOT lost: background processing still
-        // completes and delivers the bytes via onProcessed.
-        await pumpUntil(tester, () => delivered != null);
-        expect(delivered, isNotNull);
-        expect(delivered!.isNotEmpty, isTrue);
+        expect(popResult, isTrue,
+            reason: 'route result must be true after the outcome delivered');
       });
 
       testWidgets('delivered bytes decode to a valid image', (tester) async {
@@ -243,6 +251,41 @@ void main() {
 
         expect(delivered, isNull);
         expect(find.byType(ExtendedImageEditorPage), findsNothing);
+      });
+
+      testWidgets('onSubmitted fires on confirm, never on close',
+          (tester) async {
+        final png = await tester.runAsync(createTestImage);
+        var submitted = 0;
+        await _pushEditor(
+          tester,
+          imageBytes: png!,
+          onSubmitted: () => submitted++,
+          onProcessed: (_) async {},
+        );
+
+        // Close without confirming — no submit signal.
+        await tester.tap(find.byIcon(Icons.close));
+        await tester.pumpAndSettle();
+        expect(submitted, 0,
+            reason: 'closing without confirming must not fire onSubmitted');
+
+        // Reopen and confirm — the signal fires synchronously on 完成.
+        await tester.tap(find.text('Open'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await pumpUntil(
+          tester,
+          () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
+        );
+        await tester.tap(find.text('完成'));
+        await tester.pump();
+        expect(submitted, 1,
+            reason: 'onSubmitted must fire synchronously on confirm');
+        await pumpUntil(
+          tester,
+          () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty,
+        );
       });
 
       testWidgets(
@@ -298,45 +341,69 @@ void main() {
         expect(find.byType(SnackBar), findsOneWidget);
       });
 
-      testWidgets('pop result is true when confirming', (tester) async {
+      testWidgets('pop result is true only after the bytes are delivered',
+          (tester) async {
         final png = await tester.runAsync(createTestImage);
+        Uint8List? delivered;
         bool? popResult;
-        await tester.pumpWidget(MaterialApp(
-          home: Builder(
-            builder: (context) => ElevatedButton(
-              onPressed: () async {
-                popResult = await Navigator.push<bool>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ExtendedImageEditorPage(
-                      imageBytes: png!,
-                      fileName: 'test.png',
-                      onProcessed: (_) async {},
-                    ),
-                  ),
-                );
-              },
-              child: const Text('Open'),
-            ),
-          ),
-        ));
-        await tester.tap(find.text('Open'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
-        await pumpUntil(
+        await _pushEditor(
           tester,
-          () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
+          imageBytes: png!,
+          onProcessed: (result) {
+            if (result is QuickEditProcessingSuccess) {
+              delivered = result.editedBytes;
+            }
+          },
+          onPopResult: (r) => popResult = r,
         );
 
         await tester.tap(find.text('完成'));
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump(const Duration(milliseconds: 100));
 
+        // Deferred destroy: the page must NOT have popped yet.
+        expect(popResult, isNull,
+            reason: 'page must not pop before processing delivers');
+
+        await pumpUntil(tester, () => delivered != null);
+        await pumpUntil(tester, () => popResult != null);
         expect(popResult, isTrue);
       });
 
-      testWidgets('close button cannot pop the page below during exit',
+      testWidgets('system back is blocked while the edit processes',
           (tester) async {
+        final png = await tester.runAsync(createTestImage);
+        Uint8List? delivered;
+        await _pushEditor(
+          tester,
+          imageBytes: png!,
+          onProcessed: (result) {
+            if (result is QuickEditProcessingSuccess) {
+              delivered = result.editedBytes;
+            }
+          },
+        );
+
+        await tester.tap(find.text('完成'));
+        await tester.pump();
+
+        // During processing a system back must not destroy the page.
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        expect(find.byType(ExtendedImageEditorPage), findsOneWidget,
+            reason: 'system back must be blocked while processing');
+
+        // After the outcome is delivered the page pops on its own.
+        await pumpUntil(tester, () => delivered != null);
+        await pumpUntil(
+          tester,
+          () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty,
+        );
+      });
+
+      testWidgets(
+          'close button cannot pop the page below during the submitted '
+          'window', (tester) async {
         final png = await tester.runAsync(createTestImage);
         await tester.pumpWidget(MaterialApp(
           home: Builder(
@@ -344,12 +411,10 @@ void main() {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => ExtendedImageEditorPage(
-                      imageBytes: png!,
-                      fileName: 'test.png',
-                      onProcessed: (_) async {},
-                    ),
+                  buildQuickEditEditorRoute(
+                    imageBytes: png!,
+                    fileName: 'test.png',
+                    onProcessed: (_) async {},
                   ),
                 );
               },
@@ -365,26 +430,93 @@ void main() {
           () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
         );
 
-        // Confirm and immediately tap close mid-transition. While the
-        // editor route is exiting it is no longer "present" — an
-        // unguarded second pop would pop the page BELOW the editor.
+        // Confirm without pumping — the tap handler runs synchronously,
+        // so `_submitting` is already true but the tree still holds the
+        // old close button. A stale close closure must be a no-op: it can
+        // never pop the page BELOW the editor.
         await tester.tap(find.text('完成'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 100));
-
-        // The exiting route is not rebuilt, so the close handler is the
-        // stale closure from the last build — invoke it directly to
-        // prove the runtime guard makes it a no-op.
         final closeButton = tester.widget<IconButton>(
           find.widgetWithIcon(IconButton, Icons.close),
         );
         closeButton.onPressed!.call();
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump(const Duration(milliseconds: 100));
 
-        // The host page must still be here.
+        // The host page must still be here, and the editor must still be
+        // alive (processing — not destroyed by the stale close).
         expect(find.text('Open'), findsOneWidget);
-        expect(find.byType(ExtendedImageEditorPage), findsNothing);
+        expect(find.byType(ExtendedImageEditorPage), findsOneWidget);
+      });
+
+      testWidgets(
+          'a route pushed on top of the hidden editor is not popped when '
+          'processing completes', (tester) async {
+        final png = await tester.runAsync(createTestImage);
+        BuildContext? hostContext;
+        bool? popResult;
+        await tester.pumpWidget(MaterialApp(
+          home: Builder(
+            builder: (context) {
+              hostContext = context;
+              return ElevatedButton(
+                onPressed: () async {
+                  final result = await Navigator.push<bool>(
+                    context,
+                    buildQuickEditEditorRoute(
+                      imageBytes: png!,
+                      fileName: 'test.png',
+                      // Mimic the gallery flow: a route is pushed ON TOP
+                      // of the hidden editor while the pipeline runs (the
+                      // save dialog) and is left open when the deferred
+                      // destroy fires. The deferred destroy must remove
+                      // the EDITOR route by identity — never pop this
+                      // route instead.
+                      onProcessed: (_) {
+                        Navigator.push(
+                          hostContext!,
+                          MaterialPageRoute(
+                            builder: (_) => const Scaffold(
+                              body: Center(child: Text('top-route')),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                  popResult = result;
+                },
+                child: const Text('Open'),
+              );
+            },
+          ),
+        ));
+
+        await tester.tap(find.text('Open'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await pumpUntil(
+          tester,
+          () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
+        );
+
+        await tester.tap(find.text('完成'));
+        await tester.pump();
+
+        // The pipeline completes: the top route is pushed, and the
+        // deferred destroy removes the editor — NOT the top route.
+        await pumpUntil(
+          tester,
+          () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty,
+        );
+        expect(find.text('top-route'), findsOneWidget,
+            reason: 'the route pushed on top must survive the deferred '
+                'destroy');
+        expect(popResult, isTrue);
+
+        // Clean up the top route.
+        Navigator.pop(hostContext!);
+        await tester.pumpAndSettle();
+        expect(find.text('Open'), findsOneWidget);
       });
     });
 

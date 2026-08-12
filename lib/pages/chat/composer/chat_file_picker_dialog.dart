@@ -13,6 +13,7 @@ import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/video_manifest.dart';
 import 'package:stroom/widgets/image_preview_dialog.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
+import 'package:stroom/pages/image_editor_page.dart';
 import 'file_picker_shared.dart';
 
 // ====================================================================
@@ -769,12 +770,14 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   /// Handle tap on an image preview chip: show fullscreen preview with edit.
   /// Edited bytes are saved to temp cache (original file NOT overwritten).
+  /// Crop opens the quick editor; edit opens the full editor — matching the
+  /// OCR page.
   /// [entry] is the exact [MapEntry] instance stored in [_selectedItems]
   /// (identity is used to locate the item after editing).
   Future<void> _onPreviewImageTap(MapEntry<String, Uint8List> entry) async {
     final fileName = entry.key;
     final imageBytes = entry.value;
-    final shouldEdit = await showDialog<bool>(
+    final editChoice = await showDialog<String>(
       context: context,
       builder: (ctx) => ImagePreviewDialog(
         imageData: imageBytes,
@@ -782,30 +785,38 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       ),
     );
 
-    if (shouldEdit != true || !mounted) return;
+    if (editChoice == null || !mounted) return;
 
-    // Another edit is still processing — starting a second one could
-    // silently discard the newer edit (both pipelines resolve against
-    // the same original bytes). Ask the user to wait.
-    if (_editsInFlight > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('图片处理中，请稍候再编辑'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
+    if (editChoice == 'crop') {
+      // Quick crop editor. Another edit is still processing — starting a
+      // second one could silently discard the newer edit (both pipelines
+      // resolve against the same original bytes). Ask the user to wait.
+      if (_editsInFlight > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('图片处理中，请稍候再编辑'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
 
-    // Open quick editor. The editor pops immediately and processes in
-    // the background; the selection is updated from the callback once
-    // the edited bytes are ready.
-    final confirmed = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ExtendedImageEditorPage(
+      // Open quick editor. The editor hides its UI on confirm but stays
+      // alive while the image processes in the background (deferred
+      // destroy); the route is non-opaque so the picker shows through. The
+      // selection is updated from the callback once the edited bytes are
+      // ready.
+      await Navigator.push<bool>(
+        context,
+        buildQuickEditEditorRoute(
           imageBytes: imageBytes,
           fileName: fileName,
+          onSubmitted: () {
+            // The user confirmed — hold the confirm button NOW. The
+            // selection still holds the unedited bytes until the edit
+            // callback applies them; released in onProcessed.
+            if (mounted) setState(() => _editsInFlight++);
+          },
           onProcessed: (result) async {
             try {
               if (result is! QuickEditProcessingSuccess) return;
@@ -846,12 +857,46 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
             }
           },
         ),
+      );
+      return;
+    }
+
+    // User tapped edit — open the full editor. showSaveDialog=false so it
+    // directly overwrites the in-memory selection (same as the OCR page).
+    // Another edit is still processing — a second edit would race the
+    // in-flight apply and one of the two results would be silently
+    // dropped. Ask the user to wait.
+    if (_editsInFlight > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('图片处理中，请稍候再编辑'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final editorResult = await Navigator.push<ImageEditorResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ImageEditorPage(
+          imageBytes: imageBytes,
+          showSaveDialog: false,
+        ),
       ),
     );
-    if (confirmed == true && mounted) {
-      // The pipeline is now running — hold the confirm button until the
-      // callback releases it.
-      setState(() => _editsInFlight++);
+    if (editorResult == null || !mounted) return;
+    // Update the selected item in-memory with edited bytes
+    try {
+      final key =
+          _selectedItems.entries.firstWhere((e) => e.value == entry).key;
+      if (mounted) {
+        setState(() {
+          _selectedItems[key] = MapEntry(fileName, editorResult.editedBytes);
+        });
+      }
+    } catch (_) {
+      // Item was removed while editor was open — silently ignore
     }
   }
 }

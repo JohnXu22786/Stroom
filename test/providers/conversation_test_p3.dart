@@ -100,6 +100,44 @@ void conversationGroup3() {
       expect(restored1.enabledMcpToolNames, equals({'tool_a'}));
       expect(restored2.enabledMcpToolNames, equals({'tool_b', 'tool_c'}));
     });
+
+    test('fromMap migrates legacy todoread pref to todowrite', () {
+      // 旧版本把 todo 拆成 todowrite / todoread 两个工具；合并为单一
+      // todowrite 后，显式只开启 todoread 的对话必须迁移为新工具名，
+      // 否则 todo 工具在该对话中会静默失效。
+      final legacyMap = {
+        'id': 'legacy-id',
+        'title': 'Legacy',
+        'createdAt': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().toIso8601String(),
+        'messages': <Map<String, dynamic>>[],
+        'isPinned': false,
+        'sortOrder': 0,
+        'enabledMcpToolNames': ['todoread', 'web_search'],
+        'hasExplicitEnabledMcpTools': true,
+      };
+
+      final conv = Conversation.fromMap(legacyMap);
+      expect(conv.enabledMcpToolNames, equals({'todowrite', 'web_search'}),
+          reason: '旧 todoread 偏好应迁移为 todowrite，且不丢失其它工具');
+    });
+
+    test('fromMap leaves already-migrated todowrite pref untouched', () {
+      final map = {
+        'id': 'new-id',
+        'title': 'New',
+        'createdAt': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().toIso8601String(),
+        'messages': <Map<String, dynamic>>[],
+        'isPinned': false,
+        'sortOrder': 0,
+        'enabledMcpToolNames': ['todowrite', 'web_search'],
+        'hasExplicitEnabledMcpTools': true,
+      };
+
+      final conv = Conversation.fromMap(map);
+      expect(conv.enabledMcpToolNames, equals({'todowrite', 'web_search'}));
+    });
   });
 
   // ===================================================================

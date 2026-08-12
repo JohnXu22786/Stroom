@@ -27,13 +27,24 @@ extension _ChatPageListenersExt on _ChatPageState {
       final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
       if (msgId == null) return;
       _reasoningContents[msgId] = List<String>.from(next);
+      // Reset the reasoning-completed flag BEFORE rebuilding the live
+      // segments: the rebuild reads this flag to decide whether the last
+      // reasoning section is streaming. Resetting it after the rebuild left
+      // a stale `true` (set by the textSections listener, e.g. its fresh
+      // [''] push at stream start) in effect for the whole first render —
+      // the button flashed "思考完成" until the next throttled reasoning
+      // push rebuilt with the corrected flag.
+      //
+      // The reset is scoped to content updates: only when the last section
+      // has content is reasoning still being streamed. A trailing '' (the
+      // placeholder appended by ReasoningSectionEndEvent when a round ends)
+      // must NOT reset the flag — the last sealed section has already
+      // completed and keeps showing "思考完成" (resetting would flip it to
+      // "思考中" until the next round's first push).
+      if (next.last.isNotEmpty) {
+        _isReasoningCompletedForMsg[msgId] = false;
+      }
       _rebuildLiveSegments(msgId);
-      // Reset reasoning-completed flag whenever reasoning sections change.
-      // Previously only reset when section count grew, but content updates
-      // (e.g. ReasoningEvent filling an empty placeholder) don't change
-      // the count. Without this, the button shows "思考完成" while new
-      // reasoning is still arriving.
-      _isReasoningCompletedForMsg[msgId] = false;
       if (mounted) setState(() {});
     });
 

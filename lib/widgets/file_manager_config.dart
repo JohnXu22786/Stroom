@@ -18,6 +18,11 @@ class FileManagerConfig<T extends FileRecord> {
   final void Function(String)? onCurrentFolderChanged;
   final List<Widget> Function()? extraAppBarActions;
 
+  /// 重命名对话框中可选的文件格式列表。当文件的 [FileRecord.format]
+  /// 包含在此列表中时，重命名对话框会显示格式下拉框（与创建页一致），
+  /// 让用户在这几种格式之间切换；否则保持纯文本改名。
+  final List<String>? renameFormatOptions;
+
   const FileManagerConfig({
     required this.title,
     this.topActionBar,
@@ -32,6 +37,7 @@ class FileManagerConfig<T extends FileRecord> {
     this.onLongPress,
     this.onCurrentFolderChanged,
     this.extraAppBarActions,
+    this.renameFormatOptions,
   });
 
   static List<PopupMenuEntry<String>> _defaultExtraMenu(Object? _) => [];

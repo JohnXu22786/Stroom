@@ -374,8 +374,9 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
 
   /// Called when a pending attachment chip is tapped.
   /// For image attachments: shows [ImagePreviewDialog] with crop and edit
-  ///   buttons. If user taps either, opens [ExtendedImageEditorPage]; on save,
-  ///   updates the pending attachment with edited bytes.
+  ///   buttons. Crop opens [ExtendedImageEditorPage] (quick editor); edit
+  ///   opens [ImageEditorPage] (full editor) — matching the OCR page. On
+  ///   save, updates the pending attachment with edited bytes.
   /// For non-image attachments: delegates to [widget.onPreviewAttachment].
   Future<void> _onTapPendingAttachment(int index) async {
     if (index < 0 || index >= _pendingAttachments.length) return;
@@ -392,20 +393,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     if (imageBytes == null) return;
     if (!mounted) return;
 
-    // Another edit is still processing — starting a second one could
-    // silently discard the newer edit (both pipelines resolve against
-    // the same original bytes). Ask the user to wait.
-    if (_editsInFlight > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('图片处理中，请稍候再编辑'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    final shouldEdit = await showDialog<bool>(
+    final editChoice = await showDialog<String>(
       context: context,
       builder: (ctx) => ImagePreviewDialog(
         imageData: imageBytes,
@@ -413,18 +401,39 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       ),
     );
 
-    if (shouldEdit != true || !mounted) return;
+    if (editChoice == null || !mounted) return;
 
-    // User tapped edit — open the ExtendedImage quick editor
-    // (no save dialog needed for chat page attachments).
-    // The editor pops immediately and processes in the background;
-    // the pending attachment is updated from the callback once ready.
-    final confirmed = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ExtendedImageEditorPage(
+    if (editChoice == 'crop') {
+      // Quick crop editor. Another edit is still processing — starting a
+      // second one could silently discard the newer edit (both pipelines
+      // resolve against the same original bytes). Ask the user to wait.
+      if (_editsInFlight > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('图片处理中，请稍候再编辑'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+
+      // User tapped crop — open the ExtendedImage quick editor
+      // (no save dialog needed for chat page attachments).
+      // The editor hides its UI on confirm but stays alive while the image
+      // processes in the background (deferred destroy); the route is
+      // non-opaque so the composer shows through. The pending attachment is
+      // updated from the callback once the edited bytes are ready.
+      await Navigator.push<bool>(
+        context,
+        buildQuickEditEditorRoute(
           imageBytes: imageBytes,
           fileName: att.fileName,
+          onSubmitted: () {
+            // The user confirmed — hold the send button NOW. The pending
+            // attachment still holds the unedited bytes until the edit
+            // callback applies them; releasing happens in onProcessed.
+            if (mounted) setState(() => _editsInFlight++);
+          },
           onProcessed: (result) async {
             try {
               if (result is! QuickEditProcessingSuccess) return;
@@ -445,12 +454,49 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
             }
           },
         ),
+      );
+      return;
+    }
+
+    // User tapped edit — open the full editor. showSaveDialog=false so it
+    // directly overwrites the pending bytes without asking (same as the
+    // OCR page flow).
+    // Another edit is still processing — a second edit would race the
+    // in-flight apply (both re-validate only by attachment id, which is
+    // unchanged by edits) and one of the two results would be silently
+    // discarded. Ask the user to wait.
+    if (_editsInFlight > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('图片处理中，请稍候再编辑'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final editorResult = await Navigator.push<ImageEditorResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ImageEditorPage(
+          imageBytes: imageBytes,
+          showSaveDialog: false,
+        ),
       ),
     );
-    if (confirmed == true && mounted) {
-      // The pipeline is now running — hold the send button until the
-      // callback releases it.
-      setState(() => _editsInFlight++);
+    if (editorResult == null || !mounted) return;
+    if (index >= _pendingAttachments.length) return;
+    // The attachment at [index] may have changed while the editor was
+    // open — only apply the edit to the same attachment we tapped.
+    if (_pendingAttachments[index].id != att.id) return;
+    // The apply does async file I/O — hold the send-blocking guard so
+    // the user cannot send with the pre-edit bytes mid-write (same
+    // protection the quick-edit pipeline has).
+    setState(() => _editsInFlight++);
+    try {
+      await _updatePendingAttachmentAfterEdit(index, editorResult.editedBytes);
+    } finally {
+      if (mounted) setState(() => _editsInFlight--);
     }
   }
 
@@ -462,10 +508,11 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     int index,
     Uint8List editedBytes,
   ) async {
-    // The composer is interactive while the editor processes in the
-    // background — the attachment at [index] may have been removed or
-    // reordered since the edit started. Bail out BEFORE any file I/O
-    // so we never delete the file of an attachment that is still in use.
+    // The editor's modal barrier keeps the composer frozen while the
+    // image processes, but the composer may still be disposed (leaving
+    // the chat) or switched to another conversation mid-pipeline. Bail
+    // out BEFORE any file I/O so we never delete the file of an
+    // attachment that is still in use.
     if (index >= _pendingAttachments.length) return;
     final oldAtt = _pendingAttachments[index];
 
@@ -494,10 +541,9 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         base64Data: newBase64,
       );
 
-      // The composer is interactive while the editor processes in the
-      // background — the attachment at [index] may have been removed or
-      // reordered during the awaits above. Re-validate BEFORE any
-      // destructive file I/O so we never delete the file of an
+      // Defense-in-depth: the composer may be disposed or switched to
+      // another conversation during the awaits above. Re-validate BEFORE
+      // any destructive file I/O so we never delete the file of an
       // attachment that is still in the list.
       if (!mounted ||
           index >= _pendingAttachments.length ||

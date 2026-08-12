@@ -140,6 +140,83 @@ void main() {
   });
 
   group('MathDrawingPage - UI spacing', () {
+    // Helpers to measure the formula row's action buttons (the IconButtons
+    // inside the row that contains the formula TextField, excluding the
+    // AppBar's reset-view button and the TextField's own undo suffix icon).
+    List<Rect> rowButtonRects(WidgetTester tester, {int rowIndex = 0}) {
+      final row = find
+          .ancestor(
+            of: find.byType(TextField).at(rowIndex),
+            matching: find.byType(Row),
+          )
+          .first;
+      final buttons = find.descendant(
+        of: row,
+        matching: find.byWidgetPredicate(
+          (w) => w is IconButton && (w.icon as Icon?)?.icon != Icons.undo,
+        ),
+      );
+      return [
+        for (var i = 0; i < buttons.evaluate().length; i++)
+          tester.getRect(buttons.at(i)),
+      ];
+    }
+
+    Rect textFieldRect(WidgetTester tester, {int rowIndex = 0}) {
+      return tester.getRect(find.byType(TextField).at(rowIndex));
+    }
+
+    void expectUniformSpacing(
+      WidgetTester tester, {
+      required int rowIndex,
+      required double gap,
+    }) {
+      final tfRect = textFieldRect(tester, rowIndex: rowIndex);
+      final rects = rowButtonRects(tester, rowIndex: rowIndex);
+      expect(rects, isNotEmpty);
+
+      // Input -> first action button
+      expect(rects.first.left - tfRect.right, closeTo(gap, 0.01),
+          reason: 'Gap between text field and first action button');
+
+      // Every action button is a compact 24x24 block
+      for (final r in rects) {
+        expect(r.width, closeTo(24, 0.01),
+            reason: 'Action button should be 24 wide (compact block)');
+        expect(r.height, closeTo(24, 0.01),
+            reason: 'Action button should be 24 tall (compact block)');
+      }
+
+      // Uniform gaps between consecutive buttons
+      for (var i = 0; i < rects.length - 1; i++) {
+        expect(rects[i + 1].left - rects[i].right, closeTo(gap, 0.01),
+            reason: 'Gap between consecutive action buttons should be uniform');
+      }
+    }
+
+    testWidgets(
+        'action buttons are compact 24x24 blocks with uniform 12px gaps',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      expectUniformSpacing(tester, rowIndex: 0, gap: 12);
+    });
+
+    testWidgets('spacing stays uniform when add/remove buttons are visible',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      // Add a second formula so the remove button appears on both rows
+      await tester.tap(find.byIcon(Icons.add_circle));
+      await tester.pump();
+
+      // Both rows must keep uniform 12px gaps around their buttons
+      expectUniformSpacing(tester, rowIndex: 0, gap: 12);
+      expectUniformSpacing(tester, rowIndex: 1, gap: 12);
+    });
+
     testWidgets('eye icon is positioned after the text field (outside input)',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());

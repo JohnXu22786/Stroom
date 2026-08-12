@@ -997,4 +997,89 @@ void main() {
       expect(folders, contains('a/empty_sub'));
     });
   });
+
+  // ====================================================================
+  // TextRecordsNotifier.renameRecord with format
+  // （重命名时切换文件格式，如 txt → md）
+  // ====================================================================
+
+  group('TextRecordsNotifier rename record with format', () {
+    testWidgets('renameRecord with a new format updates name and format',
+        (WidgetTester t) async {
+      final notifier = TextRecordsNotifier();
+      await notifier.loadRecords();
+      await TextManifest.addRecord(TextRecord(
+        id: 'txt_fmt_1',
+        name: 'doc',
+        hash: 'hash_fmt_1',
+        format: 'txt',
+        createdAt: DateTime.now(),
+        size: 4,
+      ));
+
+      await notifier.renameRecord('txt_fmt_1', 'doc', format: 'md');
+
+      final record = notifier.state.firstWhere((r) => r.id == 'txt_fmt_1');
+      expect(record.name, equals('doc'));
+      expect(record.format, equals('md'));
+
+      // 必须持久化到 manifest
+      final fromDb = await TextManifest.loadRecords();
+      final dbRecord = fromDb.firstWhere((r) => r.id == 'txt_fmt_1');
+      expect(dbRecord.name, equals('doc'));
+      expect(dbRecord.format, equals('md'));
+    });
+
+    testWidgets('renameRecord with a new name and format updates both',
+        (WidgetTester t) async {
+      final notifier = TextRecordsNotifier();
+      await notifier.loadRecords();
+      await TextManifest.addRecord(TextRecord(
+        id: 'txt_fmt_2',
+        name: 'doc',
+        hash: 'hash_fmt_2',
+        format: 'txt',
+        createdAt: DateTime.now(),
+        size: 4,
+      ));
+
+      await notifier.renameRecord('txt_fmt_2', 'renamed', format: 'mmd');
+
+      final record = notifier.state.firstWhere((r) => r.id == 'txt_fmt_2');
+      expect(record.name, equals('renamed'));
+      expect(record.format, equals('mmd'));
+    });
+
+    testWidgets('renameRecord without a format keeps the original format',
+        (WidgetTester t) async {
+      final notifier = TextRecordsNotifier();
+      await notifier.loadRecords();
+      await TextManifest.addRecord(TextRecord(
+        id: 'txt_fmt_3',
+        name: 'doc',
+        hash: 'hash_fmt_3',
+        format: 'txt',
+        createdAt: DateTime.now(),
+        size: 4,
+      ));
+
+      await notifier.renameRecord('txt_fmt_3', 'renamed');
+
+      final record = notifier.state.firstWhere((r) => r.id == 'txt_fmt_3');
+      expect(record.name, equals('renamed'));
+      expect(record.format, equals('txt'));
+    });
+
+    testWidgets('renameRecord with an unknown id is a safe no-op',
+        (WidgetTester t) async {
+      final notifier = TextRecordsNotifier();
+      await notifier.loadRecords();
+
+      // 不应抛异常，也不应新增记录
+      await notifier.renameRecord('missing', 'x', format: 'md');
+
+      expect(notifier.state, isEmpty);
+      expect(await TextManifest.loadRecords(), isEmpty);
+    });
+  });
 }

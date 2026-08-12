@@ -137,6 +137,99 @@ void main() {
       // Settings panel opened with TextFields for provider name, host, key
       expect(find.byType(TextField), findsNWidgets(3));
     });
+
+    testWidgets(
+        'saving a new config stays on the model list page instead of '
+        'popping back to the provider list', (tester) async {
+      await tester.pumpDetailPage(configIndex: -1);
+      await tester.pumpAndSettle();
+
+      // Settings panel auto-opened with the provider fields
+      expect(find.byType(TextField), findsNWidgets(3));
+
+      // Fill in the required provider info
+      await tester.enterText(find.byType(TextField).at(0), 'NewProvider');
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        'https://api.new.com',
+      );
+      await tester.enterText(find.byType(TextField).at(2), 'new-key');
+
+      // Save the new provider
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      // The detail page is NOT popped: still on the model list page of the
+      // newly created provider (regression: used to pop back to the list).
+      expect(find.byType(ProviderConfigDetailPage), findsOneWidget);
+      // New provider name shown (AppBar title + provider card)
+      expect(find.text('NewProvider'), findsWidgets);
+      // Model list section visible
+      expect(find.text('模型列表'), findsOneWidget);
+
+      // The new config was persisted into the entry
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ProviderConfigDetailPage)),
+      );
+      final state = container.read(providerEntriesProvider);
+      expect(state.entries.single.configs.first.providerName, 'NewProvider');
+      expect(state.entries.single.configs.first.host, 'https://api.new.com');
+      expect(state.entries.single.configs.first.key, 'new-key');
+    });
+
+    testWidgets(
+        'models added after saving a new config are persisted into the '
+        'newly created config (not dropped or routed to the old config)', (
+      tester,
+    ) async {
+      // Create and save a new provider, exactly like the save test above
+      await tester.pumpDetailPage(configIndex: -1);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsNWidgets(3));
+      await tester.enterText(find.byType(TextField).at(0), 'NewProvider');
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        'https://api.new.com',
+      );
+      await tester.enterText(find.byType(TextField).at(2), 'new-key');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      // Page is now in existing-config mode for the new provider
+      expect(find.text('NewProvider'), findsWidgets);
+
+      // Add an LLM model right after the save
+      await tester.tap(find.text('添加'));
+      await tester.pumpAndSettle();
+
+      // LlmModelConfigPage basic fields: [0]=name (optional), [1]=model ID
+      // (required), [2]=context length (required)
+      await tester.enterText(find.byType(TextField).at(1), 'new-model-id');
+      await tester.enterText(find.byType(TextField).at(2), '4096');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      // Back on the detail page; the model is visible (regression: the model
+      // would be dropped into _pendingModels, which is no longer displayed
+      // once the page flipped to existing-config mode).
+      expect(find.byType(ProviderConfigDetailPage), findsOneWidget);
+      expect(find.text('new-model-id'), findsWidgets);
+
+      // The model is persisted into configs[0] = the new provider's config
+      // (regression: any model CRUD still using widget.configIndex == -1
+      // would throw a RangeError or write into the wrong config).
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ProviderConfigDetailPage)),
+      );
+      final state = container.read(providerEntriesProvider);
+      final newConfig = state.entries.single.configs.first;
+      expect(newConfig.providerName, 'NewProvider');
+      expect(newConfig.models.single.modelId, 'new-model-id');
+
+      // LLM entries become drag-sortable only after the mode switch
+      expect(find.byType(ReorderableListView), findsOneWidget);
+    });
   });
 
   group('Model config page routing by type', () {

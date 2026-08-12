@@ -56,6 +56,49 @@ Stream<String> sseStream(
   }
 }
 
+/// MCP streamable HTTP 传输：POST 一条 JSON-RPC 消息并逐行产出响应的
+/// SSE 行（含 `event:` / `data:` / 空行 / 裸 JSON 行）。
+///
+/// 与 [sseStream] 的区别：产出**所有**行而非只产出 `data:` 行。
+/// MCP streamable HTTP 的响应既有 `event: message` + `data: {...}` 帧，
+/// 也可能是 application/json 的裸 JSON 体，调用方需要看到完整行自行解析。
+Stream<String> ssePostLines(
+  String url,
+  Map<String, String> headers,
+  String body, {
+  CancelToken? cancelToken,
+
+  /// Callback invoked with the initial HTTP response headers, if available.
+  void Function(Map<String, List<String>> headers)? onResponseHeaders,
+}) async* {
+  final dio = Dio(BaseOptions(
+    headers: headers,
+    connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 30), // 单次 JSON-RPC 请求/响应，有界超时
+  ));
+
+  final response = await dio.post(
+    url,
+    options: Options(responseType: ResponseType.stream),
+    data: body,
+    cancelToken: cancelToken,
+  );
+
+  onResponseHeaders?.call(response.headers.map);
+
+  final rawStream = response.data.stream as Stream<Uint8List>;
+  final lineStream = rawStream
+      .cast<List<int>>()
+      .transform(utf8.decoder)
+      .transform(const LineSplitter());
+
+  await for (final line in lineStream) {
+    // Yield ALL lines so the caller can parse `event:` / `data:` frames
+    // as well as bare JSON bodies.
+    yield line;
+  }
+}
+
 /// SSE 事件帧：事件名 + 数据。
 ///
 /// 供需要区分事件名的协议使用（如 Anthropic Messages 流式接口的

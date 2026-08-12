@@ -113,14 +113,12 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
     debugPrint(
         'Registered ${HttpToolService.toolDefinitions.length} HTTP tools');
 
-    // Register Todo tools (todowrite / todoread)
+    // Register Todo tool (todowrite — 读写一体)
     for (final def in TodoToolService.toolDefinitions) {
       Future<String> handler(Map<String, dynamic> args) async {
         switch (def.name) {
           case 'todowrite':
-            return await TodoToolService.handleTodoWrite(args);
-          case 'todoread':
-            return await TodoToolService.handleTodoRead(args);
+            return await TodoToolService.handleTodo(args);
           default:
             return '错误: 未知的 Todo 工具 "${def.name}"';
         }

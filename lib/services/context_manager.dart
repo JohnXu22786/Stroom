@@ -36,7 +36,7 @@ const String kToolOutputTruncatedSuffix = '\n... [已截断]';
 ///
 /// 状态性工具的结果即使过期也不 prune：todo 列表是 agent 的
 /// 工作状态，清理后模型会丢失任务上下文。
-const Set<String> kPruneProtectedTools = {'todowrite', 'todoread'};
+const Set<String> kPruneProtectedTools = {'todowrite'};
 
 class ContextManager {
   /// 压缩的最小可压缩量（token 估算值）：低于此值不执行。
