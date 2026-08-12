@@ -23,6 +23,12 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
   // Mutation callbacks
   final Future<void> Function() onRefresh;
   final Future<void> Function(String id, String newName) onRenameFile;
+
+  /// 重命名时同时修改文件格式（文本文件 txt/md/mmd 下拉框切换）。
+  /// 仅在重命名对话框显示了格式下拉框时被调用；为 null 时格式变更
+  /// 会被忽略（回退到 [onRenameFile] 的纯改名路径）。
+  final Future<void> Function(String id, String newName, String format)?
+      onRenameFileWithFormat;
   final Future<void> Function(String id, String targetFolder) onMoveFile;
   final Future<void> Function(String id, String selectedFolder) onCopyFile;
   final Future<void> Function(String id) onDeleteFile;
@@ -80,6 +86,7 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
     required this.config,
     required this.onRefresh,
     required this.onRenameFile,
+    this.onRenameFileWithFormat,
     required this.onMoveFile,
     required this.onCopyFile,
     required this.onDeleteFile,
@@ -1373,35 +1380,21 @@ class _FileManagerViewState<T extends FileRecord>
   ) async {
     _renameController.text = currentName;
 
-    final result = await showDialog<String>(
+    // 文本类型文件（格式在可切换列表中）在重命名时显示格式下拉框，
+    // 与创建页一致，仅限那几种格式之间切换。页面未提供
+    // onRenameFileWithFormat 时不显示（否则格式变更会被静默丢弃）
+    final formatOptions = widget.config.renameFormatOptions;
+    final showFormatDropdown = formatOptions != null &&
+        formatOptions.contains(format) &&
+        widget.onRenameFileWithFormat != null;
+
+    final result = await showDialog<(String, String)>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        key: const Key('fm_rename_file_dialog'),
-        title: const Text('重命名文件'),
-        content: TextField(
-          key: const Key('fm_rename_file_input'),
-          controller: _renameController,
-          decoration: const InputDecoration(
-            hintText: '输入新名称',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            key: const Key('fm_rename_cancel_btn'),
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            key: const Key('fm_rename_confirm_btn'),
-            onPressed: () {
-              // 总是弹出对话框：名称校验在关闭后进行（SnackBar 提示），
-              // 避免按钮无响应让用户困惑（含空名称）
-              Navigator.pop(ctx, _renameController.text.trim());
-            },
-            child: const Text('重命名'),
-          ),
-        ],
+      builder: (ctx) => _RenameFileDialog(
+        controller: _renameController,
+        showFormatDropdown: showFormatDropdown,
+        initialFormat: format,
+        formatOptions: formatOptions ?? const [],
       ),
     );
     // 无论成功与否都清理输入，避免残留到下次打开对话框
@@ -1409,20 +1402,30 @@ class _FileManagerViewState<T extends FileRecord>
 
     if (result == null) return;
     if (!mounted) return;
-    final rawName = result.trim();
-    // 未修改名称（与预填的基础名完全相同）时视为无操作。
+    final rawName = result.$1.trim();
+    final newFormat = result.$2;
+    // 名称与格式都未修改时视为无操作。
     // 注意：存储名可能以 .$format 结尾（如导入 report.txt.txt 时
     // 存储名为 report.txt），此时必须在剥离扩展名之前判断，
     // 否则「确认未修改」会被误判为真正的重命名
-    if (rawName == currentName) return;
+    if (rawName == currentName && newFormat == format) return;
     var newName = rawName;
     // 用户输入了带扩展名的名称（如把 report.txt 改成 report.md 时
-    // 显示名会变成 report.md.txt）→ 剥离与当前格式重复的扩展名
-    if (newName.endsWith('.$format')) {
-      newName = newName.substring(0, newName.length - format.length - 1);
+    // 显示名会变成 report.md.txt）→ 剥离与当前格式重复的扩展名；
+    // 同时剥离与下拉框新选的格式重复的扩展名（输入 report.md 并选
+    // 择 md 时显示名不应变成 report.md.md）。
+    // 仅在名称确实被修改时剥离：存储名本身以 .$format 结尾（导入
+    // 场景）且只切换格式时，名称中的 .txt 是名字的一部分，不能剥掉
+    if (rawName != currentName) {
+      if (newName.endsWith('.$format')) {
+        newName = newName.substring(0, newName.length - format.length - 1);
+      }
+      if (newFormat != format && newName.endsWith('.$newFormat')) {
+        newName = newName.substring(0, newName.length - newFormat.length - 1);
+      }
     }
     // 输入完整显示名（含扩展名）且剥离后与原名相同 → 无操作
-    if (newName == currentName) return;
+    if (newName == currentName && newFormat == format) return;
 
     // 文件名校验：拒绝空名/超长/路径分隔符与 Windows 非法字符，
     // 否则非法文件名会在导出时引发路径错误
@@ -1437,21 +1440,32 @@ class _FileManagerViewState<T extends FileRecord>
       return;
     }
 
-    // Conflict check
+    // Conflict check：显示名是 name.format，因此同文件夹下
+    // 名称与格式都相同才算冲突（同名不同格式可共存，如 report.txt 与
+    // report.md）。重命名时通过下拉框切换格式的场景尤其依赖此判断。
     final conflict = widget.sortedRecords.any(
-      (r) => r.name == newName && r.folder == _currentFolder && r.id != fileId,
+      (r) =>
+          r.name == newName &&
+          r.format == newFormat &&
+          r.folder == _currentFolder &&
+          r.id != fileId,
     );
     if (conflict) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('文件 "$newName" 已存在'),
+          content: Text('文件 "$newName.$newFormat" 已存在'),
           duration: const Duration(seconds: 2),
         ),
       );
       return;
     }
     try {
-      await widget.onRenameFile(fileId, newName);
+      final onRenameWithFormat = widget.onRenameFileWithFormat;
+      if (showFormatDropdown && onRenameWithFormat != null) {
+        await onRenameWithFormat(fileId, newName, newFormat);
+      } else {
+        await widget.onRenameFile(fileId, newName);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2698,6 +2712,97 @@ class _FileManagerViewState<T extends FileRecord>
           ),
         ],
       ),
+    );
+  }
+}
+
+// ====================================================================
+// 文件重命名对话框
+//
+// 文本类型文件（txt/md/mmd）额外显示格式下拉框，与创建页一致，
+// 让用户可以在那几种格式之间切换后缀。
+// ====================================================================
+
+class _RenameFileDialog extends StatefulWidget {
+  final TextEditingController controller;
+  final bool showFormatDropdown;
+  final String initialFormat;
+  final List<String> formatOptions;
+
+  const _RenameFileDialog({
+    required this.controller,
+    required this.showFormatDropdown,
+    required this.initialFormat,
+    this.formatOptions = const [],
+  });
+
+  @override
+  State<_RenameFileDialog> createState() => _RenameFileDialogState();
+}
+
+class _RenameFileDialogState extends State<_RenameFileDialog> {
+  late String _selectedFormat = widget.initialFormat;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: const Key('fm_rename_file_dialog'),
+      title: const Text('重命名文件'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              key: const Key('fm_rename_file_input'),
+              controller: widget.controller,
+              decoration: const InputDecoration(
+                hintText: '输入新名称',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            if (widget.showFormatDropdown) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                key: const Key('fm_rename_file_format_dropdown'),
+                initialValue: _selectedFormat,
+                decoration: const InputDecoration(
+                  labelText: '格式',
+                  border: OutlineInputBorder(),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                ),
+                items: widget.formatOptions
+                    .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _selectedFormat = value);
+                  }
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          key: const Key('fm_rename_cancel_btn'),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        ElevatedButton(
+          key: const Key('fm_rename_confirm_btn'),
+          onPressed: () {
+            // 总是弹出对话框：名称校验在关闭后进行（SnackBar 提示），
+            // 避免按钮无响应让用户困惑（含空名称）
+            Navigator.pop(
+              context,
+              (widget.controller.text.trim(), _selectedFormat),
+            );
+          },
+          child: const Text('重命名'),
+        ),
+      ],
     );
   }
 }

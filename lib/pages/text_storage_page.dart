@@ -665,6 +665,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         _currentFolder = f;
         ref.read(filesPageCurrentFolderProvider.notifier).state = f;
       },
+      // 文本类型文件重命名时显示格式下拉框（与创建页一致）
+      renameFormatOptions: kTextFileFormats,
       extraPopupMenuItems: (file) => [
         // 默认菜单已包含「预览」，这里只补充页面特有的导出项
         const PopupMenuItem(
@@ -698,6 +700,12 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       },
       onRenameFile: (id, newName) async {
         await ref.read(textRecordsProvider.notifier).renameRecord(id, newName);
+      },
+      // 文本类型文件通过下拉框切换格式时同步修改后缀
+      onRenameFileWithFormat: (id, newName, format) async {
+        await ref
+            .read(textRecordsProvider.notifier)
+            .renameRecord(id, newName, format: format);
       },
       onMoveFile: (id, targetFolder) async {
         await ref

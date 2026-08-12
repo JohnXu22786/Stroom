@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 
 import '../utils/text_manifest.dart';
 
+/// 文本文件可切换的格式（新建与重命名下拉框共用同一份列表）
+const List<String> kTextFileFormats = ['txt', 'md', 'mmd'];
+
 class TextCreatePage extends StatefulWidget {
   final String initialFolder;
 
@@ -118,11 +121,9 @@ class TextCreatePageState extends State<TextCreatePage> {
                       contentPadding:
                           EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 'txt', child: Text('txt')),
-                      DropdownMenuItem(value: 'md', child: Text('md')),
-                      DropdownMenuItem(value: 'mmd', child: Text('mmd')),
-                    ],
+                    items: kTextFileFormats
+                        .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+                        .toList(),
                     onChanged: (value) {
                       if (value != null) {
                         setState(() => _selectedFormat = value);

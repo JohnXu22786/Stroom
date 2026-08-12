@@ -84,9 +84,22 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
     await loadRecords();
   }
 
-  Future<void> renameRecord(String id, String newName) async {
+  /// 重命名记录。[format] 在重命名时同步切换文件格式（如 txt → md）时传入；
+  /// 为 null 或空时保持原格式不变。
+  Future<void> renameRecord(String id, String newName, {String? format}) async {
     TextManifest.invalidateCache();
-    await TextManifest.renameRecord(id, newName);
+    if (format == null || format.isEmpty) {
+      await TextManifest.renameRecord(id, newName);
+    } else {
+      final records = await TextManifest.loadRecords();
+      final index = records.indexWhere((r) => r.id == id);
+      if (index != -1) {
+        final r = records[index];
+        await TextManifest.updateRecord(
+          r.copyWithName(newName).copyWithFormat(format),
+        );
+      }
+    }
     await loadRecords();
   }
 
