@@ -144,8 +144,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                     Icon(
                       _showDetails ? Icons.expand_less : Icons.expand_more,
                       size: 16,
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
                   ],
                 ],

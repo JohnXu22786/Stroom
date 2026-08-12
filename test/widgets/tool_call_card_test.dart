@@ -33,17 +33,14 @@ Widget _wrap(ToolCallData data) => MaterialApp(
 
 void main() {
   group('ToolCallCard - collapsible display', () {
-    testWidgets('running 状态保持展开：参数与结果可见，且无折叠箭头',
-        (tester) async {
+    testWidgets('running 状态保持展开：参数与结果可见，且无折叠箭头', (tester) async {
       await tester.pumpWidget(
         _wrap(_tc(name: 'web_search', status: ToolCallStatus.running)),
       );
 
       expect(find.text('web_search'), findsOneWidget);
-      expect(find.text('query: 天气'), findsOneWidget,
-          reason: '调用进行中应显示参数');
-      expect(find.text('搜索结果'), findsOneWidget,
-          reason: '调用进行中应显示结果');
+      expect(find.text('query: 天气'), findsOneWidget, reason: '调用进行中应显示参数');
+      expect(find.text('搜索结果'), findsOneWidget, reason: '调用进行中应显示结果');
       expect(find.byType(CircularProgressIndicator), findsOneWidget,
           reason: '调用进行中应显示加载 spinner');
       expect(find.byIcon(Icons.expand_more), findsNothing,
@@ -57,25 +54,21 @@ void main() {
         _wrap(_tc(name: 'todo_add', status: ToolCallStatus.pending)),
       );
 
-      expect(find.text('query: 天气'), findsOneWidget,
-          reason: '待执行阶段应保持展开显示参数');
-      expect(find.text('搜索结果'), findsOneWidget,
-          reason: '待执行阶段应显示结果');
+      expect(find.text('query: 天气'), findsOneWidget, reason: '待执行阶段应保持展开显示参数');
+      expect(find.text('搜索结果'), findsOneWidget, reason: '待执行阶段应显示结果');
       expect(find.byIcon(Icons.expand_more), findsNothing,
           reason: '待执行阶段不应显示箭头');
       expect(find.byType(CircularProgressIndicator), findsNothing,
           reason: 'pending 阶段不显示 spinner（spinner 仅 running 显示）');
     });
 
-    testWidgets('pending 状态点击为 no-op：点击后转为完成仍自动收起',
-        (tester) async {
+    testWidgets('pending 状态点击为 no-op：点击后转为完成仍自动收起', (tester) async {
       await tester.pumpWidget(
         _wrap(_tc(name: 'todo_add', status: ToolCallStatus.pending)),
       );
       await tester.tap(find.byType(ToolCallCard));
       await tester.pump();
-      expect(find.text('query: 天气'), findsOneWidget,
-          reason: '待执行卡片点击后仍应展开');
+      expect(find.text('query: 天气'), findsOneWidget, reason: '待执行卡片点击后仍应展开');
 
       await tester.pumpWidget(
         _wrap(_tc(name: 'todo_add', status: ToolCallStatus.completed)),
@@ -85,17 +78,14 @@ void main() {
           reason: '待执行点击应为 no-op，转为完成后仍应自动收起');
     });
 
-    testWidgets('completed 状态默认收起为一行：名称可见，参数与结果隐藏',
-        (tester) async {
+    testWidgets('completed 状态默认收起为一行：名称可见，参数与结果隐藏', (tester) async {
       await tester.pumpWidget(
         _wrap(_tc(name: 'web_search', status: ToolCallStatus.completed)),
       );
 
       expect(find.text('web_search'), findsOneWidget);
-      expect(find.text('query: 天气'), findsNothing,
-          reason: '调用完成后应自动收起参数');
-      expect(find.text('搜索结果'), findsNothing,
-          reason: '调用完成后应自动收起结果');
+      expect(find.text('query: 天气'), findsNothing, reason: '调用完成后应自动收起参数');
+      expect(find.text('搜索结果'), findsNothing, reason: '调用完成后应自动收起结果');
       expect(find.byIcon(Icons.expand_more), findsOneWidget,
           reason: '收起状态应显示可展开箭头');
     });
@@ -113,8 +103,7 @@ void main() {
       // Tap → expanded.
       await tester.tap(find.byType(ToolCallCard));
       await tester.pump();
-      expect(find.text('query: 天气'), findsOneWidget,
-          reason: '点击收起卡片应展开并显示参数');
+      expect(find.text('query: 天气'), findsOneWidget, reason: '点击收起卡片应展开并显示参数');
       expect(find.text('搜索结果'), findsOneWidget);
       expect(find.byIcon(Icons.expand_less), findsOneWidget,
           reason: '展开状态箭头应翻转为向上');
@@ -122,8 +111,7 @@ void main() {
       // Tap again → collapsed.
       await tester.tap(find.byType(ToolCallCard));
       await tester.pump();
-      expect(find.text('query: 天气'), findsNothing,
-          reason: '再次点击应重新收起');
+      expect(find.text('query: 天气'), findsNothing, reason: '再次点击应重新收起');
       expect(find.byIcon(Icons.expand_more), findsOneWidget,
           reason: '收起后箭头应恢复为向下');
     });
@@ -149,8 +137,7 @@ void main() {
       await tester.tapAt(blankPoint);
       await tester.pump();
 
-      expect(find.text('query: 天气'), findsNothing,
-          reason: '点击参数行右侧空白处应触发收起');
+      expect(find.text('query: 天气'), findsNothing, reason: '点击参数行右侧空白处应触发收起');
     });
 
     testWidgets('点击卡片左缘内边距环带同样可切换', (tester) async {
@@ -162,12 +149,10 @@ void main() {
       final cardRect = tester.getRect(find.byType(ToolCallCard));
       await tester.tapAt(Offset(cardRect.left + 3, cardRect.center.dy));
       await tester.pump();
-      expect(find.text('query: 天气'), findsOneWidget,
-          reason: '点击内边距环带应能展开');
+      expect(find.text('query: 天气'), findsOneWidget, reason: '点击内边距环带应能展开');
     });
 
-    testWidgets('error 状态名称红色（展开/收起一致），再点一次收回起',
-        (tester) async {
+    testWidgets('error 状态名称红色（展开/收起一致），再点一次收回起', (tester) async {
       await tester.pumpWidget(
         _wrap(_tc(name: 'web_search', status: ToolCallStatus.error)),
       );
@@ -182,14 +167,12 @@ void main() {
       await tester.tap(find.byType(ToolCallCard));
       await tester.pump();
       final expandedName = tester.widget<Text>(find.text('web_search'));
-      expect(expandedName.style?.color, Colors.red,
-          reason: '失败调用展开后工具名称仍应为红色');
+      expect(expandedName.style?.color, Colors.red, reason: '失败调用展开后工具名称仍应为红色');
 
       // Tap again → collapsed (same as completed 卡片).
       await tester.tap(find.byType(ToolCallCard));
       await tester.pump();
-      expect(find.text('query: 天气'), findsNothing,
-          reason: '失败调用再点一次应收起');
+      expect(find.text('query: 天气'), findsNothing, reason: '失败调用再点一次应收起');
     });
 
     testWidgets('completed 名称非红色（对照组）', (tester) async {
@@ -198,12 +181,10 @@ void main() {
       );
 
       final okName = tester.widget<Text>(find.text('read_file'));
-      expect(okName.style?.color, isNot(Colors.red),
-          reason: '成功的调用名称不应为红色');
+      expect(okName.style?.color, isNot(Colors.red), reason: '成功的调用名称不应为红色');
     });
 
-    testWidgets('compactedAt 非空时收起态显示"已压缩"徽标，展开显示占位符',
-        (tester) async {
+    testWidgets('compactedAt 非空时收起态显示"已压缩"徽标，展开显示占位符', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -222,15 +203,13 @@ void main() {
       );
 
       // 收起态：徽标可见，占位符隐藏。
-      expect(find.text('已压缩'), findsOneWidget,
-          reason: '收起态应显示"已压缩"徽标');
+      expect(find.text('已压缩'), findsOneWidget, reason: '收起态应显示"已压缩"徽标');
       expect(find.text(kCompactedToolResultPlaceholder), findsNothing);
 
       // 展开态：徽标保留，结果渲染为占位符。
       await tester.tap(find.byType(ToolCallCard));
       await tester.pump();
-      expect(find.text('已压缩'), findsOneWidget,
-          reason: '展开后徽标仍应可见');
+      expect(find.text('已压缩'), findsOneWidget, reason: '展开后徽标仍应可见');
       expect(find.text(kCompactedToolResultPlaceholder), findsOneWidget,
           reason: '展开后结果应渲染压缩占位符');
       expect(find.text('很长的结果内容'), findsNothing,
@@ -251,13 +230,11 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('query: 天气'), findsNothing,
-          reason: '状态转为完成后应自动收起为一行');
+      expect(find.text('query: 天气'), findsNothing, reason: '状态转为完成后应自动收起为一行');
       expect(find.text('web_search'), findsOneWidget);
     });
 
-    testWidgets('同 id 完成(已展开)→重新进行中→再次完成时自动收起',
-        (tester) async {
+    testWidgets('同 id 完成(已展开)→重新进行中→再次完成时自动收起', (tester) async {
       // Regression: didUpdateWidget 需在状态退回进行中时重置展开状态，
       // 否则同一 id 重跑时第二次完成后会残留旧的展开状态、无法自动收起。
       await tester.pumpWidget(
@@ -272,29 +249,25 @@ void main() {
         _wrap(_tc(name: 'web_search', status: ToolCallStatus.running)),
       );
       await tester.pump();
-      expect(find.text('query: 天气'), findsOneWidget,
-          reason: '进行中仍应展开显示');
+      expect(find.text('query: 天气'), findsOneWidget, reason: '进行中仍应展开显示');
 
       // 再次完成：应自动收起，而不是残留展开状态。
       await tester.pumpWidget(
         _wrap(_tc(name: 'web_search', status: ToolCallStatus.completed)),
       );
       await tester.pump();
-      expect(find.text('query: 天气'), findsNothing,
-          reason: '同 id 第二次完成后也应自动收起');
+      expect(find.text('query: 天气'), findsNothing, reason: '同 id 第二次完成后也应自动收起');
       expect(find.byIcon(Icons.expand_more), findsOneWidget);
     });
 
-    testWidgets('running 状态点击为 no-op：点击后转为完成仍自动收起',
-        (tester) async {
+    testWidgets('running 状态点击为 no-op：点击后转为完成仍自动收起', (tester) async {
       await tester.pumpWidget(
         _wrap(_tc(name: 'web_search', status: ToolCallStatus.running)),
       );
 
       await tester.tap(find.byType(ToolCallCard));
       await tester.pump();
-      expect(find.text('query: 天气'), findsOneWidget,
-          reason: '进行中卡片点击后仍应展开');
+      expect(find.text('query: 天气'), findsOneWidget, reason: '进行中卡片点击后仍应展开');
 
       // 判别性断言：若点击曾把 _expanded 置 true（守卫失效），
       // 转为完成后会残留展开状态，此断言即失败。
@@ -306,24 +279,24 @@ void main() {
           reason: '进行中点击应为 no-op，转为完成后仍应自动收起');
     });
 
-    testWidgets('同一位置替换为新工具调用（不同 id）时重置展开状态',
-        (tester) async {
+    testWidgets('同一位置替换为新工具调用（不同 id）时重置展开状态', (tester) async {
       // didUpdateWidget 的 id 重置分支：列表原地替换时，新工具的
       // 展开状态不应沿用到新工具上。
       await tester.pumpWidget(
-        _wrap(_tc(id: 'tc-1', name: 'web_search', status: ToolCallStatus.completed)),
+        _wrap(_tc(
+            id: 'tc-1', name: 'web_search', status: ToolCallStatus.completed)),
       );
       await tester.tap(find.byType(ToolCallCard));
       await tester.pump();
       expect(find.text('query: 天气'), findsOneWidget, reason: '先展开旧工具');
 
       await tester.pumpWidget(
-        _wrap(_tc(id: 'tc-2', name: 'read_file', status: ToolCallStatus.completed)),
+        _wrap(_tc(
+            id: 'tc-2', name: 'read_file', status: ToolCallStatus.completed)),
       );
       await tester.pump();
 
-      expect(find.text('query: 天气'), findsNothing,
-          reason: '换新工具调用后应重置为收起状态');
+      expect(find.text('query: 天气'), findsNothing, reason: '换新工具调用后应重置为收起状态');
       expect(find.byIcon(Icons.expand_more), findsOneWidget);
     });
 
@@ -348,8 +321,7 @@ void main() {
       await tester.pump();
       final expandedWidth = tester.getRect(find.byType(ToolCallCard)).width;
 
-      expect(collapsedWidth, expandedWidth,
-          reason: '收起/展开切换时卡片宽度不应跳动');
+      expect(collapsedWidth, expandedWidth, reason: '收起/展开切换时卡片宽度不应跳动');
     });
 
     testWidgets('长工具名收起时不换行、不溢出（省略号截断）', (tester) async {
