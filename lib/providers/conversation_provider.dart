@@ -302,6 +302,13 @@ class Conversation {
     if (toolsRaw is List) {
       enabledMcpToolNames = toolsRaw.map((e) => e.toString()).toSet();
     }
+    // 迁移：todowrite / todoread 已合并为单一 todowrite（读写一体）。
+    // 旧数据里仅显式开启 todoread 的对话，把该偏好迁移为 todowrite，
+    // 避免合并后 todo 工具在该对话中静默失效（仅开启 todoread 时
+    // 新工具名不在启用集里，会被当成"未启用"）。
+    if (enabledMcpToolNames.remove('todoread')) {
+      enabledMcpToolNames.add('todowrite');
+    }
     // hasExplicitEnabledMcpTools is true if the user has touched the toggles
     // for this conversation. Defaults to false (new conversation → auto-enable
     // all available tools). Persisted explicitly so an empty

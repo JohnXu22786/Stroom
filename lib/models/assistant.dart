@@ -236,6 +236,19 @@ class Assistant {
     final settingsMap = map['settings'] as Map<String, dynamic>?;
     final defaultModelNameRaw = map['defaultModelName'];
     final defaultToolsRaw = map['defaultToolNames'];
+    // 字段存在（含空列表）→ 已配置；缺失 → 从未配置（null）。
+    // 迁移：todowrite / todoread 已合并为单一 todowrite（读写一体），
+    // 旧数据里显式配置了 todoread 的助手，把该默认偏好迁移为新工具名，
+    // 避免合并后仅开启 todoread 的助手默认配置里 todo 工具静默失效。
+    Set<String>? defaultToolNames;
+    if (defaultToolsRaw != null) {
+      defaultToolNames = defaultToolsRaw is List
+          ? defaultToolsRaw.map((e) => e.toString()).toSet()
+          : <String>{};
+      if (defaultToolNames.remove('todoread')) {
+        defaultToolNames.add('todowrite');
+      }
+    }
     return Assistant(
       id: map['id'] as String?,
       name: (map['name'] as String?) ?? '',
@@ -250,12 +263,7 @@ class Assistant {
           defaultModelNameRaw is String && defaultModelNameRaw.isNotEmpty
               ? defaultModelNameRaw
               : null,
-      // 字段存在（含空列表）→ 已配置；缺失 → 从未配置（null）。
-      defaultToolNames: defaultToolsRaw != null
-          ? (defaultToolsRaw is List
-              ? defaultToolsRaw.map((e) => e.toString()).toSet()
-              : const <String>{})
-          : null,
+      defaultToolNames: defaultToolNames,
       createdAt: map['createdAt'] != null
           ? DateTime.parse(map['createdAt'] as String)
           : null,

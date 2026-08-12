@@ -576,6 +576,33 @@ void main() {
       expect(restored.defaultToolNames, isNull);
     });
 
+    test('fromMap migrates legacy todoread default to todowrite', () {
+      // 旧版本把 todo 拆成 todowrite / todoread；合并后显式配置过
+      // todoread 的助手默认工具集必须迁移为新工具名，否则该助手下
+      // 新建的话题里 todo 工具会静默失效。
+      final legacyMap = <String, dynamic>{
+        'id': 'legacy-assistant',
+        'name': '旧助手',
+        'prompt': '你好',
+        'defaultToolNames': ['todoread', 'web_search'],
+      };
+
+      final assistant = Assistant.fromMap(legacyMap);
+      expect(assistant.defaultToolNames, {'todowrite', 'web_search'});
+    });
+
+    test('fromMap leaves already-migrated todowrite default untouched', () {
+      final map = <String, dynamic>{
+        'id': 'new-assistant',
+        'name': '新助手',
+        'prompt': '你好',
+        'defaultToolNames': ['todowrite', 'web_search'],
+      };
+
+      final assistant = Assistant.fromMap(map);
+      expect(assistant.defaultToolNames, {'todowrite', 'web_search'});
+    });
+
     test('legacy assistant map without new fields parses with defaults', () {
       final map = <String, dynamic>{
         'id': 'legacy-1',

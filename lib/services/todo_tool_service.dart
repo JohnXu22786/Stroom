@@ -6,12 +6,12 @@ import '../models/tool_call.dart';
 // ============================================================================
 // Todo 工具服务层
 //
-// 参照 Anomalyco/OpenCode 的 todowrite / todoread 内置工具，
-// 改为纯 Dart 实现，作为内置 MCP 工具供 LLM 调用。
+// 参照 Anomalyco/OpenCode 的 todowrite 内置工具（todoread 已于上游移除，
+// 读取能力并入同一工具），改为纯 Dart 实现，作为内置 MCP 工具供 LLM 调用。
 //
-// 功能：
-// - todowrite：覆盖写入待办列表（全量替换，增量操作由 LLM 自行处理）
-// - todoread：读取当前会话的待办列表
+// 功能（单一 todowrite 工具，读写一体）：
+// - 写入：传入 todos 参数 → 覆盖写入待办列表（全量替换，增量操作由 LLM 自行处理）
+// - 读取：省略 todos 参数 → 读取当前会话的待办列表
 // ============================================================================
 
 /// Todo 工具的服务层，管理内存中的待办事项并提供处理函数
@@ -21,12 +21,13 @@ class TodoToolService {
   /// 内存中的待办事项列表（按 position 排序）
   static final List<TodoItem> _todos = [];
 
-  /// 工具定义列表
+  /// 工具定义列表（单一 todowrite 工具，读写一体）
   static final List<ToolDefinition> toolDefinitions = [
     ToolDefinition(
       name: 'todowrite',
-      description: '创建并管理待办事项列表。每次调用时需提供完整的待办事项列表，'
-          '系统将替换所有现有事项。各事项包含：'
+      description: '创建、读取并管理待办事项列表。'
+          '传入 todos（完整的待办事项列表）时覆盖写入，系统将替换所有现有事项；'
+          '省略 todos 参数时读取当前待办事项列表。各事项包含：'
           'content（任务描述）、status（状态: pending/in_progress/completed/cancelled）、'
           'priority（优先级: high/medium/low）。'
           '适用于 3 个以上步骤的复杂任务管理。',
@@ -35,7 +36,7 @@ class TodoToolService {
         'properties': {
           'todos': {
             'type': 'array',
-            'description': '待办事项列表（全量替换）',
+            'description': '待办事项列表（全量替换）。省略该参数时读取当前待办列表。',
             'items': {
               'type': 'object',
               'properties': {
@@ -59,15 +60,6 @@ class TodoToolService {
             },
           },
         },
-        'required': ['todos'],
-      },
-    ),
-    ToolDefinition(
-      name: 'todoread',
-      description: '读取当前的待办事项列表。返回所有待办事项及其状态和优先级信息。',
-      parameters: {
-        'type': 'object',
-        'properties': {},
         'required': <String>[],
       },
     ),
@@ -77,6 +69,23 @@ class TodoToolService {
   @visibleForTesting
   static void reset() {
     _todos.clear();
+  }
+
+  /// 处理 todowrite 调用（读写一体入口）。
+  ///
+  /// [args] 的 `todos` 为 List 时执行覆盖写入；`todos` 缺失或为 null
+  /// （null 视为省略）时读取当前待办列表，避免模型把可选数组序列化成
+  /// null 时误清空整个列表。`todos` 存在但类型非法（非 List）时返回
+  /// 错误提示，让模型自行修正，而不是静默走读取分支。
+  static Future<String> handleTodo(Map<String, dynamic> args) async {
+    final todos = args['todos'];
+    if (todos == null) {
+      return handleTodoRead(args);
+    }
+    if (todos is List) {
+      return handleTodoWrite(args);
+    }
+    return '错误: todos 参数必须是数组（省略或传 null 表示读取待办列表）';
   }
 
   /// 处理 todowrite 调用
@@ -107,7 +116,7 @@ class TodoToolService {
     return '$activeCount todos\n\n```json\n$jsonStr\n```';
   }
 
-  /// 处理 todoread 调用
+  /// 处理读取分支（todos 缺失或为 null 时由 [handleTodo] 分发到这里）
   static Future<String> handleTodoRead(Map<String, dynamic> args) async {
     if (_todos.isEmpty) {
       return '当前没有待办事项。';
