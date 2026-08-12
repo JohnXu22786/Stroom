@@ -121,6 +121,9 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
     return ExtendedImage.memory(
       bytes,
       fit: BoxFit.contain,
+      // enableLoadState 默认 false：若 loadStateChanged 的 loading 分支被
+      // 误删返回 null，页面会黑屏而不是显示默认加载圈 —— 打开开关兜底
+      enableLoadState: true,
       mode: ExtendedImageMode.gesture,
       initGestureConfigHandler: (_) => GestureConfig(
         minScale: 0.5,
@@ -135,40 +138,20 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
         if (state.extendedImageLoadState == LoadState.failed) {
           return _buildErrorWidget('Cannot load image');
         }
-        // 全分辨率解码期间继续显示缩略图，避免缩略图 → 白色加载圈 → 全图
-        // 的两次切换闪烁
+        // 全分辨率解码完成前统一显示加载圈，不显示缩略图 —— 进入查看器时
+        // 先看到的是加载动画，而不是低分辨率的缩略图占位
         if (state.extendedImageLoadState == LoadState.loading) {
-          final thumb = ImageThumbnailLoader.peek(record);
-          if (thumb != null) {
-            return _buildThumbnailPlaceholder(thumb);
-          }
+          return _buildLoadingPlaceholder();
         }
         return null;
       },
     );
   }
 
-  /// 加载占位：只显示已缓存/已加载的缩略图，绝不触发新的缩略图生成。
-  /// 全图字节的读取始终已在进行（itemBuilder 的 FutureBuilder 与
-  /// 预加载），占位符再走一次 loadThumbnail 会重复读取同一张原图。
-  Widget _buildLoadingPlaceholder(ImageRecord record) {
-    final cachedThumb = ImageThumbnailLoader.peek(record);
-    if (cachedThumb != null) {
-      return _buildThumbnailPlaceholder(cachedThumb);
-    }
+  /// 加载占位：全图字节读取/解码完成前统一显示加载圈，不显示缩略图。
+  Widget _buildLoadingPlaceholder() {
     return const Center(
       child: CircularProgressIndicator(color: Colors.white),
-    );
-  }
-
-  Widget _buildThumbnailPlaceholder(Uint8List thumb) {
-    return Center(
-      child: Image.memory(
-        thumb,
-        fit: BoxFit.contain,
-        // 256px 缩略图放大到全屏时用中等过滤，减少明显锯齿
-        filterQuality: FilterQuality.medium,
-      ),
     );
   }
 
@@ -411,7 +394,7 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
                 future: _readImageBytes(record),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return _buildLoadingPlaceholder(record);
+                    return _buildLoadingPlaceholder();
                   }
                   final bytes = snapshot.data;
                   if (bytes == null || bytes.isEmpty) {

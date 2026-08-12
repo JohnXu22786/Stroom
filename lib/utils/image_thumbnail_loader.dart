@@ -55,10 +55,6 @@ class ImageThumbnailLoader {
   @visibleForTesting
   static int generationCount = 0;
 
-  /// 同步返回内存缓存中的缩略图字节；未加载过返回 null（不触发磁盘读）。
-  /// 用于加载占位图等"有缓存立即显示、无缓存异步加载"的场景。
-  static Uint8List? peek(ImageRecord record) => _cache.peek(record.hash);
-
   /// 加载 [record] 的缩略图字节：
   /// 内存缓存 → 磁盘 `_thumb.png` → 缺失时读原图生成并持久化。
   ///

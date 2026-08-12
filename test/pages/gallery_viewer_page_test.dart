@@ -101,6 +101,54 @@ void main() {
       expect(find.text('2 / 2'), findsOneWidget);
       expect(find.text('second.png'), findsOneWidget);
     });
+
+    testWidgets(
+        'shows a loading spinner, not the cached thumbnail, while the '
+        'full image is still loading', (tester) async {
+      final png = await tester.runAsync(_createEnginePng);
+      final record = _makeRecord(
+        id: 'id_spinner',
+        name: 'spinner',
+        hash: 'spinner_hash',
+        format: 'png',
+      );
+      await tester.runAsync(() async {
+        await ImageManifest.writeFile(record.storagePath, png!);
+        // 直接写缩略图文件，再通过 loadThumbnail 读入内存缓存 —— 不经过
+        // 引擎解码生成，避免测试环境下的引擎工作引入不稳定的失败
+        await ImageManifest.writeFile('${record.hash}_thumb.png', png);
+      });
+      // 从磁盘读入内存缓存（模拟网格页已经加载过该图）。
+      // 全图字节此时尚未进入查看器的字节缓存，进入查看器会先走加载占位。
+      final thumb = await ImageThumbnailLoader.loadThumbnail(record);
+      expect(thumb, isNotNull);
+
+      await tester.pumpWidget(MaterialApp(
+        home: GalleryViewerPage(images: [record], initialIndex: 0),
+      ));
+
+      // 全图尚未加载完成：必须显示转圈动画，而不是缩略图占位。
+      // （缩略图占位是 Image.memory —— 回归此行为就等于把
+      // "先显示缩略图"的问题改回来。）
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(
+        find.byWidgetPredicate((w) => w is Image && w.image is MemoryImage),
+        findsNothing,
+        reason: '加载期间不得显示缩略图占位',
+      );
+
+      // 字节已读到、全分辨率解码中（ExtendedImage loadStateChanged 分支）：
+      // 同样必须显示转圈动画，而不是缩略图占位。解码是引擎工作，在
+      // FakeAsync 下不会完成，ExtendedImage 会停留在 loading 状态。
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(
+        find.byWidgetPredicate((w) => w is Image && w.image is MemoryImage),
+        findsNothing,
+        reason: '解码期间不得显示缩略图占位',
+      );
+      expect(find.text('1 / 1'), findsOneWidget);
+    });
   });
 
   group('showImageSaveDialog', () {
