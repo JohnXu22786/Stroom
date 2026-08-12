@@ -9,7 +9,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/chat/composer/album_picker_shared.dart';
 import 'package:stroom/pages/chat/composer/chat_album_picker_dialog.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
-import 'package:stroom/pages/image_editor_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/image_manifest.dart';
 
@@ -58,11 +57,14 @@ void main() {
   });
 
   // ====================================================================
-  // Quick-edit background processing: confirm-button gating
+  // Quick-edit flow: the editor processes the image in place (the page
+  // stays open while processing) and the selection is updated with the
+  // edited bytes once it pops.
   // ====================================================================
-  group('AppAlbumPickerDialog quick-edit gating', () {
-    testWidgets('confirm button is disabled while an edit processes',
-        (tester) async {
+  group('AppAlbumPickerDialog quick-edit flow', () {
+    testWidgets(
+        'the quick editor processes in place, then the selection holds '
+        'the edited bytes', (tester) async {
       final png = await tester.runAsync(_createEnginePng);
       // Seed the test-mode image library with one real image.
       await tester.runAsync(() async {
@@ -79,14 +81,15 @@ void main() {
         );
       });
 
+      List<MapEntry<String, Uint8List>>? pickerResult;
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
             home: Builder(
               builder: (context) {
                 return ElevatedButton(
-                  onPressed: () {
-                    showAppAlbumPickerDialog(context);
+                  onPressed: () async {
+                    pickerResult = await showAppAlbumPickerDialog(context);
                   },
                   child: const Text('Open Album'),
                 );
@@ -114,9 +117,11 @@ void main() {
         tester,
         () => find.byType(AlbumPreviewChip).evaluate().isNotEmpty,
       );
+      final originalChipBytes = tester
+          .widget<AlbumPreviewChip>(find.byType(AlbumPreviewChip))
+          .bytes;
 
-      // Preview chip → preview dialog → quick editor (crop button —
-      // the edit button opens the full editor instead).
+      // Preview chip → preview dialog → quick editor.
       await tester.tap(find.byType(AlbumPreviewChip));
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.crop));
@@ -129,99 +134,47 @@ void main() {
         () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
       );
 
-      // Confirm the edit — the editor hides its UI immediately and the
-      // image processing continues in the background (deferred destroy).
-      // The picker's in-flight guard is armed synchronously via
-      // onSubmitted.
+      // Confirm the edit — the editor must NOT close immediately: it
+      // processes the image in place with a spinner until the pipeline
+      // finishes.
       await tester.tap(find.text('完成'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
-      // Gating: while processing, confirm is disabled with a processing
-      // label — confirming now would return the unedited bytes.
-      expect(find.text('处理中...'), findsOneWidget);
-      final confirmBtn = tester.widget<FilledButton>(
-        find.byKey(const Key('album_picker_confirm_btn')),
-      );
-      expect(confirmBtn.onPressed, isNull);
-
-      // Once the pipeline finishes, the button re-enables.
-      await _pumpUntil(
-        tester,
-        () => find.text('处理中...').evaluate().isEmpty,
-      );
-      final confirmBtn2 = tester.widget<FilledButton>(
-        find.byKey(const Key('album_picker_confirm_btn')),
-      );
-      expect(confirmBtn2.onPressed, isNotNull);
-    });
-
-    testWidgets(
-        'edit button opens the full editor (ImageEditorPage), not the '
-        'quick editor', (tester) async {
-      final png = await tester.runAsync(_createEnginePng);
-      await tester.runAsync(() async {
-        await ImageManifest.writeFile('full-edit-hash.png', png!);
-        await ImageManifest.addRecord(
-          ImageRecord(
-            name: 'full-edit-image',
-            hash: 'full-edit-hash',
-            format: 'png',
-            createdAt: DateTime.now(),
-            size: png.length,
-            folder: '',
-          ),
-        );
-      });
-
-      await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(
-            home: Builder(
-              builder: (context) {
-                return ElevatedButton(
-                  onPressed: () {
-                    showAppAlbumPickerDialog(context);
-                  },
-                  child: const Text('Open Album'),
-                );
-              },
-            ),
-          ),
+      expect(find.byType(ExtendedImageEditorPage), findsOneWidget,
+          reason: 'the editor must stay on screen while processing');
+      expect(
+        find.descendant(
+          of: find.byType(ExtendedImageEditorPage),
+          matching: find.byType(CircularProgressIndicator),
         ),
+        findsOneWidget,
+        reason: 'a processing spinner must be visible',
       );
-      await tester.tap(find.text('Open Album'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 100));
 
+      // Only after the pipeline finishes does the editor pop back to the
+      // picker.
       await _pumpUntil(
         tester,
-        () => find.text('full-edit-image.png').evaluate().isNotEmpty,
+        () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty,
       );
 
-      // Select the image — the file is read asynchronously (real IO).
-      await tester.tap(find.text('full-edit-image.png'));
-      await tester.pump();
+      // The selection now holds the edited bytes — the preview chip
+      // shows a NEW bytes instance.
       await _pumpUntil(
         tester,
-        () => find.byType(AlbumPreviewChip).evaluate().isNotEmpty,
+        () => tester
+                .widget<AlbumPreviewChip>(find.byType(AlbumPreviewChip))
+                .bytes !=
+            originalChipBytes,
       );
 
-      // Preview chip → preview dialog → full editor (edit button).
-      await tester.tap(find.byType(AlbumPreviewChip));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.edit));
+      // Confirming returns the edited bytes.
+      await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
-      // The full editor page must be pushed (ProImageEditor), not the
-      // quick editor.
-      await _pumpUntil(
-        tester,
-        () => find.byType(ImageEditorPage).evaluate().isNotEmpty,
-      );
-      expect(find.byType(ExtendedImageEditorPage), findsNothing);
+      expect(pickerResult, isNotNull);
+      expect(pickerResult!.single.value, isNot(same(originalChipBytes)),
+          reason: 'the confirmed selection must hold the edited bytes');
     });
   });
 }

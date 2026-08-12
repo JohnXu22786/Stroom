@@ -12,11 +12,10 @@ import 'package:flutter_svg/flutter_svg.dart';
 ///
 /// For SVG images, uses [SvgPicture.memory] with [InteractiveViewer].
 ///
-/// The crop and edit buttons pop the dialog with DISTINCT results —
-/// `'crop'` and `'edit'` — so the caller can open the corresponding
-/// editor: the quick crop editor ([ExtendedImageEditorPage]) for crop
-/// and the full editor ([ImageEditorPage]) for edit, matching the OCR
-/// page's preview behavior. Closing the dialog pops with `null`.
+/// Both the crop and edit buttons pop the dialog with `true` (indicating
+/// the user wants to edit the image). The caller is expected to open
+/// [ExtendedImageEditorPage] in response. Closing the dialog pops with
+/// `null`.
 ///
 /// Parameters:
 ///   [imageData]   — The image bytes to display. If null or empty,
@@ -58,8 +57,8 @@ class ImagePreviewDialog extends StatelessWidget {
             ),
           ),
           // Crop + Edit buttons (top right) — only for non-SVG.
-          // They pop with DISTINCT results ('crop' / 'edit') so callers
-          // can open the corresponding editor, like the OCR page.
+          // Both pop with `true`: the caller opens the quick editor
+          // ([ExtendedImageEditorPage]) in response.
           if (!_isSvg)
             Positioned(
               top: MediaQuery.of(context).padding.top + 8,
@@ -76,7 +75,7 @@ class ImagePreviewDialog extends StatelessWidget {
                       icon:
                           const Icon(Icons.crop, color: Colors.white, size: 24),
                       tooltip: '裁剪',
-                      onPressed: () => Navigator.pop(context, 'crop'),
+                      onPressed: () => Navigator.pop(context, true),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -89,7 +88,7 @@ class ImagePreviewDialog extends StatelessWidget {
                       icon:
                           const Icon(Icons.edit, color: Colors.white, size: 24),
                       tooltip: '编辑',
-                      onPressed: () => Navigator.pop(context, 'edit'),
+                      onPressed: () => Navigator.pop(context, true),
                     ),
                   ),
                 ],

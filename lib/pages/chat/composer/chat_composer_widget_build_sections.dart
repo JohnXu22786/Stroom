@@ -321,40 +321,6 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     );
   }
 
-  /// ── Quick-edit processing banner ──
-  /// Shown above the input row while an edited image is still being
-  /// processed in the background; sending is blocked until it finishes.
-  Widget _buildProcessingBanner({required ColorScheme cs}) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: cs.primaryContainer.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 14,
-            height: 14,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: cs.primary,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '图片处理中，完成后可发送',
-              style: TextStyle(fontSize: 12, color: cs.onPrimaryContainer),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// ── Input row ──
   Widget _buildInputRow({
     required ColorScheme cs,
@@ -431,15 +397,9 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
             )
           else
             IconButton(
-              icon: _editsInFlight > 0
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(Icons.send_rounded, color: cs.primary),
+              icon: Icon(Icons.send_rounded, color: cs.primary),
               tooltip: '发送',
-              onPressed: (hasText || hasAttachments) && _editsInFlight == 0
+              onPressed: (hasText || hasAttachments)
                   ? () => _handleSubmitted(_textController.text)
                   : null,
             ),

@@ -145,11 +145,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// blocks a second tap from starting a duplicate OCR during that gap.
   bool _ocrStarting = false;
 
-  /// Number of quick image edits still processing in the background.
-  /// While non-zero, starting OCR is blocked — it would otherwise run
-  /// on the unedited image bytes.
-  int _editsInFlight = 0;
-
   /// Whether reorder mode is active
   bool _reorderMode = false;
 
@@ -1113,12 +1108,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _selectedImages.isEmpty ||
-                        _isProcessing ||
-                        _editsInFlight > 0
+                onPressed: _selectedImages.isEmpty || _isProcessing
                     ? null
                     : _startOcr,
-                icon: _isProcessing || _editsInFlight > 0
+                icon: _isProcessing
                     ? const SizedBox(
                         width: 18,
                         height: 18,
@@ -1129,11 +1122,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       )
                     : const Icon(Icons.text_snippet, size: 20),
                 label: Text(
-                  _isProcessing
-                      ? '识别中...'
-                      : _editsInFlight > 0
-                          ? '图片处理中...'
-                          : '开始识别',
+                  _isProcessing ? '识别中...' : '开始识别',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -1526,46 +1515,20 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (index >= _selectedImages.length) return;
 
     final currentImage = _selectedImages[index];
+    Uint8List? editedBytes;
 
     if (result == 'crop') {
-      // Another edit is still processing — starting a second one could
-      // silently discard the newer edit. Ask the user to wait.
-      if (_editsInFlight > 0) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('图片处理中，请稍候再编辑'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-        return;
-      }
-
       // Quick edit — directly opens crop editor, no choice dialog needed.
-      // The editor hides its UI on confirm but stays alive while the image
-      // processes in the background (deferred destroy); the route is
-      // non-opaque so the OCR page shows through. The edited bytes are
-      // applied from the callback once ready.
-      await Navigator.push<bool>(
+      // The editor processes the image in place (the page stays open with
+      // a spinner until the pipeline finishes) and pops back with the
+      // edited bytes.
+      editedBytes = await Navigator.push<Uint8List>(
         context,
-        buildQuickEditEditorRoute(
-          imageBytes: currentImage.bytes,
-          fileName: '图片_${index + 1}.${currentImage.format}',
-          onSubmitted: () {
-            // The user confirmed — hold the start button NOW (starting
-            // OCR would run on the unedited bytes). Released in the
-            // onProcessed finally, which always fires.
-            if (mounted) setState(() => _editsInFlight++);
-          },
-          onProcessed: (result) {
-            try {
-              if (result is! QuickEditProcessingSuccess) return;
-              _applyEditedImage(index, currentImage, result.editedBytes);
-            } finally {
-              if (mounted) setState(() => _editsInFlight--);
-            }
-          },
+        MaterialPageRoute(
+          builder: (_) => ExtendedImageEditorPage(
+            imageBytes: currentImage.bytes,
+            fileName: '图片_${index + 1}.${currentImage.format}',
+          ),
         ),
       );
     } else {
@@ -1581,9 +1544,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ),
       );
       if (editorResult != null) {
-        _applyEditedImage(index, currentImage, editorResult.editedBytes);
+        editedBytes = editorResult.editedBytes;
       }
     }
+
+    if (editedBytes == null || !mounted) return;
+    _applyEditedImage(index, currentImage, editedBytes);
   }
 
   /// Applies [editedBytes] to the in-memory selected image, guarding
@@ -1627,9 +1593,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _startOcr() async {
     if (_ocrStarting) return;
     if (_selectedImages.isEmpty) return;
-    // A quick image edit is still processing — starting now would run
-    // OCR on the unedited bytes.
-    if (_editsInFlight > 0) return;
 
     final modelOptions = _getOcrModelOptions(ref);
     if (modelOptions.isEmpty || _selectedModelIndex >= modelOptions.length) {
