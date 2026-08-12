@@ -127,19 +127,23 @@ void main() {
       // Regression: the wrap toggle was a 38x50 rounded-rect pill. It must
       // be a small circle (CircleBorder, equal width/height well under 40).
       final wrapInkWell = tester.widget<InkWell>(
-        find.ancestor(
-          of: find.byIcon(Icons.wrap_text),
-          matching: find.byType(InkWell),
-        ).first,
+        find
+            .ancestor(
+              of: find.byIcon(Icons.wrap_text),
+              matching: find.byType(InkWell),
+            )
+            .first,
       );
       expect(wrapInkWell.customBorder, isA<CircleBorder>(),
           reason: 'toolbar button must be circular, not a rounded pill');
 
       final btnRect = tester.getRect(
-        find.ancestor(
-          of: find.byIcon(Icons.wrap_text),
-          matching: find.byType(InkWell),
-        ).first,
+        find
+            .ancestor(
+              of: find.byIcon(Icons.wrap_text),
+              matching: find.byType(InkWell),
+            )
+            .first,
       );
       expect(btnRect.height, lessThan(40),
           reason: 'toolbar button must be compact (was 50px tall)');
