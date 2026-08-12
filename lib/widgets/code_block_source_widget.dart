@@ -324,37 +324,36 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
   Widget _buildButtonRow() {
     final cs = Theme.of(context).colorScheme;
 
-    return ConstrainedBox(
-      constraints: const BoxConstraints(
-        minWidth: 48,
-        minHeight: 48,
+    // The pill just wraps its buttons (no forced minimum size), so a
+    // single-button toolbar collapses into a circle with no trailing
+    // blank space. Radius 18 = half of the 36px button circle.
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(18),
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withOpacity(0.85),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Wrap toggle button (always present)
-            _buildActionButton(
-              icon: Icons.wrap_text,
-              label: _wrapEnabled ? '取消换行' : '换行显示',
-              onTap: () {
-                setState(() {
-                  _wrapEnabled = !_wrapEnabled;
-                });
-              },
-            ),
-            // Additional action buttons from consumer
-            ...widget.actionButtons,
-          ],
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Wrap toggle button (always present)
+          _buildActionButton(
+            icon: Icons.wrap_text,
+            label: _wrapEnabled ? '取消换行' : '换行显示',
+            onTap: () {
+              setState(() {
+                _wrapEnabled = !_wrapEnabled;
+              });
+            },
+          ),
+          // Additional action buttons from consumer
+          ...widget.actionButtons,
+        ],
       ),
     );
   }
 
+  /// A compact circular icon button (36x36) with a circular ripple via
+  /// [CircleBorder].
   Widget _buildActionButton({
     required IconData icon,
     required String label,
@@ -363,14 +362,11 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        customBorder: const CircleBorder(),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 16,
-          ),
-          child: Icon(icon, size: 18, semanticLabel: label),
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 20, semanticLabel: label),
         ),
       ),
     );

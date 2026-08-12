@@ -114,6 +114,72 @@ void main() {
       expect(find.text('1'), findsNothing);
     });
 
+    testWidgets('toolbar buttons are compact circles, not oversized pills',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CodeBlockSourceView(code: 'some code'),
+          ),
+        ),
+      );
+
+      // Regression: the wrap toggle was a 38x50 rounded-rect pill. It must
+      // be a small circle (CircleBorder, equal width/height well under 40).
+      final wrapInkWell = tester.widget<InkWell>(
+        find.ancestor(
+          of: find.byIcon(Icons.wrap_text),
+          matching: find.byType(InkWell),
+        ).first,
+      );
+      expect(wrapInkWell.customBorder, isA<CircleBorder>(),
+          reason: 'toolbar button must be circular, not a rounded pill');
+
+      final btnRect = tester.getRect(
+        find.ancestor(
+          of: find.byIcon(Icons.wrap_text),
+          matching: find.byType(InkWell),
+        ).first,
+      );
+      expect(btnRect.height, lessThan(40),
+          reason: 'toolbar button must be compact (was 50px tall)');
+      expect(btnRect.width, equals(btnRect.height),
+          reason: 'a circular button has equal width and height');
+    });
+
+    testWidgets('single-button toolbar hugs its button (no trailing blank)',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CodeBlockSourceView(code: 'some code'),
+          ),
+        ),
+      );
+
+      // Regression: the pill container was forced to minWidth 48 while the
+      // single wrap-toggle button was only 38px wide, leaving a blank gap
+      // on the right. The pill must end exactly where the button ends.
+      final pill = find
+          .ancestor(
+            of: find.byIcon(Icons.wrap_text),
+            matching: find.byType(Container),
+          )
+          .first;
+      final button = find
+          .ancestor(
+            of: find.byIcon(Icons.wrap_text),
+            matching: find.byType(InkWell),
+          )
+          .first;
+      final pillRect = tester.getRect(pill);
+      final btnRect = tester.getRect(button);
+      expect(pillRect.width, equals(btnRect.width),
+          reason: 'pill must not extend past its single button');
+      expect(pillRect.height, equals(btnRect.height),
+          reason: 'pill must not extend past its single button vertically');
+    });
+
     testWidgets('action buttons appear after wrap toggle button',
         (tester) async {
       await tester.pumpWidget(

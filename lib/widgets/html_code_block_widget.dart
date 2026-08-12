@@ -273,6 +273,8 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
     );
   }
 
+  /// A compact circular icon button (36x36) matching the shared
+  /// [CodeBlockSourceView] toolbar buttons.
   Widget _buildActionButton({
     required IconData icon,
     required String label,
@@ -281,14 +283,11 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        customBorder: const CircleBorder(),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 16,
-          ),
-          child: Icon(icon, size: 18, semanticLabel: label),
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 20, semanticLabel: label),
         ),
       ),
     );

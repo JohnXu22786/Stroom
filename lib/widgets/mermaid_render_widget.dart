@@ -1537,14 +1537,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        customBorder: const CircleBorder(),
         onTap: _toggleSourceCode,
         child: const Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 16,
-          ),
-          child: Icon(Icons.image, size: 18, semanticLabel: '查看图表'),
+          padding: EdgeInsets.all(8),
+          child: Icon(Icons.image, size: 20, semanticLabel: '查看图表'),
         ),
       ),
     );
@@ -1555,14 +1552,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        customBorder: const CircleBorder(),
         onTap: _saveAsMmd,
         child: const Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 16,
-          ),
-          child: Icon(Icons.save, size: 18, semanticLabel: '保存'),
+          padding: EdgeInsets.all(8),
+          child: Icon(Icons.save, size: 20, semanticLabel: '保存'),
         ),
       ),
     );
@@ -1583,53 +1577,52 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// same order everywhere — fullscreen → save → code. All buttons are
   /// pure icons (text-free) so the toolbars stay compact and consistent.
   Widget _buildButtonRow(ColorScheme cs) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(
-        minWidth: 48,
-        minHeight: 48,
+    // The pill just wraps its buttons (no forced minimum size), so a
+    // single-button toolbar collapses into a circle with no trailing
+    // blank space. Radius 18 = half of the 36px button circle.
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(18),
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ---- Zoom controls (block-specific, left side) ----
-            _buildActionButton(
-              icon: Icons.zoom_out,
-              label: '缩小',
-              onTap: _zoomOut,
-            ),
-            _buildActionButton(
-              icon: Icons.zoom_in,
-              label: '放大',
-              onTap: _zoomIn,
-            ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ---- Zoom controls (block-specific, left side) ----
+          _buildActionButton(
+            icon: Icons.zoom_out,
+            label: '缩小',
+            onTap: _zoomOut,
+          ),
+          _buildActionButton(
+            icon: Icons.zoom_in,
+            label: '放大',
+            onTap: _zoomIn,
+          ),
 
-            // ---- Common buttons (right-aligned, fixed order) ----
-            _buildActionButton(
-              icon: Icons.fullscreen,
-              label: '全屏',
-              onTap: _openFullScreen,
-            ),
-            _buildActionButton(
-              icon: Icons.save,
-              label: '保存',
-              onTap: _saveAsMmd,
-            ),
-            _buildActionButton(
-              icon: Icons.code,
-              label: '查看源码',
-              onTap: _toggleSourceCode,
-            ),
-          ],
-        ),
+          // ---- Common buttons (right-aligned, fixed order) ----
+          _buildActionButton(
+            icon: Icons.fullscreen,
+            label: '全屏',
+            onTap: _openFullScreen,
+          ),
+          _buildActionButton(
+            icon: Icons.save,
+            label: '保存',
+            onTap: _saveAsMmd,
+          ),
+          _buildActionButton(
+            icon: Icons.code,
+            label: '查看源码',
+            onTap: _toggleSourceCode,
+          ),
+        ],
       ),
     );
   }
 
+  /// A compact circular icon button (36x36) with a circular ripple via
+  /// [CircleBorder].
   Widget _buildActionButton({
     required IconData icon,
     required String label,
@@ -1638,14 +1631,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        customBorder: const CircleBorder(),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 16,
-          ),
-          child: Icon(icon, size: 18, semanticLabel: label),
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 20, semanticLabel: label),
         ),
       ),
     );
@@ -1654,31 +1644,25 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// Builds a compact row of zoom in/out buttons, shown when
   /// [showZoomControls] is true independently of the full toolbar.
   Widget _buildZoomControls(ColorScheme cs) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(
-        minWidth: 48,
-        minHeight: 48,
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(18),
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildActionButton(
-              icon: Icons.zoom_out,
-              label: '缩小',
-              onTap: _zoomOut,
-            ),
-            _buildActionButton(
-              icon: Icons.zoom_in,
-              label: '放大',
-              onTap: _zoomIn,
-            ),
-          ],
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildActionButton(
+            icon: Icons.zoom_out,
+            label: '缩小',
+            onTap: _zoomOut,
+          ),
+          _buildActionButton(
+            icon: Icons.zoom_in,
+            label: '放大',
+            onTap: _zoomIn,
+          ),
+        ],
       ),
     );
   }
