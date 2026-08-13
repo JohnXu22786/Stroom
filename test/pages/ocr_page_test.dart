@@ -16,16 +16,19 @@ import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
-/// Creates a small valid PNG (8x8 green) via the real engine.
+/// Creates a small valid PNG (8x8) via the real engine, tinted [color]
+/// so distinct images can be told apart (default: green).
 ///
 /// Must be called from `tester.runAsync` — engine image work never
 /// completes inside the widget-test FakeAsync zone.
-Future<Uint8List> _createEnginePng() async {
+Future<Uint8List> _createEnginePng({
+  Color color = const Color(0xFF00FF00),
+}) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
   canvas.drawRect(
     Rect.fromLTWH(0, 0, 8, 8),
-    Paint()..color = const Color(0xFF00FF00),
+    Paint()..color = color,
   );
   final picture = recorder.endRecording();
   final image = await picture.toImage(8, 8);
@@ -1857,6 +1860,89 @@ void main() {
       // Dialog should be closed
       expect(find.byIcon(Icons.crop), findsNothing);
       expect(find.byIcon(Icons.edit), findsNothing);
+    });
+  });
+
+  // ====================================================================
+  // Left/right swipe paging in the preview dialog — same interaction as
+  // the file page's gallery viewer.
+  // ====================================================================
+  group('OcrPage - preview dialog swipe', () {
+    testWidgets('swiping left/right flips the page and the indicator', (
+      tester,
+    ) async {
+      // The two images are byte-identical dummy PNGs — this test only
+      // proves the paging wiring (indicator follows the swipe); that the
+      // displayed content actually changes is covered by the next test
+      // with two distinct engine PNGs.
+      final images = [_createTestImage(), _createTestImage()];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      // Open preview on the first image
+      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+      await tester.pumpAndSettle();
+      expect(find.text('1 / 2'), findsOneWidget);
+
+      // Swipe left → second image
+      await tester.drag(
+        find.byType(ExtendedImageGesturePageView),
+        const Offset(-500, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('2 / 2'), findsOneWidget);
+
+      // Swipe right → back to the first image
+      await tester.drag(
+        find.byType(ExtendedImageGesturePageView),
+        const Offset(500, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('1 / 2'), findsOneWidget);
+    });
+
+    testWidgets('after swiping, the quick editor targets the current image', (
+      tester,
+    ) async {
+      // Two distinct engine PNGs so the edited image is identifiable.
+      final pngA = await tester.runAsync(
+        () => _createEnginePng(color: const Color(0xFF00FF00)),
+      );
+      final pngB = await tester.runAsync(
+        () => _createEnginePng(color: const Color(0xFFFF0000)),
+      );
+      final images = [
+        SelectedImage(bytes: pngA!, format: 'png'),
+        SelectedImage(bytes: pngB!, format: 'png'),
+      ];
+      await tester.pumpWidget(_buildTestApp(testImages: images));
+      await tester.pumpAndSettle();
+
+      // Open preview on the FIRST image, then swipe to the second.
+      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+      await tester.pumpAndSettle();
+      await tester.drag(
+        find.byType(ExtendedImageGesturePageView),
+        const Offset(-500, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('2 / 2'), findsOneWidget);
+
+      // Tap crop — the editor must receive the SECOND image's bytes,
+      // proving the swipe moved the edit target with the page.
+      await tester.tap(find.byIcon(Icons.crop));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpUntil(
+        tester,
+        () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
+      );
+
+      final editorWidget = tester.widget<ExtendedImageEditorPage>(
+        find.byType(ExtendedImageEditorPage),
+      );
+      expect(editorWidget.imageBytes, pngB,
+          reason: 'the editor must edit the image that was swiped to');
     });
   });
 
