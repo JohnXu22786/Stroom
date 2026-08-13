@@ -70,8 +70,7 @@ void main() {
         Conversation(id: 'n3', title: '普通3'),
       ];
       final result = pinnedFirstStable(convs);
-      expect(result.map((c) => c.id).toList(),
-          ['p1', 'p2', 'n1', 'n2', 'n3']);
+      expect(result.map((c) => c.id).toList(), ['p1', 'p2', 'n1', 'n2', 'n3']);
     });
   });
 
@@ -130,8 +129,8 @@ void main() {
       notifier.reorderConversation(0, 2);
       await tester.pump(const Duration(milliseconds: 600));
 
-      expect(notifier.state.map((c) => c.id).toList(),
-          ['p2', 'p3', 'p1', 'n1']);
+      expect(
+          notifier.state.map((c) => c.id).toList(), ['p2', 'p3', 'p1', 'n1']);
     });
 
     testWidgets(
@@ -150,8 +149,8 @@ void main() {
       notifier.reorderConversation(0, 3);
       await tester.pump(const Duration(milliseconds: 600));
 
-      expect(notifier.state.map((c) => c.id).toList(),
-          ['p2', 'p1', 'n1', 'n2']);
+      expect(
+          notifier.state.map((c) => c.id).toList(), ['p2', 'p1', 'n1', 'n2']);
     });
 
     testWidgets(
@@ -170,8 +169,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 600));
 
       // 非置顶对话不能进入置顶区：吸附到非置顶块顶部。
-      expect(notifier.state.map((c) => c.id).toList(),
-          ['p1', 'n3', 'n1', 'n2']);
+      expect(
+          notifier.state.map((c) => c.id).toList(), ['p1', 'n3', 'n1', 'n2']);
     });
 
     testWidgets('createConversation keeps state pinned-first', (tester) async {
@@ -193,8 +192,7 @@ void main() {
   // ===================================================================
   // ConversationsNotifier - 加载旧数据（置顶与非置顶交错）时归一化
   // ===================================================================
-  group('ConversationsNotifier - load normalizes legacy interleaved order',
-      () {
+  group('ConversationsNotifier - load normalizes legacy interleaved order', () {
     testWidgets('legacy interleaved storage is normalized on load',
         (tester) async {
       final convs = [
@@ -231,8 +229,7 @@ void main() {
         Conversation(id: 'n2', title: '普通2'),
       ];
       SharedPreferences.setMockInitialValues({
-        'conversations':
-            jsonEncode(diskConvs.map((c) => c.toMap()).toList()),
+        'conversations': jsonEncode(diskConvs.map((c) => c.toMap()).toList()),
       });
 
       final container = ProviderContainer();
@@ -250,7 +247,8 @@ void main() {
 
       // 无论竞态先后（_load 先完成或 createConversation 先执行），
       // 最终顺序一致：置顶块 + 新对话在非置顶块顶部。
-      expect(notifier.state.map((c) => c.id).toList(), ['p1', newId, 'n1', 'n2']);
+      expect(
+          notifier.state.map((c) => c.id).toList(), ['p1', newId, 'n1', 'n2']);
     });
   });
 }

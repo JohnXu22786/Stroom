@@ -60,8 +60,7 @@ void main() {
       final positions = <double, String>{};
       for (var i = 0; i < 40; i++) {
         final finder = find.text('对话$i');
-        expect(finder, findsOneWidget,
-            reason: '对话$i 应该在列表中可见（视口高度足够）');
+        expect(finder, findsOneWidget, reason: '对话$i 应该在列表中可见（视口高度足够）');
         positions[tester.getTopLeft(finder).dy] = '对话$i';
       }
       final visibleTitles = [
