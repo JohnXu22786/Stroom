@@ -215,8 +215,7 @@ void main() {
   });
 
   group('ChatPage send uses the conversation-bound assistant', () {
-    testWidgets('会话选择为其它助手时，请求仍用对话绑定的助手提示词',
-        (tester) async {
+    testWidgets('会话选择为其它助手时，请求仍用对话绑定的助手提示词', (tester) async {
       final provider = _RecordingProvider();
       final container = await _pumpChat(
         tester,
@@ -238,8 +237,7 @@ void main() {
       await _flushPendingTimers(tester);
     });
 
-    testWidgets('会话选择为空时，请求仍用对话绑定的助手提示词（不再无提示词）',
-        (tester) async {
+    testWidgets('会话选择为空时，请求仍用对话绑定的助手提示词（不再无提示词）', (tester) async {
       final provider = _RecordingProvider();
       await _pumpChat(
         tester,

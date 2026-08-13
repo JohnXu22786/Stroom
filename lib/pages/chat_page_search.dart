@@ -269,9 +269,7 @@ extension _ChatPageSearchExt on _ChatPageState {
       final openedAssistantId = openedConv?.assistantId;
       if (openedAssistantId != null &&
           openedAssistantId.isNotEmpty &&
-          ref
-              .read(assistantProvider)
-              .any((a) => a.id == openedAssistantId)) {
+          ref.read(assistantProvider).any((a) => a.id == openedAssistantId)) {
         ref.read(selectedAssistantIdProvider.notifier).state =
             openedAssistantId;
       }
