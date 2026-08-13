@@ -434,13 +434,13 @@ void main() {
         // The AppBar's background Material is the outermost Material in the
         // AppBar subtree (found first in traversal order).
         Material appBarMaterial() => tester.widget<Material>(
-          find
-              .descendant(
-                of: find.byType(AppBar),
-                matching: find.byType(Material),
-              )
-              .first,
-        );
+              find
+                  .descendant(
+                    of: find.byType(AppBar),
+                    matching: find.byType(Material),
+                  )
+                  .first,
+            );
 
         final colorBeforeScroll = appBarMaterial().color;
         final elevationBeforeScroll = appBarMaterial().elevation;
