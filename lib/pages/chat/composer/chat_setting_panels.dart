@@ -151,8 +151,8 @@ void showModelPanel({
                                 // contentPadding 为 start 16 / end 24，改为
                                 // 对称 16，使拖动手柄/勾选图标与文字到边缘
                                 // 的距离一致。
-                                contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16),
+                                contentPadding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
                                 leading: ReorderableDragStartListener(
                                   index: i,
                                   child: Icon(
@@ -294,8 +294,8 @@ void showToolsPanel({
                                 // start 16 / end 24，导致开关比文字更远离
                                 // 边缘。改为对称 16，与推理/自定义参数面板
                                 // 的开关行（horizontal 16）保持一致。
-                                contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16),
+                                contentPadding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
                                 value: isEnabled,
                                 onChanged: (enabled) {
                                   setState(() {
