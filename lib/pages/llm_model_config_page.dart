@@ -88,6 +88,11 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   /// 顺序，用于块顺序回退）。
   final Map<CustomParam, List<String>> _providerCustomParamValues = {};
 
+  /// 打开页面时自定义参数工作副本的成员（按实例身份）——本会话通过
+  /// 「添加参数」创建的参数不在此集合。供应商继承判定（删除按钮显隐）
+  /// 用它区分「供应商传递下来的参数」与「本会话新建后改名的参数」。
+  late final Set<CustomParam> _initialCustomParams;
+
   /// reset 版本号：每次还原参数时 +1，用于强制重建推理区输入框
   /// （TextFormField 的 internal state 不会跟随 initialValue 更新，
   /// 必须重建才能显示还原后的值）。
@@ -490,6 +495,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         }
       }
     }
+    // 打开时工作副本成员快照（实例身份）：本会话新建的参数不在此集合，
+    // 用于自定义参数的供应商继承判定（删除按钮显隐）。
+    _initialCustomParams = {..._customParams};
     // Initialize JSON validation for existing params
     for (int i = 0; i < _customParams.length; i++) {
       _validateJsonField(i, _customParams[i]);

@@ -508,7 +508,8 @@ void main() {
       expect(find.text('推理力度'), findsOneWidget);
     });
 
-    testWidgets('delete effort card and "添加推理力度" button reappears',
+    testWidgets(
+        'effort card cannot be deleted; a switch replaces the delete button',
         (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -534,33 +535,34 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      // Delete the effort card (find its delete button)
+      // The effort card is not deletable: no delete button, only a switch
       await tester.scrollUntilVisible(
         find.text('推理力度'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pump();
-
-      // Find the delete icon button on the effort card
-      final deleteButtons = find.byIcon(Icons.delete);
-      // The effort card's delete button is the second one (first is toggle's)
-      await tester.tap(deleteButtons.last);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-
-      // Now "添加推理力度" button should reappear
-      await tester.scrollUntilVisible(
-        find.text('添加推理力度'),
-        200,
-        scrollable: find.byType(Scrollable).first,
+      final effortCard = find.ancestor(
+        of: find.text('推理力度'),
+        matching: find.byType(Card),
       );
-      await tester.pump();
-      expect(find.text('添加推理力度'), findsOneWidget);
+      expect(
+        find.descendant(of: effortCard, matching: find.byIcon(Icons.delete)),
+        findsNothing,
+        reason: '推理力度不允许删除，删除按钮应被开关替换',
+      );
+      expect(
+        find.descendant(of: effortCard, matching: find.byType(Switch)),
+        findsOneWidget,
+        reason: '推理力度卡应有一个开关代替删除按钮',
+      );
+      // The card stays (no "添加推理力度" button returns)
+      expect(find.text('推理力度'), findsOneWidget);
+      expect(find.text('添加推理力度'), findsNothing);
     });
 
     testWidgets(
-        'deleting toggle reverts to empty state; 添加推理力度 stays visible but disabled',
+        'toggle card cannot be deleted; a switch replaces the delete button',
         (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -575,21 +577,24 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      // Delete the toggle
-      final deleteButtons = find.byIcon(Icons.delete);
-      await tester.tap(deleteButtons.first);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-
-      // Should show "添加推理开关" again, no "暂无推理开关"
-      expect(find.text('暂无推理开关'), findsNothing);
-      expect(find.text('添加推理开关'), findsOneWidget);
-
-      // "添加推理力度" stays visible but disabled
-      expect(find.text('添加推理力度'), findsOneWidget);
-      final addEffortButton = find.widgetWithText(TextButton, '添加推理力度');
-      final buttonWidget = tester.widget<TextButton>(addEffortButton);
-      expect(buttonWidget.onPressed, isNull);
+      // The toggle card is not deletable: no delete button, only a switch
+      final toggleCard = find.ancestor(
+        of: find.text('推理开关'),
+        matching: find.byType(Card),
+      );
+      expect(
+        find.descendant(of: toggleCard, matching: find.byIcon(Icons.delete)),
+        findsNothing,
+        reason: '推理开关不允许删除，删除按钮应被开关替换',
+      );
+      expect(
+        find.descendant(of: toggleCard, matching: find.byType(Switch)),
+        findsOneWidget,
+        reason: '推理开关卡应有一个开关代替删除按钮',
+      );
+      // The card stays (no "添加推理开关" button returns)
+      expect(find.text('推理开关'), findsOneWidget);
+      expect(find.text('添加推理开关'), findsNothing);
     });
 
     testWidgets(

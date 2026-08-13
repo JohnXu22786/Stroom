@@ -4,6 +4,8 @@
 // - 供应商的值不可删除（只能取消勾选）；模型添加的值带删除按钮
 // - 块可拖拽排序；附加参数卡片与选项值也可拖拽排序
 // - 每次打开同步供应商最新值（新值默认未勾选，勾一下即可使用）
+// - 推理开关/推理力度卡不可删除（删除按钮被启用开关替换）；
+//   供应商传递下来的附加推理参数与自定义参数同样不可删除
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/tts_models.dart';
@@ -1838,6 +1840,554 @@ void main() {
       final lowX = tester.getTopLeft(find.text('low')).dx;
       expect(mediumX < highX && highX < lowX, isTrue,
           reason: '拖动顺序应跨重启保留（optionOrder）');
+    });
+  });
+
+  group(
+      'LlmModelConfigPage switch-locked effort/toggle and inherited delete lock',
+      () {
+    /// 卡片（按标题文本定位）内的开关。
+    Finder switchInCard(String headerText) => find.descendant(
+          of: find.ancestor(
+            of: find.text(headerText),
+            matching: find.byType(Card),
+          ),
+          matching: find.byType(Switch),
+        );
+
+    ReasoningParam toggleParam() => ReasoningParam(
+          paramName: 'thinking.type',
+          isReasoningToggle: true,
+          onValue: 'enabled',
+          offValue: 'disabled',
+        );
+
+    testWidgets(
+        'effort card: switch replaces the delete button and saves '
+        'enabled=false', (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          toggleParam(),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['low', 'high'],
+          ),
+        ],
+      );
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('推理力度'));
+          // 删除按钮被开关替换：卡内无删除按钮、有开关且默认开启
+          final effortCard = find.ancestor(
+            of: find.text('推理力度'),
+            matching: find.byType(Card),
+          );
+          expect(
+            find.descendant(
+                of: effortCard, matching: find.byIcon(Icons.delete)),
+            findsNothing,
+            reason: '推理力度不允许删除，不应有删除按钮',
+          );
+          final sw = switchInCard('推理力度');
+          expect(sw, findsOneWidget);
+          expect(tester.widget<Switch>(sw).value, isTrue);
+          // 关掉开关 → 保存 enabled=false
+          await tester.tap(sw);
+          await tester.pump();
+        },
+      );
+      expect(saved, isNotNull);
+      expect(
+        saved!.reasoningParams.firstWhere((p) => p.isEffortParam).enabled,
+        isFalse,
+      );
+    });
+
+    testWidgets(
+        'toggle card: switch replaces the delete button and saves '
+        'enabled=false', (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          toggleParam(),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['low'],
+          ),
+        ],
+      );
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('推理开关'));
+          // 删除按钮被开关替换：卡内无删除按钮、有开关且默认开启
+          final toggleCard = find.ancestor(
+            of: find.text('推理开关'),
+            matching: find.byType(Card),
+          );
+          expect(
+            find.descendant(
+                of: toggleCard, matching: find.byIcon(Icons.delete)),
+            findsNothing,
+            reason: '推理开关不允许删除，不应有删除按钮',
+          );
+          final sw = switchInCard('推理开关');
+          expect(sw, findsOneWidget);
+          expect(tester.widget<Switch>(sw).value, isTrue);
+          // 关掉开关 → 保存 enabled=false
+          await tester.tap(sw);
+          await tester.pump();
+        },
+      );
+      expect(saved, isNotNull);
+      expect(
+        saved!.reasoningParams.firstWhere((p) => p.isReasoningToggle).enabled,
+        isFalse,
+      );
+    });
+
+    testWidgets('reset restores the effort switch to its open state',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          toggleParam(),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['low', 'high'],
+          ),
+        ],
+      );
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('推理力度'));
+          // 先关掉开关
+          final sw = switchInCard('推理力度');
+          await tester.tap(sw);
+          await tester.pump();
+          expect(tester.widget<Switch>(switchInCard('推理力度')).value, isFalse);
+          // 点 reset（力度卡头部的刷新图标）→ 开关恢复为开
+          final resetIcon = find
+              .descendant(
+                of: find.ancestor(
+                  of: find.text('推理力度'),
+                  matching: find.byType(Card),
+                ),
+                matching: find.byIcon(Icons.refresh),
+              )
+              .first;
+          await tester.ensureVisible(resetIcon);
+          await tester.pumpAndSettle();
+          await tester.tap(resetIcon);
+          await tester.pumpAndSettle();
+          expect(tester.widget<Switch>(switchInCard('推理力度')).value, isTrue,
+              reason: 'reset 应还原开关到打开时的状态');
+        },
+      );
+      expect(saved, isNotNull);
+      expect(
+        saved!.reasoningParams.firstWhere((p) => p.isEffortParam).enabled,
+        isTrue,
+      );
+    });
+
+    testWidgets(
+        'provider-inherited additional param cannot be deleted; '
+        'model-added one can', (tester) async {
+      final provider = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        reasoningParams: [
+          toggleParam(),
+          ReasoningParam(
+            paramName: 'provider_param',
+            enabled: true,
+            options: ['a', 'b'],
+          ),
+        ],
+      );
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          toggleParam(),
+          ReasoningParam(
+            paramName: 'model_param',
+            enabled: true,
+            options: ['x'],
+          ),
+        ],
+      );
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        provider: provider,
+        beforeSave: (tester) async {
+          // 供应商传递下来的附加参数：无删除按钮
+          await _scrollToReasoning(tester, find.text('provider_param'));
+          final providerCard = find.ancestor(
+            of: find.text('provider_param'),
+            matching: find.byType(Card),
+          );
+          expect(
+            find.descendant(
+                of: providerCard, matching: find.byIcon(Icons.delete)),
+            findsNothing,
+            reason: '供应商传递下来的附加推理参数不可删除',
+          );
+          // 模型自己的参数：有删除按钮，可删除
+          await _scrollToReasoning(tester, find.text('model_param'));
+          final modelCard = find.ancestor(
+            of: find.text('model_param'),
+            matching: find.byType(Card),
+          );
+          final del = find.descendant(
+            of: modelCard,
+            matching: find.byIcon(Icons.delete),
+          );
+          expect(del, findsOneWidget, reason: '模型自己添加的附加参数应可删除');
+          await tester.ensureVisible(del);
+          await tester.pumpAndSettle();
+          await tester.tap(del);
+          await tester.pump();
+        },
+      );
+      expect(saved, isNotNull);
+      expect(saved!.reasoningParams.map((p) => p.paramName).toList(),
+          isNot(contains('model_param')));
+      expect(saved.reasoningParams.map((p) => p.paramName).toList(),
+          contains('provider_param'));
+    });
+
+    testWidgets(
+        'provider-inherited custom param cannot be deleted; '
+        'model-added one can', (tester) async {
+      final provider = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'voice_style',
+            type: 'string',
+            options: ['warm', 'cool'],
+          ),
+        ],
+      );
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'my_param',
+            type: 'string',
+            options: ['x'],
+          ),
+        ],
+      );
+      final saved = await _pumpAndSave(
+        tester,
+        model: model,
+        provider: provider,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('自定义参数'));
+          // 供应商传递下来的自定义参数：无删除按钮
+          await tester.scrollUntilVisible(
+            find.text('voice_style'),
+            200,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.pumpAndSettle();
+          final providerCard = find.ancestor(
+            of: find.text('voice_style'),
+            matching: find.byType(Card),
+          );
+          expect(
+            find.descendant(
+                of: providerCard, matching: find.byIcon(Icons.delete)),
+            findsNothing,
+            reason: '供应商传递下来的自定义参数不可删除',
+          );
+          // 模型自己的参数：有删除按钮，可删除
+          await tester.scrollUntilVisible(
+            find.text('my_param'),
+            200,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.pumpAndSettle();
+          final modelCard = find.ancestor(
+            of: find.text('my_param'),
+            matching: find.byType(Card),
+          );
+          final del = find.descendant(
+            of: modelCard,
+            matching: find.byIcon(Icons.delete),
+          );
+          expect(del, findsOneWidget, reason: '模型自己添加的自定义参数应可删除');
+          await tester.ensureVisible(del);
+          await tester.pumpAndSettle();
+          await tester.tap(del);
+          await tester.pump();
+        },
+      );
+      expect(saved, isNotNull);
+      expect(saved!.customParams.map((p) => p.paramName).toList(),
+          ['voice_style']);
+    });
+
+    testWidgets(
+        'session-added additional param renamed to a provider name '
+        'stays deletable', (tester) async {
+      // 本会话「添加推理参数」创建的参数即使改名为供应商同名参数，
+      // 仍是模型自己的参数（可删除），不应被误锁。
+      final provider = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        reasoningParams: [
+          toggleParam(),
+          ReasoningParam(
+            paramName: 'provider_param',
+            enabled: true,
+            options: ['a', 'b'],
+          ),
+        ],
+      );
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [toggleParam()],
+      );
+      await _pumpAndSave(
+        tester,
+        model: model,
+        provider: provider,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('添加推理参数'));
+          await tester.tap(find.text('添加推理参数'));
+          await tester.pump();
+          // 新卡片在最后：参数名输入框是最后一个 TextFormField
+          await tester.enterText(
+            find.byType(TextFormField).last,
+            'provider_param',
+          );
+          await tester.pump();
+          // 供应商卡片无删除按钮；本会话新建的卡片仍有删除按钮
+          expect(find.byIcon(Icons.delete), findsOneWidget,
+              reason: '本会话新建的附加参数改名后仍应可删除');
+        },
+      );
+    });
+
+    testWidgets(
+        'provider-inherited additional param becomes deletable after '
+        'its type is changed', (tester) async {
+      // 修改供应商参数的参数定义（类型）后，参数归模型所有 → 可删除。
+      final provider = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        reasoningParams: [
+          toggleParam(),
+          ReasoningParam(
+            paramName: 'provider_param',
+            enabled: true,
+            options: ['a', 'b'],
+          ),
+        ],
+      );
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [toggleParam()],
+      );
+      await _pumpAndSave(
+        tester,
+        model: model,
+        provider: provider,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('provider_param'));
+          final providerCard = find.ancestor(
+            of: find.text('provider_param'),
+            matching: find.byType(Card),
+          );
+          expect(
+            find.descendant(
+                of: providerCard, matching: find.byIcon(Icons.delete)),
+            findsNothing,
+            reason: '供应商来源的附加参数初始不可删除',
+          );
+          // 类型：字符串 → 数字
+          await tester.tap(
+            find.descendant(of: providerCard, matching: find.text('字符串')),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('数字').last);
+          await tester.pumpAndSettle();
+          expect(
+            find.descendant(
+                of: providerCard, matching: find.byIcon(Icons.delete)),
+            findsOneWidget,
+            reason: '修改参数定义后参数归模型所有，应可删除',
+          );
+        },
+      );
+    });
+
+    testWidgets(
+        'session-added custom param renamed to a provider name stays '
+        'deletable', (tester) async {
+      // 与附加参数同款：本会话新建的自定义参数改名成供应商同名后
+      // 仍应可删除（不被误锁）。
+      final provider = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'voice_style',
+            type: 'string',
+            options: ['warm', 'cool'],
+          ),
+        ],
+      );
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+      );
+      await _pumpAndSave(
+        tester,
+        model: model,
+        provider: provider,
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('自定义参数'));
+          await tester.tap(find.text('添加参数'));
+          await tester.pump();
+          // 新参数插入到列表头部：其参数名输入框是第一个 TextFormField
+          await tester.enterText(
+            find.byType(TextFormField).first,
+            'voice_style',
+          );
+          await tester.pump();
+          // 供应商卡片无删除按钮；本会话新建的卡片仍有删除按钮
+          expect(find.byIcon(Icons.delete), findsOneWidget,
+              reason: '本会话新建的自定义参数改名后仍应可删除');
+        },
+      );
+    });
+
+    testWidgets(
+        'toggling the effort switch does not relabel the param as '
+        'model-defined', (tester) async {
+      // enabled 是模型偏好（默认启用标记），不是参数定义的一部分：
+      // 关闭供应商参数的开关不应把来源标签从「当前：供应商」改成
+      // 「当前：模型自定义」。
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          toggleParam(),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['low', 'high'],
+          ),
+        ],
+      );
+      await _pumpAndSave(
+        tester,
+        model: model,
+        provider: _providerWithEffortOptions(['low', 'high']),
+        beforeSave: (tester) async {
+          await _scrollToReasoning(tester, find.text('推理力度'));
+          final effortCard = find.ancestor(
+            of: find.text('推理力度'),
+            matching: find.byType(Card),
+          );
+          expect(
+            find.descendant(
+                of: effortCard, matching: find.textContaining('当前：供应商')),
+            findsOneWidget,
+          );
+          // 关掉开关
+          await tester.tap(switchInCard('推理力度'));
+          await tester.pump();
+          expect(
+            find.descendant(
+                of: effortCard, matching: find.textContaining('当前：供应商')),
+            findsOneWidget,
+            reason: '关闭开关不应把供应商参数标签改成模型自定义',
+          );
+        },
+      );
+    });
+
+    testWidgets('toggling the switch triggers the discard dialog on back',
+        (tester) async {
+      // 开关改变 enabled 是未保存修改：返回时应弹「放弃修改」。
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          toggleParam(),
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['low', 'high'],
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => LlmModelConfigPage(model: model),
+                  ),
+                ),
+                child: const Text('打开模型配置'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开模型配置'));
+      await tester.pumpAndSettle();
+
+      await _scrollToReasoning(tester, find.text('推理力度'));
+      await tester.tap(switchInCard('推理力度'));
+      await tester.pump();
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('放弃修改？'), findsOneWidget,
+          reason: '开关切换（enabled 变化）应算未保存修改');
     });
   });
 }

@@ -42,14 +42,9 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
 
   void _removeReasoningParam(int index) {
     setState(() {
+      // 仅附加推理参数可删除（推理开关/推理力度是固定结构，删除按钮
+      // 已被启用开关替代）——删除附加参数时清理其勾选块状态。
       final removed = _reasoningParams.removeAt(index);
-      // 删除力度参数时同步清空勾选块状态（避免重新添加后残留旧块）
-      if (removed.isEffortParam) {
-        _effortBlockValues.clear();
-        _effortSelectedValues.clear();
-        _providerEffortValues.clear();
-      }
-      // 删除附加参数时清理其勾选块状态
       _additionalBlockValues.remove(removed);
       _additionalSelectedValues.remove(removed);
       _providerAdditionalValues.remove(removed);
@@ -425,16 +420,17 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     }
   }
 
-  /// 参数来源状态（参数名标签后的括号显示）：
-  /// 「当前：供应商」= 参数名与定义（类型/开关值等，不含选项选择）
-  /// 均与供应商一致——模型只是选择了要显示/发送的值，参数仍属供应商；
-  /// 其它情况（本会话新建、无供应商同名参数、或参数定义被修改过）
-  /// → 「当前：模型自定义」。
-  String _paramSourceLabel(ReasoningParam param) {
+  /// 参数是否「继承自供应商」：供应商存在同名参数且参数定义（类型/
+  /// 开关值等，不含选项选择）一致——模型只是选择了要显示/发送的值，
+  /// 参数仍属供应商。供应商来源的参数不允许删除（删除按钮隐藏）；
+  /// 本会话新建、无供应商同名参数、或参数定义被修改过的参数属模型
+  /// 自定义，可删除。与 [_paramSourceLabel] 的「当前：供应商」判定
+  /// 共用同一逻辑。
+  bool _isReasoningParamInherited(ReasoningParam param) {
     final snapshot = _initialParamSnapshots[param];
     if (snapshot == null) {
       // 本会话新建的参数（添加按钮创建，无初始快照）
-      return '当前：模型自定义';
+      return false;
     }
     final providerByName = <String, ReasoningParam>{};
     for (final p in widget.provider?.reasoningParams ?? []) {
@@ -443,29 +439,52 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
       }
     }
     final pp = providerByName[param.paramName.trim()];
-    if (pp == null) return '当前：模型自定义';
+    if (pp == null) return false;
     // 非选项字段一致 = 同一个「参数定义」；选项值的选择/顺序是模型
-    // 的偏好，不改变参数归属。
+    // 的偏好，不改变参数归属。enabled（默认启用标记）同样是模型偏好：
+    // 开关只改变参数是否默认启用，不改变参数归属（供应商来源的参数
+    // 被关掉后仍是供应商的参数，标签不应变成「模型自定义」）。
     bool sameDefinition(ReasoningParam a, ReasoningParam b) =>
         a.paramName.trim() == b.paramName.trim() &&
         a.type == b.type &&
         a.isReasoningToggle == b.isReasoningToggle &&
         a.isEffortParam == b.isEffortParam &&
         a.onValue == b.onValue &&
-        a.offValue == b.offValue &&
-        a.enabled == b.enabled;
-    if (!sameDefinition(param, pp)) return '当前：模型自定义';
+        a.offValue == b.offValue;
+    if (!sameDefinition(param, pp)) return false;
     // 模型已保存的同名参数若改变了参数定义 → 模型的参数
     final m = widget.model;
     if (m != null) {
       for (final mp in m.reasoningParams) {
         if (mp.paramName.trim() == param.paramName.trim() &&
             !sameDefinition(mp, pp)) {
-          return '当前：模型自定义';
+          return false;
         }
       }
     }
-    return '当前：供应商';
+    return true;
+  }
+
+  /// 参数来源状态（参数名标签后的括号显示）：
+  /// 「当前：供应商」= 参数继承自供应商；其它情况 → 「当前：模型自定义」。
+  String _paramSourceLabel(ReasoningParam param) =>
+      _isReasoningParamInherited(param) ? '当前：供应商' : '当前：模型自定义';
+
+  /// 自定义参数是否「继承自供应商」：供应商存在同名且同类型的参数，
+  /// 且该参数是打开页面时工作副本里的成员（本会话添加的参数即使改名
+  /// 成供应商同名也不锁删除，与推理参数的判定一致）。供应商传递下来
+  /// 的自定义参数不允许删除（删除按钮隐藏）；模型自己添加的（或改名/
+  /// 改类型后不再是供应商同款定义的）保留删除按钮。
+  bool _isCustomParamInherited(CustomParam param) {
+    if (param.paramName.trim().isEmpty) return false;
+    if (!_initialCustomParams.contains(param)) return false;
+    final providerParam = (widget.provider?.customParams ?? const [])
+        .cast<CustomParam?>()
+        .firstWhere(
+          (pp) => pp?.paramName.trim() == param.paramName.trim(),
+          orElse: () => null,
+        );
+    return providerParam != null && providerParam.type == param.type;
   }
 
   /// Returns the reasoning toggle param, or null if none exists.

@@ -128,11 +128,14 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                   tooltip: '还原此参数',
                   onPressed: () => _resetReasoningParam(toggle),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                  onPressed: () =>
-                      _removeReasoningParam(_reasoningParams.indexOf(toggle)),
-                  tooltip: '删除推理开关',
+                // 推理开关是固定结构（不允许删除）：用启用开关替代删除
+                // 按钮，控制该参数的 enabled 状态。
+                Tooltip(
+                  message: toggle.enabled ? '停用推理开关' : '启用推理开关',
+                  child: Switch(
+                    value: toggle.enabled,
+                    onChanged: (v) => setState(() => toggle.enabled = v),
+                  ),
                 ),
               ],
             ),
@@ -251,6 +254,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
   /// the reasoning panel's OptionChip) that can be reordered by dragging
   /// the handle. Provider-provided values cannot be deleted (unchecking
   /// hides them); model-added values show a delete button.
+  /// The effort param itself is a fixed structure (有且只有一个) and is
+  /// never deletable: a Switch (bound to [ReasoningParam.enabled]) takes
+  /// the place of the delete button.
   Widget _buildReasoningEffortCard(ReasoningParam effort, ColorScheme cs) {
     final toggleComplete = _isToggleComplete;
     final isDuplicate = _isReasoningParamNameDuplicate(effort);
@@ -285,11 +291,14 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                   tooltip: '还原此参数',
                   onPressed: () => _resetReasoningParam(effort),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                  onPressed: () =>
-                      _removeReasoningParam(_reasoningParams.indexOf(effort)),
-                  tooltip: '删除推理力度参数',
+                // 推理力度参数有且只有一个（不允许删除）：用启用开关
+                // 替代删除按钮，控制该参数的 enabled 状态。
+                Tooltip(
+                  message: effort.enabled ? '停用推理力度' : '启用推理力度',
+                  child: Switch(
+                    value: effort.enabled,
+                    onChanged: (v) => setState(() => effort.enabled = v),
+                  ),
                 ),
               ],
             ),
@@ -469,11 +478,18 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 const SizedBox(width: 4),
                 _buildTypeDropdown(param, cs),
                 const SizedBox(width: 4),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                  onPressed: () => _removeReasoningParam(actualIndex),
-                  tooltip: '删除参数',
-                ),
+                // 供应商传递下来的附加参数不允许删除（只可取消勾选/
+                // 排序）；模型自己添加的参数保留删除按钮。
+                if (!_isReasoningParamInherited(param))
+                  IconButton(
+                    icon: const Icon(
+                      Icons.delete,
+                      color: Colors.red,
+                      size: 20,
+                    ),
+                    onPressed: () => _removeReasoningParam(actualIndex),
+                    tooltip: '删除参数',
+                  ),
               ],
             ),
             const SizedBox(height: 8),
