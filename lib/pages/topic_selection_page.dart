@@ -22,14 +22,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
 
+  /// 置顶优先、块内保持原有顺序（稳定排序——Dart 的 List.sort 在元素
+  /// 超过 33 个时使用不稳定快排，会任意重排等键元素，导致对话多时
+  /// 顺序"自动乱掉"）。
   List<Conversation> _sortedConversations(List<Conversation> conversations) {
-    final sorted = List<Conversation>.from(conversations);
-    sorted.sort((a, b) {
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
-      return 0;
-    });
-    return sorted;
+    return pinnedFirstStable(conversations);
   }
 
   List<Conversation> _getAssistantTopics(List<Conversation> allConversations) {

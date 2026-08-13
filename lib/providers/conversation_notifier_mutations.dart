@@ -57,7 +57,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       lastUsedModelId: assistant?.defaultModelId,
       lastUsedProviderName: assistant?.defaultProviderName,
     );
-    state = [conv, ...state];
+    state = pinnedFirstStable([conv, ...state]);
     _ref.read(activeConversationIdProvider.notifier).state = conv.id;
     _persistActiveId();
     // 立即持久化新对话（_persistNow 而非防抖 _persist）：空对话在
@@ -112,21 +112,34 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Toggles the pinned state of a conversation.
   /// Does NOT modify [updatedAt] — pinning is a metadata operation that should
   /// preserve the conversation's original last-updated time.
+  ///
+  /// 归一化存储：置顶/取消置顶后 state 重新满足"置顶在前"不变量。
+  /// 取消置顶的对话留在原显示位置；其位置之后仍有置顶对话时，
+  /// 滑到置顶块末尾（与旧版稳定显示排序的行为一致）。
   void togglePin(String id) {
-    state = state.map((c) {
+    final list = state.map((c) {
       if (c.id != id) return c;
       c.isPinned = !c.isPinned;
       return c;
     }).toList();
+    state = pinnedFirstStable(list);
     _persist();
   }
 
   /// Reorders a conversation from [oldIndex] to [newIndex] in the list.
+  ///
+  /// [newIndex] 为"移除 [oldIndex] 之后"的插入索引（与 Flutter
+  /// `onReorderItem` 语义一致）。
+  ///
+  /// 归一化存储：拖拽跨置顶/非置顶边界时结果吸附到所在组的边界
+  /// （置顶对话不能拖出置顶块、非置顶对话不能拖入置顶块），state
+  /// 始终保持"置顶在前"的稳定顺序——否则会产生显示层无法表达的
+  /// 隐藏交错，取消置顶/切换助手时乱序才暴露。
   void reorderConversation(int oldIndex, int newIndex) {
     final list = [...state];
     final item = list.removeAt(oldIndex);
     list.insert(newIndex, item);
-    state = list;
+    state = pinnedFirstStable(list);
     _persist();
   }
 

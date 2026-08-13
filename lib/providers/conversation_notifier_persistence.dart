@@ -46,16 +46,18 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               // 竞态防护：_load 的 await 窗口内用户可能已创建对话
               // （createConversation 只改内存态，磁盘无记录）——
               // 磁盘加载结果与内存合并：磁盘对话为准，内存中磁盘
-              // 没有的新对话保留，避免新对话被静默覆盖丢失。
+              // 没有的新对话保留（置前，保持"新对话在顶部"；随后
+              // 归一化使置顶对话浮到前面），避免新对话被静默覆盖
+              // 丢失，也避免新对话被合并到列表末尾。
               final inMemory = state;
               if (inMemory.isNotEmpty) {
                 final diskIds = conversations.map((c) => c.id).toSet();
                 final extra =
                     inMemory.where((c) => !diskIds.contains(c.id)).toList();
-                state = [...conversations, ...extra];
+                state = pinnedFirstStable([...extra, ...conversations]);
                 hadInMemoryMerge = true;
               } else {
-                state = conversations;
+                state = pinnedFirstStable(conversations);
               }
             }
             await AppLogService.info(
