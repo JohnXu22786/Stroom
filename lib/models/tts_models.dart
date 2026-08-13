@@ -62,11 +62,18 @@ class CustomParam {
   /// 第一个选项（排序决定默认值）。
   List<String> options;
 
+  /// 模型页勾选块的完整显示顺序（含未勾选的候选值），供勾选块跨重启
+  /// 保留拖动/添加顺序。未保存过顺序（旧数据/供应商参数）时为空，
+  /// 由 [mergeOptionBlocks] 按「供应商顺序在前」回退。仅模型页写入；
+  /// 供应商面板直接编辑 [options]，不产生该字段。
+  List<String> optionOrder;
+
   CustomParam({
     required this.paramName,
     this.defaultValue = '',
     this.type = 'string',
     List<String>? options,
+    this.optionOrder = const [],
   }) : options = options ?? [];
 
   ParamType get paramType => ParamType.fromValue(type);
@@ -76,6 +83,7 @@ class CustomParam {
         'defaultValue': defaultValue,
         'type': type,
         if (options.isNotEmpty) 'options': options,
+        if (optionOrder.isNotEmpty) 'optionOrder': optionOrder,
       };
 
   factory CustomParam.fromMap(Map<String, dynamic> map) => CustomParam(
@@ -83,6 +91,7 @@ class CustomParam {
         defaultValue: map['defaultValue'] as String? ?? '',
         type: map['type'] as String? ?? 'string',
         options: (map['options'] as List?)?.cast<String>() ?? const [],
+        optionOrder: (map['optionOrder'] as List?)?.cast<String>() ?? const [],
       );
 
   CustomParam copy() => CustomParam(
@@ -90,6 +99,7 @@ class CustomParam {
         defaultValue: defaultValue,
         type: type,
         options: List.of(options),
+        optionOrder: List<String>.from(optionOrder),
       );
 }
 
@@ -183,6 +193,11 @@ class ReasoningParam {
 
   List<String> options;
 
+  /// 勾选块的完整显示顺序（含未勾选的候选值），供模型页跨重启保留
+  /// 拖动/添加顺序。未保存过顺序（旧数据/供应商参数）时为空，由
+  /// [mergeOptionBlocks] 按「供应商顺序在前」回退。聊天侧不使用。
+  List<String> optionOrder;
+
   bool enabled;
 
   bool isReasoningToggle;
@@ -215,6 +230,7 @@ class ReasoningParam {
     this.onValue,
     this.offValue,
     List<String>? options,
+    this.optionOrder = const [],
     this.type = 'string',
   }) : options = options ?? [];
 
@@ -227,6 +243,7 @@ class ReasoningParam {
         if (onValue != null) 'onValue': onValue,
         if (offValue != null) 'offValue': offValue,
         'type': type,
+        if (optionOrder.isNotEmpty) 'optionOrder': optionOrder,
       };
 
   factory ReasoningParam.fromMap(Map<String, dynamic> map) {
@@ -247,6 +264,9 @@ class ReasoningParam {
       offValue: map['offValue'] as String?,
       options:
           (map['options'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      optionOrder:
+          (map['optionOrder'] as List?)?.map((e) => e.toString()).toList() ??
+              const [],
       type: map['type'] as String? ?? 'string',
     );
   }
@@ -260,6 +280,7 @@ class ReasoningParam {
         onValue: onValue,
         offValue: offValue,
         options: List<String>.from(options),
+        optionOrder: List<String>.from(optionOrder),
         type: type,
       );
 
@@ -367,6 +388,60 @@ List<ReasoningParam> mergeReasoningParams(
   result.addAll(providerByName.values);
   return result;
 }
+
+/// 合并供应商级与模型级自定义参数，供模型配置页继承视图使用。
+///
+/// 规则与 [mergeReasoningParams] 一致：模型同名参数覆盖（替换）供应商
+/// 参数；未被覆盖的供应商参数追加在模型参数之后；参数名为空的条目不
+/// 参与合并。供应商的自定义参数由此获得与推理参数相同的「继承视图」。
+List<CustomParam> mergeCustomParams(
+  List<CustomParam> providerParams,
+  List<CustomParam> modelParams,
+) {
+  final providerByName = <String, CustomParam>{};
+  for (final p in providerParams) {
+    final name = p.paramName.trim();
+    if (name.isEmpty) continue;
+    providerByName[name] = p;
+  }
+  final result = <CustomParam>[];
+  for (final p in modelParams) {
+    result.add(p);
+    providerByName.remove(p.paramName.trim());
+  }
+  result.addAll(providerByName.values);
+  return result;
+}
+
+/// 勾选块的显示顺序（模型页与未保存比较的单一事实来源）。
+///
+/// - 模型已保存过完整顺序（[savedOrder] = optionOrder，用户拖动/添加
+///   过的块）时：该顺序在前，供应商新增的值追加在后——拖动结果跨重启
+///   保留；
+/// - 未保存过顺序时：供应商顺序在前，模型独有值（已保存的选项）追加
+///   在后——**勾选状态不改变显示顺序**（修复「选中值自动前置」：旧逻辑
+///   把已保存的勾选值排在最前，重开后选中块跳到队首）。
+List<String> mergeOptionBlocks({
+  required List<String> providerOptions,
+  required List<String> savedOptions,
+  List<String> savedOrder = const [],
+}) {
+  final base = savedOrder.isNotEmpty ? savedOrder : providerOptions;
+  return [
+    ...base,
+    ...savedOptions.where((v) => !base.contains(v)),
+    ...providerOptions.where(
+      (v) => !base.contains(v) && !savedOptions.contains(v),
+    ),
+  ];
+}
+
+/// 把已保存的勾选值按块顺序归一化（保存与「打开即未修改」比较共用）。
+List<String> selectedInBlockOrder({
+  required List<String> blocks,
+  required List<String> savedOptions,
+}) =>
+    blocks.where((v) => savedOptions.contains(v)).toList();
 
 /// Ensures the effort param of [params] matches the effort toggle state in
 /// [values]:

@@ -1363,5 +1363,481 @@ void main() {
       expect(toggle.offValue, isEmpty);
       expect(toggle.isFilledToggle, isTrue);
     });
+
+    testWidgets('reset does not crash for a boolean effort param',
+        (tester) async {
+      // 回归：sync 会把 boolean 参数的 options 替换为 const []（前提是
+      // 保存过选项值），reset 就地 clear() 曾抛 UnsupportedError。
+      final provider = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            type: 'boolean',
+          ),
+          ReasoningParam(
+            paramName: 'effort_flag',
+            isEffortParam: true,
+            type: 'boolean',
+            options: ['true'],
+          ),
+        ],
+      );
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            type: 'boolean',
+          ),
+          ReasoningParam(
+            paramName: 'effort_flag',
+            isEffortParam: true,
+            type: 'boolean',
+            options: ['true'],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        LlmModelConfigPage(model: model, provider: provider),
+                  ),
+                ),
+                child: const Text('打开模型配置'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开模型配置'));
+      await tester.pumpAndSettle();
+
+      await _scrollToReasoning(tester, find.text('推理力度'));
+      final resetIcon = find
+          .descendant(
+            of: find.ancestor(
+              of: find.text('推理力度'),
+              matching: find.byType(Card),
+            ),
+            matching: find.byIcon(Icons.refresh),
+          )
+          .first;
+      await tester.ensureVisible(resetIcon);
+      await tester.pumpAndSettle();
+      await tester.tap(resetIcon);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull,
+          reason: 'reset 不应在 const [] options 上抛 UnsupportedError');
+    });
+
+    testWidgets(
+        'boolean effort param switched to json does not crash on typing',
+        (tester) async {
+      // 回归：sync 把 boolean 参数 options 替换为 const [] 后，切到
+      // json 类型再输入，旧代码就地 clear() 抛 UnsupportedError。
+      final provider = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            type: 'boolean',
+          ),
+          ReasoningParam(
+            paramName: 'effort_flag',
+            isEffortParam: true,
+            type: 'boolean',
+            options: ['true'],
+          ),
+        ],
+      );
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            type: 'boolean',
+          ),
+          ReasoningParam(
+            paramName: 'effort_flag',
+            isEffortParam: true,
+            type: 'boolean',
+            options: ['true'],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        LlmModelConfigPage(model: model, provider: provider),
+                  ),
+                ),
+                child: const Text('打开模型配置'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开模型配置'));
+      await tester.pumpAndSettle();
+
+      await _scrollToReasoning(tester, find.text('推理力度'));
+      // 力度卡的类型下拉（布尔）→ 切到 JSON
+      await tester.tap(find.text('布尔').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('JSON').last);
+      await tester.pumpAndSettle();
+
+      // 输入 JSON 值：不应抛 UnsupportedError
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'JSON 值'),
+        '{"thinking": {"budget": 1024}}',
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull,
+          reason: 'json 输入不应在 const [] options 上抛 UnsupportedError');
+    });
+
+    testWidgets(
+        'additional param with empty saved options and same-name provider '
+        'param does not warn on back', (tester) async {
+      // 回归：模型保存的附加参数选项为空、供应商同名参数有选项时，
+      // 打开即默认全选供应商值——基线必须镜像该语义，否则返回误弹
+      // 「放弃修改」。
+      final provider = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          ReasoningParam(
+            paramName: 'legacy_param',
+            enabled: true,
+            options: ['a', 'b'],
+          ),
+        ],
+      );
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'thinking.type',
+            isReasoningToggle: true,
+            onValue: 'enabled',
+            offValue: 'disabled',
+          ),
+          // 旧数据：同名参数存在但未保存任何选项
+          ReasoningParam(
+            paramName: 'legacy_param',
+            enabled: true,
+            options: [],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        LlmModelConfigPage(model: model, provider: provider),
+                  ),
+                ),
+                child: const Text('打开模型配置'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开模型配置'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('放弃修改？'), findsNothing,
+          reason: '空选项旧数据 + 供应商同名参数不应算未保存修改');
+      expect(find.text('打开模型配置'), findsOneWidget);
+    });
+  });
+
+  group('LlmModelConfigPage provider custom params inheritance', () {
+    ProviderConfigItem providerWithCustomParams({
+      List<String> options = const ['warm', 'cool'],
+    }) {
+      return ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'voice_style',
+            type: 'string',
+            options: options,
+          ),
+        ],
+      );
+    }
+
+    /// 滚动到自定义参数区并确保 [value] 可见。
+    Future<void> scrollToCustomValue(WidgetTester tester, String value) async {
+      await _scrollToReasoning(tester, find.text('自定义参数'));
+      await tester.scrollUntilVisible(
+        find.text(value),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+        'provider custom params are inherited into the model page and saved',
+        (tester) async {
+      final provider = providerWithCustomParams();
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+        ),
+        provider: provider,
+        beforeSave: (tester) async {
+          // 供应商自定义参数直接显示在本页（继承视图，与推理参数一致）
+          await scrollToCustomValue(tester, 'voice_style');
+          expect(find.text('voice_style'), findsOneWidget);
+          expect(find.text('warm'), findsOneWidget);
+          expect(find.text('cool'), findsOneWidget);
+          // 供应商来源的选项不可删除（只能取消勾选）
+          expect(find.byIcon(Icons.close), findsNothing);
+        },
+      );
+
+      expect(saved, isNotNull);
+      // 保存后模型携带供应商参数（默认全选 → options = 供应商全部选项）
+      expect(saved!.customParams.single.paramName, 'voice_style');
+      expect(saved.customParams.single.options, ['warm', 'cool']);
+    });
+
+    testWidgets(
+        'provider custom param uncheck persists; the unselected '
+        'value reappears unchecked on reopen', (tester) async {
+      final provider = providerWithCustomParams();
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+        ),
+        provider: provider,
+        beforeSave: (tester) async {
+          await scrollToCustomValue(tester, 'warm');
+          // 默认全选 → 取消勾选 warm
+          await tester.tap(find.text('warm'));
+          await tester.pump();
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.options, ['cool']);
+
+      // 重开：warm 重新出现但未勾选（供应商值重新同步）
+      await _pumpAndSave(tester,
+          model: saved, provider: provider, tapSave: false);
+      await scrollToCustomValue(tester, 'warm');
+      expect(find.text('warm'), findsOneWidget, reason: '未勾选的供应商值应重新出现');
+      expect(find.text('cool'), findsOneWidget);
+      final warmText = tester.widget<Text>(find.text('warm'));
+      expect(warmText.style?.fontWeight, FontWeight.normal,
+          reason: '重开后 warm 应保持未勾选');
+    });
+
+    testWidgets(
+        'opening the page with provider custom params and going back '
+        'does not warn', (tester) async {
+      // 新模型 + 供应商自定义参数：打开即显示供应商参数不算改动，
+      // 返回不应弹「放弃修改」。
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => LlmModelConfigPage(
+                      model: ModelConfig(
+                        name: 'test-model',
+                        modelId: 'test-model',
+                        typeConfig: {'context': 4096},
+                      ),
+                      provider: providerWithCustomParams(),
+                    ),
+                  ),
+                ),
+                child: const Text('打开模型配置'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开模型配置'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('放弃修改？'), findsNothing, reason: '供应商自定义参数继承显示不应算未保存修改');
+      expect(find.text('打开模型配置'), findsOneWidget);
+    });
+
+    testWidgets(
+        'editing a model: unchecking a custom param chip triggers the '
+        'discard dialog on back', (tester) async {
+      // 回归：块操作只改内存中的块列表/勾选集合，不同步则未保存比较
+      // 看不到任何变化 → 编辑模式下的勾选改动被静默丢弃。
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'voice_style',
+            type: 'string',
+            options: ['warm', 'cool'],
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => LlmModelConfigPage(model: model),
+                  ),
+                ),
+                child: const Text('打开模型配置'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('打开模型配置'));
+      await tester.pumpAndSettle();
+
+      await scrollToCustomValue(tester, 'warm');
+      await tester.tap(find.text('warm'));
+      await tester.pump();
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('放弃修改？'), findsOneWidget, reason: '取消勾选自定义参数块应算未保存修改');
+    });
+  });
+
+  group('LlmModelConfigPage block order (no selection auto-fronting)', () {
+    testWidgets('selected effort values keep the provider order on reopen',
+        (tester) async {
+      // 勾选 low + high（跳过 medium）保存 → 重开后块顺序保持供应商
+      // 顺序 [low, medium, high]，而不是选中前置的 [low, high, medium]。
+      final provider = _providerWithEffortOptions(['low', 'medium', 'high']);
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+        ),
+        provider: provider,
+        beforeSave: (tester) async {
+          await _tapBlock(tester, 'low');
+          await _tapBlock(tester, 'high');
+        },
+      );
+      expect(saved, isNotNull);
+      expect(_savedEffortOptions(saved!), ['low', 'high']);
+
+      await _pumpAndSave(tester,
+          model: saved, provider: provider, tapSave: false);
+      await _scrollToReasoning(tester, find.text('reasoning_effort'));
+      final lowX = tester.getTopLeft(find.text('low')).dx;
+      final mediumX = tester.getTopLeft(find.text('medium')).dx;
+      final highX = tester.getTopLeft(find.text('high')).dx;
+      expect(lowX < mediumX, isTrue, reason: '选中的 low 不应被未选中的 medium 挤到后面');
+      expect(mediumX < highX, isTrue, reason: '选中的 high 不应自动前置');
+    });
+
+    testWidgets('dragged block order persists across reopen', (tester) async {
+      // 用户拖动过的块顺序保存到 optionOrder：重开后按拖动顺序恢复，
+      // 而不是退回供应商顺序。
+      final provider = _providerWithEffortOptions(['low', 'medium', 'high']);
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+        ),
+        provider: provider,
+        beforeSave: (tester) async {
+          await _tapBlock(tester, 'low');
+          await _tapBlock(tester, 'medium');
+          await _tapBlock(tester, 'high');
+          // 长按 low 拖到末尾
+          await _scrollToReasoning(tester, find.text('medium'));
+          await _longPressDrag(tester, find.text('low'), const Offset(250, 0));
+        },
+      );
+      expect(saved, isNotNull);
+      expect(_savedEffortOptions(saved!), ['medium', 'high', 'low']);
+
+      await _pumpAndSave(tester,
+          model: saved, provider: provider, tapSave: false);
+      await _scrollToReasoning(tester, find.text('reasoning_effort'));
+      final mediumX = tester.getTopLeft(find.text('medium')).dx;
+      final highX = tester.getTopLeft(find.text('high')).dx;
+      final lowX = tester.getTopLeft(find.text('low')).dx;
+      expect(mediumX < highX && highX < lowX, isTrue,
+          reason: '拖动顺序应跨重启保留（optionOrder）');
+    });
   });
 }

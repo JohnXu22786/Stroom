@@ -342,9 +342,10 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 ),
                 onChanged: (v) {
                   final text = v.trim();
-                  effort.options
-                    ..clear()
-                    ..addAll(text.isNotEmpty ? [text] : []);
+                  // 赋值而非就地清空：sync 可能已把 options 替换为
+                  // const []（boolean 类型切到 json 后），clear() 会抛
+                  // UnsupportedError。
+                  effort.options = text.isNotEmpty ? [text] : const [];
                   setState(() {});
                 },
               )
@@ -505,9 +506,10 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 ),
                 onChanged: (v) {
                   final text = v.trim();
-                  param.options
-                    ..clear()
-                    ..addAll(text.isNotEmpty ? [text] : []);
+                  // 赋值而非就地清空：sync 可能已把 options 替换为
+                  // const []（boolean 类型切到 json 后），clear() 会抛
+                  // UnsupportedError。
+                  param.options = text.isNotEmpty ? [text] : const [];
                   setState(() {});
                 },
               )
