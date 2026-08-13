@@ -5,8 +5,7 @@ import '../../models/mcp.dart' show McpServerConfig;
 import '../../models/tool_call.dart';
 import '../../providers/chat_manager_provider.dart';
 import '../../providers/provider_config.dart';
-import '../../services/chat_adapter.dart'
-    show AvailableModel, resolveModelRef;
+import '../../services/chat_adapter.dart' show AvailableModel, resolveModelRef;
 import '../../services/chat_service.dart';
 import '../../services/http_tool_service.dart';
 import '../../services/todo_tool_service.dart';
@@ -188,9 +187,8 @@ class AssistantDefaultsTab extends ConsumerWidget {
                 } else {
                   // 把完整模型（含绝对身份）传给对话框，保存时同时
                   // 记录显示名与模型ID+供应商名。
-                  final model = models
-                      .where((m) => m.displayName == value)
-                      .firstOrNull;
+                  final model =
+                      models.where((m) => m.displayName == value).firstOrNull;
                   onDefaultModelChanged(model);
                 }
               },

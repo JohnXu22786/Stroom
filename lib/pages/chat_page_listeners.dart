@@ -267,7 +267,8 @@ extension _ChatPageListenersExt on _ChatPageState {
   /// 不应在会话中途改写当前对话的模型——无记录对话会在下次进入时
   /// 自然跟随新默认。
   void _registerAssistantListener() {
-    ref.listen(assistantProvider, (List<Assistant>? prev, List<Assistant> next) {
+    ref.listen(assistantProvider,
+        (List<Assistant>? prev, List<Assistant> next) {
       if (prev == null || (prev.isEmpty && next.isNotEmpty)) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _restoreActiveConversationModel();

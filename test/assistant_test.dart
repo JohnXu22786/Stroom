@@ -591,7 +591,8 @@ void main() {
       expect(map.containsKey('defaultProviderName'), isFalse);
     });
 
-    test('legacy assistant map with only display name parses with null ids', () {
+    test('legacy assistant map with only display name parses with null ids',
+        () {
       final map = <String, dynamic>{
         'id': 'legacy-1',
         'name': '旧助手',

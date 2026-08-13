@@ -223,8 +223,8 @@ void showAssistantFullEditDialog(
               // 与 tab 的"跟随全局设置"退化显示保持一致，避免同名模型
               // 重新添加后旧的默认值悄悄复活。
               final adapter = ref.read(chatStreamManagerProvider).adapter;
-              final availableModels = adapter
-                  .availableModels(ref.read(providerEntriesProvider));
+              final availableModels =
+                  adapter.availableModels(ref.read(providerEntriesProvider));
               final defaultRef = resolveModelRef(
                 models: availableModels,
                 modelId: assistant.defaultModelId,

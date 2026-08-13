@@ -315,8 +315,7 @@ class Assistant {
         modelId: modelId ?? this.modelId,
         defaultModelName: defaultModelName ?? this.defaultModelName,
         defaultModelId: defaultModelId ?? this.defaultModelId,
-        defaultProviderName:
-            defaultProviderName ?? this.defaultProviderName,
+        defaultProviderName: defaultProviderName ?? this.defaultProviderName,
         defaultToolNames: defaultToolNames ?? this.defaultToolNames,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,

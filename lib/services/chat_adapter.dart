@@ -199,8 +199,8 @@ class ChatAdapter {
       // assistant's configured default model even after renames.
       // 仅当走默认模型引用时才带供应商名消歧：绑定模型（modelId）没有
       // 供应商信息，带上的话可能把同一 modelId 的错误供应商配对。
-      final useDefaultRef = assistant.modelId == null ||
-          assistant.modelId!.isEmpty;
+      final useDefaultRef =
+          assistant.modelId == null || assistant.modelId!.isEmpty;
       final resolved = _resolveAssistantModel(
         assistant.modelId ??
             assistant.defaultModelId ??
@@ -305,9 +305,8 @@ class ChatAdapter {
     for (var pass = 0; pass < (hasProvider ? 2 : 1); pass++) {
       for (final config in llmEntry.configs) {
         if (config.host.isEmpty || config.key.isEmpty) continue;
-        final providerMatches = !hasProvider ||
-            pass == 1 ||
-            config.providerName == providerName;
+        final providerMatches =
+            !hasProvider || pass == 1 || config.providerName == providerName;
         if (!providerMatches) continue;
         for (final model in config.models) {
           if (model.modelId == modelRef) return (config, model);
