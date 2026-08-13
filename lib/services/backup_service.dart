@@ -1188,13 +1188,15 @@ class BackupService {
       // v2 格式：chat_data.json + settings.json 分开，合并后一次性恢复
       final mergedPrefs = <String, dynamic>{};
       if (selection.chatRecordsAndAttachments) {
-        debugPrint('[BackupService] _restoreFromArchive: merging chat_data.json');
+        debugPrint(
+            '[BackupService] _restoreFromArchive: merging chat_data.json');
         if (chatPrefs != null) {
           mergedPrefs.addAll(chatPrefs);
         }
       }
       if (selection.settings) {
-        debugPrint('[BackupService] _restoreFromArchive: merging settings.json');
+        debugPrint(
+            '[BackupService] _restoreFromArchive: merging settings.json');
         if (settingsPrefs != null) {
           mergedPrefs.addAll(settingsPrefs);
         }

@@ -240,8 +240,7 @@ void main() {
       ManifestDatabase.enableTestMode();
       WebFileStore.disableTestMode();
       originalPathProvider = PathProviderPlatform.instance;
-      PathProviderPlatform.instance =
-          _FakePathProviderPlatform('$workDir/app');
+      PathProviderPlatform.instance = _FakePathProviderPlatform('$workDir/app');
       AppStorage.resetCache();
     });
 
@@ -289,11 +288,9 @@ void main() {
       // 5. 验证：文件逐字节一致 + 数据库记录恢复
       final restored = await File(videoPath).readAsBytes();
       expect(restored.length, equals(largeSize));
-      expect(restored, equals(largeData),
-          reason: '流式恢复路径不得损坏大文件内容');
+      expect(restored, equals(largeData), reason: '流式恢复路径不得损坏大文件内容');
       final records = await ManifestDatabase.getAllVideoRecords();
-      expect(records.length, equals(1),
-          reason: '恢复后视频记录应存在');
+      expect(records.length, equals(1), reason: '恢复后视频记录应存在');
       expect(records[0]['id'], equals('restore_big'));
     });
 
@@ -369,8 +366,7 @@ void main() {
 
       final restored =
           await File('$appDir/videos/deflate_big.mp4').readAsBytes();
-      expect(restored, equals(fileData),
-          reason: 'deflate 压缩备份经流式解压恢复后必须逐字节一致');
+      expect(restored, equals(fileData), reason: 'deflate 压缩备份经流式解压恢复后必须逐字节一致');
     });
   });
 
