@@ -575,7 +575,7 @@ void main() {
     expect(find.textContaining('modelIndex'), findsNothing);
   });
 
-  testWidgets('TTS voice dropdown follows the selected model', (tester) async {
+  testWidgets('TTS voice dropdown lists ALL models voices', (tester) async {
     final entries = ProviderEntriesState(
       entries: [
         ProviderEntry(
@@ -608,30 +608,61 @@ void main() {
         ),
       ],
     );
-    await pumpPanel(
-      tester,
-      block: TaskFlowBlock(typeKey: BlockType.tts),
-      entries: entries,
+    TaskFlowBlock? result;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          providerEntriesProvider.overrideWith(
+            (ref) => _FakeEntriesNotifier(entries),
+          ),
+          assistantProvider.overrideWith(
+            (ref) => _FakeAssistantsNotifier(const []),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    result = await showBlockEditorDialog(
+                      context,
+                      block: TaskFlowBlock(typeKey: BlockType.tts),
+                    );
+                  },
+                  child: const Text('打开设置'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
+    await tester.tap(find.text('打开设置'));
+    await tester.pumpAndSettle();
 
-    // Default model (index 0) → open the voice dropdown: only 晓晓.
+    // Default model (index 0) — the voice dropdown still offers BOTH
+    // models' voices: a voice configured elsewhere must be selectable.
     await tester.tap(find.text('选择音色'));
     await tester.pumpAndSettle();
     expect(find.textContaining('晓晓'), findsOneWidget);
-    expect(find.textContaining('云希'), findsNothing);
+    expect(find.textContaining('云希'), findsOneWidget);
     // Close the voice menu by tapping outside.
     await tester.tapAt(const Offset(10, 10));
     await tester.pumpAndSettle();
 
-    // Switch 合成模型 to edge-b → the voice dropdown lists 云希.
-    await tester.tap(find.text('edge-a | EdgeTTS'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('edge-b | EdgeTTS').last);
-    await tester.pumpAndSettle();
+    // Selecting 云希 (which lives on model index 1) switches the model
+    // to edge-b automatically, so execution resolves the same pair.
     await tester.tap(find.text('选择音色'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('云希'), findsOneWidget);
-    expect(find.textContaining('晓晓'), findsNothing);
+    await tester.tap(find.textContaining('云希').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认'));
+    await tester.pumpAndSettle();
+    expect(result, isNotNull);
+    expect(result!.params['voice'], 'zh-CN-YunxiNeural');
+    expect(result!.params['modelIndex'], 1,
+        reason: 'picking a voice from another model must switch the model');
   });
 
   testWidgets(
@@ -740,7 +771,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Manual fallback field with the hint.
-    expect(find.text('未配置TTS音色，可手动输入ID'), findsOneWidget);
+    expect(find.text('所有TTS模型均未配置音色，可手动输入ID'), findsOneWidget);
     await tester.enterText(
       find.byType(TextField).last,
       'custom-voice-id',

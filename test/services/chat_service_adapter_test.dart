@@ -1475,12 +1475,14 @@ void main() {
 
     Assistant _assistant({
       String? modelId,
+      String? defaultModelName,
       String prompt = '你是测试助手',
     }) {
       return Assistant(
         name: '测试助手',
         prompt: prompt,
         modelId: modelId,
+        defaultModelName: defaultModelName,
       );
     }
 
@@ -1504,6 +1506,30 @@ void main() {
       expect(adapter.currentConfigIndex, equals(0));
       expect(adapter.currentModelIndex, equals(0));
       adapter.cancelService('conv-assistant');
+    });
+
+    test(
+        'assistant with a display-name default model (no modelId set) '
+        'resolves — the chat block honors the assistant editor\'s '
+        'configured default model', () {
+      // The assistant editor stores the default model as its DISPLAY name
+      // ('GPT-4o | OpenAI') while Assistant.modelId stays null. The chat
+      // block passes this assistant to getOrCreateService — it must
+      // resolve via the display name instead of failing with
+      // 聊天 API 未配置.
+      final svc = adapter.getOrCreateService(
+        'conv-displayname',
+        assistant: _assistant(
+          defaultModelName: 'GPT-4o | OpenAI',
+        ),
+        entriesState: entriesState,
+      );
+      expect(svc, isNotNull,
+          reason: 'display-name bound assistant must resolve to a service');
+      expect(svc!.assistantPrompt, '你是测试助手');
+      expect(adapter.currentConfigIndex, equals(0),
+          reason: 'global selection untouched');
+      adapter.cancelService('conv-displayname');
     });
 
     test(

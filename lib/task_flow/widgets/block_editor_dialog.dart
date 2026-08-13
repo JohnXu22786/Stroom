@@ -152,6 +152,41 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     return models[idx].model;
   }
 
+  /// Voice ids available across ALL configured TTS models. Used at
+  /// confirm time to detect a stale voice (exists on no model).
+  Set<String> _allTtsVoiceIds() {
+    final ids = <String>{};
+    for (final entry in _modelsOf('tts')) {
+      final model = entry.model;
+      final mVoices = model.voices as List<dynamic>? ?? const [];
+      for (final v in mVoices) {
+        final ve = v is VoiceEntry
+            ? v
+            : VoiceEntry.fromMap(Map<String, dynamic>.from(v as Map));
+        if (ve.id.isNotEmpty) ids.add(ve.id);
+      }
+    }
+    return ids;
+  }
+
+  /// The model index that provides [voiceId], or null if no configured
+  /// TTS model has it. Used at confirm time to keep (model, voice)
+  /// consistent.
+  int? _voiceOwnerModelIndex(String voiceId) {
+    final models = _modelsOf('tts');
+    for (var mi = 0; mi < models.length; mi++) {
+      final model = models[mi].model;
+      final mVoices = model.voices as List<dynamic>? ?? const [];
+      for (final v in mVoices) {
+        final ve = v is VoiceEntry
+            ? v
+            : VoiceEntry.fromMap(Map<String, dynamic>.from(v as Map));
+        if (ve.id == voiceId) return mi;
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -313,6 +348,24 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     const SizedBox(width: 8),
                     FilledButton(
                       onPressed: () {
+                        // Confirm-time voice/model reconciliation:
+                        // - a voice that exists on ANOTHER model moves
+                        //   modelIndex to its owning model (same pair the
+                        //   dropdown's onChanged produces);
+                        // - a voice that exists on NO model is reset to ''
+                        //   so execution doesn't fail on an unresolvable
+                        //   id — but only when SOME voices exist: with no
+                        //   voices configured anywhere, a manually typed
+                        //   id is the user's only option and is kept.
+                        final voice = _params['voice']?.toString() ?? '';
+                        if (voice.isNotEmpty) {
+                          final owner = _voiceOwnerModelIndex(voice);
+                          if (owner != null) {
+                            _params['modelIndex'] = owner;
+                          } else if (_allTtsVoiceIds().isNotEmpty) {
+                            _params['voice'] = '';
+                          }
+                        }
                         final updated = widget.block.copyWithParams(_params);
                         Navigator.pop(context, updated);
                       },
@@ -500,48 +553,42 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         );
 
       case BlockParamType.voiceSelector:
-        // Voices of the SELECTED TTS model (the same model the executor
-        // uses via modelIndex) — offering voices of every model would
-        // confuse ("my voice isn't there") and the executor would reject
-        // them. Deduped by id.
-        final selectedTtsModel = _selectedTtsModel();
-        final voices = <VoiceEntry>[];
+        // Voices of ALL TTS models (not just the currently selected
+        // model's): a voice configured on another model must still be
+        // selectable — previously an empty current-model voice list fell
+        // back to a raw manual-input field and the configured voice was
+        // never offered. Selecting a voice ALSO switches modelIndex to
+        // the model that provides it, so the executor resolves the same
+        // (model, voice) pair the user picked.
+        final ttsModels = _modelsOf('tts');
+        final voiceOptions = <({int modelIndex, String id, String name})>[];
         {
-          final byId = <String, VoiceEntry>{};
-          final model = selectedTtsModel;
-          if (model != null) {
+          final byKey = <String, ({int modelIndex, String id, String name})>{};
+          for (var mi = 0; mi < ttsModels.length; mi++) {
+            final model = ttsModels[mi].model;
             final mVoices = model.voices as List<dynamic>? ?? const [];
             for (final v in mVoices) {
               final entry = v is VoiceEntry
                   ? v
                   : VoiceEntry.fromMap(Map<String, dynamic>.from(v as Map));
               if (entry.name.isNotEmpty && entry.id.isNotEmpty) {
-                byId[entry.id] = entry;
+                byKey['$mi:${entry.id}'] = (
+                  modelIndex: mi,
+                  id: entry.id,
+                  name: entry.name,
+                );
               }
             }
           }
-          voices.addAll(byId.values);
+          voiceOptions.addAll(byKey.values);
         }
         final current = value?.toString() ?? '';
-        // A stale voice (not in the selected model's voices) must not
-        // survive confirm — reset it to '' (use the model default). Only
-        // applies when the model HAS voices: in the manual fallback (no
-        // voices configured) the user's typed id is the source of truth
-        // and must never be wiped by unrelated rebuilds.
-        final stale = voices.isNotEmpty &&
-            current.isNotEmpty &&
-            !voices.any((v) => v.id == current);
-        if (stale) {
-          _params[param.key] = '';
-          _controllers[param.key]?.text = '';
-        }
         // Track the controller in both branches (dropdown + manual
-        // fallback) so it is disposed with the panel. The fallback field
-        // must show the POST-reset value — a stale id would display while
-        // confirm silently drops it.
-        _controllers[param.key] ??=
-            TextEditingController(text: stale ? '' : current);
-        if (voices.isEmpty) {
+        // fallback) so it is disposed with the panel.
+        _controllers[param.key] ??= TextEditingController(text: current);
+        if (voiceOptions.isEmpty) {
+          // No model has voices configured — the user can still type an
+          // explicit voice id (some providers accept arbitrary ids).
           return TextField(
             controller: _controllers[param.key],
             onChanged: (v) => _params[param.key] = v,
@@ -554,13 +601,17 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 horizontal: 10,
                 vertical: 8,
               ),
-              hintText: '未配置TTS音色，可手动输入ID',
+              hintText: '所有TTS模型均未配置音色，可手动输入ID',
             ),
             style: const TextStyle(fontSize: 13),
           );
         }
+        final currentOption =
+            voiceOptions.where((o) => o.id == current).firstOrNull;
         return DropdownButtonFormField<String>(
-          value: voices.any((v) => v.id == current) ? current : null,
+          value: currentOption != null
+              ? '${currentOption.modelIndex}:${currentOption.id}'
+              : null,
           isDense: true,
           decoration: InputDecoration(
             isDense: true,
@@ -574,25 +625,32 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           hint: Text(
             // A persisted voice id that no longer exists must not show the
             // raw id string — guide re-selection instead.
-            stale ? '音色已失效，请重新选择' : '选择音色',
+            currentOption == null && current.isNotEmpty
+                ? '音色已失效，请重新选择'
+                : '选择音色',
             style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
           ),
-          items: voices.map((v) {
+          items: voiceOptions.map((o) {
             return DropdownMenuItem<String>(
-              value: v.id,
+              value: '${o.modelIndex}:${o.id}',
               // Name only — the id (e.g. zh-CN-XiaoxiaoNeural) is a long
               // opaque string that would confuse users; the TTS page shows
               // the same.
-              child: Text(v.name),
+              child: Text(o.name),
             );
           }).toList(),
           onChanged: (v) {
-            if (v != null) {
-              setState(() {
-                _params[param.key] = v;
-                _controllers[param.key]?.text = v;
-              });
-            }
+            if (v == null) return;
+            final sep = v.indexOf(':');
+            final mi = int.parse(v.substring(0, sep));
+            final id = v.substring(sep + 1);
+            setState(() {
+              _params['voice'] = id;
+              // The voice lives on another model → switch the model too,
+              // so execution resolves this voice.
+              _params['modelIndex'] = mi;
+              _controllers[param.key]?.text = id;
+            });
           },
         );
 

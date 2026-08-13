@@ -341,6 +341,23 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       return;
     }
 
+    // Validate required params (e.g. the chat block's assistant) before
+    // persisting — a flow that can never run should not be saveable.
+    for (final block in _blocks) {
+      final def = block.getDefinition();
+      if (def == null) continue;
+      for (final p in def.params) {
+        if (!p.required) continue;
+        final raw = block.params[p.key]?.toString() ?? '';
+        if (raw.trim().isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('「${def.label}」的「${p.label}」为必填项')),
+          );
+          return;
+        }
+      }
+    }
+
     final notifier = ref.read(taskFlowListProvider.notifier);
 
     if (_editingFlowId != null) {
@@ -892,6 +909,27 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         ).showSnackBar(const SnackBar(content: Text('任务流未包含任何功能块')));
       }
       return;
+    }
+
+    // Required-param guard (same rule as _saveFlow) — protects flows
+    // saved before the rule existed.
+    for (final block in flow.blocks) {
+      final def = block.getDefinition();
+      if (def == null) continue;
+      for (final p in def.params) {
+        if (!p.required) continue;
+        final raw = block.params[p.key]?.toString() ?? '';
+        if (raw.trim().isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('「${def.label}」的「${p.label}」为必填项，请先在设置中配置'),
+              ),
+            );
+          }
+          return;
+        }
+      }
     }
 
     final service = ref.read(taskFlowExecutionServiceProvider);

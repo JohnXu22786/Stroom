@@ -109,6 +109,7 @@ class TaskFlowExecutionService {
     final execId = execNotifier.addExecution(
       flowId: flow.id,
       flowName: flow.name,
+      inputText: inputText,
     );
 
     AppLogService.info('TaskFlow', '开始执行: ${flow.name} ($execId)');

@@ -257,7 +257,8 @@ class BlockTypeDefinition {
         key: 'voice',
         label: '语音',
         type: BlockParamType.voiceSelector,
-        hintText: '选择所选模型的音色',
+        // 下拉列出所有 TTS 模型的音色；选择音色会自动切换合成模型。
+        hintText: '选择音色（选择后自动切换到对应模型）',
       ),
       BlockParamDefinition(
         key: 'speed',
@@ -291,8 +292,9 @@ class BlockTypeDefinition {
         key: 'assistantId',
         label: '助手',
         type: BlockParamType.assistantSelector,
-        // Default: 未指定 — 执行时使用当前选中的助手。助手块只允许
-        // 选择"我的助手"（用户自定义），不提供内置助手选项。
+        // 必填：助手块必须指定一个"我的助手"（内置助手不可选）。
+        // 保存任务流时校验，未选择则阻止保存。
+        required: true,
         defaultValue: '',
       ),
     ],

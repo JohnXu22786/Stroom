@@ -92,6 +92,10 @@ class TaskFlowExecution {
   final List<FlowSubTask> subTasks;
   final String? error;
 
+  /// The input text this execution was started with — kept so a failed
+  /// run can be RETRIED with the same input from the task list card.
+  final String inputText;
+
   /// Transient flag: the flow is alive but its current block is waiting
   /// for scheduler resources (concurrent flows). Never persisted — a
   /// restored execution is never queued.
@@ -106,6 +110,7 @@ class TaskFlowExecution {
     this.completedAt,
     this.subTasks = const [],
     this.error,
+    this.inputText = '',
     this.queued = false,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
@@ -117,6 +122,7 @@ class TaskFlowExecution {
     List<FlowSubTask>? subTasks,
     String? error,
     bool clearError = false,
+    String? inputText,
     bool? queued,
   }) =>
       TaskFlowExecution(
@@ -129,6 +135,7 @@ class TaskFlowExecution {
             clearCompletedAt ? null : (completedAt ?? this.completedAt),
         subTasks: subTasks ?? this.subTasks,
         error: clearError ? null : (error ?? this.error),
+        inputText: inputText ?? this.inputText,
         queued: queued ?? this.queued,
       );
 
@@ -154,6 +161,7 @@ class TaskFlowExecution {
         if (completedAt != null) 'completedAt': completedAt!.toIso8601String(),
         'subTasks': subTasks.map((s) => s.toMap()).toList(),
         if (error != null) 'error': error,
+        if (inputText.isNotEmpty) 'inputText': inputText,
       };
 
   factory TaskFlowExecution.fromMap(Map<String, dynamic> map) =>
@@ -176,6 +184,7 @@ class TaskFlowExecution {
                 .toList() ??
             [],
         error: map['error'] as String?,
+        inputText: map['inputText'] as String? ?? '',
       );
 
   static FlowExecutionStatus _parseExecStatus(String? name) {

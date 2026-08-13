@@ -8,6 +8,7 @@ import '../../providers/task_provider.dart';
 import '../../providers/task_provider_shared.dart';
 import '../../task_flow/models/task_flow_execution.dart';
 import '../../task_flow/providers/task_flow_execution_provider.dart';
+import '../../task_flow/services/task_flow_execution_service.dart';
 import 'background_task_card.dart';
 import 'catcatch_task_card.dart';
 import 'synthesis_task_card.dart';
@@ -46,6 +47,27 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
         (list) => list.where((e) => e.id == widget.execution.id).firstOrNull,
       ),
     );
+
+    // Auto-collapse when the flow reaches a terminal state (completed /
+    // failed) — otherwise every finished run leaves its step cards
+    // expanded in the list. Only collapses an EXPANDED card the user
+    // opened; a card collapsed by the user stays collapsed.
+    ref.listen(
+      taskFlowExecutionsProvider.select(
+        (list) => list.where((e) => e.id == widget.execution.id).firstOrNull,
+      ),
+      (prev, next) {
+        final wasRunning =
+            prev != null && prev.status == FlowExecutionStatus.running;
+        final isTerminal = next != null &&
+            (next.status == FlowExecutionStatus.completed ||
+                next.status == FlowExecutionStatus.failed);
+        if (wasRunning && isTerminal && _expanded) {
+          setState(() => _expanded = false);
+        }
+      },
+    );
+
     if (execution == null) return const SizedBox.shrink();
 
     final subTasks = execution.subTasks;
@@ -156,6 +178,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
             _ExpandedContent(
               subTasks: subTasks,
               executionId: execution.id,
+              executionStatus: execution.status,
             ),
             if (execution.status == FlowExecutionStatus.failed &&
                 execution.error != null)
@@ -233,10 +256,12 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
 class _ExpandedContent extends ConsumerWidget {
   final List<FlowSubTask> subTasks;
   final String executionId;
+  final FlowExecutionStatus executionStatus;
 
   const _ExpandedContent({
     required this.subTasks,
     required this.executionId,
+    required this.executionStatus,
   });
 
   @override
@@ -256,20 +281,80 @@ class _ExpandedContent extends ConsumerWidget {
           alignment: Alignment.centerRight,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: TextButton.icon(
-              onPressed: () => _confirmDelete(context, ref, executionId),
-              icon:
-                  const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-              label: const Text('删除',
-                  style: TextStyle(fontSize: 13, color: Colors.red)),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                minimumSize: const Size(48, 48),
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Retry: re-run the whole flow with the SAME input text
+                // (intermediate outputs aren't persisted, so a run can
+                // only be redone from the start).
+                if (executionStatus == FlowExecutionStatus.failed)
+                  TextButton.icon(
+                    onPressed: () => _confirmRetry(context, ref),
+                    icon: Icon(Icons.refresh, size: 18, color: cs.primary),
+                    label: Text('重试',
+                        style: TextStyle(fontSize: 13, color: cs.primary)),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(48, 48),
+                    ),
+                  ),
+                TextButton.icon(
+                  onPressed: () => _confirmDelete(context, ref, executionId),
+                  icon: const Icon(Icons.delete_outline,
+                      size: 18, color: Colors.red),
+                  label: const Text('删除',
+                      style: TextStyle(fontSize: 13, color: Colors.red)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(48, 48),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
       ],
+    );
+  }
+
+  void _confirmRetry(BuildContext context, WidgetRef ref) {
+    final execution = ref
+        .read(taskFlowExecutionsProvider)
+        .where((e) => e.id == executionId)
+        .firstOrNull;
+    if (execution == null) return;
+    final inputPreview = execution.inputText.length > 30
+        ? '${execution.inputText.substring(0, 30)}…'
+        : execution.inputText;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('重试任务流'),
+        content: Text(
+          execution.inputText.isEmpty
+              ? '将重新执行整个任务流（无输入文本）。确定重试？'
+              : '将使用原输入文本重新执行整个任务流：\n"$inputPreview"\n\n确定重试？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              // Fire-and-forget: startFlow can take minutes (polling
+              // loops). A new execution record is created on top of the
+              // list; the old failed record stays for comparison.
+              ref.read(taskFlowExecutionServiceProvider).startFlow(
+                    execution.flowId,
+                    execution.inputText,
+                  );
+            },
+            child: const Text('重试'),
+          ),
+        ],
+      ),
     );
   }
 

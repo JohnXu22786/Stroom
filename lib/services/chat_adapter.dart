@@ -183,8 +183,12 @@ class ChatAdapter {
     ProviderEntriesState? entriesState,
   }) {
     if (assistant != null && entriesState != null) {
+      // The assistant editor stores the default model as a DISPLAY name
+      // (Assistant.defaultModelName); Assistant.modelId stays null unless
+      // set elsewhere. Resolve modelId first, then the display name, so a
+      // chat block honors the assistant's configured default model.
       final resolved = _resolveAssistantModel(
-        assistant.modelId,
+        assistant.modelId ?? assistant.defaultModelName,
         entriesState,
       );
       if (resolved != null) {
@@ -259,20 +263,28 @@ class ChatAdapter {
 
   /// Resolves an assistant's bound model (its `modelId`) to its
   /// (config, model) pair within the LLM provider entries.
+  ///
+  /// Matches by modelId first, then by the model's display name
+  /// (`name | providerName`). The assistant editor stores the default
+  /// model as its DISPLAY name ([Assistant.defaultModelName]), while
+  /// `Assistant.modelId` stays null unless set elsewhere — matching on
+  /// the display name is what lets a chat block honor the assistant's
+  /// configured default model without the global chat-page selection.
   (ProviderConfigItem, ModelConfig)? _resolveAssistantModel(
-    String? modelId,
+    String? modelRef,
     ProviderEntriesState entriesState,
   ) {
-    if (modelId == null || modelId.isEmpty) return null;
+    if (modelRef == null || modelRef.isEmpty) return null;
     final llmEntry =
         entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
     if (llmEntry == null) return null;
     for (final config in llmEntry.configs) {
       if (config.host.isEmpty || config.key.isEmpty) continue;
       for (final model in config.models) {
-        if (model.modelId == modelId) {
-          return (config, model);
-        }
+        if (model.modelId == modelRef) return (config, model);
+        final displayName =
+            '${model.name.isNotEmpty ? model.name : model.modelId} | ${config.providerName}';
+        if (displayName == modelRef) return (config, model);
       }
     }
     return null;
