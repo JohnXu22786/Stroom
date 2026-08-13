@@ -25,6 +25,8 @@ class TextRecord
   @override
   final DateTime createdAt;
   @override
+  final DateTime modifiedAt; // 内容最后修改时间（未修改时等于 createdAt）
+  @override
   final int size; // 文件大小（字节）
   @override
   final String folder; // 文件夹路径（空字符串表示根目录）
@@ -36,10 +38,12 @@ class TextRecord
     required this.hash,
     this.format = 'txt',
     required this.createdAt,
+    DateTime? modifiedAt,
     required this.size,
     this.folder = '',
     this.textLength = 0,
-  }) : id = id ?? 'txt_${const Uuid().v4()}';
+  })  : modifiedAt = modifiedAt ?? createdAt,
+        id = id ?? 'txt_${const Uuid().v4()}';
 
   /// 实体文件存储名
   String get storageFileName => '$hash.txt';
@@ -52,23 +56,31 @@ class TextRecord
         'hash': hash,
         'format': format,
         'createdAt': createdAt.toIso8601String(),
+        'modifiedAt': modifiedAt.toIso8601String(),
         'size': size,
         'folder': folder,
         'textLength': textLength,
       };
 
-  factory TextRecord.fromMap(Map<String, dynamic> map) => TextRecord(
-        id: map['id'] as String?,
-        name: map['name'] as String? ?? '',
-        hash: map['hash'] as String? ?? '',
-        format: map['format'] as String? ?? 'txt',
-        createdAt: map['createdAt'] != null
-            ? DateTime.parse(map['createdAt'] as String)
-            : DateTime.now(),
-        size: (map['size'] as num?)?.toInt() ?? 0,
-        folder: map['folder'] as String? ?? '',
-        textLength: (map['textLength'] as num?)?.toInt() ?? 0,
-      );
+  factory TextRecord.fromMap(Map<String, dynamic> map) {
+    final createdAt = map['createdAt'] != null
+        ? DateTime.parse(map['createdAt'] as String)
+        : DateTime.now();
+    return TextRecord(
+      id: map['id'] as String?,
+      name: map['name'] as String? ?? '',
+      hash: map['hash'] as String? ?? '',
+      format: map['format'] as String? ?? 'txt',
+      createdAt: createdAt,
+      // 旧记录没有 modifiedAt：回退为 createdAt（向后兼容）
+      modifiedAt: map['modifiedAt'] != null
+          ? DateTime.parse(map['modifiedAt'] as String)
+          : createdAt,
+      size: (map['size'] as num?)?.toInt() ?? 0,
+      folder: map['folder'] as String? ?? '',
+      textLength: (map['textLength'] as num?)?.toInt() ?? 0,
+    );
+  }
 
   @override
   TextRecord copyWithName(String name) => TextRecord(
@@ -77,6 +89,7 @@ class TextRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt,
         size: size,
         folder: folder,
         textLength: textLength,
@@ -89,6 +102,7 @@ class TextRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt,
         size: size,
         folder: folder,
         textLength: textLength,
@@ -101,6 +115,7 @@ class TextRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt,
         size: size,
         folder: folder,
         textLength: textLength,
@@ -111,6 +126,7 @@ class TextRecord
     String? folder,
     int? size,
     int? textLength,
+    DateTime? modifiedAt,
   }) =>
       TextRecord(
         id: id,
@@ -118,6 +134,7 @@ class TextRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt ?? this.modifiedAt,
         size: size ?? this.size,
         folder: folder ?? this.folder,
         textLength: textLength ?? this.textLength,

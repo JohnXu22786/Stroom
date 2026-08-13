@@ -29,6 +29,8 @@ class AudioRecord
   @override
   final DateTime createdAt;
   @override
+  final DateTime modifiedAt; // 内容最后修改时间（未修改时等于 createdAt）
+  @override
   final int size; // 文件大小（字节）
   @override
   final String folder; // 文件夹路径（空字符串表示根目录）
@@ -41,11 +43,13 @@ class AudioRecord
     required this.hash,
     required this.format,
     required this.createdAt,
+    DateTime? modifiedAt,
     required this.size,
     this.folder = '',
     this.sourceText = '',
     this.duration = 0,
-  }) : id = id ?? 'rec_${const Uuid().v4()}';
+  })  : modifiedAt = modifiedAt ?? createdAt,
+        id = id ?? 'rec_${const Uuid().v4()}';
 
   /// 音频文件的存储文件名（基于哈希）
   String get storageFileName => '$hash.$format';
@@ -63,25 +67,33 @@ class AudioRecord
         'hash': hash,
         'format': format,
         'createdAt': createdAt.toIso8601String(),
+        'modifiedAt': modifiedAt.toIso8601String(),
         'size': size,
         'folder': folder,
         'sourceText': sourceText,
         'duration': duration,
       };
 
-  factory AudioRecord.fromMap(Map<String, dynamic> map) => AudioRecord(
-        id: (map['id'] as String?) ?? 'rec_${const Uuid().v4()}',
-        name: map['name'] as String? ?? '',
-        hash: map['hash'] as String? ?? '',
-        format: map['format'] as String? ?? 'wav',
-        createdAt: map['createdAt'] != null
-            ? DateTime.parse(map['createdAt'] as String)
-            : DateTime.now(),
-        size: (map['size'] as num?)?.toInt() ?? 0,
-        folder: map['folder'] as String? ?? '',
-        sourceText: map['sourceText'] as String? ?? '',
-        duration: (map['duration'] as num?)?.toInt() ?? 0,
-      );
+  factory AudioRecord.fromMap(Map<String, dynamic> map) {
+    final createdAt = map['createdAt'] != null
+        ? DateTime.parse(map['createdAt'] as String)
+        : DateTime.now();
+    return AudioRecord(
+      id: (map['id'] as String?) ?? 'rec_${const Uuid().v4()}',
+      name: map['name'] as String? ?? '',
+      hash: map['hash'] as String? ?? '',
+      format: map['format'] as String? ?? 'wav',
+      createdAt: createdAt,
+      // 旧记录没有 modifiedAt：回退为 createdAt（向后兼容）
+      modifiedAt: map['modifiedAt'] != null
+          ? DateTime.parse(map['modifiedAt'] as String)
+          : createdAt,
+      size: (map['size'] as num?)?.toInt() ?? 0,
+      folder: map['folder'] as String? ?? '',
+      sourceText: map['sourceText'] as String? ?? '',
+      duration: (map['duration'] as num?)?.toInt() ?? 0,
+    );
+  }
 
   @override
   AudioRecord copyWithName(String name) => AudioRecord(
@@ -90,6 +102,7 @@ class AudioRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt,
         size: size,
         folder: folder,
         sourceText: sourceText,
@@ -103,6 +116,7 @@ class AudioRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt,
         size: size,
         folder: folder,
         sourceText: sourceText,
@@ -115,6 +129,7 @@ class AudioRecord
     String? sourceText,
     int? size,
     int? duration,
+    DateTime? modifiedAt,
   }) =>
       AudioRecord(
         id: id,
@@ -122,6 +137,7 @@ class AudioRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt ?? this.modifiedAt,
         size: size ?? this.size,
         duration: duration ?? this.duration,
         folder: folder ?? this.folder,

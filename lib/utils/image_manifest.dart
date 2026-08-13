@@ -24,6 +24,8 @@ class ImageRecord
   @override
   final DateTime createdAt;
   @override
+  final DateTime modifiedAt; // 内容最后修改时间（未修改时等于 createdAt）
+  @override
   final int size; // 文件大小（字节）
   @override
   final String folder; // 文件夹路径（空字符串表示根目录）
@@ -34,9 +36,11 @@ class ImageRecord
     required this.hash,
     required this.format,
     required this.createdAt,
+    DateTime? modifiedAt,
     required this.size,
     this.folder = '',
-  }) : id = id ?? 'img_${const Uuid().v4()}';
+  })  : modifiedAt = modifiedAt ?? createdAt,
+        id = id ?? 'img_${const Uuid().v4()}';
 
   /// 实体文件存储名
   String get storageFileName => '$hash.$format';
@@ -49,21 +53,29 @@ class ImageRecord
         'hash': hash,
         'format': format,
         'createdAt': createdAt.toIso8601String(),
+        'modifiedAt': modifiedAt.toIso8601String(),
         'size': size,
         'folder': folder,
       };
 
-  factory ImageRecord.fromMap(Map<String, dynamic> map) => ImageRecord(
-        id: map['id'] as String?,
-        name: map['name'] as String? ?? '',
-        hash: map['hash'] as String? ?? '',
-        format: map['format'] as String? ?? 'jpg',
-        createdAt: map['createdAt'] != null
-            ? DateTime.parse(map['createdAt'] as String)
-            : DateTime.now(),
-        size: (map['size'] as num?)?.toInt() ?? 0,
-        folder: map['folder'] as String? ?? '',
-      );
+  factory ImageRecord.fromMap(Map<String, dynamic> map) {
+    final createdAt = map['createdAt'] != null
+        ? DateTime.parse(map['createdAt'] as String)
+        : DateTime.now();
+    return ImageRecord(
+      id: map['id'] as String?,
+      name: map['name'] as String? ?? '',
+      hash: map['hash'] as String? ?? '',
+      format: map['format'] as String? ?? 'jpg',
+      createdAt: createdAt,
+      // 旧记录没有 modifiedAt：回退为 createdAt（向后兼容）
+      modifiedAt: map['modifiedAt'] != null
+          ? DateTime.parse(map['modifiedAt'] as String)
+          : createdAt,
+      size: (map['size'] as num?)?.toInt() ?? 0,
+      folder: map['folder'] as String? ?? '',
+    );
+  }
 
   @override
   ImageRecord copyWithName(String name) => ImageRecord(
@@ -72,6 +84,7 @@ class ImageRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt,
         size: size,
         folder: folder,
       );
@@ -83,6 +96,7 @@ class ImageRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt,
         size: size,
         folder: folder,
       );
@@ -91,6 +105,7 @@ class ImageRecord
     String? name,
     String? folder,
     int? size,
+    DateTime? modifiedAt,
   }) =>
       ImageRecord(
         id: id,
@@ -98,6 +113,7 @@ class ImageRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt ?? this.modifiedAt,
         size: size ?? this.size,
         folder: folder ?? this.folder,
       );

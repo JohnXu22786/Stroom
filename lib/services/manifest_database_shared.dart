@@ -51,6 +51,7 @@ class ManifestTables {
 /// Dart camelCase -> DB snake_case column name mapping.
 const Map<String, String> camelToSnake = {
   'createdAt': 'created_at',
+  'modifiedAt': 'modified_at',
   'sourceText': 'source_text',
   'textLength': 'text_length',
 };
@@ -58,9 +59,13 @@ const Map<String, String> camelToSnake = {
 /// DB snake_case -> Dart camelCase column name mapping.
 const Map<String, String> snakeToCamel = {
   'created_at': 'createdAt',
+  'modified_at': 'modifiedAt',
   'source_text': 'sourceText',
   'text_length': 'textLength',
 };
+
+/// 存储为 epoch 毫秒的日期时间列（写入时字符串 → 整数，读取时反向）。
+const Set<String> _epochTimeColumns = {'created_at', 'modified_at'};
 
 /// Convert a record Map (camelCase keys) to DB row format (snake_case).
 Map<String, dynamic> recordToDbRow(Map<String, dynamic> record) {
@@ -68,7 +73,7 @@ Map<String, dynamic> recordToDbRow(Map<String, dynamic> record) {
   for (final entry in record.entries) {
     final dbKey = camelToSnake[entry.key] ?? entry.key;
     var value = entry.value;
-    if (dbKey == 'created_at' && value is String) {
+    if (_epochTimeColumns.contains(dbKey) && value is String) {
       value = DateTime.parse(value).millisecondsSinceEpoch;
     }
     row[dbKey] = value;
@@ -82,7 +87,7 @@ Map<String, dynamic> dbRowToRecord(Map<String, dynamic> row) {
   for (final entry in row.entries) {
     final recordKey = snakeToCamel[entry.key] ?? entry.key;
     var value = entry.value;
-    if (entry.key == 'created_at' && value is int) {
+    if (_epochTimeColumns.contains(entry.key) && value is int) {
       value = DateTime.fromMillisecondsSinceEpoch(value).toIso8601String();
     }
     record[recordKey] = value;

@@ -660,17 +660,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     // Sort records
     final sortedRecords = List<VideoRecord>.from(records);
     sortedRecords.sort((a, b) {
-      int Function(VideoRecord, VideoRecord) getCmp;
-      switch (sortConfig.field) {
-        case SortField.createdAt:
-          getCmp = (x, y) => x.createdAt.compareTo(y.createdAt);
-        case SortField.name:
-          getCmp =
-              (x, y) => x.name.toLowerCase().compareTo(y.name.toLowerCase());
-        case SortField.size:
-          getCmp = (x, y) => x.size.compareTo(y.size);
-      }
-      final cmp = getCmp(a, b);
+      final cmp = compareFileRecords(a, b, sortConfig.field);
       return sortConfig.order == SortOrder.descending ? -cmp : cmp;
     });
 

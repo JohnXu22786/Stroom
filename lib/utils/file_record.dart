@@ -5,6 +5,9 @@ abstract class FileRecord {
   String get name;
   String get format;
   DateTime get createdAt;
+
+  /// 内容最后修改时间（内容未修改过的记录等于 [createdAt]）
+  DateTime get modifiedAt;
   int get size;
   String get folder;
 }

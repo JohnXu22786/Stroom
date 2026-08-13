@@ -1,4 +1,5 @@
 import 'manifest_bridge.dart';
+import 'natural_sort.dart';
 import 'sort_config.dart';
 
 // ====================================================================
@@ -236,6 +237,9 @@ class BatchRenameItem {
   /// 文件所在文件夹路径 / 文件夹的父路径
   final String folder;
   final DateTime? createdAt;
+
+  /// 内容最后修改时间（与文件记录一致；文件夹为 null）
+  final DateTime? modifiedAt;
   final int size;
 
   const BatchRenameItem({
@@ -245,6 +249,7 @@ class BatchRenameItem {
     this.format = '',
     this.folder = '',
     this.createdAt,
+    this.modifiedAt,
     this.size = 0,
   });
 
@@ -396,24 +401,28 @@ List<BatchRenameItem> _sortItems(
   List<BatchRenameItem> items,
   BatchRenameConfig config,
 ) {
-  int nameCmp(BatchRenameItem a, BatchRenameItem b) {
-    final c = a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    return c != 0 ? c : a.name.compareTo(b.name);
-  }
+  int nameCmp(BatchRenameItem a, BatchRenameItem b) =>
+      compareNatural(a.name, b.name);
 
   int fieldCmp(BatchRenameItem a, BatchRenameItem b) {
     int c;
     switch (config.sortField) {
       case SortField.name:
         return nameCmp(a, b);
-      case SortField.createdAt:
+      case SortField.createdAt || SortField.modifiedAt:
         // 文件夹无时间，始终按名称排序（组内单独排序，不会混入）
-        final at = a.createdAt;
-        final bt = b.createdAt;
+        final at = config.sortField == SortField.createdAt
+            ? a.createdAt
+            : a.modifiedAt;
+        final bt = config.sortField == SortField.createdAt
+            ? b.createdAt
+            : b.modifiedAt;
         if (at == null || bt == null) return nameCmp(a, b);
         c = at.compareTo(bt);
+        break;
       case SortField.size:
         c = a.size.compareTo(b.size);
+        break;
     }
     // 并列时用名称兜底，保证排序与编号结果稳定
     return c != 0 ? c : nameCmp(a, b);

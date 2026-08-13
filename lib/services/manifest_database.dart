@@ -68,7 +68,7 @@ class ManifestDatabase {
     final dbPath = p.join(dir.path, 'stroom_manifest.db');
     final db = await openDatabase(
       dbPath,
-      version: 4,
+      version: 5,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE IF NOT EXISTS image_records (
@@ -77,6 +77,7 @@ class ManifestDatabase {
             hash TEXT NOT NULL,
             format TEXT NOT NULL DEFAULT 'jpg',
             created_at INTEGER NOT NULL,
+            modified_at INTEGER NOT NULL DEFAULT 0,
             size INTEGER NOT NULL DEFAULT 0,
             folder TEXT NOT NULL DEFAULT ''
           )
@@ -88,6 +89,7 @@ class ManifestDatabase {
             hash TEXT NOT NULL,
             format TEXT NOT NULL DEFAULT 'wav',
             created_at INTEGER NOT NULL,
+            modified_at INTEGER NOT NULL DEFAULT 0,
             size INTEGER NOT NULL DEFAULT 0,
             folder TEXT NOT NULL DEFAULT '',
             source_text TEXT NOT NULL DEFAULT '',
@@ -101,6 +103,7 @@ class ManifestDatabase {
             hash TEXT NOT NULL,
             format TEXT NOT NULL DEFAULT 'mp4',
             created_at INTEGER NOT NULL,
+            modified_at INTEGER NOT NULL DEFAULT 0,
             size INTEGER NOT NULL DEFAULT 0,
             folder TEXT NOT NULL DEFAULT '',
             duration INTEGER NOT NULL DEFAULT 0
@@ -113,6 +116,7 @@ class ManifestDatabase {
             hash TEXT NOT NULL,
             format TEXT NOT NULL DEFAULT 'txt',
             created_at INTEGER NOT NULL,
+            modified_at INTEGER NOT NULL DEFAULT 0,
             size INTEGER NOT NULL DEFAULT 0,
             folder TEXT NOT NULL DEFAULT '',
             text_length INTEGER NOT NULL DEFAULT 0
@@ -232,6 +236,48 @@ class ManifestDatabase {
                 '_initDatabase v4: DROP TABLE ${ManifestTables.folders} failed');
           }
         }
+        if (oldVersion < 5) {
+          // V5: 为四类记录表增加修改时间列 modified_at。
+          // 旧记录没有修改时间 → 回填为 created_at（内容从未被修改过）。
+          // 幂等且自愈：列已存在则跳过 ALTER；回填 UPDATE 只处理 0 值，
+          // 重复执行（含上次失败后的重试）都是安全空操作。
+          for (final table in const [
+            ManifestTables.imageRecords,
+            ManifestTables.audioRecords,
+            ManifestTables.videoRecords,
+            ManifestTables.textRecords,
+          ]) {
+            var hasColumn = false;
+            try {
+              final cols = await db.rawQuery('PRAGMA table_info($table)');
+              hasColumn = cols.any((c) => c['name'] == 'modified_at');
+            } catch (e) {
+              await AppLogService.error('ManifestDatabase',
+                  '_initDatabase v5: table_info failed for $table', e);
+              continue;
+            }
+            if (!hasColumn) {
+              try {
+                await db.execute(
+                  'ALTER TABLE $table ADD COLUMN modified_at INTEGER NOT NULL DEFAULT 0',
+                );
+              } catch (e) {
+                // 列添加失败时记录真实原因；不继续回填（后续读写会显式报错）
+                await AppLogService.error('ManifestDatabase',
+                    '_initDatabase v5: ADD COLUMN modified_at failed for $table', e);
+                continue;
+              }
+            }
+            try {
+              await db.execute(
+                'UPDATE $table SET modified_at = created_at WHERE modified_at = 0',
+              );
+            } catch (e) {
+              await AppLogService.error('ManifestDatabase',
+                  '_initDatabase v5: backfill modified_at failed for $table', e);
+            }
+          }
+        }
       },
     );
     await _migrateOldVideoRecords(db);
@@ -275,6 +321,10 @@ class ManifestDatabase {
           'hash': row['hash'],
           'format': row['format'],
           'created_at': row['created_at'],
+          // 旧音频记录在 v5 回填后 modified_at == created_at；
+          // 列缺失时（极端场景）同样回退为 created_at，避免读到
+          // 列默认值 0（1970-01-01）
+          'modified_at': row['modified_at'] ?? row['created_at'],
           'size': row['size'],
           'folder': row['folder'],
           'duration': row['duration'],

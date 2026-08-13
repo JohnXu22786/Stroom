@@ -22,6 +22,7 @@ BatchRenameItem file(
   String format = 'txt',
   String folder = '',
   DateTime? createdAt,
+  DateTime? modifiedAt,
   int size = 0,
 }) =>
     BatchRenameItem(
@@ -31,6 +32,7 @@ BatchRenameItem file(
       format: format,
       folder: folder,
       createdAt: createdAt,
+      modifiedAt: modifiedAt,
       size: size,
     );
 
@@ -108,6 +110,48 @@ void main() {
       );
       expect(p.results.map((r) => r.item.id).toList(), ['b', 'c', 'a']);
       expect(renamedBases(p), ['1_y', '2_z', '3_x']);
+    });
+
+    test('按修改时间升序编号', () {
+      final p = plan(
+        [
+          file('a', 'x',
+              createdAt: DateTime(2024, 1, 1),
+              modifiedAt: DateTime(2024, 1, 3)),
+          file('b', 'y',
+              createdAt: DateTime(2024, 1, 2),
+              modifiedAt: DateTime(2024, 1, 1)),
+          file('c', 'z',
+              createdAt: DateTime(2024, 1, 3),
+              modifiedAt: DateTime(2024, 1, 2)),
+        ],
+        config: const BatchRenameConfig(
+          sortField: SortField.modifiedAt,
+          numbering: BatchNumberOp(enabled: true),
+        ),
+      );
+      expect(p.results.map((r) => r.item.id).toList(), ['b', 'c', 'a']);
+      expect(renamedBases(p), ['1_y', '2_z', '3_x']);
+    });
+
+    test('按修改时间降序编号', () {
+      final p = plan(
+        [
+          file('a', 'x',
+              createdAt: DateTime(2024, 1, 1),
+              modifiedAt: DateTime(2024, 1, 3)),
+          file('b', 'y',
+              createdAt: DateTime(2024, 1, 2),
+              modifiedAt: DateTime(2024, 1, 1)),
+        ],
+        config: const BatchRenameConfig(
+          sortField: SortField.modifiedAt,
+          sortOrder: SortOrder.descending,
+          numbering: BatchNumberOp(enabled: true),
+        ),
+      );
+      expect(p.results.map((r) => r.item.id).toList(), ['a', 'b']);
+      expect(renamedBases(p), ['1_x', '2_y']);
     });
 
     test('按大小降序编号', () {
