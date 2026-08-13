@@ -80,6 +80,12 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       ref.read(videoRecordsProvider.notifier).loadRecords();
       ref.read(videoFolderListProvider.notifier).loadFolders();
     });
+    // 重新进入文件页（切换底部导航）时 filesRefreshSignalProvider 递增：
+    // 只重载数据，不重建页面，保留已打开的文件夹层级。
+    ref.listenManual(filesRefreshSignalProvider, (prev, next) {
+      ref.read(videoRecordsProvider.notifier).loadRecords();
+      ref.read(videoFolderListProvider.notifier).loadFolders();
+    });
   }
 
   @override

@@ -11,9 +11,6 @@ import 'video_gallery_page.dart';
 /// Tab order provider - allows reordering the tabs
 final fileTabOrderProvider = StateProvider<List<int>>((ref) => [0, 1, 2, 3]);
 
-/// Refresh signal provider - increment to trigger refresh of files sub-pages
-final filesRefreshSignalProvider = StateProvider<int>((ref) => 0);
-
 /// 文件页面 - 包含文本、图片、视频和音频四个标签页，支持标签排序
 /// 使用 IndexedStack 保持各标签页的导航状态（如已打开的文件夹）在切换时不变。
 class FilesPage extends ConsumerStatefulWidget {
@@ -70,7 +67,6 @@ class _FilesPageState extends ConsumerState<FilesPage>
   @override
   Widget build(BuildContext context) {
     final tabOrder = ref.watch(fileTabOrderProvider);
-    final refreshSignal = ref.watch(filesRefreshSignalProvider);
 
     return SafeArea(
       top: true,
@@ -100,30 +96,33 @@ class _FilesPageState extends ConsumerState<FilesPage>
               index: _tabController.index,
               children: tabOrder.map((i) {
                 final isActiveTab = tabOrder[_tabController.index] == i;
-                // 按键包含逻辑标签索引：标签排序后各页面的 State
-                // （如已打开的文件夹）按逻辑标签保留，而不是按位置重建
+                // 按键仅包含逻辑标签索引（不含 filesRefreshSignalProvider）：
+                // 标签排序后各页面的 State（如已打开的文件夹）按逻辑标签保留，
+                // 重新进入文件页时的自动刷新只重载数据（由各子页面监听
+                // filesRefreshSignalProvider 完成），不重建页面，因此
+                // 已打开的文件夹层级在切换底部导航后保持不变。
                 switch (i) {
                   case 0:
                     return TextStoragePage(
-                      key: ValueKey('text_storage_${i}_$refreshSignal'),
+                      key: ValueKey('text_storage_$i'),
                       tabIndex: 0,
                       isActiveTab: isActiveTab,
                     );
                   case 1:
                     return TtsPage(
-                      key: ValueKey('tts_${i}_$refreshSignal'),
+                      key: ValueKey('tts_$i'),
                       tabIndex: 1,
                       isActiveTab: isActiveTab,
                     );
                   case 2:
                     return GalleryPage(
-                      key: ValueKey('gallery_${i}_$refreshSignal'),
+                      key: ValueKey('gallery_$i'),
                       tabIndex: 2,
                       isActiveTab: isActiveTab,
                     );
                   case 3:
                     return VideoGalleryPage(
-                      key: ValueKey('video_gallery_${i}_$refreshSignal'),
+                      key: ValueKey('video_gallery_$i'),
                       tabIndex: 3,
                       isActiveTab: isActiveTab,
                     );

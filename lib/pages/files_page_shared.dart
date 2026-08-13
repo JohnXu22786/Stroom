@@ -1,5 +1,11 @@
 import 'package:flutter_riverpod/legacy.dart';
 
+/// Refresh signal provider - increment to trigger a data reload of the files
+/// sub-pages. The HomePage navigation increments this when the user enters
+/// the files page; each sub-page listens to it and reloads its records and
+/// folders without being recreated, so an open folder level is preserved.
+final filesRefreshSignalProvider = StateProvider<int>((ref) => 0);
+
 /// Provider that tracks the currently-active folder path in the Files page.
 /// Empty string means root folder.
 /// Each sub-page updates this via [FileManagerConfig.onCurrentFolderChanged].
