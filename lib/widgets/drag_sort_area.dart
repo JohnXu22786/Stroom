@@ -130,6 +130,11 @@ class _DragSortScope extends InheritedWidget {
 /// 胶囊视觉高度：纵向 padding 6*2 + 一行文字 + 边框。
 const double _kPillHeight = 34;
 
+/// 胶囊内删除按钮的固定宽度（图标 16 + 左右点击留白 4*2）。
+/// 按钮与文字同高（整行可点），位于胶囊右侧而非右上角小叉——
+/// 更容易点击，也不遮挡文字。
+const double _kPillDeleteWidth = 24;
+
 class _DragSortAreaState extends State<DragSortArea> {
   /// 正在拖拽的条目索引（null = 未拖拽）。
   int? _dragIndex;
@@ -186,9 +191,10 @@ class _DragSortAreaState extends State<DragSortArea> {
   int _computeInsertIndex(Offset local, int d) {
     final n = widget.values.length;
     if (n <= 1) return d;
-    final rects = _layoutRects([
-      for (var k = 0; k < n; k++) _widthOf(k),
-    ]);
+    final rects = _layoutRects(
+      [for (var k = 0; k < n; k++) _widthOf(k)],
+      [for (var k = 0; k < n; k++) _minWidthOf(k)],
+    );
     var best = d;
     var bestDist = double.infinity;
     for (var k = 0; k < n; k++) {
@@ -215,17 +221,20 @@ class _DragSortAreaState extends State<DragSortArea> {
   List<Rect> _layoutPreview(int t, int d) {
     final n = widget.values.length;
     final widths = <double>[];
+    final minWidths = <double>[];
     for (var pos = 0; pos < n; pos++) {
       if (pos == t) {
         widths.add(_widthOf(d));
+        minWidths.add(_minWidthOf(d));
         continue;
       }
       // 该位置在「除被拖项外」序列中的索引 → 原始索引
       final kPrime = pos < t ? pos : pos - 1;
       final k = kPrime < d ? kPrime : kPrime + 1;
       widths.add(_widthOf(k));
+      minWidths.add(_minWidthOf(k));
     }
-    return _layoutRects(widths);
+    return _layoutRects(widths, minWidths);
   }
 
   /// 原始索引 k（非被拖项）在预览布局中的位置。
@@ -234,13 +243,17 @@ class _DragSortAreaState extends State<DragSortArea> {
     return kPrime < t ? kPrime : kPrime + 1;
   }
 
-  List<Rect> _layoutRects(List<double> widths) {
+  List<Rect> _layoutRects(List<double> widths, [List<double> minWidths = const []]) {
     final rects = <Rect>[];
     var x = 0.0, y = 0.0, rowBottom = 0.0;
     final itemHeight = widget.wrap ? _kPillHeight : widget.rowExtent;
-    for (final w0 in widths) {
-      var w = w0;
+    for (var i = 0; i < widths.length; i++) {
+      var w = widths[i];
       if (w > _maxWidth) w = _maxWidth;
+      // 可删除胶囊不能低于其最小宽度（padding + 边框 + 固定 24px 按钮），
+      // 否则内部 Row 溢出抛异常。父级过窄时轻微超出布局宽度（Stack
+      // clipBehavior 为 none，可正常绘制）。
+      if (i < minWidths.length && w < minWidths[i]) w = minWidths[i];
       if (x + w > _maxWidth && x > 0) {
         x = 0;
         y = rowBottom + 8;
@@ -250,6 +263,15 @@ class _DragSortAreaState extends State<DragSortArea> {
       rowBottom = math.max(rowBottom, y + itemHeight);
     }
     return rects;
+  }
+
+  /// 可删除胶囊的最小宽度（水平 padding 20 + 边框 + 删除按钮 24）。
+  double _minWidthOf(int k) {
+    if (!widget.wrap) return 0;
+    final value = widget.values[k];
+    if (!(widget.deletable?.call(value) ?? false)) return 0;
+    final selected = widget.selected?.call(value) ?? false;
+    return 20 + (selected ? 3.0 : 2.0) + _kPillDeleteWidth;
   }
 
   double _widthOf(int k) {
@@ -266,9 +288,19 @@ class _DragSortAreaState extends State<DragSortArea> {
       ),
       maxLines: 1,
       textDirection: TextDirection.ltr,
+      // 跟随系统字体缩放：否则放大字体下文字比预测宽度宽，
+      // 胶囊提前省略号、拖拽幽灵与槽位宽度不符。
+      textScaler: MediaQuery.textScalerOf(context),
     )..layout();
-    // 水平 padding 12*2 + 边框 1*2
-    return painter.width + 24 + 2;
+    // 水平 padding（可删除时右侧 8）+ 边框（选中 1.5*2）+ 删除按钮宽度。
+    // 边框必须与 _pillVisual 的 Border.all 一致，否则空值 + 删除按钮的
+    // 胶囊会横向溢出 1px。
+    final border = selected ? 3.0 : 2.0;
+    final deletable = widget.deletable?.call(value) ?? false;
+    return painter.width +
+        (deletable ? 20 : 24) +
+        border +
+        (deletable ? _kPillDeleteWidth : 0);
   }
 
   bool get _uniqueValues =>
@@ -323,8 +355,19 @@ class _DragSortAreaState extends State<DragSortArea> {
 
   Widget _pillVisual(String value, ColorScheme cs) {
     final selected = widget.selected?.call(value) ?? false;
+    final deletable = widget.deletable?.call(value) ?? false;
+    final text = Text(
+      value,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+        color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+      ),
+    );
     final chip = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: EdgeInsets.fromLTRB(12, 6, deletable ? 8 : 12, 6),
       decoration: BoxDecoration(
         // 与聊天推理面板的 OptionChip 一致：选中 = 主色淡底 + 主色边框
         color: selected ? cs.primaryContainer : Colors.transparent,
@@ -334,40 +377,30 @@ class _DragSortAreaState extends State<DragSortArea> {
           width: selected ? 1.5 : 1,
         ),
       ),
-      child: Text(
-        value,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-          color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(child: text),
+          if (deletable) _deleteControl(value, cs),
+        ],
       ),
     );
-    final deletable = widget.deletable?.call(value) ?? false;
-    if (!deletable) return chip;
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        chip,
-        Positioned(
-          top: -6,
-          right: -6,
-          child: GestureDetector(
-            onTap:
-                widget.onDelete == null ? null : () => widget.onDelete!(value),
-            child: Container(
-              decoration: BoxDecoration(
-                color: cs.errorContainer,
-                shape: BoxShape.circle,
-              ),
-              padding: const EdgeInsets.all(2),
-              child: Icon(Icons.close, size: 12, color: cs.onErrorContainer),
-            ),
-          ),
-        ),
-      ],
+    return chip;
+  }
+
+  /// 胶囊右侧的删除按钮：与文字标签同一行、等高（整行高度都可点），
+  /// 取代旧版右上角小叉（遮挡文字且难点）。
+  Widget _deleteControl(String value, ColorScheme cs) {
+    return GestureDetector(
+      onTap: widget.onDelete == null ? null : () => widget.onDelete!(value),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: _kPillDeleteWidth,
+        // 内容区高度 = 胶囊高 - 纵向 padding 12 - 选中边框 3（最紧情形）
+        height: _kPillHeight - 12 - 3,
+        alignment: Alignment.center,
+        child: Icon(Icons.close, size: 16, color: cs.onSurfaceVariant),
+      ),
     );
   }
 
@@ -434,9 +467,10 @@ class _DragSortAreaState extends State<DragSortArea> {
               !widget.wrap ? Opacity(opacity: 0.45, child: _item(d)) : _item(d),
             ));
           } else {
-            final rects = _layoutRects([
-              for (var k = 0; k < n; k++) _widthOf(k),
-            ]);
+            final rects = _layoutRects(
+              [for (var k = 0; k < n; k++) _widthOf(k)],
+              [for (var k = 0; k < n; k++) _minWidthOf(k)],
+            );
             for (var k = 0; k < n; k++) {
               final child = _item(k);
               entries.add((

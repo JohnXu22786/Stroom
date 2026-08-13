@@ -87,6 +87,99 @@ Widget _wrap(
 
 void main() {
   group('DragSortArea pills (wrap)', () {
+    testWidgets('deletable pills show an inline close button that deletes',
+        (tester) async {
+      final deleted = <String>[];
+      final taps = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 300,
+                child: DragSortArea(
+                  wrap: true,
+                  values: ['del-a', 'keep-b'],
+                  selected: (_) => false,
+                  deletable: (v) => v.startsWith('del'),
+                  onTap: taps.add,
+                  onDelete: deleted.add,
+                  onReorder: (_, __) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.close), findsOneWidget,
+          reason: '仅可删除的胶囊显示关闭按钮');
+
+      // 删除按钮与文字同一行、同一高度：图标中心 Y ≈ 文字中心 Y
+      // （不再是右上角小叉）
+      final textRect = tester.getRect(find.text('del-a'));
+      final closeCenter = tester.getCenter(find.byIcon(Icons.close));
+      expect(
+        (closeCenter.dy - textRect.center.dy).abs() < 4,
+        isTrue,
+        reason: '删除按钮应垂直居中于文字（与文字标签同一高度）',
+      );
+      // 按钮位于文字右侧，不遮挡文字
+      expect(closeCenter.dx > textRect.right, isTrue,
+          reason: '删除按钮应在文字右侧而非压在文字上');
+
+      // 文字完整显示（无省略号）：渲染宽度 == 文本自然宽度
+      final painter = TextPainter(
+        text: const TextSpan(text: 'del-a', style: TextStyle(fontSize: 13)),
+        maxLines: 1,
+        textDirection: TextDirection.ltr,
+        textScaler:
+            MediaQuery.textScalerOf(tester.element(find.text('del-a'))),
+      )..layout();
+      expect(textRect.width, closeTo(painter.width, 1.0),
+          reason: '删除按钮不应挤占文字宽度（Flexible 均分会截断文字）');
+
+      // 删除按钮保持固定 24×19 点击区
+      final control = find
+          .ancestor(
+            of: find.byIcon(Icons.close),
+            matching: find.byType(Container),
+          )
+          .first;
+      expect(tester.getSize(control), const Size(24, 19),
+          reason: '删除按钮应保持固定尺寸（整行可点）');
+
+      // 点击删除 → 仅触发 onDelete，不触发勾选（onTap）
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pump();
+      expect(deleted, ['del-a']);
+      expect(taps, isEmpty,
+          reason: '点删除按钮不应同时触发胶囊的勾选回调');
+    });
+
+    testWidgets('long-press starting on the delete button still drags',
+        (tester) async {
+      final reorders = <(int, int)>[];
+      await tester.pumpWidget(
+        _wrap(
+            values: ['del-a', 'b', 'c'],
+            onReorder: (f, t) => reorders.add((f, t))),
+      );
+      await tester.pumpAndSettle();
+
+      // 长按 del-a 胶囊内的删除按钮区域（图标中心），拖动到末尾
+      final closeIcon = find.byIcon(Icons.close);
+      final gesture = await tester.startGesture(tester.getCenter(closeIcon));
+      await tester.pump(const Duration(milliseconds: 600));
+      await gesture.moveBy(const Offset(250, 0));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(reorders, [(0, 2)],
+          reason: '从删除按钮区域长按也应启动整块拖拽排序');
+    });
+
     testWidgets('long-press dragging a pill to the end reorders it',
         (tester) async {
       final reorders = <(int, int)>[];

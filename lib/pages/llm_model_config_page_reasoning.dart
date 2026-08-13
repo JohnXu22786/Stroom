@@ -22,7 +22,7 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
       // 注册勾选块状态（新参数：空块，用户添加值后可见可勾选）
       _additionalBlockValues[param] = [];
       _additionalSelectedValues[param] = {};
-      _providerAdditionalValues[param] = {};
+      _providerAdditionalValues[param] = [];
     });
   }
 
@@ -194,16 +194,21 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     });
   }
 
-  /// 把附加参数勾选块同步到工作副本 options（勾选值按块顺序写入）。
-  /// string/number 生效；json 用大输入框；boolean 无参数值（清空
-  /// options，聊天面板提供开/关切换）。幂等，保存前与
+  /// 把附加参数勾选块同步到工作副本 options（勾选值按块顺序写入），
+  /// 完整块顺序写入 optionOrder（含未勾选的候选值，跨重启保留拖动/
+  /// 添加顺序）。string/number 生效；json 用大输入框；boolean 无参数值
+  /// （清空 options，聊天面板提供开/关切换）。幂等，保存前与
   /// _hasUnsavedChanges 比较前调用。
   void _syncAdditionalOptionsFromBlocks() {
     for (final p in _reasoningParams) {
       if (p.isReasoningToggle || p.isEffortParam) continue;
-      if (p.type == 'json') continue;
+      if (p.type == 'json') {
+        if (p.optionOrder.isNotEmpty) p.optionOrder = const [];
+        continue;
+      }
       if (p.type == 'boolean') {
-        if (p.options.isNotEmpty) p.options.clear();
+        if (p.options.isNotEmpty) p.options = const [];
+        if (p.optionOrder.isNotEmpty) p.optionOrder = const [];
         continue;
       }
       final blocks = _additionalBlockValues[p];
@@ -211,9 +216,10 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
       if (blocks == null || selected == null) continue;
       final synced = blocks.where((v) => selected.contains(v)).toList();
       if (jsonEncode(p.options) != jsonEncode(synced)) {
-        p.options
-          ..clear()
-          ..addAll(synced);
+        p.options = synced;
+      }
+      if (jsonEncode(p.optionOrder) != jsonEncode(blocks)) {
+        p.optionOrder = List.of(blocks);
       }
     }
   }
@@ -237,8 +243,9 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   void _moveCustomParamOptionTo(CustomParam param, int from, int to) {
     if (from == to) return;
     setState(() {
-      final options = param.options;
-      if (from < 0 ||
+      final options = _customParamBlockValues[param];
+      if (options == null ||
+          from < 0 ||
           from >= options.length ||
           to < 0 ||
           to >= options.length) {
@@ -280,23 +287,34 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     );
     if (value == null || value.isEmpty || !mounted) return;
     setState(() {
-      if (!param.options.contains(value)) {
-        param.options.add(value);
+      final blocks = _customParamBlockValues[param];
+      if (blocks == null) return;
+      if (!blocks.contains(value)) {
+        blocks.add(value);
         // 新选项默认勾选（照搬力度块：添加即选中）
         _customParamSelectedValues[param]?.add(value);
       }
     });
   }
 
+  /// 删除自定义参数选项块（供应商来源的块只能取消勾选，不能删除）。
+  void _removeCustomParamOption(CustomParam param, String value) {
+    setState(() {
+      _customParamBlockValues[param]?.remove(value);
+      _customParamSelectedValues[param]?.remove(value);
+    });
+  }
+
   /// 自定义参数选项值区：胶囊块（与推理力度同款——点击勾选高亮、
-  /// 长按拖拽排序、右上角删除；默认全选）。拖拽有目标槽位反馈与
+  /// 长按拖拽排序、右侧删除；默认全选）。拖拽有目标槽位反馈与
   /// 让位动画，松手提交排序。
   Widget _buildCustomParamOptionBlocks(CustomParam param, ColorScheme cs) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '点击块选中/取消（选中的值将参与发送），长按块拖拽排序。',
+          '点击块选中/取消（选中的值将参与发送），长按块拖拽排序。'
+          '供应商的值不可删除，取消勾选即可隐藏。',
           style: TextStyle(
             fontSize: 12,
             color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -305,17 +323,13 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
         const SizedBox(height: 8),
         DragSortArea(
           wrap: true,
-          values: param.options,
+          values: _customParamBlockValues[param] ?? const <String>[],
           selected: (v) =>
               _customParamSelectedValues[param]?.contains(v) ?? false,
-          deletable: (_) => true,
+          deletable: (v) =>
+              !(_providerCustomParamValues[param]?.contains(v) ?? false),
           onTap: (v) => _toggleCustomParamOption(param, v),
-          onDelete: (v) {
-            setState(() {
-              param.options.remove(v);
-              _customParamSelectedValues[param]?.remove(v);
-            });
-          },
+          onDelete: (v) => _removeCustomParamOption(param, v),
           onReorder: (from, to) => _moveCustomParamOptionTo(param, from, to),
         ),
         const SizedBox(height: 4),
@@ -328,24 +342,31 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     );
   }
 
-  /// 把自定义参数勾选块同步到工作副本 options（勾选值按原顺序写入；
-  /// 未勾选的选项不保存）。json 类型用默认值输入框；boolean 类型
-  /// 无参数值（清空 options）。幂等，保存前与 _hasUnsavedChanges
-  /// 比较前调用。
+  /// 把自定义参数勾选块同步到工作副本 options（勾选值按块顺序写入；
+  /// 未勾选的选项不保存），完整块顺序写入 optionOrder（含未勾选的
+  /// 候选值，跨重启保留拖动/添加顺序）。json 类型用默认值输入框；
+  /// boolean 类型无参数值（清空 options）。幂等，保存前与
+  /// _hasUnsavedChanges 比较前调用。
   void _syncCustomParamOptionsFromBlocks() {
     for (final p in _customParams) {
-      if (p.type == 'json') continue;
-      if (p.type == 'boolean') {
-        if (p.options.isNotEmpty) p.options.clear();
+      if (p.type == 'json') {
+        if (p.optionOrder.isNotEmpty) p.optionOrder = const [];
         continue;
       }
+      if (p.type == 'boolean') {
+        if (p.options.isNotEmpty) p.options = const [];
+        if (p.optionOrder.isNotEmpty) p.optionOrder = const [];
+        continue;
+      }
+      final blocks = _customParamBlockValues[p];
       final selected = _customParamSelectedValues[p];
-      if (selected == null) continue;
-      final synced = p.options.where((v) => selected.contains(v)).toList();
+      if (blocks == null || selected == null) continue;
+      if (jsonEncode(p.optionOrder) != jsonEncode(blocks)) {
+        p.optionOrder = List.of(blocks);
+      }
+      final synced = blocks.where((v) => selected.contains(v)).toList();
       if (jsonEncode(p.options) != jsonEncode(synced)) {
-        p.options
-          ..clear()
-          ..addAll(synced);
+        p.options = synced;
       }
     }
   }
@@ -366,22 +387,24 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
       param.offValue = snapshot.offValue;
       param.type = snapshot.type;
       param.enabled = snapshot.enabled;
-      param.options
-        ..clear()
-        ..addAll(snapshot.options);
+      // 赋值而非就地清空：sync 可能已把 options 替换为 const []（boolean
+      // 等无值类型），对不可变列表 clear() 会抛 UnsupportedError。
+      param.options = List<String>.from(snapshot.options);
+      param.optionOrder = List<String>.from(snapshot.optionOrder);
       if (param.isEffortParam) {
         _effortBlockValues = List.of(_initialBlockValues);
         _effortSelectedValues = {..._initialSelectedValues};
       } else if (!param.isReasoningToggle &&
           param.type != 'json' &&
           param.type != 'boolean') {
-        // 附加参数：还原勾选块状态
+        // 附加参数：还原勾选块状态（块顺序与打开时一致）
         final providerOptions = _providerAdditionalValues[param];
         if (providerOptions != null) {
-          _additionalBlockValues[param] = [
-            ...snapshot.options,
-            ...providerOptions.where((v) => !snapshot.options.contains(v)),
-          ];
+          _additionalBlockValues[param] = mergeOptionBlocks(
+            providerOptions: providerOptions,
+            savedOptions: snapshot.options,
+            savedOrder: snapshot.optionOrder,
+          );
           _additionalSelectedValues[param] = snapshot.options.isNotEmpty
               ? snapshot.options.toSet()
               : {...providerOptions};

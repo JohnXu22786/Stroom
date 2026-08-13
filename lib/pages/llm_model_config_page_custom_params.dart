@@ -14,8 +14,10 @@ extension _CustomParamsExt on _LlmModelConfigPageState {
     setState(() {
       final param = CustomParam(paramName: '', defaultValue: '');
       _customParams.insert(0, param);
-      // 注册勾选块状态（新参数：空勾选集合）
+      // 注册勾选块状态（新参数：空勾选集合 + 空块列表）
       _customParamSelectedValues[param] = {};
+      _customParamBlockValues[param] = [];
+      _providerCustomParamValues[param] = [];
       // Shift existing error keys by +1 since a new param was inserted at 0
       final newErrors = <int, String?>{};
       for (final entry in _jsonErrors.entries) {

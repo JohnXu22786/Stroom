@@ -280,25 +280,33 @@ extension _SaveExt on _LlmModelConfigPageState {
   }
 
   /// 把力度勾选块同步到力度参数工作副本：
-  /// 勾选的值按块顺序写入 [ReasoningParam.options]（全取消 = 空列表）。
+  /// 勾选的值按块顺序写入 [ReasoningParam.options]（全取消 = 空列表），
+  /// 完整块顺序写入 [ReasoningParam.optionOrder]（含未勾选的候选值，
+  /// 跨重启保留拖动/添加顺序）。
   /// 仅对 string/number 类型生效：json 类型的值由大输入框直接维护，
   /// boolean 类型无参数值（清空 options，聊天面板提供开/关切换）。
   /// 幂等，保存前与 _hasUnsavedChanges 比较前调用。
   void _syncEffortOptionsFromBlocks() {
     final effort = _effortReasoningParam;
     if (effort == null) return;
-    if (effort.type == 'json') return;
+    if (effort.type == 'json') {
+      if (effort.optionOrder.isNotEmpty) effort.optionOrder = const [];
+      return;
+    }
     if (effort.type == 'boolean') {
-      if (effort.options.isNotEmpty) effort.options.clear();
+      if (effort.options.isNotEmpty) effort.options = const [];
+      if (effort.optionOrder.isNotEmpty) effort.optionOrder = const [];
       return;
     }
     final selected = _effortBlockValues
         .where((v) => _effortSelectedValues.contains(v))
         .toList();
     if (jsonEncode(effort.options) != jsonEncode(selected)) {
-      effort.options
-        ..clear()
-        ..addAll(selected);
+      effort.options = selected;
+    }
+    final blockOrder = List.of(_effortBlockValues);
+    if (jsonEncode(effort.optionOrder) != jsonEncode(blockOrder)) {
+      effort.optionOrder = blockOrder;
     }
   }
 }

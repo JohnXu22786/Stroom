@@ -12,7 +12,10 @@ const _OmittedSentinel _kOmittedSentinelInstance = _OmittedSentinel();
 
 extension _ChatServiceParamsExt on ChatService {
   /// Returns the effective temperature considering assistant overrides.
-  /// Returns null when no temperature toggle is enabled (model or assistant).
+  /// Priority: assistant > model > provider（供应商级是兜底默认值，
+  /// 与 top_p 等参数的层级一致——此前供应商面板的温度开关保存后从未
+  /// 发送，属死配置）。Returns null when no temperature toggle is enabled
+  /// (assistant, model or provider).
   double? get _effectiveTemperature {
     // Assistant override takes priority when enabled
     if (_assistantSettings != null && _assistantSettings!.enableTemperature) {
@@ -26,12 +29,21 @@ extension _ChatServiceParamsExt on ChatService {
       final temperature = typeConfig?['temperature'];
       if (temperature is num) return temperature.toDouble();
     }
+    // Provider-level toggle check (兜底默认值)
+    final providerConfig = _providerConfig?.typeConfig;
+    final providerEnable =
+        providerConfig?['enableTemperature'] as bool? ?? false;
+    if (providerEnable) {
+      final providerTemperature = providerConfig?['temperature'];
+      if (providerTemperature is num) return providerTemperature.toDouble();
+    }
     // Neither toggle is on — return null so it's NOT sent in the request
     return null;
   }
 
   /// Returns the effective maxTokens considering assistant overrides.
-  /// Returns null when no max_tokens toggle is enabled (model or assistant).
+  /// Priority: assistant > model > provider. Returns null when no
+  /// max_tokens toggle is enabled (assistant, model or provider).
   int? get _effectiveMaxTokens {
     // Assistant override takes priority when enabled
     if (_assistantSettings != null && _assistantSettings!.enableMaxTokens) {
@@ -44,6 +56,14 @@ extension _ChatServiceParamsExt on ChatService {
       final value = (typeConfig!['maxTokens'] as num?)?.toInt() ??
           (typeConfig['context'] as num?)?.toInt();
       if (value != null) return value;
+    }
+    // Provider-level toggle check (兜底默认值；供应商无 context 概念)
+    final providerConfig = _providerConfig?.typeConfig;
+    final providerEnable =
+        providerConfig?['enableMaxTokens'] as bool? ?? false;
+    if (providerEnable) {
+      final providerMaxTokens = providerConfig?['maxTokens'];
+      if (providerMaxTokens is num) return providerMaxTokens.toInt();
     }
     // Neither toggle is on — return null so it's NOT sent in the request
     return null;

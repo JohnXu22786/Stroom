@@ -72,12 +72,21 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   /// 每个附加参数的勾选集合。
   final Map<ReasoningParam, Set<String>> _additionalSelectedValues = {};
 
-  /// 每个附加参数在供应商侧的选项值集合（删除按钮判定）。
-  final Map<ReasoningParam, Set<String>> _providerAdditionalValues = {};
+  /// 每个附加参数在供应商侧的选项值集合（删除按钮判定，顺序即供应商
+  /// 顺序，用于块顺序回退）。
+  final Map<ReasoningParam, List<String>> _providerAdditionalValues = {};
 
   /// 自定义参数（CustomParam）选项的勾选集合（照搬推理力度块交互，
   /// 默认全选；保存时 options = 勾选的选项）。
   final Map<CustomParam, Set<String>> _customParamSelectedValues = {};
+
+  /// 每个自定义参数的选项块列表（与力度/附加参数同款：块 = 候选值，
+  /// 勾选状态独立于列表；未勾选的块保持可见）。
+  final Map<CustomParam, List<String>> _customParamBlockValues = {};
+
+  /// 每个自定义参数在供应商侧的选项值（删除按钮判定，顺序即供应商
+  /// 顺序，用于块顺序回退）。
+  final Map<CustomParam, List<String>> _providerCustomParamValues = {};
 
   /// reset 版本号：每次还原参数时 +1，用于强制重建推理区输入框
   /// （TextFormField 的 internal state 不会跟随 initialValue 更新，
@@ -116,13 +125,17 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       if (_nameController.text.isNotEmpty) return true;
       if (_modelIdController.text.isNotEmpty) return true;
       if (_contextController.text.isNotEmpty) return true;
-      if (_customParams.any((p) => p.paramName.isNotEmpty)) return true;
       // 新模型 + 供应商参数：打开即显示供应商参数不算改动，与
       // merge(provider, []) 初始态比较（默认不选 → 力度 options 为空）。
       // 注意：merge 结果可能包含供应商的共享实例，归一化前必须拷贝，
       // 否则会把「默认不选」写回供应商配置（模型改动污染供应商）。
+      _syncCustomParamOptionsFromBlocks();
       _syncEffortOptionsFromBlocks();
       _syncAdditionalOptionsFromBlocks();
+      if (jsonEncode(_baselineCustomParams()) !=
+          jsonEncode(_customParams.map((p) => p.toMap()).toList())) {
+        return true;
+      }
       final initialReasoning = mergeReasoningParams(
         widget.provider?.reasoningParams ?? [],
         const [],
@@ -131,7 +144,12 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           .cast<ReasoningParam?>()
           .firstWhere((p) => p?.isEffortParam ?? false, orElse: () => null);
       if (initialEffort != null) {
-        initialEffort.options = [];
+        _normalizeBaselineEffort(initialEffort, const []);
+      }
+      for (final p in initialReasoning) {
+        if (!p.isReasoningToggle && !p.isEffortParam) {
+          _normalizeBaselineAdditional(p);
+        }
       }
       // 镜像 initState：名称式供应商力度参数（无选项）不参与比较
       _removeNameOnlyProviderEffort(initialReasoning);
@@ -220,22 +238,15 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // Custom params and reasoning params (simple check via serialization)
     // 用 jsonEncode 而非 toString 比较：List/Map 的 toString 不引用
     // 字符串，空选项 [''] 会与无选项 [] 混淆。
-    // 基线应用与 initState 相同的升级：string/number 的 defaultValue →
-    // 首选项；boolean 的 options 清空（否则旧数据打开即误报未保存）。
-    final originalCustom = m.customParams.map((p) {
-      final copy = p.copy();
-      if (copy.type == 'string' || copy.type == 'number') {
-        if (copy.options.isEmpty && copy.defaultValue.trim().isNotEmpty) {
-          copy.options.add(copy.defaultValue);
-          copy.defaultValue = '';
-        }
-      } else if (copy.type == 'boolean') {
-        copy.options.clear();
-      }
-      return copy.toMap();
-    }).toList();
-    final currentCustom = _customParams.map((p) => p.toMap()).toList();
-    if (jsonEncode(originalCustom) != jsonEncode(currentCustom)) return true;
+    // 基线 = 供应商+模型合并视图，应用与 initState 相同的升级与顺序
+    // 规范化：打开即显示供应商参数不算改动，勾选/顺序变化才会触发。
+    // 勾选块状态先同步到工作副本（块操作只改内存中的块列表/勾选集合，
+    // 不同步则比较看不到任何变化）。
+    _syncCustomParamOptionsFromBlocks();
+    if (jsonEncode(_baselineCustomParams()) !=
+        jsonEncode(_customParams.map((p) => p.toMap()).toList())) {
+      return true;
+    }
     // Reasoning params: 与「打开时的初始合并视图」比较——保存会全量写入
     // 工作副本，而打开时的工作副本 = merge(provider, model) 再应用力度
     // 遮蔽与默认勾选。两者相等说明用户未做任何修改（打开即显示供应商
@@ -243,7 +254,6 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // 力度勾选块先同步到工作副本，勾选/排序变化才能被检测到。
     _syncEffortOptionsFromBlocks();
     _syncAdditionalOptionsFromBlocks();
-    _syncCustomParamOptionsFromBlocks();
     // 归一化前拷贝合并结果：merged 中未被子模型覆盖的供应商参数是
     // 共享实例，直接改 options 会把模型的勾选状态写进供应商配置。
     final initialReasoning = _applyEffortShadowing(
@@ -254,22 +264,18 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       m.reasoningParams,
     ).map((p) => p.copy()).toList();
     // 应用初始勾选状态（默认不选语义）：基准的力度 options = 模型已
-    // 保存的 options（模型无力度参数时为空）——与 initState 的块勾选
-    // 初始值一致。boolean 类型的 options 清空（与 sync 一致）。
+    // 保存的 options 按块顺序归一化（模型无力度参数时为空）——与
+    // initState 的块勾选初始值一致。boolean 清空 options/order，json
+    // 保留 options（与 sync 一致）。
     final initialEffort = initialReasoning
         .cast<ReasoningParam?>()
         .firstWhere((p) => p?.isEffortParam ?? false, orElse: () => null);
     if (initialEffort != null) {
-      if (initialEffort.type == 'boolean') {
-        initialEffort.options.clear();
-      } else {
-        initialEffort.options =
-            List.of(findEffortParam(m.reasoningParams)?.options ?? const []);
-      }
+      _normalizeBaselineEffort(initialEffort, m.reasoningParams);
     }
     for (final p in initialReasoning) {
-      if (!p.isReasoningToggle && !p.isEffortParam && p.type == 'boolean') {
-        p.options.clear();
+      if (!p.isReasoningToggle && !p.isEffortParam) {
+        _normalizeBaselineAdditional(p);
       }
     }
     // 镜像 initState：名称式供应商力度参数（无选项）不参与比较
@@ -307,6 +313,116 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     return merged
         .where((p) => !p.isEffortParam || p.paramName == modelEffortName)
         .toList();
+  }
+
+  /// 归一化力度参数基线（未修改比较用）：options = 已保存勾选值按块
+  /// 顺序过滤，optionOrder = 块顺序——与 initState 的块列表同一算法，
+  /// 保证「打开即未修改」。boolean 清空 options/order；json 保留
+  /// options（值由大输入框维护）仅清空 order。
+  void _normalizeBaselineEffort(
+    ReasoningParam effort,
+    List<ReasoningParam> modelParams,
+  ) {
+    if (effort.type == 'boolean') {
+      effort.options = const [];
+      effort.optionOrder = const [];
+      return;
+    }
+    if (effort.type == 'json') {
+      effort.optionOrder = const [];
+      return;
+    }
+    final providerEffort =
+        findEffortParam(widget.provider?.reasoningParams ?? []);
+    final savedEffort = findEffortParam(modelParams);
+    final savedOptions = savedEffort?.options ?? const <String>[];
+    effort.optionOrder = mergeOptionBlocks(
+      providerOptions: providerEffort?.options ?? const [],
+      savedOptions: savedOptions,
+      savedOrder: savedEffort?.optionOrder ?? const [],
+    );
+    effort.options = selectedInBlockOrder(
+      blocks: effort.optionOrder,
+      savedOptions: savedOptions,
+    );
+  }
+
+  /// 归一化附加参数基线（string/number）：options = 已保存勾选值按块
+  /// 顺序过滤，optionOrder = 块顺序（与 initState 同一算法，保证旧数据
+  /// 保存顺序与供应商顺序不同时也不算未保存修改）。已保存值为空时
+  /// 镜像 initState 的「默认全选供应商值」语义（否则空值参数打开即
+  /// 误报未保存）。boolean 清空 options/order；json 保留 options 仅清空
+  /// order。
+  void _normalizeBaselineAdditional(ReasoningParam p) {
+    if (p.type == 'boolean') {
+      p.options = const [];
+      p.optionOrder = const [];
+      return;
+    }
+    if (p.type == 'json') {
+      p.optionOrder = const [];
+      return;
+    }
+    final providerParam = (widget.provider?.reasoningParams ?? const [])
+        .cast<ReasoningParam?>()
+        .firstWhere(
+          (pp) => pp?.paramName.trim() == p.paramName.trim(),
+          orElse: () => null,
+        );
+    final providerOptions =
+        List<String>.of(providerParam?.options ?? const []);
+    final savedOptions = List<String>.of(p.options);
+    p.optionOrder = mergeOptionBlocks(
+      providerOptions: providerOptions,
+      savedOptions: savedOptions,
+      savedOrder: p.optionOrder,
+    );
+    p.options = savedOptions.isNotEmpty
+        ? selectedInBlockOrder(blocks: p.optionOrder, savedOptions: savedOptions)
+        : p.optionOrder.where((v) => providerOptions.contains(v)).toList();
+  }
+
+  /// 自定义参数初始基线（未修改比较用）：供应商+模型合并视图，应用与
+  /// initState 相同的升级与顺序规范化。供应商参数继承显示不算改动；
+  /// 勾选/顺序变化才会触发「未保存」。
+  List<Map<String, dynamic>> _baselineCustomParams() {
+    final merged = mergeCustomParams(
+      widget.provider?.customParams ?? [],
+      widget.model?.customParams ?? [],
+    ).map((p) => p.copy()).toList();
+    final providerByName = {
+      for (final p in widget.provider?.customParams ?? [])
+        if (p.paramName.trim().isNotEmpty) p.paramName.trim(): p,
+    };
+    for (final p in merged) {
+      if (p.type == 'string' || p.type == 'number') {
+        if (p.options.isEmpty && p.defaultValue.trim().isNotEmpty) {
+          p.options.add(p.defaultValue);
+          p.defaultValue = '';
+        }
+        final providerOptions = List<String>.of(
+          providerByName[p.paramName.trim()]?.options ?? const [],
+        );
+        final savedOptions = List<String>.of(p.options);
+        p.optionOrder = mergeOptionBlocks(
+          providerOptions: providerOptions,
+          savedOptions: savedOptions,
+          savedOrder: p.optionOrder,
+        );
+        // 已保存值为空时镜像 initState 的「默认全选供应商值」语义
+        p.options = savedOptions.isNotEmpty
+            ? selectedInBlockOrder(
+                blocks: p.optionOrder, savedOptions: savedOptions)
+            : p.optionOrder.where((v) => providerOptions.contains(v)).toList();
+      } else if (p.type == 'boolean') {
+        p.options = const [];
+        p.optionOrder = const [];
+      } else {
+        // json：options 为值本身，保留；无块顺序
+        p.optionOrder = const [];
+      }
+    }
+    return merged.map((p) => p.toMap()).toList();
   }
 
   @override
@@ -354,7 +470,14 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     _overrideEndpointType = m?.endpointType != null;
     _endpointType = m?.endpointType ?? 'openai';
 
-    _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
+    // 自定义参数：合并视图工作副本（供应商参数 + 模型参数，同名时模型
+    // 参数覆盖供应商参数，与请求构建时的合并语义一致；照搬推理参数的
+    // 「继承视图」——供应商已配置的自定义参数直接显示在本页）。
+    // 无「继承/独立」标记：页面显示什么、保存就写入什么。
+    _customParams = mergeCustomParams(
+      widget.provider?.customParams ?? [],
+      m?.customParams ?? [],
+    ).map((p) => p.copy()).toList();
     // 旧数据升级：string/number 类型且仅有 defaultValue（无 options）时，
     // 把 defaultValue 作为第一个选项并清空 defaultValue（options 为权威，
     // 否则用户取消全部勾选后 defaultValue 仍会发送）。
@@ -371,11 +494,45 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     for (int i = 0; i < _customParams.length; i++) {
       _validateJsonField(i, _customParams[i]);
     }
-    // 自定义参数勾选块状态：默认全选（json 类型用默认值输入框，不参与）
+    // 自定义参数勾选块状态：默认全选（json 类型用默认值输入框，不参与）。
+    // 块顺序规范化：模型已保存的完整顺序（optionOrder，拖动/添加结果）
+    // 在前 + 供应商新增值追加；未保存过顺序时供应商顺序在前 + 模型独有
+    // 值——勾选状态不改变显示顺序（修复「选中值自动前置」）。供应商来源
+    // 的选项不可删除（只能取消勾选），模型独有选项带删除按钮。
+    // 块列表独立于 options（options = 已保存的勾选值，与力度/附加参数
+    // 同款），未勾选的块保持可见。
     _customParamSelectedValues.clear();
+    _customParamBlockValues.clear();
+    _providerCustomParamValues.clear();
+    final providerCustomByName = {
+      for (final p in widget.provider?.customParams ?? [])
+        if (p.paramName.trim().isNotEmpty) p.paramName.trim(): p,
+    };
     for (final p in _customParams) {
-      if (p.type == 'json') continue;
-      _customParamSelectedValues[p] = p.options.toSet();
+      if (p.type == 'json') {
+        p.optionOrder = const [];
+        continue;
+      }
+      if (p.type == 'boolean') {
+        p.options = const [];
+        p.optionOrder = const [];
+        continue;
+      }
+      final providerOptions = List<String>.of(
+        providerCustomByName[p.paramName.trim()]?.options ?? const [],
+      );
+      _providerCustomParamValues[p] = providerOptions;
+      // savedOptions = 已保存的勾选值（含旧数据 defaultValue 升级后的
+      // 首选项）——勾选默认值必须来自它，而不是模型原始字段
+      final savedOptions = List<String>.of(p.options);
+      p.optionOrder = mergeOptionBlocks(
+        providerOptions: providerOptions,
+        savedOptions: savedOptions,
+        savedOrder: p.optionOrder,
+      );
+      _customParamBlockValues[p] = List.of(p.optionOrder);
+      _customParamSelectedValues[p] =
+          savedOptions.isNotEmpty ? savedOptions.toSet() : {...providerOptions};
     }
     // Reasoning params: 合并视图工作副本（供应商参数 + 模型参数，
     // 同名时模型参数覆盖供应商参数，与请求构建时的合并语义一致）。
@@ -406,21 +563,19 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     }
 
     // 推理力度「勾选块」初始化：
-    // - 块顺序：模型已保存的顺序在前（模型有力度参数时），供应商
-    //   独有值追加——保证「打开即未修改」比较成立（工作副本与初始
-    //   合并视图一致）；
+    // - 块顺序：模型已保存的完整顺序（optionOrder）在前 + 供应商新增值
+    //   追加；未保存过顺序时供应商顺序在前 + 模型独有值——勾选状态不改
+    //   变显示顺序（修复「选中值自动前置」）；
     // - 勾选 = 模型已保存的 options；模型未保存过勾选（新建模型或
     //   编辑但模型无力度参数）时默认全不选，用户显式勾选想显示的值；
     // - 供应商来源判定用于删除按钮的显隐。
     _providerEffortValues = {...providerEffort?.options ?? []};
     final modelEffortValues = modelEffortParam?.options ?? [];
-    _effortBlockValues = modelEffortParam != null
-        ? [
-            ...modelEffortValues,
-            ..._providerEffortValues
-                .where((v) => !modelEffortValues.contains(v)),
-          ]
-        : [..._providerEffortValues];
+    _effortBlockValues = mergeOptionBlocks(
+      providerOptions: providerEffort?.options ?? const [],
+      savedOptions: modelEffortValues,
+      savedOrder: modelEffortParam?.optionOrder ?? const [],
+    );
     _effortSelectedValues =
         modelEffortParam != null ? modelEffortValues.toSet() : <String>{};
 
@@ -432,7 +587,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     _initialSelectedValues = {..._effortSelectedValues};
 
     // 附加参数「勾选块」初始化（string/number 类型）：
-    // - 块顺序：模型已保存的顺序在前，供应商独有值追加；
+    // - 块顺序：模型已保存的完整顺序（optionOrder）在前 + 供应商新增值
+    //   追加；未保存过顺序时供应商顺序在前 + 模型独有值（与力度参数
+    //   同款，勾选状态不改变显示顺序）；
     // - 勾选 = 模型已保存的 options；模型未保存过时默认全选供应商值
     //   （附加参数保持「选项默认有效」语义，与力度参数默认不选不同）；
     // - 供应商来源判定用于删除按钮的显隐。
@@ -446,15 +603,16 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     for (final p in _reasoningParams) {
       if (p.isReasoningToggle || p.isEffortParam) continue;
       if (p.type == 'json' || p.type == 'boolean') continue;
-      final providerOptions = <String>{
-        ...providerByName[p.paramName.trim()]?.options ?? const <String>[],
-      };
+      final providerOptions = List<String>.of(
+        providerByName[p.paramName.trim()]?.options ?? const <String>[],
+      );
       final modelOptions = p.options;
       _providerAdditionalValues[p] = providerOptions;
-      _additionalBlockValues[p] = [
-        ...modelOptions,
-        ...providerOptions.where((v) => !modelOptions.contains(v)),
-      ];
+      _additionalBlockValues[p] = mergeOptionBlocks(
+        providerOptions: providerOptions,
+        savedOptions: modelOptions,
+        savedOrder: p.optionOrder,
+      );
       _additionalSelectedValues[p] =
           modelOptions.isNotEmpty ? modelOptions.toSet() : {...providerOptions};
     }

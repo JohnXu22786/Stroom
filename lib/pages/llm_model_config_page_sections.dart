@@ -329,6 +329,12 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
           ),
         ],
       ),
+      const SizedBox(height: 4),
+      Text(
+        '供应商已配置的自定义参数会直接显示在本页，'
+        '每次打开都会同步供应商的最新值。',
+        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+      ),
       const SizedBox(height: 8),
 
       if (_customParams.isEmpty)
@@ -417,6 +423,10 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                                   if (v == 'string' || v == 'number') {
                                     _customParamSelectedValues.putIfAbsent(
                                         param, () => param.options.toSet());
+                                    _customParamBlockValues.putIfAbsent(
+                                        param, () => List.of(param.options));
+                                    _providerCustomParamValues.putIfAbsent(
+                                        param, () => const []);
                                     param.defaultValue = '';
                                   }
                                   _validateJsonField(i, param);
