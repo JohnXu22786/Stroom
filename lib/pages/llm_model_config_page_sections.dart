@@ -100,7 +100,9 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
         '您还可以通过底部按钮添加额外的推理参数。'
         '参数名支持点号嵌套（如 thinking.type 会展开为 {"thinking": {"type": "..."}}）。'
         '供应商已配置的推理参数会直接显示在本页，'
-        '每次打开都会同步供应商的最新值。参数与选项值均可拖拽排序。',
+        '每次打开都会同步供应商的最新值。参数与选项值均可拖拽排序。'
+        '推理开关/推理力度卡上的开关控制参数在模型中的启用状态（随模型保存），'
+        '聊天页面的推理开/关在对话中独立控制，不受此开关影响。',
         style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
       ),
       const SizedBox(height: 12),
@@ -437,15 +439,18 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.delete,
-                          color: Colors.red,
-                          size: 20,
+                      // 供应商传递下来的自定义参数不允许删除（只可修改
+                      // 值/勾选）；模型自己添加的参数保留删除按钮。
+                      if (!_isCustomParamInherited(param))
+                        IconButton(
+                          icon: const Icon(
+                            Icons.delete,
+                            color: Colors.red,
+                            size: 20,
+                          ),
+                          onPressed: () => _removeCustomParam(i),
+                          tooltip: '删除参数',
                         ),
-                        onPressed: () => _removeCustomParam(i),
-                        tooltip: '删除参数',
-                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
