@@ -369,8 +369,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           (pp) => pp?.paramName.trim() == p.paramName.trim(),
           orElse: () => null,
         );
-    final providerOptions =
-        List<String>.of(providerParam?.options ?? const []);
+    final providerOptions = List<String>.of(providerParam?.options ?? const []);
     final savedOptions = List<String>.of(p.options);
     p.optionOrder = mergeOptionBlocks(
       providerOptions: providerOptions,
@@ -378,7 +377,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       savedOrder: p.optionOrder,
     );
     p.options = savedOptions.isNotEmpty
-        ? selectedInBlockOrder(blocks: p.optionOrder, savedOptions: savedOptions)
+        ? selectedInBlockOrder(
+            blocks: p.optionOrder, savedOptions: savedOptions)
         : p.optionOrder.where((v) => providerOptions.contains(v)).toList();
   }
 

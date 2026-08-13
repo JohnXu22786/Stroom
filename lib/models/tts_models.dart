@@ -264,10 +264,9 @@ class ReasoningParam {
       offValue: map['offValue'] as String?,
       options:
           (map['options'] as List?)?.map((e) => e.toString()).toList() ?? [],
-      optionOrder: (map['optionOrder'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
+      optionOrder:
+          (map['optionOrder'] as List?)?.map((e) => e.toString()).toList() ??
+              const [],
       type: map['type'] as String? ?? 'string',
     );
   }

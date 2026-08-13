@@ -1444,7 +1444,8 @@ void main() {
           reason: 'reset 不应在 const [] options 上抛 UnsupportedError');
     });
 
-    testWidgets('boolean effort param switched to json does not crash on typing',
+    testWidgets(
+        'boolean effort param switched to json does not crash on typing',
         (tester) async {
       // 回归：sync 把 boolean 参数 options 替换为 const [] 后，切到
       // json 类型再输入，旧代码就地 clear() 抛 UnsupportedError。
@@ -1615,8 +1616,7 @@ void main() {
     }
 
     /// 滚动到自定义参数区并确保 [value] 可见。
-    Future<void> scrollToCustomValue(
-        WidgetTester tester, String value) async {
+    Future<void> scrollToCustomValue(WidgetTester tester, String value) async {
       await _scrollToReasoning(tester, find.text('自定义参数'));
       await tester.scrollUntilVisible(
         find.text(value),
@@ -1655,7 +1655,8 @@ void main() {
       expect(saved.customParams.single.options, ['warm', 'cool']);
     });
 
-    testWidgets('provider custom param uncheck persists; the unselected '
+    testWidgets(
+        'provider custom param uncheck persists; the unselected '
         'value reappears unchecked on reopen', (tester) async {
       final provider = providerWithCustomParams();
       final saved = await _pumpAndSave(
@@ -1681,8 +1682,7 @@ void main() {
       await _pumpAndSave(tester,
           model: saved, provider: provider, tapSave: false);
       await scrollToCustomValue(tester, 'warm');
-      expect(find.text('warm'), findsOneWidget,
-          reason: '未勾选的供应商值应重新出现');
+      expect(find.text('warm'), findsOneWidget, reason: '未勾选的供应商值应重新出现');
       expect(find.text('cool'), findsOneWidget);
       final warmText = tester.widget<Text>(find.text('warm'));
       expect(warmText.style?.fontWeight, FontWeight.normal,
@@ -1723,8 +1723,7 @@ void main() {
 
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
-      expect(find.text('放弃修改？'), findsNothing,
-          reason: '供应商自定义参数继承显示不应算未保存修改');
+      expect(find.text('放弃修改？'), findsNothing, reason: '供应商自定义参数继承显示不应算未保存修改');
       expect(find.text('打开模型配置'), findsOneWidget);
     });
 
@@ -1771,14 +1770,12 @@ void main() {
 
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
-      expect(find.text('放弃修改？'), findsOneWidget,
-          reason: '取消勾选自定义参数块应算未保存修改');
+      expect(find.text('放弃修改？'), findsOneWidget, reason: '取消勾选自定义参数块应算未保存修改');
     });
   });
 
   group('LlmModelConfigPage block order (no selection auto-fronting)', () {
-    testWidgets(
-        'selected effort values keep the provider order on reopen',
+    testWidgets('selected effort values keep the provider order on reopen',
         (tester) async {
       // 勾选 low + high（跳过 medium）保存 → 重开后块顺序保持供应商
       // 顺序 [low, medium, high]，而不是选中前置的 [low, high, medium]。
@@ -1805,8 +1802,7 @@ void main() {
       final lowX = tester.getTopLeft(find.text('low')).dx;
       final mediumX = tester.getTopLeft(find.text('medium')).dx;
       final highX = tester.getTopLeft(find.text('high')).dx;
-      expect(lowX < mediumX, isTrue,
-          reason: '选中的 low 不应被未选中的 medium 挤到后面');
+      expect(lowX < mediumX, isTrue, reason: '选中的 low 不应被未选中的 medium 挤到后面');
       expect(mediumX < highX, isTrue, reason: '选中的 high 不应自动前置');
     });
 

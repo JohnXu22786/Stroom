@@ -59,8 +59,7 @@ extension _ChatServiceParamsExt on ChatService {
     }
     // Provider-level toggle check (兜底默认值；供应商无 context 概念)
     final providerConfig = _providerConfig?.typeConfig;
-    final providerEnable =
-        providerConfig?['enableMaxTokens'] as bool? ?? false;
+    final providerEnable = providerConfig?['enableMaxTokens'] as bool? ?? false;
     if (providerEnable) {
       final providerMaxTokens = providerConfig?['maxTokens'];
       if (providerMaxTokens is num) return providerMaxTokens.toInt();

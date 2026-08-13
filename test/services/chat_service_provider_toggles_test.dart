@@ -197,8 +197,7 @@ void main() {
 
     test('disabled provider maxTokens is not sent', () async {
       await sendWith(providerConfig: providerWithToggles());
-      expect(provider.lastMaxTokens, isNull,
-          reason: '未启用时不得回退到 provider 默认值');
+      expect(provider.lastMaxTokens, isNull, reason: '未启用时不得回退到 provider 默认值');
     });
 
     test('model maxTokens wins over provider maxTokens', () async {

@@ -243,7 +243,8 @@ class _DragSortAreaState extends State<DragSortArea> {
     return kPrime < t ? kPrime : kPrime + 1;
   }
 
-  List<Rect> _layoutRects(List<double> widths, [List<double> minWidths = const []]) {
+  List<Rect> _layoutRects(List<double> widths,
+      [List<double> minWidths = const []]) {
     final rects = <Rect>[];
     var x = 0.0, y = 0.0, rowBottom = 0.0;
     final itemHeight = widget.wrap ? _kPillHeight : widget.rowExtent;
