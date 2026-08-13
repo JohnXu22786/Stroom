@@ -218,6 +218,18 @@ extension _ChatPageListenersExt on _ChatPageState {
       if (prev != next) {
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           if (!mounted) return;
+          // 供应商配置可能连带改了拖动排序（model_order，与供应商页
+          // 共享）：先重载顺序再重配，避免"列表第一个"兜底用旧顺序。
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            if (!mounted) return;
+            final savedOrder = prefs.getStringList('model_order');
+            if (savedOrder != null && savedOrder.isNotEmpty) {
+              setState(() => _savedModelOrder = savedOrder);
+            }
+          } catch (e) {
+            debugPrint('entries listener reload model_order failed: $e');
+          }
           _configureAdapter();
           // Re-initialize built-in and MCP tools with the updated provider
           // data. initializeMcpServers is lazy (publishes placeholders only,
@@ -235,22 +247,31 @@ extension _ChatPageListenersExt on _ChatPageState {
           // path — so the tool badge/list shows the full count.
           if (mounted) _resolveEnabledToolsForActiveConversation();
           if (mounted) setState(() {});
-          // _configureAdapter resets the adapter to model 0. Restore the
-          // saved model selection so the adapter and reasoning params
-          // stay in sync with the persisted choice. The conversation's
-          // last used model takes priority over the global index.
-          final convId = ref.read(activeConversationIdProvider);
-          final convs = ref.read(conversationsProvider);
-          final conv = convs.where((c) => c.id == convId).firstOrNull;
-          if (conv != null &&
-              conv.lastUsedModelName != null &&
-              conv.lastUsedModelName!.isNotEmpty) {
-            _selectModelByName(conv.lastUsedModelName!);
-          } else {
-            SharedPreferences.getInstance().then((prefs) {
-              if (mounted) _restoreSavedModelSelection(prefs);
-            });
-          }
+          // _configureAdapter resets the adapter to model 0 and already
+          // re-applies the active conversation's model (per-conversation
+          // record → assistant default → first model). 再跑一次无副作用的
+          // 恢复链，兜底 _configureAdapter 早期调用时对话尚未加载的情况。
+          _restoreActiveConversationModel();
+        });
+      }
+    });
+  }
+
+  /// 助手列表异步加载完成后重跑模型恢复链。
+  ///
+  /// 竞态防护：conversations 与 assistants 是两条独立的异步加载路径，
+  /// 对话先加载完时恢复链可能看不到助手默认模型（规则2落空）。此处
+  /// 监听 assistantProvider，仅在 空 → 非空 的首次加载完成转换时补跑
+  /// 一次（prev == null 覆盖监听注册时的首帧；prev.isEmpty 覆盖加载
+  /// 完成）。注意不监听增删改（非空 → 非空 不触发）：编辑助手默认值
+  /// 不应在会话中途改写当前对话的模型——无记录对话会在下次进入时
+  /// 自然跟随新默认。
+  void _registerAssistantListener() {
+    ref.listen(assistantProvider,
+        (List<Assistant>? prev, List<Assistant> next) {
+      if (prev == null || (prev.isEmpty && next.isNotEmpty)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _restoreActiveConversationModel();
         });
       }
     });

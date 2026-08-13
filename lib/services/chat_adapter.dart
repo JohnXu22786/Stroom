@@ -25,6 +25,12 @@ class AvailableModel {
   /// 显示名："[model.name ?? model.modelId] | [providerName]"
   final String displayName;
 
+  /// 模型的 API 模型 ID（绝对身份，重命名显示名后不变）
+  final String modelId;
+
+  /// 供应商名称（与 [displayName] 中的供应商部分一致）
+  final String providerName;
+
   /// 指向 llmEntry.configs[configIndex]
   final int configIndex;
 
@@ -33,6 +39,8 @@ class AvailableModel {
 
   const AvailableModel({
     required this.displayName,
+    this.modelId = '',
+    this.providerName = '',
     required this.configIndex,
     required this.modelIndex,
   });
@@ -184,12 +192,21 @@ class ChatAdapter {
   }) {
     if (assistant != null && entriesState != null) {
       // The assistant editor stores the default model as a DISPLAY name
-      // (Assistant.defaultModelName); Assistant.modelId stays null unless
-      // set elsewhere. Resolve modelId first, then the display name, so a
-      // chat block honors the assistant's configured default model.
+      // (Assistant.defaultModelName) plus its absolute identity
+      // (Assistant.defaultModelId / defaultProviderName); Assistant.modelId
+      // stays null unless set elsewhere. Resolve the absolute identity
+      // first, then the display name, so a chat block honors the
+      // assistant's configured default model even after renames.
+      // 仅当走默认模型引用时才带供应商名消歧：绑定模型（modelId）没有
+      // 供应商信息，带上的话可能把同一 modelId 的错误供应商配对。
+      final useDefaultRef =
+          assistant.modelId == null || assistant.modelId!.isEmpty;
       final resolved = _resolveAssistantModel(
-        assistant.modelId ?? assistant.defaultModelName,
+        assistant.modelId ??
+            assistant.defaultModelId ??
+            assistant.defaultModelName,
         entriesState,
+        providerName: useDefaultRef ? assistant.defaultProviderName : null,
       );
       if (resolved != null) {
         final (config, modelConfig) = resolved;
@@ -264,27 +281,39 @@ class ChatAdapter {
   /// Resolves an assistant's bound model (its `modelId`) to its
   /// (config, model) pair within the LLM provider entries.
   ///
-  /// Matches by modelId first, then by the model's display name
-  /// (`name | providerName`). The assistant editor stores the default
-  /// model as its DISPLAY name ([Assistant.defaultModelName]), while
-  /// `Assistant.modelId` stays null unless set elsewhere — matching on
-  /// the display name is what lets a chat block honor the assistant's
-  /// configured default model without the global chat-page selection.
+  /// Matches by (providerName, modelId) first, then by modelId alone,
+  /// then by the model's display name (`name | providerName`). The
+  /// assistant editor stores the default model as its DISPLAY name
+  /// ([Assistant.defaultModelName]) plus its absolute identity
+  /// ([Assistant.defaultModelId] / [Assistant.defaultProviderName]),
+  /// while `Assistant.modelId` stays null unless set elsewhere — matching
+  /// on the absolute identity lets a chat block honor the assistant's
+  /// configured default model even after renames.
   (ProviderConfigItem, ModelConfig)? _resolveAssistantModel(
     String? modelRef,
-    ProviderEntriesState entriesState,
-  ) {
+    ProviderEntriesState entriesState, {
+    String? providerName,
+  }) {
     if (modelRef == null || modelRef.isEmpty) return null;
     final llmEntry =
         entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
     if (llmEntry == null) return null;
-    for (final config in llmEntry.configs) {
-      if (config.host.isEmpty || config.key.isEmpty) continue;
-      for (final model in config.models) {
-        if (model.modelId == modelRef) return (config, model);
-        final displayName =
-            '${model.name.isNotEmpty ? model.name : model.modelId} | ${config.providerName}';
-        if (displayName == modelRef) return (config, model);
+
+    // 两遍扫描：先按供应商名精确匹配；无供应商名（旧数据）或供应商名
+    // 已过期时退化为按模型ID/显示名找第一个（与 resolveModelRef 一致）。
+    final hasProvider = providerName != null && providerName.isNotEmpty;
+    for (var pass = 0; pass < (hasProvider ? 2 : 1); pass++) {
+      for (final config in llmEntry.configs) {
+        if (config.host.isEmpty || config.key.isEmpty) continue;
+        final providerMatches =
+            !hasProvider || pass == 1 || config.providerName == providerName;
+        if (!providerMatches) continue;
+        for (final model in config.models) {
+          if (model.modelId == modelRef) return (config, model);
+          final displayName =
+              '${model.name.isNotEmpty ? model.name : model.modelId} | ${config.providerName}';
+          if (displayName == modelRef) return (config, model);
+        }
       }
     }
     return null;
@@ -357,6 +386,8 @@ class ChatAdapter {
         result.add(
           AvailableModel(
             displayName: displayName,
+            modelId: model.modelId,
+            providerName: config.providerName,
             configIndex: ci,
             modelIndex: mi,
           ),
@@ -661,22 +692,60 @@ Set<String> resolveEnabledToolNames({
 
 /// Resolves which model the chat page should restore for the active
 /// conversation, when the conversation has a per-conversation record
-/// ([Conversation.lastUsedModelName] — set by an assistant default at
+/// ([Conversation.lastUsedModelName] / [Conversation.lastUsedModelId] /
+/// [Conversation.lastUsedProviderName] — set by an assistant default at
 /// creation or by the user's own switch inside that conversation).
 ///
 /// Returns the model display name when it still exists among
 /// [availableModels]; returns null when the conversation has no record or
 /// the recorded model was removed from the provider configs — in both
-/// cases the global saved model index applies (the fallback).
+/// cases the assistant default / first model applies (the fallback).
 ///
 /// Pure so the priority policy is unit-testable; the side effects (adapter
 /// select + per-model settings restore) live in the chat page.
 String? perConversationModelToRestore({
-  required String? lastUsedModelName,
+  String? lastUsedModelName,
+  String? lastUsedModelId,
+  String? lastUsedProviderName,
   required List<AvailableModel> availableModels,
 }) {
-  final name = lastUsedModelName;
-  if (name == null || name.isEmpty) return null;
-  if (!availableModels.any((m) => m.displayName == name)) return null;
-  return name;
+  return resolveModelRef(
+    models: availableModels,
+    modelId: lastUsedModelId,
+    providerName: lastUsedProviderName,
+    displayName: lastUsedModelName,
+  )?.displayName;
+}
+
+/// 按持久化的模型引用解析出当前可用的 [AvailableModel]。
+///
+/// 匹配优先级（绝对身份优先，显示名兜底）：
+/// 1. `(providerName, modelId)` 精确匹配——模型/供应商被重命名后仍可解析；
+/// 2. 仅 `modelId` 匹配——旧数据没有供应商名时退化为按 ID 找第一个；
+/// 3. `displayName` 精确匹配——旧数据只有显示名（模型未重命名时成立）。
+///
+/// 没有任何引用命中时返回 null（调用方回退到助手默认 / 列表第一个）。
+AvailableModel? resolveModelRef({
+  required List<AvailableModel> models,
+  String? modelId,
+  String? providerName,
+  String? displayName,
+}) {
+  final id = modelId;
+  if (id != null && id.isNotEmpty) {
+    final provider = providerName;
+    if (provider != null && provider.isNotEmpty) {
+      final exact = models.where(
+        (m) => m.modelId == id && m.providerName == provider,
+      );
+      if (exact.isNotEmpty) return exact.first;
+    }
+    final byId = models.where((m) => m.modelId == id);
+    if (byId.isNotEmpty) return byId.first;
+  }
+  if (displayName != null && displayName.isNotEmpty) {
+    final byName = models.where((m) => m.displayName == displayName);
+    if (byName.isNotEmpty) return byName.first;
+  }
+  return null;
 }

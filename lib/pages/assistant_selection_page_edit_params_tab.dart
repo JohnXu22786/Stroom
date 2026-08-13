@@ -22,6 +22,8 @@ class _EditDialogVars {
     required this.enableSeed,
     required this.customParameters,
     this.defaultModelName,
+    this.defaultModelId,
+    this.defaultProviderName,
     this.defaultToolNames,
   });
 
@@ -45,6 +47,12 @@ class _EditDialogVars {
 
   /// 默认模型显示名（新建话题时应用；null = 跟随全局选择）。
   String? defaultModelName;
+
+  /// 默认模型的 API 模型 ID（绝对身份）。
+  String? defaultModelId;
+
+  /// 默认模型所属供应商名称（绝对身份的一部分）。
+  String? defaultProviderName;
 
   /// 默认启用工具集合（新建话题时应用；未添加的工具保持关闭）。
   /// null = 从未配置默认工具（新话题自动启用全部工具）；非 null（含空集合）

@@ -54,6 +54,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
           : null,
       hasExplicitEnabledMcpTools: hasToolDefaults,
       lastUsedModelName: assistant?.defaultModelName,
+      lastUsedModelId: assistant?.defaultModelId,
+      lastUsedProviderName: assistant?.defaultProviderName,
     );
     state = [conv, ...state];
     _ref.read(activeConversationIdProvider.notifier).state = conv.id;
@@ -239,12 +241,23 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     _persist();
   }
 
-  /// Updates the last used model name for a conversation.
+  /// Updates the last used model for a conversation.
   /// This is used to restore the model when re-entering the conversation.
-  void updateLastUsedModel(String conversationId, String modelName) {
+  ///
+  /// [modelName] 是显示名（用于兼容旧数据与显示），[modelId] 是 API 模型
+  /// ID、[providerName] 是供应商名——两者构成绝对身份，模型/供应商被
+  /// 重命名后该对话记录仍能解析回同一模型。
+  void updateLastUsedModel(
+    String conversationId,
+    String modelName, {
+    String? modelId,
+    String? providerName,
+  }) {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.lastUsedModelName = modelName;
+      c.lastUsedModelId = modelId;
+      c.lastUsedProviderName = providerName;
       return c;
     }).toList();
     _persist();

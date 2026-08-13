@@ -214,5 +214,57 @@ void conversationGroup3() {
       expect(restored1.lastUsedModelName, equals('GPT-4o | OpenAI'));
       expect(restored2.lastUsedModelName, equals('Claude 3 | Anthropic'));
     });
+
+    test('roundtrip preserves absolute model id and provider name', () {
+      final conv = Conversation(
+        id: 'test-id',
+        title: 'Test',
+        messages: [],
+        lastUsedModelName: 'GPT-4o | OpenAI',
+        lastUsedModelId: 'gpt-4o',
+        lastUsedProviderName: 'OpenAI',
+      );
+
+      final map = conv.toMap();
+      final restored = Conversation.fromMap(map);
+
+      expect(restored.lastUsedModelName, equals('GPT-4o | OpenAI'));
+      expect(restored.lastUsedModelId, equals('gpt-4o'));
+      expect(restored.lastUsedProviderName, equals('OpenAI'));
+    });
+
+    test('toMap omits lastUsedModelId/ProviderName when null or empty', () {
+      final conv = Conversation(
+        id: 'test-id',
+        title: 'Test',
+        messages: [],
+        lastUsedModelId: '',
+        lastUsedProviderName: '',
+      );
+      final map = conv.toMap();
+      expect(map.containsKey('lastUsedModelId'), isFalse);
+      expect(map.containsKey('lastUsedProviderName'), isFalse);
+    });
+
+    test('fromMap handles missing absolute fields gracefully (old data)', () {
+      final oldMap = {
+        'id': 'old-id',
+        'title': 'Old Conversation',
+        'createdAt': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().toIso8601String(),
+        'messages': <Map<String, dynamic>>[],
+        'isPinned': false,
+        'sortOrder': 0,
+        'assistantId': 'assistant-1',
+        'draftText': '',
+        // 旧数据只有显示名，没有绝对身份字段
+        'lastUsedModelName': 'GPT-4o | OpenAI',
+      };
+
+      final conv = Conversation.fromMap(oldMap);
+      expect(conv.lastUsedModelName, equals('GPT-4o | OpenAI'));
+      expect(conv.lastUsedModelId, isNull);
+      expect(conv.lastUsedProviderName, isNull);
+    });
   });
 }

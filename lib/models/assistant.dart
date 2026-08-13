@@ -180,6 +180,15 @@ class Assistant {
   /// 用户在某条对话内切换模型后，以对话自身的记录为准，互不影响。
   final String? defaultModelName;
 
+  /// 默认模型的 API 模型 ID（绝对身份，配合 [defaultProviderName]）。
+  ///
+  /// 显示名可能因模型/供应商重命名而过期，模型 ID + 供应商名在重命名后
+  /// 仍能解析回同一模型。旧数据（仅显示名）为 null，回退到显示名匹配。
+  final String? defaultModelId;
+
+  /// 默认模型所属供应商名称（绝对身份的一部分）。
+  final String? defaultProviderName;
+
   /// 该助手新建话题（对话）时默认启用的工具名集合。
   /// 未添加进此集合的工具在新话题中保持关闭。
   /// 对话内用户手动开关工具后，以对话自身的记录为准。
@@ -203,6 +212,8 @@ class Assistant {
     AssistantSettings? settings,
     this.modelId,
     this.defaultModelName,
+    this.defaultModelId,
+    this.defaultProviderName,
     this.defaultToolNames,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -221,6 +232,10 @@ class Assistant {
         if (modelId != null) 'modelId': modelId,
         if (defaultModelName != null && defaultModelName!.isNotEmpty)
           'defaultModelName': defaultModelName,
+        if (defaultModelId != null && defaultModelId!.isNotEmpty)
+          'defaultModelId': defaultModelId,
+        if (defaultProviderName != null && defaultProviderName!.isNotEmpty)
+          'defaultProviderName': defaultProviderName,
         // 非 null 时总是写出（含空集合）：区分"配置过但全关"与"从未配置"。
         if (defaultToolNames != null)
           'defaultToolNames': defaultToolNames!.toList(),
@@ -263,6 +278,8 @@ class Assistant {
           defaultModelNameRaw is String && defaultModelNameRaw.isNotEmpty
               ? defaultModelNameRaw
               : null,
+      defaultModelId: map['defaultModelId'] as String?,
+      defaultProviderName: map['defaultProviderName'] as String?,
       defaultToolNames: defaultToolNames,
       createdAt: map['createdAt'] != null
           ? DateTime.parse(map['createdAt'] as String)
@@ -282,6 +299,8 @@ class Assistant {
     AssistantSettings? settings,
     String? modelId,
     String? defaultModelName,
+    String? defaultModelId,
+    String? defaultProviderName,
     Set<String>? defaultToolNames,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -295,6 +314,8 @@ class Assistant {
         settings: settings ?? this.settings,
         modelId: modelId ?? this.modelId,
         defaultModelName: defaultModelName ?? this.defaultModelName,
+        defaultModelId: defaultModelId ?? this.defaultModelId,
+        defaultProviderName: defaultProviderName ?? this.defaultProviderName,
         defaultToolNames: defaultToolNames ?? this.defaultToolNames,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,

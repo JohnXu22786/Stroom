@@ -8,6 +8,18 @@ part of 'chat_page.dart';
 extension _ChatPageMessagesExt on _ChatPageState {
   Future<void> _initialize() async {
     await AppLogService.info('ChatPage', '开始初始化聊天页面');
+    // 先加载拖动排序（model_order）：_configureAdapter → 恢复链的
+    // "列表第一个"兜底依赖显示顺序，晚加载会导致首帧选错模型再跳变。
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      final savedOrder = prefs.getStringList('model_order');
+      if (savedOrder != null && savedOrder.isNotEmpty) {
+        setState(() => _savedModelOrder = savedOrder);
+      }
+    } catch (e) {
+      debugPrint('_initialize load model_order failed: $e');
+    }
     _configureAdapter();
     // Initialize built-in tools (HTTP tools) first — independent of MCP
     // server connectivity. This ensures HTTP tools (brave_web_search,
@@ -278,16 +290,12 @@ extension _ChatPageMessagesExt on _ChatPageState {
 
       if (!isCurrentLoad()) return;
 
-      // Restore per-conversation model selection if this conversation has a
-      // model record: the conversation's last used model takes priority over
-      // the globally saved model index. The record may come from the user's
-      // own switch in this conversation OR from the assistant default model
-      // seeded at creation ([Assistant.defaultModelName]).
-      if (conv != null &&
-          conv.lastUsedModelName != null &&
-          conv.lastUsedModelName!.isNotEmpty) {
-        _selectModelByName(conv.lastUsedModelName!);
-      }
+      // Restore the active conversation's model selection: the conversation's
+      // own record (user choice or seeded assistant default) takes priority,
+      // then the assistant's live default, then the first model in the list.
+      // 记录可能来自用户在该对话的切换，也可能来自创建时播种的助手默认
+      // 模型（[Assistant.defaultModelName]）。
+      _restoreActiveConversationModel();
 
       // Restore per-conversation enabled MCP/built-in tool names.
       // If the conversation has saved tool preferences, use them.

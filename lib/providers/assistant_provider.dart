@@ -196,13 +196,16 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
   }
 
   /// Updates an assistant's conversation defaults: the default model
-  /// (display name, applied to NEW conversations) and the default enabled
-  /// tool names (tools not in the set stay off in new conversations).
+  /// (display name + absolute identity, applied to NEW conversations) and
+  /// the default enabled tool names (tools not in the set stay off in new
+  /// conversations).
   ///
   /// Unlike [updateAssistant]'s copyWith semantics, a null [defaultModelName]
   /// here explicitly CLEARS the default (new conversations fall back to the
   /// global model selection), so the assistant is rebuilt directly instead of
-  /// via copyWith.
+  /// via copyWith. [defaultModelId]/[defaultProviderName] 是绝对身份
+  /// （API 模型 ID + 供应商名），与 [defaultModelName] 一起保存；重命名
+  /// 显示名后默认模型仍可解析。
   ///
   /// ASYMMETRY: a null [defaultToolNames] KEEPS the assistant's previous
   /// tool-default state. Pass a non-null set — including an empty one, which
@@ -216,6 +219,8 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
   void updateAssistantDefaults({
     required String id,
     String? defaultModelName,
+    String? defaultModelId,
+    String? defaultProviderName,
     Set<String>? defaultToolNames,
     bool clearDefaultToolNames = false,
   }) {
@@ -234,6 +239,8 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
         settings: a.settings,
         modelId: a.modelId,
         defaultModelName: defaultModelName,
+        defaultModelId: defaultModelId,
+        defaultProviderName: defaultProviderName,
         // 拷贝一份：不持有调用方的可变 Set 实例（对话框保存后仍会复用）。
         // 传入非 null（含空集合）即视为"已配置默认工具"；
         // clearDefaultToolNames 显式回到"从未配置"（null）。
