@@ -43,7 +43,9 @@ import BackgroundTasks
   // com.johntsui.stroom 前缀。
 
   private func setupStorageChannel(with registry: FlutterPluginRegistry) {
-    let registrar = registry.registrar(forPlugin: "StorageBridge")
+    guard let registrar = registry.registrar(forPlugin: "StorageBridge") else {
+      return
+    }
     let channel = FlutterMethodChannel(
       name: "com.johntsui.stroom/storage",
       binaryMessenger: registrar.messenger()

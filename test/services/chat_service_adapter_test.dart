@@ -5,6 +5,7 @@
 // No naming conflicts between sources for this file.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/mcp.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -1464,6 +1465,137 @@ void main() {
       expect(resolved, equals({'brave_web_search'}),
           reason: 'When user has explicit prefs, newly discovered MCP tools '
               'should NOT be auto-enabled — they must be explicitly toggled.');
+    });
+  });
+
+  group('ChatAdapter per-assistant services', () {
+    setUp(() {
+      adapter.configure(entriesState);
+    });
+
+    Assistant _assistant({
+      String? modelId,
+      String? defaultModelName,
+      String prompt = '你是测试助手',
+    }) {
+      return Assistant(
+        name: '测试助手',
+        prompt: prompt,
+        modelId: modelId,
+        defaultModelName: defaultModelName,
+      );
+    }
+
+    test('service without assistant uses the global model + no prompt', () {
+      final svc = adapter.getOrCreateService('conv-default');
+      expect(svc, isNotNull);
+      expect(svc!.assistantPrompt, isNull);
+      adapter.cancelService('conv-default');
+    });
+
+    test('service with assistant resolves its modelId and applies prompt', () {
+      // Assistant bound to 'claude-3' (config 1, model 0).
+      final svc = adapter.getOrCreateService(
+        'conv-assistant',
+        assistant: _assistant(modelId: 'claude-3'),
+        entriesState: entriesState,
+      );
+      expect(svc, isNotNull);
+      expect(svc!.assistantPrompt, '你是测试助手');
+      // The global selection must NOT have changed.
+      expect(adapter.currentConfigIndex, equals(0));
+      expect(adapter.currentModelIndex, equals(0));
+      adapter.cancelService('conv-assistant');
+    });
+
+    test(
+        'assistant with a display-name default model (no modelId set) '
+        'resolves — the chat block honors the assistant editor\'s '
+        'configured default model', () {
+      // The assistant editor stores the default model as its DISPLAY name
+      // ('GPT-4o | OpenAI') while Assistant.modelId stays null. The chat
+      // block passes this assistant to getOrCreateService — it must
+      // resolve via the display name instead of failing with
+      // 聊天 API 未配置.
+      final svc = adapter.getOrCreateService(
+        'conv-displayname',
+        assistant: _assistant(
+          defaultModelName: 'GPT-4o | OpenAI',
+        ),
+        entriesState: entriesState,
+      );
+      expect(svc, isNotNull,
+          reason: 'display-name bound assistant must resolve to a service');
+      expect(svc!.assistantPrompt, '你是测试助手');
+      expect(adapter.currentConfigIndex, equals(0),
+          reason: 'global selection untouched');
+      adapter.cancelService('conv-displayname');
+    });
+
+    test(
+        'service with unresolvable assistant model falls back to global '
+        'config but still applies the prompt', () {
+      final svc = adapter.getOrCreateService(
+        'conv-fallback',
+        assistant: _assistant(modelId: 'does-not-exist'),
+        entriesState: entriesState,
+      );
+      expect(svc, isNotNull);
+      expect(svc!.assistantPrompt, '你是测试助手');
+      adapter.cancelService('conv-fallback');
+    });
+    test('per-conversation services are independent (concurrent flows)', () {
+      final svcA = adapter.getOrCreateService(
+        'flow_conv_a',
+        assistant: _assistant(modelId: 'gpt-4o', prompt: '助手A'),
+        entriesState: entriesState,
+      );
+      final svcB = adapter.getOrCreateService(
+        'flow_conv_b',
+        assistant: _assistant(modelId: 'claude-3', prompt: '助手B'),
+        entriesState: entriesState,
+      );
+      expect(svcA, isNotNull);
+      expect(svcB, isNotNull);
+      expect(svcA!.assistantPrompt, '助手A');
+      expect(svcB!.assistantPrompt, '助手B');
+      expect(identical(svcA, svcB), isFalse);
+      adapter.cancelService('flow_conv_a');
+      adapter.cancelService('flow_conv_b');
+    });
+
+    test(
+        'assistant with a resolvable model works in a FRESH session '
+        '(no global configure yet)', () {
+      // The adapter has NOT been configured (no chat page opened this
+      // session): the assistant's bound model must still resolve.
+      final fresh = ChatAdapter();
+      final svc = fresh.getOrCreateService(
+        'flow_conv_fresh',
+        assistant: _assistant(modelId: 'claude-3-opus', prompt: '你是测试助手'),
+        entriesState: entriesState,
+      );
+      expect(svc, isNotNull,
+          reason: 'a resolvable assistant must not depend on the global '
+              'cache (fresh session)');
+      expect(svc!.assistantPrompt, '你是测试助手');
+      expect(fresh.isConfigured, isFalse,
+          reason: 'the fresh adapter must remain unconfigured');
+      fresh.cancelService('flow_conv_fresh');
+    });
+
+    test(
+        'assistant with an unresolvable model on a fresh adapter returns '
+        'null (fallback guard preserved)', () {
+      final fresh = ChatAdapter();
+      final svc = fresh.getOrCreateService(
+        'flow_conv_fresh_miss',
+        assistant: _assistant(modelId: 'does-not-exist'),
+        entriesState: entriesState,
+      );
+      expect(svc, isNull,
+          reason: 'without a global cache AND an unresolvable assistant '
+              'model there is nothing to build the service from');
     });
   });
 

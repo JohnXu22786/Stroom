@@ -307,6 +307,9 @@ class ChatService {
   /// Optional assistant system prompt to prepend to API messages.
   String? _assistantPrompt;
 
+  /// The assistant system prompt currently applied (used by tests).
+  String? get assistantPrompt => _assistantPrompt;
+
   /// Set the assistant's system prompt that will be prepended as a
   /// system-role message in the API request.
   void setAssistantPrompt(String? prompt) {

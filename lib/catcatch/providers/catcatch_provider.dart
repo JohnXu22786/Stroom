@@ -60,8 +60,8 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   ///
   /// 返回新任务 ID。
   String addTask(String url, int expectedDurationSec,
-      {String videoFolder = '', String audioFolder = ''}) {
-    final id = const Uuid().v4();
+      {String videoFolder = '', String audioFolder = '', String? taskId}) {
+    final id = taskId ?? const Uuid().v4();
     final metadata = <String, String>{
       if (videoFolder.isNotEmpty) 'videoFolder': videoFolder,
       if (audioFolder.isNotEmpty) 'audioFolder': audioFolder,

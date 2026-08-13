@@ -108,20 +108,26 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
   }
 
   /// 获取当前路径下的直接子文件夹（排序后）
+  ///
+  /// 当前目录自身也会出现在列表中（像根目录一样始终可见可选）——
+  /// 否则当保存文件夹恰好是浏览中的目录时，它在列表里"消失"，
+  /// 用户看不到自己的保存文件夹。
   List<String> get _filteredFolders {
     final prefix = _currentPath.isEmpty ? '' : '$_currentPath/';
     final result = <String>[];
     for (final f in _availableFolders) {
-      if (f == _currentPath) continue;
       if (_currentPath.isEmpty) {
-        // 根目录：只显示顶级文件夹（不含 /）
-        if (!f.contains('/')) result.add(f);
-      } else {
-        if (f.startsWith(prefix)) {
-          final suffix = f.substring(prefix.length);
-          // 直接子级：不含额外的 /
-          if (!suffix.contains('/')) result.add(f);
-        }
+        // 根目录：只显示顶级文件夹（不含 /）。空字符串表示根目录
+        // 自身，由固定的"根目录"行表示，不重复列出。
+        if (f.isNotEmpty && !f.contains('/')) result.add(f);
+      } else if (f == _currentPath) {
+        // 当前目录自身始终显示（像根目录一样），保存文件夹 =
+        // 当前目录时不会从列表"消失"。
+        result.add(f);
+      } else if (f.startsWith(prefix)) {
+        final suffix = f.substring(prefix.length);
+        // 直接子级：不含额外的 /
+        if (!suffix.contains('/')) result.add(f);
       }
     }
     result.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
@@ -372,7 +378,9 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                             folder,
                             // 显示文件夹基名（不含父路径）
                             _isInSubFolder
-                                ? folder.substring(_currentPath.length + 1)
+                                ? folder.substring(
+                                    folder.lastIndexOf('/') + 1,
+                                  )
                                 : folder,
                             Icons.folder_outlined,
                           ),

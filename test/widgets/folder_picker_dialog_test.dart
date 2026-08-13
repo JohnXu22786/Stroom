@@ -134,8 +134,9 @@ void main() {
       await tester.tap(find.text('photos'));
       await tester.pumpAndSettle();
 
-      // Now should see 'vacation' (direct child of 'photos')
-      expect(find.text('photos'), findsNothing);
+      // The current directory itself stays visible (like 根目录),
+      // alongside its direct children.
+      expect(find.text('photos'), findsOneWidget);
       expect(find.text('vacation'), findsOneWidget);
       expect(find.text('beach'), findsNothing);
 
@@ -145,9 +146,61 @@ void main() {
       await tester.tap(find.text('vacation'));
       await tester.pumpAndSettle();
 
-      // Now should see 'beach' (direct child of 'photos/vacation')
-      expect(find.text('vacation'), findsNothing);
+      // Now should see 'beach' (direct child of 'photos/vacation'),
+      // with the current directory 'vacation' still listed.
+      expect(find.text('vacation'), findsOneWidget);
       expect(find.text('beach'), findsOneWidget);
+    });
+
+    testWidgets('current directory (save folder) stays visible and selectable',
+        (tester) async {
+      String? result;
+      await tester.pumpWidget(_buildTestApp(
+        Builder(builder: (context) {
+          return ElevatedButton(
+            onPressed: () async {
+              result = await FolderPickerDialog.show(
+                context,
+                currentFolder: 'photos/vacation',
+                availableFolders: {
+                  'photos',
+                  'photos/vacation',
+                  'photos/work',
+                },
+              );
+            },
+            child: const Text('Open'),
+          );
+        }),
+      ));
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      // Navigate into 'photos'
+      await tester.tap(find.text('photos'));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.text('photos'));
+      await tester.pumpAndSettle();
+
+      // The save folder 'vacation' is listed even though it is not the
+      // current browsing path — it never disappears from the list.
+      expect(find.text('vacation'), findsOneWidget);
+      expect(find.text('work'), findsOneWidget);
+
+      // Navigate INTO the save folder: it must STAY in the list
+      // (it is the current directory now), like 根目录 always is.
+      await tester.tap(find.text('vacation'));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.text('vacation'));
+      await tester.pumpAndSettle();
+      expect(find.text('vacation'), findsOneWidget);
+      expect(find.text('work'), findsNothing);
+
+      // Confirm — the current directory (the save folder) is returned.
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+      expect(result, 'photos/vacation');
     });
 
     testWidgets('back navigation from sub-folder works', (tester) async {

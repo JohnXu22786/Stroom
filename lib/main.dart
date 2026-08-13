@@ -13,7 +13,9 @@ import 'catcatch/providers/catcatch_provider.dart';
 import 'providers/task_provider.dart';
 import 'providers/background_task_provider.dart';
 import 'providers/notification_provider.dart';
-import 'pages/unified_task_list/task_utils.dart';
+import 'pages/unified_task_list/task_session_tracker.dart';
+import 'task_flow/providers/task_flow_provider.dart';
+import 'task_flow/providers/task_flow_execution_provider.dart';
 import 'services/background_service.dart';
 import 'services/desktop_app_service.dart';
 import 'services/notification_service.dart';
@@ -23,6 +25,8 @@ final catcatchStartupProvider = FutureProvider<void>((ref) async {
   await ref.read(catcatchTasksProvider.notifier).restoreUnfinishedTasks();
   await ref.read(taskListProvider.notifier).restoreFromPersistence();
   await ref.read(backgroundTasksProvider.notifier).restoreFromPersistence();
+  await ref.read(taskFlowListProvider.notifier).restoreFromPersistence();
+  await ref.read(taskFlowExecutionsProvider.notifier).restoreFromPersistence();
   final lastRead = await loadTaskListLastRead();
   ref.read(taskListLastReadProvider.notifier).state = lastRead;
   // 加载通知设置

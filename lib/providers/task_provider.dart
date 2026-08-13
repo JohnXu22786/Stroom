@@ -45,9 +45,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     required ModelConfig modelConfig,
     Map<String, String>? customParams,
     Map<String, dynamic>? trimPreset,
+    String? taskId,
     String folder = '',
   }) {
-    final id = _uuid.v4();
+    final id = taskId ?? _uuid.v4();
     final task = SynthesisTask(
       id: id,
       title: title,
@@ -91,6 +92,17 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       if (task.customParams != null) {
         params.addAll(task.customParams!);
       }
+      // 'saveFolder' is an internal key (flow blocks use it to pick the
+      // output folder) — strip it so it never reaches the TTS API body.
+      params.remove('saveFolder');
+      // customParams values are String-typed (flow blocks stringify
+      // numbers); the API contract for speed is numeric, so coerce it
+      // back instead of sending "speed": "1.0" as a JSON string, which
+      // strict TTS servers reject with 400.
+      final speedParam = task.customParams?['speed'];
+      if (speedParam != null) {
+        params['speed'] = double.tryParse(speedParam) ?? synthConfig.speed;
+      }
       // Parse JSON-type custom param values from string to actual JSON
       // objects/arrays so they are sent as raw JSON, not quoted strings.
       parseJsonCustomParams(params, task.modelConfig);
@@ -130,12 +142,15 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       if (cancelToken.isCancelled) return;
 
       // 保存音频文件
+      final saveFolder = task.customParams?['saveFolder'] as String? ?? '';
       final filePath = await _saveAudioFile(
         audioData,
         actualFormat,
         task.text,
         name: task.title,
-        folder: task.folder,
+        // 显式 folder 参数（TTS 页面）优先；任务流块通过 customParams
+        // 传 saveFolder，两者都指向保存目录。
+        folder: task.folder.isNotEmpty ? task.folder : saveFolder,
       );
 
       // 更新任务为完成

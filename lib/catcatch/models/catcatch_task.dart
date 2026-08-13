@@ -166,6 +166,12 @@ class CatCatchTask {
   final String? downloadedFilePath;
   final Map<String, String> metadata;
 
+  /// Cumulative bytes received during the download step (byte-granularity
+  /// progress signal). Useful when the server sends no Content-Length
+  /// (chunked transfer): percent progress stays 0 while bytes stream in,
+  /// so stall detection must look at bytes, not percent.
+  final int downloadedBytes;
+
   const CatCatchTask({
     required this.id,
     required this.url,
@@ -182,6 +188,7 @@ class CatCatchTask {
     this.progress = 0,
     this.downloadedFilePath,
     this.metadata = const {},
+    this.downloadedBytes = 0,
   });
 
   // ---------------------------------------------------------------------------
@@ -204,6 +211,7 @@ class CatCatchTask {
     int? progress,
     String? downloadedFilePath,
     Map<String, String>? metadata,
+    int? downloadedBytes,
     bool clearError = false,
     bool clearCompletedAt = false,
     bool clearDownloadedFilePath = false,
@@ -234,6 +242,7 @@ class CatCatchTask {
           ? null
           : (downloadedFilePath ?? this.downloadedFilePath),
       metadata: metadata ?? this.metadata,
+      downloadedBytes: downloadedBytes ?? this.downloadedBytes,
     );
   }
 
@@ -257,6 +266,7 @@ class CatCatchTask {
         'progress': progress,
         'downloadedFilePath': downloadedFilePath,
         'metadata': metadata,
+        'downloadedBytes': downloadedBytes,
       };
 
   factory CatCatchTask.fromMap(Map<String, dynamic> map) => CatCatchTask(
@@ -291,6 +301,7 @@ class CatCatchTask {
         progress: map['progress'] as int? ?? 0,
         downloadedFilePath: map['downloadedFilePath'] as String?,
         metadata: Map<String, String>.from(map['metadata'] as Map? ?? {}),
+        downloadedBytes: map['downloadedBytes'] as int? ?? 0,
       );
 
   @override

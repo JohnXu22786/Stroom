@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 
-import '../models/assistant.dart' show AssistantSettings, CustomParameter;
+import '../models/assistant.dart'
+    show Assistant, AssistantSettings, CustomParameter;
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
 import '../models/mcp.dart';
@@ -166,27 +167,127 @@ class ChatAdapter {
   /// conversation. Each conversation gets an independent HTTP connection,
   /// enabling concurrent streaming across multiple conversations.
   /// Returns null if the adapter hasn't been configured yet.
-  ChatService? getOrCreateService(String convId) {
+  ///
+  /// When [assistant] is provided (with [entriesState]), the service is
+  /// built from the assistant's bound model (its `modelId`) and carries
+  /// the assistant's prompt/settings — the global cached model selection
+  /// is NOT touched, so a task-flow chat block and the chat page can run
+  /// concurrently with different models/assistants. The assistant model
+  /// resolution does NOT depend on the global cache: it works even in a
+  /// fresh session where the chat page was never opened. If the
+  /// assistant's model cannot be resolved, it falls back to the global
+  /// config (still applying the assistant's prompt/settings).
+  ChatService? getOrCreateService(
+    String convId, {
+    Assistant? assistant,
+    ProviderEntriesState? entriesState,
+  }) {
+    if (assistant != null && entriesState != null) {
+      // The assistant editor stores the default model as a DISPLAY name
+      // (Assistant.defaultModelName); Assistant.modelId stays null unless
+      // set elsewhere. Resolve modelId first, then the display name, so a
+      // chat block honors the assistant's configured default model.
+      final resolved = _resolveAssistantModel(
+        assistant.modelId ?? assistant.defaultModelName,
+        entriesState,
+      );
+      if (resolved != null) {
+        final (config, modelConfig) = resolved;
+        final endpointType = effectiveEndpointType(
+          modelConfig.endpointType,
+          config.endpointType,
+        );
+        final provider = createChatProviderFromConfig(
+          providerName: config.providerName,
+          baseUrl: config.host,
+          apiKey: config.key,
+          endpointType: endpointType,
+        );
+        return _activeServices.putIfAbsent(convId, () {
+          return _buildService(
+            provider,
+            modelConfig,
+            config,
+            endpointType,
+            assistant: assistant,
+          );
+        });
+      }
+    }
+
+    // Fallback: the global cached model (requires the adapter to have
+    // been configured — e.g. the chat page opened this session).
     if (_cachedProvider == null || _cachedModelConfig == null) return null;
     return _activeServices.putIfAbsent(convId, () {
-      final svc = ChatService(
-        provider: _cachedProvider!,
-        modelConfig: _cachedModelConfig!,
-        providerConfig: _cachedProviderConfig,
-        endpointType: _cachedEndpointType,
+      final svc = _buildService(
+        _cachedProvider!,
+        _cachedModelConfig!,
+        _cachedProviderConfig,
+        _cachedEndpointType,
+        assistant: assistant,
       );
-      // Apply any assistant settings that were set on the "template"
-      if (_cachedAssistantPrompt != null) {
-        svc.setAssistantPrompt(_cachedAssistantPrompt);
-      }
-      if (_cachedAssistantSettings != null) {
-        svc.setAssistantSettings(_cachedAssistantSettings);
-      }
-      if (_cachedAssistantCustomParams != null) {
-        svc.setAssistantCustomParams(_cachedAssistantCustomParams);
-      }
       return svc;
     });
+  }
+
+  ChatService _buildService(
+    BaseChatProvider provider,
+    ModelConfig modelConfig,
+    ProviderConfigItem? providerConfig,
+    String endpointType, {
+    Assistant? assistant,
+  }) {
+    final svc = ChatService(
+      provider: provider,
+      modelConfig: modelConfig,
+      providerConfig: providerConfig,
+      endpointType: endpointType,
+    );
+    // Apply the assistant prompt/settings (explicit assistant wins over
+    // the global cached assistant template).
+    final prompt = assistant?.prompt ?? _cachedAssistantPrompt;
+    final settings = assistant?.settings ?? _cachedAssistantSettings;
+    final customParams =
+        assistant?.settings.customParameters ?? _cachedAssistantCustomParams;
+    if (prompt != null) {
+      svc.setAssistantPrompt(prompt);
+    }
+    if (settings != null) {
+      svc.setAssistantSettings(settings);
+    }
+    if (customParams != null) {
+      svc.setAssistantCustomParams(customParams);
+    }
+    return svc;
+  }
+
+  /// Resolves an assistant's bound model (its `modelId`) to its
+  /// (config, model) pair within the LLM provider entries.
+  ///
+  /// Matches by modelId first, then by the model's display name
+  /// (`name | providerName`). The assistant editor stores the default
+  /// model as its DISPLAY name ([Assistant.defaultModelName]), while
+  /// `Assistant.modelId` stays null unless set elsewhere — matching on
+  /// the display name is what lets a chat block honor the assistant's
+  /// configured default model without the global chat-page selection.
+  (ProviderConfigItem, ModelConfig)? _resolveAssistantModel(
+    String? modelRef,
+    ProviderEntriesState entriesState,
+  ) {
+    if (modelRef == null || modelRef.isEmpty) return null;
+    final llmEntry =
+        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    if (llmEntry == null) return null;
+    for (final config in llmEntry.configs) {
+      if (config.host.isEmpty || config.key.isEmpty) continue;
+      for (final model in config.models) {
+        if (model.modelId == modelRef) return (config, model);
+        final displayName =
+            '${model.name.isNotEmpty ? model.name : model.modelId} | ${config.providerName}';
+        if (displayName == modelRef) return (config, model);
+      }
+    }
+    return null;
   }
 
   /// 创建一次性 [ChatService]（不缓存、不进入 _activeServices）。
@@ -494,9 +595,13 @@ class ChatAdapter {
     Map<String, String> reasoningParamValues = const {},
     List<ToolDefinition> tools = const [],
     String convId = '',
+    Assistant? assistant,
+    ProviderEntriesState? entriesState,
   }) {
-    final svc =
-        convId.isNotEmpty ? getOrCreateService(convId) : currentChatService;
+    final svc = convId.isNotEmpty
+        ? getOrCreateService(convId,
+            assistant: assistant, entriesState: entriesState)
+        : currentChatService;
     if (svc == null) {
       return Stream.error('请先配置聊天供应商');
     }

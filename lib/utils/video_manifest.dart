@@ -191,6 +191,11 @@ class VideoManifest {
     return FolderPathUtils.getAllDescendantFolderPaths(parentPath, allPaths);
   }
 
+  /// Storage directory path for videos (Native only) — used to copy
+  /// large downloaded files into hash-addressed storage without
+  /// buffering them in memory.
+  static Future<String> get videoDir => _ops.storageDirPath;
+
   /// Find a record by its hash.
   static Future<VideoRecord?> getRecordByHash(String hash) async {
     final records = await loadRecords();

@@ -1,218 +1,263 @@
 part of 'home_page.dart';
 
+/// Aggregated task counts for the home status card.
+///
+/// Watches all three task providers plus flow executions and computes the
+/// counts in one place: flow sub-tasks are excluded (they render inside
+/// their flow card in the unified list) and each flow execution counts
+/// once by its own status. All state is read fresh inside the provider
+/// body — no closure-capture staleness. The result is a value-comparable
+/// record, so the home page only rebuilds when a count actually changes,
+/// not on every intermediate step update (e.g. updateStep running →
+/// running on a different step index), keeping the GUI responsive during
+/// CPU-bound extraction pipelines.
+final homeStatusCountsProvider =
+    Provider<({int inProgress, int completed, int failed})>((ref) {
+  final bgTasks = ref.watch(backgroundTasksProvider);
+  final catcatchTasks = ref.watch(catcatchTasksProvider);
+  final synthesisTasks = ref.watch(taskListProvider);
+  final flowExecutions = ref.watch(taskFlowExecutionsProvider);
+
+  final flowSubTaskIds = <String>{
+    for (final e in flowExecutions)
+      for (final st in e.subTasks) st.subTaskId,
+  };
+
+  int inProgress = 0, completed = 0, failed = 0;
+
+  void addStatus(String statusName) {
+    if (statusName == 'running' ||
+        statusName == 'paused' ||
+        statusName == 'waiting') {
+      inProgress++;
+    } else if (statusName == 'completed') {
+      completed++;
+    } else if (statusName == 'failed') {
+      failed++;
+    }
+  }
+
+  void addTaskIfStandalone(String id, String statusName) {
+    if (flowSubTaskIds.contains(id)) return;
+    addStatus(statusName);
+  }
+
+  for (final t in bgTasks) {
+    addTaskIfStandalone(t.id, t.status.name);
+  }
+  for (final t in catcatchTasks) {
+    addTaskIfStandalone(t.id, t.status.name);
+  }
+  for (final t in synthesisTasks) {
+    addTaskIfStandalone(t.id, t.status.name);
+  }
+  // Each flow execution is exactly one card in the unified task list —
+  // count it once, matching what the user sees there.
+  for (final e in flowExecutions) {
+    addStatus(e.status.name);
+  }
+
+  return (inProgress: inProgress, completed: completed, failed: failed);
+});
+
 extension _HomePageHomeContentExt on _HomePageState {
   /// 构建模块化首页内容
   Widget _buildHomeContent() {
     final cs = Theme.of(context).colorScheme;
-    final catcatchTasks = ref.watch(catcatchTasksProvider);
-    final synthesisTasks = ref.watch(taskListProvider);
-    // Use .select() so the home page ONLY rebuilds when a background
-    // task transitions between running/completed/failed — not on every
-    // intermediate step update (e.g. updateStep from running → running
-    // on a different step index).  This keeps the GUI responsive during
-    // CPU-bound extraction pipelines.
-    final bgStatusCounts = ref.watch(backgroundTasksProvider.select((tasks) {
-      int p = 0, c = 0, f = 0;
-      for (final t in tasks) {
-        switch (t.status) {
-          case TaskStatus.running:
-          case TaskStatus.paused:
-          case TaskStatus.waiting:
-            p++;
-          case TaskStatus.completed:
-            c++;
-          case TaskStatus.failed:
-            f++;
-        }
-      }
-      return (inProgress: p, completed: c, failed: f);
-    }));
-
-    // --- Compute status counts for the status card ---
-    int inProgressCount = bgStatusCounts.inProgress;
-    int completedCount = bgStatusCounts.completed;
-    int failedCount = bgStatusCounts.failed;
-
-    void countCatchStatusName(String statusName) {
-      if (statusName == 'running' ||
-          statusName == 'paused' ||
-          statusName == 'waiting') {
-        inProgressCount++;
-      } else if (statusName == 'completed') {
-        completedCount++;
-      } else if (statusName == 'failed') {
-        failedCount++;
-      }
-    }
-
-    for (final t in catcatchTasks) {
-      countCatchStatusName(t.status.name);
-    }
-    for (final t in synthesisTasks) {
-      countCatchStatusName(t.status.name);
-    }
+    final counts = ref.watch(homeStatusCountsProvider);
+    final inProgressCount = counts.inProgress;
+    final completedCount = counts.completed;
+    final failedCount = counts.failed;
 
     return SafeArea(
       top: true,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header — no notification button (replaced by status card)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                children: [
-                  Icon(Icons.auto_awesome, size: 24, color: cs.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '欢迎使用 Stroom',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: cs.onSurface,
+        // Whole content scrolls so short/landscape screens don't overflow
+        // (the module grid is shrink-wrapped — a fixed handful of cards,
+        // no perf concern).
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header — no notification button (replaced by status card)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.auto_awesome, size: 24, color: cs.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '欢迎使用 Stroom',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: cs.onSurface,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '选择一个功能模块开始使用',
-              style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
-            ),
-            const SizedBox(height: 16),
-            // Status card — shows task counts by status
-            _buildStatusCard(
-                context, inProgressCount, completedCount, failedCount),
-            const SizedBox(height: 16),
-            // Module grid
-            Expanded(
-              child: GridView(
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 180,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 1.2,
+                  ],
                 ),
-                children: [
-                  _buildModuleCard(
-                    icon: Icons.text_snippet,
-                    label: 'OCR',
-                    subtitle: '文字识别',
-                    color: Colors.teal,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const OcrPage()),
-                      );
-                    },
-                  ),
-                  _buildModuleCard(
-                    icon: Icons.multitrack_audio,
-                    label: '语音识别',
-                    subtitle: '语音转文字',
-                    color: Colors.deepPurple,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const AsrPage()),
-                      );
-                    },
-                  ),
-                  _buildModuleCard(
-                    icon: Icons.language,
-                    label: '下载网页资源',
-                    subtitle: '下载网页中的音视频',
-                    color: Colors.purple,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const CatCatchPage()),
-                      );
-                    },
-                  ),
-                  _buildModuleCard(
-                    icon: Icons.music_note,
-                    label: '音频分离',
-                    subtitle: '从视频中提取音频',
-                    color: Colors.indigo,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const AudioSeparationPage(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildModuleCard(
-                    icon: Icons.record_voice_over,
-                    label: '语音合成',
-                    subtitle: '文字转语音',
-                    color: Colors.cyan,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const TTSCreatePage(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildModuleCard(
-                    icon: Icons.account_tree,
-                    label: '图表制作',
-                    subtitle: 'Mermaid图表编辑',
-                    color: Colors.orange,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const MermaidChartPage(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildModuleCard(
-                    icon: Icons.functions,
-                    label: '数学绘图',
-                    subtitle: '函数绘图',
-                    color: Colors.blue,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const MathDrawingPage(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildModuleCard(
-                    icon: Icons.auto_stories,
-                    label: 'Anki闪卡',
-                    subtitle: '记忆辅助系统',
-                    color: Colors.teal,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const AnkiDroidPage(),
-                        ),
-                      );
-                    },
-                  ),
-                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                '选择一个功能模块开始使用',
+                style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 16),
+              // Status card — shows task counts by status
+              _buildStatusCard(
+                  context, inProgressCount, completedCount, failedCount),
+              const SizedBox(height: 16),
+              // Full-width task flow entry below recent tasks
+              _buildTaskFlowCard(context),
+              const SizedBox(height: 16),
+              // Module grid — a Wrap (NOT a GridView): a scrollable grid
+              // registers its own drag recognizer even with
+              // NeverScrollableScrollPhysics and swallows page swipes that
+              // start on it (deepest recognizer wins the gesture arena).
+              // Fixed handful of cards — no perf concern.
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth;
+                  // Same column math as the old
+                  // SliverGridDelegateWithMaxCrossAxisExtent(180, spacing 12):
+                  // ceil(width / (180 + 12)) — floor(width/180) would give
+                  // fewer, much wider columns on phones.
+                  final cols = math.max(1, (width / 192).ceil());
+                  final cardWidth = (width - (cols - 1) * 12) / cols;
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      for (final card in _moduleCards())
+                        SizedBox(
+                          width: cardWidth,
+                          height: cardWidth / 1.2,
+                          child: card,
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  List<Widget> _moduleCards() {
+    return [
+      _buildModuleCard(
+        icon: Icons.text_snippet,
+        label: 'OCR',
+        subtitle: '文字识别',
+        color: Colors.teal,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const OcrPage()),
+          );
+        },
+      ),
+      _buildModuleCard(
+        icon: Icons.multitrack_audio,
+        label: '语音识别',
+        subtitle: '语音转文字',
+        color: Colors.deepPurple,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AsrPage()),
+          );
+        },
+      ),
+      _buildModuleCard(
+        icon: Icons.language,
+        label: '下载网页资源',
+        subtitle: '下载网页中的音视频',
+        color: Colors.purple,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CatCatchPage()),
+          );
+        },
+      ),
+      _buildModuleCard(
+        icon: Icons.music_note,
+        label: '音频分离',
+        subtitle: '从视频中提取音频',
+        color: Colors.indigo,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const AudioSeparationPage(),
+            ),
+          );
+        },
+      ),
+      _buildModuleCard(
+        icon: Icons.record_voice_over,
+        label: '语音合成',
+        subtitle: '文字转语音',
+        color: Colors.cyan,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const TTSCreatePage(),
+            ),
+          );
+        },
+      ),
+      _buildModuleCard(
+        icon: Icons.account_tree,
+        label: '图表制作',
+        subtitle: 'Mermaid图表编辑',
+        color: Colors.orange,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const MermaidChartPage(),
+            ),
+          );
+        },
+      ),
+      _buildModuleCard(
+        icon: Icons.functions,
+        label: '数学绘图',
+        subtitle: '函数绘图',
+        color: Colors.blue,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const MathDrawingPage(),
+            ),
+          );
+        },
+      ),
+      _buildModuleCard(
+        icon: Icons.auto_stories,
+        label: 'Anki闪卡',
+        subtitle: '记忆辅助系统',
+        color: Colors.teal,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const AnkiDroidPage(),
+            ),
+          );
+        },
+      ),
+    ];
   }
 
   /// 构建模块卡片
@@ -266,6 +311,94 @@ extension _HomePageHomeContentExt on _HomePageState {
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Full-width entry to the task flow system, shown below the recent
+  /// tasks status card (original design: full-width card with flow count).
+  Widget _buildTaskFlowCard(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final taskFlows = ref.watch(taskFlowListProvider);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const TaskFlowListPage(),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Row(
+            children: [
+              // Icon
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: cs.tertiary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.account_tree,
+                  size: 22,
+                  color: cs.tertiary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Text content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '任务流',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      taskFlows.isEmpty
+                          ? '创建一个自动化任务流，依次执行多个功能'
+                          : '${taskFlows.length} 个任务流 · 点击管理',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Add button (chevron always — the home navigation test
+              // asserts no standalone plus icon on the home page)
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: cs.tertiary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: cs.tertiary,
+                ),
               ),
             ],
           ),

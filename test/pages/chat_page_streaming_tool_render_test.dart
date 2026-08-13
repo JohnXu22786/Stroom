@@ -18,6 +18,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/message_block.dart';
+import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/tool_call.dart'
     show ToolCallData, ToolCallStatus, ToolDefinition;
 import 'package:stroom/pages/chat_page.dart';
@@ -47,6 +48,7 @@ class _HangingStreamManager extends ChatStreamManager {
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
     String? streamingMsgId,
+    Assistant? assistant,
   }) {
     return Completer<StreamResult>().future;
   }

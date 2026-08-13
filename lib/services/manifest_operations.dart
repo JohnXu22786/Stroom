@@ -131,6 +131,18 @@ class ManifestOperations<T extends FileRecord> {
     return dir;
   }
 
+  /// Storage directory path (Native only).
+  ///
+  /// Exposed for callers that need the directory itself (e.g. copying a
+  /// large already-downloaded file into hash-addressed storage without
+  /// buffering it in memory — [writeFile] would need the full bytes).
+  /// Matches the ancestors' guard: in web/test-mode file stores (which
+  /// have no real directory) this returns '' like every other API here.
+  Future<String> get storageDirPath async {
+    if (_useWebFileStore) return '';
+    return _storageDir;
+  }
+
   /// Web 上用 "storageDirName/fileName" 做前缀，与 Native 目录结构保持一致。
   /// Native 上 `tts_audio/<hash>.wav`  ↔  Web 上 key = `"tts_audio/<hash>.wav"`
   String _webKey(String fileName) => '$storageDirName/$fileName';

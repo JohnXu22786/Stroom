@@ -20,7 +20,8 @@ import 'task_provider.dart';
 enum BackgroundTaskType {
   ocr,
   asr,
-  audioSeparation;
+  audioSeparation,
+  chat;
 
   String get label {
     switch (this) {
@@ -30,6 +31,8 @@ enum BackgroundTaskType {
         return '音频转写';
       case BackgroundTaskType.audioSeparation:
         return '音频分离';
+      case BackgroundTaskType.chat:
+        return '助手对话';
     }
   }
 
@@ -45,6 +48,9 @@ enum BackgroundTaskType {
       case BackgroundTaskType.audioSeparation:
         // Audio Separation: local processing only, no API
         return ['分离音频', '保存到文件'];
+      case BackgroundTaskType.chat:
+        // Chat/Assistant: API call
+        return ['发送请求', '等待回复', '接收结果'];
     }
   }
 }
@@ -269,8 +275,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     required String title,
     Map<String, dynamic>? retryData,
     bool startImmediately = true,
+    String? taskId,
   }) {
-    final id = _uuid.v4();
+    final id = taskId ?? _uuid.v4();
     final steps = type.stepLabels
         .map((label) => BgTaskStep(label: label, status: BgStepStatus.pending))
         .toList();
