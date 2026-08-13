@@ -53,8 +53,8 @@ extension _ChatPageEditingExt on _ChatPageState {
       _editingMessageAttachments = msg.attachments;
       // Sending the edit deletes this message and every message below it —
       // arm the composer's data-loss warning when there is anything to lose.
-      // The composer reveals it once the soft keyboard is up (or after a
-      // short fallback delay on no-keyboard setups) in the capsule's row.
+      // The composer shows it immediately on entry in the capsule's row
+      // (fade-in), then fades it out after 2s or on close.
       _showEditWarningOnEntry = index < _history.length - 1;
       // Bump so the composer re-arms even for the same message id
       // (re-tap on the message being edited re-shows the warning).

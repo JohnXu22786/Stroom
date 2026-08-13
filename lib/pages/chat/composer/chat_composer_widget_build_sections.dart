@@ -181,70 +181,9 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
   }
 
   /// ── Edit mode capsule ──
+  /// Centered in its row (same position as the warning pill it replaces)
+  /// and fades in when it returns after the warning is dismissed.
   Widget _buildEditModeCapsule({required ColorScheme cs}) {
-    return Padding(
-      padding: const EdgeInsets.only(
-        left: 12,
-        right: 12,
-        top: 6,
-        bottom: 0,
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: cs.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: cs.primary.withValues(alpha: 0.3),
-            width: 1,
-          ),
-        ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 4,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.edit,
-              size: 14,
-              color: cs.primary,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              '编辑消息',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: cs.primary,
-              ),
-            ),
-            const SizedBox(width: 6),
-            GestureDetector(
-              onTap: widget.onEditCancel,
-              // Add padding around the close icon for a larger
-              // touch target on mobile.
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(
-                  Icons.close,
-                  size: 16,
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// ── Edit data-loss warning pill ──
-  /// Replaces the edit capsule in its row while visible: re-sending the
-  /// edit deletes this message and everything below it. Centered in the
-  /// capsule's row (same position and height); fades in on entry and is
-  /// dismissed by the 2s auto-hide or the close button.
-  Widget _buildEditWarningPill({required ColorScheme cs}) {
     return Padding(
       padding: const EdgeInsets.only(
         left: 12,
@@ -257,16 +196,16 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
         children: [
           TweenAnimationBuilder<double>(
             tween: Tween(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 150),
+            duration: ChatComposerWidgetState._editWarningFadeOutDuration,
             builder: (context, value, child) =>
                 Opacity(opacity: value, child: child),
             child: Container(
-              key: const Key('editWarningPill'),
+              key: const Key('editModeCapsule'),
               decoration: BoxDecoration(
-                color: cs.errorContainer.withValues(alpha: 0.4),
+                color: cs.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: cs.error.withValues(alpha: 0.3),
+                  color: cs.primary.withValues(alpha: 0.3),
                   width: 1,
                 ),
               ),
@@ -278,34 +217,32 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    Icons.warning_amber_rounded,
-                    size: 14,
-                    color: cs.error,
+                    Icons.edit,
+                    size: 16,
+                    color: cs.primary,
                   ),
                   const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      '重新编辑发送后下面所有的消息将丢失',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: cs.onErrorContainer,
-                      ),
+                  Text(
+                    '编辑消息',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: cs.primary,
                     ),
                   ),
                   const SizedBox(width: 6),
                   Tooltip(
                     message: '关闭',
                     child: GestureDetector(
-                      onTap: _dismissEditWarning,
-                      // Same padding around the close icon as the capsule
-                      // for a larger touch target on mobile.
+                      onTap: widget.onEditCancel,
+                      // Small padding around the close icon for a slightly
+                      // larger touch target on mobile, kept subtle so the
+                      // right side does not read as a button next to the
+                      // bare left icon.
                       child: Padding(
-                        padding: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.all(2),
                         child: Icon(
                           Icons.close,
-                          key: const Key('editWarningCloseButton'),
                           size: 16,
                           color: cs.onSurfaceVariant,
                         ),
@@ -313,6 +250,99 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                     ),
                   ),
                 ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// ── Edit data-loss warning pill ──
+  /// Replaces the edit capsule in its row while visible: re-sending the
+  /// edit deletes this message and everything below it. Shown immediately
+  /// on edit entry when the warning is armed, centered in the capsule's
+  /// row, fading in on entry. Dismissed by the auto-hide countdown or the
+  /// close button — both set [fadingOut], which fades the pill out first;
+  /// the edit capsule fades back in once the pill is removed.
+  Widget _buildEditWarningPill({
+    required ColorScheme cs,
+    required bool fadingOut,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(
+        left: 12,
+        right: 12,
+        top: 6,
+        bottom: 0,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // While fading out the pill must not receive taps (or hover
+          // tooltips) at partial/zero opacity.
+          IgnorePointer(
+            ignoring: fadingOut,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: fadingOut ? 1 : 0, end: fadingOut ? 0 : 1),
+              duration: ChatComposerWidgetState._editWarningFadeOutDuration,
+              builder: (context, value, child) =>
+                  Opacity(opacity: value, child: child),
+              child: Container(
+                key: const Key('editWarningPill'),
+                decoration: BoxDecoration(
+                  color: cs.errorContainer.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: cs.error.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      size: 16,
+                      color: cs.error,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        '重新编辑发送后下面所有的消息将丢失',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: cs.onErrorContainer,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message: '关闭',
+                      child: GestureDetector(
+                        onTap: _dismissEditWarning,
+                        // Small padding around the close icon (see the
+                        // capsule's comment).
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(
+                            Icons.close,
+                            key: const Key('editWarningCloseButton'),
+                            size: 16,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

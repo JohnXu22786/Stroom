@@ -416,8 +416,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // viewInsets.bottom from the body's MediaQuery (resizeToAvoidBottom-
     // Inset consumes it), so MediaQuery would always report 0 here and
     // the whole keyboard session would never run on device. The view is
-    // fresh even inside this callback (the composer's _isKeyboardUp uses
-    // the same pattern).
+    // fresh even inside this callback.
     final bottomInset = _currentKeyboardInset();
     final isNowVisible = bottomInset > _keyboardVisibleThreshold;
     // While the initial positioning pass runs the list is hidden; keyboard /
