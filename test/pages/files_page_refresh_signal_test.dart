@@ -43,8 +43,8 @@ void main() {
         're-entering files page (refresh signal) keeps the open folder level',
         (tester) async {
       // Seed a record inside a folder so the folder tile shows at root.
-      await TextManifest.addRecord(_record('note_in_folder', 'hash1',
-          folder: 'subfolder'));
+      await TextManifest.addRecord(
+          _record('note_in_folder', 'hash1', folder: 'subfolder'));
 
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
