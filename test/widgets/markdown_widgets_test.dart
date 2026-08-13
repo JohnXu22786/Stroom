@@ -24,14 +24,14 @@ List<m.Node> _parseWithLatex(String text) {
 
 /// Helper: creates a [m.Document] with the same settings as
 /// `markdown_widget`'s [MarkdownGenerator] (gitHubFlavored + encodeHtml:
-/// false) plus the app's custom [LatexSyntax] and [BrSyntax], and parses
-/// [text] so tests can inspect the AST of tables (which need the
-/// gitHubFlavored [m.TableSyntax]).
+/// false) plus the app's custom [LatexSyntax], [BrSyntax] and [USyntax],
+/// and parses [text] so tests can inspect the AST of tables (which need
+/// the gitHubFlavored [m.TableSyntax]).
 List<m.Node> _parseLikeMarkdownGenerator(String text) {
   final doc = m.Document(
     extensionSet: m.ExtensionSet.gitHubFlavored,
     encodeHtml: false,
-    inlineSyntaxes: [LatexSyntax(), BrSyntax()],
+    inlineSyntaxes: [LatexSyntax(), BrSyntax(), USyntax()],
   );
   return doc.parse(text);
 }
@@ -49,6 +49,36 @@ m.Element? _findElement(List<m.Node> nodes, String tag) {
     }
   }
   return null;
+}
+
+/// Recursively searches an [InlineSpan] tree for the leaf [TextSpan]
+/// whose plain text equals [text]. Returns null when not found.
+///
+/// Used to assert that the underline is scoped to exactly the `<u>...`
+/// content and does not bleed onto the surrounding text.
+TextSpan? _leafSpanWithText(InlineSpan span, String text) {
+  if (span is TextSpan) {
+    if (span.text == text) return span;
+    for (final child in span.children ?? const <InlineSpan>[]) {
+      final found = _leafSpanWithText(child, text);
+      if (found != null) return found;
+    }
+  }
+  return null;
+}
+
+/// Collects every [m.Text] leaf's plain text in [nodes], in document order.
+List<String> _collectPlainText(List<m.Node> nodes) {
+  final texts = <String>[];
+  void walk(List<m.Node> list) {
+    for (final n in list) {
+      if (n is m.Text) texts.add(n.text);
+      if (n is m.Element) walk(n.children ?? []);
+    }
+  }
+
+  walk(nodes);
+  return texts;
 }
 
 void main() {
@@ -961,6 +991,135 @@ void main() {
 
       expect(find.text('第一行\n第二行', findRichText: true), findsOneWidget);
       expect(find.textContaining('<br>', findRichText: true), findsNothing);
+    });
+  });
+
+  group('USyntax - HTML <u> underline tags', () {
+    // Regression: models emit `<u>...</u>` to underline text. The markdown
+    // package's InlineHtmlSyntax passes inline HTML through as literal
+    // text, so `<u>下划线文本</u>` used to render as the characters
+    // "<u>下划线文本</u>" instead of underlined text.
+
+    test('<u>text</u> parses into a u element, not literal text', () {
+      final nodes = _parseLikeMarkdownGenerator('这是<u>下划线文本</u>。');
+
+      final u = _findElement(nodes, 'u');
+      expect(u, isNotNull,
+          reason: '<u>...</u> must be parsed into a u element');
+      expect(u!.textContent, '下划线文本');
+      // No literal "<u>" / "</u>" text anywhere in the AST.
+      expect(
+          _collectPlainText(nodes)
+              .any((t) => t.contains('<u>') || t.contains('</u>')),
+          isFalse,
+          reason: 'the tags must not survive as literal text');
+    });
+
+    test('nested markdown inside <u>...</u> is still parsed', () {
+      final nodes = _parseLikeMarkdownGenerator('<u>**加粗**文本</u>');
+
+      final u = _findElement(nodes, 'u');
+      expect(u, isNotNull);
+      expect(_findElement([u!], 'strong'), isNotNull,
+          reason: '**bold** inside <u> must remain real markdown');
+      // The ** delimiters are consumed by the emphasis parser, so the
+      // plain text content keeps only "加粗".
+      expect(u.textContent, '加粗文本');
+    });
+
+    test('unclosed <u> without </u> stays literal text', () {
+      final nodes = _parseLikeMarkdownGenerator('a <u> b');
+      expect(_findElement(nodes, 'u'), isNull);
+      expect(_collectPlainText(nodes).join(), contains('<u>'),
+          reason: 'an unclosed tag must render as literal characters');
+    });
+
+    test('an opening <u> alone on a line stays literal (HTML block)', () {
+      // CommonMark HTML-block rule (type 7): a complete open tag followed
+      // only by end-of-line starts an HTML block that is not inline-parsed.
+      // Documented in USyntax; pinned here so a future change cannot
+      // silently alter it.
+      final nodes = _parseLikeMarkdownGenerator('<u>\ntext\n</u>');
+      expect(_findElement(nodes, 'u'), isNull);
+      expect(_collectPlainText(nodes).join(), '<u>\ntext\n</u>');
+    });
+
+    test('similar tags (<ul>, <u class="x">) are not treated as underline', () {
+      const md = 'a <ul> b <u class="x">c</u> d';
+      final nodes = _parseLikeMarkdownGenerator(md);
+      expect(_findElement(nodes, 'u'), isNull,
+          reason: 'attributed <u class="x"> and <ul> must not become u '
+              'elements');
+
+      // ...and the text is preserved verbatim.
+      expect(_collectPlainText(nodes).join(), md,
+          reason: 'non-matching tags must render as literal characters');
+    });
+
+    test('a <u> inside an inline code span stays literal', () {
+      final nodes = _parseLikeMarkdownGenerator(r'`a<u>b</u>c`');
+      expect(_findElement(nodes, 'u'), isNull);
+      final code = _findElement(nodes, 'code');
+      expect(code, isNotNull);
+      expect(code!.textContent, 'a<u>b</u>c');
+    });
+
+    test('uppercase <U>...</U> is matched case-insensitively', () {
+      final nodes = _parseLikeMarkdownGenerator('<U>大写</U>');
+      final u = _findElement(nodes, 'u');
+      expect(u, isNotNull);
+      expect(u!.textContent, '大写');
+    });
+
+    testWidgets('<u>text</u> renders underlined text with no literal tags',
+        (WidgetTester tester) async {
+      const md = '这是<u>下划线文本</u>。';
+      final config = buildMarkdownConfig(isDark: false);
+      final widgets = markdownGenerator.buildWidgets(md, config: config);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Column(children: widgets),
+        ),
+      ));
+
+      expect(find.text('这是下划线文本。', findRichText: true), findsOneWidget);
+      expect(find.textContaining('<u>', findRichText: true), findsNothing);
+      expect(find.textContaining('</u>', findRichText: true), findsNothing);
+
+      // The underline must be scoped to exactly the tagged content: the
+      // inner leaf span is underlined, the surrounding text is not.
+      final rootSpan = (widgets.single as Padding).child as Text;
+      expect(_leafSpanWithText(rootSpan.textSpan!, '下划线文本')!.style?.decoration,
+          TextDecoration.underline,
+          reason: 'the tagged text must carry TextDecoration.underline');
+      expect(_leafSpanWithText(rootSpan.textSpan!, '这是')!.style?.decoration,
+          isNot(TextDecoration.underline),
+          reason: 'text before <u> must not be underlined');
+      expect(_leafSpanWithText(rootSpan.textSpan!, '。')!.style?.decoration,
+          isNot(TextDecoration.underline),
+          reason: 'text after </u> must not be underlined');
+    });
+
+    testWidgets('<u> with nested **bold** renders bold AND underlined',
+        (WidgetTester tester) async {
+      const md = '<u>普通与**加粗**文本</u>';
+      final config = buildMarkdownConfig(isDark: false);
+      final widgets = markdownGenerator.buildWidgets(md, config: config);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Column(children: widgets),
+        ),
+      ));
+
+      final rootSpan = (widgets.single as Padding).child as Text;
+      final boldLeaf = _leafSpanWithText(rootSpan.textSpan!, '加粗')!;
+      expect(boldLeaf.style?.fontWeight, FontWeight.bold,
+          reason: 'nested **bold** must keep the bold weight');
+      expect(boldLeaf.style?.decoration, TextDecoration.underline,
+          reason: 'nested **bold** inside <u> must keep the underline');
+      expect(_leafSpanWithText(rootSpan.textSpan!, '普通与')!.style?.decoration,
+          TextDecoration.underline,
+          reason: 'non-bold text inside <u> stays underlined');
     });
   });
 

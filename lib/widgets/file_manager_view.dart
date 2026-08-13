@@ -9,8 +9,136 @@ import '../utils/sort_config.dart';
 import 'batch_rename_dialog.dart';
 import 'file_manager_config.dart';
 import 'file_manager_utils.dart';
+import 'folder_picker_dialog.dart';
 
 export 'file_manager_config.dart';
+
+/// 单行文本：可用宽度不足时从「开头」省略（保留末尾），
+/// 用省略号代替被省略的前半部分，避免与前面的文字重叠。
+/// Flutter 原生 [Text] 只能从末尾省略，此组件用于需要
+/// 保留路径尾部（最深一级文件夹）的场景。
+class _FrontEllipsisText extends StatelessWidget {
+  final String text;
+  final TextStyle? style;
+  final TextAlign textAlign;
+
+  const _FrontEllipsisText({
+    required this.text,
+    this.style,
+    this.textAlign = TextAlign.start,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth;
+        if (maxWidth <= 0 || text.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        // 必须与渲染端 [Text] 完全一致：Text 内部会用 DefaultTextStyle
+        // 合并 style，并按 MediaQuery 的 textScaler 缩放；无障碍「粗体
+        // 文字」开关还会把字重强制为 bold。测量端不这样做时，系统
+        // 字体放大/粗体（无障碍）会让实际渲染比测量更宽，导致尾部
+        // 溢出、开头的省略号被裁掉。
+        var effectiveStyle = DefaultTextStyle.of(context).style.merge(style);
+        if (MediaQuery.boldTextOf(context)) {
+          effectiveStyle = effectiveStyle.copyWith(fontWeight: FontWeight.bold);
+        }
+        final textDirection = Directionality.of(context);
+        final textScaler = MediaQuery.textScalerOf(context);
+
+        const ellipsis = '…';
+        if (_measureWidth(
+              ellipsis,
+              effectiveStyle,
+              textScaler,
+              textDirection,
+            ) >=
+            maxWidth) {
+          // 连省略号都放不下，只显示省略号
+          return _buildText(ellipsis, textAlign);
+        }
+        if (_measureWidth(
+              text,
+              effectiveStyle,
+              textScaler,
+              textDirection,
+            ) <=
+            maxWidth) {
+          // 完整文本放得下，直接显示
+          return _buildText(text, textAlign);
+        }
+        // 二分查找能放下的最长尾部。测量「省略号 + 尾部」的整体宽度
+        // （与最终渲染的字符串一致，避免拼接处宽度偏差）。若切点落在
+        // 代理对（emoji）中间，[_pairAlignedTail] 会从代理对起点开始，
+        // 保证不测量/渲染不完整的 UTF-16 字符串。
+        var lo = 0; // 保留 0 个尾部字符（仅省略号）
+        var hi = text.length;
+        while (lo < hi) {
+          final mid = (lo + hi + 1) >> 1;
+          final tail = _pairAlignedTail(text, mid);
+          final joinedWidth = _measureWidth(
+            '$ellipsis$tail',
+            effectiveStyle,
+            textScaler,
+            textDirection,
+          );
+          if (joinedWidth <= maxWidth) {
+            lo = mid;
+          } else {
+            hi = mid - 1;
+          }
+        }
+        final tail = _pairAlignedTail(text, lo);
+        return _buildText(
+          tail.isEmpty ? ellipsis : '$ellipsis$tail',
+          textAlign,
+        );
+      },
+    );
+  }
+
+  /// 取 [text] 末尾 [units] 个码元；若切点落在代理对中间，
+  /// 从代理对起点（高位代理）开始，保证返回的字符串是合法的 UTF-16。
+  static String _pairAlignedTail(String text, int units) {
+    final start = text.length - units;
+    if (start <= 0 || start >= text.length) return text.substring(start);
+    final first = text.codeUnitAt(start);
+    if (first >= 0xDC00 && first <= 0xDFFF) {
+      // 切点落在低位代理上 → 回退一位，包含完整代理对
+      return text.substring(start - 1);
+    }
+    return text.substring(start);
+  }
+
+  /// 按与渲染端 [Text] 相同的 [style]/[textScaler]/[textDirection]
+  /// 测量单行文本的像素宽度。
+  static double _measureWidth(
+    String value,
+    TextStyle style,
+    TextScaler textScaler,
+    TextDirection textDirection,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(text: value, style: style),
+      maxLines: 1,
+      textDirection: textDirection,
+      textScaler: textScaler,
+    )..layout();
+    return painter.width;
+  }
+
+  Widget _buildText(String value, TextAlign align) {
+    return Text(
+      value,
+      style: style,
+      maxLines: 1,
+      textAlign: align,
+      overflow: TextOverflow.clip,
+    );
+  }
+}
 
 // ====================================================================
 // FileManagerView — reusable file-manager stateful widget
@@ -413,16 +541,94 @@ class _FileManagerViewState<T extends FileRecord>
     );
   }
 
+  /// 当前文件夹的祖先链（含根目录），按「根目录 → 当前文件夹」排序。
+  /// 只包含各级父文件夹，不包含与父级并列的文件夹。
+  /// 返回的路径列表可用于面包屑跳转（如 ['', 'a', 'a/b', 'a/b/c']）。
+  List<String> _ancestorFolderChain() {
+    final chain = <String>[''];
+    if (_currentFolder.isEmpty) return chain;
+    final reversed = <String>[];
+    var folder = _currentFolder;
+    // 防呆：最多迭代 64 层，避免异常桥接实现产生死循环
+    for (var i = 0; folder.isNotEmpty && i < 64; i++) {
+      reversed.add(folder);
+      final parent = widget.manifestBridge.getParentFolderPath(folder);
+      if (parent == folder) break; // 异常实现自环保护
+      folder = parent;
+    }
+    chain.addAll(reversed.reversed);
+    return chain;
+  }
+
+  /// 顶部标题：显示当前文件夹名字（而非完整路径）+ 下拉箭头。
+  /// 点击后弹出按顺序排列的祖先文件夹（根目录 → 当前），
+  /// 选择任意一级即可跳转。
+  Widget _buildFolderBreadcrumbTitle() {
+    final chain = _ancestorFolderChain();
+    return PopupMenuButton<String>(
+      key: const Key('fm_folder_breadcrumb_btn'),
+      tooltip: '祖先文件夹',
+      onSelected: (value) => _setCurrentFolder(value),
+      itemBuilder: (context) => [
+        for (final folderPath in chain)
+          PopupMenuItem<String>(
+            value: folderPath,
+            // 当前文件夹已是所在位置，禁用以避免无意义跳转
+            enabled: folderPath != _currentFolder,
+            child: Row(
+              children: [
+                Icon(
+                  folderPath.isEmpty
+                      ? Icons.home_outlined
+                      : folderPath == _currentFolder
+                          ? Icons.check
+                          : Icons.folder_outlined,
+                  size: 18,
+                  color: Colors.grey[600],
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    folderPath.isEmpty
+                        ? '根目录'
+                        : widget.manifestBridge.getFolderBaseName(folderPath),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: folderPath == _currentFolder
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              widget.manifestBridge.getFolderBaseName(_currentFolder),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const Icon(Icons.arrow_drop_down),
+        ],
+      ),
+    );
+  }
+
   PreferredSizeWidget _buildAppBar(Map<String, List<T>> grouped) {
     return AppBar(
       primary: false,
-      title: Text(
-        _selectionMode
-            ? '已选择 ${_selectedIds.length} 项'
-            : _currentFolder.isNotEmpty
-                ? _currentFolder
-                : widget.config.title,
-      ),
+      title: _selectionMode
+          ? Text('已选择 ${_selectedIds.length} 项')
+          : _currentFolder.isNotEmpty
+              ? _buildFolderBreadcrumbTitle()
+              : Text(widget.config.title),
       centerTitle: true,
       leading: _selectionMode
           ? IconButton(
@@ -618,10 +824,15 @@ class _FileManagerViewState<T extends FileRecord>
                     : '返回: ${widget.manifestBridge.getFolderBaseName(parentFolder)}',
                 style: TextStyle(fontSize: 15, color: Colors.blue[700]),
               ),
-              const Spacer(),
-              Text(
-                widget.manifestBridge.getFolderBaseName(_currentFolder),
-                style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+              const SizedBox(width: 8),
+              // 右侧灰色字显示当前文件夹完整路径；空间不足时从开头
+              // 省略（保留末尾），避免与前面的蓝字重叠
+              Expanded(
+                child: _FrontEllipsisText(
+                  text: _currentFolder,
+                  style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                  textAlign: TextAlign.end,
+                ),
               ),
             ],
           ),
@@ -2499,254 +2710,38 @@ class _FileManagerViewState<T extends FileRecord>
   }
 
   // ====================================================================
-  // Folder picker dialog (tree navigation + inline create)
+  // Folder picker dialog (shared [FolderPickerDialog], same as OCR page)
   // ====================================================================
 
-  /// 显示内嵌文件夹选择面板。返回 (选中的文件夹路径, 面板会话结束时的
-  /// 实时文件夹集合)。实时集合包含面板内新建的文件夹 —— 调用方需要用
-  /// 它做目标冲突校验，因为 [widget.folders] 是构建时冻结的集合。
+  /// 显示统一的目标文件夹选择面板（与文字识别页共用的 [FolderPickerDialog]）。
+  /// 返回 (选中的文件夹路径, 面板会话结束时的实时文件夹集合)。实时集合包含
+  /// 面板内新建的文件夹 —— 调用方需要用它对目标冲突做校验，因为
+  /// [widget.folders] 是构建时冻结的集合。
   Future<(String?, Set<String>)> _showFolderPickerDialog(
     Set<String> folders, {
     String title = '选择目标文件夹',
   }) async {
-    final nameController = TextEditingController();
-    final focusNode = FocusNode();
-    var isCreating = false;
-    var isCreatingInProgress = false; // 创建请求进行中，防止重复触发
-    var pickerCurrentPath = '';
-    var currentFolders = Set<String>.from(folders);
+    // 面板会话内新建的文件夹路径（用于返回实时集合做冲突校验）
+    final createdFolders = <String>{};
 
-    final result = await showDialog<(String, Set<String>)>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          // Direct subfolders under pickerCurrentPath
-          final subFolders = _getDirectSubFolders(
-            pickerCurrentPath,
-            currentFolders,
-          );
-
-          /// 校验名称并创建文件夹；成功后把新路径加入可导航集合。
-          Future<void> createAndAddFolder() async {
-            if (isCreatingInProgress) return; // 防止回车+按钮等双重触发
-            isCreatingInProgress = true;
-            final name = nameController.text.trim();
-            if (name.isEmpty) {
-              isCreatingInProgress = false;
-              return;
-            }
-            final err = widget.manifestBridge.validateFolderName(name);
-            if (err != null) {
-              isCreatingInProgress = false;
-              if (ctx.mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(
-                    content: Text(err),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              }
-              return;
-            }
-            final newPath =
-                pickerCurrentPath.isEmpty ? name : '$pickerCurrentPath/$name';
-            if (currentFolders.contains(newPath)) {
-              isCreatingInProgress = false;
-              if (ctx.mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(
-                    content: Text('文件夹已存在'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              }
-              return;
-            }
-            try {
-              await widget.onCreateFolder(newPath);
-            } catch (e) {
-              isCreatingInProgress = false;
-              if (ctx.mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(
-                    content: Text('创建文件夹失败: $e'),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              }
-              return;
-            }
-            if (ctx.mounted) {
-              setDialogState(() {
-                // Manually add the new path instead of re-reading
-                // widget.folders because widget.folders is the frozen
-                // initial set.
-                currentFolders = {...currentFolders, newPath};
-                isCreating = false;
-                nameController.clear();
-              });
-            }
-            isCreatingInProgress = false;
-          }
-
-          return AlertDialog(
-            key: const Key('fm_folder_picker_dialog'),
-            title: Text(title),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Path bar + back button
-                  _buildPickerPathBar(pickerCurrentPath, () {
-                    setDialogState(() {
-                      pickerCurrentPath = widget.manifestBridge
-                          .getParentFolderPath(pickerCurrentPath);
-                    });
-                  }),
-                  const Divider(height: 1),
-                  // Folder list
-                  Expanded(
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: [
-                        if (pickerCurrentPath.isEmpty)
-                          const ListTile(
-                            leading: Icon(Icons.home_outlined),
-                            title: Text('（根目录）'),
-                            dense: true,
-                            selected: true,
-                          ),
-                        if (subFolders.isEmpty && !isCreating)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 24),
-                            child: Center(
-                              child: Text(
-                                '此文件夹为空',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            ),
-                          ),
-                        ...subFolders.map(
-                          (f) => ListTile(
-                            leading: const Icon(Icons.folder_outlined),
-                            title: Text(
-                              widget.manifestBridge.getFolderBaseName(f),
-                            ),
-                            dense: true,
-                            onTap: () {
-                              setDialogState(() {
-                                pickerCurrentPath = f;
-                              });
-                            },
-                          ),
-                        ),
-                        // Inline create folder
-                        if (isCreating) ...[
-                          const Divider(height: 1),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 4,
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: nameController,
-                                    focusNode: focusNode,
-                                    autofocus: true,
-                                    decoration: const InputDecoration(
-                                      hintText: '输入文件夹名称',
-                                      border: OutlineInputBorder(),
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 10,
-                                      ),
-                                    ),
-                                    onSubmitted: (_) => createAndAddFolder(),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  key: const Key(
-                                    'fm_picker_create_confirm_btn',
-                                  ),
-                                  icon: const Icon(
-                                    Icons.check_circle_outline,
-                                    color: Colors.green,
-                                  ),
-                                  tooltip: '确认创建',
-                                  onPressed: createAndAddFolder,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  if (!isCreating)
-                    TextButton.icon(
-                      key: const Key('fm_add_folder_btn'),
-                      onPressed: () {
-                        setDialogState(() => isCreating = true);
-                        WidgetsBinding.instance.addPostFrameCallback(
-                          (_) => focusNode.requestFocus(),
-                        );
-                      },
-                      icon: const Icon(
-                        Icons.create_new_folder_outlined,
-                        size: 18,
-                      ),
-                      label: const Text('新建文件夹'),
-                    )
-                  else
-                    const SizedBox.shrink(),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextButton(
-                        key: const Key('fm_picker_cancel_btn'),
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('取消'),
-                      ),
-                      TextButton(
-                        key: const Key('fm_select_folder_btn'),
-                        // 创建进行中禁用：避免在途创建时弹出旧选择
-                        onPressed: isCreatingInProgress
-                            ? null
-                            : () => Navigator.pop(
-                                  ctx,
-                                  (
-                                    pickerCurrentPath,
-                                    Set<String>.from(currentFolders),
-                                  ),
-                                ),
-                        child: const Text('选择此文件夹'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
+    final selectedFolder = await FolderPickerDialog.show(
+      context,
+      availableFolders: folders,
+      title: title,
+      onCreateFolder: (name) async {
+        try {
+          await widget.onCreateFolder(name);
+          createdFolders.add(name);
+          return null;
+        } catch (e) {
+          return '创建文件夹失败: $e';
+        }
+      },
+      onRefreshFolders: () async => {...folders, ...createdFolders},
     );
 
-    nameController.dispose();
-    focusNode.dispose();
-    if (result == null) return (null, Set<String>.from(folders));
-    return result;
+    if (selectedFolder == null) return (null, Set<String>.from(folders));
+    return (selectedFolder, {...folders, ...createdFolders});
   }
 
   /// Compute direct subfolders from a set of all folder paths
@@ -2759,34 +2754,6 @@ class _FileManagerViewState<T extends FileRecord>
       final suffix = f.substring(prefix.length);
       return !suffix.contains('/');
     }).toList();
-  }
-
-  Widget _buildPickerPathBar(String currentPath, VoidCallback onBack) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
-        children: [
-          if (currentPath.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.arrow_back, size: 20),
-              tooltip: '返回上级',
-              onPressed: onBack,
-              visualDensity: VisualDensity.compact,
-            ),
-          Expanded(
-            child: Text(
-              currentPath.isEmpty ? '根目录' : currentPath,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey[700],
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 

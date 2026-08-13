@@ -46,6 +46,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     Map<String, String>? customParams,
     Map<String, dynamic>? trimPreset,
     String? taskId,
+    String folder = '',
   }) {
     final id = taskId ?? _uuid.v4();
     final task = SynthesisTask(
@@ -56,6 +57,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       modelConfig: modelConfig,
       customParams: customParams,
       trimPreset: trimPreset,
+      folder: folder,
     );
 
     state = [task, ...state];
@@ -146,7 +148,9 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         actualFormat,
         task.text,
         name: task.title,
-        folder: saveFolder,
+        // 显式 folder 参数（TTS 页面）优先；任务流块通过 customParams
+        // 传 saveFolder，两者都指向保存目录。
+        folder: task.folder.isNotEmpty ? task.folder : saveFolder,
       );
 
       // 更新任务为完成

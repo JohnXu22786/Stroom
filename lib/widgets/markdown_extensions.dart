@@ -16,6 +16,10 @@ const _latexTag = 'latex';
 /// (`$...$`) keeps the regular text size.
 const double _displayMathScaleFactor = 1.5;
 
+/// Char code of '<', the start character of the HTML-like inline syntaxes
+/// ([BrSyntax], [USyntax]).
+const int _ltCharCode = 0x3C;
+
 /// Custom [m.InlineSyntax] that parses HTML line-break tags (`<br>`,
 /// `<br/>`, `<br />`, `</br>`) as hard line breaks.
 ///
@@ -39,8 +43,6 @@ class BrSyntax extends m.InlineSyntax {
           caseSensitive: false,
         );
 
-  static const int _ltCharCode = 0x3C; // '<'
-
   @override
   bool onMatch(m.InlineParser parser, Match match) {
     parser.addNode(m.Element.text('br', ''));
@@ -48,12 +50,71 @@ class BrSyntax extends m.InlineSyntax {
   }
 }
 
+/// Custom [m.InlineSyntax] that parses HTML underline tags (`<u>text</u>`)
+/// into a `u` element.
+///
+/// The `markdown` package's [m.InlineHtmlSyntax] passes inline HTML through
+/// as literal text, so without this syntax `<u>下划线文本</u>` would render
+/// as the characters "<u>下划线文本</u>" instead of underlined text.
+///
+/// The inner content is re-parsed with the document's inline syntaxes, so
+/// nested markdown (`<u>**加粗**</u>`) keeps rendering inside the
+/// underline. Only the plain paired form is matched: attributed
+/// (`<u class="x">`) and unclosed tags keep rendering as literal text —
+/// models do not emit attributes, and keeping the match strict avoids
+/// false positives.
+///
+/// Known limitation (CommonMark HTML-block rule): an opening `<u>` alone on
+/// a line at block start (document start or right after a blank line)
+/// begins an HTML block and renders literally. Everywhere else — including
+/// `<u>text</u>` at the start of a line, or on a line following paragraph
+/// text (an HTML block cannot interrupt a paragraph) — it underlines
+/// normally.
+class USyntax extends m.InlineSyntax {
+  USyntax()
+      : super(
+          // Case-insensitive: models also output <U> or </U>. The inner
+          // group is re-parsed by [m.Document.parseInline] in [onMatch].
+          r'<u>([\s\S]*?)</u>',
+          startCharacter: _ltCharCode,
+          caseSensitive: false,
+        );
+
+  @override
+  bool onMatch(m.InlineParser parser, Match match) {
+    // Parse the inner content with the same inline syntaxes as the rest of
+    // the document so markdown inside the underline keeps working.
+    final content = match.group(1) ?? '';
+    final el = m.Element('u', parser.document.parseInline(content));
+    parser.addNode(el);
+    return true;
+  }
+}
+
+/// A [SpanNode] that renders its children with an underline
+/// ([TextDecoration.underline]), mirroring how `markdown_widget`'s
+/// [DelNode] renders strikethrough for `<del>`.
+class UNode extends ElementNode {
+  @override
+  TextStyle get style => parentStyle?.merge(_defaultUStyle) ?? _defaultUStyle;
+}
+
+/// See [UNode].
+const _defaultUStyle = TextStyle(decoration: TextDecoration.underline);
+
 /// [SpanNodeGeneratorWithTag] that creates [LatexNode] instances when
 /// the markdown parser encounters a LaTeX element.
 final SpanNodeGeneratorWithTag latexGenerator = SpanNodeGeneratorWithTag(
   tag: _latexTag,
   generator: (e, config, visitor) =>
       LatexNode(e.attributes, e.textContent, config),
+);
+
+/// [SpanNodeGeneratorWithTag] that creates [UNode] instances when
+/// the markdown parser encounters a `u` (underline) element.
+final SpanNodeGeneratorWithTag uGenerator = SpanNodeGeneratorWithTag(
+  tag: 'u',
+  generator: (e, config, visitor) => UNode(),
 );
 
 /// Custom [m.InlineSyntax] that parses LaTeX math expressions written
@@ -430,12 +491,270 @@ PreConfig codeBlockPreConfig({
 /// Adds the [BrSyntax] parser so that `<br>` in table cells (and
 /// paragraphs) renders as a line break instead of literal text.
 ///
+/// Adds the [USyntax] parser and [uGenerator] so that `<u>text</u>`
+/// renders as underlined text instead of literal characters.
+///
 /// Created once and reused to avoid re-allocation on every
 /// [MarkdownWidget] build.
 final MarkdownGenerator markdownGenerator = MarkdownGenerator(
-  inlineSyntaxList: [LatexSyntax(), BrSyntax()],
-  generators: [latexGenerator],
+  inlineSyntaxList: [LatexSyntax(), BrSyntax(), USyntax()],
+  generators: [latexGenerator, uGenerator],
 );
+
+/// Counts case-insensitive occurrences of [lowerQuery] in [text].
+///
+/// [lowerQuery] must already be lower-cased. Used to keep search-match
+/// ordinals aligned across the multiple markdown widgets a single message is
+/// split into (text segments around tool calls).
+int countOccurrences(String text, String lowerQuery) {
+  if (lowerQuery.isEmpty) return 0;
+  final lower = text.toLowerCase();
+  var count = 0;
+  var start = 0;
+  while (true) {
+    final idx = lower.indexOf(lowerQuery, start);
+    if (idx == -1) break;
+    count++;
+    start = idx + lowerQuery.length;
+  }
+  return count;
+}
+
+/// Returns [text] with the markdown constructs whose content is never
+/// rendered as visited text removed: fenced code blocks (also inside
+/// blockquotes), inline code spans and display math (`$$...$$`).
+///
+/// Chat search counts matches on the raw message text, but the render-time
+/// highlight generator can only paint occurrences inside visited text nodes
+/// — code blocks, inline code and math are rendered as dedicated widgets and
+/// never visited as text. Without stripping, those raw matches would shift
+/// the highlight ordinals (the orange "current" match would land on the
+/// wrong occurrence) and overstate the match counter. Line structure is
+/// preserved so the occurrence ORDER matches the rendered text's order.
+///
+/// Known limitations (matches there keep shifting ordinals, an uncommon
+/// case for real search queries): matches inside link/image URLs, inline
+/// `$...$` math, and 4-space-indented code blocks are still not stripped
+/// (the renderer does not visit them as text either, but this function does
+/// not detect them).
+String stripSearchIrrelevantMarkdown(String text) {
+  final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+  final lines = normalized.split('\n');
+  final kept = <String>[];
+  var inFence = false;
+  String? fenceChar;
+  var fenceLength = 0;
+  for (final line in lines) {
+    final trimmed = line.trimRight();
+    // Fence detection ignores a leading blockquote marker (">"), so fences
+    // inside blockquotes are stripped too — matching the renderer, which
+    // parses them as code blocks.
+    final withoutQuote = _stripBlockquoteMarker(trimmed);
+    if (inFence) {
+      if (_isClosingFenceLine(withoutQuote, fenceChar!, fenceLength)) {
+        inFence = false;
+        // Keep the line count so later occurrences keep their relative
+        // order; the fence content itself is dropped.
+        kept.add('');
+      }
+      // Content inside the fence is dropped.
+    } else {
+      final opening = _openingFence(withoutQuote);
+      if (opening != null) {
+        inFence = true;
+        fenceChar = opening.fenceChar;
+        fenceLength = opening.fenceLength;
+        kept.add(''); // The opening fence line is replaced by a blank line.
+      } else {
+        kept.add(line);
+      }
+    }
+  }
+  if (inFence) {
+    // Unclosed trailing fence: drop everything after its opening fence.
+    kept.add('');
+  }
+  final withoutFences = kept.join('\n');
+  // Inline pass: drop inline code spans and display math. The renderer
+  // inline-parses each paragraph separately, so the code-span scan is split
+  // per paragraph (a span can never cross a blank line). Matches are walked
+  // manually instead of replaceAll because the parser refuses to start a
+  // span right after a backtick — a regex scan would otherwise strip prose
+  // on ragged backtick runs. Unmatched backticks/`$` are left alone: the
+  // renderer treats them as literal text too, so search and rendering stay
+  // consistent.
+  final paragraphs = withoutFences.split('\n\n');
+  final inlineStripped = paragraphs.map((paragraph) {
+    final buffer = StringBuffer();
+    var last = 0;
+    for (final match in _codeSpanPattern.allMatches(paragraph)) {
+      if (match.start > 0 && paragraph[match.start - 1] == '`') continue;
+      buffer.write(paragraph.substring(last, match.start));
+      last = match.end;
+    }
+    buffer.write(paragraph.substring(last));
+    return buffer.toString();
+  }).join('\n\n');
+  return inlineStripped.replaceAll(_displayMathPattern, '');
+}
+
+/// The markdown parser's inline code pattern (see `CodeSyntax`): a run of
+/// backticks, non-greedy content ending in a non-backtick, then a
+/// same-length run of backticks.
+final RegExp _codeSpanPattern = RegExp(
+  r'(`+(?!`))((?:.|\n)*?[^`])\1(?!`)',
+);
+
+/// Display math (`$$...$$`) pattern used by the search stripper.
+final RegExp _displayMathPattern = RegExp(r'\$\$[\s\S]*?\$\$');
+
+/// Strips one leading blockquote marker (`>`), with up to 3 leading spaces
+/// and an optional space after it, from [line]. Returns [line] unchanged when
+/// it is not a blockquote line.
+String _stripBlockquoteMarker(String line) {
+  var i = 0;
+  // CommonMark allows up to 3 leading spaces before the '>'.
+  while (i < line.length && i < 3 && line[i] == ' ') {
+    i++;
+  }
+  if (i >= line.length || line[i] != '>') return line;
+  i++; // consume '>'
+  if (i < line.length && line[i] == ' ') i++; // optional space after '>'
+  return line.substring(i);
+}
+
+/// A [TextNode] that highlights every case-insensitive occurrence of the
+/// search query within its own text.
+///
+/// The surrounding markdown structure (headings, emphasis, links, math, ...)
+/// is preserved because only the text node's content is split into
+/// highlighted spans.
+///
+/// [startGlobalIndex] is the global index (into the search's flat match list)
+/// of the first occurrence inside this node; the occurrence whose global
+/// index equals [currentGlobalIndex] is drawn as the "current" match.
+class SearchHighlightTextNode extends SpanNode {
+  final String text;
+  final String lowerQuery;
+  final int startGlobalIndex;
+  final int currentGlobalIndex;
+
+  SearchHighlightTextNode({
+    required this.text,
+    required this.lowerQuery,
+    required this.startGlobalIndex,
+    required this.currentGlobalIndex,
+    required TextStyle? baseStyle,
+  }) {
+    style = baseStyle;
+  }
+
+  @override
+  InlineSpan build() {
+    final effectiveStyle = style?.merge(parentStyle);
+    // An empty query must not loop forever (indexOf('') matches everywhere).
+    if (lowerQuery.isEmpty) {
+      return TextSpan(text: text, style: effectiveStyle);
+    }
+    final spans = <InlineSpan>[];
+    final lower = text.toLowerCase();
+    var start = 0;
+    var ordinal = 0;
+    while (true) {
+      final idx = lower.indexOf(lowerQuery, start);
+      if (idx == -1) break;
+      if (idx > start) {
+        spans.add(
+          TextSpan(text: text.substring(start, idx), style: effectiveStyle),
+        );
+      }
+      final isCurrent = startGlobalIndex + ordinal == currentGlobalIndex;
+      spans.add(
+        TextSpan(
+          text: text.substring(idx, idx + lowerQuery.length),
+          style: effectiveStyle?.copyWith(
+            backgroundColor: isCurrent ? Colors.orangeAccent : Colors.yellow,
+            color: Colors.black87,
+            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      );
+      ordinal++;
+      start = idx + lowerQuery.length;
+    }
+    if (start < text.length) {
+      spans.add(TextSpan(text: text.substring(start), style: effectiveStyle));
+    }
+    return TextSpan(children: spans);
+  }
+}
+
+/// Renders inline code the same way the library's [CodeNode] does, but as a
+/// plain (non-element) span that never accepts child text nodes.
+///
+/// The library's [CodeNode] is an [ElementNode], so its content is still
+/// visited — which would make the search generator count (and try to
+/// highlight) text inside inline code or fenced code blocks even though that
+/// text is never painted. Code content is rendered by dedicated widgets, so
+/// it must never contribute to the highlight ordinals.
+class _SearchCodeNode extends SpanNode {
+  final String text;
+
+  _SearchCodeNode(this.text, CodeConfig codeConfig) {
+    style = codeConfig.style;
+  }
+
+  @override
+  InlineSpan build() => TextSpan(text: text, style: style?.merge(parentStyle));
+}
+
+/// Builds a [MarkdownGenerator] that renders the search [query]'s occurrences
+/// highlighted inside the markdown text while keeping the markdown structure
+/// intact.
+///
+/// Matches are matched again inside every text node, so raw offsets do not
+/// need to survive markdown parsing. [messageFirstMatchIndex] is the global
+/// index (into the search's flat match list) of this message's first match;
+/// [occurrenceOffset] is how many occurrences appeared in earlier text
+/// segments of the same message. Together they align the "current" (orange)
+/// highlight with the navigation cursor across messages and segments.
+MarkdownGenerator buildSearchMarkdownGenerator({
+  required String query,
+  required int messageFirstMatchIndex,
+  required int occurrenceOffset,
+  required int currentMatchIndex,
+}) {
+  final lowerQuery = query.toLowerCase();
+  var counter = occurrenceOffset;
+  return MarkdownGenerator(
+    inlineSyntaxList: [LatexSyntax(), BrSyntax()],
+    generators: [
+      latexGenerator,
+      // Inline/fenced code must not be counted or highlighted: the library's
+      // CodeNode accepts (and discards) child text nodes, which would advance
+      // the ordinal counter for content that can never be painted.
+      SpanNodeGeneratorWithTag(
+        tag: MarkdownTag.code.name,
+        generator: (e, config, visitor) =>
+            _SearchCodeNode(e.textContent, config.code),
+      ),
+    ],
+    textGenerator: (node, config, visitor) {
+      if (node is! m.Text) return null;
+      final count = countOccurrences(node.text, lowerQuery);
+      final startIndex = counter;
+      counter += count;
+      if (count == 0) return null;
+      return SearchHighlightTextNode(
+        text: node.text,
+        lowerQuery: lowerQuery,
+        startGlobalIndex: messageFirstMatchIndex + startIndex,
+        currentGlobalIndex: currentMatchIndex,
+        baseStyle: config.p.textStyle,
+      );
+    },
+  );
+}
 
 /// A custom [H1Config] that removes the bottom divider line.
 /// Accepts an optional [style] to preserve dark-mode text color.

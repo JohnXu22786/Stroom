@@ -8,7 +8,6 @@ import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/widgets/image_preview_dialog.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
-import 'package:stroom/pages/image_editor_page.dart';
 import 'album_picker_shared.dart';
 
 /// Shows a dialog for selecting images from the app's internal album.
@@ -43,11 +42,6 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
 
   // 多选状态: key = recordId, value = (fileName, bytes)
   final Map<String, MapEntry<String, Uint8List>> _selectedItems = {};
-
-  /// Number of quick image edits still processing in the background.
-  /// While non-zero, confirming is blocked — the selection still holds
-  /// the unedited bytes until the edit callback applies them.
-  int _editsInFlight = 0;
 
   /// Track temp file paths created during edit for cleanup on dialog close.
   final List<String> _tempEditFiles = [];
@@ -237,27 +231,13 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 ),
                 child: FilledButton.icon(
                   key: const Key('album_picker_confirm_btn'),
-                  onPressed: _editsInFlight > 0
-                      ? null
-                      : () {
-                          final result = _selectedItems.values.toList();
-                          Navigator.of(context).pop(result);
-                        },
-                  icon: _editsInFlight > 0
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.check, size: 18),
-                  label: Text(_editsInFlight > 0
-                      ? '处理中...'
-                      : hasSelection
-                          ? '确定 (${_selectedItems.length})'
-                          : '确定'),
+                  onPressed: () {
+                    final result = _selectedItems.values.toList();
+                    Navigator.of(context).pop(result);
+                  },
+                  icon: const Icon(Icons.check, size: 18),
+                  label: Text(
+                      hasSelection ? '确定 (${_selectedItems.length})' : '确定'),
                 ),
               ),
             ),
@@ -529,15 +509,15 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   /// Handle tap on a preview chip: show fullscreen preview with edit.
   /// If the user edits the image, the edited bytes are saved to temp cache
   /// and the selected item is updated in memory (original file is NOT overwritten).
-  /// Crop opens the quick editor; edit opens the full editor — matching the
-  /// OCR page.
+  /// The quick editor processes the image in place and pops back with the
+  /// edited bytes only after the pipeline finishes.
   Future<void> _onPreviewChipTap(
     String recordKey,
     String fileName,
     Uint8List imageBytes,
   ) async {
     // Show the fullscreen preview dialog with edit button
-    final editChoice = await showDialog<String>(
+    final shouldEdit = await showDialog<bool>(
       context: context,
       builder: (ctx) => ImagePreviewDialog(
         imageData: imageBytes,
@@ -545,114 +525,43 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
       ),
     );
 
-    if (editChoice == null || !mounted) return;
+    if (shouldEdit != true || !mounted) return;
 
-    if (editChoice == 'crop') {
-      // Quick crop editor. Another edit is still processing — starting a
-      // second one could silently discard the newer edit (both pipelines
-      // resolve against the same original bytes). Ask the user to wait.
-      if (_editsInFlight > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('图片处理中，请稍候再编辑'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-        return;
-      }
-
-      // User tapped crop — open quick editor. The editor hides its UI on
-      // confirm but stays alive while the image processes in the background
-      // (deferred destroy); the route is non-opaque so the picker shows
-      // through. The selection is updated from the callback once the
-      // edited bytes are ready.
-      await Navigator.push<bool>(
-        context,
-        buildQuickEditEditorRoute(
-          imageBytes: imageBytes,
-          fileName: fileName,
-          onSubmitted: () {
-            // The user confirmed — hold the confirm button NOW. The
-            // selection still holds the unedited bytes until the edit
-            // callback applies them; released in onProcessed.
-            if (mounted) setState(() => _editsInFlight++);
-          },
-          onProcessed: (result) async {
-            try {
-              if (result is! QuickEditProcessingSuccess) return;
-              final editedBytes = result.editedBytes;
-              if (!mounted) return;
-
-              // Save edited bytes to temp cache directory instead of
-              // overwriting original
-              try {
-                final tempDir = await getTemporaryDirectory();
-                final tempFileName =
-                    'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
-                final tempFile = File('${tempDir.path}/$tempFileName');
-                await tempFile.writeAsBytes(editedBytes);
-                _tempEditFiles.add(tempFile.path);
-              } catch (_) {
-                // Temp file save is best-effort; we keep the bytes in
-                // memory
-              }
-
-              // The dialog is interactive while the editor processes in
-              // the background — it may have been dismissed, or the item
-              // removed (and possibly re-added) since the edit started.
-              // Only apply the edit if it is still the same entry.
-              if (!mounted) return;
-              final current = _selectedItems[recordKey];
-              if (current == null || !identical(current.value, imageBytes)) {
-                return;
-              }
-
-              // Update the selected item in-memory with edited bytes
-              setState(() {
-                _selectedItems[recordKey] = MapEntry(fileName, editedBytes);
-              });
-            } finally {
-              // The pipeline always fires the callback (success or
-              // failure) — release the confirm-blocking guard here.
-              if (mounted) setState(() => _editsInFlight--);
-            }
-          },
-        ),
-      );
-      return;
-    }
-
-    // User tapped edit — open the full editor. showSaveDialog=false so it
-    // directly overwrites the in-memory selection (same as the OCR page).
-    // Another edit is still processing — a second edit would race the
-    // in-flight apply and one of the two results would be silently
-    // dropped. Ask the user to wait.
-    if (_editsInFlight > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('图片处理中，请稍候再编辑'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    final editorResult = await Navigator.push<ImageEditorResult>(
+    // User tapped edit — open quick editor
+    final editedBytes = await Navigator.push<Uint8List>(
       context,
       MaterialPageRoute(
-        builder: (_) => ImageEditorPage(
+        builder: (_) => ExtendedImageEditorPage(
           imageBytes: imageBytes,
-          showSaveDialog: false,
+          fileName: fileName,
         ),
       ),
     );
-    if (editorResult == null || !mounted) return;
-    // The dialog is interactive while the editor is open — only apply the
-    // edit if it is still the same entry.
+
+    if (editedBytes == null || !mounted) return;
+
+    // Save edited bytes to temp cache directory instead of overwriting original
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final tempFileName =
+          'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+      final tempFile = File('${tempDir.path}/$tempFileName');
+      await tempFile.writeAsBytes(editedBytes);
+      _tempEditFiles.add(tempFile.path);
+    } catch (_) {
+      // Temp file save is best-effort; we keep the bytes in memory
+    }
+
+    // The picker may have been dismissed, or the item removed (and
+    // possibly re-added) while the temp save was in flight — only apply
+    // the edit if it is still the same entry.
+    if (!mounted) return;
     final current = _selectedItems[recordKey];
     if (current == null || !identical(current.value, imageBytes)) return;
+
+    // Update the selected item in-memory with edited bytes
     setState(() {
-      _selectedItems[recordKey] = MapEntry(fileName, editorResult.editedBytes);
+      _selectedItems[recordKey] = MapEntry(fileName, editedBytes);
     });
   }
 

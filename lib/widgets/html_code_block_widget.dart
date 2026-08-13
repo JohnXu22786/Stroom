@@ -5,9 +5,9 @@ import 'code_block_source_widget.dart';
 /// Widget shown for ```html fenced code blocks inside a chat message.
 ///
 /// The default preview is a compact CARD (not the raw code): it shows an
-/// "html" language badge, a "正在生成中..." indicator while the block is
-/// still being generated, and three action buttons — 标题 (shows the
-/// document's extracted `<title>`), 全屏查看 (renders the HTML in a
+/// "html" language badge, the document's extracted `<title>` as a single
+/// centered line, a "正在生成中..." indicator while the block is still
+/// being generated, and two action buttons — 全屏查看 (renders the HTML in a
 /// full-screen [WebView]-based dialog; disabled while generating) and
 /// 查看代码 (reveals the raw source).
 ///
@@ -96,25 +96,6 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
     );
   }
 
-  void _showTitleDialog(BuildContext context) {
-    final title = HtmlCodeBlockWidget.extractHtmlTitle(widget.htmlCode);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('标题'),
-        content: SelectableText(
-          title.isEmpty ? '（无标题）' : title,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('关闭'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_showCode) {
@@ -146,6 +127,7 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
     final cs = Theme.of(context).colorScheme;
     final isDark = cs.brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xff555555) : const Color(0xffeff1f3);
+    final title = HtmlCodeBlockWidget.extractHtmlTitle(widget.htmlCode);
 
     return Container(
       width: double.infinity,
@@ -187,6 +169,25 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
                 ),
               ),
             ),
+            // The extracted document <title>, shown as a single centered
+            // line (replaces the old 标题 button). Hidden when the HTML has
+            // no (non-empty) title.
+            if (title.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isDark
+                      ? const Color(0xffe0e0e0)
+                      : const Color(0xff333333),
+                ),
+              ),
+            ],
             // "(empty)" hint for a finished block with no content.
             if (widget.htmlCode.trim().isEmpty && !widget.isStreaming) ...[
               const SizedBox(height: 12),
@@ -221,18 +222,13 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
               ),
             ],
             const SizedBox(height: 12),
-            // Action buttons: 标题 / 全屏查看 / 查看代码. Wrapped so very
-            // narrow bubbles wrap onto a second row instead of overflowing.
+            // Action buttons: 全屏查看 / 查看代码. Wrapped so very narrow
+            // bubbles wrap onto a second row instead of overflowing.
             Wrap(
               alignment: WrapAlignment.center,
               spacing: 8,
               runSpacing: 8,
               children: [
-                _buildCardButton(
-                  icon: Icons.title,
-                  label: '标题',
-                  onPressed: () => _showTitleDialog(context),
-                ),
                 _buildCardButton(
                   icon: Icons.fullscreen,
                   label: '全屏查看',
@@ -273,6 +269,8 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
     );
   }
 
+  /// A compact circular icon button (36x36) matching the shared
+  /// [CodeBlockSourceView] toolbar buttons.
   Widget _buildActionButton({
     required IconData icon,
     required String label,
@@ -281,14 +279,11 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        customBorder: const CircleBorder(),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 16,
-          ),
-          child: Icon(icon, size: 18, semanticLabel: label),
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 20, semanticLabel: label),
         ),
       ),
     );

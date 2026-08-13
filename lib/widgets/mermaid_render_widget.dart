@@ -763,10 +763,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   void didUpdateWidget(MermaidRenderWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.mermaidCode != widget.mermaidCode) {
-      // Invalidate the memoized initial HTML: a recreated WebView (e.g.
-      // after the source-code view was shown, which unmounts the platform
-      // view) reads initialData again and must see the NEW code. While the
-      // WebView stays alive the code change goes through loadData below.
+      // Invalidate the memoized initial HTML: if the WebView is recreated
+      // (e.g. the widget was unmounted and mounted again) it reads
+      // initialData anew and must see the NEW code. While the WebView
+      // stays alive the code change goes through loadData below. (The
+      // source-code toggle keeps the WebView mounted — see [build].)
       _initialHtml = null;
       // On web the loading state is managed INSIDE the iframe (the asset
       // template shows a hint until the diagram is rendered), so _isReady
@@ -1321,14 +1322,46 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       );
     }
 
-    // ---- Source code mode: show raw code without WebView ----
-    // Uses CodeBlockSourceView directly (which provides its own border,
-    // background, line numbers, and wrap toggle) so we do NOT wrap it
-    // in _buildBorderedContainer to avoid double borders.
-    if (_showSourceCode) {
+    // ---- Source code mode on web ----
+    // On web the WebView is an iframe (HtmlElementView) that the engine
+    // composites ABOVE the Flutter canvas, so a Flutter overlay cannot
+    // reliably cover it. Unmount the iframe as before — re-creation is
+    // cheap on web (no platform-view teardown), and the source view
+    // renders unconditionally.
+    if (_showSourceCode && kIsWeb) {
       return _buildSourceCodeView(cs, isDark, effectiveHeight);
     }
 
+    // ---- Render layer + source-code overlay (stable root) ----
+    // The render layer is ALWAYS the Stack's base child, so its element —
+    // and with it the InAppWebView platform view on native — keeps the
+    // same tree slot across source↔preview toggles. The source code view
+    // is drawn ON TOP of the live render layer only while the source is
+    // shown; toggling back just removes the overlay and the
+    // already-rendered diagram is visible instantly — no blank flash, no
+    // loading animation, no platform-view re-creation. This mirrors
+    // MermaidChartPage's split mode, which keeps the preview mounted while
+    // the code editor is visible.
+    //
+    // CodeBlockSourceView provides its own border, background, line
+    // numbers, and wrap toggle, so the source view needs no extra border
+    // container — it sits directly on top of the render layer.
+    return Stack(
+      children: [
+        _buildRenderLayer(cs, effectiveHeight),
+        if (_showSourceCode)
+          Positioned.fill(
+            child: _buildSourceCodeView(cs, isDark, effectiveHeight),
+          ),
+      ],
+    );
+  }
+
+  /// Builds the render layer: the deferred-creation loading placeholder
+  /// (before the WebView exists), or the WebView with its overlays and
+  /// button row. Kept mounted underneath the source code view when
+  /// [_showSourceCode] is true (see [build]).
+  Widget _buildRenderLayer(ColorScheme cs, double? effectiveHeight) {
     // ---- Loading placeholder (deferred WebView creation) ----
     // On native platforms the WebView is created only after the bundled
     // mermaid.js asset is loaded (so the initial HTML can inline it) AND
@@ -1537,14 +1570,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        customBorder: const CircleBorder(),
         onTap: _toggleSourceCode,
         child: const Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 16,
-          ),
-          child: Icon(Icons.image, size: 18, semanticLabel: '查看图表'),
+          padding: EdgeInsets.all(8),
+          child: Icon(Icons.image, size: 20, semanticLabel: '查看图表'),
         ),
       ),
     );
@@ -1555,14 +1585,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        customBorder: const CircleBorder(),
         onTap: _saveAsMmd,
         child: const Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 16,
-          ),
-          child: Icon(Icons.save, size: 18, semanticLabel: '保存'),
+          padding: EdgeInsets.all(8),
+          child: Icon(Icons.save, size: 20, semanticLabel: '保存'),
         ),
       ),
     );
@@ -1583,53 +1610,52 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// same order everywhere — fullscreen → save → code. All buttons are
   /// pure icons (text-free) so the toolbars stay compact and consistent.
   Widget _buildButtonRow(ColorScheme cs) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(
-        minWidth: 48,
-        minHeight: 48,
+    // The pill just wraps its buttons (no forced minimum size), so a
+    // single-button toolbar collapses into a circle with no trailing
+    // blank space. Radius 18 = half of the 36px button circle.
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(18),
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ---- Zoom controls (block-specific, left side) ----
-            _buildActionButton(
-              icon: Icons.zoom_out,
-              label: '缩小',
-              onTap: _zoomOut,
-            ),
-            _buildActionButton(
-              icon: Icons.zoom_in,
-              label: '放大',
-              onTap: _zoomIn,
-            ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ---- Zoom controls (block-specific, left side) ----
+          _buildActionButton(
+            icon: Icons.zoom_out,
+            label: '缩小',
+            onTap: _zoomOut,
+          ),
+          _buildActionButton(
+            icon: Icons.zoom_in,
+            label: '放大',
+            onTap: _zoomIn,
+          ),
 
-            // ---- Common buttons (right-aligned, fixed order) ----
-            _buildActionButton(
-              icon: Icons.fullscreen,
-              label: '全屏',
-              onTap: _openFullScreen,
-            ),
-            _buildActionButton(
-              icon: Icons.save,
-              label: '保存',
-              onTap: _saveAsMmd,
-            ),
-            _buildActionButton(
-              icon: Icons.code,
-              label: '查看源码',
-              onTap: _toggleSourceCode,
-            ),
-          ],
-        ),
+          // ---- Common buttons (right-aligned, fixed order) ----
+          _buildActionButton(
+            icon: Icons.fullscreen,
+            label: '全屏',
+            onTap: _openFullScreen,
+          ),
+          _buildActionButton(
+            icon: Icons.save,
+            label: '保存',
+            onTap: _saveAsMmd,
+          ),
+          _buildActionButton(
+            icon: Icons.code,
+            label: '查看源码',
+            onTap: _toggleSourceCode,
+          ),
+        ],
       ),
     );
   }
 
+  /// A compact circular icon button (36x36) with a circular ripple via
+  /// [CircleBorder].
   Widget _buildActionButton({
     required IconData icon,
     required String label,
@@ -1638,14 +1664,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        customBorder: const CircleBorder(),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 16,
-          ),
-          child: Icon(icon, size: 18, semanticLabel: label),
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 20, semanticLabel: label),
         ),
       ),
     );
@@ -1654,31 +1677,25 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// Builds a compact row of zoom in/out buttons, shown when
   /// [showZoomControls] is true independently of the full toolbar.
   Widget _buildZoomControls(ColorScheme cs) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(
-        minWidth: 48,
-        minHeight: 48,
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(18),
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildActionButton(
-              icon: Icons.zoom_out,
-              label: '缩小',
-              onTap: _zoomOut,
-            ),
-            _buildActionButton(
-              icon: Icons.zoom_in,
-              label: '放大',
-              onTap: _zoomIn,
-            ),
-          ],
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildActionButton(
+            icon: Icons.zoom_out,
+            label: '缩小',
+            onTap: _zoomOut,
+          ),
+          _buildActionButton(
+            icon: Icons.zoom_in,
+            label: '放大',
+            onTap: _zoomIn,
+          ),
+        ],
       ),
     );
   }

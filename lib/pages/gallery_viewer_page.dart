@@ -121,6 +121,9 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
     return ExtendedImage.memory(
       bytes,
       fit: BoxFit.contain,
+      // enableLoadState 默认 false：若 loadStateChanged 的 loading 分支被
+      // 误删返回 null，页面会黑屏而不是显示默认加载圈 —— 打开开关兜底
+      enableLoadState: true,
       mode: ExtendedImageMode.gesture,
       initGestureConfigHandler: (_) => GestureConfig(
         minScale: 0.5,
@@ -135,40 +138,20 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
         if (state.extendedImageLoadState == LoadState.failed) {
           return _buildErrorWidget('Cannot load image');
         }
-        // 全分辨率解码期间继续显示缩略图，避免缩略图 → 白色加载圈 → 全图
-        // 的两次切换闪烁
+        // 全分辨率解码完成前统一显示加载圈，不显示缩略图 —— 进入查看器时
+        // 先看到的是加载动画，而不是低分辨率的缩略图占位
         if (state.extendedImageLoadState == LoadState.loading) {
-          final thumb = ImageThumbnailLoader.peek(record);
-          if (thumb != null) {
-            return _buildThumbnailPlaceholder(thumb);
-          }
+          return _buildLoadingPlaceholder();
         }
         return null;
       },
     );
   }
 
-  /// 加载占位：只显示已缓存/已加载的缩略图，绝不触发新的缩略图生成。
-  /// 全图字节的读取始终已在进行（itemBuilder 的 FutureBuilder 与
-  /// 预加载），占位符再走一次 loadThumbnail 会重复读取同一张原图。
-  Widget _buildLoadingPlaceholder(ImageRecord record) {
-    final cachedThumb = ImageThumbnailLoader.peek(record);
-    if (cachedThumb != null) {
-      return _buildThumbnailPlaceholder(cachedThumb);
-    }
+  /// 加载占位：全图字节读取/解码完成前统一显示加载圈，不显示缩略图。
+  Widget _buildLoadingPlaceholder() {
     return const Center(
       child: CircularProgressIndicator(color: Colors.white),
-    );
-  }
-
-  Widget _buildThumbnailPlaceholder(Uint8List thumb) {
-    return Center(
-      child: Image.memory(
-        thumb,
-        fit: BoxFit.contain,
-        // 256px 缩略图放大到全屏时用中等过滤，减少明显锯齿
-        filterQuality: FilterQuality.medium,
-      ),
     );
   }
 
@@ -198,69 +181,39 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
   Future<void> _onCrop() async {
     if (_isLoading) return;
     _isLoading = true;
-    // When the editor is confirmed, the pipeline keeps running while the
-    // editor stays alive (hidden) — the guard stays held until the
-    // callback (which always fires, success or failure) releases it. On
-    // every other path the guard is released here in `finally`.
-    var pipelineRunning = false;
     try {
       final record = widget.images[_currentIndex];
       final bytes = await _readImageBytes(record);
       if (bytes == null || bytes.isEmpty || !mounted) return;
 
-      // The editor hides its UI on confirm but stays alive while the
-      // image processes in the background (deferred destroy); the route
-      // is non-opaque so the gallery shows through. The save dialog is
-      // shown from the callback once processing done.
-      final confirmed = await Navigator.push<bool>(
+      // The quick editor processes the image in place (the page stays
+      // open with a spinner until the pipeline finishes) and pops back
+      // with the edited bytes.
+      final editedBytes = await Navigator.push<Uint8List>(
         context,
-        buildQuickEditEditorRoute(
-          imageBytes: bytes,
-          fileName: '${record.name}.${record.format}',
-          onProcessed: (result) async {
-            try {
-              await _onQuickEditProcessed(record, result);
-            } catch (e) {
-              // Callback errors must not surface as unhandled async
-              // errors — the failure snackbar is the pipeline's job.
-              debugPrint('Quick edit result handling failed: $e');
-            } finally {
-              // Release the re-entry guard once the background
-              // pipeline has finished (success OR failure — the
-              // callback always fires).
-              _isLoading = false;
-            }
-          },
+        MaterialPageRoute(
+          builder: (_) => ExtendedImageEditorPage(
+            imageBytes: bytes,
+            fileName: '${record.name}.${record.format}',
+          ),
         ),
       );
-      pipelineRunning = confirmed == true;
-      // Confirmed — the guard stays held until the callback releases it,
-      // so the user cannot start a second overlapping edit pipeline.
+
+      if (editedBytes == null || !mounted) return;
+
+      // Show the same save dialog as the full editor uses.
+      final saveAction = await showImageSaveDialog(context);
+      if (!mounted) return;
+      if (saveAction == null || saveAction == SaveAction.cancel) return;
+
+      await _saveEditedImage(
+        record,
+        editedBytes,
+        isSaveAs: saveAction == SaveAction.saveAs,
+      );
     } finally {
-      if (!pipelineRunning) _isLoading = false;
+      _isLoading = false;
     }
-  }
-
-  /// Called when the quick editor finishes background processing (the
-  /// editor still holds its page alive until this returns — deferred
-  /// destroy). On success shows the save dialog and persists; on failure
-  /// the pipeline already showed a snackbar.
-  Future<void> _onQuickEditProcessed(
-    ImageRecord record,
-    QuickEditProcessingResult result,
-  ) async {
-    if (result is! QuickEditProcessingSuccess) return;
-    if (!mounted) return;
-
-    final saveAction = await showImageSaveDialog(context);
-    if (!mounted) return;
-    if (saveAction == null || saveAction == SaveAction.cancel) return;
-
-    await _saveEditedImage(
-      record,
-      result.editedBytes,
-      isSaveAs: saveAction == SaveAction.saveAs,
-    );
   }
 
   Future<void> _onEdit() async {
@@ -411,7 +364,7 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
                 future: _readImageBytes(record),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return _buildLoadingPlaceholder(record);
+                    return _buildLoadingPlaceholder();
                   }
                   final bytes = snapshot.data;
                   if (bytes == null || bytes.isEmpty) {

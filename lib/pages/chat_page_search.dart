@@ -14,7 +14,15 @@ extension _ChatPageSearchExt on _ChatPageState {
       if (query.isEmpty) return;
       final lowerQuery = query.toLowerCase();
       for (final msg in _history) {
-        final text = msg.content;
+        // AI messages are rendered as markdown: matches inside code blocks,
+        // inline code or math can never be highlighted (those are rendered
+        // as dedicated widgets), so strip them before matching — otherwise
+        // they would overstate the counter and shift the "current" match.
+        // User messages are plain text and keep raw offsets (used by the
+        // plain-text highlight).
+        final text = msg.role == 'user'
+            ? msg.content
+            : stripSearchIrrelevantMarkdown(msg.content);
         final lowerContent = text.toLowerCase();
         int start = 0;
         while (true) {
@@ -26,18 +34,136 @@ extension _ChatPageSearchExt on _ChatPageState {
       }
     });
     if (_searchMatches.isNotEmpty) {
-      _scrollToCurrentMatch();
+      // Scroll after the rebuild so the message list reflects the new
+      // highlight state (lazy items may not be built until then).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToCurrentMatch();
+      });
     }
   }
 
-  void _scrollToCurrentMatch() {
+  Future<void> _scrollToCurrentMatch() async {
+    // Serialize navigations: a rapid second tap must wait for the first
+    // one's pagination loads instead of racing them (load-more refuses
+    // concurrent runs, which would silently drop the newer navigation).
+    final inFlight = _pendingSearchScroll;
+    if (inFlight != null) {
+      try {
+        await inFlight;
+      } catch (_) {}
+      if (!mounted) return;
+    }
+
     if (_currentMatchIndex < 0 || _currentMatchIndex >= _searchMatches.length) {
       return;
     }
-    final match = _searchMatches[_currentMatchIndex];
-    final key = _messageKeys[match.messageId];
-    if (key?.currentContext != null) {
-      Scrollable.ensureVisible(key!.currentContext!, alignment: 0.3);
+    final targetIndex = _currentMatchIndex;
+    final match = _searchMatches[targetIndex];
+
+    Future<void> navigation() async {
+      // The target may still be unloaded: lazy pagination keeps only the
+      // latest messages in the chat controller. Load older batches (without
+      // the spinner's minimum-display delay) until the message is present.
+      var loadGuard = 0;
+      var stalledRetries = 0;
+      while (mounted) {
+        final historyIdx = _history.indexWhere((m) => m.id == match.messageId);
+        if (historyIdx == -1 || _loadedUpToIndex <= historyIdx) break;
+        final before = _loadedUpToIndex;
+        await _loadMoreMessages(skipMinDisplayDelay: true);
+        if (!mounted) return;
+        if (_loadedUpToIndex < before) {
+          // The batch loaded — keep going.
+          stalledRetries = 0;
+        } else if (_hasMoreMessages && ++stalledRetries <= 10) {
+          // _loadMoreMessages refuses concurrent runs (e.g. the user's own
+          // scroll already triggered onEndReached). Wait briefly and retry
+          // instead of silently dropping the navigation.
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          continue;
+        } else {
+          // Nothing more to load (or retries exhausted): the target message
+          // is not in the chat controller.
+          if (stalledRetries > 10) {
+            debugPrint('[ChatPage] search navigation retries exhausted for '
+                'message ${match.messageId}');
+          }
+          break;
+        }
+        if (++loadGuard > 100) {
+          debugPrint('[ChatPage] search navigation gave up before reaching '
+              'message ${match.messageId}');
+          break;
+        }
+      }
+      if (!mounted) return;
+
+      // A newer query or navigation superseded this one: never scroll to a
+      // stale match.
+      if (_currentMatchIndex != targetIndex ||
+          _currentMatchIndex >= _searchMatches.length ||
+          _searchMatches[_currentMatchIndex].messageId != match.messageId) {
+        return;
+      }
+
+      // Already-built messages: ensureVisible scrolls the exact render box
+      // and bypasses the keyboard session's scroll swallow, matching the
+      // original behavior for visible items.
+      final key = _messageKeys[match.messageId];
+      if (key?.currentContext != null) {
+        Scrollable.ensureVisible(key!.currentContext!, alignment: 0.3);
+        return;
+      }
+
+      // Loaded but not built (scrolled out of the lazy list's cache): use
+      // the library's observer-based scroll-to-message, which repeatedly
+      // scrolls near the target until the item is found.
+      final controller = _controller;
+      if (controller == null) return;
+      try {
+        // The keyboard session swallows controller-initiated scrolls (they
+        // fight the page's own keyboard scroll). This is a user-initiated
+        // navigation, so lift the swallow for the duration of the scroll.
+        final wasSwallow = _chatScrollController.swallowScrolls;
+        _chatScrollController.swallowScrolls = false;
+        try {
+          // The load-more just inserted messages; the list has not laid them
+          // out yet. Defer one frame so the observer can locate the target
+          // item instead of silently aborting.
+          final scrolled = Completer<void>();
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            try {
+              await controller.scrollToMessage(
+                match.messageId,
+                alignment: 0.3,
+                duration: const Duration(milliseconds: 250),
+              );
+            } catch (e, s) {
+              if (!scrolled.isCompleted) scrolled.completeError(e, s);
+            } finally {
+              if (!scrolled.isCompleted) scrolled.complete();
+            }
+          });
+          // Make sure a frame is scheduled so the deferred scroll always
+          // runs — if no frame were pending, `scrolled.future` would never
+          // complete and every later navigation would wedge behind it.
+          WidgetsBinding.instance.scheduleFrame();
+          await scrolled.future;
+        } finally {
+          _chatScrollController.swallowScrolls = wasSwallow;
+        }
+      } catch (_) {
+        // The observer could not locate the item; nothing more to do — the
+        // message simply is not in the current list.
+      }
+    }
+
+    final future = navigation();
+    _pendingSearchScroll = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_pendingSearchScroll, future)) _pendingSearchScroll = null;
     }
   }
 

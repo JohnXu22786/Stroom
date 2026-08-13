@@ -159,6 +159,16 @@ extension _ChatPageBubblesExt on _ChatPageState {
     // throttle intervals). Each text block renders in a
     // single MarkdownWidget for continuity.
     final widgets = <Widget>[];
+    // When searching, each text segment renders through a highlight-aware
+    // markdown generator. Matches are re-found inside every text node, and
+    // [occurrenceOffset] (how many occurrences appeared in earlier text
+    // segments of this message) keeps the "current" highlight aligned with
+    // the global navigation cursor across segments.
+    final lowerQuery = hasSearchMatch ? _searchQuery.toLowerCase() : '';
+    final messageFirstMatchIndex = hasSearchMatch
+        ? _searchMatches.indexWhere((m) => m.messageId == messageId)
+        : 0;
+    var occurrenceOffset = 0;
     for (final seg in mergeConsecutiveTextSegments(segments)) {
       switch (seg) {
         case TextSegment s:
@@ -167,9 +177,24 @@ extension _ChatPageBubblesExt on _ChatPageState {
               bottom: 4,
             ),
             child: hasSearchMatch
-                ? _buildHighlightedText(
-                    s.text,
-                    messageId,
+                ? MarkdownWidget(
+                    data: s.text,
+                    selectable: true,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    config: buildMessageMarkdownConfig(
+                      isDark: isDark,
+                      conversationIsStreaming: isStreaming,
+                      streamingMsgId: _streamingMsgId,
+                      messageId: messageId,
+                      streamingText: s.text,
+                    ),
+                    markdownGenerator: buildSearchMarkdownGenerator(
+                      query: _searchQuery,
+                      messageFirstMatchIndex: messageFirstMatchIndex,
+                      occurrenceOffset: occurrenceOffset,
+                      currentMatchIndex: _currentMatchIndex,
+                    ),
                   )
                 : MarkdownWidget(
                     data: s.text,
@@ -190,6 +215,14 @@ extension _ChatPageBubblesExt on _ChatPageState {
                     markdownGenerator: markdownGenerator,
                   ),
           ));
+          // Count occurrences the highlight generator can actually paint
+          // (matches inside code/math render as dedicated widgets and never
+          // become highlightable text), so the offset stays aligned with the
+          // per-segment ordinal of the next text segment.
+          occurrenceOffset += countOccurrences(
+            stripSearchIrrelevantMarkdown(s.text),
+            lowerQuery,
+          );
         case ToolCallSegment s:
           widgets.add(ToolCallCard(data: s.data));
         case ReasoningSegment s:
@@ -309,9 +342,20 @@ extension _ChatPageBubblesExt on _ChatPageState {
               messageId: message.id,
             )
           else if (hasSearchMatch)
-            _buildHighlightedText(
-              message.text,
-              message.id,
+            MarkdownWidget(
+              data: message.text,
+              selectable: true,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              config: markdownConfig,
+              markdownGenerator: buildSearchMarkdownGenerator(
+                query: _searchQuery,
+                messageFirstMatchIndex: _searchMatches.indexWhere(
+                  (m) => m.messageId == message.id,
+                ),
+                occurrenceOffset: 0,
+                currentMatchIndex: _currentMatchIndex,
+              ),
             )
           else
             MarkdownWidget(
