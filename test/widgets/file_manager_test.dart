@@ -400,6 +400,74 @@ void main() {
     });
   });
 
+  group('FileManagerView title bar scroll color', () {
+    testWidgets(
+      'title bar keeps its color and elevation when the list scrolls under it',
+      (tester) async {
+        // Enough records to make the list taller than the viewport.
+        final manyFiles = List.generate(
+          60,
+          (i) => _TestFileRecord(
+            id: 'scroll_file_$i',
+            name: 'file_$i',
+            hash: 'hash_$i',
+            format: 'txt',
+          ),
+        );
+
+        final config = FileManagerConfig<_TestFileRecord>(
+          title: 'Test',
+          fileIconBuilder: (_) => const Icon(Icons.description),
+          onFileTap: (_) {},
+        );
+
+        await tester.pumpWidget(
+          _buildFileManagerApp(
+            config: config,
+            folders: const {},
+            manifestBridge: fileManagerNavManifestBridge,
+            records: manyFiles,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // The AppBar's background Material is the outermost Material in the
+        // AppBar subtree (found first in traversal order).
+        Material appBarMaterial() => tester.widget<Material>(
+          find
+              .descendant(
+                of: find.byType(AppBar),
+                matching: find.byType(Material),
+              )
+              .first,
+        );
+
+        final colorBeforeScroll = appBarMaterial().color;
+        final elevationBeforeScroll = appBarMaterial().elevation;
+        expect(elevationBeforeScroll, 0);
+
+        // Scroll down so the list content scrolls under the title bar.
+        await tester.drag(find.byType(ListView), const Offset(0, -400));
+        await tester.pumpAndSettle();
+
+        // Regression: Material 3's scrolled-under elevation must not tint the
+        // title bar or switch its background color when the list is scrolled.
+        expect(
+          appBarMaterial().color,
+          colorBeforeScroll,
+          reason: 'title bar must not change color when the list is '
+              'scrolled under it',
+        );
+        expect(
+          appBarMaterial().elevation,
+          elevationBeforeScroll,
+          reason: 'title bar must not gain scrolled-under elevation when the '
+              'list is scrolled under it',
+        );
+      },
+    );
+  });
+
   group('FileManagerView sorting', () {
     FileManagerView<_TestFileRecord> build({
       Set<String> folders = const {},

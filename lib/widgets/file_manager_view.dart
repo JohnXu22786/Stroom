@@ -625,6 +625,13 @@ class _FileManagerViewState<T extends FileRecord>
   PreferredSizeWidget _buildAppBar(Map<String, List<T>> grouped) {
     return AppBar(
       primary: false,
+      // 固定标题栏背景色并禁用 scrolled-under 抬升：Material 3 默认在内容
+      // 滚动到标题栏下方（WidgetState.scrolledUnder）时，会把背景从
+      // colorScheme.surface 切换成 surfaceContainer，导致标题栏颜色轻微
+      // 变化。这里显式固定为 colorScheme.surface，并把 scrolledUnderElevation
+      // 设为 0，保证滚动时标题栏颜色完全不变。
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      scrolledUnderElevation: 0,
       title: _selectionMode
           ? Text('已选择 ${_selectedIds.length} 项')
           : _currentFolder.isNotEmpty
