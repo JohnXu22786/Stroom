@@ -403,7 +403,7 @@ void main() {
     });
   });
 
-  group('操作链：按 编号→替换→插入→删除→大小写 顺序应用', () {
+  group('操作链：按 编号→替换→删除字符→插入→大小写 顺序应用', () {
     test('先编号再替换', () {
       final p = plan(
         [file('a', 'report')],
@@ -430,6 +430,89 @@ void main() {
       );
       // 编号 → 1_report → 删除前 2 字符 → report → 全大写
       expect(renamedBases(p), ['REPORT']);
+    });
+
+    test('删除先于插入：1 字符与 3 字符文件名删除 2 字符后由插入拯救', () {
+      // 旧顺序（插入先于删除）会让 1 字符文件名先插入再被删空，
+      // 报「文件名不能为空」；删除先于插入则短文件名被插入文本填充。
+      final p = plan(
+        [file('a', 'A'), file('b', 'BCD')],
+        config: const BatchRenameConfig(
+          delete: BatchDeleteOp(enabled: true, count: 2),
+          insert: BatchInsertOp(
+            enabled: true,
+            position: BatchRenameInsertPos.start,
+            text: 'X',
+          ),
+        ),
+      );
+      // A → 删空 → X；BCD → 删 2 位 → D → XD
+      expect(renamedBases(p), ['X', 'XD']);
+      expect(p.results.where((r) => r.error != null), isEmpty);
+      expect(p.canApply, isTrue);
+    });
+
+    test('删除先于插入：插入文本不会被删除字符吃掉', () {
+      final p = plan(
+        [file('a', 'abc')],
+        config: const BatchRenameConfig(
+          delete: BatchDeleteOp(enabled: true, count: 1),
+          insert: BatchInsertOp(
+            enabled: true,
+            position: BatchRenameInsertPos.start,
+            text: 'pre_',
+          ),
+        ),
+      );
+      // 删除前 1 字符 → bc → 插入 → pre_bc
+      // （旧顺序：pre_abc 删 1 位 → re_abc，插入的 'p' 被删除吃掉）
+      expect(renamedBases(p), ['pre_bc']);
+    });
+
+    test('删除先于插入：从结尾删除后再结尾插入', () {
+      final p = plan(
+        [file('a', 'ab')],
+        config: const BatchRenameConfig(
+          delete: BatchDeleteOp(
+            enabled: true,
+            position: BatchRenameDeletePos.end,
+            count: 1,
+          ),
+          insert: BatchInsertOp(
+            enabled: true,
+            position: BatchRenameInsertPos.end,
+            text: 'Z',
+          ),
+        ),
+      );
+      // 删除结尾 1 字符 → a → 结尾插入 → aZ
+      expect(renamedBases(p), ['aZ']);
+    });
+
+    test('替换先于删除：替换结果再被删除裁剪', () {
+      final p = plan(
+        [file('a', 'IMG_001')],
+        config: const BatchRenameConfig(
+          replace: BatchReplaceOp(enabled: true, find: 'IMG_', replace: ''),
+          delete: BatchDeleteOp(enabled: true, count: 2),
+        ),
+      );
+      // 替换 → 001 → 删除前 2 字符 → 1（若先删除，'G_001' 中的 IMG_
+      // 已不存在，替换无效果）
+      expect(renamedBases(p), ['1']);
+    });
+
+    test('删除到底且无插入时仍被校验拒绝', () {
+      final p = plan(
+        [file('a', 'ab')],
+        config: const BatchRenameConfig(
+          delete: BatchDeleteOp(enabled: true, count: 5),
+          insert: BatchInsertOp(enabled: true, text: ''),
+        ),
+      );
+      expect(p.results.single.baseName, isEmpty);
+      expect(p.results.single.error, isNotNull);
+      expect(p.canApply, isFalse);
     });
   });
 
@@ -655,15 +738,6 @@ void main() {
       expect(p.fileEntries.single.id, 'a');
       expect(p.fileEntries.single.newBaseName, 'z');
       expect(p.folderEntries, isEmpty);
-    });
-
-    test('hasActiveOps：无有效操作时为 false', () {
-      const cfg = BatchRenameConfig();
-      expect(cfg.hasActiveOps, isFalse);
-      const cfg2 = BatchRenameConfig(
-        replace: BatchReplaceOp(enabled: true, find: '', replace: 'x'),
-      );
-      expect(cfg2.hasActiveOps, isFalse);
     });
   });
 }

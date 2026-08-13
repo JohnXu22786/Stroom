@@ -5,8 +5,15 @@ import 'sort_config.dart';
 // 批量重命名 — 纯逻辑（无 UI 依赖，可单测）
 //
 // 设计对标「拖把更名器 XTools」：先对选中项排序，再按固定操作链
-// （编号 → 替换 → 插入 → 删除字符 → 大小写）逐项计算新名称，
+// （编号 → 替换 → 删除字符 → 插入 → 大小写）逐项计算新名称，
 // 并做冲突检测与名称校验，最后给出可直接应用的 [BatchRenamePlan]。
+//
+// 操作链顺序说明（删除先于插入）：
+// - 删除字符作用于替换后的名称，随后插入补充的文本永远不会被
+//   删除吃掉——短文件名（不足删除数量）删空后可由插入拯救，
+//   不会误报「名称不能为空」。
+// - 替换先于删除：替换是文本级操作，作用于完整原始名称；
+//   删除按位置裁剪替换后的结果。
 // ====================================================================
 
 /// 编号位置
@@ -187,14 +194,6 @@ class BatchRenameConfig {
     this.delete = const BatchDeleteOp(),
     this.caseOp = const BatchCaseOp(),
   });
-
-  /// 是否存在能真正生效的操作（空查找/空插入等视为无效）
-  bool get hasActiveOps =>
-      numbering.effective ||
-      replace.effective ||
-      insert.effective ||
-      delete.effective ||
-      caseOp.effective;
 
   BatchRenameConfig copyWith({
     SortField? sortField,
@@ -436,7 +435,10 @@ List<BatchRenameItem> _sortItems(
 // 操作链
 // --------------------------------------------------------------------
 
-/// 固定顺序：编号 → 替换 → 插入 → 删除字符 → 大小写
+/// 固定顺序：编号 → 替换 → 删除字符 → 插入 → 大小写
+///
+/// 删除先于插入：插入补充的文本不会被删除吃掉；名称被删空后
+/// 若插入仍生效则被拯救（否则由名称校验拒绝）。
 String _applyOps(BatchRenameItem item, int index, BatchRenameConfig config) {
   var name = item.name;
 
@@ -455,15 +457,6 @@ String _applyOps(BatchRenameItem item, int index, BatchRenameConfig config) {
         : _replaceAllIgnoreCase(name, r.find, r.replace);
   }
 
-  final ins = config.insert;
-  if (ins.effective) {
-    name = switch (ins.position) {
-      BatchRenameInsertPos.start => '${ins.text}$name',
-      BatchRenameInsertPos.end => '$name${ins.text}',
-      BatchRenameInsertPos.atIndex => _insertAtIndex(name, ins.text, ins.index),
-    };
-  }
-
   final del = config.delete;
   if (del.effective) {
     final runes = name.runes.toList();
@@ -474,6 +467,15 @@ String _applyOps(BatchRenameItem item, int index, BatchRenameConfig config) {
         : (runes.length <= del.count
             ? ''
             : String.fromCharCodes(runes.take(runes.length - del.count)));
+  }
+
+  final ins = config.insert;
+  if (ins.effective) {
+    name = switch (ins.position) {
+      BatchRenameInsertPos.start => '${ins.text}$name',
+      BatchRenameInsertPos.end => '$name${ins.text}',
+      BatchRenameInsertPos.atIndex => _insertAtIndex(name, ins.text, ins.index),
+    };
   }
 
   final c = config.caseOp;
