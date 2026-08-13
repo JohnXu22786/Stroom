@@ -29,6 +29,33 @@ final defaultAssistantProvider = Provider<Assistant?>((ref) {
   return assistants.first;
 });
 
+/// 解析一次发送实际应使用的助手（对话绑定优先）。
+///
+/// 优先级：
+/// 1. [conversationAssistantId] —— 对话创建时绑定的助手（持久化）。
+///    全局搜索等入口可能绕过"选择助手"页面直接打开其它助手的对话，
+///    此时对话的绑定才是权威（与模型恢复链、话题页过滤一致）。
+///    绑定助手已被删除时该项解析失败，继续向下回退。
+/// 2. [sessionAssistant] —— 会话当前选择的助手。未绑定助手的旧对话
+///    语义：跟随当前选择。
+/// 3. 列表第一个助手（默认助手）—— 绑定与会话选择都不可用时兜底，
+///    避免静默发出"无系统提示词"的请求。
+///
+/// 仅当助手列表为空（加载中/异常）时返回 null，调用方保持原行为。
+Assistant? resolveAssistantForSend({
+  required String? conversationAssistantId,
+  required Assistant? sessionAssistant,
+  required List<Assistant> assistants,
+}) {
+  final boundId = conversationAssistantId;
+  if (boundId != null && boundId.isNotEmpty) {
+    final bound = assistants.where((a) => a.id == boundId).firstOrNull;
+    if (bound != null) return bound;
+  }
+  if (sessionAssistant != null) return sessionAssistant;
+  return assistants.isEmpty ? null : assistants.first;
+}
+
 // ============================================================================
 // Provider: list of all assistants
 // ============================================================================
