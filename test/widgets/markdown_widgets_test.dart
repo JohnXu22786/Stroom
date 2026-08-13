@@ -363,12 +363,12 @@ void main() {
     });
   });
 
-  group('LatexNode - display math is 1.5x inline math', () {
-    // Regression: `$$...$$` display math must render 1.5x larger than the
+  group('LatexNode - display math is 1.3x inline math', () {
+    // Regression: `$$...$$` display math must render 1.3x larger than the
     // surrounding text, and the line containing it must grow to fit.
     // Inline `$...$` math must keep the regular text size.
 
-    testWidgets('block math font size is 1.5x the text size',
+    testWidgets('block math font size is 1.3x the text size',
         (WidgetTester tester) async {
       final config = MarkdownConfig.defaultConfig;
       final node = LatexNode(
@@ -381,8 +381,8 @@ void main() {
       final math = (span.child as Container).child! as Math;
 
       expect(math.textStyle, isNotNull);
-      expect(math.textStyle!.fontSize, 24,
-          reason: 'block/display math must render at 1.5x the text size '
+      expect(math.textStyle!.fontSize, 20.8,
+          reason: 'block/display math must render at 1.3x the text size '
               '(config.p.textStyle.fontSize is 16)');
     });
 
@@ -400,10 +400,10 @@ void main() {
 
       expect(math.textStyle, isNotNull);
       expect(math.textStyle!.fontSize, 16,
-          reason: 'inline math must keep the regular text size, not 1.5x');
+          reason: 'inline math must keep the regular text size, not 1.3x');
     });
 
-    testWidgets('the block-math line grows to fit the 1.5x formula',
+    testWidgets('the block-math line grows to fit the 1.3x formula',
         (WidgetTester tester) async {
       final config = MarkdownConfig.defaultConfig;
 
@@ -428,7 +428,7 @@ void main() {
       );
       final blockSpan = blockNode.build() as WidgetSpan;
       final blockMath = (blockSpan.child as Container).child! as Math;
-      expect(blockMath.textStyle!.fontSize, 24);
+      expect(blockMath.textStyle!.fontSize, 20.8);
 
       final inlineNode = LatexNode(
         {'content': r'\frac{a}{b}', 'isInline': 'true'},
@@ -439,8 +439,8 @@ void main() {
 
       // Reference height: the same formula rendered inline at 16px,
       // measured standalone. flutter_math_fork scales every dimension
-      // linearly with fontSize, so the block formula (24px) is exactly
-      // 1.5x this height.
+      // linearly with fontSize, so the block formula (20.8px) is exactly
+      // 1.3x this height.
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: Center(child: inlineMath),
@@ -450,8 +450,8 @@ void main() {
       expect(inlineMathHeight, greaterThan(0),
           reason: 'the math must render with real dimensions for this test');
 
-      // The block line must be tall enough to contain the 1.5x formula
-      // (1.5 * inline height) plus the block container's vertical
+      // The block line must be tall enough to contain the 1.3x formula
+      // (1.3 * inline height) plus the block container's vertical
       // padding/margin (8+8+8+8 = 32). If the line did not grow with the
       // formula, the formula would overflow into the adjacent lines.
       await tester.pumpWidget(richTextWith(blockSpan));
@@ -459,9 +459,9 @@ void main() {
           tester.getSize(find.byKey(const ValueKey('math-line'))).height;
 
       expect(blockLineHeight,
-          greaterThanOrEqualTo(inlineMathHeight * 1.5 + 32 - 2),
-          reason: 'the line containing a 1.5x block formula must be tall '
-              'enough to fit it (1.5x the inline math height) plus the '
+          greaterThanOrEqualTo(inlineMathHeight * 1.3 + 32 - 2),
+          reason: 'the line containing a 1.3x block formula must be tall '
+              'enough to fit it (1.3x the inline math height) plus the '
               'container padding/margin');
     });
   });

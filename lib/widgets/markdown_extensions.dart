@@ -14,7 +14,7 @@ const _latexTag = 'latex';
 /// Scale factor for block/display math (`$$...$$`) relative to the
 /// surrounding text size. Only display math is scaled; inline math
 /// (`$...$`) keeps the regular text size.
-const double _displayMathScaleFactor = 1.5;
+const double _displayMathScaleFactor = 1.3;
 
 /// Char code of '<', the start character of the HTML-like inline syntaxes
 /// ([BrSyntax], [USyntax]).
