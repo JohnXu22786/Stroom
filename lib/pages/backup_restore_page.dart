@@ -12,6 +12,7 @@ import '../services/backup_service.dart';
 import '../startup/app_restart.dart';
 import '../anki/apkg/apkg_exporter.dart';
 import '../anki/apkg/apkg_importer.dart';
+import '../utils/system_pick_utils.dart';
 
 class BackupRestorePage extends ConsumerStatefulWidget {
   const BackupRestorePage({super.key});
@@ -519,6 +520,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     final picked = await FilePicker.pickFiles(
       type: FileType.any,
       allowMultiple: false,
+      initialDirectory: SystemPickDirectories.documents(),
     );
     if (picked == null || picked.files.isEmpty) return;
     final path = picked.files.single.path;

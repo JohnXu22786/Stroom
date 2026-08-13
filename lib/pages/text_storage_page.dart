@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart' as p;
 
 import '../providers/text_provider.dart';
+import '../utils/system_pick_utils.dart';
 import '../utils/text_manifest.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
@@ -101,6 +102,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         allowedExtensions: _supportedFormats.toList(),
         withData: true,
         allowMultiple: true,
+        initialDirectory: SystemPickDirectories.documents(),
       );
       if (result == null || result.files.isEmpty) {
         _isImporting = false;
@@ -294,6 +296,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         type: FileType.custom,
         allowedExtensions: [file.format],
         bytes: data,
+        initialDirectory: SystemPickDirectories.documents(),
       );
       if (outputPath != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -325,7 +328,10 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       } else {
         outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
         if (outputDir == null) {
-          outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
+          outputDir = await FilePicker.getDirectoryPath(
+            dialogTitle: '选择导出目录',
+            initialDirectory: SystemPickDirectories.documents(),
+          );
           if (outputDir == null) return null;
         }
       }
@@ -351,6 +357,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
             type: FileType.custom,
             allowedExtensions: [file.format],
             bytes: data,
+            initialDirectory: SystemPickDirectories.documents(),
           );
           if (saved == null) continue;
         } else {
@@ -440,6 +447,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
               type: FileType.custom,
               allowedExtensions: [file.format],
               bytes: data,
+              initialDirectory: SystemPickDirectories.documents(),
             );
             if (saved == null) continue;
             exportedCount++;
@@ -461,7 +469,10 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
       String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
       if (outputDir == null) {
-        outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
+        outputDir = await FilePicker.getDirectoryPath(
+          dialogTitle: '选择导出目录',
+          initialDirectory: SystemPickDirectories.documents(),
+        );
         if (outputDir == null) return null;
       }
 

@@ -16,6 +16,7 @@ import '../utils/file_manifest.dart';
 import '../utils/text_manifest.dart';
 import '../utils/audio_playback.dart';
 import '../utils/audio_utils.dart';
+import '../utils/system_pick_utils.dart';
 import '../widgets/app_media_picker_dialog.dart';
 import 'audio_player_shared.dart';
 import 'audio_separation_shared.dart';
@@ -261,6 +262,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
         allowedExtensions: ['txt'],
         allowMultiple: false,
         withData: true,
+        initialDirectory: SystemPickDirectories.documents(),
       );
       if (result == null || result.files.isEmpty) return;
 

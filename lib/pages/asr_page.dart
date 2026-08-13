@@ -18,6 +18,7 @@ import '../services/asr_service.dart';
 import '../utils/audio_utils.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/file_manifest.dart';
+import '../utils/system_pick_utils.dart';
 import '../utils/text_manifest.dart';
 import '../widgets/app_media_picker_dialog.dart';
 import '../widgets/folder_picker_dialog.dart';
@@ -978,6 +979,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         type: FileType.audio,
         allowMultiple: true,
         withData: true,
+        initialDirectory: SystemPickDirectories.music(),
       );
       if (result == null || result.files.isEmpty) return;
 

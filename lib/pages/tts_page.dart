@@ -12,6 +12,7 @@ import '../utils/file_manifest.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
+import '../utils/system_pick_utils.dart';
 import '../utils/audio_playback.dart';
 import '../utils/audio_utils.dart';
 import '../widgets/file_manager_view.dart';
@@ -104,6 +105,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         type: FileType.audio,
         withData: true,
         allowMultiple: true,
+        initialDirectory: SystemPickDirectories.music(),
       );
       if (result == null || result.files.isEmpty) return;
 
@@ -246,6 +248,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           type: FileType.custom,
           allowedExtensions: [exportFormat],
           bytes: data,
+          initialDirectory: SystemPickDirectories.music(),
         );
         if (outputPath != null && mounted) {
           ScaffoldMessenger.of(
@@ -388,7 +391,10 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       } else {
         outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
         if (outputDir == null) {
-          outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
+          outputDir = await FilePicker.getDirectoryPath(
+            dialogTitle: '选择导出目录',
+            initialDirectory: SystemPickDirectories.music(),
+          );
           if (outputDir == null) return null;
         }
       }
@@ -524,7 +530,10 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
 
       String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
       if (outputDir == null) {
-        outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
+        outputDir = await FilePicker.getDirectoryPath(
+          dialogTitle: '选择导出目录',
+          initialDirectory: SystemPickDirectories.music(),
+        );
         if (outputDir == null) return null;
       }
 

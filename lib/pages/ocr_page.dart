@@ -15,6 +15,7 @@ import '../providers/ocr_instructions_provider.dart';
 import '../providers/text_provider.dart';
 import '../services/ocr_service.dart';
 import '../utils/data_sanitizer.dart';
+import '../utils/system_pick_utils.dart';
 import '../utils/text_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'chat/composer/chat_album_picker_dialog.dart';
@@ -1294,8 +1295,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// Pick images from the system gallery (supports batch selection).
   Future<void> _pickFromSystemGallery() async {
     try {
-      final picker = ImagePicker();
-      final files = await picker.pickMultiImage(
+      // 移动端直接打开系统相册（图片专用选择 UI），
+      // 桌面端打开文件选择器并定位到系统"图片"目录
+      final files = await pickSystemMedia(
+        SystemMediaKind.image,
         imageQuality: 90,
         maxWidth: 2048,
         maxHeight: 2048,
@@ -1305,6 +1308,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       final newImages = <SelectedImage>[];
       for (final file in files) {
         final bytes = await file.readAsBytes();
+        if (bytes.isEmpty) continue; // 读取失败的文件跳过（与相册路径一致）
         newImages.add(
           SelectedImage(
             bytes: bytes,

@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
 import '../utils/audio_separation.dart';
@@ -14,6 +13,7 @@ import '../utils/audio_utils.dart' show detectAudioFormat, normalizeAudioFormat;
 import '../providers/background_task_provider.dart';
 import '../utils/file_manifest.dart';
 import '../utils/pop_animation.dart';
+import '../utils/system_pick_utils.dart';
 import '../widgets/folder_picker_dialog.dart';
 import 'tts_page.dart';
 import 'audio_separation_shared.dart';
@@ -795,17 +795,15 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
   Future<void> _pickVideoFile() async {
     try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.video,
-        allowMultiple: true,
-        withData: true,
-      );
-      if (result == null || result.files.isEmpty) return;
+      // 移动端直接打开系统相册（视频专用选择 UI），
+      // 桌面端打开文件选择器并定位到系统"视频"目录
+      final pickedFiles = await pickSystemMedia(SystemMediaKind.video);
+      if (pickedFiles.isEmpty) return;
 
       final newVideos = <SelectedVideo>[];
-      for (final file in result.files) {
-        final bytes = file.bytes;
-        if (bytes == null || bytes.isEmpty) continue;
+      for (final file in pickedFiles) {
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty) continue;
         newVideos.add(
           SelectedVideo(
             bytes: bytes,

@@ -17,6 +17,7 @@ import 'manifest_database.dart';
 import 'storage_service.dart';
 import '../anki/database/anki_database.dart';
 import '../utils/app_version.dart';
+import '../utils/system_pick_utils.dart';
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
 
@@ -1494,6 +1495,7 @@ class BackupService {
       final outputPath = await FilePicker.saveFile(
         fileName: defaultName,
         bytes: bytes,
+        initialDirectory: SystemPickDirectories.documents(),
       );
 
       if (outputPath != null && context.mounted) {
@@ -1526,6 +1528,7 @@ class BackupService {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['zip'],
+        initialDirectory: SystemPickDirectories.documents(),
       );
       if (result == null || result.files.isEmpty) return false;
 

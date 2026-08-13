@@ -13,6 +13,7 @@ import 'package:stroom/providers/provider_config.dart'
     show ReasoningParam, findEffortParam;
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/services/attachment_storage.dart';
+import 'package:stroom/utils/system_pick_utils.dart';
 import 'package:stroom/widgets/file_preview.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/widgets/chat_attachment_panel.dart';
