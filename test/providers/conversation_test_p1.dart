@@ -212,6 +212,8 @@ void conversationGroup1() {
         name: '助手',
         prompt: '你好',
         defaultModelName: 'gpt-4o | OpenAI',
+        defaultModelId: 'gpt-4o',
+        defaultProviderName: 'OpenAI',
         defaultToolNames: {'web_search', 'todowrite'},
       );
       final container = _containerWithAssistants([assistant]);
@@ -226,7 +228,11 @@ void conversationGroup1() {
           reason:
               'assistant defaults are explicit prefs so an empty default set '
               'keeps every tool OFF instead of auto-enabling all');
+      // 播种的默认模型带绝对身份（供应商 + 模型ID），显示名重命名后
+      // 仍可解析。
       expect(conv.lastUsedModelName, 'gpt-4o | OpenAI');
+      expect(conv.lastUsedModelId, 'gpt-4o');
+      expect(conv.lastUsedProviderName, 'OpenAI');
     });
     testWidgets(
         'new topic under assistant with configured-empty defaults keeps '

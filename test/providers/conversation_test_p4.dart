@@ -11,10 +11,14 @@ void conversationGroup4() {
       final container = _createContainer(initialState: [conv1, conv2]);
       final notifier = container.read(conversationsProvider.notifier);
 
-      notifier.updateLastUsedModel('conv-1', 'GPT-4o | OpenAI');
+      notifier.updateLastUsedModel('conv-1', 'GPT-4o | OpenAI',
+          modelId: 'gpt-4o', providerName: 'OpenAI');
 
       expect(notifier.state[0].lastUsedModelName, 'GPT-4o | OpenAI');
+      expect(notifier.state[0].lastUsedModelId, 'gpt-4o');
+      expect(notifier.state[0].lastUsedProviderName, 'OpenAI');
       expect(notifier.state[1].lastUsedModelName, isNull);
+      expect(notifier.state[1].lastUsedModelId, isNull);
     });
 
     test('different conversations have independent lastUsedModelName', () {
@@ -23,11 +27,15 @@ void conversationGroup4() {
       final container = _createContainer(initialState: [conv1, conv2]);
       final notifier = container.read(conversationsProvider.notifier);
 
-      notifier.updateLastUsedModel('conv-1', 'GPT-4o | OpenAI');
-      notifier.updateLastUsedModel('conv-2', 'Claude 3 | Anthropic');
+      notifier.updateLastUsedModel('conv-1', 'GPT-4o | OpenAI',
+          modelId: 'gpt-4o', providerName: 'OpenAI');
+      notifier.updateLastUsedModel('conv-2', 'Claude 3 | Anthropic',
+          modelId: 'claude-3', providerName: 'Anthropic');
 
       expect(notifier.state[0].lastUsedModelName, 'GPT-4o | OpenAI');
+      expect(notifier.state[0].lastUsedModelId, 'gpt-4o');
       expect(notifier.state[1].lastUsedModelName, 'Claude 3 | Anthropic');
+      expect(notifier.state[1].lastUsedModelId, 'claude-3');
     });
 
     test('updateLastUsedModel overwrites previous model name', () {
@@ -35,10 +43,14 @@ void conversationGroup4() {
       final container = _createContainer(initialState: [conv]);
       final notifier = container.read(conversationsProvider.notifier);
 
-      notifier.updateLastUsedModel('test', 'GPT-4o | OpenAI');
-      notifier.updateLastUsedModel('test', 'GPT-4o Mini | OpenAI');
+      notifier.updateLastUsedModel('test', 'GPT-4o | OpenAI',
+          modelId: 'gpt-4o', providerName: 'OpenAI');
+      notifier.updateLastUsedModel('test', 'GPT-4o Mini | OpenAI',
+          modelId: 'gpt-4o-mini', providerName: 'OpenAI');
 
       expect(notifier.state[0].lastUsedModelName, 'GPT-4o Mini | OpenAI');
+      expect(notifier.state[0].lastUsedModelId, 'gpt-4o-mini');
+      expect(notifier.state[0].lastUsedProviderName, 'OpenAI');
     });
 
     test('updateLastUsedModel on non-existent conversation does not crash', () {

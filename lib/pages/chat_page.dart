@@ -22,6 +22,7 @@ import '../utils/model_order.dart';
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
 import '../models/tool_call.dart' show ToolCallData;
+import '../models/assistant.dart' show Assistant;
 import '../services/app_log_service.dart';
 import '../services/chat_adapter.dart';
 import '../providers/conversation_provider.dart';
@@ -29,7 +30,8 @@ import '../providers/chat_stream_provider.dart';
 import '../providers/chat_manager_provider.dart';
 import '../services/chat_stream_manager.dart' show StreamResult;
 import '../providers/provider_config.dart';
-import '../providers/assistant_provider.dart' show selectedAssistantProvider;
+import '../providers/assistant_provider.dart'
+    show assistantProvider, selectedAssistantProvider;
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
 import 'message_search_page.dart';
@@ -502,6 +504,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _registerConversationsListener();
     // Re-configure adapter when provider entries change.
     _registerProviderEntriesListener();
+    // Re-run the model restore chain when the assistant list finishes
+    // loading (rules: assistant default / first model fallback).
+    _registerAssistantListener();
     // Auto-save reasoning settings when they change (per-model persistence).
     _registerReasoningListeners();
 

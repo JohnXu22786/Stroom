@@ -332,17 +332,41 @@ void main() {
       notifier.updateAssistantDefaults(
         id: a1.id,
         defaultModelName: 'gpt-4o | OpenAI',
+        defaultModelId: 'gpt-4o',
+        defaultProviderName: 'OpenAI',
         defaultToolNames: {'web_search'},
       );
       notifier.updateAssistantDefaults(
         id: a1.id,
         defaultModelName: null,
+        defaultModelId: null,
+        defaultProviderName: null,
         defaultToolNames: {},
       );
 
       final updated = notifier.state.firstWhere((a) => a.id == a1.id);
       expect(updated.defaultModelName, isNull);
+      expect(updated.defaultModelId, isNull);
+      expect(updated.defaultProviderName, isNull);
       expect(updated.defaultToolNames, isEmpty);
+    });
+
+    test('updateAssistantDefaults stores the absolute model identity', () {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      final a1 = notifier.createAssistant(name: '助手1', prompt: 'P1');
+      notifier.updateAssistantDefaults(
+        id: a1.id,
+        defaultModelName: 'gpt-4o | OpenAI',
+        defaultModelId: 'gpt-4o',
+        defaultProviderName: 'OpenAI',
+      );
+
+      final updated = notifier.state.firstWhere((a) => a.id == a1.id);
+      expect(updated.defaultModelName, 'gpt-4o | OpenAI');
+      expect(updated.defaultModelId, 'gpt-4o');
+      expect(updated.defaultProviderName, 'OpenAI');
     });
 
     test('updateAssistantSettings updates only settings', () {
@@ -539,6 +563,8 @@ void main() {
         name: '助手',
         prompt: '你好',
         defaultModelName: 'gpt-4o | OpenAI',
+        defaultModelId: 'gpt-4o',
+        defaultProviderName: 'OpenAI',
         defaultToolNames: {'web_search', 'todowrite'},
       );
 
@@ -546,7 +572,37 @@ void main() {
       final restored = Assistant.fromMap(map);
 
       expect(restored.defaultModelName, 'gpt-4o | OpenAI');
+      // 绝对身份（供应商 + 模型ID）与显示名一起持久化：重命名后仍可解析。
+      expect(restored.defaultModelId, 'gpt-4o');
+      expect(restored.defaultProviderName, 'OpenAI');
       expect(restored.defaultToolNames, {'web_search', 'todowrite'});
+    });
+
+    test('absolute model fields omitted from map when empty', () {
+      final assistant = Assistant(
+        name: '助手',
+        prompt: '你好',
+        defaultModelName: 'gpt-4o | OpenAI',
+        defaultModelId: '',
+        defaultProviderName: '',
+      );
+      final map = assistant.toMap();
+      expect(map.containsKey('defaultModelId'), isFalse);
+      expect(map.containsKey('defaultProviderName'), isFalse);
+    });
+
+    test('legacy assistant map with only display name parses with null ids', () {
+      final map = <String, dynamic>{
+        'id': 'legacy-1',
+        'name': '旧助手',
+        'prompt': '你好',
+        'defaultModelName': 'gpt-4o | OpenAI',
+      };
+
+      final assistant = Assistant.fromMap(map);
+      expect(assistant.defaultModelName, 'gpt-4o | OpenAI');
+      expect(assistant.defaultModelId, isNull);
+      expect(assistant.defaultProviderName, isNull);
     });
 
     test('configured-empty tool set round-trips as non-null empty', () {

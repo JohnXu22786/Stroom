@@ -1476,6 +1476,8 @@ void main() {
     Assistant _assistant({
       String? modelId,
       String? defaultModelName,
+      String? defaultModelId,
+      String? defaultProviderName,
       String prompt = '你是测试助手',
     }) {
       return Assistant(
@@ -1483,6 +1485,8 @@ void main() {
         prompt: prompt,
         modelId: modelId,
         defaultModelName: defaultModelName,
+        defaultModelId: defaultModelId,
+        defaultProviderName: defaultProviderName,
       );
     }
 
@@ -1530,6 +1534,29 @@ void main() {
       expect(adapter.currentConfigIndex, equals(0),
           reason: 'global selection untouched');
       adapter.cancelService('conv-displayname');
+    });
+
+    test(
+        'assistant with an ABSOLUTE default model identity (modelId + '
+        'providerName) resolves even when the display name went stale '
+        'after a rename', () {
+      // 编辑助手对话框现在同时保存显示名与绝对身份（供应商 + 模型ID）。
+      // 显示名过期时，按绝对身份解析（getOrCreateService 优先 modelId）。
+      final svc = adapter.getOrCreateService(
+        'conv-absid',
+        assistant: _assistant(
+          defaultModelName: 'GPT-4o-renamed | OpenAI', // stale display name
+          defaultModelId: 'gpt-4o',
+          defaultProviderName: 'OpenAI',
+        ),
+        entriesState: entriesState,
+      );
+      expect(svc, isNotNull,
+          reason: 'absolute model identity must resolve to a service');
+      expect(svc!.assistantPrompt, '你是测试助手');
+      expect(adapter.currentConfigIndex, equals(0),
+          reason: 'global selection untouched');
+      adapter.cancelService('conv-absid');
     });
 
     test(
@@ -1603,11 +1630,15 @@ void main() {
     const available = [
       AvailableModel(
         displayName: 'gpt-4o | OpenAI',
+        modelId: 'gpt-4o',
+        providerName: 'OpenAI',
         configIndex: 0,
         modelIndex: 0,
       ),
       AvailableModel(
         displayName: 'claude-3.5 | Anthropic',
+        modelId: 'claude-3.5',
+        providerName: 'Anthropic',
         configIndex: 0,
         modelIndex: 1,
       ),
@@ -1648,7 +1679,140 @@ void main() {
         ),
         isNull,
         reason: 'a stale per-conversation model must fall back to the '
-            'global saved index, not crash or select the wrong model',
+            'assistant default / first model, not crash or select the '
+            'wrong model',
+      );
+    });
+
+    test(
+        'resolves by absolute (providerName, modelId) when the display '
+        'name went stale after a rename', () {
+      // The user renamed the model in the provider config: the stored
+      // display name no longer matches, but the absolute identity
+      // (provider + API model id) still resolves.
+      expect(
+        perConversationModelToRestore(
+          lastUsedModelName: 'gpt-4o-renamed | OpenAI',
+          lastUsedModelId: 'gpt-4o',
+          lastUsedProviderName: 'OpenAI',
+          availableModels: available,
+        ),
+        'gpt-4o | OpenAI',
+      );
+    });
+
+    test('resolves by modelId alone when provider name is missing', () {
+      expect(
+        perConversationModelToRestore(
+          lastUsedModelName: 'stale-name | OpenAI',
+          lastUsedModelId: 'claude-3.5',
+          availableModels: available,
+        ),
+        'claude-3.5 | Anthropic',
+      );
+    });
+
+    test(
+        'returns null when both the absolute id and the display name are '
+        'unresolvable (model deleted)', () {
+      expect(
+        perConversationModelToRestore(
+          lastUsedModelName: 'deleted | OpenAI',
+          lastUsedModelId: 'deleted-id',
+          lastUsedProviderName: 'OpenAI',
+          availableModels: available,
+        ),
+        isNull,
+      );
+    });
+
+    test(
+        'exact (providerName, modelId) match wins over the same modelId '
+        'in another provider', () {
+      const twoProviders = [
+        AvailableModel(
+          displayName: 'gpt-4o | OpenAI',
+          modelId: 'gpt-4o',
+          providerName: 'OpenAI',
+          configIndex: 0,
+          modelIndex: 0,
+        ),
+        AvailableModel(
+          displayName: 'gpt-4o | Proxy',
+          modelId: 'gpt-4o',
+          providerName: 'Proxy',
+          configIndex: 1,
+          modelIndex: 0,
+        ),
+      ];
+      // Without a provider discriminator, the first match wins.
+      expect(
+        perConversationModelToRestore(
+          lastUsedModelId: 'gpt-4o',
+          availableModels: twoProviders,
+        ),
+        'gpt-4o | OpenAI',
+      );
+      // With the provider name, the exact provider wins.
+      expect(
+        perConversationModelToRestore(
+          lastUsedModelId: 'gpt-4o',
+          lastUsedProviderName: 'Proxy',
+          availableModels: twoProviders,
+        ),
+        'gpt-4o | Proxy',
+      );
+    });
+  });
+
+  group('resolveModelRef', () {
+    const models = [
+      AvailableModel(
+        displayName: 'gpt-4o | OpenAI',
+        modelId: 'gpt-4o',
+        providerName: 'OpenAI',
+        configIndex: 0,
+        modelIndex: 0,
+      ),
+      AvailableModel(
+        displayName: 'claude-3.5 | Anthropic',
+        modelId: 'claude-3.5',
+        providerName: 'Anthropic',
+        configIndex: 1,
+        modelIndex: 0,
+      ),
+    ];
+
+    test('matches exact (providerName, modelId)', () {
+      final m = resolveModelRef(
+        models: models,
+        modelId: 'claude-3.5',
+        providerName: 'Anthropic',
+      );
+      expect(m?.displayName, 'claude-3.5 | Anthropic');
+    });
+
+    test('matches by modelId alone', () {
+      final m = resolveModelRef(models: models, modelId: 'gpt-4o');
+      expect(m?.displayName, 'gpt-4o | OpenAI');
+    });
+
+    test('falls back to display name when no id is stored (legacy data)', () {
+      final m = resolveModelRef(
+        models: models,
+        displayName: 'claude-3.5 | Anthropic',
+      );
+      expect(m?.displayName, 'claude-3.5 | Anthropic');
+    });
+
+    test('returns null when nothing matches', () {
+      expect(
+        resolveModelRef(models: models, modelId: 'missing'),
+        isNull,
+      );
+      expect(
+        resolveModelRef(models: models, displayName: 'missing | X'),
+        isNull,
       );
     });
   });

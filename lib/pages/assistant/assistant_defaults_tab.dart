@@ -5,6 +5,8 @@ import '../../models/mcp.dart' show McpServerConfig;
 import '../../models/tool_call.dart';
 import '../../providers/chat_manager_provider.dart';
 import '../../providers/provider_config.dart';
+import '../../services/chat_adapter.dart'
+    show AvailableModel, resolveModelRef;
 import '../../services/chat_service.dart';
 import '../../services/http_tool_service.dart';
 import '../../services/todo_tool_service.dart';
@@ -28,9 +30,18 @@ import '../../services/web_search_service.dart';
 class AssistantDefaultsTab extends ConsumerWidget {
   final String? defaultModelName;
 
+  /// 默认模型的 API 模型 ID（绝对身份）。显示名重命名后仍可解析。
+  final String? defaultModelId;
+
+  /// 默认模型所属供应商名称（绝对身份的一部分）。
+  final String? defaultProviderName;
+
   /// null = 从未配置默认工具：新话题自动启用全部工具（本 tab 显示为全部开启）。
   final Set<String>? defaultToolNames;
-  final ValueChanged<String?> onDefaultModelChanged;
+
+  /// 用户选择默认模型时回调完整的 [AvailableModel]（null = 跟随全局设置），
+  /// 供对话框同时保存显示名与绝对身份（供应商 + 模型ID）。
+  final ValueChanged<AvailableModel?> onDefaultModelChanged;
 
   /// 用户改动任何工具开关（或使用"全部启用/全部关闭"）时，回调完整的
   /// 新默认工具集合。tab 本身不再产生 null（"恢复未配置"按钮已移除）。
@@ -39,6 +50,8 @@ class AssistantDefaultsTab extends ConsumerWidget {
   const AssistantDefaultsTab({
     super.key,
     required this.defaultModelName,
+    required this.defaultModelId,
+    required this.defaultProviderName,
     required this.defaultToolNames,
     required this.onDefaultModelChanged,
     required this.onDefaultToolsChanged,
@@ -118,10 +131,16 @@ class AssistantDefaultsTab extends ConsumerWidget {
     final isToolsConfigured = defaultToolNames != null;
 
     // 生效中的默认模型：记录的模型已被删除（stale）时退化为"跟随全局设置"。
-    final effectiveModelName = defaultModelName != null &&
-            models.any((m) => m.displayName == defaultModelName)
-        ? defaultModelName!
-        : null;
+    // 与聊天页/保存逻辑一致地按绝对身份优先解析（resolveModelRef）：
+    // (providerName, modelId) 精确 → modelId → 显示名，显示名重命名后
+    // 仍能高亮正确模型（含跨供应商同名 modelId 的消歧）。
+    final effectiveModel = resolveModelRef(
+      models: models,
+      modelId: defaultModelId,
+      providerName: defaultProviderName,
+      displayName: defaultModelName,
+    );
+    final effectiveModelName = effectiveModel?.displayName;
 
     return SingleChildScrollView(
       child: Column(
@@ -167,7 +186,12 @@ class AssistantDefaultsTab extends ConsumerWidget {
                 if (value == _followGlobalSentinel) {
                   onDefaultModelChanged(null);
                 } else {
-                  onDefaultModelChanged(value);
+                  // 把完整模型（含绝对身份）传给对话框，保存时同时
+                  // 记录显示名与模型ID+供应商名。
+                  final model = models
+                      .where((m) => m.displayName == value)
+                      .firstOrNull;
+                  onDefaultModelChanged(model);
                 }
               },
               child: Column(

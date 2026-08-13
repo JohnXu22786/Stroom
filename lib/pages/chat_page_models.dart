@@ -10,6 +10,9 @@ extension _ChatPageModelsExt on _ChatPageState {
     final entriesState = ref.read(providerEntriesProvider);
     _adapter.configure(entriesState);
     _recalculateSelectedModelIndex();
+    // configure 把适配器重置到第一个模型；立即按当前对话的记录/助手
+    // 默认/列表第一个恢复真实选择，避免供应商配置变更时模型跳变。
+    _restoreActiveConversationModel();
     if (mounted) setState(() {});
   }
 
@@ -116,31 +119,21 @@ extension _ChatPageModelsExt on _ChatPageState {
     _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
     setState(() => _selectedModelIndex = idx);
     // Persist the choice for THIS conversation so the user's switch survives
-    // re-entry (takes priority over the global saved index) without
-    // affecting other conversations.
+    // re-entry, without affecting other conversations. 同时记录绝对身份
+    // （模型ID + 供应商名）：显示名重命名后该记录仍能解析回同一模型。
     final convId = ref.read(activeConversationIdProvider);
-    var hadPerConversationModel = false;
     if (convId != null) {
-      final conv = ref
-          .read(conversationsProvider)
-          .where((c) => c.id == convId)
-          .firstOrNull;
-      hadPerConversationModel = conv != null &&
-          conv.lastUsedModelName != null &&
-          conv.lastUsedModelName!.isNotEmpty;
       ref.read(conversationsProvider.notifier).updateLastUsedModel(
             convId,
             selectedName,
+            modelId: model.modelId,
+            providerName: model.providerName,
           );
     }
+    // 不再写全局 selected_model_index（"上次使用"规则已移除）：无记录的
+    // 对话回退到助手默认 / 列表第一个，而不是继承其它对话的旧选择。
     SharedPreferences.getInstance().then((prefs) {
       try {
-        // Only update the GLOBAL fallback when this conversation was not
-        // overriding it with its own model — an override must not leak its
-        // choice into other conversations that follow the global default.
-        if (!hadPerConversationModel) {
-          prefs.setInt('selected_model_index', idx);
-        }
         // Restore the new model's per-model settings
         _restorePerModelSettings(prefs, idx);
       } catch (e) {
@@ -161,18 +154,28 @@ extension _ChatPageModelsExt on _ChatPageState {
     });
   }
 
-  /// Restores the model selection for a conversation by display name
-  /// (from [Conversation.lastUsedModelName]).
-  void _selectModelByName(String modelName) {
+  /// Restores the model selection for a conversation by its stored
+  /// reference: absolute identity (modelId + providerName) first, display
+  /// name as fallback (from [Conversation.lastUsedModelName] and friends).
+  void _selectModelByName(
+    String modelName, {
+    String? modelId,
+    String? providerName,
+  }) {
     final entriesState = ref.read(providerEntriesProvider);
     final models = _adapter.availableModels(entriesState);
     final displayNames = _getModelNames();
-    final modelIdx = models.indexWhere((m) => m.displayName == modelName);
-    if (modelIdx < 0) return;
-    final displayIdx = displayNames.indexOf(modelName);
+    final resolved = resolveModelRef(
+      models: models,
+      modelId: modelId,
+      providerName: providerName,
+      displayName: modelName,
+    );
+    if (resolved == null) return;
+    final displayIdx = displayNames.indexOf(resolved.displayName);
     if (displayIdx < 0) return;
 
-    final model = models[modelIdx];
+    final model = resolved;
     _adapter.selectModel(entriesState, model.configIndex, model.modelIndex);
     setState(() => _selectedModelIndex = displayIdx);
     // Restore per-model settings for this model
@@ -183,6 +186,14 @@ extension _ChatPageModelsExt on _ChatPageState {
         debugPrint('_selectModelByName restore settings failed: $e');
       }
     });
+  }
+
+  /// 选择列表中的第一个模型（显示顺序，尊重拖动排序）。
+  /// 无任何记录可恢复时的兜底：助手默认缺失 → 列表第一个。
+  void _selectFirstDisplayModel() {
+    final displayNames = _getModelNames();
+    if (displayNames.isEmpty) return;
+    _selectModelByName(displayNames.first);
   }
 
   /// Returns the display name of the currently selected model.
@@ -215,19 +226,19 @@ extension _ChatPageModelsExt on _ChatPageState {
     }
   }
 
-  /// Restores the saved model selection (index + adapter state + per-model
-  /// settings) from SharedPreferences. Also restores drag-sort order.
+  /// Restores the saved model selection (adapter state + per-model settings)
+  /// from SharedPreferences. Also restores drag-sort order.
   ///
   /// This is used both on initial page load and after [_configureAdapter]
   /// resets the adapter state (e.g. when [providerEntriesProvider] changes),
   /// ensuring the adapter and UI stay in sync with the persisted selection.
   ///
-  /// IMPORTANT: The saved [selected_model_index] is a DISPLAY index (from the
-  /// possibly-reordered model list shown to the user). We must map it through
-  /// the model's display name to find the correct flat index in the adapter's
-  /// [availableModels] list. Using the saved index directly on the flat list
-  /// would select the wrong model when the display order differs from the flat
-  /// order (e.g. after drag-and-drop reordering in the model panel).
+  /// 恢复优先级（用户规则，不再有全局"上次使用"索引）：
+  /// 1. 对话自身的模型记录（用户在对话内的显式选择，或创建时播种的
+  ///    助手默认模型）——按绝对身份（模型ID + 供应商名）解析，显示名
+  ///    重命名后仍可解析；旧数据只有显示名时按显示名匹配。
+  /// 2. 对话所属助手的默认模型（对话无记录时实时解析）。
+  /// 3. 列表第一个模型（显示顺序，尊重拖动排序）。
   void _restoreSavedModelSelection(SharedPreferences prefs) {
     // Restore saved model order (drag-sort persistence) first,
     // so model names resolve correctly.
@@ -238,12 +249,14 @@ extension _ChatPageModelsExt on _ChatPageState {
       });
     }
 
-    // Per-conversation model takes priority over the global saved index:
-    // the conversation's last used model (or its assistant default, seeded
-    // at creation) was already restored by _selectModelByName during
-    // message load. Applying the global index here would clobber it, so
-    // re-apply the conversation's own choice (idempotent) and skip the
-    // global restore entirely.
+    _restoreActiveConversationModel();
+  }
+
+  /// 为当前活跃对话应用模型选择（不依赖 prefs，供多条恢复路径复用）：
+  /// 对话记录 → 助手默认 → 列表第一个。
+  void _restoreActiveConversationModel() {
+    final entriesState = ref.read(providerEntriesProvider);
+    final models = _adapter.availableModels(entriesState);
     final convId = ref.read(activeConversationIdProvider);
     final conv = convId != null
         ? ref
@@ -251,59 +264,51 @@ extension _ChatPageModelsExt on _ChatPageState {
             .where((c) => c.id == convId)
             .firstOrNull
         : null;
+
+    // 1. Per-conversation model record (user choice or seeded assistant
+    // default) — absolute identity first, display name as legacy fallback.
     final perConvName = perConversationModelToRestore(
       lastUsedModelName: conv?.lastUsedModelName,
-      availableModels: _adapter.availableModels(
-        ref.read(providerEntriesProvider),
-      ),
+      lastUsedModelId: conv?.lastUsedModelId,
+      lastUsedProviderName: conv?.lastUsedProviderName,
+      availableModels: models,
     );
     if (perConvName != null) {
-      _selectModelByName(perConvName);
+      _selectModelByName(
+        perConvName,
+        modelId: conv?.lastUsedModelId,
+        providerName: conv?.lastUsedProviderName,
+      );
       return;
     }
 
-    // Restore saved model selection — clear stale index if out of range
-    final entriesState = ref.read(providerEntriesProvider);
-    final models = _adapter.availableModels(entriesState);
-    final saved = prefs.getInt('selected_model_index');
-    int selectedIdx = 0;
-    if (saved != null && saved >= 0) {
-      // Map display index to flat index via display name:
-      // The saved index is a DISPLAY index (from the user-facing reorderable
-      // list). We need to find the corresponding model in the flat list by
-      // resolving through the display name, not by using the index directly.
-      final displayNames = _getModelNames();
-      if (saved < displayNames.length) {
-        selectedIdx = saved;
-        final selectedName = displayNames[saved];
-        final flatIdx = models.indexWhere(
-          (m) => m.displayName == selectedName,
+    // 2. Assistant default model — conversation has no own record, so the
+    // assistant's CURRENT default applies (rule: 没有专门设置 → 助手默认).
+    if (conv?.assistantId != null) {
+      final assistant = ref
+          .read(assistantProvider)
+          .where((a) => a.id == conv!.assistantId)
+          .firstOrNull;
+      if (assistant != null) {
+        final assistantDefault = perConversationModelToRestore(
+          lastUsedModelName: assistant.defaultModelName,
+          lastUsedModelId: assistant.defaultModelId,
+          lastUsedProviderName: assistant.defaultProviderName,
+          availableModels: models,
         );
-        if (flatIdx >= 0) {
-          final model = models[flatIdx];
-          _adapter.selectModel(
-            entriesState,
-            model.configIndex,
-            model.modelIndex,
+        if (assistantDefault != null) {
+          _selectModelByName(
+            assistantDefault,
+            modelId: assistant.defaultModelId,
+            providerName: assistant.defaultProviderName,
           );
-        } else {
-          // Saved model not found in current list (e.g. deleted from
-          // provider config). Fall back to the default (first model).
-          selectedIdx = 0;
-          prefs.remove('selected_model_index');
+          return;
         }
-      } else {
-        // Saved index out of range for current display names — discard
-        selectedIdx = 0;
-        prefs.remove('selected_model_index');
       }
-    } else {
-      prefs.remove('selected_model_index');
     }
-    setState(() => _selectedModelIndex = selectedIdx);
 
-    // Restore per-model settings for the currently selected model
-    _restorePerModelSettings(prefs, selectedIdx);
+    // 3. First model in the display list (rule: 助手没有设置 → 列表第一个).
+    _selectFirstDisplayModel();
   }
 
   /// Restores the reasoning/reasoning-effort/reasoning-param settings

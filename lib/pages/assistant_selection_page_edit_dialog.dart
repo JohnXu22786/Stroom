@@ -36,6 +36,8 @@ void showAssistantFullEditDialog(
     enableSeed: assistant.settings.enableSeed,
     customParameters: List.from(assistant.settings.customParameters),
     defaultModelName: assistant.defaultModelName,
+    defaultModelId: assistant.defaultModelId,
+    defaultProviderName: assistant.defaultProviderName,
     // null = 从未配置（保持三态语义：新话题自动启用全部工具）。
     defaultToolNames: assistant.defaultToolNames == null
         ? null
@@ -144,9 +146,15 @@ void showAssistantFullEditDialog(
                       // ============ Tab 3: 默认设置 ============
                       AssistantDefaultsTab(
                         defaultModelName: vars.defaultModelName,
+                        defaultModelId: vars.defaultModelId,
+                        defaultProviderName: vars.defaultProviderName,
                         defaultToolNames: vars.defaultToolNames,
-                        onDefaultModelChanged: (name) => setDlgState(() {
-                          vars.defaultModelName = name;
+                        onDefaultModelChanged: (model) => setDlgState(() {
+                          // 记录显示名 + 绝对身份（模型ID + 供应商名），
+                          // 重命名后默认模型仍可解析。
+                          vars.defaultModelName = model?.displayName;
+                          vars.defaultModelId = model?.modelId;
+                          vars.defaultProviderName = model?.providerName;
                           vars.defaultsModelEngaged = true;
                         }),
                         onDefaultToolsChanged: (next) => setDlgState(() {
@@ -215,12 +223,17 @@ void showAssistantFullEditDialog(
               // 与 tab 的"跟随全局设置"退化显示保持一致，避免同名模型
               // 重新添加后旧的默认值悄悄复活。
               final adapter = ref.read(chatStreamManagerProvider).adapter;
-              final availableModelNames = adapter
-                  .availableModels(ref.read(providerEntriesProvider))
-                  .map((m) => m.displayName)
-                  .toSet();
-              final modelStale = assistant.defaultModelName != null &&
-                  !availableModelNames.contains(assistant.defaultModelName);
+              final availableModels = adapter
+                  .availableModels(ref.read(providerEntriesProvider));
+              final defaultRef = resolveModelRef(
+                models: availableModels,
+                modelId: assistant.defaultModelId,
+                providerName: assistant.defaultProviderName,
+                displayName: assistant.defaultModelName,
+              );
+              final modelStale = (assistant.defaultModelName != null ||
+                      assistant.defaultModelId != null) &&
+                  defaultRef == null;
               ref.read(assistantProvider.notifier).updateAssistantDefaults(
                     id: assistant.id,
                     defaultModelName: vars.defaultsModelEngaged
@@ -228,6 +241,16 @@ void showAssistantFullEditDialog(
                         : modelStale
                             ? null
                             : assistant.defaultModelName,
+                    defaultModelId: vars.defaultsModelEngaged
+                        ? vars.defaultModelId
+                        : modelStale
+                            ? null
+                            : assistant.defaultModelId,
+                    defaultProviderName: vars.defaultsModelEngaged
+                        ? vars.defaultProviderName
+                        : modelStale
+                            ? null
+                            : assistant.defaultProviderName,
                     // 默认工具集合：仅在用户改过（engaged）时写入；
                     // 从未配置的助手保持 null（新话题自动启用全部工具）。
                     // "恢复未配置"入口（clearDefaultToolNames）已随
