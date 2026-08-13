@@ -260,11 +260,6 @@ class _FileManagerViewState<T extends FileRecord>
   static const int _maxThumbnailCache = 200;
   final LinkedHashMap<String, Widget> _thumbnailCache = LinkedHashMap();
 
-  /// 列表/网格中的「返回上级」哨兵项。
-  /// 用对象而非字符串，避免与名为 "back" 的真实文件夹冲突
-  /// （字符串哨兵会让名为 back 的文件夹被渲染成返回卡片而无法访问）。
-  static const _backMarker = Object();
-
   /// 缩略图缓存的记录集合指纹（排序后的 id 列表）。
   /// 记录是不可变的：内容变化总是产生新 id 的新记录，
   /// 因此 id 集合不变时缓存可安全复用，避免父级每次重建
@@ -435,6 +430,8 @@ class _FileManagerViewState<T extends FileRecord>
       body: Column(
         children: [
           if (widget.config.topActionBar != null) widget.config.topActionBar!,
+          // 「返回上级」行固定在顶部按钮下方，不随列表/网格滚动
+          if (_currentFolder.isNotEmpty) _buildBackItem(),
           Expanded(
             child: showGrid
                 ? _buildGridView(grouped)
@@ -781,7 +778,6 @@ class _FileManagerViewState<T extends FileRecord>
     }
 
     final allItems = <dynamic>[
-      if (isInFolder) _backMarker,
       for (final f in subFolders) f,
       ...currentFiles,
     ];
@@ -791,9 +787,7 @@ class _FileManagerViewState<T extends FileRecord>
       itemCount: allItems.length,
       itemBuilder: (context, index) {
         final item = allItems[index];
-        if (identical(item, _backMarker)) {
-          return _buildBackItem();
-        } else if (item is String) {
+        if (item is String) {
           // folder name
           return _buildFolderItem(item, grouped[item]?.length ?? 0);
         } else {
@@ -804,6 +798,7 @@ class _FileManagerViewState<T extends FileRecord>
     );
   }
 
+  /// 固定在顶部的「返回上级」行（列表与网格共用，不随内容滚动）。
   Widget _buildBackItem() {
     final parentFolder = widget.manifestBridge.getParentFolderPath(
       _currentFolder,
@@ -884,7 +879,6 @@ class _FileManagerViewState<T extends FileRecord>
     }
 
     final allItems = <dynamic>[
-      if (isInFolder) _backMarker,
       for (final f in subFolders) f,
       ...currentFiles,
     ];
@@ -900,44 +894,12 @@ class _FileManagerViewState<T extends FileRecord>
       itemCount: allItems.length,
       itemBuilder: (context, index) {
         final item = allItems[index];
-        if (identical(item, _backMarker)) {
-          return _buildGridBackItem();
-        } else if (item is String) {
+        if (item is String) {
           return _buildGridFolderItem(item, grouped[item]?.length ?? 0);
         } else {
           return _buildGridFileItem(item as T);
         }
       },
-    );
-  }
-
-  Widget _buildGridBackItem() {
-    final parentFolder = widget.manifestBridge.getParentFolderPath(
-      _currentFolder,
-    );
-    return GestureDetector(
-      key: const Key('fm_grid_back_item'),
-      onTap: () => _setCurrentFolder(parentFolder),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.arrow_back, size: 32, color: Colors.blue),
-            const SizedBox(height: 4),
-            Text(
-              parentFolder.isEmpty ? '根目录' : '..',
-              style: TextStyle(fontSize: 11, color: Colors.blue[700]),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
     );
   }
 

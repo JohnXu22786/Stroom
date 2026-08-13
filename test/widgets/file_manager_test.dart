@@ -753,6 +753,141 @@ void main() {
     );
   });
 
+  group('FileManagerView fixed back item header', () {
+    /// Builder with enough content to make the list/grid scrollable.
+    FileManagerView<_TestFileRecord> build({
+      required List<_TestFileRecord> records,
+      required Set<String> folders,
+      bool grid = false,
+    }) {
+      return FileManagerView<_TestFileRecord>(
+        sortedRecords: records,
+        folders: folders,
+        sortConfig: sortConfig,
+        config: FileManagerConfig<_TestFileRecord>(
+          title: 'Test',
+          showThumbnailToggle: true,
+          initialGridView: grid,
+          fileIconBuilder: (_) =>
+              const Icon(Icons.videocam, key: Key('fallback_icon')),
+          fileThumbnailBuilder: grid
+              ? (file) => Container(
+                    key: Key('thumb_${file.id}'),
+                    color: Colors.black,
+                  )
+              : null,
+          onFileTap: (_) {},
+        ),
+        onRefresh: () async {},
+        onRenameFile: (_, __) async {},
+        onMoveFile: (_, __) async {},
+        onCopyFile: (_, __) async {},
+        onDeleteFile: (_) async {},
+        onDeleteFiles: (_) async {},
+        onDeleteFolders: (_) async {},
+        onMoveFiles: (_, __) async {},
+        onMoveFolders: (_, __) async {},
+        onExportFile: (_) async {},
+        onRenameFolder: (_, __) async {},
+        onMoveFolder: (_, __) async {},
+        onCopyFolder: (_, __) async {},
+        onDeleteFolder: (_) async {},
+        onCreateFolder: (_) async {},
+        onToggleSort: (_) {},
+        manifestBridge: fileManagerNavManifestBridge,
+      );
+    }
+
+    testWidgets('back item stays fixed while the file list scrolls', (
+      tester,
+    ) async {
+      final records = [
+        for (var i = 0; i < 40; i++)
+          _TestFileRecord(id: 'f$i', name: 'f$i', folder: 'a'),
+      ];
+      await tester.pumpWidget(
+        _buildTestApp(build(records: records, folders: {'a'})),
+      );
+
+      await tester.tap(find.text('a'));
+      await tester.pumpAndSettle();
+
+      final backItem = find.byKey(const Key('fm_back_item'));
+      expect(backItem, findsOneWidget);
+      // The back row must not be part of the scrollable list
+      expect(
+        find.ancestor(of: backItem, matching: find.byType(ListView)),
+        findsNothing,
+      );
+      final backYBefore = tester.getTopLeft(backItem).dy;
+
+      await tester.drag(find.byType(ListView), const Offset(0, -400));
+      await tester.pumpAndSettle();
+
+      // The list really scrolled…
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byType(ListView),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(scrollable.position.pixels, greaterThan(0));
+      // …but the back row did not move
+      expect(tester.getTopLeft(backItem).dy, closeTo(backYBefore, 0.1));
+    });
+
+    testWidgets('back item stays fixed while the grid scrolls', (
+      tester,
+    ) async {
+      final records = [
+        for (var i = 0; i < 40; i++)
+          _TestFileRecord(id: 'g$i', name: 'g$i', folder: 'a'),
+      ];
+      await tester.pumpWidget(
+        _buildTestApp(build(records: records, folders: {'a'}, grid: true)),
+      );
+
+      await tester.tap(find.text('a'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GridView), findsOneWidget);
+      final backItem = find.byKey(const Key('fm_back_item'));
+      expect(backItem, findsOneWidget);
+      // The back row must not be part of the scrollable grid
+      expect(
+        find.ancestor(of: backItem, matching: find.byType(GridView)),
+        findsNothing,
+      );
+      final backYBefore = tester.getTopLeft(backItem).dy;
+
+      await tester.drag(find.byType(GridView), const Offset(0, -400));
+      await tester.pumpAndSettle();
+
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byType(GridView),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(scrollable.position.pixels, greaterThan(0));
+      expect(tester.getTopLeft(backItem).dy, closeTo(backYBefore, 0.1));
+    });
+
+    testWidgets('back item shows even when the subfolder is empty', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(build(records: [], folders: {'a'})),
+      );
+
+      await tester.tap(find.text('a'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('此文件夹为空'), findsOneWidget);
+      expect(find.byKey(const Key('fm_back_item')), findsOneWidget);
+    });
+  });
+
   group('FileManagerView folder long-press selection', () {
     testWidgets('long-press on grid folder enters selection mode', (
       tester,
@@ -2819,7 +2954,7 @@ void main() {
 
   // ===========================================================================
   // Current-folder breadcrumb title (basename + ancestor dropdown) and the
-  // full-path label (front-truncated) on the in-list back item.
+  // full-path label (front-truncated) on the fixed back item header.
   // ===========================================================================
 
   /// True when [value] contains no lone surrogates — every high surrogate is
@@ -2903,7 +3038,8 @@ void main() {
         await tester.pumpAndSettle();
 
         // Title shows only the current folder basename + dropdown arrow,
-        // never the full path
+        // never the full path. (The full path may legitimately appear on
+        // the fixed back row's right side, so scope this check to the AppBar.)
         expect(
           find.byKey(const Key('fm_folder_breadcrumb_btn')),
           findsOneWidget,
@@ -2915,7 +3051,13 @@ void main() {
           ),
           findsOneWidget,
         );
-        expect(find.text('photos/vacation'), findsNothing);
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text('photos/vacation'),
+          ),
+          findsNothing,
+        );
         expect(find.byIcon(Icons.arrow_drop_down), findsOneWidget);
       },
     );
@@ -3015,7 +3157,8 @@ void main() {
           buildBreadcrumbFM(
             folders: {'photos', 'photos/vacation'},
             config: breadcrumbConfig(),
-            // 'photos/vacation' needs content for the in-list back item to render
+            // The fixed back row always shows the full path on its right side,
+            // regardless of whether the folder has content.
             records: [
               _TestFileRecord(
                 id: 'beach',
