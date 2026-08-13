@@ -5,7 +5,7 @@ import '../utils/app_version.dart';
 ///
 /// 展示 CD 构建时写入的信息：
 /// - 版本号（[appVersion]，即 release 版本号）
-/// - 发布时间（[appReleaseTimeFormatted]，CD 构建日期时间，本地时区）
+/// - 发布时间（[appReleaseTimeFormatted]，CD 构建日期时间，UTC）
 /// - 更新内容（[appReleaseNotes]，该 release 的 Release 说明）
 ///
 /// 各字段可通过构造函数注入（测试用），默认读取构建时写入的常量。
@@ -42,7 +42,13 @@ class VersionInfoDialog extends StatelessWidget {
           children: [
             _buildInfoRow(cs, '版本号', version ?? appVersion),
             const SizedBox(height: 12),
-            _buildInfoRow(cs, '发布时间', time.isEmpty ? '本地构建' : time),
+            _buildInfoRow(
+              cs,
+              '发布时间',
+              // CD 构建写入的时间一律是 UTC（ISO 8601 `Z`），展示时标注
+              // UTC，避免用户误以为是本地时间；本地构建无时间，显示回退文案。
+              time.isEmpty ? '本地构建' : '$time UTC',
+            ),
             if (notes.isNotEmpty) ...[
               const SizedBox(height: 16),
               const Text('更新内容', style: TextStyle(fontWeight: FontWeight.bold)),

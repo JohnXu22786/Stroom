@@ -49,7 +49,7 @@ void main() {
       expect(find.text('版本号'), findsOneWidget);
       expect(find.text('1.2.3'), findsOneWidget);
       expect(find.text('发布时间'), findsOneWidget);
-      expect(find.text('2026-08-08 17:30'), findsOneWidget);
+      expect(find.text('2026-08-08 17:30 UTC'), findsOneWidget);
       expect(find.text('更新内容'), findsOneWidget);
       expect(find.text('第一行更新内容\n第二行更新内容'), findsOneWidget);
     });
