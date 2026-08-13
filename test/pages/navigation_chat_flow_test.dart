@@ -50,6 +50,16 @@ Widget createChatFlowTestApp({
     child: MaterialApp(
       home: Navigator(
         initialRoute: '/assistant-selection',
+        // Mirror production (home_page_navigation.dart): generate only the
+        // real root route. The default ancestor-splitting would push '/'
+        // below '/assistant-selection', which the default route case would
+        // render as a phantom duplicate assistant-selection page.
+        onGenerateInitialRoutes: (navigator, initialRoute) {
+          final route = navigator.widget.onGenerateRoute!(
+            RouteSettings(name: initialRoute),
+          );
+          return [route!];
+        },
         onGenerateRoute: (settings) {
           switch (settings.name) {
             case '/assistant-selection':

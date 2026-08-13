@@ -144,6 +144,22 @@ extension _HomePageNavigationExt on _HomePageState {
     return Navigator(
       key: _chatNavigatorKey,
       initialRoute: '/assistant-selection',
+      // Flutter 默认的 defaultGenerateInitialRoutes 会把带多段路径的
+      // initialRoute 拆成祖先路由：'/' + '/assistant-selection'。而下面
+      // onGenerateRoute 的 default 分支会把 '/' 也渲染成
+      // AssistantSelectionPage，导致根路由之下还压着一个"幽灵"助手选择页。
+      // 此时在助手选择页按返回键/双击对话标签会先弹掉顶层页面（带返回
+      // 动画）却仍停在助手选择页（弹到了幽灵页），看起来返回无效；只有
+      // 再按一次才会真正回到主页。这里只生成真正的根路由，保持路由栈为
+      // 单根，返回/双击行为恢复预期。
+      onGenerateInitialRoutes: (navigator, initialRoute) {
+        // onGenerateRoute 的 switch 含 default 分支，对任意名称（含 null）
+        // 都返回非空路由，因此这里不会返回 null。
+        final route = navigator.widget.onGenerateRoute!(
+          RouteSettings(name: initialRoute),
+        );
+        return [route!];
+      },
       onGenerateRoute: (settings) {
         switch (settings.name) {
           case '/assistant-selection':
