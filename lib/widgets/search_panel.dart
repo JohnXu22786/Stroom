@@ -26,12 +26,9 @@ class _SearchPanelState extends State<SearchPanel> {
     final query = _query.trim().toLowerCase();
     if (query.isEmpty) return [];
 
-    final sorted = List<Conversation>.from(widget.conversations);
-    sorted.sort((a, b) {
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
-      return 0;
-    });
+    // 稳定排序（pinnedFirstStable）：Dart 的 List.sort 对 >33 个元素
+    // 使用不稳定快排，会打乱等键（同为置顶/非置顶）元素的顺序。
+    final sorted = pinnedFirstStable(widget.conversations);
 
     return sorted.where((c) {
       final displayTitle = c.title.isEmpty ? '新对话' : c.title;

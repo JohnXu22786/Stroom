@@ -40,14 +40,12 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   ///   - Clicking a conversation does NOT auto-move it to the top
   ///   - User drag-reorder is preserved
   ///   - New conversations (prepended by createConversation) stay at top
+  ///
+  /// 用稳定的分区实现而非 `sort + return 0`：Dart 的 List.sort 在元素
+  /// 超过 33 个时使用不稳定快排，会任意重排等键元素（对话多时顺序
+  /// "自动乱掉"的根源）。
   List<Conversation> _sortedConversations(List<Conversation> conversations) {
-    final sorted = List<Conversation>.from(conversations);
-    sorted.sort((a, b) {
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
-      return 0; // Preserve list order for non-pinned items
-    });
-    return sorted;
+    return pinnedFirstStable(conversations);
   }
 
   List<Conversation> _filteredConversations(List<Conversation> conversations) {
@@ -349,12 +347,12 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                   itemCount: filtered.length,
                   buildDefaultDragHandles: false,
                   onReorderItem: (oldIndex, newIndex) {
+                    // onReorderItem 的 newIndex 已是移除 oldIndex 项之后
+                    // 调整过的索引（框架保证），直接按显示位置映射回存储
+                    // 位置即可（存储与显示同为"置顶在前"的稳定顺序）。
                     final convs = ref.read(conversationsProvider);
                     final item = filtered[oldIndex];
                     final realOld = convs.indexWhere((c) => c.id == item.id);
-                    if (newIndex >= filtered.length) {
-                      newIndex = filtered.length - 1;
-                    }
                     final target = filtered[newIndex];
                     final realNew = convs.indexWhere((c) => c.id == target.id);
                     if (realOld >= 0 && realNew >= 0) {

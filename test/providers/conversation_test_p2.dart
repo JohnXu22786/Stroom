@@ -92,7 +92,9 @@ void conversationGroup2() {
       expect(notifier.state[2].id, ids[1]);
     });
 
-    testWidgets('pinned conversations can be reordered like any other',
+    testWidgets(
+        'reorderConversation keeps state pinned-first: dragging a pinned '
+        'conversation below unpinned ones snaps back to the pinned block',
         (tester) async {
       final conv1 = Conversation(
         id: 'conv-pin',
@@ -106,11 +108,41 @@ void conversationGroup2() {
       final container = _createContainer(initialState: [conv1, conv2]);
       final notifier = container.read(conversationsProvider.notifier);
 
+      // 把置顶对话拖到非置顶区：显示层永远是"置顶在前"，拖拽结果
+      // 吸附回置顶块（存储顺序与显示顺序一致，不产生隐藏交错）。
       notifier.reorderConversation(0, 1);
       await tester.pump(const Duration(milliseconds: 600));
 
-      expect(notifier.state[0].id, 'conv-normal');
-      expect(notifier.state[1].id, 'conv-pin');
+      expect(notifier.state[0].id, 'conv-pin');
+      expect(notifier.state[1].id, 'conv-normal');
+    });
+
+    testWidgets(
+        'reorderConversation moves a pinned conversation within the pinned '
+        'block exactly as dragged', (tester) async {
+      final conv1 = Conversation(
+        id: 'conv-pin-1',
+        title: 'Pinned 1',
+        isPinned: true,
+      );
+      final conv2 = Conversation(
+        id: 'conv-pin-2',
+        title: 'Pinned 2',
+        isPinned: true,
+      );
+      final conv3 = Conversation(
+        id: 'conv-normal',
+        title: 'Normal',
+      );
+      final container = _createContainer(initialState: [conv1, conv2, conv3]);
+      final notifier = container.read(conversationsProvider.notifier);
+
+      // onReorderItem 语义（移除后索引）：把 conv-pin-1 移到置顶块末尾。
+      notifier.reorderConversation(0, 1);
+      await tester.pump(const Duration(milliseconds: 600));
+
+      expect(notifier.state.map((c) => c.id).toList(),
+          ['conv-pin-2', 'conv-pin-1', 'conv-normal']);
     });
   });
 
