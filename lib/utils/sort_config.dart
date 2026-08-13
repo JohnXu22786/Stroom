@@ -88,7 +88,8 @@ class SortConfig {
       SortField.size => '大小',
     };
     final orderName = switch (field) {
-      SortField.createdAt || SortField.modifiedAt =>
+      SortField.createdAt ||
+      SortField.modifiedAt =>
         order == SortOrder.descending ? '新到旧' : '旧到新',
       _ => order == SortOrder.descending ? '大到小' : '小到大',
     };

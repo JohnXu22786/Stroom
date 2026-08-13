@@ -263,8 +263,10 @@ class ManifestDatabase {
                 );
               } catch (e) {
                 // 列添加失败时记录真实原因；不继续回填（后续读写会显式报错）
-                await AppLogService.error('ManifestDatabase',
-                    '_initDatabase v5: ADD COLUMN modified_at failed for $table', e);
+                await AppLogService.error(
+                    'ManifestDatabase',
+                    '_initDatabase v5: ADD COLUMN modified_at failed for $table',
+                    e);
                 continue;
               }
             }
@@ -273,8 +275,10 @@ class ManifestDatabase {
                 'UPDATE $table SET modified_at = created_at WHERE modified_at = 0',
               );
             } catch (e) {
-              await AppLogService.error('ManifestDatabase',
-                  '_initDatabase v5: backfill modified_at failed for $table', e);
+              await AppLogService.error(
+                  'ManifestDatabase',
+                  '_initDatabase v5: backfill modified_at failed for $table',
+                  e);
             }
           }
         }

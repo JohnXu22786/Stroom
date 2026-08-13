@@ -469,12 +469,10 @@ void main() {
         ),
       );
 
-      final dy9 = tester
-          .getTopLeft(find.byKey(const Key('fm_folder_25.3.9')))
-          .dy;
-      final dy30 = tester
-          .getTopLeft(find.byKey(const Key('fm_folder_25.3.30')))
-          .dy;
+      final dy9 =
+          tester.getTopLeft(find.byKey(const Key('fm_folder_25.3.9'))).dy;
+      final dy30 =
+          tester.getTopLeft(find.byKey(const Key('fm_folder_25.3.30'))).dy;
       expect(dy9, lessThan(dy30));
 
       // 降序：25.3.30 应排在 25.3.9 之前
@@ -490,12 +488,10 @@ void main() {
         ),
       );
 
-      final dy30d = tester
-          .getTopLeft(find.byKey(const Key('fm_folder_25.3.30')))
-          .dy;
-      final dy9d = tester
-          .getTopLeft(find.byKey(const Key('fm_folder_25.3.9')))
-          .dy;
+      final dy30d =
+          tester.getTopLeft(find.byKey(const Key('fm_folder_25.3.30'))).dy;
+      final dy9d =
+          tester.getTopLeft(find.byKey(const Key('fm_folder_25.3.9'))).dy;
       expect(dy30d, lessThan(dy9d));
     });
   });
