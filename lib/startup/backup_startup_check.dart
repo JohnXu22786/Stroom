@@ -202,19 +202,18 @@ class BackupStartupCheck {
         if (!backupSuccess && context.mounted) {
           // 弹窗前的静默重试窗口：失败且非取消时自动重试，不打扰用户。
           final cancelled = AutoBackupService.lastFailure == null;
-          if (dialogRetryCount == 0 && !cancelled &&
+          if (dialogRetryCount == 0 &&
+              !cancelled &&
               backupAttempts <= maxSilentRetries) {
             debugPrint('[BackupStartupCheck] 自动备份失败（第 $backupAttempts 次，'
                 '共可静默重试 $maxSilentRetries 次），稍后自动重试…');
             await AppLogService.warning(
-                'BackupStartupCheck',
-                '自动备份失败（第 $backupAttempts 次），自动重试中');
+                'BackupStartupCheck', '自动备份失败（第 $backupAttempts 次），自动重试中');
             await Future<void>.delayed(retryDelay);
             continue;
           }
 
-          final reachedMaxAttempts =
-              dialogRetryCount + 1 >= maxFailureDialogs;
+          final reachedMaxAttempts = dialogRetryCount + 1 >= maxFailureDialogs;
           final dialogResult = await showBackupFailedDialog(
             context,
             showSkip: reachedMaxAttempts,

@@ -217,7 +217,8 @@ void main() {
       expect(find.text('存储空间提醒'), findsNothing);
     });
 
-    testWidgets('reminder requires tapping 知道了 to dismiss — tapping the '
+    testWidgets(
+        'reminder requires tapping 知道了 to dismiss — tapping the '
         'blank area outside must not close it', (WidgetTester tester) async {
       AutoBackupService.lastBackupSizeBytes = 100;
       BackupLocationManager.debugFreeSpaceOverride = () async => 400; // < 500
@@ -242,13 +243,11 @@ void main() {
       // 点击对话框外空白处：提醒必须保持打开，直到用户点击「知道了」
       await tester.tapAt(const Offset(5, 5));
       await tester.pumpAndSettle();
-      expect(find.text('存储空间提醒'), findsOneWidget,
-          reason: '点击空白处不应关闭存储空间提醒');
+      expect(find.text('存储空间提醒'), findsOneWidget, reason: '点击空白处不应关闭存储空间提醒');
 
       await tester.tap(find.text('知道了'));
       await tester.pumpAndSettle();
-      expect(find.text('存储空间提醒'), findsNothing,
-          reason: '只有点击「知道了」才能关闭提醒');
+      expect(find.text('存储空间提醒'), findsNothing, reason: '只有点击「知道了」才能关闭提醒');
     });
 
     testWidgets('does not show reminder when free >= 5x backup size',
@@ -315,8 +314,7 @@ void main() {
       required int Function() preCheckCalls,
     }) {
       return tester.runAsync(() async {
-        final context =
-            navKey.currentContext!; // Builder context（对话框挂在此导航栈）
+        final context = navKey.currentContext!; // Builder context（对话框挂在此导航栈）
         BackupStartupResult? finalResult;
         final checkFuture = BackupStartupCheck.runCheck(context).then((r) {
           finalResult = r;
@@ -375,13 +373,14 @@ void main() {
       expect(result?.autoBackupPerformed, isFalse);
       expect(result?.storageReady, isTrue);
       // 最后一次尝试的失败原因保留，供对话框展示针对性提示
-      expect(AutoBackupService.lastFailure?.reason,
-          BackupFailureReason.noSpace);
+      expect(
+          AutoBackupService.lastFailure?.reason, BackupFailureReason.noSpace);
 
       await tester.pumpAndSettle();
     });
 
-    testWidgets('recovers on a silent retry — no failure dialog, backup '
+    testWidgets(
+        'recovers on a silent retry — no failure dialog, backup '
         'succeeds', (WidgetTester tester) async {
       var preCheckCalls = 0;
       // 步骤 2 空间检查通过；步骤 3 第一次预检失败（瞬时错误），
@@ -419,22 +418,22 @@ void main() {
           if (finalResult != null) break;
         }
         await checkFuture;
-        expect(dialogAppeared, isFalse,
-            reason: '静默重试成功后不应弹出失败对话框');
+        expect(dialogAppeared, isFalse, reason: '静默重试成功后不应弹出失败对话框');
         return finalResult;
       });
 
       expect(preCheckCalls, greaterThanOrEqualTo(2),
           reason: '首次失败后应自动重试（第 2 次成功）—— 失败仅发生 1 次，'
               '第 3 次调用来自成功后的空间提醒检查');
-      expect(result?.autoBackupPerformed, isTrue,
-          reason: '瞬时错误经静默重试恢复后备份应成功');
+      expect(result?.autoBackupPerformed, isTrue, reason: '瞬时错误经静默重试恢复后备份应成功');
 
       await tester.pumpAndSettle();
     });
 
-    testWidgets('user retry after the first dialog leads to exactly one '
-        'more failure dialog before the flow ends', (WidgetTester tester) async {
+    testWidgets(
+        'user retry after the first dialog leads to exactly one '
+        'more failure dialog before the flow ends',
+        (WidgetTester tester) async {
       var preCheckCalls = 0;
       // 所有尝试都失败（空间不足）
       BackupLocationManager.debugFreeSpaceOverride =
@@ -480,8 +479,7 @@ void main() {
             if (dialogs == 2) break;
           }
         }
-        expect(dialogs, 2,
-            reason: '静默重试 + 用户重试都失败后，应恰好出现 2 个失败对话框');
+        expect(dialogs, 2, reason: '静默重试 + 用户重试都失败后，应恰好出现 2 个失败对话框');
         await checkFuture;
         return finalResult;
       });
