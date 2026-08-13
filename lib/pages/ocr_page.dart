@@ -1389,126 +1389,27 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   Future<void> _previewImage(int index) async {
     if (index < 0 || index >= _selectedImages.length) return;
-    final image = _selectedImages[index];
 
-    final result = await showDialog<String>(
+    // Full-screen preview with left/right swipe paging — the same
+    // interaction as the file page's gallery viewer. Pops with the
+    // tapped action and the index of the image that was being viewed
+    // (which may differ from [index] after swiping).
+    final result = await showDialog<({String action, int index})>(
       context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: EdgeInsets.zero,
-        child: Stack(
-          children: [
-            Center(
-              child: GestureDetector(
-                key: const Key('preview_tap_to_close'),
-                onTap: () => Navigator.pop(ctx),
-                child: ExtendedImage.memory(
-                  image.bytes,
-                  fit: BoxFit.contain,
-                  mode: ExtendedImageMode.gesture,
-                  initGestureConfigHandler: (_) => GestureConfig(
-                    minScale: 0.5,
-                    maxScale: 4.0,
-                    animationMinScale: 0.5,
-                    animationMaxScale: 4.0,
-                    initialScale: 1.0,
-                    cacheGesture: false,
-                  ),
-                  loadStateChanged: (state) {
-                    if (state.extendedImageLoadState == LoadState.failed) {
-                      return const Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.broken_image,
-                                size: 48, color: Colors.white54),
-                            SizedBox(height: 8),
-                            Text('无法加载图片',
-                                style: TextStyle(color: Colors.white54)),
-                          ],
-                        ),
-                      );
-                    }
-                    return null;
-                  },
-                ),
-              ),
-            ),
-            // Close button (top left)
-            Positioned(
-              top: MediaQuery.of(ctx).padding.top + 8,
-              left: 8,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Color(0x66000000),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  key: const Key('preview_close_btn'),
-                  icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                  onPressed: () => Navigator.pop(ctx),
-                ),
-              ),
-            ),
-            // Edit buttons (top right) — same two-button design as gallery
-            // viewer page: crop (quick edit) + edit (full editor)
-            Positioned(
-              top: MediaQuery.of(ctx).padding.top + 8,
-              right: 8,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    decoration: const BoxDecoration(
-                      color: Color(0x66000000),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon:
-                          const Icon(Icons.crop, color: Colors.white, size: 24),
-                      tooltip: '裁剪',
-                      onPressed: () => Navigator.pop(ctx, 'crop'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    decoration: const BoxDecoration(
-                      color: Color(0x66000000),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon:
-                          const Icon(Icons.edit, color: Colors.white, size: 24),
-                      tooltip: '编辑',
-                      onPressed: () => Navigator.pop(ctx, 'edit'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (_selectedImages.length > 1)
-              Positioned(
-                bottom: 16,
-                left: 16,
-                right: 16,
-                child: Text(
-                  '${index + 1} / ${_selectedImages.length}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
-                ),
-              ),
-          ],
-        ),
+      builder: (_) => _OcrPreviewDialog(
+        images: _selectedImages,
+        initialIndex: index,
       ),
     );
 
     if (result == null || !mounted) return;
-    if (index >= _selectedImages.length) return;
+    final editedIndex = result.index;
+    if (editedIndex >= _selectedImages.length) return;
 
-    final currentImage = _selectedImages[index];
+    final currentImage = _selectedImages[editedIndex];
     Uint8List? editedBytes;
 
-    if (result == 'crop') {
+    if (result.action == 'crop') {
       // Quick edit — directly opens crop editor, no choice dialog needed.
       // The editor processes the image in place (the page stays open with
       // a spinner until the pipeline finishes) and pops back with the
@@ -1518,7 +1419,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         MaterialPageRoute(
           builder: (_) => ExtendedImageEditorPage(
             imageBytes: currentImage.bytes,
-            fileName: '图片_${index + 1}.${currentImage.format}',
+            fileName: '图片_${editedIndex + 1}.${currentImage.format}',
           ),
         ),
       );
@@ -1540,7 +1441,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     }
 
     if (editedBytes == null || !mounted) return;
-    _applyEditedImage(index, currentImage, editedBytes);
+    _applyEditedImage(editedIndex, currentImage, editedBytes);
   }
 
   /// Applies [editedBytes] to the in-memory selected image, guarding
@@ -2029,4 +1930,175 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   String _pad(int n) => n.toString().padLeft(2, '0');
+}
+
+// ====================================================================
+// OCR Image Preview Dialog (swipeable)
+// ====================================================================
+
+/// Full-screen preview of the selected OCR images with left/right swipe
+/// paging — the same interaction as the file page's gallery viewer.
+///
+/// Pops with a record of the tapped action ('crop' or 'edit') and the
+/// index of the image that was being viewed, so the caller edits the
+/// right image after the user has swiped away from the originally
+/// tapped one. A plain pop (close button / tap on the image) yields null.
+class _OcrPreviewDialog extends StatefulWidget {
+  final List<SelectedImage> images;
+  final int initialIndex;
+
+  const _OcrPreviewDialog({
+    required this.images,
+    required this.initialIndex,
+  });
+
+  @override
+  State<_OcrPreviewDialog> createState() => _OcrPreviewDialogState();
+}
+
+class _OcrPreviewDialogState extends State<_OcrPreviewDialog> {
+  late final ExtendedPageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = ExtendedPageController(initialPage: _currentIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  /// Pops with the tapped [action] plus the index of the image that was
+  /// being viewed when the button was tapped.
+  void _popWithAction(String action) {
+    Navigator.pop(context, (action: action, index: _currentIndex));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.black,
+      insetPadding: EdgeInsets.zero,
+      child: Stack(
+        children: [
+          ExtendedImageGesturePageView.builder(
+            controller: _pageController,
+            itemCount: widget.images.length,
+            onPageChanged: (index) {
+              setState(() => _currentIndex = index);
+            },
+            itemBuilder: (context, index) {
+              if (index < 0 || index >= widget.images.length) {
+                return const Center(child: Text('Invalid index'));
+              }
+              final image = widget.images[index];
+              return GestureDetector(
+                key: const Key('preview_tap_to_close'),
+                onTap: () => Navigator.pop(context),
+                child: Center(
+                  child: ExtendedImage.memory(
+                    image.bytes,
+                    fit: BoxFit.contain,
+                    mode: ExtendedImageMode.gesture,
+                    initGestureConfigHandler: (_) => GestureConfig(
+                      minScale: 0.5,
+                      maxScale: 4.0,
+                      animationMinScale: 0.5,
+                      animationMaxScale: 4.0,
+                      initialScale: 1.0,
+                      cacheGesture: false,
+                      inPageView: true,
+                    ),
+                    loadStateChanged: (state) {
+                      if (state.extendedImageLoadState == LoadState.failed) {
+                        return const Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.broken_image,
+                                  size: 48, color: Colors.white54),
+                              SizedBox(height: 8),
+                              Text('无法加载图片',
+                                  style: TextStyle(color: Colors.white54)),
+                            ],
+                          ),
+                        );
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+          // Close button (top left)
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            left: 8,
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Color(0x66000000),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                key: const Key('preview_close_btn'),
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ),
+          // Edit buttons (top right) — same two-button design as gallery
+          // viewer page: crop (quick edit) + edit (full editor)
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            right: 8,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Color(0x66000000),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.crop, color: Colors.white, size: 24),
+                    tooltip: '裁剪',
+                    onPressed: () => _popWithAction('crop'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Color(0x66000000),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.edit, color: Colors.white, size: 24),
+                    tooltip: '编辑',
+                    onPressed: () => _popWithAction('edit'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (widget.images.length > 1)
+            Positioned(
+              bottom: 16,
+              left: 16,
+              right: 16,
+              child: Text(
+                '${_currentIndex + 1} / ${widget.images.length}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
