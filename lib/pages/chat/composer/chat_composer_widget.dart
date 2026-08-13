@@ -30,6 +30,16 @@ part 'chat_composer_widget_attachments.dart';
 part 'chat_composer_widget_panels.dart';
 part 'chat_composer_widget_build_sections.dart';
 
+/// Tap-region group shared by the composer input and the chat message
+/// list. With the app-wide tap-outside blur ([TapOutsideUnfocus]), a tap on
+/// the message list while composing would otherwise count as "outside" and
+/// unfocus the composer, closing the keyboard the moment the user touches
+/// the list to scroll. Grouping the list with the composer keeps the
+/// deliberate chat behavior: the keyboard stays up while the user
+/// reads/scrolls the list, and is dismissed via the keyboard's own close
+/// key or the page's keyboard-dismiss button.
+const chatComposerTapRegionGroupId = ValueKey('chat-composer-tap-region');
+
 class ChatComposerWidget extends ConsumerStatefulWidget {
   final void Function(String text, List<Attachment> attachments) onSend;
   final VoidCallback onStop;
@@ -522,37 +532,47 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
 
     return Material(
       type: MaterialType.transparency,
-      child: Container(
-        key: _composerKey,
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerLow,
-          border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Pending attachments row (reorderable) ──
-            if (hasAttachments) _buildPendingAttachmentsRow(),
-            // ── Settings row (model, tools, reasoning) ──
-            _buildChipsSettingsRow(
-              cs: cs,
-              hasAttachments: hasAttachments,
-            ),
-            // ── Edit mode capsule / data-loss warning pill ──
-            // The warning replaces the capsule in its row while visible.
-            if (widget.editingMessageId != null)
-              _editWarningVisible
-                  ? _buildEditWarningPill(cs: cs)
-                  : _buildEditModeCapsule(cs: cs),
-            // ── Input row ──
-            _buildInputRow(
-              cs: cs,
-              isStreaming: isStreaming,
-              hasText: hasText,
-              hasAttachments: hasAttachments,
-            ),
-          ],
+      // The whole composer is part of the composer's tap region group
+      // ([chatComposerTapRegionGroupId], shared with the message list): with
+      // the app-wide tap-outside blur, tapping the composer's OWN controls
+      // (attach / model chip / send / edit capsule) must not unfocus the
+      // input — the keyboard stays up while the user adjusts the composer,
+      // exactly like it stays up while reading/scrolls the list.
+      child: TextFieldTapRegion(
+        groupId: chatComposerTapRegionGroupId,
+        child: Container(
+          key: _composerKey,
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerLow,
+            border:
+                Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Pending attachments row (reorderable) ──
+              if (hasAttachments) _buildPendingAttachmentsRow(),
+              // ── Settings row (model, tools, reasoning) ──
+              _buildChipsSettingsRow(
+                cs: cs,
+                hasAttachments: hasAttachments,
+              ),
+              // ── Edit mode capsule / data-loss warning pill ──
+              // The warning replaces the capsule in its row while visible.
+              if (widget.editingMessageId != null)
+                _editWarningVisible
+                    ? _buildEditWarningPill(cs: cs)
+                    : _buildEditModeCapsule(cs: cs),
+              // ── Input row ──
+              _buildInputRow(
+                cs: cs,
+                isStreaming: isStreaming,
+                hasText: hasText,
+                hasAttachments: hasAttachments,
+              ),
+            ],
+          ),
         ),
       ),
     );

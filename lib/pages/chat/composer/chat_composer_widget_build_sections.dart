@@ -350,6 +350,11 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
             child: TextField(
               controller: _textController,
               focusNode: _focusNode,
+              // Part of the chat-composer tap region group: taps on the
+              // message list (grouped via [TextFieldTapRegion] on the page)
+              // are treated as inside the input, so they do not blur the
+              // composer while the user reads/scrolls the list.
+              groupId: chatComposerTapRegionGroupId,
               textInputAction: _isMobile(context)
                   ? TextInputAction.newline
                   : TextInputAction.send,

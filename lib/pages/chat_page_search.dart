@@ -318,85 +318,124 @@ extension _ChatPageSearchExt on _ChatPageState {
   }
 
   /// Search bar with input field, match navigation and mode toggle chips.
+  ///
+  /// Part of the chat-composer tap region group
+  /// ([chatComposerTapRegionGroupId], shared with the message list): with
+  /// the app-wide tap-outside blur, tapping a search result (in the list)
+  /// or the prev/next-match buttons must NOT blur the search field — the
+  /// keyboard stays up while browsing results, matching the pre-fix
+  /// behavior the chat page deliberately preserves.
   Widget _buildSearchBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 4,
-      ),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outlineVariant,
-            width: 0.5,
+    return TextFieldTapRegion(
+      groupId: chatComposerTapRegionGroupId,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 4,
+        ),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border(
+            bottom: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant,
+              width: 0.5,
+            ),
           ),
         ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Row 1: Search field + nav controls
-          Row(
-            children: [
-              Icon(
-                Icons.search,
-                size: 18,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: SizedBox(
-                  height: 32,
-                  child: TextField(
-                    controller: _searchTextController,
-                    autofocus: true,
-                    onChanged: (query) {
-                      if (_searchMode == SearchMode.current) {
-                        _performSearch(query);
-                      } else if (query.isNotEmpty) {
-                        // Global mode: defer to full search page
-                        _openGlobalSearch();
-                      }
-                    },
-                    decoration: InputDecoration(
-                      hintText: _searchMode == SearchMode.current
-                          ? '搜索当前对话...'
-                          : '搜索所有对话...',
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 6,
-                      ),
-                      border: OutlineInputBorder(),
-                    ),
-                    style: const TextStyle(fontSize: 13),
-                  ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Row 1: Search field + nav controls
+            Row(
+              children: [
+                Icon(
+                  Icons.search,
+                  size: 18,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant,
                 ),
-              ),
-              if (_searchMode == SearchMode.current &&
-                  _searchMatches.isNotEmpty) ...[
                 const SizedBox(width: 8),
-                Text(
-                  '${_currentMatchIndex + 1}/${_searchMatches.length}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurfaceVariant,
+                Expanded(
+                  child: SizedBox(
+                    height: 32,
+                    child: TextField(
+                      controller: _searchTextController,
+                      autofocus: true,
+                      // Same tap-region group as the message list: tapping a
+                      // search result (in the list) must not blur the search
+                      // field — the keyboard stays up while browsing results.
+                      groupId: chatComposerTapRegionGroupId,
+                      onChanged: (query) {
+                        if (_searchMode == SearchMode.current) {
+                          _performSearch(query);
+                        } else if (query.isNotEmpty) {
+                          // Global mode: defer to full search page
+                          _openGlobalSearch();
+                        }
+                      },
+                      decoration: InputDecoration(
+                        hintText: _searchMode == SearchMode.current
+                            ? '搜索当前对话...'
+                            : '搜索所有对话...',
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                        border: OutlineInputBorder(),
+                      ),
+                      style: const TextStyle(fontSize: 13),
+                    ),
                   ),
                 ),
-              ],
-              if (_searchMode == SearchMode.current) ...[
-                IconButton(
-                  icon: const Icon(
-                    Icons.keyboard_arrow_up,
-                    size: 20,
+                if (_searchMode == SearchMode.current &&
+                    _searchMatches.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    '${_currentMatchIndex + 1}/${_searchMatches.length}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                  tooltip: '上一个',
-                  onPressed: _previousMatch,
+                ],
+                if (_searchMode == SearchMode.current) ...[
+                  IconButton(
+                    icon: const Icon(
+                      Icons.keyboard_arrow_up,
+                      size: 20,
+                    ),
+                    tooltip: '上一个',
+                    onPressed: _previousMatch,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 20,
+                    ),
+                    tooltip: '下一个',
+                    onPressed: _nextMatch,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                  ),
+                ],
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  tooltip: '关闭搜索',
+                  onPressed: _closeSearch,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
@@ -404,65 +443,40 @@ extension _ChatPageSearchExt on _ChatPageState {
                     minHeight: 32,
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 20,
-                  ),
-                  tooltip: '下一个',
-                  onPressed: _nextMatch,
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
-                  ),
+              ],
+            ),
+            // Row 2: Mode toggle chips
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                _buildModeChip(
+                  label: '当前对话',
+                  selected: _searchMode == SearchMode.current,
+                  onTap: () {
+                    if (_searchMode != SearchMode.current) {
+                      setState(() {
+                        _searchMode = SearchMode.current;
+                        _searchTextController.clear();
+                        _performSearch('');
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+                _buildModeChip(
+                  label: '所有对话',
+                  selected: _searchMode == SearchMode.global,
+                  onTap: () {
+                    if (_searchMode != SearchMode.global) {
+                      setState(() => _searchMode = SearchMode.global);
+                      _openGlobalSearch();
+                    }
+                  },
                 ),
               ],
-              IconButton(
-                icon: const Icon(Icons.close, size: 18),
-                tooltip: '关闭搜索',
-                onPressed: _closeSearch,
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 32,
-                  minHeight: 32,
-                ),
-              ),
-            ],
-          ),
-          // Row 2: Mode toggle chips
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              _buildModeChip(
-                label: '当前对话',
-                selected: _searchMode == SearchMode.current,
-                onTap: () {
-                  if (_searchMode != SearchMode.current) {
-                    setState(() {
-                      _searchMode = SearchMode.current;
-                      _searchTextController.clear();
-                      _performSearch('');
-                    });
-                  }
-                },
-              ),
-              const SizedBox(width: 8),
-              _buildModeChip(
-                label: '所有对话',
-                selected: _searchMode == SearchMode.global,
-                onTap: () {
-                  if (_searchMode != SearchMode.global) {
-                    setState(() => _searchMode = SearchMode.global);
-                    _openGlobalSearch();
-                  }
-                },
-              ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

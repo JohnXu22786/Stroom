@@ -143,7 +143,14 @@ class _CompactionThresholdFieldState extends State<_CompactionThresholdField> {
           widget.onChanged(parsed);
         }
       },
-      onTapOutside: (_) => _revertIfInvalid(),
+      // 失焦时：先回退非法输入，再真正失焦。自定义 onTapOutside 会完全
+      // 替换框架默认的 EditableTextTapOutsideIntent（应用的全局
+      // tap-outside 失焦覆盖因此不会生效），必须在这里显式失焦，否则
+      // 光标会一直留在框内。
+      onTapOutside: (_) {
+        _revertIfInvalid();
+        FocusScope.of(context).unfocus();
+      },
       onFieldSubmitted: (_) => _revertIfInvalid(),
     );
   }

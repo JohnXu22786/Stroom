@@ -550,80 +550,90 @@ class _ChatPageState extends ConsumerState<ChatPage>
                         // pass itself is never visible to the user.
                         visible: !_pendingInitialScrollAdjustment,
                         maintainState: true,
-                        child: Stack(
-                          children: [
-                            _buildChatWidget(
-                              isDark: isDark,
-                              isStreaming: isStreaming,
-                              streamingFullReply: streamingFullReply,
-                              streamingMsgId: streamingMsgId,
-                              activeId: activeId,
-                              controller: controller,
-                            ),
-                            // ── Scroll-to-bottom overlay button ──
-                            // Shown whenever the list is NOT at the
-                            // bottom. The AnimatedSwitcher plays the
-                            // non-linear scale-up + fade-in (appear) and
-                            // scale-down + fade-out (disappear)
-                            // transition.
-                            Positioned(
-                              right: _overlayButtonMargin,
-                              bottom: _overlayButtonMargin,
-                              child: AnimatedSwitcher(
-                                duration: _overlaySwitchDuration,
-                                switchInCurve: _overlaySwitchCurve,
-                                switchOutCurve: _overlaySwitchCurve,
-                                transitionBuilder: (child, animation) =>
-                                    FadeTransition(
-                                  opacity: animation,
-                                  child: ScaleTransition(
-                                    scale: animation,
-                                    child: child,
-                                  ),
-                                ),
-                                child: _showScrollToBottomButton
-                                    ? KeyedSubtree(
-                                        key: const ValueKey(
-                                            'scroll-to-bottom-button'),
-                                        child: _buildScrollToBottomButton(
-                                            isDark: isDark),
-                                      )
-                                    : const SizedBox(
-                                        key: ValueKey(
-                                            'scroll-to-bottom-placeholder'),
-                                        width: _overlayButtonSize,
-                                        height: _overlayButtonSize,
-                                      ),
+                        // The message list is part of the composer's tap
+                        // region group ([chatComposerTapRegionGroupId]): with
+                        // the app-wide tap-outside blur, touching the list to
+                        // scroll while composing must NOT unfocus the
+                        // composer — the keyboard stays up while the user
+                        // reads/scrolls (dismissed via the keyboard's own
+                        // close key or the page's keyboard-dismiss button).
+                        child: TextFieldTapRegion(
+                          groupId: chatComposerTapRegionGroupId,
+                          child: Stack(
+                            children: [
+                              _buildChatWidget(
+                                isDark: isDark,
+                                isStreaming: isStreaming,
+                                streamingFullReply: streamingFullReply,
+                                streamingMsgId: streamingMsgId,
+                                activeId: activeId,
+                                controller: controller,
                               ),
-                            ),
-                            // ── Keyboard-dismiss overlay button ──
-                            // Shown while the soft keyboard is open (the
-                            // list itself never dismisses it — manual
-                            // behavior), so the user can close the
-                            // keyboard without hunting for its close key.
-                            // Driven by the keyboard-visibility flag that
-                            // didChangeMetrics setState-updates (MediaQuery
-                            // would always read 0 here — the enclosing
-                            // Scaffold strips viewInsets from the body).
-                            // Bottom-right, LEFT of the scroll-to-bottom
-                            // button when that button is visible; it
-                            // slides (non-linear, _overlaySwitchCurve)
-                            // into the scroll button's corner slot when
-                            // the scroll button hides.
-                            if (_wasKeyboardVisible)
-                              AnimatedPositioned(
-                                duration: _overlaySwitchDuration,
-                                curve: _overlaySwitchCurve,
-                                right: _showScrollToBottomButton
-                                    ? _overlayButtonMargin +
-                                        _overlayButtonSize +
-                                        _overlayButtonGap
-                                    : _overlayButtonMargin,
+                              // ── Scroll-to-bottom overlay button ──
+                              // Shown whenever the list is NOT at the
+                              // bottom. The AnimatedSwitcher plays the
+                              // non-linear scale-up + fade-in (appear) and
+                              // scale-down + fade-out (disappear)
+                              // transition.
+                              Positioned(
+                                right: _overlayButtonMargin,
                                 bottom: _overlayButtonMargin,
-                                child:
-                                    _buildKeyboardDismissButton(isDark: isDark),
+                                child: AnimatedSwitcher(
+                                  duration: _overlaySwitchDuration,
+                                  switchInCurve: _overlaySwitchCurve,
+                                  switchOutCurve: _overlaySwitchCurve,
+                                  transitionBuilder: (child, animation) =>
+                                      FadeTransition(
+                                    opacity: animation,
+                                    child: ScaleTransition(
+                                      scale: animation,
+                                      child: child,
+                                    ),
+                                  ),
+                                  child: _showScrollToBottomButton
+                                      ? KeyedSubtree(
+                                          key: const ValueKey(
+                                              'scroll-to-bottom-button'),
+                                          child: _buildScrollToBottomButton(
+                                              isDark: isDark),
+                                        )
+                                      : const SizedBox(
+                                          key: ValueKey(
+                                              'scroll-to-bottom-placeholder'),
+                                          width: _overlayButtonSize,
+                                          height: _overlayButtonSize,
+                                        ),
+                                ),
                               ),
-                          ],
+                              // ── Keyboard-dismiss overlay button ──
+                              // Shown while the soft keyboard is open (the
+                              // list itself never dismisses it — manual
+                              // behavior), so the user can close the
+                              // keyboard without hunting for its close key.
+                              // Driven by the keyboard-visibility flag that
+                              // didChangeMetrics setState-updates (MediaQuery
+                              // would always read 0 here — the enclosing
+                              // Scaffold strips viewInsets from the body).
+                              // Bottom-right, LEFT of the scroll-to-bottom
+                              // button when that button is visible; it
+                              // slides (non-linear, _overlaySwitchCurve)
+                              // into the scroll button's corner slot when
+                              // the scroll button hides.
+                              if (_wasKeyboardVisible)
+                                AnimatedPositioned(
+                                  duration: _overlaySwitchDuration,
+                                  curve: _overlaySwitchCurve,
+                                  right: _showScrollToBottomButton
+                                      ? _overlayButtonMargin +
+                                          _overlayButtonSize +
+                                          _overlayButtonGap
+                                      : _overlayButtonMargin,
+                                  bottom: _overlayButtonMargin,
+                                  child: _buildKeyboardDismissButton(
+                                      isDark: isDark),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
               ),
