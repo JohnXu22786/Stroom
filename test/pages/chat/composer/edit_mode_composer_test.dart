@@ -584,6 +584,23 @@ void main() {
   group('Edit data-loss warning', () {
     const warningText = '重新编辑发送后下面所有的消息将丢失';
     const closeKey = Key('editWarningCloseButton');
+    const pillKey = Key('editWarningPill');
+    const capsuleKey = Key('editModeCapsule');
+
+    /// The opacity of the fade wrapper directly around [key] — the pill's
+    /// / capsule's own fade-in/out Opacity (nearest Opacity ancestor).
+    double fadeOpacity(WidgetTester tester, Key key) {
+      return tester
+          .widget<Opacity>(
+            find
+                .ancestor(
+                  of: find.byKey(key),
+                  matching: find.byType(Opacity),
+                )
+                .first,
+          )
+          .opacity;
+    }
 
     /// Pumps a direct-mount composer in edit mode with the warning armed.
     Future<void> pumpArmedComposer(
@@ -610,23 +627,196 @@ void main() {
     }
 
     testWidgets(
-      'armed warning appears after the no-keyboard fallback and replaces '
-      'the capsule',
+      'armed warning appears immediately on edit entry, replacing the '
+      'capsule (no keyboard/fallback wait)',
       (tester) async {
         await pumpArmedComposer(tester);
 
-        // Not visible immediately — waits for the soft keyboard (or the
-        // no-keyboard fallback, which is what fires in tests).
-        expect(find.text(warningText), findsNothing);
-        expect(find.text('编辑消息'), findsOneWidget);
-
-        await tester.pump(const Duration(milliseconds: 800));
+        // Shown at once — no fallback delay, no keyboard wait.
         expect(find.text(warningText), findsOneWidget);
         expect(find.text('编辑消息'), findsNothing);
 
-        // Dismiss so no timers stay pending.
+        // Dismiss via close: the pill fades out first, then the capsule
+        // returns.
         await tester.tap(find.byKey(closeKey));
         await tester.pump();
+        expect(find.text(warningText), findsOneWidget);
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(find.text(warningText), findsNothing);
+        expect(find.text('编辑消息'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'the pill fades in on entry and fades out before the capsule fades '
+      'back in',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(1200, 2000));
+        await tester.pumpWidget(
+          wrapComposerInApp(
+            editingMessageId: 'msg-1',
+            editingMessageText: 'original text',
+            showEditWarningOnEntry: true,
+            editWarningArmCount: 1,
+          ),
+        );
+        await tester.pump();
+
+        // Just inserted: the fade-in starts at opacity ~0.
+        expect(find.text(warningText), findsOneWidget);
+        expect(fadeOpacity(tester, pillKey), lessThan(0.05));
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(fadeOpacity(tester, pillKey), greaterThan(0.95));
+
+        // Close: fade-out over 200ms while the pill stays in the tree.
+        // (The rebuild with the fade-out tween happens on the first pump;
+        // the animation then progresses on the following pumps.)
+        await tester.tap(find.byKey(closeKey));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(fadeOpacity(tester, pillKey), lessThan(1.0));
+        expect(find.text(warningText), findsOneWidget);
+        expect(find.text('编辑消息'), findsNothing);
+
+        // Fade-out finished, then the pill is removed; the capsule enters
+        // and fades in.
+        await tester.pump(const Duration(milliseconds: 150));
+        expect(find.text(warningText), findsNothing);
+        expect(find.text('编辑消息'), findsOneWidget);
+        expect(fadeOpacity(tester, capsuleKey), lessThan(0.05));
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(fadeOpacity(tester, capsuleKey), greaterThan(0.95));
+      },
+    );
+
+    testWidgets(
+      'auto-hide after 2s fades the pill out, then the capsule fades back '
+      'in',
+      (tester) async {
+        await pumpArmedComposer(tester);
+        expect(find.text(warningText), findsOneWidget);
+
+        // Countdown fires: the fade-out starts, the pill is still in the
+        // tree.
+        await tester.pump(const Duration(seconds: 2));
+        expect(find.text(warningText), findsOneWidget);
+
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(find.text(warningText), findsNothing);
+        expect(find.text('编辑消息'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'the edit capsule is horizontally centered in its row',
+      (tester) async {
+        await pumpArmedComposer(tester);
+
+        // Dismiss so the capsule returns.
+        await tester.tap(find.byKey(closeKey));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(find.text('编辑消息'), findsOneWidget);
+
+        final composerCenter = tester.getCenter(
+          find.byType(ChatComposerWidget),
+        );
+        final capsuleCenter = tester.getCenter(find.byKey(capsuleKey));
+        expect((capsuleCenter.dx - composerCenter.dx).abs(), lessThan(1.0));
+      },
+    );
+
+    testWidgets(
+      're-entering edit during the fade-out cancels it and re-shows the '
+      'pill with a fresh countdown',
+      (tester) async {
+        await pumpArmedComposer(tester);
+        expect(find.text(warningText), findsOneWidget);
+
+        // Start the dismissal (fade-out in progress), then re-enter while
+        // fading.
+        await tester.tap(find.byKey(closeKey));
+        await tester.pump();
+        expect(find.text(warningText), findsOneWidget);
+
+        await tester.pumpWidget(
+          wrapComposerInApp(
+            editingMessageId: 'msg-1',
+            editingMessageText: 'original text',
+            conversationId: 'conv-a',
+            showEditWarningOnEntry: true,
+            editWarningArmCount: 2,
+          ),
+        );
+        await tester.pump();
+        // The fade-out is cancelled: the pill is back and still visible
+        // well past the original fade-out window (fresh countdown).
+        expect(find.text(warningText), findsOneWidget);
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text(warningText), findsOneWidget);
+
+        await tester.tap(find.byKey(closeKey));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(find.text(warningText), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'switching the edit target from a warned to an unwarned message '
+      'hides the warning immediately',
+      (tester) async {
+        await pumpArmedComposer(tester);
+        expect(find.text(warningText), findsOneWidget);
+
+        // User taps edit on the LAST message (nothing below it): the page
+        // passes a new message id with showEditWarningOnEntry: false.
+        await tester.pumpWidget(
+          wrapComposerInApp(
+            editingMessageId: 'msg-2',
+            editingMessageText: 'other text',
+            conversationId: 'conv-a',
+            showEditWarningOnEntry: false,
+            editWarningArmCount: 2,
+          ),
+        );
+        await tester.pump();
+        // No stale pill for the new target — the capsule shows instead.
+        expect(find.text(warningText), findsNothing);
+        expect(find.text('编辑消息'), findsOneWidget);
+
+        // Nothing reappears later.
+        await tester.pump(const Duration(seconds: 2));
+        expect(find.text(warningText), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'an unrelated rebuild during the fade-out does not interrupt it',
+      (tester) async {
+        await pumpArmedComposer(tester);
+        expect(find.text(warningText), findsOneWidget);
+
+        await tester.tap(find.byKey(closeKey));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(fadeOpacity(tester, pillKey), lessThan(1.0));
+
+        // Ordinary rebuild (identical props, no entry bump): the fade-out
+        // continues and the capsule still returns when it completes.
+        await tester.pumpWidget(
+          wrapComposerInApp(
+            editingMessageId: 'msg-1',
+            editingMessageText: 'original text',
+            conversationId: 'conv-a',
+            showEditWarningOnEntry: true,
+            editWarningArmCount: 1,
+          ),
+        );
+        await tester.pump();
+        expect(fadeOpacity(tester, pillKey), lessThan(1.0));
+
+        await tester.pump(const Duration(milliseconds: 150));
         expect(find.text(warningText), findsNothing);
         expect(find.text('编辑消息'), findsOneWidget);
       },
@@ -634,7 +824,6 @@ void main() {
 
     testWidgets('leaving edit mode disarms the warning', (tester) async {
       await pumpArmedComposer(tester);
-      await tester.pump(const Duration(milliseconds: 800));
       expect(find.text(warningText), findsOneWidget);
 
       // Cancel edit mode (editingMessageId → null): the warning and the
@@ -655,7 +844,6 @@ void main() {
 
     testWidgets('switching conversations disarms the warning', (tester) async {
       await pumpArmedComposer(tester);
-      await tester.pump(const Duration(milliseconds: 800));
       expect(find.text(warningText), findsOneWidget);
 
       // Conversation switch while still in edit mode: the pill refers to
@@ -681,13 +869,14 @@ void main() {
       'warning after a dismissal',
       (tester) async {
         await pumpArmedComposer(tester);
-        await tester.pump(const Duration(milliseconds: 800));
         expect(find.text(warningText), findsOneWidget);
 
-        // Dismiss via the close button.
+        // Dismiss via the close button (fade-out completes).
         await tester.tap(find.byKey(closeKey));
         await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
         expect(find.text(warningText), findsNothing);
+        expect(find.text('编辑消息'), findsOneWidget);
 
         // Same message id, but the page bumped the arm count (user tapped
         // the edit button again): the warning re-arms and re-appears.
@@ -701,41 +890,28 @@ void main() {
           ),
         );
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 800));
-        expect(find.text(warningText), findsOneWidget);
-
-        await tester.tap(find.byKey(closeKey));
-        await tester.pump();
-        expect(find.text(warningText), findsNothing);
-      },
-    );
-
-    testWidgets(
-      'a composer created directly in edit mode with the keyboard already '
-      'up reveals the warning immediately (post-frame arm)',
-      (tester) async {
-        addTearDown(tester.view.reset);
-        await tester.binding.setSurfaceSize(const Size(1200, 2000));
-        // Keyboard up before the composer is even mounted.
-        tester.view.viewInsets = const FakeViewPadding(bottom: 600);
-        await tester.pumpWidget(
-          wrapComposerInApp(
-            editingMessageId: 'msg-1',
-            editingMessageText: 'original text',
-            showEditWarningOnEntry: true,
-            editWarningArmCount: 1,
-          ),
-        );
-        await tester.pump();
-        await tester.pump();
-        tester.takeException();
-
-        // Revealed via the post-frame arm (no fallback wait needed).
         expect(find.text(warningText), findsOneWidget);
         expect(find.text('编辑消息'), findsNothing);
 
         await tester.tap(find.byKey(closeKey));
         await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(find.text(warningText), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'a composer created directly in edit mode shows the warning '
+      'immediately',
+      (tester) async {
+        // No keyboard involved: arming is synchronous with the first build.
+        await pumpArmedComposer(tester);
+        expect(find.text(warningText), findsOneWidget);
+        expect(find.text('编辑消息'), findsNothing);
+
+        await tester.tap(find.byKey(closeKey));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
         expect(find.text(warningText), findsNothing);
       },
     );
@@ -744,13 +920,14 @@ void main() {
       'a rebuild without any entry bump does not re-show the warning',
       (tester) async {
         await pumpArmedComposer(tester);
-        await tester.pump(const Duration(milliseconds: 800));
         expect(find.text(warningText), findsOneWidget);
 
         // Dismiss; the capsule returns.
         await tester.tap(find.byKey(closeKey));
         await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
         expect(find.text(warningText), findsNothing);
+        expect(find.text('编辑消息'), findsOneWidget);
 
         // Ordinary rebuild (e.g. a keystroke) with the same arm count:
         // the warning stays dismissed.
@@ -764,8 +941,8 @@ void main() {
           ),
         );
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 800));
         expect(find.text(warningText), findsNothing);
+        expect(find.text('编辑消息'), findsOneWidget);
       },
     );
   });

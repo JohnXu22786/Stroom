@@ -80,11 +80,12 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   /// Called when user taps X on the edit capsule to cancel editing.
   final VoidCallback? onEditCancel;
 
-  /// Whether the data-loss warning should be armed when entering edit mode.
+  /// Whether the data-loss warning should be shown when entering edit mode.
   /// The chat page sets this when the edited message has newer messages
-  /// below it (re-sending the edit would delete them). The warning is then
-  /// revealed once the soft keyboard is up, or after a short fallback
-  /// delay when no keyboard appears (floating / external keyboard setups).
+  /// below it (re-sending the edit would delete them). When set, the
+  /// warning pill replaces the edit capsule immediately on entry (fading
+  /// in), then fades out on auto-hide (2s) or close so the edit capsule
+  /// fades back in.
   final bool showEditWarningOnEntry;
 
   /// Bumped by the chat page on every explicit edit entry
@@ -131,32 +132,34 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   final GlobalKey _composerKey = GlobalKey();
 
   // ── Edit data-loss warning state ──
-  /// Whether the warning is armed for the current edit session. Armed only
-  /// when the page says re-sending the edit can delete messages below
-  /// ([ChatComposerWidget.showEditWarningOnEntry]).
-  bool _editWarningArmed = false;
-
-  /// Whether the warning pill is currently visible in the edit capsule's
+  /// Whether the warning pill is currently shown in the edit capsule's
   /// row. While visible it replaces the edit capsule.
   bool _editWarningVisible = false;
+
+  /// Whether the warning pill is in its fade-out phase: dismissed (auto-
+  /// hide or close) but still in the tree until the fade completes, so the
+  /// edit capsule fades back in only after the pill is gone.
+  bool _editWarningFadingOut = false;
 
   /// Timer that auto-hides the warning pill after 2 seconds.
   Timer? _editWarningTimer;
 
-  /// Fallback timer: reveals the warning after a short delay when no soft
-  /// keyboard appeared (floating / external keyboard, tablet without
-  /// keyboard, …). Cancelled as soon as the keyboard reveals it earlier.
-  Timer? _editWarningFallbackTimer;
-
-  /// Insets above which the soft keyboard is considered visible.
-  static const double _keyboardVisibleThreshold = 100;
-
-  /// How long to wait for the soft keyboard before revealing the warning
-  /// anyway (no-keyboard setups).
-  static const Duration _editWarningFallbackDelay = Duration(milliseconds: 700);
+  /// Timer that removes the pill from the tree once its fade-out finished.
+  Timer? _editWarningFadeOutTimer;
 
   /// How long the warning stays visible before auto-hiding.
   static const Duration _editWarningAutoHideDelay = Duration(seconds: 2);
+
+  /// How long the pill's fade-out (and the capsule's fade-in) lasts.
+  static const Duration _editWarningFadeOutDuration =
+      Duration(milliseconds: 200);
+
+  /// How long after dismissal the pill stays in the tree before being
+  /// removed: slightly longer than the fade-out, so the removal never
+  /// preempts the fade animation (frame jank) and the pill→capsule swap
+  /// stays strictly sequential.
+  static final Duration _editWarningFadeOutRemovalDelay =
+      _editWarningFadeOutDuration + const Duration(milliseconds: 50);
 
   /// 在途的图片后台预压缩任务（按附件 hash 追踪）。
   ///
@@ -235,14 +238,11 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
       _lastSavedDraft = widget.editingMessageText!;
       _lastHadText = widget.editingMessageText!.trim().isNotEmpty;
       _loadEditingAttachments(widget.editingMessageAttachments);
-      // Same arming as the didUpdateWidget entry branch, for states that
-      // are created directly in edit mode. Deferred to the first frame:
-      // the keyboard check reads View.of(context), which registers an
-      // inherited-widget dependency and is not allowed during initState.
-      // No-op unless showEditWarningOnEntry is set.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _armEditWarning(fromBuild: false);
-      });
+      // Arm the data-loss warning: the pill replaces the edit capsule on
+      // the first build. Safe during initState — no setState, no view
+      // access (unlike the removed keyboard-based reveal). No-op unless
+      // showEditWarningOnEntry is set.
+      _armEditWarning();
     }
 
     _focusNode.onKeyEvent = (node, event) {
@@ -295,9 +295,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
         // Pre-populate pending attachments with the original message's
         // attachments, and load image bytes for preview.
         _loadEditingAttachments(widget.editingMessageAttachments);
-        // Arm the data-loss warning; it is revealed once the keyboard is
-        // up (or after a short fallback delay without a keyboard).
-        _armEditWarning(fromBuild: true);
+        // Arm the data-loss warning: it is revealed immediately, replacing
+        // the capsule until dismissed (auto-hide or close).
+        _armEditWarning();
       } else if (widget.editingMessageId == null &&
           oldWidget.editingMessageId != null) {
         // Edit mode cancelled - clear everything, then restore the current
@@ -326,12 +326,14 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     // Re-entry on the SAME message (the edit button tapped again while it
     // is already being edited): the id didn't transition, so re-arm on the
     // page's explicit entry bump — re-shows the warning after a dismissal.
-    // When the pill is already showing, keep it (avoid a hide/re-show
-    // blip); the current auto-hide countdown continues.
+    // Also cancels an in-progress fade-out (re-tap during the fade
+    // restarts the countdown instead of letting the pill vanish). When the
+    // pill is already fully showing, keep it (avoid a hide/re-show blip);
+    // the current auto-hide countdown continues.
     if (widget.editingMessageId != null &&
         widget.editWarningArmCount != oldWidget.editWarningArmCount) {
-      if (!_editWarningVisible) {
-        _armEditWarning(fromBuild: true);
+      if (!_editWarningVisible || _editWarningFadingOut) {
+        _armEditWarning();
       }
       return;
     }
@@ -389,84 +391,45 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     }
   }
 
-  /// Arms the edit data-loss warning for the current edit session.
+  /// Arms the edit data-loss warning for the current edit session: the
+  /// warning pill replaces the edit capsule immediately on the next build
+  /// (the fade-in is handled by the pill's own TweenAnimationBuilder) and
+  /// auto-hides after [_editWarningAutoHideDelay].
   ///
-  /// The warning only matters when re-sending the edit can delete messages
-  /// below, which the page decides on entry
-  /// ([ChatComposerWidget.showEditWarningOnEntry]). When armed it is
-  /// revealed once the soft keyboard is up — the composer sits right above
-  /// it — and falls back to a short delay for setups where no keyboard
-  /// appears (floating / external keyboard).
-  ///
-  /// [fromBuild] is true when called from [initState]/[didUpdateWidget]
-  /// (build phase): the direct reveal must not call setState — the pill is
-  /// rendered by the build that follows. When false (post-frame), the
-  /// setState-based [_revealEditWarning] is used.
-  void _armEditWarning({required bool fromBuild}) {
+  /// No-op unless the page says re-sending the edit can delete messages
+  /// below ([ChatComposerWidget.showEditWarningOnEntry]) — but the pill
+  /// state is reset in either case, so switching the edit target from a
+  /// warned to an unwarned message hides the pill. Called during the build
+  /// phase ([initState]/[didUpdateWidget]) only, so it mutates state
+  /// directly — the build that follows renders the pill or the capsule.
+  void _armEditWarning() {
     _editWarningTimer?.cancel();
-    _editWarningFallbackTimer?.cancel();
-    _editWarningArmed = widget.showEditWarningOnEntry;
+    _editWarningFadeOutTimer?.cancel();
     _editWarningVisible = false;
-    if (!_editWarningArmed) return;
-    if (_isKeyboardUp()) {
-      // Keyboard already up (user was typing): show immediately.
-      if (fromBuild) {
-        _editWarningVisible = true;
-        _editWarningTimer = Timer(
-          _editWarningAutoHideDelay,
-          _dismissEditWarning,
-        );
-      } else {
-        _revealEditWarning();
-      }
-    } else {
-      // Keyboard still sliding up or never coming: [didChangeMetrics]
-      // reveals it the moment the keyboard appears; the fallback timer
-      // covers no-keyboard setups.
-      _editWarningFallbackTimer = Timer(
-        _editWarningFallbackDelay,
-        _revealEditWarning,
-      );
-    }
-  }
-
-  /// Whether the soft keyboard is currently up. Reads the view directly so
-  /// it is fresh even inside [didChangeMetrics] callbacks, where the
-  /// inherited MediaQuery is one frame behind.
-  bool _isKeyboardUp() {
-    final view = View.of(context);
-    return view.viewInsets.bottom / view.devicePixelRatio >
-        _keyboardVisibleThreshold;
-  }
-
-  /// Reveals the armed warning the moment the soft keyboard appears.
-  /// No-op when nothing is armed or the warning is already visible.
-  void _revealEditWarningIfKeyboardUp() {
-    if (!_editWarningArmed || _editWarningVisible || !mounted) return;
-    if (_isKeyboardUp()) {
-      _revealEditWarning();
-    }
-  }
-
-  /// Shows the warning pill (with auto-hide) and cancels any pending
-  /// timers (fallback or a prior auto-hide).
-  void _revealEditWarning() {
-    if (!mounted || !_editWarningArmed || _editWarningVisible) return;
-    _editWarningTimer?.cancel();
-    _editWarningFallbackTimer?.cancel();
-    setState(() => _editWarningVisible = true);
+    _editWarningFadingOut = false;
+    if (!widget.showEditWarningOnEntry) return;
+    _editWarningVisible = true;
     _editWarningTimer = Timer(_editWarningAutoHideDelay, _dismissEditWarning);
   }
 
   /// Dismisses the warning pill (close button or auto-hide). Dismissing
-  /// also disarms: the warning is shown at most once per edit entry.
+  /// also disarms: the warning is shown at most once per edit entry
+  /// (re-armed only by a new entry bump).
+  ///
+  /// The pill fades out over [_editWarningFadeOutDuration] before being
+  /// removed from the tree (after [_editWarningFadeOutRemovalDelay]), so
+  /// the edit capsule only fades back in once the fade-out finished
+  /// (sequential, not a cross-fade).
   void _dismissEditWarning() {
     _editWarningTimer?.cancel();
-    _editWarningFallbackTimer?.cancel();
-    if (!mounted || !_editWarningVisible) return;
-    setState(() {
-      _editWarningArmed = false;
-      _editWarningVisible = false;
+    if (!mounted || !_editWarningVisible || _editWarningFadingOut) return;
+    setState(() => _editWarningFadingOut = true);
+    _editWarningFadeOutTimer = Timer(_editWarningFadeOutRemovalDelay, () {
+      if (!mounted) return;
+      setState(() {
+        _editWarningVisible = false;
+        _editWarningFadingOut = false;
+      });
     });
   }
 
@@ -475,15 +438,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   /// changes; the build that follows renders the capsule again).
   void _disarmEditWarning() {
     _editWarningTimer?.cancel();
-    _editWarningFallbackTimer?.cancel();
-    _editWarningArmed = false;
+    _editWarningFadeOutTimer?.cancel();
     _editWarningVisible = false;
-  }
-
-  @override
-  void didChangeMetrics() {
-    super.didChangeMetrics();
-    _revealEditWarningIfKeyboardUp();
+    _editWarningFadingOut = false;
   }
 
   @override
@@ -491,7 +448,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     WidgetsBinding.instance.removeObserver(this);
     _draftTimer?.cancel();
     _editWarningTimer?.cancel();
-    _editWarningFallbackTimer?.cancel();
+    _editWarningFadeOutTimer?.cancel();
     // Save draft before disposing. Use try-catch because ref may
     // already be disposed during teardown, especially in tests.
     try {
@@ -559,10 +516,15 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
                 hasAttachments: hasAttachments,
               ),
               // ── Edit mode capsule / data-loss warning pill ──
-              // The warning replaces the capsule in its row while visible.
+              // The warning replaces the capsule in its row while visible;
+              // dismissal fades the pill out before the capsule fades back
+              // in.
               if (widget.editingMessageId != null)
                 _editWarningVisible
-                    ? _buildEditWarningPill(cs: cs)
+                    ? _buildEditWarningPill(
+                        cs: cs,
+                        fadingOut: _editWarningFadingOut,
+                      )
                     : _buildEditModeCapsule(cs: cs),
               // ── Input row ──
               _buildInputRow(
