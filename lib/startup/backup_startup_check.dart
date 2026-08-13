@@ -55,6 +55,13 @@ class BackupStartupResult {
 class BackupStartupCheck {
   BackupStartupCheck._();
 
+  /// 静默自动重试之间的间隔。
+  ///
+  /// 测试中可覆盖为更短的值以加速用例（真实 IO 在 testWidgets 的
+  /// FakeAsync 区域中不会完成，重试用例需在 runAsync 中跑真实延迟）。
+  @visibleForTesting
+  static Duration retryDelay = const Duration(seconds: 2);
+
   /// 执行启动时的备份存储检查和自动备份。
   ///
   /// 此方法会阻塞直到：
@@ -165,9 +172,22 @@ class BackupStartupCheck {
       // ---------------------------------------------------------------
       // 步骤 3：执行启动后自动备份
       // ---------------------------------------------------------------
-      // 最多尝试 2 次，避免 OOM 等不可恢复错误导致无限弹窗循环。
+      //
+      // 失败处理策略：不急着报错 —— 首次失败后先静默自动重试
+      // [maxSilentRetries] 次（瞬时错误如文件占用、存储抖动常可自愈），
+      // 静默重试全部失败后才弹窗让用户决定（重试/跳过/重新授权）。
+      //
+      // 被取消的备份（应用进入后台时系统主动 cancel）不自动重试 ——
+      // 用户已离开应用，重试会违背其意图并浪费资源。
+      // 取消的备份 lastFailure 为 null（见 AutoBackupService），
+      // 用此区分「真实失败」与「系统取消」。
+      //
+      // 弹窗阶段最多出现 [maxFailureDialogs] 个失败对话框，避免不可恢复
+      // 错误（如 OOM）导致无限弹窗循环（第 2 个对话框起只剩「跳过」）。
       int backupAttempts = 0;
-      const maxBackupAttempts = 2;
+      int dialogRetryCount = 0; // 弹窗阶段用户点击「重试」的次数
+      const maxSilentRetries = 2;
+      const maxFailureDialogs = 2;
 
       while (!backupSuccess && context.mounted) {
         backupAttempts++;
@@ -180,7 +200,20 @@ class BackupStartupCheck {
         }
 
         if (!backupSuccess && context.mounted) {
-          final reachedMaxAttempts = backupAttempts >= maxBackupAttempts;
+          // 弹窗前的静默重试窗口：失败且非取消时自动重试，不打扰用户。
+          final cancelled = AutoBackupService.lastFailure == null;
+          if (dialogRetryCount == 0 &&
+              !cancelled &&
+              backupAttempts <= maxSilentRetries) {
+            debugPrint('[BackupStartupCheck] 自动备份失败（第 $backupAttempts 次，'
+                '共可静默重试 $maxSilentRetries 次），稍后自动重试…');
+            await AppLogService.warning(
+                'BackupStartupCheck', '自动备份失败（第 $backupAttempts 次），自动重试中');
+            await Future<void>.delayed(retryDelay);
+            continue;
+          }
+
+          final reachedMaxAttempts = dialogRetryCount + 1 >= maxFailureDialogs;
           final dialogResult = await showBackupFailedDialog(
             context,
             showSkip: reachedMaxAttempts,
@@ -195,6 +228,7 @@ class BackupStartupCheck {
 
           if (dialogResult == true) {
             // 用户选择「重试」→ 继续循环
+            dialogRetryCount++;
             continue;
           }
 
@@ -247,6 +281,9 @@ class BackupStartupCheck {
 
       await showDialog<void>(
         context: context,
+        // 必须点击「知道了」按钮才能关闭：防止用户误点空白处忽略提醒后，
+        // 因剩余空间不足导致后续自动备份失败。
+        barrierDismissible: false,
         builder: (ctx) => AlertDialog(
           title: Row(
             children: [
