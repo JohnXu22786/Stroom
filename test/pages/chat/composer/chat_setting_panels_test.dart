@@ -706,4 +706,119 @@ void main() {
       // Just verify we can scroll to it
     }, timeout: const Timeout(Duration(seconds: 10)));
   });
+
+  group('Panel spacing consistency', () {
+    // 回归测试：底部面板中开关与文字到边缘的距离必须一致。
+    // M3 ListTile 默认 contentPadding 是 start 16 / end 24，会让
+    // SwitchListTile 的开关比文字更远离边缘；其他面板（推理/自定义
+    // 参数）的开关行使用对称 16 的内边距。这里锁定所有开关行均为
+    // 16：文字到左边缘 == 开关到右边缘，且各面板一致。
+
+    testWidgets('tools panel: switch and title are equidistant from tile edges',
+        (tester) async {
+      final tools = [
+        ToolDefinition(
+          name: 'web_search',
+          description: 'Searches the web',
+          parameters: {},
+        ),
+      ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                return ElevatedButton(
+                  onPressed: () {
+                    showToolsPanel(
+                      context: context,
+                      tools: tools,
+                      enabledTools: {'web_search'},
+                      onToolToggle: (_, __) {},
+                    );
+                  },
+                  child: const Text('Open'),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      await openPanel(tester);
+
+      final tile = tester.getRect(find.byType(SwitchListTile));
+      final title = tester.getRect(find.text('web_search'));
+      final switchBox = tester.getRect(find.byType(Switch));
+
+      final titleLeftInset = title.left - tile.left;
+      final switchRightInset = tile.right - switchBox.right;
+
+      expect(titleLeftInset, closeTo(16, 0.1),
+          reason: 'title should sit 16px from the tile left edge');
+      expect(switchRightInset, closeTo(16, 0.1),
+          reason: 'switch should sit 16px from the tile right edge');
+      expect(switchRightInset, closeTo(titleLeftInset, 0.1),
+          reason: 'switch and text must be equidistant from the edges');
+    });
+
+    testWidgets(
+        'reasoning panel: switch and label are equidistant from row edges',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                return ElevatedButton(
+                  onPressed: () {
+                    showReasoningPanel(
+                      context: context,
+                      reasoningEnabled: true,
+                      reasoningEffortEnabled: true,
+                      reasoningParamSelections: {'effort': 'high'},
+                      reasoningParams: [
+                        ReasoningParam(
+                          paramName: 'effort',
+                          options: ['high', 'low'],
+                          isEffortParam: true,
+                        ),
+                      ],
+                      onReasoningToggle: (_) {},
+                      onReasoningEffortToggle: (_) {},
+                      onReasoningParamChanged: (_, __) {},
+                    );
+                  },
+                  child: const Text('Open'),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      await openPanel(tester);
+
+      // The nearest Container ancestor of the '推理' label is its switch row.
+      final rowFinder = find
+          .ancestor(of: find.text('推理'), matching: find.byType(Container))
+          .first;
+      final row = tester.getRect(rowFinder);
+      final label = tester.getRect(find.text('推理'));
+      final switchBox = tester.getRect(
+        find.descendant(of: rowFinder, matching: find.byType(Switch)),
+      );
+
+      final labelLeftInset = label.left - row.left;
+      final switchRightInset = row.right - switchBox.right;
+
+      expect(labelLeftInset, closeTo(16, 0.1),
+          reason: 'label should sit 16px from the row left edge');
+      expect(switchRightInset, closeTo(16, 0.1),
+          reason: 'switch should sit 16px from the row right edge');
+      expect(switchRightInset, closeTo(labelLeftInset, 0.1),
+          reason: 'switch and text must be equidistant from the edges');
+    });
+  });
 }
