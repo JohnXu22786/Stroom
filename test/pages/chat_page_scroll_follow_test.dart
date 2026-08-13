@@ -64,6 +64,9 @@ Future<ProviderContainer> pumpChat(
   final messages = _testMessages(messageCount);
   await tester.pumpWidget(createChatTestApp());
   await tester.pump();
+  // Resize tests mutate the view (devicePixelRatio / physicalSize); make
+  // sure the configuration does not leak into later tests.
+  addTearDown(tester.view.reset);
 
   final ctx = tester.element(find.byType(ChatPage));
   final container = ProviderScope.containerOf(ctx);
@@ -263,6 +266,10 @@ void main() {
       // over the next few frames.
       await tester.tap(find.byIcon(Icons.arrow_downward));
       await tester.pump();
+      // The button leaves via its scale-down + fade-out exit animation
+      // (250ms) — pump past it before asserting it is gone.
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
       expect(find.byIcon(Icons.arrow_downward), findsNothing,
           reason: 'the button hides after the tap');
       await pumpUntil(tester, () => _isAtBottom(tester));
@@ -359,6 +366,51 @@ void main() {
         _chatPosition(tester).pixels,
         closeTo(restPixels, 1.0),
         reason: 'a viewport-only change must not move the scroll offset',
+      );
+      // Flush one-shot timers before teardown.
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 500));
+      }
+    });
+
+    testWidgets(
+        'a taller window (viewport-only growth) hides the scroll-to-bottom '
+        'button without any scroll event', (tester) async {
+      await pumpChat(tester);
+      await scrollToBottom(tester);
+      await scrollUp(tester);
+      // Let the button's enter animation finish (250ms + one rebuild).
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
+      expect(
+        find.byIcon(Icons.arrow_downward),
+        findsOneWidget,
+        reason: 'precondition: scrolled up shows the button',
+      );
+
+      // Grow the window height: the viewport grows, maxScrollExtent
+      // shrinks and the reading position is clamped to the bottom — a
+      // metric-only change with NO scroll event (an idle ScrollPosition
+      // does not notify its controller listeners). The button must hide
+      // because its visibility is judged from the CURRENT metrics. (A
+      // physicalSize change also reaches didChangeMetrics, so this test
+      // exercises the recompute feature as a whole rather than isolating
+      // the metrics-notification path.)
+      const dpr = 3.0;
+      tester.view.devicePixelRatio = dpr;
+      tester.view.physicalSize = const Size(2400, 3000);
+      // Generous frame budget: the metrics microtask defers the button
+      // recompute to a post-frame callback, which then starts the 250ms
+      // exit animation — the button leaves the tree one frame after the
+      // animation completes.
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(
+        find.byIcon(Icons.arrow_downward),
+        findsNothing,
+        reason: 'a viewport-only growth puts the reader at the bottom — '
+            'the button must hide without any scroll action',
       );
       // Flush one-shot timers before teardown.
       for (var i = 0; i < 4; i++) {

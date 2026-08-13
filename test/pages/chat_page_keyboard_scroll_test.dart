@@ -173,6 +173,19 @@ Future<void> scrollUp(WidgetTester tester, {double amount = 400}) async {
   await tester.pump();
 }
 
+/// The circular overlay button's rect (the [Material] that carries
+/// [icon]) — NOT the 20x20 icon rect inside the 36x36 button.
+Rect _buttonRect(WidgetTester tester, IconData icon) {
+  return tester.getRect(
+    find
+        .ancestor(
+          of: find.byIcon(icon),
+          matching: find.byType(Material),
+        )
+        .first,
+  );
+}
+
 /// Flushes one-shot timers (chat library's scroll-to-bottom show timer,
 /// conversation persist debounce, keyboard mixin debounce, ...) so the
 /// framework's end-of-test pending-timer check passes. Pumps in small
@@ -480,12 +493,17 @@ void main() {
     });
 
     testWidgets(
-        'the keyboard-dismiss button unfocuses the input and is visible '
-        'bottom-left, symmetric to the scroll-to-bottom button',
-        (tester) async {
+        'the keyboard-dismiss button unfocuses the input and sits '
+        'bottom-right, LEFT of the scroll-to-bottom button', (tester) async {
       await pumpChat(tester);
       await scrollToBottom(tester);
       await scrollUp(tester);
+      // Let the scroll-to-bottom button's enter animation finish so its
+      // rect reflects the full 36x36 size. The pump exceeds the overlay
+      // switch duration (250ms, _overlaySwitchDuration) — if that constant
+      // is ever lengthened past 260ms these pumps must grow too.
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
       final saved = _scrollPosition(tester).pixels;
 
       // Focus the input and open the keyboard.
@@ -498,19 +516,28 @@ void main() {
         findsOneWidget,
         reason: 'the dismiss button appears while the keyboard is open',
       );
-      // Symmetric to the scroll-to-bottom button: bottom-left.
-      final dismissRect = tester.getRect(find.byIcon(Icons.keyboard_hide));
-      final scrollRect = tester.getRect(find.byIcon(Icons.arrow_downward));
+      // Both buttons bottom-right: the dismiss button sits to the LEFT of
+      // the scroll-to-bottom button (8px gap); the scroll-to-bottom button
+      // anchors the corner.
+      final dismissRect = _buttonRect(tester, Icons.keyboard_hide);
+      final scrollRect = _buttonRect(tester, Icons.arrow_downward);
+      final screenWidth =
+          tester.view.physicalSize.width / tester.view.devicePixelRatio;
       expect(
-        dismissRect.left,
-        lessThan(scrollRect.left),
-        reason: 'the dismiss button sits on the LEFT, the scroll-to-bottom '
-            'button on the RIGHT',
+        dismissRect.right + 8,
+        closeTo(scrollRect.left, 1.0),
+        reason: 'the dismiss button sits LEFT of the scroll-to-bottom '
+            'button with the 8px gap between them',
+      );
+      expect(
+        scrollRect.right,
+        closeTo(screenWidth - 16, 1.0),
+        reason: 'the scroll-to-bottom button anchors the bottom-right corner',
       );
       expect(
         (dismissRect.bottom - scrollRect.bottom).abs(),
         lessThan(2.0),
-        reason: 'the two buttons share the bottom edge (symmetric)',
+        reason: 'the two buttons share the bottom edge',
       );
 
       // Tapping it drops the input focus (the keyboard close key / system
@@ -540,6 +567,189 @@ void main() {
         reason: 'dismissing the keyboard must not move the list — it stays '
             'where it was before the keyboard opened',
       );
+      await settle(tester);
+    });
+
+    testWidgets(
+        'with the list at the bottom and the keyboard open, the '
+        'keyboard-dismiss button alone occupies the bottom-right corner',
+        (tester) async {
+      await pumpChat(tester);
+      await scrollToBottom(tester);
+      await scrollUp(tester);
+      // Let the scroll button's enter animation finish.
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
+      // Open the keyboard: the dismiss button appears LEFT of the scroll
+      // button.
+      await tester.tap(find.byType(TextField));
+      await tester.pump(const Duration(milliseconds: 16));
+      await setKeyboardInset(tester, 300);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(
+        find.byIcon(Icons.keyboard_hide),
+        findsOneWidget,
+        reason: 'the dismiss button appears while the keyboard is open',
+      );
+
+      // The user returns to the bottom (the list jumps): the scroll button
+      // plays its exit animation and the dismiss button slides into the
+      // corner slot.
+      await scrollToBottom(tester);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      expect(
+        find.byIcon(Icons.arrow_downward),
+        findsNothing,
+        reason: 'at the bottom the scroll-to-bottom button is hidden',
+      );
+      final dismissRect = _buttonRect(tester, Icons.keyboard_hide);
+      final screenWidth =
+          tester.view.physicalSize.width / tester.view.devicePixelRatio;
+      expect(
+        dismissRect.right,
+        closeTo(screenWidth - 16, 1.0),
+        reason: 'without the scroll-to-bottom button the dismiss button '
+            'occupies the bottom-right corner slot',
+      );
+      await closeKeyboard(tester);
+      await settle(tester);
+    });
+
+    testWidgets(
+        'opening the keyboard while at the bottom surfaces the '
+        'scroll-to-bottom button again — a viewport-only change, no scroll '
+        'event fires', (tester) async {
+      await pumpChat(tester);
+      await scrollToBottom(tester);
+      await scrollUp(tester);
+      expect(
+        find.byIcon(Icons.arrow_downward),
+        findsOneWidget,
+        reason: 'precondition: scrolled up shows the button',
+      );
+      // Let the button's enter animation finish before tapping it — mid-
+      // scale (scale 0.0) the button's hit area is a point and the tap
+      // misses.
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
+
+      // Tap the button → the list jumps to the bottom and the button
+      // hides (after its exit animation).
+      await tester.tap(find.byIcon(Icons.arrow_downward));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
+      expect(
+        find.byIcon(Icons.arrow_downward),
+        findsNothing,
+        reason: 'precondition: after the tap the list is at the bottom',
+      );
+
+      // The keyboard opens: the viewport shrinks and maxScrollExtent
+      // grows, so the list is no longer at the bottom — but NO scroll
+      // event fires (the pixels do not move; an idle scroll position does
+      // not notify its controller listeners, only the metrics
+      // notification does). The button must still reappear because its
+      // visibility is judged from the CURRENT metrics, not from actions.
+      await tester.tap(find.byType(TextField));
+      await tester.pump(const Duration(milliseconds: 16));
+      await setKeyboardInset(tester, 300);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(
+        find.byIcon(Icons.arrow_downward),
+        findsOneWidget,
+        reason: 'the keyboard-shrunk viewport puts the list away from the '
+            'bottom — the scroll-to-bottom button must reappear without '
+            'any scroll action',
+      );
+      await closeKeyboard(tester);
+      await settle(tester);
+    });
+
+    testWidgets(
+        'switching the scroll-to-bottom button in/out animates the '
+        'keyboard-dismiss button to/from the corner and scales the scroll '
+        'button', (tester) async {
+      await pumpChat(tester);
+      await scrollToBottom(tester);
+      await scrollUp(tester);
+      // Let the scroll button's enter animation finish so its rect is
+      // full-size.
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
+      // Keyboard open while scrolled up: both buttons visible, dismiss
+      // LEFT of the scroll-to-bottom button.
+      await tester.tap(find.byType(TextField));
+      await tester.pump(const Duration(milliseconds: 16));
+      await setKeyboardInset(tester, 300);
+      await tester.pump(const Duration(milliseconds: 16));
+
+      final dismissBefore = _buttonRect(tester, Icons.keyboard_hide);
+      final screenWidth =
+          tester.view.physicalSize.width / tester.view.devicePixelRatio;
+      final cornerLeft = screenWidth - 16 - 36;
+      expect(
+        dismissBefore.right + 8,
+        closeTo(_buttonRect(tester, Icons.arrow_downward).left, 1.0),
+        reason: 'precondition: dismiss is LEFT of the scroll button',
+      );
+
+      // Scroll to the bottom: the scroll button plays its scale-down +
+      // fade-out exit while the dismiss button slides RIGHT into the
+      // corner slot (both non-linear, 250ms).
+      await scrollToBottom(tester);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      final dismissMid = _buttonRect(tester, Icons.keyboard_hide);
+      expect(
+        dismissMid.left,
+        greaterThan(dismissBefore.left),
+        reason: 'mid-animation the dismiss button has started moving right',
+      );
+      expect(
+        dismissMid.left,
+        lessThan(cornerLeft),
+        reason: 'mid-animation the dismiss button has not reached the '
+            'corner yet',
+      );
+      final fade = tester.widget<FadeTransition>(
+        find
+            .ancestor(
+              of: find.byIcon(Icons.arrow_downward),
+              matching: find.byType(FadeTransition),
+            )
+            .first,
+      );
+      expect(
+        fade.opacity.value,
+        greaterThan(0.0),
+        reason: 'mid-exit the scroll button is still fading',
+      );
+      expect(
+        fade.opacity.value,
+        lessThan(1.0),
+        reason: 'mid-exit the scroll button has already started fading',
+      );
+
+      // The animation completes: the dismiss button sits at the corner and
+      // the scroll button has left the tree.
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+      final dismissAfter = _buttonRect(tester, Icons.keyboard_hide);
+      expect(
+        dismissAfter.left,
+        closeTo(cornerLeft, 1.0),
+        reason: 'after the animation the dismiss button occupies the '
+            'corner slot',
+      );
+      expect(
+        find.byIcon(Icons.arrow_downward),
+        findsNothing,
+        reason: 'after the exit animation the scroll button is gone',
+      );
+      await closeKeyboard(tester);
       await settle(tester);
     });
 
