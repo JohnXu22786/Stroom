@@ -288,6 +288,124 @@ void main() {
       expect(find.text('选择助手'), findsOneWidget);
     });
 
+    testWidgets(
+        'back from assistant selection root returns to Home (no phantom '
+        'pop, no duplicate assistant-selection route)', (tester) async {
+      await tester.pumpWidget(_buildTestApp(
+        screenSize: const Size(390, 844),
+        assistants: [
+          Assistant(
+            name: '助手根',
+            prompt: 'P1',
+            emoji: '🤖',
+            description: '根路由助手',
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Enter chat tab: assistant selection page (root of the nested
+      // navigator)
+      await tester.tap(_navTab('对话'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择助手'), findsOneWidget);
+
+      // System back at the chat tab root must leave the chat tab and
+      // return to Home — not replay a pop animation on the assistant
+      // selection page.
+      await _simulateBackButton(tester);
+      expect(find.text('欢迎使用 Stroom'), findsOneWidget);
+      expect(find.text('选择助手'), findsNothing);
+    });
+
+    testWidgets(
+        'back at assistant selection after returning from the chat page '
+        'goes Home, not a second assistant-selection pop', (tester) async {
+      await tester.pumpWidget(_buildTestApp(
+        screenSize: const Size(390, 844),
+        assistants: [
+          Assistant(
+            name: '助手深',
+            prompt: 'P1',
+            emoji: '🤖',
+            description: '深流程助手',
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Drill down: assistant selection → topic selection → chat page
+      await tester.tap(_navTab('对话'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('助手深'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择对话'), findsOneWidget);
+
+      final newTopicButtons = find.widgetWithText(FilledButton, '新话题');
+      await tester.tap(newTopicButtons.first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull);
+      expect(find.text('新对话'), findsWidgets);
+
+      // Back from chat page → topic selection
+      await _simulateBackButton(tester);
+      expect(find.text('选择对话'), findsOneWidget);
+
+      // Back from topic selection → assistant selection (nested root)
+      await _simulateBackButton(tester);
+      expect(find.text('选择助手'), findsOneWidget);
+
+      // Back from assistant selection root → Home page
+      await _simulateBackButton(tester);
+      expect(find.text('欢迎使用 Stroom'), findsOneWidget);
+      expect(find.text('选择助手'), findsNothing);
+    });
+
+    testWidgets(
+        'double-tap chat tab at assistant selection root does not leave '
+        'a duplicate route behind', (tester) async {
+      await tester.pumpWidget(_buildTestApp(
+        screenSize: const Size(390, 844),
+        assistants: [
+          Assistant(
+            name: '助手双',
+            prompt: 'P1',
+            emoji: '🤖',
+            description: '双击助手',
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Enter chat tab. The nested navigator must have exactly ONE
+      // assistant-selection route: the framework's default initial-route
+      // generation would also push a '/' ancestor route that renders as a
+      // phantom duplicate assistant-selection page (visible offstage).
+      await tester.tap(_navTab('对话'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择助手', skipOffstage: false), findsOneWidget,
+          reason: 'chat tab must have a single root route — a phantom '
+              'duplicate assistant-selection page would make back '
+              'navigation replay a pop animation and stay on the page');
+
+      // Double-tap the chat tab while already at the root: this must be a
+      // no-op (reset to root that is already the root), not a pop that
+      // reveals a phantom duplicate.
+      await tester.tap(_navTab('对话'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择助手'), findsOneWidget);
+      expect(find.text('选择助手', skipOffstage: false), findsOneWidget,
+          reason: 'double-tap at the root must not pop to a phantom '
+              'duplicate route');
+
+      // The stack is at the single root: system back leaves for Home.
+      await _simulateBackButton(tester);
+      expect(find.text('欢迎使用 Stroom'), findsOneWidget);
+      expect(find.text('选择助手'), findsNothing);
+    });
+
     testWidgets('chat state preserved when switching away and back',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(screenSize: const Size(390, 844)));
