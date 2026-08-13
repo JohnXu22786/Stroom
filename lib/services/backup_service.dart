@@ -123,8 +123,11 @@ class BackupSelection {
 // ====================================================================
 //
 // 将应用数据导出为 zip 文件，或从 zip 文件恢复。
-// 支持 Web 和 Native 双平台，全程在内存中构建/解析归档，
-// 避免在 Web 上使用不受支持的 dart:io File/Directory。
+// 支持 Web 和 Native 双平台：
+// - 桌面端（Windows/macOS/Linux）：备份/恢复全程流式
+//   （磁盘 → ZIP → 磁盘，小块写入），峰值内存与备份体积无关；
+// - 移动端（Android/iOS）与 Web：使用内存构建/解析归档
+//   （file_picker 的 saveFile 在移动端必须提供 bytes）。
 // ====================================================================
 
 class BackupService {
@@ -168,9 +171,17 @@ class BackupService {
       throw UnsupportedError(
           'restoreBackup is not available on web. Use importBackup instead.');
     }
-    final bytes = await File(zipPath).readAsBytes();
-    await _restoreFromBytes(bytes,
-        onProgress: onProgress, selection: selection);
+    if (WebFileStore.isTestMode) {
+      // 测试模式：测试数据存放在 WebFileStore 内存存储中，走内存路径。
+      final bytes = await File(zipPath).readAsBytes();
+      await _restoreFromBytes(bytes,
+          onProgress: onProgress, selection: selection);
+    } else {
+      // 生产环境：流式解码 + 逐文件小块写入磁盘，
+      // 峰值内存从 O(备份体积 + 全部解压内容) 降到 O(分块缓冲)。
+      await _restoreFromFileStream(zipPath,
+          onProgress: onProgress, selection: selection);
+    }
   }
 
   // ================================================================
@@ -888,7 +899,7 @@ class BackupService {
     return encoded;
   }
 
-  /// 从字节数据恢复备份（双平台通用）。
+  /// 从字节数据恢复备份（Web / 测试模式通用）。
   ///
   /// [selection] 控制只恢复哪些数据类别。默认全量恢复。
   ///
@@ -896,6 +907,9 @@ class BackupService {
   /// - v1: preferences.json（聊天+设置合并），attachments/ 分开
   /// - v2: chat_data.json（聊天记录）+ settings.json（设置），
   ///       attachments/ 作为聊天记录和附件的一部分
+  ///
+  /// 原生生产环境请使用 [_restoreFromFileStream]（流式解码 + 小块写入，
+  /// 避免整个备份文件与全部解压内容驻留内存）。
   static Future<void> _restoreFromBytes(
     Uint8List bytes, {
     void Function(double progress)? onProgress,
@@ -911,25 +925,87 @@ class BackupService {
       debugPrint('[BackupService] _restoreFromBytes: 备份文件解压失败: $e');
       throw BackupValidationException('无效的备份文件：无法解压 ($e)');
     }
+
+    await _restoreFromArchive(archive,
+        onProgress: onProgress, selection: selection);
+  }
+
+  /// 从磁盘备份文件流式恢复（原生生产环境）。
+  ///
+  /// 使用 [InputFileStream] 分块读取磁盘，配合 [ZipDecoder] 的惰性解压：
+  /// 压缩内容按需从磁盘读取（共享缓冲，不把整个备份文件载入内存），
+  /// 恢复出的文件经 [_writeArchiveFileToDisk] 以小块写入磁盘。
+  /// 峰值内存与备份体积无关。
+  static Future<void> _restoreFromFileStream(
+    String zipPath, {
+    void Function(double progress)? onProgress,
+    BackupSelection selection = BackupSelection.all,
+  }) async {
+    onProgress?.call(0.0);
+    await _yieldToEventLoop();
+
+    final input = InputFileStream(zipPath);
+    try {
+      Archive? archive;
+      try {
+        archive = ZipDecoder().decodeStream(input);
+      } catch (e) {
+        debugPrint('[BackupService] _restoreFromFileStream: 备份文件解压失败: $e');
+        throw BackupValidationException('无效的备份文件：无法解压 ($e)');
+      }
+      await _restoreFromArchive(archive,
+          onProgress: onProgress, selection: selection, streamToDisk: true);
+    } finally {
+      input.closeSync();
+    }
+  }
+
+  /// 从已解码的 [archive] 恢复数据（字节路径与流式路径共用）。
+  ///
+  /// [streamToDisk] 为 true（原生生产环境）时，每个二进制文件经
+  /// [_writeArchiveFileToDisk] 以 64KB 小块流式写入磁盘，文件内容
+  /// 不驻留内存；false（Web / 测试模式）时整读字节后经
+  /// [writeBackupFile] 写入（兼容 WebFileStore 内存存储）。
+  ///
+  /// 校验阶段（manifest / 数据库清单 / 偏好设置）只按需读取归档中的
+  /// 小 JSON 文件。元数据校验失败会在删除任何现有数据之前抛出
+  /// [BackupValidationException]；但单个二进制文件在写入阶段才解压，
+  /// 若某个文件损坏，会在删除/替换进行到一半时失败（半成品文件已被
+  /// [_writeArchiveFileToDisk] 清理），由调用方提示"恢复未完成，请
+  /// 重启应用"。这与旧实现"全量解压通过后才删除"的时机不同，但换取
+  /// 了恢复过程的内存上限与流式写入。
+  static Future<void> _restoreFromArchive(
+    Archive archive, {
+    void Function(double progress)? onProgress,
+    BackupSelection selection = BackupSelection.all,
+    bool streamToDisk = false,
+  }) async {
     onProgress?.call(0.1);
     await _yieldToEventLoop();
 
-    // 读取所有文件内容到内存 Map
-    final fileMap = <String, Uint8List>{};
-    var fileIndex = 0;
-    for (final f in archive) {
-      if (f.isFile) {
-        fileMap[f.name] = Uint8List.fromList(f.content as List<int>);
+    // 按需读取归档中的小文件（manifest / 偏好设置 / 数据库清单），
+    // 校验阶段不触碰大文件。
+    Uint8List? readArchiveFile(String name) => archive.find(name)?.readBytes();
+
+    // 将一个归档文件写入应用数据目录（流式小块 / 内存字节两种模式）。
+    Future<void> writeRestoredFile(
+        ArchiveFile file, String subDir, String fileName) async {
+      if (streamToDisk) {
+        final appDir = await AppStorage.directory;
+        final destPath = subDir.isEmpty
+            ? p.join(appDir, fileName)
+            : p.join(appDir, subDir, fileName);
+        await _writeArchiveFileToDisk(file, destPath);
+      } else {
+        final data = file.readBytes();
+        if (data != null) {
+          await writeBackupFile(subDir, fileName, data);
+        }
       }
-      fileIndex++;
-      if (fileIndex % 50 == 0) await _yieldToEventLoop();
     }
 
-    debugPrint(
-        '[BackupService] _restoreFromBytes: archive decoded (${fileMap.length} files)');
-
     // 验证 manifest（兼容 v1 和 v2）
-    final manifestJson = fileMap['manifest.json'];
+    final manifestJson = readArchiveFile('manifest.json');
     if (manifestJson == null) {
       throw BackupValidationException('无效的备份文件：缺少 manifest.json');
     }
@@ -962,8 +1038,8 @@ class BackupService {
     // 造成的数据丢失。
     // ================================================================
     Map<String, dynamic>? dbData;
-    final dbJson = fileMap['stroom_manifest.json'] ??
-        fileMap['database/manifest_data.json'];
+    final dbJson = readArchiveFile('stroom_manifest.json') ??
+        readArchiveFile('database/manifest_data.json');
     if (dbJson != null) {
       try {
         final decoded = jsonDecode(utf8.decode(dbJson));
@@ -1014,7 +1090,7 @@ class BackupService {
     Map<String, dynamic>? chatPrefs;
     Map<String, dynamic>? settingsPrefs;
     Map<String, dynamic>? validatePrefsFile(String name) {
-      final raw = fileMap[name];
+      final raw = readArchiveFile(name);
       if (raw == null) return null;
       try {
         final decoded = jsonDecode(utf8.decode(raw));
@@ -1053,7 +1129,7 @@ class BackupService {
     }
 
     // 恢复数据库记录（使用已解析校验的数据）
-    debugPrint('[BackupService] _restoreFromBytes: restoring database');
+    debugPrint('[BackupService] _restoreFromArchive: restoring database');
     if (dbData != null) {
       await _restoreDatabaseFromJson(dbData, selection: selection);
     } else if (selection.pictures ||
@@ -1095,7 +1171,7 @@ class BackupService {
       // 按 key 分类拆分：只恢复选中类别对应的键，未选中的类别保持原样
       if (selection.chatRecordsAndAttachments || selection.settings) {
         debugPrint(
-            '[BackupService] _restoreFromBytes: restoring v1 preferences');
+            '[BackupService] _restoreFromArchive: restoring v1 preferences');
         final restorePrefs = <String, dynamic>{};
         if (v1Prefs != null) {
           for (final entry in v1Prefs.entries) {
@@ -1112,13 +1188,13 @@ class BackupService {
       // v2 格式：chat_data.json + settings.json 分开，合并后一次性恢复
       final mergedPrefs = <String, dynamic>{};
       if (selection.chatRecordsAndAttachments) {
-        debugPrint('[BackupService] _restoreFromBytes: merging chat_data.json');
+        debugPrint('[BackupService] _restoreFromArchive: merging chat_data.json');
         if (chatPrefs != null) {
           mergedPrefs.addAll(chatPrefs);
         }
       }
       if (selection.settings) {
-        debugPrint('[BackupService] _restoreFromBytes: merging settings.json');
+        debugPrint('[BackupService] _restoreFromArchive: merging settings.json');
         if (settingsPrefs != null) {
           mergedPrefs.addAll(settingsPrefs);
         }
@@ -1131,7 +1207,7 @@ class BackupService {
     await _yieldToEventLoop();
 
     debugPrint(
-        '[BackupService] _restoreFromBytes: restoring binary files (selection: ${selection.selectedLabels})');
+        '[BackupService] _restoreFromArchive: restoring binary files (selection: ${selection.selectedLabels})');
     // 恢复二进制文件和任务文件（兼容新旧两种路径格式）
     // 新格式: pictures/, tts_audio/, videos/, texts/, attachments/, synthesis/, catcatch/
     // 旧格式: files/pictures/, files/tts_audio/, ..., tasks/synthesis_tasks.json
@@ -1157,9 +1233,9 @@ class BackupService {
 
     // 恢复浏览器Cookies持久化数据（选中则恢复，未选中则保持原样）
     if (selection.browserCookies) {
-      final bcData = fileMap['browser_cookies.json'];
-      if (bcData != null) {
-        await writeBackupFile('', 'browser_cookies.json', bcData);
+      final bcFile = archive.find('browser_cookies.json');
+      if (bcFile != null && bcFile.isFile) {
+        await writeRestoredFile(bcFile, '', 'browser_cookies.json');
       }
     }
 
@@ -1190,8 +1266,9 @@ class BackupService {
     }
 
     var restoreIndex = 0;
-    for (final entry in fileMap.entries) {
-      var key = entry.key;
+    for (final entry in archive.files) {
+      if (!entry.isFile) continue;
+      var key = entry.name;
 
       // 跳过元数据文件
       if (skipFiles.contains(key)) {
@@ -1238,21 +1315,21 @@ class BackupService {
         //（备份归档内的路径为 anki/collection.anki2）。
         // 先关闭可能打开的数据库连接（Windows 上文件被占用时无法写入）。
         await AnkiDatabase.closeOpenedInstance();
-        await writeBackupFile('', relativePath, entry.value);
+        await writeRestoredFile(entry, '', relativePath);
         restoreIndex++;
         continue;
       }
 
       if (matchedDir == 'synthesis' || matchedDir == 'catcatch') {
         if (relativePath == 'tasks.json') {
-          await writeBackupFile(matchedDir, 'tasks.json', entry.value);
+          await writeRestoredFile(entry, matchedDir, 'tasks.json');
         }
         restoreIndex++;
         continue;
       }
 
       // 普通二进制文件
-      await writeBackupFile(matchedDir, relativePath, entry.value);
+      await writeRestoredFile(entry, matchedDir, relativePath);
       restoreIndex++;
       // 每处理 20 个文件让出事件循环
       if (restoreIndex % 20 == 0) await _yieldToEventLoop();
@@ -1273,6 +1350,33 @@ class BackupService {
   // ================================================================
   // 文件清理辅助
   // ================================================================
+
+  /// 将一个归档文件以小块（64KB 分块）流式解压写入磁盘目标路径。
+  ///
+  /// 解压后的数据不驻留内存：store 模式按 64KB 分块写入，deflate 模式
+  /// 经 [ZipDecoder] 的流式解码逐块写出，每块立即落盘。
+  /// 与 [_createBackupStreamingSync] 的流式写入对称，保证手动恢复
+  /// 大备份时峰值内存与单文件大小无关。
+  ///
+  /// 写入中途失败（如磁盘已满、备份内单个文件损坏）时删除半成品文件，
+  /// 避免恢复出的数据库记录指向被截断的文件；错误继续向上抛出，
+  /// 由调用方提示"恢复未完成，请重启应用"。
+  static Future<void> _writeArchiveFileToDisk(
+      ArchiveFile file, String destPath) async {
+    final dir = Directory(destPath).parent;
+    await dir.create(recursive: true);
+    final output = _FileOutputStream(destPath);
+    try {
+      file.writeContent(output);
+    } catch (_) {
+      output.closeSync();
+      try {
+        await File(destPath).delete();
+      } catch (_) {}
+      rethrow;
+    }
+    output.closeSync();
+  }
 
   /// 删除指定目录中的一个文件。
   ///
@@ -1476,6 +1580,12 @@ class BackupService {
   ///
   /// [onProgress] 可选回调，报告备份构建进度（0.0 ~ 1.0）。
   /// [selection] 控制哪些数据类别包含在备份中。默认全量。
+  ///
+  /// 桌面端（Windows/macOS/Linux）先让用户选择保存位置，再由
+  /// [createBackup] 以流式小块方式直接写入所选路径（峰值内存与备份
+  /// 体积无关）；Web 与移动端（Android/iOS）因 file_picker 的
+  /// saveFile 必须提供 bytes（浏览器下载 / SAF 保存），仍在内存中
+  /// 构建归档。
   static Future<void> exportBackup(
     BuildContext context, {
     void Function(double progress)? onProgress,
@@ -1487,14 +1597,44 @@ class BackupService {
           DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
       final defaultName = 'stroom_backup_$dateStr.zip';
 
-      // 在内存中构建归档（传递进度回调）
-      final bytes =
-          await _buildBackupBytes(onProgress: onProgress, selection: selection);
-
-      final outputPath = await FilePicker.saveFile(
-        fileName: defaultName,
-        bytes: bytes,
-      );
+      String? outputPath;
+      if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
+        // Web / 移动端：saveFile 必须提供 bytes
+        final bytes = await _buildBackupBytes(
+            onProgress: onProgress, selection: selection);
+        outputPath = await FilePicker.saveFile(
+          fileName: defaultName,
+          bytes: bytes,
+        );
+      } else {
+        // 桌面端：先选择保存位置，再流式写入（不经过内存归档）
+        outputPath = await FilePicker.saveFile(fileName: defaultName);
+        if (outputPath == null) {
+          await AppLogService.info('BackupService', 'exportBackup: 用户取消保存');
+          return;
+        }
+        // 记录写入前该路径是否已存在文件：若写入失败且原本没有文件，
+        // 删除半成品 zip；若原本有文件（覆盖写入），只在写入真正开始后
+        // 失败时才清理，避免"尚未写入就失败"误删用户原有文件。
+        final existedBefore = await File(outputPath).exists();
+        try {
+          await createBackup(
+            outputPath: outputPath,
+            onProgress: onProgress,
+            selection: selection,
+          );
+        } catch (e) {
+          if (!existedBefore) {
+            try {
+              final f = File(outputPath);
+              if (await f.exists()) {
+                await f.delete();
+              }
+            } catch (_) {}
+          }
+          rethrow;
+        }
+      }
 
       if (outputPath != null && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

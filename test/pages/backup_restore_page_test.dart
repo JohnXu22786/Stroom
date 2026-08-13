@@ -151,4 +151,92 @@ void main() {
           reason: 'Restart prompt must not use a countdown');
     });
   });
+
+  group('BackupRestorePage - stay-in-app hints', () {
+    testWidgets('import confirm dialog shows the stay-in-app hint',
+        (tester) async {
+      await tester.pumpWidget(createTestApp());
+      await tester.pump();
+
+      await tester.scrollUntilVisible(
+        find.widgetWithText(OutlinedButton, '选择备份文件并恢复'),
+        200.0,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.pump();
+
+      await tester.tap(
+          find.widgetWithText(OutlinedButton, '选择备份文件并恢复'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('确认恢复'), findsOneWidget);
+      expect(find.textContaining('不要离开应用'), findsOneWidget,
+          reason: '恢复确认弹窗必须提示用户在恢复期间不要离开应用或息屏');
+      expect(find.textContaining('息屏'), findsOneWidget);
+
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.text('确认恢复'), findsNothing);
+    });
+
+    testWidgets('export progress dialog shows the stay-in-app hint',
+        (tester) async {
+      await tester.pumpWidget(createTestApp());
+      await tester.pump();
+
+      await tester.scrollUntilVisible(
+        find.widgetWithText(ElevatedButton, '导出备份'),
+        200.0,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.pump();
+
+      await tester.tap(find.widgetWithText(ElevatedButton, '导出备份'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('正在导出备份'), findsOneWidget);
+      expect(find.textContaining('不要离开应用'), findsOneWidget,
+          reason: '导出进度弹窗必须提示用户在导出期间不要离开应用或息屏');
+
+      // 测试环境中 FilePicker 平台通道不可用，导出会失败并关闭进度弹窗。
+      // 用有限次 pump 推进，避免在无限动画的进度圈上无超时等待。
+      for (var i = 0;
+          i < 10 && tester.any(find.text('正在导出备份'));
+          i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(find.text('正在导出备份'), findsNothing);
+    });
+
+    testWidgets('restore progress dialog shows the stay-in-app hint',
+        (tester) async {
+      await tester.pumpWidget(createTestApp());
+      await tester.pump();
+
+      await tester.scrollUntilVisible(
+        find.widgetWithText(OutlinedButton, '选择备份文件并恢复'),
+        200.0,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.pump();
+
+      await tester.tap(
+          find.widgetWithText(OutlinedButton, '选择备份文件并恢复'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定恢复'));
+      await tester.pump();
+      // 等待确认弹窗退场动画完成（进度弹窗此时是唯一可见弹窗）
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('正在恢复备份'), findsOneWidget);
+      expect(find.textContaining('不要离开应用'), findsOneWidget,
+          reason: '恢复进度弹窗必须提示用户在恢复期间不要离开应用或息屏');
+      expect(find.text('确认恢复'), findsNothing,
+          reason: '确认弹窗应已退场，提示文本来自恢复进度弹窗');
+
+      // 测试环境中 FilePicker 平台通道无响应，恢复流程会停在进度弹窗，
+      // 这里只验证提示可见性，不等待操作结束。
+    });
+  });
 }

@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_location_manager.dart';
@@ -11,6 +13,17 @@ import 'package:stroom/services/backup_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/utils/web_file_store.dart';
+
+/// Fake [PathProviderPlatform] pointing the app documents dir at a unique
+/// test temp root (mirrors the pattern used by attachment_storage_test).
+class _FakePathProviderPlatform extends PathProviderPlatform {
+  _FakePathProviderPlatform(this.root);
+
+  final String root;
+
+  @override
+  Future<String> getApplicationDocumentsPath() async => root;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -203,6 +216,161 @@ void main() {
       expect(entry.size, equals(largeSize));
       expect(Uint8List.fromList(entry.content as List<int>), equals(largeData),
           reason: '后台 isolate 路径不得损坏大文件内容');
+    });
+  });
+
+  // ==================================================================
+  // 流式恢复端到端：restoreBackup 生产路径（文件流解码 + 小块写入）
+  // ==================================================================
+  //
+  // 回归场景：手动恢复大备份时旧实现 readAsBytes + 全量解压进内存
+  // Map 再逐个 writeAsBytes，峰值内存随备份体积线性增长。新实现从
+  // 磁盘流式解码（InputFileStream 共享缓冲，不复制整包），逐文件
+  // 分块（64KB）写入磁盘 —— 这里验证生产路径（关闭 WebFileStore
+  // 测试模式）的正确性：大文件逐字节无损、无效备份在任何现有数据
+  // 被触碰之前抛出校验异常。
+
+  group('restoreBackup end-to-end via streaming file decode', () {
+    late PathProviderPlatform originalPathProvider;
+
+    setUp(() {
+      // 生产路径恢复会删除 AppStorage 目录下选中类别的目录。将
+      // AppStorage 指向本测试独有的临时目录，避免并行测试文件
+      // 共享 systemTemp 根目录时互相干扰（与仓库其他测试一致）。
+      ManifestDatabase.enableTestMode();
+      WebFileStore.disableTestMode();
+      originalPathProvider = PathProviderPlatform.instance;
+      PathProviderPlatform.instance =
+          _FakePathProviderPlatform('$workDir/app');
+      AppStorage.resetCache();
+    });
+
+    tearDown(() {
+      PathProviderPlatform.instance = originalPathProvider;
+      AppStorage.resetCache();
+      ManifestDatabase.enableTestMode();
+    });
+
+    test('restores a large file byte-identically through the streaming path',
+        () async {
+      // 1. 注册数据库记录（内存 JSON 存储），并准备真实视频文件
+      final rng = Random(2024);
+      final largeSize = 10 * 1024 * 1024;
+      final largeData = Uint8List(largeSize);
+      for (var i = 0; i < largeSize; i++) {
+        largeData[i] = rng.nextInt(256);
+      }
+      await ManifestDatabase.insertVideoRecord({
+        'id': 'restore_big',
+        'name': 'restore_big',
+        'hash': 'restore_big',
+        'format': 'mp4',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': largeSize,
+        'folder': '',
+      });
+
+      final appDir = await AppStorage.directory;
+      final videosDir = Directory('$appDir/videos');
+      await videosDir.create(recursive: true);
+      final videoPath = '$appDir/videos/restore_big.mp4';
+      await File(videoPath).writeAsBytes(largeData, flush: true);
+
+      // 2. 创建备份（后台 isolate 流式构建）
+      final backupPath = '$workDir/restore_e2e_backup.zip';
+      await BackupService.createBackup(outputPath: backupPath);
+
+      // 3. 删除源文件，模拟恢复前置状态（生产恢复路径会先清除选中类别）
+      await File(videoPath).delete();
+
+      // 4. 生产路径流式恢复
+      await BackupService.restoreBackup(backupPath);
+
+      // 5. 验证：文件逐字节一致 + 数据库记录恢复
+      final restored = await File(videoPath).readAsBytes();
+      expect(restored.length, equals(largeSize));
+      expect(restored, equals(largeData),
+          reason: '流式恢复路径不得损坏大文件内容');
+      final records = await ManifestDatabase.getAllVideoRecords();
+      expect(records.length, equals(1),
+          reason: '恢复后视频记录应存在');
+      expect(records[0]['id'], equals('restore_big'));
+    });
+
+    test('invalid zip throws BackupValidationException before touching data',
+        () async {
+      // 预置一个"现有数据"文件：若校验不通过就删数据，该文件会消失
+      final appDir = await AppStorage.directory;
+      final picturesDir = Directory('$appDir/pictures');
+      await picturesDir.create(recursive: true);
+      final markerPath = '$appDir/pictures/marker.jpg';
+      await File(markerPath).writeAsBytes([1, 2, 3, 4], flush: true);
+
+      // 非 zip 内容的"备份文件"
+      final garbagePath = '$workDir/not_a_zip.zip';
+      await File(garbagePath).writeAsBytes(
+          Uint8List.fromList(List.generate(512, (i) => i % 256)),
+          flush: true);
+
+      await expectLater(
+        BackupService.restoreBackup(garbagePath),
+        throwsA(isA<BackupValidationException>()),
+      );
+
+      expect(await File(markerPath).exists(), isTrue,
+          reason: '无效备份必须在删除任何现有数据之前失败');
+    });
+
+    test('deflate-compressed backup restores byte-identically (old v1 format)',
+        () async {
+      // 旧版本备份使用 deflate 压缩（ZipEncoder 默认），走
+      // ZipFile.decompress 的流式解压路径 —— 与新备份的 store 模式
+      // 路径不同，单独覆盖，防止流式解压损坏旧备份。
+      final rng = Random(77);
+      final fileData = Uint8List(4 * 1024 * 1024);
+      for (var i = 0; i < fileData.length; i++) {
+        fileData[i] = rng.nextInt(256);
+      }
+
+      // 用 deflate（默认压缩）构建 zip
+      final archive = Archive();
+      final manifestJson = '{"version":2}';
+      archive.addFile(ArchiveFile('manifest.json',
+          utf8.encode(manifestJson).length, utf8.encode(manifestJson)));
+      archive.addFile(
+          ArchiveFile('videos/deflate_big.mp4', fileData.length, fileData));
+      final deflatePath = '$workDir/deflate_backup.zip';
+      await File(deflatePath).writeAsBytes(ZipEncoder().encode(archive));
+
+      // 确认该 zip 确实是 deflate 压缩，否则本测试会静默失去 deflate 覆盖
+      final encodedArchive =
+          ZipDecoder().decodeBytes(await File(deflatePath).readAsBytes());
+      final encodedVideo = encodedArchive.files
+          .firstWhere((f) => f.name == 'videos/deflate_big.mp4');
+      expect(encodedVideo.compression, CompressionType.deflate,
+          reason: '测试 zip 必须使用 deflate 压缩才能覆盖解压路径');
+
+      final appDir = await AppStorage.directory;
+      final videosDir = Directory('$appDir/videos');
+      await videosDir.create(recursive: true);
+
+      const videosOnly = BackupSelection(
+        chatRecordsAndAttachments: false,
+        settings: false,
+        pictures: false,
+        audio: false,
+        videos: true,
+        texts: false,
+        tasks: false,
+        ankiData: false,
+        browserCookies: false,
+      );
+      await BackupService.restoreBackup(deflatePath, selection: videosOnly);
+
+      final restored =
+          await File('$appDir/videos/deflate_big.mp4').readAsBytes();
+      expect(restored, equals(fileData),
+          reason: 'deflate 压缩备份经流式解压恢复后必须逐字节一致');
     });
   });
 

@@ -107,34 +107,52 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           canPop: false,
           child: AlertDialog(
             title: const Text('正在导出备份'),
-            content: Row(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                ValueListenableBuilder<double?>(
-                  valueListenable: progressValue,
-                  builder: (_, value, __) {
-                    if (value != null) {
-                      return SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          value: value,
-                          strokeWidth: 2.5,
-                        ),
-                      );
-                    }
-                    return const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2.5),
-                    );
-                  },
+                Row(
+                  children: [
+                    ValueListenableBuilder<double?>(
+                      valueListenable: progressValue,
+                      builder: (_, value, __) {
+                        if (value != null) {
+                          return SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              value: value,
+                              strokeWidth: 2.5,
+                            ),
+                          );
+                        }
+                        return const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ValueListenableBuilder<String>(
+                        valueListenable: progressNotifier,
+                        builder: (_, msg, __) => Text(msg),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ValueListenableBuilder<String>(
-                    valueListenable: progressNotifier,
-                    builder: (_, msg, __) => Text(msg),
-                  ),
+                const SizedBox(height: 12),
+                const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.blue, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '导出过程中请不要离开应用或让屏幕息屏（黑屏），以免备份文件损坏。',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -269,6 +287,19 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 ],
               ),
             ),
+            const SizedBox(height: 8),
+            const Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.blue, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '恢复过程中请不要离开应用或让屏幕息屏（黑屏），以免备份文件损坏。',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
         actions: [
@@ -288,17 +319,74 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
 
     if (!mounted) return;
     setState(() => _isImporting = true);
+    var progressShown = false;
     try {
+      // 显示不可关闭的恢复进度弹窗（含"不要离开应用/息屏"提示），
+      // 与导出流程对称，保证恢复期间提示持续可见
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: const AlertDialog(
+            title: Text('正在恢复备份'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    ),
+                    SizedBox(width: 16),
+                    Expanded(child: Text('正在从备份文件恢复数据...')),
+                  ],
+                ),
+                SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.blue, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '恢复过程中请不要离开应用或让屏幕息屏（黑屏），以免备份文件损坏。',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      progressShown = true;
+
+      await Future<void>.delayed(Duration.zero);
+      if (!mounted) return;
+
       final success = await BackupService.importBackup(
         context,
         selection: selection,
       );
       if (success && mounted) {
+        // 先关闭进度弹窗，再展示重启提示弹窗，避免弹窗叠放
+        if (progressShown) {
+          Navigator.of(context, rootNavigator: true).pop();
+          progressShown = false;
+        }
         // 弹窗展示期间停止按钮 spinner（避免模态框背后持续动画）
         setState(() => _isImporting = false);
         await _showRestartPrompt();
       }
     } catch (e) {
+      // 先关闭进度弹窗，让失败提示/重启提示可见
+      if (mounted && progressShown) {
+        Navigator.of(context, rootNavigator: true).pop();
+        progressShown = false;
+      }
       if (!mounted) return;
       setState(() => _isImporting = false);
       if (e is BackupValidationException) {
@@ -315,6 +403,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         iconColor: Colors.orange,
       );
     } finally {
+      if (mounted && progressShown) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
       if (mounted) setState(() => _isImporting = false);
     }
   }
