@@ -103,6 +103,45 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
   final _insIndexController = TextEditingController();
   final _delCountController = TextEditingController();
 
+  /// 校验单个数值字段的当前文本（派生状态，不依赖输入事件时序）：
+  /// 空 → 「不能为空」；非数字 → 「请输入数字」；
+  /// [positiveOnly]（删除数量）还拒绝 ≤ 0，避免删除静默不生效。
+  String? _numFieldError(
+    TextEditingController controller, {
+    bool positiveOnly = false,
+  }) {
+    final text = controller.text.trim();
+    if (text.isEmpty) return '不能为空';
+    final value = int.tryParse(text);
+    if (value == null) return '请输入数字';
+    if (positiveOnly && value <= 0) return '请输入大于 0 的数字';
+    return null;
+  }
+
+  /// 当前可见的数值字段是否存在校验错误。
+  /// 只检查已展开区块中的字段：隐藏字段（区块关闭或位置切换后）
+  /// 的残留无效输入不阻塞应用；重新展开时 [build] 会按当前文本
+  /// 重新校验并显示提示。
+  bool get _hasInvalidNumericField {
+    final c = _config;
+    if (c.numbering.enabled &&
+        (_numFieldError(_numStartController) != null ||
+            _numFieldError(_numStepController) != null ||
+            _numFieldError(_numDigitsController) != null)) {
+      return true;
+    }
+    if (c.insert.enabled &&
+        c.insert.position == BatchRenameInsertPos.atIndex &&
+        _numFieldError(_insIndexController) != null) {
+      return true;
+    }
+    if (c.delete.enabled &&
+        _numFieldError(_delCountController, positiveOnly: true) != null) {
+      return true;
+    }
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -172,9 +211,9 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                     const SizedBox(height: 12),
                     _buildReplaceSection(),
                     const SizedBox(height: 12),
-                    _buildInsertSection(),
-                    const SizedBox(height: 12),
                     _buildDeleteSection(),
+                    const SizedBox(height: 12),
+                    _buildInsertSection(),
                     const SizedBox(height: 12),
                     _buildCaseSection(),
                     const SizedBox(height: 12),
@@ -196,23 +235,34 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.drive_file_rename_outline,
-              color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '批量重命名（${widget.items.length} 项）',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
+          Row(
+            children: [
+              Icon(Icons.drive_file_rename_outline,
+                  color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '批量重命名（${widget.items.length} 项）',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+              IconButton(
+                key: const Key('batch_rename_close_btn'),
+                icon: const Icon(Icons.close),
+                tooltip: '关闭',
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
           ),
-          IconButton(
-            key: const Key('batch_rename_close_btn'),
-            icon: const Icon(Icons.close),
-            tooltip: '关闭',
-            onPressed: () => Navigator.pop(context),
+          // 操作链顺序提示：与执行顺序一致，回答「先替换还是先删除」等疑问
+          Text(
+            '操作顺序：编号 → 替换 → 删除字符 → 插入 → 大小写',
+            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
           ),
         ],
       ),
@@ -358,16 +408,19 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
       );
 
   /// 紧凑数字输入框。
-  /// [fallback] 为上一次有效的配置值：输入无法解析时回退显示该值，
-  /// 避免预览/计划与实际输入脱节。
+  /// 输入为空或非数字时不清空、不强制回填（方便先清空再重新输入），
+  /// 校验提示由 [build] 按字段当前文本派生显示；字段无效期间配置
+  /// 保持上一次有效值，且应用按钮被禁用，避免按过期配置执行。
   Widget _numField({
     required String label,
     required String hint,
     required TextEditingController controller,
     required double width,
-    required int fallback,
+    Key? fieldKey,
+    bool positiveOnly = false,
     required ValueChanged<int> onChanged,
   }) {
+    final error = _numFieldError(controller, positiveOnly: positiveOnly);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -376,6 +429,7 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
         SizedBox(
           width: width,
           child: TextField(
+            key: fieldKey,
             controller: controller,
             keyboardType: TextInputType.number,
             style: const TextStyle(fontSize: 13),
@@ -383,19 +437,22 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
               hintText: hint,
               isDense: true,
               border: const OutlineInputBorder(),
+              errorText: error,
+              errorStyle: const TextStyle(fontSize: 11),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 8,
                 vertical: 8,
               ),
             ),
             onChanged: (s) {
-              final parsed = int.tryParse(s.trim());
-              if (parsed == null) {
-                // 输入非法 → 回退到上次有效值，保持字段与配置一致
-                controller.text = '$fallback';
-                controller.selection = TextSelection.collapsed(
-                  offset: controller.text.length,
-                );
+              // 无效输入：仅刷新派生的校验提示，不修改配置
+              if (s.trim().isEmpty || int.tryParse(s.trim()) == null) {
+                setState(() {});
+                return;
+              }
+              final parsed = int.tryParse(s.trim())!;
+              if (positiveOnly && parsed <= 0) {
+                setState(() {});
                 return;
               }
               onChanged(parsed);
@@ -442,7 +499,6 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                 hint: '1',
                 controller: _numStartController,
                 width: double.infinity,
-                fallback: n.start,
                 onChanged: (v) =>
                     _update(_config.copyWith(numbering: n.copyWith(start: v))),
               ),
@@ -454,7 +510,6 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                 hint: '1',
                 controller: _numStepController,
                 width: double.infinity,
-                fallback: n.step,
                 onChanged: (v) =>
                     _update(_config.copyWith(numbering: n.copyWith(step: v))),
               ),
@@ -466,7 +521,6 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                 hint: '1',
                 controller: _numDigitsController,
                 width: double.infinity,
-                fallback: n.digits,
                 onChanged: (v) =>
                     _update(_config.copyWith(numbering: n.copyWith(digits: v))),
               ),
@@ -624,7 +678,7 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                 hint: '1',
                 controller: _insIndexController,
                 width: 90,
-                fallback: ins.index,
+                fieldKey: const Key('batch_insert_index_field'),
                 onChanged: (v) =>
                     _update(_config.copyWith(insert: ins.copyWith(index: v))),
               ),
@@ -649,39 +703,42 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
       onEnabledChanged: () => _update(
           _config.copyWith(delete: del.copyWith(enabled: !del.enabled))),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: SegmentedButton<BatchRenameDeletePos>(
-                key: const Key('batch_delete_pos_selector'),
-                showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(
-                    value: BatchRenameDeletePos.start,
-                    label: Text('从开头'),
-                  ),
-                  ButtonSegment(
-                    value: BatchRenameDeletePos.end,
-                    label: Text('从结尾'),
-                  ),
-                ],
-                selected: {del.position},
-                onSelectionChanged: (s) => _update(
-                  _config.copyWith(delete: del.copyWith(position: s.first)),
-                ),
-              ),
+        SegmentedButton<BatchRenameDeletePos>(
+          key: const Key('batch_delete_pos_selector'),
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(
+              value: BatchRenameDeletePos.start,
+              label: Text('从开头'),
             ),
-            const SizedBox(width: 12),
-            _numField(
-              label: '数量',
-              hint: '1',
-              controller: _delCountController,
-              width: 72,
-              fallback: del.count,
-              onChanged: (v) =>
-                  _update(_config.copyWith(delete: del.copyWith(count: v))),
+            ButtonSegment(
+              value: BatchRenameDeletePos.end,
+              label: Text('从结尾'),
             ),
           ],
+          selected: {del.position},
+          onSelectionChanged: (s) => _update(
+            _config.copyWith(delete: del.copyWith(position: s.first)),
+          ),
+        ),
+        const SizedBox(height: 8),
+        // 数量字段独占一行：为校验提示（如「请输入大于 0 的数字」）
+        // 留出充足宽度，避免与位置选择器挤在一行
+        _numField(
+          label: '数量',
+          hint: '1',
+          controller: _delCountController,
+          width: 120,
+          fieldKey: const Key('batch_delete_count_field'),
+          positiveOnly: true,
+          onChanged: (v) =>
+              _update(_config.copyWith(delete: del.copyWith(count: v))),
+        ),
+        const SizedBox(height: 6),
+        // 删除先于插入：短文件名删空后可由「插入」补充文本拯救
+        Text(
+          '删除后若名称为空则无法应用；可配合「插入」补充文本',
+          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
         ),
       ],
     );
@@ -864,7 +921,10 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
           const Spacer(),
           FilledButton(
             key: const Key('batch_rename_apply_btn'),
-            onPressed: _plan.canApply ? _apply : null,
+            // 可见数值字段存在校验提示（如「不能为空」）时禁用，
+            // 避免按上一次有效配置执行与所见不一致的规则
+            onPressed:
+                _plan.canApply && !_hasInvalidNumericField ? _apply : null,
             child: Text('重命名 ${_plan.changeCount} 项'),
           ),
         ],
