@@ -44,6 +44,8 @@ class _TestFileRecord
   @override
   final DateTime createdAt;
   @override
+  final DateTime modifiedAt;
+  @override
   final int size;
   @override
   final String folder;
@@ -54,10 +56,12 @@ class _TestFileRecord
     this.hash = 'test_hash',
     this.format = 'mp4',
     DateTime? createdAt,
+    DateTime? modifiedAt,
     this.size = 1024,
     this.folder = '',
   })  : id = id ?? 'file_${DateTime.now().millisecondsSinceEpoch}',
-        createdAt = createdAt ?? DateTime.now();
+        createdAt = createdAt ?? DateTime.now(),
+        modifiedAt = modifiedAt ?? createdAt ?? DateTime.now();
 
   @override
   String get storagePath => '$hash.$format';
@@ -69,6 +73,7 @@ class _TestFileRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt,
         size: size,
         folder: folder,
       );
@@ -80,6 +85,7 @@ class _TestFileRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt,
         size: size,
         folder: folder,
       );
@@ -391,6 +397,102 @@ void main() {
 
       expect(find.byKey(const Key('thumbnail_file_1')), findsOneWidget);
       expect(find.byKey(const Key('thumbnail_file_2')), findsOneWidget);
+    });
+  });
+
+  group('FileManagerView sorting', () {
+    FileManagerView<_TestFileRecord> build({
+      Set<String> folders = const {},
+      List<_TestFileRecord> records = const [],
+      SortConfig config = const SortConfig(
+        field: SortField.name,
+        order: SortOrder.ascending,
+      ),
+    }) {
+      final fmConfig = FileManagerConfig<_TestFileRecord>(
+        title: 'Test',
+        fileIconBuilder: (_) =>
+            const Icon(Icons.videocam, key: Key('fallback_icon')),
+        onFileTap: (_) {},
+      );
+      return FileManagerView<_TestFileRecord>(
+        sortedRecords: records,
+        folders: folders,
+        sortConfig: config,
+        config: fmConfig,
+        onRefresh: () async {},
+        onRenameFile: (_, __) async {},
+        onMoveFile: (_, __) async {},
+        onCopyFile: (_, __) async {},
+        onDeleteFile: (_) async {},
+        onDeleteFiles: (_) async {},
+        onDeleteFolders: (_) async {},
+        onMoveFiles: (_, __) async {},
+        onMoveFolders: (_, __) async {},
+        onExportFile: (_) async {},
+        onRenameFolder: (_, __) async {},
+        onMoveFolder: (_, __) async {},
+        onCopyFolder: (_, __) async {},
+        onDeleteFolder: (_) async {},
+        onCreateFolder: (_) async {},
+        onToggleSort: (_) {},
+        manifestBridge: testManifestBridge,
+      );
+    }
+
+    testWidgets('sort menu offers 创建时间/修改时间/文件名/大小 four categories',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(build()));
+
+      await tester.tap(find.byKey(const Key('fm_sort_btn')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('按创建时间'), findsOneWidget);
+      expect(find.text('按修改时间'), findsOneWidget);
+      expect(find.text('按文件名'), findsOneWidget);
+      expect(find.text('按大小'), findsOneWidget);
+    });
+
+    testWidgets('folders sort naturally by name (dot-numbered names)', (
+      tester,
+    ) async {
+      // 升序：25.3.9 应排在 25.3.30 之前（字典序会颠倒）
+      await tester.pumpWidget(
+        _buildTestApp(
+          build(
+            folders: {'25.3.30', '25.3.9'},
+            config: const SortConfig(
+              field: SortField.name,
+              order: SortOrder.ascending,
+            ),
+          ),
+        ),
+      );
+
+      final dy9 =
+          tester.getTopLeft(find.byKey(const Key('fm_folder_25.3.9'))).dy;
+      final dy30 =
+          tester.getTopLeft(find.byKey(const Key('fm_folder_25.3.30'))).dy;
+      expect(dy9, lessThan(dy30));
+
+      // 降序：25.3.30 应排在 25.3.9 之前
+      await tester.pumpWidget(
+        _buildTestApp(
+          build(
+            folders: {'25.3.30', '25.3.9'},
+            config: const SortConfig(
+              field: SortField.name,
+              order: SortOrder.descending,
+            ),
+          ),
+        ),
+      );
+
+      final dy30d =
+          tester.getTopLeft(find.byKey(const Key('fm_folder_25.3.30'))).dy;
+      final dy9d =
+          tester.getTopLeft(find.byKey(const Key('fm_folder_25.3.9'))).dy;
+      expect(dy30d, lessThan(dy9d));
     });
   });
 

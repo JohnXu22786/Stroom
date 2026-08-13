@@ -24,6 +24,8 @@ class _TestFileRecord
   @override
   final DateTime createdAt;
   @override
+  final DateTime modifiedAt;
+  @override
   final int size;
   @override
   final String folder;
@@ -34,10 +36,12 @@ class _TestFileRecord
     this.hash = 'test_hash',
     this.format = 'mp4',
     DateTime? createdAt,
+    DateTime? modifiedAt,
     this.size = 1024,
     this.folder = '',
   })  : id = id ?? 'file_${DateTime.now().millisecondsSinceEpoch}',
-        createdAt = createdAt ?? DateTime.now();
+        createdAt = createdAt ?? DateTime.now(),
+        modifiedAt = modifiedAt ?? createdAt ?? DateTime.now();
 
   @override
   String get storagePath => '$hash.$format';
@@ -49,6 +53,7 @@ class _TestFileRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt,
         size: size,
         folder: folder,
       );
@@ -60,6 +65,7 @@ class _TestFileRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt,
         size: size,
         folder: folder,
       );

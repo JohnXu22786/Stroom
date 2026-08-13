@@ -25,6 +25,8 @@ class _TestFileRecord
   @override
   final DateTime createdAt;
   @override
+  final DateTime modifiedAt;
+  @override
   final int size;
   @override
   final String folder;
@@ -35,10 +37,12 @@ class _TestFileRecord
     this.hash = 'test_hash',
     this.format = 'mp4',
     DateTime? createdAt,
+    DateTime? modifiedAt,
     this.size = 1024,
     this.folder = '',
   })  : id = id ?? 'file_${DateTime.now().millisecondsSinceEpoch}',
-        createdAt = createdAt ?? DateTime.now();
+        createdAt = createdAt ?? DateTime.now(),
+        modifiedAt = modifiedAt ?? createdAt ?? DateTime.now();
 
   @override
   String get storagePath => '$hash.$format';
@@ -50,6 +54,7 @@ class _TestFileRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt,
         size: size,
         folder: folder,
       );
@@ -61,6 +66,7 @@ class _TestFileRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt,
         size: size,
         folder: folder,
       );
@@ -236,6 +242,51 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('1_beta.mov'), findsOneWidget);
     expect(find.text('2_alpha.mp4'), findsOneWidget);
+  });
+
+  testWidgets('可按修改时间排序编号（四类排序字段均提供）', (tester) async {
+    await tester.pumpWidget(
+      _buildTestApp(
+        _buildFileManagerView(
+          records: [
+            _TestFileRecord(
+              id: 'file_1',
+              name: 'old',
+              hash: 'h1',
+              format: 'txt',
+              createdAt: DateTime(2024, 1, 1),
+              modifiedAt: DateTime(2024, 1, 3),
+            ),
+            _TestFileRecord(
+              id: 'file_2',
+              name: 'recent',
+              hash: 'h2',
+              format: 'txt',
+              createdAt: DateTime(2024, 1, 2),
+              modifiedAt: DateTime(2024, 1, 1),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await _selectFiles(tester, ['file_1', 'file_2']);
+    await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pumpAndSettle();
+
+    // 四个排序字段都在面板中
+    expect(find.text('名称'), findsOneWidget);
+    expect(find.text('创建时间'), findsOneWidget);
+    expect(find.text('修改时间'), findsOneWidget);
+    expect(find.text('大小'), findsOneWidget);
+
+    // 切到「修改时间」升序：recent（1/1）→ 1，old（1/3）→ 2
+    await tester.tap(find.text('修改时间'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('batch_num_switch')));
+    await tester.pumpAndSettle();
+    expect(find.text('1_recent.txt'), findsOneWidget);
+    expect(find.text('2_old.txt'), findsOneWidget);
   });
 
   testWidgets('冲突时预览报错且应用按钮禁用', (tester) async {

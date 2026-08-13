@@ -567,15 +567,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     // Sort records
     final sortedRecords = List<TextRecord>.from(records);
     sortedRecords.sort((a, b) {
-      int cmp;
-      switch (sortConfig.field) {
-        case SortField.createdAt:
-          cmp = a.createdAt.compareTo(b.createdAt);
-        case SortField.name:
-          cmp = a.name.toLowerCase().compareTo(b.name.toLowerCase());
-        case SortField.size:
-          cmp = a.size.compareTo(b.size);
-      }
+      final cmp = compareFileRecords(a, b, sortConfig.field);
       return sortConfig.order == SortOrder.descending ? -cmp : cmp;
     });
 

@@ -32,6 +32,7 @@ Future<BatchRenamePlan?> showBatchRenameDialog<T extends FileRecord>({
         format: r.format,
         folder: r.folder,
         createdAt: r.createdAt,
+        modifiedAt: r.modifiedAt,
         size: r.size,
       ),
   ];
@@ -44,6 +45,7 @@ Future<BatchRenamePlan?> showBatchRenameDialog<T extends FileRecord>({
           format: r.format,
           folder: r.folder,
           createdAt: r.createdAt,
+          modifiedAt: r.modifiedAt,
           size: r.size,
         ),
       )
@@ -234,29 +236,56 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            SegmentedButton<SortField>(
-              key: const Key('batch_sort_field_selector'),
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: SortField.name, label: Text('按名称')),
-                ButtonSegment(value: SortField.createdAt, label: Text('按时间')),
-                ButtonSegment(value: SortField.size, label: Text('按大小')),
-              ],
-              selected: {_config.sortField},
-              onSelectionChanged: (s) =>
-                  _update(_config.copyWith(sortField: s.first)),
+            // 与文件页排序保持一致的四类字段。窄屏 / 系统字体放大时
+            // 四个分段可能放不下：用 FittedBox 整体缩小而不是溢出
+            SizedBox(
+              width: double.infinity,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: SegmentedButton<SortField>(
+                  key: const Key('batch_sort_field_selector'),
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  segments: const [
+                    ButtonSegment(value: SortField.name, label: Text('名称')),
+                    ButtonSegment(
+                        value: SortField.createdAt, label: Text('创建时间')),
+                    ButtonSegment(
+                        value: SortField.modifiedAt, label: Text('修改时间')),
+                    ButtonSegment(value: SortField.size, label: Text('大小')),
+                  ],
+                  selected: {_config.sortField},
+                  onSelectionChanged: (s) =>
+                      _update(_config.copyWith(sortField: s.first)),
+                ),
+              ),
             ),
             const SizedBox(height: 8),
-            SegmentedButton<SortOrder>(
-              key: const Key('batch_sort_order_selector'),
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: SortOrder.ascending, label: Text('升序')),
-                ButtonSegment(value: SortOrder.descending, label: Text('降序')),
-              ],
-              selected: {_config.sortOrder},
-              onSelectionChanged: (s) =>
-                  _update(_config.copyWith(sortOrder: s.first)),
+            SizedBox(
+              width: double.infinity,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: SegmentedButton<SortOrder>(
+                  key: const Key('batch_sort_order_selector'),
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  segments: const [
+                    ButtonSegment(
+                        value: SortOrder.ascending, label: Text('升序')),
+                    ButtonSegment(
+                        value: SortOrder.descending, label: Text('降序')),
+                  ],
+                  selected: {_config.sortOrder},
+                  onSelectionChanged: (s) =>
+                      _update(_config.copyWith(sortOrder: s.first)),
+                ),
+              ),
             ),
           ],
         ),

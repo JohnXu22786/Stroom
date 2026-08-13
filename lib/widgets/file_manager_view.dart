@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../utils/batch_rename.dart';
 import '../utils/file_record.dart';
 import '../utils/manifest_bridge.dart';
+import '../utils/natural_sort.dart';
 import '../utils/sort_config.dart';
 import 'batch_rename_dialog.dart';
 import 'file_manager_config.dart';
@@ -680,7 +681,8 @@ class _FileManagerViewState<T extends FileRecord>
             tooltip: '排序（${widget.sortConfig.label}）',
             onSelected: widget.onToggleSort,
             itemBuilder: (_) => [
-              _buildSortMenuItem(SortField.createdAt, '按时间'),
+              _buildSortMenuItem(SortField.createdAt, '按创建时间'),
+              _buildSortMenuItem(SortField.modifiedAt, '按修改时间'),
               _buildSortMenuItem(SortField.name, '按文件名'),
               _buildSortMenuItem(SortField.size, '按大小'),
             ],
@@ -747,11 +749,10 @@ class _FileManagerViewState<T extends FileRecord>
     // 使用 widget.folders（来自 provider 的全量合并集）而非 getChildFolderPaths（只读 _folderCache）
     final subFolders = _getDirectSubFolders(_currentFolder, widget.folders);
     subFolders.sort((a, b) {
-      final nameA = widget.manifestBridge.getFolderBaseName(a).toLowerCase();
-      final nameB = widget.manifestBridge.getFolderBaseName(b).toLowerCase();
-      return widget.sortConfig.order == SortOrder.descending
-          ? nameB.compareTo(nameA)
-          : nameA.compareTo(nameB);
+      final nameA = widget.manifestBridge.getFolderBaseName(a);
+      final nameB = widget.manifestBridge.getFolderBaseName(b);
+      final cmp = compareNatural(nameA, nameB);
+      return widget.sortConfig.order == SortOrder.descending ? -cmp : cmp;
     });
 
     final currentFiles =
@@ -851,11 +852,10 @@ class _FileManagerViewState<T extends FileRecord>
     // 使用 widget.folders（来自 provider 的全量合并集）
     final subFolders = _getDirectSubFolders(_currentFolder, widget.folders);
     subFolders.sort((a, b) {
-      final nameA = widget.manifestBridge.getFolderBaseName(a).toLowerCase();
-      final nameB = widget.manifestBridge.getFolderBaseName(b).toLowerCase();
-      return widget.sortConfig.order == SortOrder.descending
-          ? nameB.compareTo(nameA)
-          : nameA.compareTo(nameB);
+      final nameA = widget.manifestBridge.getFolderBaseName(a);
+      final nameB = widget.manifestBridge.getFolderBaseName(b);
+      final cmp = compareNatural(nameA, nameB);
+      return widget.sortConfig.order == SortOrder.descending ? -cmp : cmp;
     });
 
     final currentFiles =

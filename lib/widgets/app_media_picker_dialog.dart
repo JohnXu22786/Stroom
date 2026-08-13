@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
+import 'package:stroom/utils/natural_sort.dart';
 
 // ============================================================================
 // MediaPickerConfig — configuration for the unified media picker
@@ -160,7 +161,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
 
   List<String> get _subFolders {
     return FolderPathUtils.getChildFolderPaths(_currentFolder, _folders)
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      ..sort(compareNatural);
   }
 
   List<T> get _currentFiles {
@@ -171,10 +172,10 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
         )
         .toList()
       ..sort(
-        (a, b) => widget.config
-            .displayName(a)
-            .toLowerCase()
-            .compareTo(widget.config.displayName(b).toLowerCase()),
+        (a, b) => compareNatural(
+          widget.config.displayName(a),
+          widget.config.displayName(b),
+        ),
       );
   }
 

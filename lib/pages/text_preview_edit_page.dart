@@ -292,13 +292,17 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
       // 删除旧的存储文件
       await TextManifest.deleteFile(oldStorageFileName);
 
-      // 更新 manifest 记录为新 hash
+      // 更新 manifest 记录为新 hash；内容未变化时保留原修改时间，
+      // 内容变化时把修改时间更新为当前时间（按修改时间排序的依据）
       await TextManifest.updateRecord(TextRecord(
         id: widget.file.id,
         name: widget.file.name,
         hash: newHash,
         format: widget.file.format,
         createdAt: widget.file.createdAt,
+        modifiedAt: newHash == widget.file.hash
+            ? widget.file.modifiedAt
+            : DateTime.now(),
         size: bytes.length,
         folder: widget.file.folder,
         textLength: newContent.length,

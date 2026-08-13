@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'file_record.dart';
+import 'natural_sort.dart';
 
 /// 排序字段
 enum SortField {
   createdAt,
+  modifiedAt,
   name,
   size,
 }
@@ -13,6 +16,21 @@ enum SortField {
 enum SortOrder {
   ascending,
   descending,
+}
+
+/// 按 [field] 比较两条文件记录（升序语义）。
+/// 四个页面的列表排序共用此比较器，保证行为一致。
+int compareFileRecords<T extends FileRecord>(T a, T b, SortField field) {
+  switch (field) {
+    case SortField.createdAt:
+      return a.createdAt.compareTo(b.createdAt);
+    case SortField.modifiedAt:
+      return a.modifiedAt.compareTo(b.modifiedAt);
+    case SortField.name:
+      return compareNatural(a.name, b.name);
+    case SortField.size:
+      return a.size.compareTo(b.size);
+  }
 }
 
 /// 排序配置
@@ -63,15 +81,18 @@ class SortConfig {
 
   /// 排序标签（用于显示）
   String get label {
-    if (field == SortField.createdAt) {
-      return order == SortOrder.descending ? '最新在前' : '最旧在前';
-    }
     final fieldName = switch (field) {
-      SortField.createdAt => '时间',
+      SortField.createdAt => '创建时间',
+      SortField.modifiedAt => '修改时间',
       SortField.name => '文件名',
       SortField.size => '大小',
     };
-    final orderName = order == SortOrder.descending ? '大到小' : '小到大';
+    final orderName = switch (field) {
+      SortField.createdAt ||
+      SortField.modifiedAt =>
+        order == SortOrder.descending ? '新到旧' : '旧到新',
+      _ => order == SortOrder.descending ? '大到小' : '小到大',
+    };
     return '$fieldName（$orderName）';
   }
 }

@@ -24,6 +24,8 @@ class VideoRecord
   @override
   final DateTime createdAt;
   @override
+  final DateTime modifiedAt; // 内容最后修改时间（未修改时等于 createdAt）
+  @override
   final int size; // 文件大小（字节）
   @override
   final String folder; // 文件夹路径（空字符串表示根目录）
@@ -35,10 +37,12 @@ class VideoRecord
     required this.hash,
     required this.format,
     required this.createdAt,
+    DateTime? modifiedAt,
     required this.size,
     this.folder = '',
     this.duration = 0,
-  }) : id = id ?? 'vid_${const Uuid().v4()}';
+  })  : modifiedAt = modifiedAt ?? createdAt,
+        id = id ?? 'vid_${const Uuid().v4()}';
 
   /// 实体文件存储名
   String get storageFileName => '$hash.$format';
@@ -51,23 +55,31 @@ class VideoRecord
         'hash': hash,
         'format': format,
         'createdAt': createdAt.toIso8601String(),
+        'modifiedAt': modifiedAt.toIso8601String(),
         'size': size,
         'folder': folder,
         'duration': duration,
       };
 
-  factory VideoRecord.fromMap(Map<String, dynamic> map) => VideoRecord(
-        id: map['id'] as String?,
-        name: map['name'] as String? ?? '',
-        hash: map['hash'] as String? ?? '',
-        format: map['format'] as String? ?? 'mp4',
-        createdAt: map['createdAt'] != null
-            ? DateTime.parse(map['createdAt'] as String)
-            : DateTime.now(),
-        size: (map['size'] as num?)?.toInt() ?? 0,
-        folder: map['folder'] as String? ?? '',
-        duration: (map['duration'] as num?)?.toInt() ?? 0,
-      );
+  factory VideoRecord.fromMap(Map<String, dynamic> map) {
+    final createdAt = map['createdAt'] != null
+        ? DateTime.parse(map['createdAt'] as String)
+        : DateTime.now();
+    return VideoRecord(
+      id: map['id'] as String?,
+      name: map['name'] as String? ?? '',
+      hash: map['hash'] as String? ?? '',
+      format: map['format'] as String? ?? 'mp4',
+      createdAt: createdAt,
+      // 旧记录没有 modifiedAt：回退为 createdAt（向后兼容）
+      modifiedAt: map['modifiedAt'] != null
+          ? DateTime.parse(map['modifiedAt'] as String)
+          : createdAt,
+      size: (map['size'] as num?)?.toInt() ?? 0,
+      folder: map['folder'] as String? ?? '',
+      duration: (map['duration'] as num?)?.toInt() ?? 0,
+    );
+  }
 
   @override
   VideoRecord copyWithName(String name) => VideoRecord(
@@ -76,6 +88,7 @@ class VideoRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt,
         size: size,
         folder: folder,
         duration: duration,
@@ -88,6 +101,7 @@ class VideoRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt,
         size: size,
         folder: folder,
         duration: duration,
@@ -98,6 +112,7 @@ class VideoRecord
     String? folder,
     int? size,
     int? duration,
+    DateTime? modifiedAt,
   }) =>
       VideoRecord(
         id: id,
@@ -105,6 +120,7 @@ class VideoRecord
         hash: hash,
         format: format,
         createdAt: createdAt,
+        modifiedAt: modifiedAt ?? this.modifiedAt,
         size: size ?? this.size,
         folder: folder ?? this.folder,
         duration: duration ?? this.duration,

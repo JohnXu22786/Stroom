@@ -593,18 +593,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
     // Sort records
     final sortedRecords = List<AudioRecord>.from(records);
     sortedRecords.sort((a, b) {
-      int cmp;
-      switch (sortConfig.field) {
-        case SortField.createdAt:
-          cmp = a.createdAt.compareTo(b.createdAt);
-          break;
-        case SortField.name:
-          cmp = a.name.toLowerCase().compareTo(b.name.toLowerCase());
-          break;
-        case SortField.size:
-          cmp = a.size.compareTo(b.size);
-          break;
-      }
+      final cmp = compareFileRecords(a, b, sortConfig.field);
       return sortConfig.order == SortOrder.descending ? -cmp : cmp;
     });
 

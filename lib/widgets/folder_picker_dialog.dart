@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../utils/folder_path_utils.dart';
+import '../utils/natural_sort.dart';
 
 /// 文件夹选择器对话框
 ///
@@ -130,7 +131,7 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
         if (!suffix.contains('/')) result.add(f);
       }
     }
-    result.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    result.sort(compareNatural);
     return result;
   }
 
