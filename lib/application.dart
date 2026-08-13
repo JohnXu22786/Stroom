@@ -26,6 +26,7 @@ import 'services/notification_service.dart';
 import 'startup/backup_startup_check.dart';
 import 'widgets/update_dialog.dart';
 import 'widgets/quit_confirmation_dialog.dart';
+import 'widgets/tap_outside_unfocus.dart';
 
 /// 启动后任务（更新检查 + 备份检查）的进程级去重标记。
 ///
@@ -461,6 +462,15 @@ class _ApplicationState extends ConsumerState<Application>
                   '/settings': (context) => const SettingsPage(),
                 },
                 debugShowCheckedModeBanner: false,
+                // Make tapping outside a focused text field blur it on
+                // EVERY platform and pointer kind. Flutter's default only
+                // unfocuses on desktop (and mouse/stylus events on mobile);
+                // a mobile touch outside a focused field leaves the cursor
+                // and soft keyboard stuck there — the "can't leave this
+                // input" bug. (Fields with their own onTapOutside keep
+                // their custom behavior.)
+                builder: (context, child) =>
+                    TapOutsideUnfocus(child: child ?? const SizedBox.shrink()),
               ),
               // In-app notification banner overlay
               _InAppBannerOverlay(),

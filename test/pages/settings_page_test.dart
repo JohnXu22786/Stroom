@@ -372,6 +372,61 @@ void main() {
     });
 
     testWidgets(
+        'tapping outside the field blurs it (invalid input still '
+        'reverts)', (tester) async {
+      tester.view.physicalSize = const Size(1080, 6000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      SharedPreferences.setMockInitialValues({});
+
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
+
+      // 滚动到"自定义压缩触发值"开关并开启
+      final toggleFinder = find.text('自定义压缩触发值').first;
+      await tester.scrollUntilVisible(toggleFinder, 300,
+          scrollable: find.byType(Scrollable).first);
+      await tester.tap(toggleFinder);
+      await tester.pumpAndSettle();
+
+      // 输入框出现：输入非法文本并聚焦
+      final fieldFinder = find.byType(TextFormField);
+      expect(fieldFinder, findsOneWidget);
+      await tester.enterText(fieldFinder, 'abc');
+      await tester.pump();
+      final editableFinder = find.descendant(
+        of: fieldFinder,
+        matching: find.byType(EditableText),
+      );
+      bool fieldFocused() => tester
+          .state<EditableTextState>(editableFinder)
+          .widget
+          .focusNode
+          .hasFocus;
+      await tester.tap(fieldFinder);
+      await tester.pump();
+      expect(fieldFocused(), isTrue,
+          reason: 'precondition: the field is focused');
+
+      // 点击字段外的区域 → 字段必须失焦（自定义 onTapOutside 同时
+      // 回退非法输入；此前该字段在任何平台上都不会失焦）
+      await tester.tap(find.text('上下文管理').first);
+      await tester.pump();
+      expect(fieldFocused(), isFalse,
+          reason: 'tapping outside the compaction threshold field must '
+              'blur it (the cursor must not stay stuck)');
+      expect(
+        tester.widget<TextFormField>(fieldFinder).controller?.text,
+        isEmpty,
+        reason: 'the invalid input is reverted on blur',
+      );
+    });
+
+    testWidgets(
         'clearing the field falls back to model context and closes '
         'the custom toggle', (tester) async {
       tester.view.physicalSize = const Size(1080, 6000);
