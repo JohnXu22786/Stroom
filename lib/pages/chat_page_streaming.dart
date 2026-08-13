@@ -218,7 +218,21 @@ extension _ChatPageStreamingExt on _ChatPageState {
     final effectiveConvId =
         capturedConvId ?? ref.read(activeConversationIdProvider) ?? '';
     final manager = ref.read(chatStreamManagerProvider);
-    final selectedAssistant = ref.read(selectedAssistantProvider);
+    // 解析本次发送实际使用的助手：对话绑定的助手优先（创建时按
+    // assistantId 绑定并持久化；全局搜索等入口可能绕过"选择助手"页面
+    // 直接打开其它助手的对话，此时对话的绑定才是权威），其次回退到
+    // 会话当前选择的助手（旧数据中未绑定助手的对话语义），最后兜底
+    // 默认助手——绝不静默退化为"无系统提示词"的请求。
+    final assistants = ref.read(assistantProvider);
+    final conv = ref
+        .read(conversationsProvider)
+        .where((c) => c.id == effectiveConvId)
+        .firstOrNull;
+    final selectedAssistant = resolveAssistantForSend(
+      conversationAssistantId: conv?.assistantId,
+      sessionAssistant: ref.read(selectedAssistantProvider),
+      assistants: assistants,
+    );
     if (selectedAssistant != null) {
       _adapter.setAssistantPrompt(selectedAssistant.prompt);
       _adapter.setAssistantSettings(selectedAssistant.settings);

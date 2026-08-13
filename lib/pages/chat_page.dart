@@ -31,7 +31,11 @@ import '../providers/chat_manager_provider.dart';
 import '../services/chat_stream_manager.dart' show StreamResult;
 import '../providers/provider_config.dart';
 import '../providers/assistant_provider.dart'
-    show assistantProvider, selectedAssistantProvider;
+    show
+        assistantProvider,
+        resolveAssistantForSend,
+        selectedAssistantIdProvider,
+        selectedAssistantProvider;
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
 import 'message_search_page.dart';

@@ -251,6 +251,30 @@ extension _ChatPageSearchExt on _ChatPageState {
             .read(conversationsProvider.notifier)
             .selectConversation(conversationId);
       }
+      // Step 2b: Sync the session assistant selection to the opened
+      // conversation's bound assistant. Global search can open ANY
+      // conversation (not only the session assistant's), so the session
+      // selection would otherwise drift from what the chat actually uses —
+      // the topic page (which filters by the session selection) would then
+      // hide this conversation when navigating back. The conversation's
+      // binding is the source of truth; the session selection follows it.
+      // Guard: only sync when the binding still resolves to an existing
+      // assistant. A conversation whose assistant was deleted must NOT
+      // clobber the user's current selection with a dead id (the send path
+      // already falls back gracefully for such bindings).
+      final openedConv = ref
+          .read(conversationsProvider)
+          .where((c) => c.id == conversationId)
+          .firstOrNull;
+      final openedAssistantId = openedConv?.assistantId;
+      if (openedAssistantId != null &&
+          openedAssistantId.isNotEmpty &&
+          ref
+              .read(assistantProvider)
+              .any((a) => a.id == openedAssistantId)) {
+        ref.read(selectedAssistantIdProvider.notifier).state =
+            openedAssistantId;
+      }
 
       // Step 3: Schedule search activation for the next frame, after
       // _loadConversationMessages has completed its synchronous part.
