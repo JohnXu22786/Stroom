@@ -116,10 +116,16 @@ extension _ChatServiceParamsExt on ChatService {
       }
 
       // Provider-level custom params
+      // 点号参数名（如 `provider.only`）展开为嵌套 JSON，
+      // 与推理参数的 setNestedParam 语义一致。
       for (final cp in _providerConfig!.customParams) {
-        result[cp.paramName] = ChatService._coerceCustomParam(
-            cp.paramName, cp.type, _customParamEffectiveValue(cp),
-            source: 'provider');
+        setNestedParam(
+          result,
+          cp.paramName,
+          ChatService._coerceCustomParam(
+              cp.paramName, cp.type, _customParamEffectiveValue(cp),
+              source: 'provider'),
+        );
       }
 
       // Provider-level reasoning params:
@@ -218,10 +224,15 @@ extension _ChatServiceParamsExt on ChatService {
     }
 
     // Model-level custom params
+    // 点号参数名（如 `provider.only`）展开为嵌套 JSON。
     for (final cp in _modelConfig!.customParams) {
-      result[cp.paramName] = ChatService._coerceCustomParam(
-          cp.paramName, cp.type, _customParamEffectiveValue(cp),
-          source: 'model');
+      setNestedParam(
+        result,
+        cp.paramName,
+        ChatService._coerceCustomParam(
+            cp.paramName, cp.type, _customParamEffectiveValue(cp),
+            source: 'model'),
+      );
     }
 
     // Model-level reasoning params:
@@ -285,9 +296,14 @@ extension _ChatServiceParamsExt on ChatService {
     }
 
     // Assistant-level custom params (override model-level on name collision)
+    // 点号参数名同样展开为嵌套 JSON。
     if (_assistantCustomParams != null) {
       for (final cp in _assistantCustomParams!) {
-        result[cp.name] = ChatService._coerceAssistantCustomParam(cp);
+        setNestedParam(
+          result,
+          cp.name,
+          ChatService._coerceAssistantCustomParam(cp),
+        );
       }
     }
 

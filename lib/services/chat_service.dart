@@ -338,11 +338,26 @@ class ChatService {
   /// Filter out the `_OmittedSentinel` values (params that failed to coerce).
   /// Sentinel-mapped entries must be removed so they don't get re-serialized
   /// into the JSON request body.
+  ///
+  /// Recursive: dotted param names (`provider.only`) may bury a sentinel at
+  /// any depth. A nested map whose entries were ALL omitted is dropped too;
+  /// a legitimately empty map (a JSON param whose value is `{}`) is kept.
   static Map<String, dynamic> _stripOmitted(Map<String, dynamic> params) {
-    return {
-      for (final entry in params.entries)
-        if (entry.value is! _OmittedSentinel) entry.key: entry.value,
-    };
+    final result = <String, dynamic>{};
+    for (final entry in params.entries) {
+      if (entry.value is _OmittedSentinel) continue;
+      if (entry.value is Map<String, dynamic>) {
+        final sub = entry.value as Map<String, dynamic>;
+        final stripped = _stripOmitted(sub);
+        // 嵌套值全部被剔除（原 map 非空 → 由哨兵剔净）：整体丢弃，
+        // 避免向 API 发送残缺的空对象。
+        if (stripped.isEmpty && sub.isNotEmpty) continue;
+        result[entry.key] = stripped;
+      } else {
+        result[entry.key] = entry.value;
+      }
+    }
+    return result;
   }
 
   // ----------------------------------------------------------------

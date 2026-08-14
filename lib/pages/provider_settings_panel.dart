@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../providers/provider_config.dart';
 import '../services/asr_service.dart';
+import '../widgets/code_editor_field.dart';
 import '../widgets/drag_sort_area.dart';
 import 'llm_model_config_shared.dart';
 
@@ -10,27 +11,6 @@ part 'provider_settings_panel_reasoning.dart';
 part 'provider_settings_panel_save.dart';
 part 'provider_settings_panel_tab_basic.dart';
 part 'provider_settings_panel_tab_asr.dart';
-
-/// Format a JSON parse error with detailed position information.
-///
-/// Extracts line and column numbers from the exception's offset and the
-/// source text, producing a Chinese message like
-/// "第 3 行第 10 列: Unexpected token".
-String formatJsonError(String source, dynamic error) {
-  if (error is FormatException) {
-    final offset = error.offset;
-    final msg = error.message;
-    if (offset != null && offset >= 0 && offset <= source.length) {
-      final before = source.substring(0, offset);
-      final lines = before.split('\n');
-      final line = lines.length;
-      final col = lines.last.length + 1;
-      return '第 $line 行第 $col 列: $msg';
-    }
-    return 'JSON 格式错误: $msg';
-  }
-  return 'JSON 格式不正确';
-}
 
 /// Validate a value as JSON when the param type is 'json'.
 ///
@@ -41,7 +21,8 @@ String? validateJsonValue(String type, String value) {
     try {
       jsonDecode(value.trim());
     } catch (e) {
-      return formatJsonError(value, e);
+      // 用与 jsonDecode 相同的（去首尾空白）源文本计算行列。
+      return formatJsonError(value.trim(), e);
     }
   }
   return null;

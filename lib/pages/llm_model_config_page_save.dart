@@ -69,6 +69,17 @@ extension _SaveExt on _LlmModelConfigPageState {
         );
         return;
       }
+      // 点号分段名（provider.only）不允许空段（.only / provider. /
+      // provider..only 会在请求构建时产生空键或嵌套错误）。
+      if (!isValidParamName(name)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('参数名格式不正确（点号分段不能为空）: $name'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
       if (!seenNames.add(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

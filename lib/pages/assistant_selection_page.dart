@@ -8,6 +8,7 @@ import '../providers/assistant_provider.dart';
 import '../providers/chat_manager_provider.dart';
 import '../providers/provider_config.dart';
 import '../services/chat_adapter.dart' show resolveModelRef;
+import '../widgets/code_editor_field.dart';
 import 'assistant/assistant_defaults_tab.dart';
 import 'assistant/assistant_shared.dart';
 import 'assistant/built_in_prompt_selector.dart';

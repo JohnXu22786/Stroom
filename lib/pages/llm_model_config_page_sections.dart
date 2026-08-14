@@ -359,6 +359,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                   _reasoningParams.any(
                     (p) => p.paramName.trim() == name,
                   ));
+          final hasInvalidName = name.isNotEmpty && !isValidParamName(name);
           return Card(
             key: ObjectKey(param),
             margin: const EdgeInsets.only(bottom: 8),
@@ -376,7 +377,11 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                             labelText: '参数名',
                             border: const OutlineInputBorder(),
                             isDense: true,
-                            errorText: isDuplicate ? '已存在该参数' : null,
+                            errorText: hasInvalidName
+                                ? '参数名格式不正确（点号分段不能为空）'
+                                : isDuplicate
+                                    ? '已存在该参数'
+                                    : null,
                             errorStyle: const TextStyle(fontSize: 11),
                           ),
                           onChanged: (v) {
@@ -449,16 +454,28 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                     ],
                   ),
                   const SizedBox(height: 8),
+                  // 点号参数名（如 provider.only）自动分行展示嵌套结构
+                  ParamNamePathPreview(name: name),
                   // 值区按类型区分（与推理参数同款）：
                   // string/number → 选项值胶囊块（可添加多个、删除、
                   // 长按排序）；json → 默认参数值输入框；
                   // boolean → 无参数值（只有参数名）。
                   if (param.type == 'json')
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           child: TextFormField(
                             initialValue: param.defaultValue,
+                            minLines: 4,
+                            maxLines: 8,
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 13,
+                            ),
+                            inputFormatters: const [
+                              CodeSmartInputFormatter(),
+                            ],
                             decoration: InputDecoration(
                               labelText: '默认参数值',
                               hintText: param.paramType.defaultValueHint,
@@ -477,7 +494,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                               ),
                               errorText: _jsonErrors[i],
                               errorMaxLines: 3,
-                              isDense: true,
+                              alignLabelWithHint: true,
                             ),
                             onChanged: (v) {
                               param.defaultValue = v;
@@ -491,16 +508,16 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                           icon: const Icon(Icons.fullscreen, size: 20),
                           tooltip: '全屏编辑',
                           onPressed: () {
-                            _showValueFullscreenEditor(
+                            showJsonValueEditorDialog(
                               context,
-                              param.defaultValue,
-                              (result) {
+                              initialValue: param.defaultValue,
+                              hintText: param.paramType.defaultValueHint,
+                              type: param.type,
+                              onSave: (result) {
                                 param.defaultValue = result;
                                 _validateJsonField(i, param);
                                 setState(() {});
                               },
-                              param.paramType.defaultValueHint,
-                              type: param.type,
                             );
                           },
                         ),

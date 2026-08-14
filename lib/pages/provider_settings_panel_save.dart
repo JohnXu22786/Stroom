@@ -33,6 +33,16 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
         );
         return false;
       }
+      // 点号分段名（provider.only）不允许空段。
+      if (!isValidParamName(pn)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('参数名格式不正确（点号分段不能为空）: $pn'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return false;
+      }
       if (!seenNames.add(pn)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
