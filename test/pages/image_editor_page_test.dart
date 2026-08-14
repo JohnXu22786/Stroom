@@ -12,8 +12,7 @@ void main() {
   // case a future package upgrade changes the defaults.
   // ====================================================================
   group('buildImageEditorConfigs', () {
-    test('main editor top-right button is a save icon, close stays X',
-        () {
+    test('main editor top-right button is a save icon, close stays X', () {
       final configs = buildImageEditorConfigs();
 
       expect(configs.mainEditor.icons.doneIcon, Icons.save,
@@ -29,8 +28,7 @@ void main() {
           reason: 'crop/rotate confirm (打勾) must remain a checkmark');
     });
 
-    test('done tooltip and processing message are localized to Chinese',
-        () {
+    test('done tooltip and processing message are localized to Chinese', () {
       final configs = buildImageEditorConfigs();
 
       expect(configs.i18n.done, '保存');
