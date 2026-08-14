@@ -123,8 +123,7 @@ class CodeSmartInputFormatter extends TextInputFormatter {
       final insertPos = newSel.baseOffset - 1;
       if (insertPos < 0 || insertPos >= newText.length) return newValue;
       // 确认插入确实发生在光标处（防御程序化的非光标文本变化）。
-      if (oldText.substring(0, insertPos) !=
-          newText.substring(0, insertPos)) {
+      if (oldText.substring(0, insertPos) != newText.substring(0, insertPos)) {
         return newValue;
       }
       final inserted = newText[insertPos];
@@ -136,9 +135,8 @@ class CodeSmartInputFormatter extends TextInputFormatter {
 
       final closing = _openers[inserted];
       if (closing != null) {
-        final next = insertPos + 1 < newText.length
-            ? newText[insertPos + 1]
-            : null;
+        final next =
+            insertPos + 1 < newText.length ? newText[insertPos + 1] : null;
         final isQuote = inserted == '"' || inserted == "'";
         if (isQuote) {
           // 下一个字符已是引号：视为输入闭合引号 → 跳过（不重复插入）。
@@ -199,19 +197,17 @@ class CodeSmartInputFormatter extends TextInputFormatter {
       // 仅退格触发成对删除：退格后光标停在删除位置（deletePos），
       // Del 键（向前删除）光标停在 deletePos + 1，不应触发。
       if (newSel.baseOffset != deletePos) return newValue;
-      if (newText.substring(0, deletePos) !=
-          oldText.substring(0, deletePos)) {
+      if (newText.substring(0, deletePos) != oldText.substring(0, deletePos)) {
         return newValue;
       }
       final deleted = oldText[deletePos];
-      final next = deletePos + 1 < oldText.length
-          ? oldText[deletePos + 1]
-          : null;
+      final next =
+          deletePos + 1 < oldText.length ? oldText[deletePos + 1] : null;
       if (next != null && _openers[deleted] == next) {
         // 光标在成对括号中间退格 → 成对删除。
         return TextEditingValue(
-          text:
-              oldText.substring(0, deletePos) + oldText.substring(deletePos + 2),
+          text: oldText.substring(0, deletePos) +
+              oldText.substring(deletePos + 2),
           selection: TextSelection.collapsed(offset: deletePos),
         );
       }
@@ -249,8 +245,7 @@ class CodeSmartInputFormatter extends TextInputFormatter {
       indent += _indentUnit;
     }
     var j = diff + 1;
-    while (j < newText.length &&
-        (newText[j] == ' ' || newText[j] == '\t')) {
+    while (j < newText.length && (newText[j] == ' ' || newText[j] == '\t')) {
       j++;
     }
     if (j < newText.length && _bracketClosers.contains(newText[j])) {
@@ -258,7 +253,8 @@ class CodeSmartInputFormatter extends TextInputFormatter {
           ? indent.substring(0, indent.length - _indentUnit.length)
           : '';
     }
-    final text = '${newText.substring(0, diff)}\n$indent${newText.substring(diff + 1)}';
+    final text =
+        '${newText.substring(0, diff)}\n$indent${newText.substring(diff + 1)}';
     return TextEditingValue(
       text: text,
       selection: TextSelection.collapsed(offset: diff + 1 + indent.length),
@@ -282,8 +278,7 @@ class CodeSmartInputFormatter extends TextInputFormatter {
   ) {
     final lineStart = oldText.lastIndexOf('\n', diff - 1) + 1;
     final lineBefore = oldText.substring(lineStart, diff);
-    if (lineBefore.trim().isEmpty &&
-        lineBefore.length >= _indentUnit.length) {
+    if (lineBefore.trim().isEmpty && lineBefore.length >= _indentUnit.length) {
       final newIndent =
           lineBefore.substring(0, lineBefore.length - _indentUnit.length);
       final text = oldText.substring(0, lineStart) +

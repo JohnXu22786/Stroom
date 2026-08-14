@@ -223,7 +223,8 @@ void main() {
       expect((extra['provider'] as Map).length, equals(1));
     });
 
-    test('invalid JSON in a dotted param is omitted without breaking the '
+    test(
+        'invalid JSON in a dotted param is omitted without breaking the '
         'request', () async {
       // The sentinel produced by failed JSON coercion must be stripped at
       // ANY depth (previously only top-level sentinels were removed, so the
@@ -266,7 +267,9 @@ void main() {
         () {
       final params = <String, dynamic>{
         'empty': <String, dynamic>{}, // 合法 JSON 值 {} 必须保留
-        'deep': {'a': {'b': 1}}, // 合法嵌套值不受影响
+        'deep': {
+          'a': {'b': 1}
+        }, // 合法嵌套值不受影响
         'provider': {
           'only': ChatService.omittedSentinelInstanceForTest,
         },
@@ -278,7 +281,11 @@ void main() {
       final stripped = ChatService.stripOmittedForTest(params);
       expect(stripped.containsKey('empty'), isTrue);
       expect(stripped['empty'], isEmpty);
-      expect(stripped['deep'], equals({'a': {'b': 1}}));
+      expect(
+          stripped['deep'],
+          equals({
+            'a': {'b': 1}
+          }));
       expect(stripped.containsKey('provider'), isFalse,
           reason: 'nested branch whose only value was omitted must drop');
       expect(stripped['mixed'], equals({'a': 1}),

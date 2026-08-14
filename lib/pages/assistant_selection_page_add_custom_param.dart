@@ -41,9 +41,7 @@ void showAddCustomParameterDialog(
                   labelText: '参数名',
                   hintText: '如: top_k 或 provider.only',
                   border: const OutlineInputBorder(),
-                  errorText: hasInvalidName
-                      ? '参数名格式不正确（点号分段不能为空）'
-                      : null,
+                  errorText: hasInvalidName ? '参数名格式不正确（点号分段不能为空）' : null,
                 ),
                 autofocus: true,
                 onChanged: (_) => setDlgState(() {}),
@@ -156,7 +154,8 @@ void showAddCustomParameterDialog(
                 if (jsonError != null) return;
                 dynamic value = valueController.text.trim();
                 if (type == 'number') {
-                  value = double.tryParse(value) ?? int.tryParse(value) ?? value;
+                  value =
+                      double.tryParse(value) ?? int.tryParse(value) ?? value;
                 } else if (type == 'boolean') {
                   value = (value as String).toLowerCase() == 'true';
                 } else if (type == 'json') {

@@ -189,8 +189,7 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
         jsonDecode(param.defaultValue.trim());
         _jsonErrors.remove(index);
       } catch (e) {
-        _jsonErrors[index] =
-            formatJsonError(param.defaultValue.trim(), e);
+        _jsonErrors[index] = formatJsonError(param.defaultValue.trim(), e);
       }
     } else {
       _jsonErrors.remove(index);
