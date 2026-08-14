@@ -130,8 +130,7 @@ void main() {
               'pictures/${imageThumbFileName('hash_thumb_only')}'),
           isFalse,
           reason: 'thumbnail must be deleted when its hash is no longer used');
-      expect(
-          await WebFileStore.exists('pictures/hash_thumb_only_thumb.png'),
+      expect(await WebFileStore.exists('pictures/hash_thumb_only_thumb.png'),
           isFalse,
           reason:
               'legacy distorted thumbnail must also be cleaned up on delete');
@@ -171,8 +170,7 @@ void main() {
               'pictures/${imageThumbFileName('hash_thumb_shared')}'),
           isTrue,
           reason: 'thumbnail must stay while the twin record still uses it');
-      expect(
-          await WebFileStore.exists('pictures/hash_thumb_shared_thumb.png'),
+      expect(await WebFileStore.exists('pictures/hash_thumb_shared_thumb.png'),
           isTrue,
           reason:
               'legacy thumbnail must stay while the twin record still uses it');

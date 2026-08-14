@@ -88,8 +88,8 @@ void main() {
       final record = _makeRecord(hash: 'gen_me');
       // 源图大于 maxDimension：生成端必须缩小，产物必然 ≠ 原图字节
       // （8×8 的小源图会保持原尺寸、重编码后与原图字节相同）
-      final png =
-          await tester.runAsync(() => _createEnginePng(width: 512, height: 512));
+      final png = await tester
+          .runAsync(() => _createEnginePng(width: 512, height: 512));
       await tester.runAsync(() async {
         await ImageManifest.writeFile(record.storagePath, png!);
       });
@@ -217,7 +217,8 @@ void main() {
       expect(result, isNull);
     });
 
-    testWidgets('generateThumbnail decodes a real image to a bounded PNG '
+    testWidgets(
+        'generateThumbnail decodes a real image to a bounded PNG '
         'without upscaling small sources', (tester) async {
       final png = await tester.runAsync(_createEnginePng);
       final result = await tester.runAsync(
@@ -234,8 +235,8 @@ void main() {
         'generateThumbnail keeps the aspect ratio of wide images '
         '(regression: forcing 256×256 decode squashed panoramas)',
         (tester) async {
-      final png =
-          await tester.runAsync(() => _createEnginePng(width: 800, height: 200));
+      final png = await tester
+          .runAsync(() => _createEnginePng(width: 800, height: 200));
       final result = await tester.runAsync(
         () => ImageThumbnailLoader.generateThumbnail(png!, maxDimension: 256),
       );
@@ -251,8 +252,8 @@ void main() {
         'generateThumbnail keeps the aspect ratio of tall images '
         '(regression: forcing 256×256 decode stretched portraits)',
         (tester) async {
-      final png =
-          await tester.runAsync(() => _createEnginePng(width: 200, height: 800));
+      final png = await tester
+          .runAsync(() => _createEnginePng(width: 200, height: 800));
       final result = await tester.runAsync(
         () => ImageThumbnailLoader.generateThumbnail(png!, maxDimension: 256),
       );

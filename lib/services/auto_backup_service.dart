@@ -545,8 +545,7 @@ class AutoBackupService {
         // 缩略图按实际文件大小统计（避免固定估算过度放大）
         final hash = r['hash'] as String?;
         if (hash != null) {
-          addFileLength(
-              p.join(appDir, 'pictures', imageThumbFileName(hash)));
+          addFileLength(p.join(appDir, 'pictures', imageThumbFileName(hash)));
         }
       }
       for (final r in audioRecords) {

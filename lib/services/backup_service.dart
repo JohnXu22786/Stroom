@@ -362,9 +362,12 @@ class BackupService {
         if (hash == null) continue;
         await _addPlanFile(diskFiles, memoryFiles, 'pictures/$hash.$format',
             p.join(appDir, 'pictures', '$hash.$format'), useStreaming);
-        await _addPlanFile(diskFiles, memoryFiles,
+        await _addPlanFile(
+            diskFiles,
+            memoryFiles,
             'pictures/${imageThumbFileName(hash)}',
-            p.join(appDir, 'pictures', imageThumbFileName(hash)), useStreaming);
+            p.join(appDir, 'pictures', imageThumbFileName(hash)),
+            useStreaming);
         if (i % 10 == 0) {
           await _yieldToEventLoop();
           checkCancelled();
