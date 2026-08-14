@@ -103,13 +103,13 @@ void main() {
     });
 
     testWidgets(
-        'shows a loading spinner, not the cached thumbnail, while the '
-        'full image is still loading', (tester) async {
+        'shows the cached thumbnail immediately while the full image '
+        'is still loading', (tester) async {
       final png = await tester.runAsync(_createEnginePng);
       final record = _makeRecord(
-        id: 'id_spinner',
-        name: 'spinner',
-        hash: 'spinner_hash',
+        id: 'id_thumb_first',
+        name: 'thumb_first',
+        hash: 'thumb_first_hash',
         format: 'png',
       );
       await tester.runAsync(() async {
@@ -127,26 +127,63 @@ void main() {
         home: GalleryViewerPage(images: [record], initialIndex: 0),
       ));
 
-      // 全图尚未加载完成：必须显示转圈动画，而不是缩略图占位。
-      // （缩略图占位是 Image.memory —— 回归此行为就等于把
-      // "先显示缩略图"的问题改回来。）
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(
-        find.byWidgetPredicate((w) => w is Image && w.image is MemoryImage),
-        findsNothing,
-        reason: '加载期间不得显示缩略图占位',
+      // 全图字节尚未读到：立即显示已缓存的缩略图（像聊天页一样点开就能
+      // 看到图像内容），而不是干等一个转圈动画。
+      final thumbFinder = find.byWidgetPredicate(
+        (w) => w is Image && w.image is MemoryImage,
       );
+      expect(thumbFinder, findsOneWidget,
+          reason: '加载期间必须先显示已缓存的缩略图占位');
+      // 占位缩略图必须撑满全屏（letterbox 与原图同框）—— 若按 256px
+      // 原始尺寸缩在屏幕中间，切换原图时会出现明显的尺寸跳变
+      expect(tester.getSize(thumbFinder), tester.getSize(find.byType(
+        GalleryViewerPage,
+      )));
+      // 缩略图只是占位：叠加小加载指示，明确原图仍在加载/解码
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
       // 字节已读到、全分辨率解码中（ExtendedImage loadStateChanged 分支）：
-      // 同样必须显示转圈动画，而不是缩略图占位。解码是引擎工作，在
+      // 仍显示缩略图占位，解码完成后才替换为原图。解码是引擎工作，在
       // FakeAsync 下不会完成，ExtendedImage 会停留在 loading 状态。
       await tester.pump();
+      expect(
+        find.byWidgetPredicate((w) => w is Image && w.image is MemoryImage),
+        findsOneWidget,
+        reason: '解码期间不得退回纯转圈动画',
+      );
+      expect(find.text('1 / 1'), findsOneWidget);
+    });
+
+    testWidgets(
+        'falls back to the loading spinner when no thumbnail is cached',
+        (tester) async {
+      final png = await tester.runAsync(_createEnginePng);
+      final record = _makeRecord(
+        id: 'id_spinner',
+        name: 'spinner',
+        hash: 'spinner_hash',
+        format: 'png',
+      );
+      await tester.runAsync(() async {
+        await ImageManifest.writeFile(record.storagePath, png!);
+      });
+      // 不写缩略图文件、也不加载缩略图：peek 必然未命中 → 退回转圈动画
+
+      await tester.pumpWidget(MaterialApp(
+        home: GalleryViewerPage(images: [record], initialIndex: 0),
+      ));
+
+      // 全图未加载且无缩略图可显示：显示转圈动画
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(
         find.byWidgetPredicate((w) => w is Image && w.image is MemoryImage),
         findsNothing,
-        reason: '解码期间不得显示缩略图占位',
+        reason: '无缩略图时不得出现图像占位',
       );
+
+      // 字节已读到、解码中：依然只有转圈动画
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(find.text('1 / 1'), findsOneWidget);
     });
   });

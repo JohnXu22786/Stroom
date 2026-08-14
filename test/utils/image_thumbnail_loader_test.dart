@@ -126,7 +126,28 @@ void main() {
           reason: 'five concurrent calls must trigger exactly one generation');
     });
 
-    testWidgets('returns null when both thumb and full image are missing',
+    testWidgets('peek returns cached bytes synchronously without disk access',
+        (tester) async {
+      final record = _makeRecord(hash: 'peek');
+      final thumb = Uint8List.fromList([5, 6, 7, 8]);
+      await tester.runAsync(() async {
+        await ImageManifest.writeFile('${record.hash}_thumb.png', thumb);
+      });
+
+      // 未加载 → peek 返回 null（不触发磁盘读）
+      expect(ImageThumbnailLoader.peek(record), isNull);
+      await ImageThumbnailLoader.loadThumbnail(record);
+      expect(ImageThumbnailLoader.peek(record), equals(thumb));
+
+      // 删掉磁盘文件后 peek 仍命中 → 证明 peek 纯内存访问，无磁盘读
+      await tester.runAsync(() async {
+        await ImageManifest.deleteFile('${record.hash}_thumb.png');
+      });
+      expect(ImageThumbnailLoader.peek(record), equals(thumb));
+    });
+
+    testWidgets(
+        'returns null when both thumb and full image are missing',
         (tester) async {
       final record = _makeRecord(hash: 'missing');
       final result = await ImageThumbnailLoader.loadThumbnail(record);
@@ -189,8 +210,8 @@ void main() {
         () => ImageThumbnailLoader.loadThumbnail(record),
       );
       expect(first, isNull);
-      // 原图字节绝不能进入缓存：若缓存了原图，下面的第二次调用会直接命中
-      // 并返回非 null，而不是走负缓存返回 null
+      // 原图字节绝不能进入缓存
+      expect(ImageThumbnailLoader.peek(record), isNull);
       // 也没有写出孤儿缩略图文件
       await tester.runAsync(() async {
         expect(

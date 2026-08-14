@@ -138,20 +138,74 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
         if (state.extendedImageLoadState == LoadState.failed) {
           return _buildErrorWidget('Cannot load image');
         }
-        // 全分辨率解码完成前统一显示加载圈，不显示缩略图 —— 进入查看器时
-        // 先看到的是加载动画，而不是低分辨率的缩略图占位
+        // 全分辨率解码完成前显示缩略图占位（叠加小加载指示），解码完成
+        // 后原地替换为原图 —— 进入查看器立即看到图像内容，不再干等转圈
         if (state.extendedImageLoadState == LoadState.loading) {
-          return _buildLoadingPlaceholder();
+          return _buildLoadingPlaceholder(record);
         }
         return null;
       },
     );
   }
 
-  /// 加载占位：全图字节读取/解码完成前统一显示加载圈，不显示缩略图。
-  Widget _buildLoadingPlaceholder() {
+  /// 加载占位：只显示已缓存/已加载的缩略图，绝不触发新的缩略图生成。
+  /// 全图字节的读取始终已在进行（itemBuilder 的 FutureBuilder 与
+  /// 预加载），占位符再走一次 loadThumbnail 会重复读取同一张原图。
+  /// 无缓存缩略图时退回转圈动画。
+  Widget _buildLoadingPlaceholder(ImageRecord record) {
+    final cachedThumb = ImageThumbnailLoader.peek(record);
+    if (cachedThumb != null) {
+      return _buildThumbnailPlaceholder(cachedThumb);
+    }
     return const Center(
       child: CircularProgressIndicator(color: Colors.white),
+    );
+  }
+
+  /// 缩略图占位：立即显示已缓存的缩略图（与聊天页"点开即见图"的体验
+  /// 一致），叠加一个小加载圈明确"原图仍在加载/解码"，避免把低分辨率
+  /// 占位误当成已加载完成的原图。
+  Widget _buildThumbnailPlaceholder(Uint8List thumb) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // 必须撑满全屏（width/height 无穷大 + loose constraints 下按
+        // 最大可用尺寸绘制）：BoxFit.contain 与原图同框 letterbox，
+        // 缩略图 → 原图的切换是纯清晰度变化，没有尺寸跳变
+        Center(
+          child: Image.memory(
+            thumb,
+            width: double.infinity,
+            height: double.infinity,
+            fit: BoxFit.contain,
+            // 256px 缩略图放大到全屏时用中等过滤，减少明显锯齿
+            filterQuality: FilterQuality.medium,
+            // 缩略图字节损坏时不再绘制（叠加层的小加载圈即为加载提示，
+            // 原图字节仍会正常解码显示）
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          ),
+        ),
+        // 深色底托 + 白色小圈：亮色照片上也能看清"仍在加载"的提示
+        const Center(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Color(0x66000000),
+              shape: BoxShape.circle,
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(6),
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2.5,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -364,7 +418,7 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
                 future: _readImageBytes(record),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return _buildLoadingPlaceholder();
+                    return _buildLoadingPlaceholder(record);
                   }
                   final bytes = snapshot.data;
                   if (bytes == null || bytes.isEmpty) {
