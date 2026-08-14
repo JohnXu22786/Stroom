@@ -17,6 +17,7 @@ import '../utils/video_manifest.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../utils/manifest_bridge.dart';
+import '../utils/system_pick_utils.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/file_manager_utils.dart';
 import 'files_page_shared.dart';
@@ -251,8 +252,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     // pop 会误弹下层路由（应用根路由），因此必须带条件执行
     var dialogShown = false;
     try {
-      final picker = ImagePicker();
-      final pickedFiles = await picker.pickMultiVideo();
+      // 移动端直接打开系统相册（视频专用选择 UI），
+      // 桌面端打开文件选择器并定位到系统"视频"目录
+      final pickedFiles = await pickSystemMedia(SystemMediaKind.video);
       if (pickedFiles.isEmpty) {
         _isImporting = false;
         return;
@@ -429,6 +431,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         type: FileType.custom,
         allowedExtensions: [file.format],
         bytes: data,
+        initialDirectory: SystemPickDirectories.videos(),
       );
       if (outputPath != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -460,7 +463,10 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       } else {
         outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
         if (outputDir == null) {
-          outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
+          outputDir = await FilePicker.getDirectoryPath(
+            dialogTitle: '选择导出目录',
+            initialDirectory: SystemPickDirectories.videos(),
+          );
           if (outputDir == null) return null;
         }
       }
@@ -484,6 +490,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
             type: FileType.custom,
             allowedExtensions: [file.format],
             bytes: data,
+            initialDirectory: SystemPickDirectories.videos(),
           );
           // 用户取消保存时不计数
           if (saved == null) continue;
@@ -574,6 +581,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
               type: FileType.custom,
               allowedExtensions: [file.format],
               bytes: data,
+              initialDirectory: SystemPickDirectories.videos(),
             );
             if (saved == null) continue;
             exportedCount++;
@@ -595,7 +603,10 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
 
       String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
       if (outputDir == null) {
-        outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
+        outputDir = await FilePicker.getDirectoryPath(
+          dialogTitle: '选择导出目录',
+          initialDirectory: SystemPickDirectories.videos(),
+        );
         if (outputDir == null) return null;
       }
 

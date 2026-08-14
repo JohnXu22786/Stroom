@@ -65,14 +65,13 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   /// 从设备相册选取图片（系统 API）
   ///
   /// 支持多选图片，自动适配不同平台：
-  /// - Android/iOS: 原生系统相册
+  /// - Android/iOS: 原生系统相册（专用相册 UI）
   /// - Web (桌面/移动): 浏览器文件选择器（image/*）
-  /// - 桌面原生: 系统文件对话框
+  /// - 桌面原生: 系统文件对话框（定位到系统"图片"目录）
   /// 不支持时显示清晰的错误信息。
   Future<void> _pickFromGallery() async {
     try {
-      final picker = ImagePicker();
-      final files = await picker.pickMultiImage();
+      final files = await pickSystemMedia(SystemMediaKind.image);
       if (files.isEmpty) return;
       for (final file in files) {
         final bytes = await file.readAsBytes();
@@ -123,12 +122,13 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   /// 支持所有平台，自动适配不同操作系统：
   /// - Android/iOS: 系统文件选择器
   /// - Web (桌面/移动): 浏览器文件选择器
-  /// - 桌面原生: 原生系统文件对话框
+  /// - 桌面原生: 原生系统文件对话框（定位到系统"文档"目录）
   Future<void> _pickFromFilePicker() async {
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.any,
         withData: true,
+        initialDirectory: SystemPickDirectories.documents(),
       );
       if (result == null || result.files.isEmpty) return;
       final file = result.files.first;

@@ -16,6 +16,7 @@ import '../utils/image_thumbnail_loader.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
+import '../utils/system_pick_utils.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/file_manager_utils.dart';
 import 'files_page_shared.dart';
@@ -209,8 +210,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     // pop 会误弹下层路由（应用根路由），因此必须带条件执行
     var dialogShown = false;
     try {
-      final picker = ImagePicker();
-      final pickedFiles = await picker.pickMultiImage();
+      // 移动端直接打开系统相册（图片专用选择 UI），
+      // 桌面端打开文件选择器并定位到系统"图片"目录
+      final pickedFiles = await pickSystemMedia(SystemMediaKind.image);
       if (pickedFiles.isEmpty) {
         _isImporting = false;
         return;
@@ -342,6 +344,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         type: FileType.custom,
         allowedExtensions: [file.format],
         bytes: data,
+        initialDirectory: SystemPickDirectories.pictures(),
       );
       if (outputPath != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -375,7 +378,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       } else {
         outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
         if (outputDir == null) {
-          outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
+          outputDir = await FilePicker.getDirectoryPath(
+            dialogTitle: '选择导出目录',
+            initialDirectory: SystemPickDirectories.pictures(),
+          );
           if (outputDir == null) return null;
         }
       }
@@ -400,6 +406,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
             type: FileType.custom,
             allowedExtensions: [file.format],
             bytes: data,
+            initialDirectory: SystemPickDirectories.pictures(),
           );
           // 用户取消保存时不计数
           if (saved == null) continue;
@@ -493,6 +500,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
               type: FileType.custom,
               allowedExtensions: [file.format],
               bytes: data,
+              initialDirectory: SystemPickDirectories.pictures(),
             );
             if (saved == null) continue;
             exportedCount++;
@@ -514,7 +522,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
       String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
       if (outputDir == null) {
-        outputDir = await FilePicker.getDirectoryPath(dialogTitle: '选择导出目录');
+        outputDir = await FilePicker.getDirectoryPath(
+          dialogTitle: '选择导出目录',
+          initialDirectory: SystemPickDirectories.pictures(),
+        );
         if (outputDir == null) return null;
       }
 
