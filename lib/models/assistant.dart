@@ -176,7 +176,8 @@ class Assistant {
 
   /// 该助手新建话题（对话）时使用的默认模型显示名
   /// （"modelName | providerName" 格式，与 [Conversation.lastUsedModelName]
-  /// 同一命名空间）。为 null 时新话题跟随全局保存的模型选择。
+  /// 同一命名空间）。为 null 时暂不设置默认模型：新话题回退到对话页
+  /// 模型列表的第一个（显示顺序）。
   /// 用户在某条对话内切换模型后，以对话自身的记录为准，互不影响。
   final String? defaultModelName;
 
