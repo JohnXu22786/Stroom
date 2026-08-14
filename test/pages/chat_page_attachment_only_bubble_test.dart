@@ -73,6 +73,19 @@ Attachment _documentAttachment() {
   );
 }
 
+/// A document attachment with a distinct [fileName] (and hash) so tests can
+/// assert which attachment rendered where.
+Attachment _namedDocumentAttachment(String fileName) {
+  return Attachment(
+    fileName: fileName,
+    mimeType: 'text/plain',
+    fileType: 'document',
+    hash: 'hash-$fileName',
+    storagePath: '/tmp/$fileName',
+    fileSize: 2048,
+  );
+}
+
 /// Pumps until messages are loaded (same cadence as the existing tests).
 Future<void> _pumpLoadedChatPage(
   WidgetTester tester,
@@ -141,6 +154,81 @@ void main() {
 
         expect(find.byType(SimpleTextMessage), findsOneWidget);
         expect(find.text('doc.txt'), findsOneWidget);
+      },
+    );
+  });
+
+  group('ChatPage user message attachment preview order', () {
+    testWidgets(
+      'attachment previews render left-to-right in the same order as the '
+      'pending/send order (first file leftmost)', (tester) async {
+        await _pumpLoadedChatPage(tester, [
+          _userMessage(
+            id: 'u1',
+            content: '三个文件',
+            attachments: [
+              _namedDocumentAttachment('alpha.txt'),
+              _namedDocumentAttachment('bravo.txt'),
+              _namedDocumentAttachment('charlie.txt'),
+            ],
+          ),
+        ]);
+
+        // 记录里的可见顺序必须与待发/发送顺序一致：alpha 最左、
+        // charlie 最右（气泡右对齐，但顺序不能被镜像反转）。
+        final xs = <double>[];
+        for (final name in ['alpha.txt', 'bravo.txt', 'charlie.txt']) {
+          final finder = find.text(name);
+          expect(finder, findsOneWidget, reason: '附件名 $name 应显示在气泡中');
+          xs.add(tester.getTopLeft(finder).dx);
+        }
+        expect(xs[0], lessThan(xs[1]),
+            reason: '第一个待发文件必须显示在最左侧');
+        expect(xs[1], lessThan(xs[2]),
+            reason: '第二个待发文件必须显示在第三个之前');
+      },
+    );
+
+    testWidgets(
+      'overflowing attachment strips rest at the head: the first file is '
+      'visible at the left (like the pending row)',
+      (tester) async {
+        // 窄屏让横条溢出：8 个文件 × 108px 间距 >> 400px 视口
+        await tester.binding.setSurfaceSize(const Size(400, 800));
+        await tester.pumpWidget(
+          createChatTestAppWithMessages([
+            _userMessage(
+              id: 'u1',
+              content: '一批文件',
+              attachments: [
+                for (var i = 0; i < 8; i++)
+                  _namedDocumentAttachment('f$i.txt'),
+              ],
+            ),
+          ]),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        tester.takeException();
+
+        // 第一个文件必须构建且落在视口内（若横条按 reverse 右锚定，
+        // f0 会在最左屏外不被构建；shrinkWrap + 左锚定则默认显示首项）
+        final f0 = find.text('f0.txt');
+        expect(f0, findsOneWidget, reason: '横条默认必须显示第一个文件');
+        final f0dx = tester.getTopLeft(f0).dx;
+        expect(f0dx, greaterThanOrEqualTo(0));
+        expect(f0dx, lessThan(400));
+
+        // 可见部分按发送顺序从左到右排布
+        final dxs = [
+          f0dx,
+          tester.getTopLeft(find.text('f1.txt')).dx,
+          tester.getTopLeft(find.text('f2.txt')).dx,
+          tester.getTopLeft(find.text('f3.txt')).dx,
+        ];
+        expect(dxs[0], lessThan(dxs[1]));
+        expect(dxs[1], lessThan(dxs[2]));
+        expect(dxs[2], lessThan(dxs[3]));
       },
     );
   });
