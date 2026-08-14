@@ -145,17 +145,17 @@ void main() {
     // ====================================================================
     // In-place processing
     //
-    // On 完成 the editor does NOT close immediately: it stays on screen
-    // with a processing spinner while the image is decoded, cropped,
-    // rotated and re-encoded. Only after the pipeline finishes does the
-    // page pop back with the edited bytes. While processing, the user
-    // cannot leave (system back / close / 完成 are all blocked).
+    // On 保存 the editor does NOT close immediately: it stays on screen
+    // with a full-screen processing overlay while the image is decoded,
+    // cropped, rotated and re-encoded. Only after the pipeline finishes
+    // does the page pop back with the edited bytes. While processing, the
+    // user cannot leave (system back / close / 保存 are all blocked).
     // ====================================================================
     group('in-place processing: the page stays open until the image is done',
         () {
       testWidgets(
-          'tapping 完成 keeps the page alive with a spinner while '
-          'processing, then pops with the edited bytes', (tester) async {
+          'tapping 保存 keeps the page alive with a processing overlay '
+          'while processing, then pops with the edited bytes', (tester) async {
         final png = await tester.runAsync(createTestImage);
         Uint8List? popResult;
         await _pushEditor(
@@ -164,15 +164,17 @@ void main() {
           onPopResult: (r) => popResult = r,
         );
 
-        // Tap 完成 — the page must NOT close: it processes in place.
-        await tester.tap(find.text('完成'));
+        // Tap 保存 — the page must NOT close: it processes in place.
+        await tester.tap(find.text('保存'));
         await tester.pump();
 
-        // The editor page is still alive and shows a processing spinner.
+        // The editor page is still alive and shows a processing overlay.
         expect(find.byType(ExtendedImageEditorPage), findsOneWidget,
             reason: 'the editor must stay on screen while processing');
         expect(find.byType(CircularProgressIndicator), findsOneWidget,
             reason: 'a processing spinner must be visible');
+        expect(find.text('正在处理图片，请稍候…'), findsOneWidget,
+            reason: 'the processing overlay must show a status message');
         expect(popResult, isNull,
             reason: 'the page must not pop before processing finishes');
 
@@ -192,7 +194,7 @@ void main() {
           onPopResult: (r) => popResult = r,
         );
 
-        await tester.tap(find.text('完成'));
+        await tester.tap(find.text('保存'));
         await tester.pump();
         await pumpUntil(tester, () => popResult != null);
 
@@ -217,6 +219,13 @@ void main() {
 
         // Close the editor without confirming — no processing should run.
         await tester.tap(find.byIcon(Icons.close));
+        await tester.pump();
+
+        // Closing must NOT flash the processing overlay — X runs no
+        // pipeline, so no "正在处理图片" feedback may appear.
+        expect(find.text('正在处理图片，请稍候…'), findsNothing,
+            reason: 'the processing overlay must not flash on close');
+
         await tester.pumpAndSettle();
 
         expect(popResult, isNull);
@@ -236,7 +245,7 @@ void main() {
           waitForEditorReady: false,
         );
 
-        await tester.tap(find.text('完成'));
+        await tester.tap(find.text('保存'));
         await tester.pump();
         await tester.pumpAndSettle();
 
@@ -255,7 +264,7 @@ void main() {
           onPopResult: (r) => popResult = r,
         );
 
-        await tester.tap(find.text('完成'));
+        await tester.tap(find.text('保存'));
         await tester.pump();
 
         // During processing a system back must not destroy the page.
@@ -272,12 +281,12 @@ void main() {
         );
       });
 
-      testWidgets('close and 完成 are disabled while the image processes',
+      testWidgets('close and 保存 are disabled while the image processes',
           (tester) async {
         final png = await tester.runAsync(createTestImage);
         await _pushEditor(tester, imageBytes: png!);
 
-        await tester.tap(find.text('完成'));
+        await tester.tap(find.text('保存'));
         await tester.pump();
 
         // The close button must be blocked so the user cannot leave
@@ -288,12 +297,13 @@ void main() {
         expect(closeBtn.onPressed, isNull,
             reason: 'close must be disabled while processing');
 
-        // 完成 is disabled too (the spinner replaces the check icon).
-        final confirmBtn = tester.widget<TextButton>(find.ancestor(
-            of: find.byType(CircularProgressIndicator),
-            matching: find.byType(TextButton)));
-        expect(confirmBtn.onPressed, isNull,
-            reason: '完成 must be disabled while processing');
+        // 保存 is disabled too — the full-screen overlay shows the
+        // spinner instead of the button.
+        final saveBtn = tester.widget<TextButton>(
+          find.widgetWithText(TextButton, '保存'),
+        );
+        expect(saveBtn.onPressed, isNull,
+            reason: '保存 must be disabled while processing');
       });
 
       testWidgets(

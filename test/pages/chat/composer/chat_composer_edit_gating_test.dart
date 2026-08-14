@@ -210,7 +210,7 @@ void main() {
       // Confirm the edit — the editor must NOT close immediately: it
       // processes the image in place, keeping the page on screen with a
       // spinner until the pipeline finishes.
-      await tester.tap(find.text('完成'));
+      await tester.tap(find.text('保存'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 

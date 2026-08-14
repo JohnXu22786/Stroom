@@ -4,6 +4,42 @@ import 'package:stroom/pages/image_editor_page.dart';
 
 void main() {
   // ====================================================================
+  // Editor configuration: save affordance clarity
+  //
+  // The main editor's top-right button must be a save icon (final save),
+  // while sub-editors (crop, paint, ...) keep their checkmark confirm
+  // buttons (apply this edit). This pins the user-facing contract in
+  // case a future package upgrade changes the defaults.
+  // ====================================================================
+  group('buildImageEditorConfigs', () {
+    test('main editor top-right button is a save icon, close stays X',
+        () {
+      final configs = buildImageEditorConfigs();
+
+      expect(configs.mainEditor.icons.doneIcon, Icons.save,
+          reason: 'final save must look like a save button, not a check');
+      expect(configs.mainEditor.icons.closeEditor, Icons.clear,
+          reason: 'closing without saving must stay an X');
+    });
+
+    test('sub-editor confirm buttons stay checkmarks', () {
+      final configs = buildImageEditorConfigs();
+
+      expect(configs.cropRotateEditor.icons.applyChanges, Icons.done,
+          reason: 'crop/rotate confirm (打勾) must remain a checkmark');
+    });
+
+    test('done tooltip and processing message are localized to Chinese',
+        () {
+      final configs = buildImageEditorConfigs();
+
+      expect(configs.i18n.done, '保存');
+      expect(configs.i18n.doneLoadingMsg, '正在生成图片，请稍候…',
+          reason: 'user must see clear feedback while the image is generated');
+    });
+  });
+
+  // ====================================================================
   // Tests for the save dialog function
   // ====================================================================
   group('showImageSaveDialog', () {

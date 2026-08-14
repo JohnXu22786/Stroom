@@ -10,12 +10,12 @@ import 'package:image/image.dart' as img;
 /// Provides crop, rotate, and flip operations. The edited image bytes are
 /// returned via [Navigator.pop] as [Uint8List], or `null` if cancelled.
 ///
-/// When the user confirms (完成) the image is processed IN PLACE: the page
-/// stays on screen showing a processing spinner while the image is
+/// When the user confirms (保存) the image is processed IN PLACE: the page
+/// stays on screen showing a processing overlay while the image is
 /// decoded, cropped, rotated and re-encoded. Only after processing
 /// finishes does the page pop back with the edited bytes. While the image
 /// is being processed the user cannot leave — system back, the close
-/// button and 完成 are all blocked until the pipeline completes.
+/// button and 保存 are all blocked until the pipeline completes.
 class ExtendedImageEditorPage extends StatefulWidget {
   final Uint8List imageBytes;
   final String fileName;
@@ -36,12 +36,26 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
       GlobalKey<ExtendedImageEditorState>();
 
   /// True while the image is being processed in place. While true the
-  /// editor stays on screen (完成 shows a spinner), leaving is blocked,
-  /// and the edited bytes are popped once the pipeline completes.
+  /// editor stays on screen (a full-screen processing overlay is shown),
+  /// leaving is blocked, and the edited bytes are popped once the
+  /// pipeline completes.
   bool _isProcessing = false;
 
+  /// True after the user tapped X to close. Latched synchronously before
+  /// the pop so a second tap during the exit transition can never pop
+  /// the page BELOW the editor. Unlike [_isProcessing] it must NOT show
+  /// the processing overlay — closing runs no pipeline.
+  bool _isClosing = false;
+
+  /// Closes the editor without saving (X button).
+  void _onClose() {
+    if (_isProcessing || _isClosing) return;
+    setState(() => _isClosing = true);
+    Navigator.pop(context, null);
+  }
+
   Future<void> _onSave() async {
-    if (_isProcessing) return;
+    if (_isProcessing || _isClosing) return;
 
     final editorState = _editorKey.currentState;
     if (editorState == null) {
@@ -88,7 +102,9 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
     return PopScope(
       // While the image is processed in place the user must not leave —
       // the edited bytes are popped by [_onSave] once processing is done.
-      canPop: !_isProcessing,
+      // [_isClosing] additionally latches the exit transition after X so
+      // a second pop can never fire while the route is still on screen.
+      canPop: !_isProcessing && !_isClosing,
       child: Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
@@ -100,65 +116,86 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
           ),
           leading: IconButton(
             icon: const Icon(Icons.close),
-            // Blocked while processing — the user cannot leave until the
-            // edited bytes are delivered. The leave guard is latched
-            // synchronously before the pop so a second tap during the
-            // exit transition can never pop the page BELOW the editor.
-            onPressed: _isProcessing
-                ? null
-                : () {
-                    if (_isProcessing) return;
-                    setState(() => _isProcessing = true);
-                    Navigator.pop(context, null);
-                  },
+            // Blocked while processing or closing — the user cannot leave
+            // until the edited bytes are delivered. The leave guard is
+            // latched synchronously before the pop so a second tap during
+            // the exit transition can never pop the page BELOW the editor.
+            onPressed: (_isProcessing || _isClosing) ? null : _onClose,
           ),
           actions: [
             TextButton.icon(
-              onPressed: _isProcessing ? null : _onSave,
-              icon: _isProcessing
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.check, color: Colors.white),
+              onPressed: (_isProcessing || _isClosing) ? null : _onSave,
+              icon: const Icon(Icons.save, color: Colors.white),
               label: const Text(
-                '完成',
+                '保存',
                 style: TextStyle(color: Colors.white),
               ),
             ),
           ],
         ),
-        body: ExtendedImage.memory(
-          widget.imageBytes,
-          fit: BoxFit.contain,
-          mode: ExtendedImageMode.editor,
-          extendedImageEditorKey: _editorKey,
-          initEditorConfigHandler: (_) => EditorConfig(
-            maxScale: 5.0,
-            cropRectPadding: const EdgeInsets.all(20),
-            hitTestSize: 44,
-            cropAspectRatio: CropAspectRatios.custom,
-            initCropRectType: InitCropRectType.imageRect,
-          ),
-          loadStateChanged: (state) {
-            if (state.extendedImageLoadState == LoadState.failed) {
-              return const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.broken_image, size: 48, color: Colors.white54),
-                    SizedBox(height: 8),
-                    Text('无法加载图片', style: TextStyle(color: Colors.white54)),
-                  ],
+        body: Stack(
+          children: [
+            ExtendedImage.memory(
+              widget.imageBytes,
+              fit: BoxFit.contain,
+              mode: ExtendedImageMode.editor,
+              extendedImageEditorKey: _editorKey,
+              initEditorConfigHandler: (_) => EditorConfig(
+                maxScale: 5.0,
+                cropRectPadding: const EdgeInsets.all(20),
+                hitTestSize: 44,
+                cropAspectRatio: CropAspectRatios.custom,
+                initCropRectType: InitCropRectType.imageRect,
+              ),
+              loadStateChanged: (state) {
+                if (state.extendedImageLoadState == LoadState.failed) {
+                  return const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.broken_image,
+                            size: 48, color: Colors.white54),
+                        SizedBox(height: 8),
+                        Text('无法加载图片',
+                            style: TextStyle(color: Colors.white54)),
+                      ],
+                    ),
+                  );
+                }
+                return null;
+              },
+            ),
+            // 全屏处理遮罩：保存按钮点击后图片解码/裁剪/旋转/编码
+            // 需要时间，用明显的遮罩 + 文案给出 UI 反馈，避免用户
+            // 以为界面卡死。关闭（X）时 [_isClosing] 为 true，不显示。
+            if (_isProcessing && !_isClosing)
+              const Positioned.fill(
+                child: AbsorbPointer(
+                  child: ColoredBox(
+                    color: Colors.black54,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 3,
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            '正在处理图片，请稍候…',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              );
-            }
-            return null;
-          },
+              ),
+          ],
         ),
         bottomNavigationBar: Container(
           color: Colors.black,
@@ -172,7 +209,7 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
               _buildToolButton(
                 icon: Icons.rotate_left,
                 label: '左旋',
-                onTap: _isProcessing
+                onTap: (_isProcessing || _isClosing)
                     ? null
                     : () {
                         _editorKey.currentState?.rotate(degree: -90);
@@ -181,7 +218,7 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
               _buildToolButton(
                 icon: Icons.rotate_right,
                 label: '右旋',
-                onTap: _isProcessing
+                onTap: (_isProcessing || _isClosing)
                     ? null
                     : () {
                         _editorKey.currentState?.rotate(degree: 90);
@@ -190,7 +227,7 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
               _buildToolButton(
                 icon: Icons.flip,
                 label: '翻转',
-                onTap: _isProcessing
+                onTap: (_isProcessing || _isClosing)
                     ? null
                     : () {
                         _editorKey.currentState?.flip();
@@ -199,7 +236,7 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
               _buildToolButton(
                 icon: Icons.crop,
                 label: '裁剪',
-                onTap: _isProcessing
+                onTap: (_isProcessing || _isClosing)
                     ? null
                     : () {
                         // Cropping is always active in editor mode — this
@@ -219,16 +256,26 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
     required String label,
     VoidCallback? onTap,
   }) {
+    // Disabled while processing/closing — dim the row so the buttons
+    // don't look tappable.
+    final disabled = onTap == null;
     return GestureDetector(
       onTap: onTap,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: Colors.white, size: 28),
+          Icon(
+            icon,
+            color: disabled ? Colors.white38 : Colors.white,
+            size: 28,
+          ),
           const SizedBox(height: 4),
           Text(
             label,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: TextStyle(
+              color: disabled ? Colors.white38 : Colors.white70,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
