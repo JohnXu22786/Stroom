@@ -247,7 +247,8 @@ extension _HomePageHomeContentExt on _HomePageState {
         icon: Icons.auto_stories,
         label: 'Anki闪卡',
         subtitle: '记忆辅助系统',
-        color: Colors.teal,
+        // blueGrey: 与 OCR 的 teal 区分，同时贴近 Anki 品牌蓝
+        color: Colors.blueGrey,
         onTap: () {
           Navigator.push(
             context,
