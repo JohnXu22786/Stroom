@@ -1238,16 +1238,14 @@ void main() {
 
       // 已保存顺序中的模型按保存顺序排在前，未保存的模型按原顺序追加在末尾：
       // 期望 claude → gpt-4o → gemini（而非配置添加顺序 gpt-4o → claude → gemini）。
-      final claudeY = tester
-          .getCenter(find.text('claude-3.5-sonnet | OpenAI'))
-          .dy;
+      final claudeY =
+          tester.getCenter(find.text('claude-3.5-sonnet | OpenAI')).dy;
       final gptY = tester.getCenter(find.text('gpt-4o | OpenAI')).dy;
       final geminiY =
           tester.getCenter(find.text('gemini-2.0-flash | OpenAI')).dy;
       expect(claudeY, lessThan(gptY),
           reason: '保存顺序（model_order）中的模型应排在配置添加顺序之前');
-      expect(gptY, lessThan(geminiY),
-          reason: '未出现在保存顺序中的新模型按原顺序追加在末尾');
+      expect(gptY, lessThan(geminiY), reason: '未出现在保存顺序中的新模型按原顺序追加在末尾');
     });
 
     testWidgets(
