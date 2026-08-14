@@ -160,8 +160,7 @@ void main() {
       expect(find.byIcon(Icons.image), findsOneWidget);
     });
 
-    testWidgets(
-        'source code mode toolbar order: copy, save, wrap, view-chart',
+    testWidgets('source code mode toolbar order: copy, save, wrap, view-chart',
         (tester) async {
       // Regression: the shared code-block buttons (copy, save, wrap) must
       // keep the copy → save → wrap order, and the block-specific

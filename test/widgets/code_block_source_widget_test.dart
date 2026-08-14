@@ -1054,8 +1054,7 @@ void main() {
           reason: 'copy must copy every line of the block, not one line');
     });
 
-    testWidgets(
-        'copy feedback: checkmark fades in, stays ~1s, then reverts',
+    testWidgets('copy feedback: checkmark fades in, stays ~1s, then reverts',
         (tester) async {
       installClipboardMock(tester);
       await pumpCodeBlock(tester);
@@ -1251,8 +1250,7 @@ void main() {
       expect(find.text('已保存到: D:/docs/code.dart'), findsOneWidget);
     });
 
-    testWidgets('cancelling the save panel shows no snackbar',
-        (tester) async {
+    testWidgets('cancelling the save panel shows no snackbar', (tester) async {
       final picker = FakeFilePicker(result: null);
       final originalPicker = FilePickerPlatform.instance;
       FilePickerPlatform.instance = picker;
