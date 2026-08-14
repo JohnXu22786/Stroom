@@ -217,8 +217,7 @@ void main() {
         // 快速点击（远短于短延迟）→ 打开预览，不得触发拖拽
         await tester.tap(find.byKey(const ValueKey('pending_att_a')));
         await tester.pump();
-        expect(previewed, ['a'],
-            reason: '快速点击必须走预览回调而非拖拽');
+        expect(previewed, ['a'], reason: '快速点击必须走预览回调而非拖拽');
 
         // 顺序未被意外改变
         await tester.tap(find.byIcon(Icons.send_rounded));

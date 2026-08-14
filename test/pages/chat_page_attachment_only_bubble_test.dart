@@ -161,7 +161,8 @@ void main() {
   group('ChatPage user message attachment preview order', () {
     testWidgets(
       'attachment previews render left-to-right in the same order as the '
-      'pending/send order (first file leftmost)', (tester) async {
+      'pending/send order (first file leftmost)',
+      (tester) async {
         await _pumpLoadedChatPage(tester, [
           _userMessage(
             id: 'u1',
@@ -182,10 +183,8 @@ void main() {
           expect(finder, findsOneWidget, reason: '附件名 $name 应显示在气泡中');
           xs.add(tester.getTopLeft(finder).dx);
         }
-        expect(xs[0], lessThan(xs[1]),
-            reason: '第一个待发文件必须显示在最左侧');
-        expect(xs[1], lessThan(xs[2]),
-            reason: '第二个待发文件必须显示在第三个之前');
+        expect(xs[0], lessThan(xs[1]), reason: '第一个待发文件必须显示在最左侧');
+        expect(xs[1], lessThan(xs[2]), reason: '第二个待发文件必须显示在第三个之前');
       },
     );
 
@@ -201,8 +200,7 @@ void main() {
               id: 'u1',
               content: '一批文件',
               attachments: [
-                for (var i = 0; i < 8; i++)
-                  _namedDocumentAttachment('f$i.txt'),
+                for (var i = 0; i < 8; i++) _namedDocumentAttachment('f$i.txt'),
               ],
             ),
           ]),
