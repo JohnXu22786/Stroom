@@ -531,7 +531,7 @@ void main() {
         }
       });
 
-      testWidgets('完整流程：编辑器里右旋 90° 后点完成，输出旋转后尺寸且无白条', (tester) async {
+      testWidgets('完整流程：编辑器里右旋 90° 后点保存，输出旋转后尺寸且无白条', (tester) async {
         // 走真实编辑器（ExtendedImage editor）→ getCropRect() → 管线，
         // 验证生产路径旋转输出：尺寸为旋转后的竖版、全不透明无白条，
         // 且内容方向与编辑器预览一致（顺时针：左上蓝、右上红、
@@ -546,7 +546,7 @@ void main() {
 
         await tester.tap(find.text('右旋'));
         await tester.pump();
-        await tester.tap(find.text('完成'));
+        await tester.tap(find.text('保存'));
         await tester.pump();
         await pumpUntil(tester, () => popResult != null);
 
