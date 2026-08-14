@@ -589,12 +589,13 @@ void main() {
   group('CodeBlockSourceView - streaming auto-scroll', () {
     // The vertical code-area scroll view (the outer SingleChildScrollView;
     // no-wrap mode also has a nested horizontal one).
-    Finder verticalScrollView() => find.byWidgetPredicate(
-        (w) => w is SingleChildScrollView && w.scrollDirection == Axis.vertical);
+    Finder verticalScrollView() => find.byWidgetPredicate((w) =>
+        w is SingleChildScrollView && w.scrollDirection == Axis.vertical);
 
-    ScrollPosition position(WidgetTester tester) =>
-        tester.widget<SingleChildScrollView>(verticalScrollView()).controller!
-            .position;
+    ScrollPosition position(WidgetTester tester) => tester
+        .widget<SingleChildScrollView>(verticalScrollView())
+        .controller!
+        .position;
 
     String longCode(int lines) =>
         List.generate(lines, (i) => 'line $i').join('\n');
@@ -707,8 +708,7 @@ void main() {
           reason: 'no resume button once generation is complete');
     });
 
-    testWidgets(
-        'does not yank an interrupted block to the top on completion',
+    testWidgets('does not yank an interrupted block to the top on completion',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(800, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -759,8 +759,8 @@ void main() {
       // The user puts a finger on the block and drags a little — still
       // within the at-bottom window, so the auto-scroll is still engaged,
       // but the block must not fight the finger.
-      final gesture = await tester.startGesture(
-          tester.getCenter(verticalScrollView()));
+      final gesture =
+          await tester.startGesture(tester.getCenter(verticalScrollView()));
       await gesture.moveBy(const Offset(0, 20));
       await tester.pump();
       expect(position(tester).pixels,
@@ -827,15 +827,12 @@ void main() {
       // Long lines so no-wrap mode has horizontal overflow to pan.
       final longCodeWithWideLines =
           List.generate(40, (i) => 'line $i ' * 10).join('\n');
-      await pumpBlock(tester,
-          code: longCodeWithWideLines, isStreaming: true);
+      await pumpBlock(tester, code: longCodeWithWideLines, isStreaming: true);
       expect(position(tester).pixels,
           closeTo(position(tester).maxScrollExtent, 0.5));
 
-      final horizontalScrollView = find.byWidgetPredicate(
-          (w) =>
-              w is SingleChildScrollView &&
-              w.scrollDirection == Axis.horizontal);
+      final horizontalScrollView = find.byWidgetPredicate((w) =>
+          w is SingleChildScrollView && w.scrollDirection == Axis.horizontal);
       expect(horizontalScrollView, findsOneWidget);
 
       // Hold a horizontal pan (finger down) and let the code grow: the

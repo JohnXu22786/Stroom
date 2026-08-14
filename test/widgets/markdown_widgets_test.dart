@@ -912,8 +912,7 @@ void main() {
           reason: 'the still-open trailing block is the one being generated');
     });
 
-    test('plain code block is streaming when streamingText is unavailable',
-        () {
+    test('plain code block is streaming when streamingText is unavailable', () {
       // Legacy path (streamingText == null): every code block in the
       // streaming message is treated as still being generated.
       final pre = codeBlockPreConfig(isDark: false, isStreaming: true);
@@ -921,8 +920,7 @@ void main() {
       expect(widget.isStreaming, isTrue);
     });
 
-    test('plain code block is not streaming when the message is not',
-        () {
+    test('plain code block is not streaming when the message is not', () {
       final pre = codeBlockPreConfig(isDark: false, isStreaming: false);
       final widget = pre.builder!('x = 1', 'python') as CodeBlockSourceView;
       expect(widget.isStreaming, isFalse);
