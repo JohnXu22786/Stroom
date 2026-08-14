@@ -220,7 +220,7 @@ void showAssistantFullEditDialog(
               // auto-enable-all to all-tools-OFF).
               //
               // 记录的默认模型已失效（从供应商配置中删除）时，保存自动清空：
-              // 与 tab 的"跟随全局设置"退化显示保持一致，避免同名模型
+              // 与 tab 的"暂不设置"退化显示保持一致，避免同名模型
               // 重新添加后旧的默认值悄悄复活。
               final adapter = ref.read(chatStreamManagerProvider).adapter;
               final availableModels =

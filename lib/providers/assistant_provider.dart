@@ -228,8 +228,8 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
   /// conversations).
   ///
   /// Unlike [updateAssistant]'s copyWith semantics, a null [defaultModelName]
-  /// here explicitly CLEARS the default (new conversations fall back to the
-  /// global model selection), so the assistant is rebuilt directly instead of
+  /// here explicitly CLEARS the default ("暂不设置"：新话题回退到对话页模型
+  /// 列表的第一个，显示顺序), so the assistant is rebuilt directly instead of
   /// via copyWith. [defaultModelId]/[defaultProviderName] 是绝对身份
   /// （API 模型 ID + 供应商名），与 [defaultModelName] 一起保存；重命名
   /// 显示名后默认模型仍可解析。
