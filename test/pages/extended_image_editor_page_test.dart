@@ -400,13 +400,25 @@ void main() {
         for (final p in im) {
           p.a = 255;
           if (p.x < 4 && p.y < 3) {
-            p..r = 255..g = 0..b = 0; // 左上红
+            p
+              ..r = 255
+              ..g = 0
+              ..b = 0; // 左上红
           } else if (p.x >= 4 && p.y < 3) {
-            p..r = 0..g = 255..b = 0; // 右上绿
+            p
+              ..r = 0
+              ..g = 255
+              ..b = 0; // 右上绿
           } else if (p.x < 4) {
-            p..r = 0..g = 0..b = 255; // 左下蓝
+            p
+              ..r = 0
+              ..g = 0
+              ..b = 255; // 左下蓝
           } else {
-            p..r = 255..g = 255..b = 0; // 右下黄
+            p
+              ..r = 255
+              ..g = 255
+              ..b = 0; // 右下黄
           }
         }
         return img.encodePng(im);
@@ -444,8 +456,7 @@ void main() {
         expect(out!.width, 8);
         expect(out.height, 4);
         for (final p in out) {
-          expect(p.a, 255,
-              reason: '裁剪输出不能含透明像素（被裁掉的部分不应留白）');
+          expect(p.a, 255, reason: '裁剪输出不能含透明像素（被裁掉的部分不应留白）');
         }
       });
 
@@ -466,7 +477,8 @@ void main() {
         }
       });
 
-      testWidgets('裁剪 + 旋转 90°：裁剪框按旋转后坐标解释（与编辑器 getCropRect 一致）', (tester) async {
+      testWidgets('裁剪 + 旋转 90°：裁剪框按旋转后坐标解释（与编辑器 getCropRect 一致）',
+          (tester) async {
         // 8x6 右旋 90° 后框架是 6x8（顺时针：原图左上 → 框架右上）；
         // 旋转后裁剪框 (0,4,3,4) 对应原图右下象限（黄），输出 3x4。
         final bytes = await tester.runAsync(
@@ -545,20 +557,16 @@ void main() {
         final tl = out.getPixel(1, 1);
         expect(tl.r.toInt(), 0);
         expect(tl.g.toInt(), 0);
-        expect(tl.b.toInt(), 255,
-            reason: '输出左上应为蓝色（原图左下象限顺时针转到左上）');
+        expect(tl.b.toInt(), 255, reason: '输出左上应为蓝色（原图左下象限顺时针转到左上）');
         final tr = out.getPixel(4, 1);
         expect(tr.r.toInt(), 255);
-        expect(tr.g.toInt(), 0,
-            reason: '输出右上应为红色（原图左上象限）');
+        expect(tr.g.toInt(), 0, reason: '输出右上应为红色（原图左上象限）');
         final bl = out.getPixel(1, 6);
         expect(bl.r.toInt(), 255);
-        expect(bl.g.toInt(), 255,
-            reason: '输出左下应为黄色（原图右下象限）');
+        expect(bl.g.toInt(), 255, reason: '输出左下应为黄色（原图右下象限）');
         final br = out.getPixel(4, 6);
         expect(br.r.toInt(), 0);
-        expect(br.g.toInt(), 255,
-            reason: '输出右下应为绿色（原图右上象限）');
+        expect(br.g.toInt(), 255, reason: '输出右下应为绿色（原图右上象限）');
       });
       testWidgets('裁剪 + 旋转 180°：反旋转与方向无关', (tester) async {
         // 180° 框架与原图同尺寸；裁剪框 (0,0,4,6)（旋转后坐标，左半）
