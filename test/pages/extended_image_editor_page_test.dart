@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -354,6 +355,300 @@ void main() {
             reason: 'JPEG 源编辑结果必须是可解码的图片');
         expect(bytes[0], 0xFF);
         expect(bytes[1], 0xD8, reason: 'JPEG 照片源应输出 JPEG（旧实现输出 PNG 导致体积暴涨）');
+      });
+    });
+
+    // ── 裁剪/旋转几何（回归：裁剪后输出必须等于裁剪区域大小并充满
+    //    整张画布，不能保留原图尺寸、把裁掉的部分留成透明/白色）──
+    // 直接调用顶层处理管线并用像素级断言验证输出内容。
+    group('crop geometry', () {
+      /// 生成 8x6 的左右双色 PNG（左半红、右半绿），像素级断言用。
+      Uint8List twoTonePng() {
+        final im = img.Image(width: 8, height: 6);
+        for (final p in im) {
+          p
+            ..r = p.x < 4 ? 255 : 0
+            ..g = p.x >= 4 ? 255 : 0
+            ..b = 0
+            ..a = 255;
+        }
+        return img.encodePng(im);
+      }
+
+      /// 生成 8x6 纯色 PNG。
+      Uint8List solidPng({
+        int width = 8,
+        int height = 8,
+        int r = 0,
+        int g = 0,
+        int b = 255,
+      }) {
+        final im = img.Image(width: width, height: height);
+        for (final p in im) {
+          p
+            ..r = r
+            ..g = g
+            ..b = b
+            ..a = 255;
+        }
+        return img.encodePng(im);
+      }
+
+      /// 生成 8x6 四象限 PNG：左上红、右上绿、左下蓝、右下黄。
+      Uint8List quadrantPng() {
+        final im = img.Image(width: 8, height: 6);
+        for (final p in im) {
+          p.a = 255;
+          if (p.x < 4 && p.y < 3) {
+            p..r = 255..g = 0..b = 0; // 左上红
+          } else if (p.x >= 4 && p.y < 3) {
+            p..r = 0..g = 255..b = 0; // 右上绿
+          } else if (p.x < 4) {
+            p..r = 0..g = 0..b = 255; // 左下蓝
+          } else {
+            p..r = 255..g = 255..b = 0; // 右下黄
+          }
+        }
+        return img.encodePng(im);
+      }
+
+      testWidgets('裁剪后输出尺寸等于裁剪区域（不能保留原图尺寸）', (tester) async {
+        final bytes = await tester.runAsync(
+          () => processQuickEditImage(
+            rawData: twoTonePng(),
+            cropRect: Rect.fromLTWH(4, 0, 4, 6), // 右半（绿）
+            action: null,
+          ),
+        );
+        final out = img.decodePng(bytes!);
+        expect(out, isNotNull);
+        expect(out!.width, 4, reason: '裁剪输出宽度必须等于裁剪区域宽度');
+        expect(out.height, 6, reason: '裁剪输出高度必须等于裁剪区域高度');
+        for (final p in out) {
+          expect(p.r, 0, reason: '输出必须是裁剪区域内容（绿），不能混入被裁掉的部分');
+          expect(p.g, 255);
+          expect(p.a, 255);
+        }
+      });
+
+      testWidgets('裁剪区域充满整张输出画布，无透明/白色空白', (tester) async {
+        final bytes = await tester.runAsync(
+          () => processQuickEditImage(
+            rawData: solidPng(width: 8, height: 8, b: 255),
+            cropRect: Rect.fromLTWH(0, 0, 8, 4), // 上半（宽高比与源不同）
+            action: null,
+          ),
+        );
+        final out = img.decodePng(bytes!);
+        expect(out, isNotNull);
+        expect(out!.width, 8);
+        expect(out.height, 4);
+        for (final p in out) {
+          expect(p.a, 255,
+              reason: '裁剪输出不能含透明像素（被裁掉的部分不应留白）');
+        }
+      });
+
+      testWidgets('旋转 90° 后内容居中充满画布，不裁剪不出白条', (tester) async {
+        final bytes = await tester.runAsync(
+          () => processQuickEditImage(
+            rawData: twoTonePng(),
+            cropRect: null,
+            action: EditActionDetails()..rotateRadians = math.pi / 2,
+          ),
+        );
+        final out = img.decodePng(bytes!);
+        expect(out, isNotNull);
+        expect(out!.width, 6, reason: '旋转 90° 后宽高应互换');
+        expect(out.height, 8);
+        for (final p in out) {
+          expect(p.a, 255, reason: '旋转输出不能含透明/被裁剪掉的内容');
+        }
+      });
+
+      testWidgets('裁剪 + 旋转 90°：裁剪框按旋转后坐标解释（与编辑器 getCropRect 一致）', (tester) async {
+        // 8x6 右旋 90° 后框架是 6x8（顺时针：原图左上 → 框架右上）；
+        // 旋转后裁剪框 (0,4,3,4) 对应原图右下象限（黄），输出 3x4。
+        final bytes = await tester.runAsync(
+          () => processQuickEditImage(
+            rawData: quadrantPng(),
+            cropRect: Rect.fromLTWH(0, 4, 3, 4),
+            action: EditActionDetails()..rotateRadians = math.pi / 2,
+          ),
+        );
+        final out = img.decodePng(bytes!);
+        expect(out, isNotNull);
+        expect(out!.width, 3, reason: '输出宽度 = 旋转后裁剪框宽度');
+        expect(out.height, 4, reason: '输出高度 = 旋转后裁剪框高度');
+        for (final p in out) {
+          expect(p.a, 255, reason: '裁剪输出不能含透明像素');
+          expect(p.r, 255, reason: '90° 反旋转应映射到原图右下象限（黄），不能取左上');
+          expect(p.g, 255);
+          expect(p.b, 0);
+        }
+      });
+
+      testWidgets('裁剪 + 旋转 270°：反旋转方向与 90° 相反', (tester) async {
+        // 同一裁剪框 (0,4,3,4) 在 270° 框架里对应原图左上象限（红）。
+        final bytes = await tester.runAsync(
+          () => processQuickEditImage(
+            rawData: quadrantPng(),
+            cropRect: Rect.fromLTWH(0, 4, 3, 4),
+            action: EditActionDetails()..rotateRadians = -math.pi / 2,
+          ),
+        );
+        final out = img.decodePng(bytes!);
+        expect(out, isNotNull);
+        expect(out!.width, 3);
+        expect(out.height, 4);
+        for (final p in out) {
+          expect(p.a, 255);
+          expect(p.r, 255, reason: '270° 反旋转应映射到原图左上象限（红），不能和 90° 一样取右下');
+          expect(p.g, 0);
+          expect(p.b, 0);
+        }
+      });
+
+      testWidgets('完整流程：编辑器里右旋 90° 后点完成，输出旋转后尺寸且无白条', (tester) async {
+        // 走真实编辑器（ExtendedImage editor）→ getCropRect() → 管线，
+        // 验证生产路径旋转输出：尺寸为旋转后的竖版、全不透明无白条，
+        // 且内容方向与编辑器预览一致（顺时针：左上蓝、右上红、
+        // 左下黄、右下绿）。
+        final png = quadrantPng();
+        Uint8List? popResult;
+        await _pushEditor(
+          tester,
+          imageBytes: png,
+          onPopResult: (r) => popResult = r,
+        );
+
+        await tester.tap(find.text('右旋'));
+        await tester.pump();
+        await tester.tap(find.text('完成'));
+        await tester.pump();
+        await pumpUntil(tester, () => popResult != null);
+
+        // 右旋触发了编辑器内部 400ms 的防抖保存定时器；推进虚拟时钟
+        // 让它在测试结束前触发（回调只碰普通字段，安全）。
+        await tester.pump(const Duration(milliseconds: 500));
+
+        final out = img.decodePng(popResult!);
+        expect(out, isNotNull);
+        expect(out!.width, 6, reason: '右旋 90° 后输出应为竖版（宽 = 原图高）');
+        expect(out.height, 8, reason: '右旋 90° 后输出高度 = 原图宽');
+        for (final p in out) {
+          expect(p.a, 255, reason: '旋转输出不能含透明/白色条（裁剪框外区域不应残留）');
+        }
+        // 内容方向必须与编辑器预览一致（顺时针旋转）：
+        // 左上=蓝（原左下）、右上=红（原左上）、左下=黄（原右下）、
+        // 右下=绿（原右上）。
+        final tl = out.getPixel(1, 1);
+        expect(tl.r.toInt(), 0);
+        expect(tl.g.toInt(), 0);
+        expect(tl.b.toInt(), 255,
+            reason: '输出左上应为蓝色（原图左下象限顺时针转到左上）');
+        final tr = out.getPixel(4, 1);
+        expect(tr.r.toInt(), 255);
+        expect(tr.g.toInt(), 0,
+            reason: '输出右上应为红色（原图左上象限）');
+        final bl = out.getPixel(1, 6);
+        expect(bl.r.toInt(), 255);
+        expect(bl.g.toInt(), 255,
+            reason: '输出左下应为黄色（原图右下象限）');
+        final br = out.getPixel(4, 6);
+        expect(br.r.toInt(), 0);
+        expect(br.g.toInt(), 255,
+            reason: '输出右下应为绿色（原图右上象限）');
+      });
+      testWidgets('裁剪 + 旋转 180°：反旋转与方向无关', (tester) async {
+        // 180° 框架与原图同尺寸；裁剪框 (0,0,4,6)（旋转后坐标，左半）
+        // 对应原图右半（绿），输出 4x6。
+        final bytes = await tester.runAsync(
+          () => processQuickEditImage(
+            rawData: twoTonePng(),
+            cropRect: Rect.fromLTWH(0, 0, 4, 6),
+            action: EditActionDetails()..rotateRadians = math.pi,
+          ),
+        );
+        final out = img.decodePng(bytes!);
+        expect(out, isNotNull);
+        expect(out!.width, 4);
+        expect(out.height, 6);
+        for (final p in out) {
+          expect(p.a, 255);
+          expect(p.r, 0, reason: '180° 反旋转应映射到原图右半（绿）');
+          expect(p.g, 255);
+        }
+      });
+
+      testWidgets('翻转 + 裁剪：裁剪框在镜像后的显示坐标系里', (tester) async {
+        // 翻转后显示框架 = 原图水平镜像：显示右上区域 (4,0,4,3) 显示的是
+        // 原图左上（红）；输出 = 裁剪框尺寸 4x3 全红。
+        final bytes = await tester.runAsync(
+          () => processQuickEditImage(
+            rawData: quadrantPng(),
+            cropRect: Rect.fromLTWH(4, 0, 4, 3),
+            action: EditActionDetails()..rotationYRadians = math.pi,
+          ),
+        );
+        final out = img.decodePng(bytes!);
+        expect(out, isNotNull);
+        expect(out!.width, 4);
+        expect(out.height, 3);
+        for (final p in out) {
+          expect(p.a, 255);
+          expect(p.r, 255, reason: '翻转后的显示右上应取原图左上（红），不能直接按原图坐标采样');
+          expect(p.g, 0);
+          expect(p.b, 0);
+        }
+      });
+
+      testWidgets('翻转 + 右旋 + 裁剪：镜像后再反旋转（270° 分支）', (tester) async {
+        // 翻转后右旋：编辑器 rotateRadians = -90°（reverseRotateRadians）。
+        // 显示坐标 (3,0,3,4) 对应原图右上象限（绿）。
+        final bytes = await tester.runAsync(
+          () => processQuickEditImage(
+            rawData: quadrantPng(),
+            cropRect: Rect.fromLTWH(3, 0, 3, 4),
+            action: EditActionDetails()
+              ..rotationYRadians = math.pi
+              ..rotateRadians = -math.pi / 2,
+          ),
+        );
+        final out = img.decodePng(bytes!);
+        expect(out, isNotNull);
+        expect(out!.width, 3);
+        expect(out.height, 4);
+        for (final p in out) {
+          expect(p.a, 255);
+          expect(p.r, 0, reason: '翻转+右旋应取原图右上象限（绿），不能取到左下');
+          expect(p.g, 255);
+          expect(p.b, 0);
+        }
+      });
+
+      testWidgets('翻转 + 左旋 + 裁剪：镜像后再反旋转（90° 分支）', (tester) async {
+        // 翻转后左旋：编辑器 rotateRadians = +90°。同一显示坐标 (3,0,3,4)
+        // 对应原图左下象限（蓝），与右旋相反。
+        final bytes = await tester.runAsync(
+          () => processQuickEditImage(
+            rawData: quadrantPng(),
+            cropRect: Rect.fromLTWH(3, 0, 3, 4),
+            action: EditActionDetails()
+              ..rotationYRadians = math.pi
+              ..rotateRadians = math.pi / 2,
+          ),
+        );
+        final out = img.decodePng(bytes!);
+        expect(out, isNotNull);
+        expect(out!.width, 3);
+        expect(out.height, 4);
+        for (final p in out) {
+          expect(p.a, 255);
+          expect(p.r, 0, reason: '翻转+左旋应取原图左下象限（蓝），与右旋方向相反');
+          expect(p.g, 0);
+          expect(p.b, 255);
+        }
       });
     });
   });

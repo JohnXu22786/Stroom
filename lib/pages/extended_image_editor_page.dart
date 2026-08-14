@@ -259,22 +259,95 @@ Future<Uint8List> processQuickEditImage({
     codec.dispose();
   }
 
-  // Determine output size accounting for rotation
-  final needsRotation = action != null && action.rotateDegrees % 180 != 0;
-  final int outputWidth =
-      needsRotation ? originalImage.height : originalImage.width;
-  final int outputHeight =
-      needsRotation ? originalImage.width : originalImage.height;
+  // Snap the crop region to integer pixel bounds (floor/ceil) so the
+  // output canvas is pixel-exact and never leaves transparent edges.
+  final Rect? snappedCrop = cropRect == null
+      ? null
+      : Rect.fromLTRB(
+          cropRect.left.floorToDouble(),
+          cropRect.top.floorToDouble(),
+          cropRect.right.ceilToDouble(),
+          cropRect.bottom.ceilToDouble(),
+        );
+
+  // 关键坐标系说明：extended_image 的 getCropRect() 返回的裁剪框在
+  // 旋转后的图像坐标系里（编辑器渲染是顺时针：原图左上角在 +90° 后
+  // 位于旋转框架的右上角；翻转则在旋转之后再镜像）。本管线是从原图
+  // 采样再旋转画布，所以必须先把这个旋转后的裁剪框反旋转回原图坐标
+  // （绕图像中心），否则旋转+裁剪的内容和尺寸都会错。输出尺寸 = 裁剪
+  // 框尺寸（本身就是旋转后坐标，90/270° 时按 srcRect 交换宽高还原）。
+  final int rot = ((action?.rotateDegrees ?? 0) % 360).round();
+  final double imgW = originalImage.width.toDouble();
+  final double imgH = originalImage.height.toDouble();
+
+  Rect? srcRect;
+  if (snappedCrop != null) {
+    // 翻转时（action.flipY），裁剪框在“旋转后再镜像”的显示坐标系里
+    // （编辑器的 rotationY 在 rotationZ 之后生效）。先绕显示框架的
+    // 竖直中线镜像，再做反旋转；与管线的画布镜像（旋转后镜像）对应。
+    Rect crop = snappedCrop;
+    if (action?.flipY ?? false) {
+      final double frameW = (rot % 180 != 0) ? imgH : imgW;
+      crop = Rect.fromLTWH(
+        frameW - crop.right,
+        crop.top,
+        crop.width,
+        crop.height,
+      );
+    }
+    if (rot == 90) {
+      srcRect = Rect.fromLTWH(
+        crop.top,
+        imgH - crop.right,
+        crop.height,
+        crop.width,
+      );
+    } else if (rot == 180) {
+      srcRect = Rect.fromLTWH(
+        imgW - crop.right,
+        imgH - crop.bottom,
+        crop.width,
+        crop.height,
+      );
+    } else if (rot == 270) {
+      srcRect = Rect.fromLTWH(
+        imgW - crop.bottom,
+        crop.left,
+        crop.height,
+        crop.width,
+      );
+    } else {
+      // rot == 0：旋转后坐标 == 原图坐标。
+      srcRect = crop;
+    }
+    // getCropRect() 的比例换算可能让边界浮点越界一个 ulp；钳制到图像
+    // 边界内，保证输出尺寸不会超过图像、采样不会越界。
+    srcRect = Rect.fromLTRB(
+      srcRect.left.clamp(0.0, imgW),
+      srcRect.top.clamp(0.0, imgH),
+      srcRect.right.clamp(0.0, imgW),
+      srcRect.bottom.clamp(0.0, imgH),
+    );
+  }
+
+  // 输出尺寸 = 裁剪区域大小（90/270° 时 srcRect 宽高已交换，再按旋转
+  // 交换回来正好等于裁剪框尺寸；裁剪框本身就是旋转后坐标）。没有
+  // 裁剪框时输出整图，90/270° 旋转交换宽高。
+  final double srcW = srcRect?.width ?? imgW;
+  final double srcH = srcRect?.height ?? imgH;
+  final bool needsRotation = rot % 180 != 0;
+  final int outputWidth = needsRotation ? srcH.round() : srcW.round();
+  final int outputHeight = needsRotation ? srcW.round() : srcH.round();
 
   final output = await _processImage(
     image: originalImage,
-    cropRect: cropRect,
+    // 反旋转后的原图坐标裁剪框（rot == 0 时等于 snappedCrop）。
+    cropRect: srcRect,
     rotateAngle: action?.rotateDegrees ?? 0,
     flipX: action?.flipY ?? false,
     flipY: false,
     outputWidth: outputWidth,
     outputHeight: outputHeight,
-    needsRotation: needsRotation,
     isJpegSource: _isJpegPhotoSource(rawData),
   );
 
@@ -295,32 +368,23 @@ Future<Uint8List?> _processImage({
   required bool flipY,
   required int outputWidth,
   required int outputHeight,
-  required bool needsRotation,
   required bool isJpegSource,
 }) async {
   final srcW = cropRect?.width ?? image.width.toDouble();
   final srcH = cropRect?.height ?? image.height.toDouble();
 
-  // When the canvas is rotated (90/270 degrees), the effective drawing
-  // width/height are swapped relative to the output dimensions.
-  final drawW =
-      needsRotation ? outputHeight.toDouble() : outputWidth.toDouble();
-  final drawH =
-      needsRotation ? outputWidth.toDouble() : outputHeight.toDouble();
-
-  // Scale so the source image (or crop region) fills the drawing area
-  // while preserving aspect ratio.
-  final scale =
-      (drawW / srcW) < (drawH / srcH) ? (drawW / srcW) : (drawH / srcH);
-  final destW = srcW * scale;
-  final destH = srcH * scale;
-
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
 
   canvas.save();
-  // Move to center of drawing area
-  canvas.translate(drawW / 2.0, drawH / 2.0);
+  // Rotate/flip around the OUTPUT canvas center. [processQuickEditImage]
+  // maps the editor's rotated-frame crop rect back into original-image
+  // coordinates and sizes the output canvas to the crop region, so
+  // drawing the source at 1:1 fills it exactly — the cropped-away area
+  // is not part of the output, and nothing is left blank. (The old code
+  // translated by drawW/2, drawH/2 — the swapped center when rotated —
+  // which shifted the content out of the canvas, clipping two edges.)
+  canvas.translate(outputWidth / 2.0, outputHeight / 2.0);
   // Apply flip
   if (flipX) canvas.scale(-1.0, 1.0);
   if (flipY) canvas.scale(1.0, -1.0);
@@ -331,7 +395,7 @@ Future<Uint8List?> _processImage({
       ? Rect.fromLTWH(
           cropRect.left, cropRect.top, cropRect.width, cropRect.height)
       : Offset.zero & Size(image.width.toDouble(), image.height.toDouble());
-  final dst = Rect.fromLTWH(-destW / 2.0, -destH / 2.0, destW, destH);
+  final dst = Rect.fromLTWH(-srcW / 2.0, -srcH / 2.0, srcW, srcH);
 
   canvas.drawImageRect(image, src, dst, Paint());
   canvas.restore();
