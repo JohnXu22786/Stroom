@@ -1,10 +1,15 @@
+import 'dart:convert';
+
+// The platform interface lives under the package's src/ (not exported
+// publicly); extending it is the supported way to fake the save dialog.
+// ignore_for_file: implementation_imports
+import 'package:file_picker/src/platform/file_picker_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:stroom/services/manifest_database.dart';
-import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
+
+import '../fake_file_picker.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -23,8 +28,8 @@ void main() {
         (tester) async {
       // Regression: zoom in/out and fullscreen buttons must only appear
       // when the widget is in render (diagram) mode. In source code mode
-      // they should be absent and only the image (查看图表) and save
-      // icons shown.
+      // they should be absent and only the shared code-block toolbar
+      // (copy, save, wrap) and the image (查看图表) toggle shown.
       const widget = MermaidRenderWidget(
         mermaidCode: 'graph TD\nA-->B',
         testOnlyShowSourceCode: true,
@@ -155,12 +160,13 @@ void main() {
       expect(find.byIcon(Icons.image), findsOneWidget);
     });
 
-    testWidgets('source code mode toolbar order: wrap, save, view-chart',
+    testWidgets(
+        'source code mode toolbar order: copy, save, wrap, view-chart',
         (tester) async {
-      // Regression: the common buttons (save, view-chart) must sit on the
-      // RIGHT of the toolbar and keep the same relative order as the
-      // mermaid render toolbar (save before code toggle), so muscle memory
-      // carries over and mis-clicks are avoided.
+      // Regression: the shared code-block buttons (copy, save, wrap) must
+      // keep the copy → save → wrap order, and the block-specific
+      // view-chart toggle must sit on the right of the common buttons so
+      // muscle memory carries over and mis-clicks are avoided.
       const widget = MermaidRenderWidget(
         mermaidCode: 'graph TD',
         testOnlyShowSourceCode: true,
@@ -173,15 +179,17 @@ void main() {
         ),
       );
 
-      final wrapPos = tester.getCenter(find.byIcon(Icons.wrap_text));
+      final copyPos = tester.getCenter(find.byIcon(Icons.copy));
       final savePos = tester.getCenter(find.byIcon(Icons.save));
+      final wrapPos = tester.getCenter(find.byIcon(Icons.wrap_text));
       final imagePos = tester.getCenter(find.byIcon(Icons.image));
 
-      expect(wrapPos.dx, lessThan(savePos.dx),
-          reason: 'wrap toggle (block-specific) sits left of common buttons');
-      expect(savePos.dx, lessThan(imagePos.dx),
-          reason: 'save must come before the code/view-chart toggle, '
-              'matching the render toolbar order');
+      expect(copyPos.dx, lessThan(savePos.dx),
+          reason: 'copy must come first in the toolbar');
+      expect(savePos.dx, lessThan(wrapPos.dx),
+          reason: 'save must come before the wrap toggle');
+      expect(wrapPos.dx, lessThan(imagePos.dx),
+          reason: 'the view-chart toggle sits right of the common buttons');
     });
   });
 
@@ -189,17 +197,11 @@ void main() {
   // Save button behavior tests
   // ===========================================================================
   //
-  // These tests verify that the save button appears correctly in the
-  // source code mode toolbar and triggers the FolderPickerDialog for
-  // saving Mermaid source code as .mmd files via TextManifest.
+  // These tests verify that the save button in the source code mode
+  // toolbar opens the system file save panel (the built-in code-block
+  // save) instead of the old per-block FolderPickerDialog flow.
 
   group('MermaidRenderWidget - save button', () {
-    setUp(() async {
-      SharedPreferences.setMockInitialValues({});
-      ManifestDatabase.enableTestMode();
-      TextManifest.invalidateCache();
-    });
-
     testWidgets('save icon appears in source code mode toolbar',
         (tester) async {
       // Regression: the save button (Icons.save) must be present in the
@@ -263,9 +265,17 @@ void main() {
       expect(find.byIcon(Icons.save), findsNothing);
     });
 
-    testWidgets('tapping save button opens FolderPickerDialog', (tester) async {
-      // Regression: tapping the save button must show the folder picker
-      // dialog so the user can choose where to save the .mmd file.
+    testWidgets('tapping save opens the system file save panel with the code',
+        (tester) async {
+      // Regression: the source view's save button must open the system
+      // save panel (FilePicker) with the mermaid source as content — the
+      // built-in code-block save replaced the old app-internal
+      // FolderPickerDialog flow in the source view.
+      final picker = FakeFilePicker();
+      final originalPicker = FilePickerPlatform.instance;
+      FilePickerPlatform.instance = picker;
+      addTearDown(() => FilePickerPlatform.instance = originalPicker);
+
       const widget = MermaidRenderWidget(
         mermaidCode: 'graph TD',
         testOnlyShowSourceCode: true,
@@ -281,10 +291,14 @@ void main() {
       // Tap the save button
       await tester.tap(find.byIcon(Icons.save));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
 
-      // Should show the FolderPickerDialog for selecting save location
-      expect(find.byType(FolderPickerDialog), findsOneWidget);
+      expect(picker.lastBytes, isNotNull);
+      expect(utf8.decode(picker.lastBytes!), 'graph TD',
+          reason: 'the save panel must carry the mermaid source code');
+      expect(picker.lastFileName, 'code.mmd',
+          reason: 'mermaid source saves with a .mmd default name');
+      expect(find.byType(FolderPickerDialog), findsNothing,
+          reason: 'the old app-internal folder picker flow is gone');
     });
 
     testWidgets('save icon has proper accessibility semantic label',

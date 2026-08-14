@@ -1543,15 +1543,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
   /// Builds the raw Mermaid source code view using the shared
   /// [CodeBlockSourceView] widget, providing a unified code display
-  /// area UI with line numbers and a wrap toggle.
+  /// area UI with line numbers, copy / save / wrap buttons.
   ///
   /// The [effectiveHeight] is passed through so the source code view
   /// uses the same height as the render mode, ensuring visual consistency.
   ///
-  /// Button order follows the shared toolbar convention: block-specific
-  /// buttons (wrap) on the left, common buttons on the right in the same
-  /// order as the mermaid render toolbar — save before the code/view-chart
-  /// toggle — so muscle memory carries over between views.
+  /// The shared code-block toolbar already provides copy and save, so
+  /// only the block-specific "查看图表" toggle is passed as an action
+  /// button (it sits right of the common buttons).
   Widget _buildSourceCodeView(
       ColorScheme cs, bool isDark, double? effectiveHeight) {
     return CodeBlockSourceView(
@@ -1559,7 +1558,6 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       language: 'mermaid',
       height: effectiveHeight,
       actionButtons: [
-        _buildSrcSaveButton(),
         _buildSrcCodeActionButton(),
       ],
     );
@@ -1575,21 +1573,6 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         child: const Padding(
           padding: EdgeInsets.all(8),
           child: Icon(Icons.image, size: 20, semanticLabel: '查看图表'),
-        ),
-      ),
-    );
-  }
-
-  /// Builds the "保存" action button for the source code view.
-  Widget _buildSrcSaveButton() {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: _saveAsMmd,
-        child: const Padding(
-          padding: EdgeInsets.all(8),
-          child: Icon(Icons.save, size: 20, semanticLabel: '保存'),
         ),
       ),
     );
