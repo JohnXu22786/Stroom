@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/mcp.dart' show McpServerConfig;
 import '../../models/tool_call.dart';
@@ -10,13 +11,15 @@ import '../../services/chat_service.dart';
 import '../../services/http_tool_service.dart';
 import '../../services/todo_tool_service.dart';
 import '../../services/web_search_service.dart';
+import '../../utils/model_order.dart' show applySavedOrder;
 
 /// "默认设置" tab of the assistant edit dialog: the default model and the
 /// default enabled tools that NEW conversations (topics) created under this
 /// assistant start with.
 ///
-/// - Default model: null ("跟随全局设置") falls back to the global saved
-///   model selection.
+/// - Default model: null ("暂不设置") leaves the assistant without a fixed
+///   default — new topics fall back to the chat page's list (first model in
+///   the display order), like any conversation without its own record.
 /// - Default tools: null ("从未配置") keeps the legacy behavior — new topics
 ///   auto-enable ALL available tools — so the tab displays every tool as ON
 ///   in that state. A non-null set (including an empty one) is the explicit
@@ -26,7 +29,7 @@ import '../../services/web_search_service.dart';
 /// their own per-conversation model/tool state, and changes made inside a
 /// topic (model switch, tool toggles) persist for that topic independently
 /// of other conversations and of these defaults.
-class AssistantDefaultsTab extends ConsumerWidget {
+class AssistantDefaultsTab extends ConsumerStatefulWidget {
   final String? defaultModelName;
 
   /// 默认模型的 API 模型 ID（绝对身份）。显示名重命名后仍可解析。
@@ -38,7 +41,7 @@ class AssistantDefaultsTab extends ConsumerWidget {
   /// null = 从未配置默认工具：新话题自动启用全部工具（本 tab 显示为全部开启）。
   final Set<String>? defaultToolNames;
 
-  /// 用户选择默认模型时回调完整的 [AvailableModel]（null = 跟随全局设置），
+  /// 用户选择默认模型时回调完整的 [AvailableModel]（null = 暂不设置），
   /// 供对话框同时保存显示名与绝对身份（供应商 + 模型ID）。
   final ValueChanged<AvailableModel?> onDefaultModelChanged;
 
@@ -55,6 +58,33 @@ class AssistantDefaultsTab extends ConsumerWidget {
     required this.onDefaultModelChanged,
     required this.onDefaultToolsChanged,
   });
+
+  @override
+  ConsumerState<AssistantDefaultsTab> createState() =>
+      _AssistantDefaultsTabState();
+}
+
+class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
+  /// 对话页底部模型选择器保存的全局拖动顺序（SharedPreferences
+  /// `model_order`），与聊天页一致地用于模型列表排序；null = 未保存过，
+  /// 按配置添加顺序显示。
+  List<String>? _savedModelOrder;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedModelOrder();
+  }
+
+  Future<void> _loadSavedModelOrder() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() => _savedModelOrder = prefs.getStringList('model_order'));
+    } catch (e) {
+      debugPrint('AssistantDefaultsTab load model order failed: $e');
+    }
+  }
 
   /// All tools the user can pick from: the built-in tools plus any MCP
   /// tools already discovered by the adapter.
@@ -85,7 +115,7 @@ class AssistantDefaultsTab extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final entriesState = ref.watch(providerEntriesProvider);
     final adapter = ref.read(chatStreamManagerProvider).adapter;
@@ -95,6 +125,18 @@ class AssistantDefaultsTab extends ConsumerWidget {
     final models = [
       for (final m in adapter.availableModels(entriesState))
         if (seenModelNames.add(m.displayName)) m,
+    ];
+    // 模型列表按对话页底部模型选择器的显示顺序排序：套用全局保存的拖动
+    // 顺序（model_order，与聊天页/供应商页共享），已保存的名字按保存顺序
+    // 前置，未保存的新模型按配置添加顺序追加在末尾——而不是默认的
+    // 配置添加顺序。
+    final displayNames = applySavedOrder(
+      [for (final m in models) m.displayName],
+      _savedModelOrder,
+    );
+    final orderedModels = [
+      for (final name in displayNames)
+        models.firstWhere((m) => m.displayName == name),
     ];
     final tools = _availableTools(ref);
     final allToolNames = tools.map((t) => t.name).toSet();
@@ -126,18 +168,18 @@ class AssistantDefaultsTab extends ConsumerWidget {
     // 基线用 validToolNames（含被隐藏的 MCP 工具）而非 allToolNames：
     // 从未配置时第一次开关某个工具，生成的显式集合与"全部启用"按钮
     // 一致——被隐藏但有效的 MCP 工具不会在 null→已配置 的转换中丢失。
-    final effectiveToolNames = defaultToolNames ?? validToolNames;
-    final isToolsConfigured = defaultToolNames != null;
+    final effectiveToolNames = widget.defaultToolNames ?? validToolNames;
+    final isToolsConfigured = widget.defaultToolNames != null;
 
-    // 生效中的默认模型：记录的模型已被删除（stale）时退化为"跟随全局设置"。
+    // 生效中的默认模型：记录的模型已被删除（stale）时退化为"暂不设置"。
     // 与聊天页/保存逻辑一致地按绝对身份优先解析（resolveModelRef）：
     // (providerName, modelId) 精确 → modelId → 显示名，显示名重命名后
     // 仍能高亮正确模型（含跨供应商同名 modelId 的消歧）。
     final effectiveModel = resolveModelRef(
       models: models,
-      modelId: defaultModelId,
-      providerName: defaultProviderName,
-      displayName: defaultModelName,
+      modelId: widget.defaultModelId,
+      providerName: widget.defaultProviderName,
+      displayName: widget.defaultModelName,
     );
     final effectiveModelName = effectiveModel?.displayName;
 
@@ -178,18 +220,18 @@ class AssistantDefaultsTab extends ConsumerWidget {
           _SectionCard(
             icon: Icons.smart_toy_outlined,
             title: '默认模型',
-            subtitle: '新建话题使用的模型；未设置时跟随全局设置。',
+            subtitle: '新建话题使用的模型；未设置时暂不指定默认模型。',
             child: RadioGroup<String>(
-              groupValue: effectiveModelName ?? _followGlobalSentinel,
+              groupValue: effectiveModelName ?? _notSetSentinel,
               onChanged: (value) {
-                if (value == _followGlobalSentinel) {
-                  onDefaultModelChanged(null);
+                if (value == _notSetSentinel) {
+                  widget.onDefaultModelChanged(null);
                 } else {
                   // 把完整模型（含绝对身份）传给对话框，保存时同时
                   // 记录显示名与模型ID+供应商名。
                   final model =
                       models.where((m) => m.displayName == value).firstOrNull;
-                  onDefaultModelChanged(model);
+                  widget.onDefaultModelChanged(model);
                 }
               },
               child: Column(
@@ -198,9 +240,9 @@ class AssistantDefaultsTab extends ConsumerWidget {
                   RadioListTile<String>(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
-                    value: _followGlobalSentinel,
+                    value: _notSetSentinel,
                     title: Text(
-                      '跟随全局设置',
+                      '暂不设置',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: effectiveModelName == null
@@ -220,7 +262,7 @@ class AssistantDefaultsTab extends ConsumerWidget {
                       ),
                     )
                   else
-                    for (final m in models)
+                    for (final m in orderedModels)
                       RadioListTile<String>(
                         dense: true,
                         contentPadding: EdgeInsets.zero,
@@ -264,11 +306,11 @@ class AssistantDefaultsTab extends ConsumerWidget {
                       if (isToolsConfigured)
                         TextButton(
                           onPressed: () =>
-                              onDefaultToolsChanged(validToolNames),
+                              widget.onDefaultToolsChanged(validToolNames),
                           child: const Text('全部启用'),
                         ),
                       TextButton(
-                        onPressed: () => onDefaultToolsChanged(const {}),
+                        onPressed: () => widget.onDefaultToolsChanged(const {}),
                         child: const Text('全部关闭'),
                       ),
                     ],
@@ -324,7 +366,7 @@ class AssistantDefaultsTab extends ConsumerWidget {
                             } else {
                               next.remove(tool.name);
                             }
-                            onDefaultToolsChanged(next);
+                            widget.onDefaultToolsChanged(next);
                           },
                         ),
                     ],
@@ -366,7 +408,7 @@ class AssistantDefaultsTab extends ConsumerWidget {
                   const SizedBox(height: 8),
                   _SummaryRow(
                     label: '模型',
-                    value: effectiveModelName ?? '跟随全局设置',
+                    value: effectiveModelName ?? '暂不设置',
                   ),
                   const SizedBox(height: 6),
                   _SummaryRow(
@@ -390,10 +432,10 @@ class AssistantDefaultsTab extends ConsumerWidget {
   }
 }
 
-/// Sentinel value for the "跟随全局设置" radio. 含 NUL 字符，真实模型的
+/// Sentinel value for the "暂不设置" radio. 含 NUL 字符，真实模型的
 /// 显示名（用户可任意配置）不可能包含 NUL——保证不会与模型名冲突，
 /// 避免 RadioGroup 因重复 value 崩溃。
-const _followGlobalSentinel = '\u0000__follow_global__';
+const _notSetSentinel = '\u0000__not_set__';
 
 /// 配置区块卡片：图标 + 标题 + 说明 + 内容。
 /// [trailing] 渲染在标题行右侧（右对齐），用于放置区块级操作按钮

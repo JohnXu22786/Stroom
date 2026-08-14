@@ -45,7 +45,8 @@ class _EditDialogVars {
   bool enableSeed;
   List<CustomParameter> customParameters;
 
-  /// 默认模型显示名（新建话题时应用；null = 跟随全局选择）。
+  /// 默认模型显示名（新建话题时应用；null = 暂不设置，新话题回退到
+  /// 对话页模型列表的第一个）。
   String? defaultModelName;
 
   /// 默认模型的 API 模型 ID（绝对身份）。

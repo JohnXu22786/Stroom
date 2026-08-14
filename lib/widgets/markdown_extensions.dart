@@ -275,6 +275,26 @@ class _MermaidLoadingWidget extends StatelessWidget {
   }
 }
 
+/// True when [code] is the code of the block that is currently still being
+/// generated: the message must be streaming AND [code] must be the
+/// still-open trailing fence (or the streaming text must be unavailable,
+/// the legacy whole-stream fallback).
+///
+/// Shares the fence-completion detection of mermaid/html blocks
+/// ([isStreamingMermaidTail]), including its known limitation: a CLOSED
+/// block whose trimmed content is identical to the still-open tail's
+/// content is indistinguishable and keeps counting as generating until the
+/// tail diverges or the stream ends.
+bool isCodeBlockStillGenerating({
+  required bool isStreaming,
+  String? streamingText,
+  required String code,
+}) {
+  if (!isStreaming) return false;
+  if (streamingText == null) return true;
+  return isStreamingMermaidTail(code, streamingText);
+}
+
 /// Builds a code block widget for the given [code] and [language].
 ///
 /// If [language] is `'mermaid'`, renders the code using [MermaidRenderWidget].
@@ -291,6 +311,11 @@ class _MermaidLoadingWidget extends StatelessWidget {
 /// Otherwise, renders the code using [CodeBlockSourceView] which provides
 /// a unified code display area with line numbers, a wrap toggle and the
 /// language label in the top-left corner.
+///
+/// While the block is the one currently being generated
+/// ([isCodeBlockStillGenerating]), [CodeBlockSourceView] receives
+/// isStreaming=true and auto-scrolls to its bottom edge, animating back
+/// to the top when the fence closes.
 Widget _buildCodeBlock(
   String code,
   String language,
@@ -306,9 +331,11 @@ Widget _buildCodeBlock(
     // code with the still-open trailing tail (see [unclosedFenceTail]).
     // Callers that cannot provide the streaming text (streamingText ==
     // null) keep the legacy behavior: loading for the whole stream.
-    if (isStreaming &&
-        (streamingText == null ||
-            isStreamingMermaidTail(code, streamingText))) {
+    if (isCodeBlockStillGenerating(
+      isStreaming: isStreaming,
+      streamingText: streamingText,
+      code: code,
+    )) {
       return const _MermaidLoadingWidget();
     }
     return MermaidRenderWidget(mermaidCode: code);
@@ -318,19 +345,38 @@ Widget _buildCodeBlock(
     // The same fence-completion check as mermaid: the HTML card shows its
     // "正在生成中" state only while the block's fence is still open, so a
     // closed block renders as a finished card even mid-stream.
-    final stillGenerating = isStreaming &&
-        (streamingText == null || isStreamingMermaidTail(code, streamingText));
     return HtmlCodeBlockWidget(
       htmlCode: code,
       language: language,
-      isStreaming: stillGenerating,
+      isStreaming: isCodeBlockStillGenerating(
+        isStreaming: isStreaming,
+        streamingText: streamingText,
+        code: code,
+      ),
     );
   }
 
   // Fallback: render using the unified source code display widget
   // ([CodeBlockSourceView]) with line numbers, a wrap toggle and the
   // language label (from the opening fence's info string).
-  return CodeBlockSourceView(code: code, language: language);
+  //
+  // The same fence-completion check as mermaid/html: only the block that
+  // is currently the still-open trailing fence of the streaming reply gets
+  // isStreaming=true, which makes it auto-scroll to its bottom edge while
+  // generating and animate back to the top once its fence closes. Closed
+  // blocks in the same message are untouched (each block owns its own
+  // auto-scroll state), except for the known limitations of the check
+  // itself (streamingText == null treats every block as generating; two
+  // identical blocks, see [isStreamingMermaidTail]).
+  return CodeBlockSourceView(
+    code: code,
+    language: language,
+    isStreaming: isCodeBlockStillGenerating(
+      isStreaming: isStreaming,
+      streamingText: streamingText,
+      code: code,
+    ),
+  );
 }
 
 /// Returns the content of the still-OPEN trailing fenced code block in

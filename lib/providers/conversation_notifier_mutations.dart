@@ -29,7 +29,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   ///
   /// Conversations created WITHOUT an assistant keep the legacy behavior:
   /// no explicit tool prefs (chat page auto-enables all tools) and no model
-  /// preset (global saved selection applies).
+  /// preset (new topics fall back to the chat page's first model in the
+  /// display order).
   ///
   /// 立即持久化（_persistNow）：空对话在未发消息前被杀进程即永久丢失；
   /// _persistCore 的 _loadHasRun 守卫保证启动窗口内不覆写磁盘，

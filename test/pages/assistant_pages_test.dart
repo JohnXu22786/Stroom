@@ -830,11 +830,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // Model section + empty state (no LLM config in test env) — the
-      // follow-global option is still shown and is the effective selection
+      // not-set option is still shown and is the effective selection
       // (radio tile + 效果预览 summary each show the label)
       expect(find.text('默认模型'), findsOneWidget);
       expect(find.textContaining('暂无可用模型'), findsOneWidget);
-      expect(find.text('跟随全局设置'), findsWidgets);
+      expect(find.text('暂不设置'), findsWidgets);
 
       // Tool section lists the built-in tools with switches
       expect(find.text('默认启用工具'), findsOneWidget);
@@ -852,9 +852,9 @@ void main() {
         expect(tile.value, isTrue, reason: '未配置默认工具时，工具开关应显示为开启（$toolName）');
       }
 
-      // 效果预览卡反映生效行为：全部自动启用 + 跟随全局模型
+      // 效果预览卡反映生效行为：全部自动启用 + 暂不设置
       expect(find.text('新建话题效果'), findsOneWidget);
-      expect(find.text('跟随全局设置'), findsWidgets);
+      expect(find.text('暂不设置'), findsWidgets);
       expect(find.text('全部自动启用（未配置）'), findsOneWidget);
 
       // 头部右侧始终提供批量操作按钮；未配置时"全部启用"没有意义
@@ -946,7 +946,7 @@ void main() {
     });
 
     testWidgets(
-        '默认模型已失效（从供应商配置中删除）时：tab 退化为跟随全局设置，'
+        '默认模型已失效（从供应商配置中删除）时：tab 退化为暂不设置，'
         '保存后自动清除失效记录', (tester) async {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
@@ -976,9 +976,9 @@ void main() {
       await tester.tap(find.text('默认设置'));
       await tester.pumpAndSettle();
 
-      // 失效的模型名不出现，生效状态退化为"跟随全局设置"
+      // 失效的模型名不出现，生效状态退化为"暂不设置"
       expect(find.text('removed-model | OpenAI'), findsNothing);
-      expect(find.text('跟随全局设置'), findsWidgets);
+      expect(find.text('暂不设置'), findsWidgets);
 
       // 未触碰模型选择直接保存 → 失效记录被清除（避免同名模型重新
       // 添加后旧的默认值悄悄复活）
@@ -1045,7 +1045,7 @@ void main() {
       await tester.tap(find.text('默认设置'));
       await tester.pumpAndSettle();
 
-      // 重复的显示名只渲染一次（跟随全局设置 + 2 个唯一模型）
+      // 重复的显示名只渲染一次（暂不设置 + 2 个唯一模型）
       expect(find.text('gpt-4o | OpenAI'), findsOneWidget);
       expect(find.text('claude-3.5-sonnet | OpenAI'), findsOneWidget);
 
@@ -1157,7 +1157,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Model selector lists the available models (radio tile + summary)
-      expect(find.text('跟随全局设置'), findsWidgets);
+      expect(find.text('暂不设置'), findsWidgets);
       expect(find.text('gpt-4o | OpenAI'), findsOneWidget);
       expect(find.text('claude-3.5-sonnet | OpenAI'), findsOneWidget);
 
@@ -1183,6 +1183,69 @@ void main() {
       expect(assistant.defaultModelName, 'gpt-4o | OpenAI');
       expect(assistant.defaultToolNames, contains('web_search'));
       expect(assistant.defaultToolNames, isNot(contains('todowrite')));
+    });
+
+    testWidgets(
+        '默认设置 tab 的模型列表按对话页底部模型选择器的保存顺序（model_order）'
+        '排序，而不是按供应商配置的添加顺序', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'test_llm',
+            'type': 'llm',
+            'name': 'LLM供应商',
+            'configs': [
+              {
+                'providerName': 'OpenAI',
+                'host': 'https://api.openai.com/v1',
+                'key': 'test-key',
+                'models': [
+                  {'name': 'gpt-4o', 'modelId': 'gpt-4o'},
+                  {'name': 'claude-3.5-sonnet', 'modelId': 'claude-3.5-sonnet'},
+                  {'name': 'gemini-2.0-flash', 'modelId': 'gemini-2.0-flash'},
+                ],
+              },
+            ],
+          },
+        ]),
+        // 对话页底部模型选择器里保存的全局拖动顺序（与配置添加顺序相反，
+        // 且只覆盖其中两个模型）。
+        'model_order': ['claude-3.5-sonnet | OpenAI', 'gpt-4o | OpenAI'],
+      });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            assistantProvider.overrideWith((ref) {
+              final notifier = AssistantsNotifier();
+              notifier.createAssistant(name: '助手编辑', prompt: 'P1');
+              return notifier;
+            }),
+          ],
+          child: const MaterialApp(home: AssistantSelectionPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open edit dialog
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // Switch to 默认设置 tab
+      await tester.tap(find.text('默认设置'));
+      await tester.pumpAndSettle();
+
+      // 已保存顺序中的模型按保存顺序排在前，未保存的模型按原顺序追加在末尾：
+      // 期望 claude → gpt-4o → gemini（而非配置添加顺序 gpt-4o → claude → gemini）。
+      final claudeY =
+          tester.getCenter(find.text('claude-3.5-sonnet | OpenAI')).dy;
+      final gptY = tester.getCenter(find.text('gpt-4o | OpenAI')).dy;
+      final geminiY =
+          tester.getCenter(find.text('gemini-2.0-flash | OpenAI')).dy;
+      expect(claudeY, lessThan(gptY),
+          reason: '保存顺序（model_order）中的模型应排在配置添加顺序之前');
+      expect(gptY, lessThan(geminiY), reason: '未出现在保存顺序中的新模型按原顺序追加在末尾');
     });
 
     testWidgets(
