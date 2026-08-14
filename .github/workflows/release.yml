@@ -68,7 +68,7 @@ jobs:
           channel: stable
           # 固定 3.44.9：Flutter 3.47.0 在 windows 上 flutter_assemble 失败
           # （MSB8066, flutter_windows.dll），3.44.9 已验证可成功构建。
-          version: 3.44.9
+          flutter-version: 3.44.9
           cache: true
           pub-cache: true
       - run: flutter pub get
