@@ -892,6 +892,39 @@ void main() {
       final widget = pre.builder!('some code', '') as CodeBlockSourceView;
       expect(widget.language, '');
     });
+
+    test('plain code block is streaming only while it is the open tail', () {
+      // Same fence-completion check as mermaid/html: of the two python
+      // blocks in the streaming text, only the still-open trailing one is
+      // the block currently being generated.
+      final pre = codeBlockPreConfig(
+        isDark: false,
+        isStreaming: true,
+        streamingText:
+            '```python\nclosed\n```\nthen prose\n```python\nopen\nmore',
+      );
+      final closed = pre.builder!('closed', 'python') as CodeBlockSourceView;
+      expect(closed.isStreaming, isFalse,
+          reason: 'a closed block must not auto-scroll');
+      final openTail =
+          pre.builder!('open\nmore', 'python') as CodeBlockSourceView;
+      expect(openTail.isStreaming, isTrue,
+          reason: 'the still-open trailing block is the one being generated');
+    });
+
+    test('plain code block is streaming when streamingText is unavailable', () {
+      // Legacy path (streamingText == null): every code block in the
+      // streaming message is treated as still being generated.
+      final pre = codeBlockPreConfig(isDark: false, isStreaming: true);
+      final widget = pre.builder!('x = 1', 'python') as CodeBlockSourceView;
+      expect(widget.isStreaming, isTrue);
+    });
+
+    test('plain code block is not streaming when the message is not', () {
+      final pre = codeBlockPreConfig(isDark: false, isStreaming: false);
+      final widget = pre.builder!('x = 1', 'python') as CodeBlockSourceView;
+      expect(widget.isStreaming, isFalse);
+    });
   });
 
   group('BrSyntax - HTML <br> line breaks', () {

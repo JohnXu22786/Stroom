@@ -286,11 +286,16 @@ extension _ChatPageBubblesExt on _ChatPageState {
     // segment's raw text as streamingText, so mermaid blocks whose fence
     // has already closed render immediately; only the still-open trailing
     // block keeps the loading placeholder (see isStreamingMermaidTail).
+    // The fallback MarkdownWidgets below (messages without segments) pass
+    // the message text as streamingText for the same fence-completion
+    // check, so a closed block in a streaming message is never treated as
+    // still being generated.
     final markdownConfig = buildMessageMarkdownConfig(
       isDark: isDark,
       conversationIsStreaming: isStreaming,
       streamingMsgId: _streamingMsgId,
       messageId: message.id,
+      streamingText: message.text,
     );
 
     return Container(
