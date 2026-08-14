@@ -405,6 +405,13 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
     final isReasoningComplete =
         hasReasoningContent && (hasFirstToken || !isStreamActive);
 
+    // The panel is "streaming" while the thinking is still in progress.
+    // The jump-to-bottom button only exists in this phase; once the
+    // thinking completes it is replaced by the draggable scrollbar.
+    // (Named isPanelStreaming to avoid shadowing widget.isStreaming, the
+    // open-time snapshot passed from the section.)
+    final isPanelStreaming = !isReasoningComplete;
+
     final showEmpty = _displayText.isEmpty && !isReasoningComplete;
 
     // Detect completion transitions to drive the corner checkmark sequence.
@@ -573,21 +580,37 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
                   )
                 : Stack(
                     children: [
-                      SingleChildScrollView(
+                      // Draggable scrollbar once the thinking has completed.
+                      // While still streaming the scrollbar is kept fully
+                      // hidden (no thumb, zero thickness so nothing paints)
+                      // and the jump-to-bottom button below is the only
+                      // scroll affordance. The scrollbar stays in the tree
+                      // in both phases so the scroll position survives the
+                      // streaming → completed transition.
+                      Scrollbar(
                         controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
-                        child: MarkdownWidget(
-                          data: _displayText,
-                          selectable: true,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          config: markdownConfig,
-                          markdownGenerator: markdownGenerator,
+                        thumbVisibility: !isPanelStreaming,
+                        interactive: !isPanelStreaming,
+                        thickness: isPanelStreaming ? 0 : null,
+                        child: SingleChildScrollView(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.all(16),
+                          child: MarkdownWidget(
+                            data: _displayText,
+                            selectable: true,
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            config: markdownConfig,
+                            markdownGenerator: markdownGenerator,
+                          ),
                         ),
                       ),
-                      // "Jump to bottom" button — only visible when user
-                      // has manually scrolled up (interrupted auto-scroll).
-                      if (_userScrolledUp)
+                      // "Jump to bottom" button — only while the reasoning
+                      // is still streaming and the user has manually
+                      // scrolled up (interrupted auto-scroll). Once the
+                      // thinking completes the button disappears and the
+                      // draggable scrollbar above takes over.
+                      if (_userScrolledUp && isPanelStreaming)
                         Positioned(
                           right: 16,
                           bottom: 16,
