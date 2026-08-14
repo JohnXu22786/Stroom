@@ -146,8 +146,7 @@ void main() {
       expect(ImageThumbnailLoader.peek(record), equals(thumb));
     });
 
-    testWidgets(
-        'returns null when both thumb and full image are missing',
+    testWidgets('returns null when both thumb and full image are missing',
         (tester) async {
       final record = _makeRecord(hash: 'missing');
       final result = await ImageThumbnailLoader.loadThumbnail(record);

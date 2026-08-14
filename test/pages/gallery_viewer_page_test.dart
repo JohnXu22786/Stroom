@@ -132,13 +132,14 @@ void main() {
       final thumbFinder = find.byWidgetPredicate(
         (w) => w is Image && w.image is MemoryImage,
       );
-      expect(thumbFinder, findsOneWidget,
-          reason: '加载期间必须先显示已缓存的缩略图占位');
+      expect(thumbFinder, findsOneWidget, reason: '加载期间必须先显示已缓存的缩略图占位');
       // 占位缩略图必须撑满全屏（letterbox 与原图同框）—— 若按 256px
       // 原始尺寸缩在屏幕中间，切换原图时会出现明显的尺寸跳变
-      expect(tester.getSize(thumbFinder), tester.getSize(find.byType(
-        GalleryViewerPage,
-      )));
+      expect(
+          tester.getSize(thumbFinder),
+          tester.getSize(find.byType(
+            GalleryViewerPage,
+          )));
       // 缩略图只是占位：叠加小加载指示，明确原图仍在加载/解码
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
@@ -154,8 +155,7 @@ void main() {
       expect(find.text('1 / 1'), findsOneWidget);
     });
 
-    testWidgets(
-        'falls back to the loading spinner when no thumbnail is cached',
+    testWidgets('falls back to the loading spinner when no thumbnail is cached',
         (tester) async {
       final png = await tester.runAsync(_createEnginePng);
       final record = _makeRecord(
