@@ -506,12 +506,9 @@ void main() {
       // The scrollbar must not be shown while streaming: no thumb, no
       // interaction, zero thickness (nothing paints).
       final scrollbar = scrollbarOf(tester);
-      expect(scrollbar.thumbVisibility, isFalse,
-          reason: '流式期间滚动条 thumb 不应显示');
-      expect(scrollbar.interactive, isFalse,
-          reason: '流式期间滚动条不应可拖动');
-      expect(scrollbar.thickness, 0,
-          reason: '流式期间滚动条应零厚度（完全不可见）');
+      expect(scrollbar.thumbVisibility, isFalse, reason: '流式期间滚动条 thumb 不应显示');
+      expect(scrollbar.interactive, isFalse, reason: '流式期间滚动条不应可拖动');
+      expect(scrollbar.thickness, 0, reason: '流式期间滚动条应零厚度（完全不可见）');
 
       // Unmount to dispose the streaming chevron timer.
       await unmountAndFlushTimers(tester);
@@ -534,12 +531,9 @@ void main() {
           reason: '思考完成后即使未在底部也不应显示到底部按钮');
 
       final scrollbar = scrollbarOf(tester);
-      expect(scrollbar.thumbVisibility, isTrue,
-          reason: '思考完成后滚动条 thumb 应常驻显示');
-      expect(scrollbar.interactive, isTrue,
-          reason: '思考完成后滚动条应可拖动');
-      expect(scrollbar.thickness, isNot(0),
-          reason: '思考完成后滚动条应恢复实际厚度');
+      expect(scrollbar.thumbVisibility, isTrue, reason: '思考完成后滚动条 thumb 应常驻显示');
+      expect(scrollbar.interactive, isTrue, reason: '思考完成后滚动条应可拖动');
+      expect(scrollbar.thickness, isNot(0), reason: '思考完成后滚动条应恢复实际厚度');
 
       await unmountAndFlushTimers(tester);
     });
