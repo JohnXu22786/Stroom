@@ -103,6 +103,9 @@ class _HtmlCodeBlockWidgetState extends State<HtmlCodeBlockWidget> {
         code: widget.htmlCode,
         height: widget.height,
         language: widget.language,
+        // The raw source view follows the same streaming auto-scroll as
+        // plain code blocks while the html block is still being generated.
+        isStreaming: widget.isStreaming,
         actionButtons: [
           // HTML code view uses an EYE icon for "preview" (only HTML; all
           // other code blocks keep the plain fullscreen icon).

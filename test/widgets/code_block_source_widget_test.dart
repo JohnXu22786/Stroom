@@ -585,4 +585,387 @@ void main() {
           reason: 'Explicit height should be respected');
     });
   });
+
+  group('CodeBlockSourceView - streaming auto-scroll', () {
+    // The vertical code-area scroll view (the outer SingleChildScrollView;
+    // no-wrap mode also has a nested horizontal one).
+    Finder verticalScrollView() => find.byWidgetPredicate(
+        (w) => w is SingleChildScrollView && w.scrollDirection == Axis.vertical);
+
+    ScrollPosition position(WidgetTester tester) =>
+        tester.widget<SingleChildScrollView>(verticalScrollView()).controller!
+            .position;
+
+    String longCode(int lines) =>
+        List.generate(lines, (i) => 'line $i').join('\n');
+
+    /// Pumps the block in a fixed 200px-high viewport (40 lines overflow
+    /// it) and drains the frame so post-frame auto-scroll jumps have run.
+    Future<void> pumpBlock(
+      WidgetTester tester, {
+      required String code,
+      required bool isStreaming,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 400,
+                child: CodeBlockSourceView(
+                  code: code,
+                  height: 200,
+                  isStreaming: isStreaming,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    testWidgets('pins the scroll position to the bottom while the code grows',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await pumpBlock(tester, code: longCode(7), isStreaming: true);
+      // Content fits the viewport initially — nothing to scroll yet.
+      expect(position(tester).maxScrollExtent, 0);
+
+      // Streaming content grows past the viewport: the block must stay
+      // pinned to its bottom edge, with no resume button while following.
+      await pumpBlock(tester, code: longCode(40), isStreaming: true);
+      expect(position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5),
+          reason: 'growing streaming code must stay pinned to the bottom');
+      expect(find.byIcon(Icons.arrow_downward), findsNothing);
+
+      // A further growth keeps the pin.
+      await pumpBlock(tester, code: longCode(80), isStreaming: true);
+      expect(position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5));
+    });
+
+    testWidgets(
+        'shows the resume button after a manual interrupt, resumes on tap, '
+        'and re-engages when scrolled back to the bottom', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await pumpBlock(tester, code: longCode(40), isStreaming: true);
+      expect(position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5));
+
+      // The user drags the code area down (scrolling toward the top): the
+      // auto-scroll must stop and the resume button must appear.
+      await tester.drag(verticalScrollView(), const Offset(0, 150));
+      await tester.pump();
+      expect(find.byIcon(Icons.arrow_downward), findsOneWidget,
+          reason: 'interrupting the auto-scroll must show the resume button');
+      expect(position(tester).pixels,
+          lessThan(position(tester).maxScrollExtent - 40));
+
+      // Tapping the button resumes the auto-scroll: back to the bottom,
+      // button hidden.
+      await tester.tap(find.byIcon(Icons.arrow_downward));
+      await tester.pump();
+      expect(find.byIcon(Icons.arrow_downward), findsNothing);
+      expect(position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5));
+
+      // Interrupt again, then scroll back to the bottom manually: the
+      // auto-scroll re-engages and the button hides (mirrors the chat list).
+      await tester.drag(verticalScrollView(), const Offset(0, 150));
+      await tester.pump();
+      expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+
+      await tester.drag(verticalScrollView(), const Offset(0, -300));
+      await tester.pump();
+      expect(find.byIcon(Icons.arrow_downward), findsNothing);
+      expect(position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5));
+    });
+
+    testWidgets('animates back to the top when the block finishes generating',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await pumpBlock(tester, code: longCode(40), isStreaming: true);
+      expect(position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5));
+
+      // The fence closes — the block is no longer the one being generated.
+      await pumpBlock(tester, code: longCode(40), isStreaming: false);
+      await tester.pumpAndSettle();
+
+      expect(position(tester).pixels, closeTo(0, 0.5),
+          reason: 'a finished block must return to its top (non-linear)');
+      expect(find.byIcon(Icons.arrow_downward), findsNothing,
+          reason: 'no resume button once generation is complete');
+    });
+
+    testWidgets(
+        'does not yank an interrupted block to the top on completion',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await pumpBlock(tester, code: longCode(40), isStreaming: true);
+      // Interrupt: scroll toward the top and hold there.
+      await tester.drag(verticalScrollView(), const Offset(0, 150));
+      await tester.pump();
+      final interrupted = position(tester).pixels;
+      expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+
+      // The block finishes generating: no forced scroll (the user broke
+      // the auto-scroll session), and the resume button is hidden.
+      await pumpBlock(tester, code: longCode(40), isStreaming: false);
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.arrow_downward), findsNothing,
+          reason: 'the resume button must not show after generation completes');
+      expect(position(tester).pixels, closeTo(interrupted, 0.5),
+          reason: 'an interrupted block must keep the user reading position');
+    });
+
+    testWidgets('does not re-pin after an interrupt while streaming continues',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await pumpBlock(tester, code: longCode(40), isStreaming: true);
+      await tester.drag(verticalScrollView(), const Offset(0, 150));
+      await tester.pump();
+      final interrupted = position(tester).pixels;
+
+      // The stream keeps growing, but the user interrupted: the block
+      // must stay where the user left it (no re-pinning to the bottom).
+      await pumpBlock(tester, code: longCode(80), isStreaming: true);
+      expect(position(tester).pixels, closeTo(interrupted, 0.5),
+          reason: 'a manual interrupt must stop the auto-scroll for good');
+      expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+    });
+
+    testWidgets(
+        'does not yank to the top on completion while the finger is held',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await pumpBlock(tester, code: longCode(40), isStreaming: true);
+      // The user puts a finger on the block and drags a little — still
+      // within the at-bottom window, so the auto-scroll is still engaged,
+      // but the block must not fight the finger.
+      final gesture = await tester.startGesture(
+          tester.getCenter(verticalScrollView()));
+      await gesture.moveBy(const Offset(0, 20));
+      await tester.pump();
+      expect(position(tester).pixels,
+          greaterThan(position(tester).maxScrollExtent - 40));
+
+      // The block finishes generating while the finger is down: no forced
+      // scroll to the top.
+      await pumpBlock(tester, code: longCode(40), isStreaming: false);
+      await tester.pumpAndSettle();
+      expect(position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 40),
+          reason: 'a held finger must suppress the return-to-top animation');
+
+      await gesture.up();
+      await tester.pump();
+      expect(find.byIcon(Icons.arrow_downward), findsNothing);
+    });
+
+    testWidgets('engages the follow when streaming starts from empty code',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      // A freshly opened fence: empty code, "(empty)" placeholder, no
+      // scroll view attached yet.
+      await pumpBlock(tester, code: '', isStreaming: true);
+      // The first code arrives: the scroll view attaches and the block
+      // pins to the bottom.
+      await pumpBlock(tester, code: longCode(40), isStreaming: true);
+      expect(position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5),
+          reason: 'the follow must engage as soon as code starts arriving');
+      expect(find.byIcon(Icons.arrow_downward), findsNothing);
+    });
+
+    testWidgets(
+        'reconciles the button state when metric-only changes move the '
+        'position to the bottom', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await pumpBlock(tester, code: longCode(40), isStreaming: true);
+      // Interrupt the auto-scroll: button visible, auto-scroll off.
+      await tester.drag(verticalScrollView(), const Offset(0, 150));
+      await tester.pump();
+      expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+
+      // The content shrinks (e.g. the user toggles wrap mode off and the
+      // lines no longer wrap): the position clamps to the new bottom
+      // without firing a scroll event. The button must hide again.
+      await pumpBlock(tester, code: longCode(7), isStreaming: true);
+      expect(find.byIcon(Icons.arrow_downward), findsNothing,
+          reason: 'the button must reflect the current metrics, not the '
+              'last scroll action');
+      expect(position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5));
+    });
+
+    testWidgets('a horizontal drag does not interrupt the vertical follow',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      // Long lines so no-wrap mode has horizontal overflow to pan.
+      final longCodeWithWideLines =
+          List.generate(40, (i) => 'line $i ' * 10).join('\n');
+      await pumpBlock(tester,
+          code: longCodeWithWideLines, isStreaming: true);
+      expect(position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5));
+
+      final horizontalScrollView = find.byWidgetPredicate(
+          (w) =>
+              w is SingleChildScrollView &&
+              w.scrollDirection == Axis.horizontal);
+      expect(horizontalScrollView, findsOneWidget);
+
+      // Hold a horizontal pan (finger down) and let the code grow: the
+      // vertical follow must stay engaged — a horizontal pan is not an
+      // interrupt of the vertical auto-scroll.
+      final gesture =
+          await tester.startGesture(tester.getCenter(horizontalScrollView));
+      await gesture.moveBy(const Offset(-100, 0));
+      await tester.pump();
+
+      await pumpBlock(tester,
+          code: '$longCodeWithWideLines\nline extra', isStreaming: true);
+      expect(position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5),
+          reason: 'a horizontal pan must not interrupt the vertical follow');
+      expect(find.byIcon(Icons.arrow_downward), findsNothing);
+
+      await gesture.up();
+      await tester.pump();
+    });
+
+    testWidgets(
+        'a finished block never re-engages the follow when mislabeled as '
+        'generating again', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final code = longCode(40);
+      // Streaming (following) → fence closes (completes, returns to top).
+      await pumpBlock(tester, code: code, isStreaming: true);
+      expect(position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5));
+      await pumpBlock(tester, code: code, isStreaming: false);
+      await tester.pumpAndSettle();
+      expect(position(tester).pixels, closeTo(0, 0.5));
+
+      // The content-based tail check mislabels the closed block as the
+      // still-open trailing block again (identical content): the latch
+      // must keep the auto-scroll (and the resume button) off.
+      await pumpBlock(tester, code: code, isStreaming: true);
+      await tester.pump();
+      expect(position(tester).pixels, closeTo(0, 0.5),
+          reason: 'a finished block must not re-engage the auto-scroll');
+      expect(find.byIcon(Icons.arrow_downward), findsNothing);
+
+      // Further growth stays unpinned and button-free.
+      await pumpBlock(tester, code: longCode(80), isStreaming: true);
+      expect(position(tester).pixels, closeTo(0, 0.5),
+          reason: 'growth must not re-pin a completed block');
+      expect(find.byIcon(Icons.arrow_downward), findsNothing);
+    });
+
+    testWidgets(
+        'a static block re-labeled as generating with unchanged code stays '
+        'static', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final code = longCode(40);
+      // Born as a static (non-streaming) block — e.g. a closed block in a
+      // freshly rebuilt message.
+      await pumpBlock(tester, code: code, isStreaming: false);
+      expect(position(tester).pixels, 0);
+
+      // The content-based tail check mislabels it as the still-open
+      // trailing block with UNCHANGED code: a real generating block always
+      // arrives with new code, so this must latch the block as finished —
+      // no auto-scroll, no button.
+      await pumpBlock(tester, code: code, isStreaming: true);
+      await tester.pump();
+      expect(position(tester).pixels, 0,
+          reason: 'a static block must not start following when re-labeled '
+              'with unchanged code');
+      expect(find.byIcon(Icons.arrow_downward), findsNothing);
+
+      // Further growth stays unpinned and button-free.
+      await pumpBlock(tester, code: longCode(80), isStreaming: true);
+      expect(position(tester).pixels, 0);
+      expect(find.byIcon(Icons.arrow_downward), findsNothing);
+    });
+
+    testWidgets(
+        'a re-engaged auto-scroll animates back to the top on completion',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await pumpBlock(tester, code: longCode(40), isStreaming: true);
+      // Interrupt, then scroll back to the bottom: the auto-scroll
+      // re-engages and the button hides (mirrors the chat list).
+      await tester.drag(verticalScrollView(), const Offset(0, 150));
+      await tester.pump();
+      expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+      await tester.drag(verticalScrollView(), const Offset(0, -300));
+      await tester.pump();
+      expect(find.byIcon(Icons.arrow_downward), findsNothing);
+      expect(position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5));
+
+      // The block finishes generating while the session is re-engaged:
+      // it must animate back to the top.
+      await pumpBlock(tester, code: longCode(40), isStreaming: false);
+      await tester.pumpAndSettle();
+      expect(position(tester).pixels, closeTo(0, 0.5),
+          reason: 'a re-engaged session must return to the top on completion');
+    });
+
+    testWidgets('non-streaming blocks never pin nor show the resume button',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      // A normal (already-finished) code block: scrolling is plain.
+      await pumpBlock(tester, code: longCode(40), isStreaming: false);
+      expect(position(tester).pixels, 0);
+      expect(find.byIcon(Icons.arrow_downward), findsNothing);
+
+      // Drag up to scroll the static block down from its top.
+      await tester.drag(verticalScrollView(), const Offset(0, -150));
+      await tester.pump();
+      final scrolled = position(tester).pixels;
+      expect(scrolled, greaterThan(0));
+      expect(find.byIcon(Icons.arrow_downward), findsNothing,
+          reason: 'no resume button outside a streaming session');
+
+      // Growing a static block must not pin it back to the bottom.
+      await pumpBlock(tester, code: longCode(80), isStreaming: false);
+      expect(position(tester).pixels, closeTo(scrolled, 0.5),
+          reason: 'content growth must not move a non-streaming block');
+      expect(find.byIcon(Icons.arrow_downward), findsNothing);
+    });
+  });
 }
