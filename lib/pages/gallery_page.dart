@@ -166,7 +166,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       final thumbnailBytes =
           await ImageThumbnailLoader.generateThumbnail(bytes);
       if (thumbnailBytes != null) {
-        await ImageManifest.writeFile('${hash}_thumb.png', thumbnailBytes);
+        await ImageManifest.writeFile(
+          imageThumbFileName(hash),
+          thumbnailBytes,
+        );
       }
       final now = DateTime.now();
       final timestamp =
@@ -271,7 +274,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           bytes,
         );
         if (thumbnailBytes != null) {
-          await ImageManifest.writeFile('${hash}_thumb.png', thumbnailBytes);
+          await ImageManifest.writeFile(
+            imageThumbFileName(hash),
+            thumbnailBytes,
+          );
         }
         await ImageManifest.addRecord(
           ImageRecord(
@@ -684,10 +690,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
               fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,
-              // 缩略图按 ≤256px 解码，即使生成失败回退到原图路径
-              // 也不会以全分辨率解码多 MB 图片
+              // 缩略图按 ≤256px 解码（仅限宽：同时限宽又限高会把
+              // 非正方形图片强行压成正方形再裁剪，导致缩略图变形）。
+              // 生成端已保证缩略图尺寸受控，显示解码不会超预算。
               cacheWidth: _thumbDecodeSize,
-              cacheHeight: _thumbDecodeSize,
               loadStateChanged: (state) {
                 if (state.extendedImageLoadState == LoadState.failed) {
                   return buildFormatIcon(file.format);

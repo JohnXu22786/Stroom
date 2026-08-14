@@ -7,22 +7,35 @@ import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/image_thumbnail_loader.dart';
 
-/// Creates a small valid PNG (8x8 green) via the real engine.
+/// Creates a valid green PNG of [width]×[height] via the real engine.
 ///
 /// Must be called from `tester.runAsync` — engine image work never
 /// completes inside the widget-test FakeAsync zone.
-Future<Uint8List> _createEnginePng() async {
+Future<Uint8List> _createEnginePng({int width = 8, int height = 8}) async {
   final recorder = ui.PictureRecorder();
   final canvas = ui.Canvas(recorder);
   canvas.drawRect(
-    ui.Rect.fromLTWH(0, 0, 8, 8),
+    ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
     ui.Paint()..color = const ui.Color(0xFF00FF00),
   );
   final picture = recorder.endRecording();
-  final image = await picture.toImage(8, 8);
+  final image = await picture.toImage(width, height);
   final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
   image.dispose();
   return byteData!.buffer.asUint8List();
+}
+
+/// Decodes PNG bytes and returns their (width, height) in pixels.
+Future<(int, int)> _decodeSize(Uint8List pngBytes) async {
+  final codec = await ui.instantiateImageCodec(pngBytes);
+  try {
+    final frame = await codec.getNextFrame();
+    final size = (frame.image.width, frame.image.height);
+    frame.image.dispose();
+    return size;
+  } finally {
+    codec.dispose();
+  }
 }
 
 ImageRecord _makeRecord({String id = 'id', String hash = 'hash'}) {
@@ -54,7 +67,7 @@ void main() {
       final record = _makeRecord(hash: 'cache_hit');
       final thumb = Uint8List.fromList([1, 2, 3, 4]);
       await tester.runAsync(() async {
-        await ImageManifest.writeFile('${record.hash}_thumb.png', thumb);
+        await ImageManifest.writeFile(imageThumbFileName(record.hash), thumb);
       });
 
       final first = await ImageThumbnailLoader.loadThumbnail(record);
@@ -63,7 +76,7 @@ void main() {
       // 删掉磁盘文件后再次调用仍能命中 → 证明第二次调用没有重新读盘，
       // 防止网格滚动/重建时反复读盘造成的卡顿
       await tester.runAsync(() async {
-        await ImageManifest.deleteFile('${record.hash}_thumb.png');
+        await ImageManifest.deleteFile(imageThumbFileName(record.hash));
       });
       final second = await ImageThumbnailLoader.loadThumbnail(record);
       expect(second, equals(thumb));
@@ -73,7 +86,10 @@ void main() {
         'generates and persists a thumbnail when the thumb file is '
         'missing (full-image fallback regression)', (tester) async {
       final record = _makeRecord(hash: 'gen_me');
-      final png = await tester.runAsync(_createEnginePng);
+      // 源图大于 maxDimension：生成端必须缩小，产物必然 ≠ 原图字节
+      // （8×8 的小源图会保持原尺寸、重编码后与原图字节相同）
+      final png =
+          await tester.runAsync(() => _createEnginePng(width: 512, height: 512));
       await tester.runAsync(() async {
         await ImageManifest.writeFile(record.storagePath, png!);
       });
@@ -88,13 +104,49 @@ void main() {
           reason: 'thumb must be a re-encoded small PNG, not the original');
       // PNG 魔数
       expect(result.sublist(0, 4), [0x89, 0x50, 0x4E, 0x47]);
-      // 已持久化到磁盘：删除内存缓存后仍可从磁盘读到
+      // 已持久化到磁盘（新 v2 命名）：删除内存缓存后仍可从磁盘读到
       ImageThumbnailLoader.invalidate(record.hash);
       await tester.runAsync(() async {
         final fromDisk =
-            await ImageManifest.readFile('${record.hash}_thumb.png');
+            await ImageManifest.readFile(imageThumbFileName(record.hash));
         expect(fromDisk, equals(result));
       });
+    });
+
+    testWidgets(
+        'ignores legacy `_thumb.png` files and persists the generated '
+        'thumbnail under the versioned v2 name '
+        '(regression: stale distorted thumbs must not be served)',
+        (tester) async {
+      final record = _makeRecord(hash: 'legacy_thumb');
+      final png = await tester.runAsync(_createEnginePng);
+      await tester.runAsync(() async {
+        await ImageManifest.writeFile(record.storagePath, png!);
+        // 旧版（变形 256×256）缩略图仍躺在磁盘上 —— 新命名下必须被忽略
+        await ImageManifest.writeFile(
+            '${record.hash}_thumb.png', Uint8List.fromList([1, 2, 3]));
+      });
+
+      final result = await tester.runAsync(
+        () => ImageThumbnailLoader.loadThumbnail(record),
+      );
+
+      expect(result, isNotNull);
+      expect(result, isNot(equals(Uint8List.fromList([1, 2, 3]))),
+          reason: 'legacy distorted thumb bytes must never be served');
+      // 新命名的缩略图已持久化，后续加载直接命中
+      await tester.runAsync(() async {
+        final fromDisk =
+            await ImageManifest.readFile(imageThumbFileName(record.hash));
+        expect(fromDisk, equals(result));
+        // 旧版残留文件在 v2 落盘后被顺手清理
+        expect(await ImageManifest.readFile('${record.hash}_thumb.png'), isNull,
+            reason: 'legacy distorted thumb file must be cleaned up');
+      });
+      final cached = await tester.runAsync(
+        () => ImageThumbnailLoader.loadThumbnail(record),
+      );
+      expect(cached, equals(result));
     });
 
     testWidgets(
@@ -139,14 +191,14 @@ void main() {
       final record = _makeRecord(hash: 'invalidate');
       final thumb = Uint8List.fromList([9, 8, 7]);
       await tester.runAsync(() async {
-        await ImageManifest.writeFile('${record.hash}_thumb.png', thumb);
+        await ImageManifest.writeFile(imageThumbFileName(record.hash), thumb);
       });
 
       expect(await ImageThumbnailLoader.loadThumbnail(record), equals(thumb));
 
       ImageThumbnailLoader.invalidate(record.hash);
       await tester.runAsync(() async {
-        await ImageManifest.deleteFile('${record.hash}_thumb.png');
+        await ImageManifest.deleteFile(imageThumbFileName(record.hash));
       });
 
       expect(await ImageThumbnailLoader.loadThumbnail(record), isNull,
@@ -165,14 +217,51 @@ void main() {
       expect(result, isNull);
     });
 
-    testWidgets('generateThumbnail decodes a real image to a bounded PNG',
-        (tester) async {
+    testWidgets('generateThumbnail decodes a real image to a bounded PNG '
+        'without upscaling small sources', (tester) async {
       final png = await tester.runAsync(_createEnginePng);
       final result = await tester.runAsync(
         () => ImageThumbnailLoader.generateThumbnail(png!, maxDimension: 256),
       );
       expect(result, isNotNull);
       expect(result!.sublist(0, 4), [0x89, 0x50, 0x4E, 0x47]);
+      final (w, h) = (await tester.runAsync(() => _decodeSize(result)))!;
+      expect((w, h), (8, 8),
+          reason: 'small sources must be kept at intrinsic size, not upscaled');
+    });
+
+    testWidgets(
+        'generateThumbnail keeps the aspect ratio of wide images '
+        '(regression: forcing 256×256 decode squashed panoramas)',
+        (tester) async {
+      final png =
+          await tester.runAsync(() => _createEnginePng(width: 800, height: 200));
+      final result = await tester.runAsync(
+        () => ImageThumbnailLoader.generateThumbnail(png!, maxDimension: 256),
+      );
+      expect(result, isNotNull);
+      final (w, h) = (await tester.runAsync(() => _decodeSize(result!)))!;
+      expect(w, 256);
+      expect(h, 64,
+          reason: 'wide image must keep its 4:1 ratio, not be squashed into '
+              'a 256×256 square');
+    });
+
+    testWidgets(
+        'generateThumbnail keeps the aspect ratio of tall images '
+        '(regression: forcing 256×256 decode stretched portraits)',
+        (tester) async {
+      final png =
+          await tester.runAsync(() => _createEnginePng(width: 200, height: 800));
+      final result = await tester.runAsync(
+        () => ImageThumbnailLoader.generateThumbnail(png!, maxDimension: 256),
+      );
+      expect(result, isNotNull);
+      final (w, h) = (await tester.runAsync(() => _decodeSize(result!)))!;
+      expect(h, 256);
+      expect(w, 64,
+          reason: 'tall image must keep its 1:4 ratio, not be stretched into '
+              'a 256×256 square');
     });
 
     testWidgets(
@@ -194,7 +283,7 @@ void main() {
       // 也没有写出孤儿缩略图文件
       await tester.runAsync(() async {
         expect(
-          await ImageManifest.readFile('${record.hash}_thumb.png'),
+          await ImageManifest.readFile(imageThumbFileName(record.hash)),
           isNull,
         );
       });
@@ -221,7 +310,7 @@ void main() {
       final record = _makeRecord(hash: 'clear_test');
       final thumb = Uint8List.fromList([1, 2, 3]);
       await tester.runAsync(() async {
-        await ImageManifest.writeFile('${record.hash}_thumb.png', thumb);
+        await ImageManifest.writeFile(imageThumbFileName(record.hash), thumb);
       });
 
       await ImageThumbnailLoader.loadThumbnail(record);
@@ -230,14 +319,14 @@ void main() {
       // 删掉磁盘文件：若 clear() 没清空内存缓存，这里仍会命中并返回 thumb；
       // 返回 null 才证明内存状态已被重置、重新走了磁盘读
       await tester.runAsync(() async {
-        await ImageManifest.deleteFile('${record.hash}_thumb.png');
+        await ImageManifest.deleteFile(imageThumbFileName(record.hash));
       });
       expect(await ImageThumbnailLoader.loadThumbnail(record), isNull,
           reason: 'clear() 必须重置内存缓存（陈旧缓存会返回非 null）');
 
       // 恢复磁盘文件：clear() 后下一次调用应重新从磁盘读取
       await tester.runAsync(() async {
-        await ImageManifest.writeFile('${record.hash}_thumb.png', thumb);
+        await ImageManifest.writeFile(imageThumbFileName(record.hash), thumb);
       });
       expect(await ImageThumbnailLoader.loadThumbnail(record), equals(thumb),
           reason: 'clear() 后重新从磁盘加载');

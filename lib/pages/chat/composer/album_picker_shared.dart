@@ -54,9 +54,9 @@ class AlbumImageThumbnailState extends State<AlbumImageThumbnail> {
           fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,
-          // 按 ≤256px 解码，避免回退路径以全分辨率解码原图
+          // 仅限宽 ≤256px 解码：同时限宽限高会把非正方形图片
+          // 压成正方形再裁剪，导致缩略图变形
           cacheWidth: 256,
-          cacheHeight: 256,
           loadStateChanged: (state) {
             if (state.extendedImageLoadState == LoadState.failed) {
               return Container(

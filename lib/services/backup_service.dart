@@ -17,6 +17,7 @@ import 'manifest_database.dart';
 import 'storage_service.dart';
 import '../anki/database/anki_database.dart';
 import '../utils/app_version.dart';
+import '../utils/image_thumbnail_loader.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
@@ -361,8 +362,9 @@ class BackupService {
         if (hash == null) continue;
         await _addPlanFile(diskFiles, memoryFiles, 'pictures/$hash.$format',
             p.join(appDir, 'pictures', '$hash.$format'), useStreaming);
-        await _addPlanFile(diskFiles, memoryFiles, 'pictures/${hash}_thumb.png',
-            p.join(appDir, 'pictures', '${hash}_thumb.png'), useStreaming);
+        await _addPlanFile(diskFiles, memoryFiles,
+            'pictures/${imageThumbFileName(hash)}',
+            p.join(appDir, 'pictures', imageThumbFileName(hash)), useStreaming);
         if (i % 10 == 0) {
           await _yieldToEventLoop();
           checkCancelled();
@@ -790,8 +792,8 @@ class BackupService {
         if (hash == null) continue;
         await addFileToArchive(
             archive, 'pictures/$hash.$format', 'pictures', '$hash.$format');
-        await addFileToArchive(archive, 'pictures/${hash}_thumb.png',
-            'pictures', '${hash}_thumb.png');
+        await addFileToArchive(archive, 'pictures/${imageThumbFileName(hash)}',
+            'pictures', imageThumbFileName(hash));
         if (i % 10 == 0) {
           await _yieldToEventLoop();
           checkCancelled();
@@ -1666,8 +1668,13 @@ class BackupService {
         if (!await _deleteFile('pictures', '$hash.$format')) {
           deleteFailed = true;
         }
-        if (!await _deleteFile('pictures', '${hash}_thumb.png')) {
+        if (!await _deleteFile('pictures', imageThumbFileName(hash))) {
           deleteFailed = true;
+        }
+        // 旧版（变形）命名残留：Web/测试模式下没有整目录删除兜底，
+        // 逐记录一并清理（原生模式由下方的 _deleteDirectory 兜底）
+        if (kIsWeb || WebFileStore.isTestMode) {
+          await _deleteFile('pictures', '${hash}_thumb.png');
         }
       }
       if (!await _deleteDirectory('pictures')) deleteFailed = true;
