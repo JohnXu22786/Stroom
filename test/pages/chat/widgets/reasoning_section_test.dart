@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/pages/chat/widgets/reasoning_section.dart';
 import 'package:stroom/providers/chat_stream_provider.dart';
+import 'package:stroom/providers/conversation_provider.dart';
 
 void main() {
   group('ReasoningSection (Single section)', () {
@@ -416,6 +418,155 @@ void main() {
       expect(find.textContaining('思考 3'), findsNothing,
           reason: '空占位段落不应渲染出第三个按钮');
       expect(find.text('思考完成'), findsNothing, reason: '多段落时按钮带序号前缀，不应出现无前缀的按钮');
+    });
+  });
+
+  group('ReasoningPanel dialog scroll affordances', () {
+    // Long enough to overflow the dialog content area so the view starts
+    // (and stays) NOT at the bottom.
+    final longText = List.generate(120, (i) => '推理内容第 $i 行').join('\n\n');
+
+    Future<void> openDialog(
+      WidgetTester tester, {
+      required bool sectionStreaming,
+      required bool streamActive,
+      required bool hasFirstToken,
+    }) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
+            streamingReasoningSectionsProvider('test-conv-id')
+                .overrideWith((ref) => [longText]),
+            isStreamingProvider('test-conv-id')
+                .overrideWith((ref) => streamActive),
+            streamingHasFirstTokenProvider('test-conv-id')
+                .overrideWith((ref) => hasFirstToken),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ReasoningSection(
+                sections: ReasoningSectionData(
+                  texts: [longText],
+                  streaming: sectionStreaming,
+                ),
+                messageId: 'scroll-msg-id',
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Open the reasoning panel dialog.
+      await tester.tap(find.text(sectionStreaming ? '思考中' : '思考完成'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+
+      // Scroll a little (away from the top) so the scroll position is
+      // deterministically NOT at the bottom, like a user who scrolled up.
+      await tester.drag(
+        find.descendant(
+          of: find.byType(Scrollbar),
+          matching: find.byType(SingleChildScrollView),
+        ),
+        const Offset(0, -150),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+
+    Scrollbar scrollbarOf(WidgetTester tester) =>
+        tester.widget<Scrollbar>(find.byType(Scrollbar));
+
+    /// Unmounts the widget tree (disposing the dialog), then flushes the
+    /// visibility_detector one-shot update timer scheduled by
+    /// markdown_widget's internals during the last paint, so no timer
+    /// stays pending at teardown.
+    Future<void> unmountAndFlushTimers(WidgetTester tester) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+    }
+
+    testWidgets(
+        'streaming: jump-to-bottom button shows when not at bottom and the '
+        'scrollbar stays hidden', (tester) async {
+      // Reasoning in progress: stream active, no first text token yet.
+      await openDialog(
+        tester,
+        sectionStreaming: true,
+        streamActive: true,
+        hasFirstToken: false,
+      );
+
+      expect(find.byIcon(Icons.arrow_downward), findsOneWidget,
+          reason: '流式期间未在底部时应显示到底部按钮');
+
+      // The scrollbar must not be shown while streaming: no thumb, no
+      // interaction, zero thickness (nothing paints).
+      final scrollbar = scrollbarOf(tester);
+      expect(scrollbar.thumbVisibility, isFalse, reason: '流式期间滚动条 thumb 不应显示');
+      expect(scrollbar.interactive, isFalse, reason: '流式期间滚动条不应可拖动');
+      expect(scrollbar.thickness, 0, reason: '流式期间滚动条应零厚度（完全不可见）');
+
+      // Unmount to dispose the streaming chevron timer.
+      await unmountAndFlushTimers(tester);
+    });
+
+    testWidgets(
+        'completed: no jump-to-bottom button even when not at bottom; '
+        'draggable scrollbar takes over', (tester) async {
+      // Thinking completed but the overall stream is still active (the
+      // first text token has arrived): the button must disappear and the
+      // draggable scrollbar must take over.
+      await openDialog(
+        tester,
+        sectionStreaming: false,
+        streamActive: true,
+        hasFirstToken: true,
+      );
+
+      expect(find.byIcon(Icons.arrow_downward), findsNothing,
+          reason: '思考完成后即使未在底部也不应显示到底部按钮');
+
+      final scrollbar = scrollbarOf(tester);
+      expect(scrollbar.thumbVisibility, isTrue, reason: '思考完成后滚动条 thumb 应常驻显示');
+      expect(scrollbar.interactive, isTrue, reason: '思考完成后滚动条应可拖动');
+      expect(scrollbar.thickness, isNot(0), reason: '思考完成后滚动条应恢复实际厚度');
+
+      await unmountAndFlushTimers(tester);
+    });
+
+    testWidgets(
+        'button disappears reactively the moment the thinking completes',
+        (tester) async {
+      await openDialog(
+        tester,
+        sectionStreaming: true,
+        streamActive: true,
+        hasFirstToken: false,
+      );
+      expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+
+      // Reasoning completes mid-session (first text token arrives while
+      // the dialog is open): the button must vanish immediately.
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ReasoningSection)),
+      );
+      container
+          .read(streamingHasFirstTokenProvider('test-conv-id').notifier)
+          .state = true;
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byIcon(Icons.arrow_downward), findsNothing,
+          reason: '思考完成的瞬间到底部按钮应立即消失');
+      expect(scrollbarOf(tester).thumbVisibility, isTrue,
+          reason: '思考完成的瞬间滚动条应随即接管');
+
+      // Unmount to dispose the streaming chevron timer / animations.
+      await unmountAndFlushTimers(tester);
     });
   });
 }
