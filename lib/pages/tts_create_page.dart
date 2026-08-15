@@ -512,14 +512,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              cs.primaryContainer.withValues(alpha: 0.6),
-              cs.secondaryContainer.withValues(alpha: 0.3),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: cs.surface.withValues(alpha: 0.7),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
         ),
@@ -533,7 +526,9 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                 color: cs.primary.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(Icons.record_voice_over, size: 16, color: cs.primary),
+              // 机器人图标，与对话页面输入框的模型标识一致（同 OCR 页面）
+              child:
+                  Icon(Icons.smart_toy_outlined, size: 16, color: cs.primary),
             ),
             const SizedBox(width: 10),
             Text(
