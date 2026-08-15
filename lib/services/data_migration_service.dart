@@ -10,7 +10,10 @@ import '../pages/chat/chat_types.dart' show legacyToBlocks;
 import 'app_log_service.dart';
 import 'auto_backup_service.dart';
 import 'backup_location_manager.dart';
+import 'data_integrity_checker.dart';
+import 'data_safety_manager.dart';
 import 'manifest_database.dart';
+import 'snapshot_service.dart';
 
 part 'data_migration_backup.dart';
 part 'data_migration_old_configs.dart';
@@ -307,19 +310,19 @@ class DataMigrationService {
     await cleanOldBackups();
 
     try {
-      // 创建备份到外部位置。
-      // 备份失败（或并发备份被取消）时绝不继续迁移：没有安全快照
+      // 创建迁移前快照（私有目录结构化快照，无视 1 小时规则）。
+      // 快照失败（或并发快照被取消）时绝不继续迁移：没有安全快照
       // 的迁移一旦中途失败可能造成数据损坏。返回 needsMigration=false
       // 保持版本号不变，下次启动自动重试（与旧版 v2→v3 结构性失败
       // 「版本号永不提升」的哲学一致）。
-      // Web 平台不支持本地备份（createBackup 恒返回 null），直接迁移。
+      // Web 平台不支持本地快照（createSnapshot 恒返回 null），直接迁移。
       if (!kIsWeb) {
-        final backupPath = await createBackup();
-        if (backupPath == null) {
-          debugPrint('[DataMigrationService] 迁移前备份失败，'
+        final snapshot = await SnapshotService.createSnapshot(force: true);
+        if (snapshot == null) {
+          debugPrint('[DataMigrationService] 迁移前快照失败，'
               '取消本次迁移（下次启动重试）');
           await AppLogService.error(
-              'DataMigrationService', '迁移前备份失败，取消本次迁移（下次启动重试）');
+              'DataMigrationService', '迁移前快照失败，取消本次迁移（下次启动重试）');
           return const MigrationResult(needsMigration: false);
         }
       }
@@ -336,6 +339,36 @@ class DataMigrationService {
       debugPrint('[DataMigrationService] Per-part data format migration '
           'completed: $detail');
       await AppLogService.info('DataMigrationService', '数据格式迁移成功: $detail');
+
+      // 迁移完成后立即做完整性校验：迁移代码 bug 可能产出"能写入但
+      // 校验不过"的数据（确定性失败，重试无效）。此时恢复迁移前
+      // 快照（旧格式完整数据）并冻结 —— 当前构建不再尝试迁移，
+      // 数据保持旧格式，用户回退旧版应用仍可正常使用。
+      if (!kIsWeb) {
+        final check = await DataIntegrityChecker.checkCurrentData();
+        if (check.hasCorruption) {
+          debugPrint('[DataMigrationService] 迁移后校验失败（数据损坏），'
+              '恢复迁移前快照并冻结: ${check.corruptions.map((i) => i.message).join('; ')}');
+          await AppLogService.error(
+              'DataMigrationService',
+              '迁移后数据校验失败，恢复迁移前快照并冻结',
+              check.corruptions.first.message);
+          try {
+            await DataSafetyManager.restoreLatestSnapshot();
+          } catch (e) {
+            debugPrint('[DataMigrationService] 恢复迁移前快照失败: $e');
+          }
+          await DataSafetyManager.freezeForMigrationFailure(
+            targetFormatVersion:
+                DataParts.all.fold<int>(0, (max, p) {
+              final v = DataParts.currentVersions[p] ?? 0;
+              return v > max ? v : max;
+            }),
+            description: detail,
+          );
+          return const MigrationResult(needsMigration: false);
+        }
+      }
     } catch (e) {
       debugPrint('[DataMigrationService] Migration failed: $e');
       await AppLogService.error('DataMigrationService', '数据格式迁移失败', e);

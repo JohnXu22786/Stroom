@@ -7,7 +7,6 @@ import 'package:path/path.dart' as p;
 
 import '../utils/app_version.dart';
 import '../utils/atomic_file.dart';
-import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
 import 'backup_service.dart';
 import 'backup_service_shared.dart' show collectAttachmentPaths;
@@ -29,7 +28,7 @@ enum DataSafetyState {
   frozen,
 }
 
-/// 持久化的数据安全状态（<AppStorage>/.data_safety.json）。
+/// 持久化的数据安全状态（`<AppStorage>/.data_safety.json`）。
 class DataSafetyStatus {
   final DataSafetyState state;
 
@@ -282,6 +281,36 @@ class DataSafetyManager {
       }
     }
     return false;
+  }
+
+  /// 从最近一版快照恢复（迁移失败时回退到迁移前状态）。
+  ///
+  /// 返回是否成功；快照缺失/校验失败返回 false。
+  static Future<bool> restoreLatestSnapshot() async {
+    final snapshots = await SnapshotService.listSnapshots();
+    if (snapshots.isEmpty) {
+      debugPrint('[DataSafetyManager] 无快照可恢复');
+      return false;
+    }
+    final entry = snapshots.first;
+    try {
+      final dir = await SnapshotService.snapshotsDir;
+      final file = File(p.join(dir.path, entry.file));
+      if (!await file.exists()) return false;
+      final bytes = await file.readAsBytes();
+      if (sha256.convert(bytes).toString() != entry.sha256) {
+        debugPrint('[DataSafetyManager] 最近快照校验失败（SHA 不符）');
+        return false;
+      }
+      await BackupService.restoreBackup(
+        file.path,
+        selection: BackupSelection.structuredOnly,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[DataSafetyManager] 恢复最近快照失败: $e');
+      return false;
+    }
   }
 
   // ================================================================

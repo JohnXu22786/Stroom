@@ -43,6 +43,44 @@ void main() {
     });
   });
 
+  group('StartupCheckService - version sentinel', () {
+    test('returns null when no part is ahead of current version', () async {
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions': jsonEncode({
+          for (final part in DataParts.all) part: DataParts.currentVersions[part],
+        }),
+      });
+      final ahead = await StartupCheckService.checkVersionAhead();
+      expect(ahead, isNull);
+    });
+
+    test('describes parts whose stored version is ahead', () async {
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions': jsonEncode({
+          'chat': 99, // 超前（当前 chat v1）
+          'settings': 1, // 正常
+          for (final part in DataParts.all)
+            if (part != 'chat' && part != 'settings')
+              part: DataParts.currentVersions[part],
+        }),
+      });
+      final ahead = await StartupCheckService.checkVersionAhead();
+      expect(ahead, isNotNull);
+      expect(ahead, contains('chat'));
+      expect(ahead, contains('v99'));
+    });
+
+    test('returns null when version record is unreadable (fail-open)',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions': 'not-json{{{',
+      });
+      final ahead = await StartupCheckService.checkVersionAhead();
+      expect(ahead, isNull,
+          reason: '版本记录损坏时按未存储处理（0），不应误判为超前');
+    });
+  });
+
   group('StartupCheckService - data format validation', () {
     test('validates provider_entries JSON structure', () async {
       final prefs = await SharedPreferences.getInstance();

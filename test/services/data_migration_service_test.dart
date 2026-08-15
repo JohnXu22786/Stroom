@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -651,21 +652,22 @@ void main() {
       expect(prefs.getString('conversations_bak'), isNotNull);
     });
 
-    test('backup ZIP is created in external location during migration',
+    test('migration snapshot is created in private snapshots directory',
         () async {
-      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      // 迁移前快照现在是私有目录结构化快照（不再写外部 AutoBackups）
+      final appDir = await AppStorage.directory;
+      final snapDir = Directory(p.join(appDir, 'snapshots'));
 
-      // Clean any existing backup root
-      final rootDir = Directory(backupRoot);
-      if (await rootDir.exists()) {
-        await rootDir.delete(recursive: true);
+      // Clean any existing snapshots
+      if (await snapDir.exists()) {
+        await snapDir.delete(recursive: true);
       }
 
       await DataMigrationService.checkAndMigrate();
 
-      // Backup root should exist with at least one ZIP file
-      expect(await rootDir.exists(), isTrue);
-      final entries = await rootDir.list().toList();
+      // Private snapshots dir should exist with at least one ZIP file
+      expect(await snapDir.exists(), isTrue);
+      final entries = await snapDir.list().toList();
       final zips = entries
           .whereType<File>()
           .where((f) => f.path.endsWith('.zip'))
@@ -673,8 +675,8 @@ void main() {
       expect(zips.length, greaterThan(0));
 
       // Cleanup after test
-      if (await rootDir.exists()) {
-        await rootDir.delete(recursive: true);
+      if (await snapDir.exists()) {
+        await snapDir.delete(recursive: true);
       }
     });
   });
