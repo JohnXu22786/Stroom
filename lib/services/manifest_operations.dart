@@ -4,9 +4,10 @@ import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../utils/file_record.dart';
-import '../utils/web_file_store.dart';
 import '../utils/folder_path_utils.dart';
+import '../utils/image_thumbnail_loader.dart';
 import '../utils/manifest_operations_shared.dart';
+import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
 import 'manifest_database.dart';
 
@@ -58,6 +59,34 @@ class ManifestOperations<T extends FileRecord> {
   bool get _isImageTable => tableName == ManifestTables.imageRecords;
   bool get _isVideoTable => tableName == ManifestTables.videoRecords;
   bool get _isTextTable => tableName == ManifestTables.textRecords;
+
+  /// 缩略图文件名：图片表使用带版本号的 v2 命名（旧版 `_thumb.png`
+  /// 是被强制缩放成 256×256 的变形产物，已废弃）；其余表保持原命名。
+  String _thumbFileNameOf(T record) {
+    final hash = hashOf(record);
+    return _isImageTable
+        ? imageThumbFileName(hash)
+        : '${hash}_thumb$thumbnailExtension';
+  }
+
+  /// 删除记录时一并清理图片表旧版（变形）缩略图残留文件
+  /// `{hash}_thumb.png`（升级前的安装可能遗留，加载器只在重新生成
+  /// v2 时清理）。删除失败仅记日志，不影响删除主流程。
+  Future<void> _deleteLegacyThumbIfImage(String hash) async {
+    if (!_isImageTable) return;
+    try {
+      if (_useWebFileStore) {
+        await WebFileStore.delete(_webKey('${hash}_thumb.png'));
+      } else {
+        final dir = await _storageDir;
+        final legacy = File(p.join(dir, '${hash}_thumb.png'));
+        if (await legacy.exists()) await legacy.delete();
+      }
+    } catch (e) {
+      debugPrint('ManifestOperations($manifestKey) '
+          'delete legacy thumbnail failed: $e');
+    }
+  }
 
   // ---- 数据库代理方法（根据 tableName 路由到正确的表操作） ---------------
 
@@ -207,7 +236,7 @@ class ManifestOperations<T extends FileRecord> {
     final hashRefCount =
         _cache!.where((x) => hashOf(x) == hashOf(record)).length;
     if (hashRefCount <= 1) {
-      final thumbName = '${hashOf(record)}_thumb$thumbnailExtension';
+      final thumbName = _thumbFileNameOf(record);
       debugPrint(
           'ManifestOperations($manifestKey) deleting thumbnail [$thumbName]');
       if (_useWebFileStore) {
@@ -217,6 +246,7 @@ class ManifestOperations<T extends FileRecord> {
         final thumbFile = File(p.join(dir, thumbName));
         if (await thumbFile.exists()) await thumbFile.delete();
       }
+      await _deleteLegacyThumbIfImage(hashOf(record));
     }
   }
 
@@ -283,7 +313,7 @@ class ManifestOperations<T extends FileRecord> {
         final h = hashOf(r);
         hashCount[h] = (hashCount[h] ?? 1) - 1;
         if (hashCount[h]! <= 0) {
-          final thumbName = '${hashOf(r)}_thumb$thumbnailExtension';
+          final thumbName = _thumbFileNameOf(r);
           if (_useWebFileStore) {
             await WebFileStore.delete(_webKey(thumbName));
           } else {
@@ -291,6 +321,7 @@ class ManifestOperations<T extends FileRecord> {
             final thumbFile = File(p.join(dir, thumbName));
             if (await thumbFile.exists()) await thumbFile.delete();
           }
+          await _deleteLegacyThumbIfImage(h);
         }
       }
       _cache = remaining;
@@ -539,7 +570,7 @@ class ManifestOperations<T extends FileRecord> {
         final h = hashOf(r);
         hashCount[h] = (hashCount[h] ?? 1) - 1;
         if (hashCount[h]! <= 0) {
-          final thumbName = '${hashOf(r)}_thumb$thumbnailExtension';
+          final thumbName = _thumbFileNameOf(r);
           if (_useWebFileStore) {
             await WebFileStore.delete(_webKey(thumbName));
           } else {
@@ -547,6 +578,7 @@ class ManifestOperations<T extends FileRecord> {
             final thumbFile = File(p.join(dir, thumbName));
             if (await thumbFile.exists()) await thumbFile.delete();
           }
+          await _deleteLegacyThumbIfImage(h);
         }
       }
 

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/image_manifest.dart';
+import 'package:stroom/utils/image_thumbnail_loader.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/video_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
@@ -116,14 +117,23 @@ void main() {
       await ImageManifest.writeFile(
           record.storagePath, Uint8List.fromList([1]));
       await ImageManifest.writeFile(
-          'hash_thumb_only_thumb.png', Uint8List.fromList([2]));
+          imageThumbFileName('hash_thumb_only'), Uint8List.fromList([2]));
+      // 旧版（变形）命名残留文件：删除记录时必须一并清理
+      await ImageManifest.writeFile(
+          'hash_thumb_only_thumb.png', Uint8List.fromList([5]));
       await ImageManifest.addRecord(record);
 
       await ImageManifest.deleteRecord(record.id);
 
-      expect(await WebFileStore.exists('pictures/hash_thumb_only_thumb.png'),
+      expect(
+          await WebFileStore.exists(
+              'pictures/${imageThumbFileName('hash_thumb_only')}'),
           isFalse,
           reason: 'thumbnail must be deleted when its hash is no longer used');
+      expect(await WebFileStore.exists('pictures/hash_thumb_only_thumb.png'),
+          isFalse,
+          reason:
+              'legacy distorted thumbnail must also be cleaned up on delete');
     });
 
     testWidgets(
@@ -146,15 +156,24 @@ void main() {
         size: 4,
       );
       await ImageManifest.writeFile(
-          'hash_thumb_shared_thumb.png', Uint8List.fromList([2]));
+          imageThumbFileName('hash_thumb_shared'), Uint8List.fromList([2]));
+      // 旧版命名残留：hash 仍有记录引用时不得清理
+      await ImageManifest.writeFile(
+          'hash_thumb_shared_thumb.png', Uint8List.fromList([5]));
       await ImageManifest.addRecord(record);
       await ImageManifest.addRecord(twin);
 
       await ImageManifest.deleteRecord(record.id);
 
-      expect(await WebFileStore.exists('pictures/hash_thumb_shared_thumb.png'),
+      expect(
+          await WebFileStore.exists(
+              'pictures/${imageThumbFileName('hash_thumb_shared')}'),
           isTrue,
           reason: 'thumbnail must stay while the twin record still uses it');
+      expect(await WebFileStore.exists('pictures/hash_thumb_shared_thumb.png'),
+          isTrue,
+          reason:
+              'legacy thumbnail must stay while the twin record still uses it');
     });
 
     testWidgets(
@@ -189,9 +208,9 @@ void main() {
       await ImageManifest.writeFile(
           unique.storagePath, Uint8List.fromList([2]));
       await ImageManifest.writeFile(
-          'hash_batch_shared_thumb.png', Uint8List.fromList([3]));
+          imageThumbFileName('hash_batch_shared'), Uint8List.fromList([3]));
       await ImageManifest.writeFile(
-          'hash_batch_unique_thumb.png', Uint8List.fromList([4]));
+          imageThumbFileName('hash_batch_unique'), Uint8List.fromList([4]));
       await ImageManifest.addRecord(shared1);
       await ImageManifest.addRecord(shared2);
       await ImageManifest.addRecord(unique);
@@ -209,10 +228,14 @@ void main() {
       expect(
           await WebFileStore.exists('pictures/${unique.storagePath}'), isFalse,
           reason: 'unique entity file must be deleted');
-      expect(await WebFileStore.exists('pictures/hash_batch_shared_thumb.png'),
+      expect(
+          await WebFileStore.exists(
+              'pictures/${imageThumbFileName('hash_batch_shared')}'),
           isTrue,
           reason: 'shared thumbnail must survive while one record remains');
-      expect(await WebFileStore.exists('pictures/hash_batch_unique_thumb.png'),
+      expect(
+          await WebFileStore.exists(
+              'pictures/${imageThumbFileName('hash_batch_unique')}'),
           isFalse,
           reason: 'unique thumbnail must be deleted');
     });

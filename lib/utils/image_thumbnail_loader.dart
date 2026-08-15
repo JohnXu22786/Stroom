@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -27,7 +28,19 @@ import 'image_manifest.dart';
 // 生成失败（无法解码的格式/损坏文件）返回 null 并记入有界负缓存，
 // 调用方显示格式图标 —— 绝不把原图字节当作缩略图缓存（多 MB 原图进
 // LRU 会挤爆内存），也不在每次网格重建时重复读原图重试解码。
+//
+// 宽高比：缩略图生成按原图宽高比缩放（最大边 ≤ maxDimension），绝不做
+// 强制拉伸 —— 早期实现同时传 targetWidth/targetHeight=256 会把全景图/
+// 长截图压成正方形（缩略图变形）。持久化文件名带 v2 后缀：旧版变形的
+// `_thumb.png` 不再被读取，下次加载自动按正确比例重新生成。
 // ====================================================================
+
+/// 图片缩略图的持久化文件名（按图片 hash 内容寻址）。
+///
+/// v2：缩略图生成保持原图宽高比。v1（`{hash}_thumb.png`）被强制缩放到
+/// 256×256 导致变形，已废弃 —— 磁盘上残留的 v1 文件不会被读取，
+/// 缺失的 v2 会在加载时按正确比例重新生成。
+String imageThumbFileName(String hash) => '${hash}_thumb_v2.png';
 
 class ImageThumbnailLoader {
   ImageThumbnailLoader._();
@@ -56,7 +69,7 @@ class ImageThumbnailLoader {
   static int generationCount = 0;
 
   /// 加载 [record] 的缩略图字节：
-  /// 内存缓存 → 磁盘 `_thumb.png` → 缺失时读原图生成并持久化。
+  /// 内存缓存 → 磁盘 `_thumb_v2.png` → 缺失时读原图生成并持久化。
   ///
   /// 失败/无法生成返回 null。同一 hash 的并发调用共享同一个 Future。
   static Future<Uint8List?> loadThumbnail(ImageRecord record) async {
@@ -86,7 +99,7 @@ class ImageThumbnailLoader {
     // 1) 磁盘上已有缩略图 → 读回并缓存
     Uint8List? existing;
     try {
-      existing = await ImageManifest.readFile('${record.hash}_thumb.png');
+      existing = await ImageManifest.readFile(imageThumbFileName(record.hash));
     } catch (e) {
       debugPrint('ImageThumbnailLoader read thumb failed: $e');
     }
@@ -114,32 +127,69 @@ class ImageThumbnailLoader {
     // 不再持久化/缓存，避免已删除记录写回孤儿缩略图文件
     if (!_inflight.containsKey(record.hash)) return null;
 
+    var persisted = false;
     try {
-      await ImageManifest.writeFile('${record.hash}_thumb.png', thumb);
+      await ImageManifest.writeFile(imageThumbFileName(record.hash), thumb);
+      persisted = true;
     } catch (e) {
       // 持久化失败仅影响下次加载的缓存命中，不阻塞本次显示
       debugPrint('ImageThumbnailLoader persist thumb failed: $e');
+    }
+    // 旧版（变形）命名残留文件已无用途：仅当 v2 成功落盘后才清理，
+    // 避免写入失败时把磁盘上仅剩的缩略图也一并删掉
+    if (persisted) {
+      await ImageManifest.deleteFile('${record.hash}_thumb.png');
     }
     _cache.put(record.hash, thumb);
     return thumb;
   }
 
-  /// 生成缩略图（最大 [maxDimension]px，保持宽高比）。
+  /// 生成缩略图（最大边 [maxDimension]px，保持宽高比，小图不放大）。
   ///
   /// 与旧实现的关键差异：解码失败返回 null（旧的回退原图会让网格
   /// 以全分辨率渲染多 MB 原图）。引擎解码在后台线程执行，不阻塞 UI。
+  ///
+  /// 宽高比：通过 [ui.instantiateImageCodecWithSize] 先取得原图固有尺寸，
+  /// 按「最大边 ≤ maxDimension」算出目标尺寸后再解码（两端平台同一套
+  /// 数学，Web 端也能精确控制尺寸）。绝不能直接传
+  /// targetWidth=targetHeight=max，引擎会把图片强制缩放到精确尺寸 ——
+  /// 全景图/长截图会被压成正方形（缩略图变形）。
   static Future<Uint8List?> generateThumbnail(
     Uint8List imageData, {
     int maxDimension = 256,
   }) async {
     ui.Codec? codec;
     ui.Image? image;
+    ui.ImmutableBuffer? buffer;
     try {
       generationCount++;
-      codec = await ui.instantiateImageCodec(
-        imageData,
-        targetWidth: maxDimension,
-        targetHeight: maxDimension,
+      if (maxDimension <= 0) return null;
+      buffer = await ui.ImmutableBuffer.fromUint8List(imageData);
+      // 传入的 buffer 由 instantiateImageCodecWithSize 负责释放
+      // （两端实现均在 finally 中 dispose），调用方不得重复释放。
+      codec = await ui.instantiateImageCodecWithSize(
+        buffer,
+        getTargetSize: (int intrinsicWidth, int intrinsicHeight) {
+          if (intrinsicWidth <= 0 || intrinsicHeight <= 0) {
+            return ui.TargetImageSize();
+          }
+          // 最大边缩放到 maxDimension（小图保持原尺寸，不放大）。
+          // 两个目标尺寸均按原图宽高比计算：比例一致时引擎不会变形。
+          final scale = maxDimension /
+              (intrinsicWidth > intrinsicHeight
+                  ? intrinsicWidth
+                  : intrinsicHeight);
+          if (scale >= 1) {
+            return ui.TargetImageSize(
+              width: intrinsicWidth,
+              height: intrinsicHeight,
+            );
+          }
+          return ui.TargetImageSize(
+            width: math.max(1, (intrinsicWidth * scale).round()),
+            height: math.max(1, (intrinsicHeight * scale).round()),
+          );
+        },
       );
       final frame = await codec.getNextFrame();
       image = frame.image;
@@ -151,10 +201,14 @@ class ImageThumbnailLoader {
     } catch (e) {
       return null;
     } finally {
-      // Codec 持有原生编码缓冲，Image 持有解码后的原生内存：
-      // 两条路径都必须释放，否则网格批量生成时内存持续累积
+      // Codec 持有解码缓冲，Image 持有解码后的原生内存：
+      // 两条路径都必须释放，否则网格批量生成时内存持续累积。
       image?.dispose();
       codec?.dispose();
+      // buffer 由 instantiateImageCodecWithSize 释放，这里不能再调
+      // dispose()（调试模式下会触发 assert）。极端情况（原始字节无法
+      // 解码、原生端 descriptor 创建失败）下可能泄漏一个缓冲区，
+      // 由负缓存兜底：同一 hash 每会话至多一次。
     }
   }
 

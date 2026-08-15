@@ -116,7 +116,7 @@ void main() {
         await ImageManifest.writeFile(record.storagePath, png!);
         // 直接写缩略图文件，再通过 loadThumbnail 读入内存缓存 —— 不经过
         // 引擎解码生成，避免测试环境下的引擎工作引入不稳定的失败
-        await ImageManifest.writeFile('${record.hash}_thumb.png', png);
+        await ImageManifest.writeFile(imageThumbFileName(record.hash), png);
       });
       // 从磁盘读入内存缓存（模拟网格页已经加载过该图）。
       // 全图字节此时尚未进入查看器的字节缓存，进入查看器会先走加载占位。

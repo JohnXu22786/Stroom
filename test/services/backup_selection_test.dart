@@ -8,6 +8,7 @@ import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_service.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/utils/image_thumbnail_loader.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
@@ -2882,7 +2883,8 @@ void main() {
       });
       await WebFileStore.write('pictures/img_sel_clear_hash.jpg',
           Uint8List.fromList(utf8.encode('img_bytes')));
-      await WebFileStore.write('pictures/img_sel_clear_hash_thumb.png',
+      await WebFileStore.write(
+          'pictures/${imageThumbFileName('img_sel_clear_hash')}',
           Uint8List.fromList(utf8.encode('thumb_bytes')));
 
       // Build a backup WITHOUT any of those files (empty stroom_manifest,
@@ -2944,7 +2946,9 @@ void main() {
               'Selected chat category must clear orphan attachment files too');
       expect(await WebFileStore.read('pictures/img_sel_clear_hash.jpg'), isNull,
           reason: 'Selected pictures category must clear existing media files');
-      expect(await WebFileStore.read('pictures/img_sel_clear_hash_thumb.png'),
+      expect(
+          await WebFileStore.read(
+              'pictures/${imageThumbFileName('img_sel_clear_hash')}'),
           isNull,
           reason: 'Selected pictures category must clear thumbnails too');
 
