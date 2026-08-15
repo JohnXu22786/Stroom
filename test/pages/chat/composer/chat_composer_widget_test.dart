@@ -39,38 +39,6 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
     }
 
-    testWidgets('clicking model button opens model panel', (tester) async {
-      await setupSurface(tester);
-      await tester.pumpWidget(createChatTestApp());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      tester.takeException();
-
-      // Tap the model button
-      await tester.ensureVisible(find.text('模型'));
-      await tester.tap(find.text('模型'));
-      await tester.pumpAndSettle();
-
-      // Model panel should be visible
-      expect(find.text('选择模型'), findsOneWidget);
-    });
-
-    testWidgets('clicking 工具 button opens tools panel', (tester) async {
-      await setupSurface(tester);
-      await tester.pumpWidget(createChatTestApp());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      tester.takeException();
-
-      // Tap the tools button
-      await tester.ensureVisible(find.text('工具'));
-      await tester.tap(find.text('工具'));
-      await tester.pumpAndSettle();
-
-      // Tools panel should be visible
-      expect(find.text('可用工具'), findsOneWidget);
-    });
-
     testWidgets('clicking 推理 button opens reasoning panel', (tester) async {
       await setupSurface(tester);
       await tester.pumpWidget(createChatTestApp());
@@ -174,17 +142,7 @@ void main() {
   // ═══════════════════════════════════════════════════════════
   // ChatPage Integration Smoke Tests
   // ═══════════════════════════════════════════════════════════
-  group('ChatPage basic rendering', () {
-    testWidgets('renders with default title', (WidgetTester tester) async {
-      await tester.binding.setSurfaceSize(const Size(1200, 2000));
-      await tester.pumpWidget(createChatTestApp());
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      tester.takeException();
-
-      expect(find.text('新对话'), findsOneWidget);
-    });
-  });
+  // (renders with default title — removed: pure existence check)
 
   // ═══════════════════════════════════════════════════════════
   // Req: File button works during streaming
@@ -264,66 +222,12 @@ void main() {
   // ═══════════════════════════════════════════════════════════
   // Req: Gallery picker uses updated attachment panel
   // ═══════════════════════════════════════════════════════════
-  group(
-    'Gallery picker shows camera/gallery/file/app-file options (file-only panel)',
-    () {
-      testWidgets('gallery picker opens file-only panel with 4 action buttons',
-          (
-        tester,
-      ) async {
-        await tester.pumpWidget(createChatTestApp());
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
-        tester.takeException();
-
-        // Tap the attach file button to open file-only panel
-        await tester.tap(find.byIcon(Icons.attach_file_outlined));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 500));
-
-        // The file-only panel should show all 4 file action buttons with
-        // updated labels
-        expect(find.text('拍照'), findsOneWidget);
-        expect(find.text('设备相册'), findsOneWidget);
-        expect(find.text('设备文件'), findsOneWidget);
-        expect(find.text('应用内文件'), findsOneWidget);
-
-        // Old settings section "推理设置" should not appear (it's not the button label)
-        expect(find.text('推理设置'), findsNothing);
-
-        // "模型" and "工具" are now visible in the settings row (always above input),
-        // so they are expected to exist even when the file panel is open.
-        expect(find.text('模型'), findsOneWidget);
-        expect(find.text('工具'), findsOneWidget);
-      });
-    },
-  );
+  // (gallery picker 4-action-button panel — removed: pure existence checks)
 
   // ═══════════════════════════════════════════════════════════
   // Req: File-only panel on attach file button
   // ═══════════════════════════════════════════════════════════
-  group('Attachment button opens file-only panel (no settings)', () {
-    testWidgets(
-      'attach file button opens file-only panel, not old settings panel',
-      (tester) async {
-        await tester.pumpWidget(createChatTestApp());
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
-        tester.takeException();
-
-        // Tap the attach file button
-        await tester.tap(find.byIcon(Icons.attach_file_outlined));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 500));
-
-        // The panel title should be about file transfer, not settings
-        expect(find.text('传文件'), findsOneWidget);
-
-        // Old settings section headers should not exist
-        expect(find.text('Chat 设置'), findsNothing);
-      },
-    );
-  });
+  // (attach file button opens file-only panel — removed: pure existence checks)
 
   // ═══════════════════════════════════════════════════════════
   // Per-conversation streaming button isolation

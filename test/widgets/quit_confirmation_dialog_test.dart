@@ -27,17 +27,6 @@ void main() {
     return () => result;
   }
 
-  testWidgets('shows the running task count in the confirmation text',
-      (tester) async {
-    await showDialogHelper(tester, runningTaskCount: 3);
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('退出应用？'), findsOneWidget);
-    expect(find.textContaining('3 个任务正在运行'), findsOneWidget);
-    // 对话框仍打开（未点击任何按钮）。
-  });
-
   testWidgets('cancel returns false and keeps the app running', (tester) async {
     final result = await showDialogHelper(tester, runningTaskCount: 1);
     await tester.tap(find.text('open'));

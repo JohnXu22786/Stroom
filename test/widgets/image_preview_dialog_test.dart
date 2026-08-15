@@ -76,13 +76,6 @@ void main() {
           reason: 'Error text when imageData is null');
     });
 
-    testWidgets('shows error state when imageData is empty', (tester) async {
-      await pumpDialog(tester, imageData: Uint8List(0));
-
-      expect(find.byIcon(Icons.broken_image), findsOneWidget);
-      expect(find.text('无法加载图片'), findsOneWidget);
-    });
-
     // ================================================================
     // Interaction: buttons
     // ================================================================

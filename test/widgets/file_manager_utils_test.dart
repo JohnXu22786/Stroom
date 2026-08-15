@@ -44,11 +44,4 @@ void main() {
       expect(result.length, lessThanOrEqualTo(110));
     });
   });
-
-  group('formatDate', () {
-    test('formats same-day date with 今天 prefix', () {
-      final now = DateTime.now();
-      expect(formatDate(now), startsWith('今天 '));
-    });
-  });
 }

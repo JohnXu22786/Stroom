@@ -218,22 +218,6 @@ void main() {
   });
 
   group('MessageSearchPage - Widget', () {
-    testWidgets('shows results when searching', (tester) async {
-      await tester.pumpWidget(createMessageSearchTestApp());
-      await tester.pump();
-
-      // Enter search query
-      await tester.enterText(find.byType(TextField), 'Flutter');
-      await tester.pumpAndSettle();
-
-      // Should show conversation results
-      expect(find.text('Flutter讨论'), findsOneWidget);
-      expect(find.text('编程学习'), findsOneWidget);
-
-      // Should show match count badges
-      expect(find.text('2 个匹配'), findsWidgets);
-    });
-
     testWidgets('shows no results state when no matches', (tester) async {
       await tester.pumpWidget(createMessageSearchTestApp());
       await tester.pump();

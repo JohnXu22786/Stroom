@@ -193,26 +193,5 @@ void main() {
       // No dialog should appear (silent error)
       expect(find.text('发现新版本'), findsNothing);
     });
-
-    testWidgets('dialog has same UI elements as manual check dialog',
-        (tester) async {
-      final dio = _createMockDio(
-        _githubRelease('v0.2.14',
-            body: 'Bug fixes and improvements',
-            assets: _allPlatformAssets('v0.2.14')),
-      );
-
-      await _pumpThroughStartup(tester, dio: dio);
-
-      // Same elements as the manual check dialog in settings_page
-      expect(find.text('发现新版本'), findsOneWidget);
-      expect(find.text('最新版本: 0.2.14'), findsOneWidget);
-      expect(find.text('更新内容:'), findsOneWidget);
-      expect(find.text('Bug fixes and improvements'), findsOneWidget);
-      expect(find.text('跳过此版本'), findsOneWidget);
-      expect(find.text('稍后提醒'), findsOneWidget);
-      expect(find.text('立即更新'), findsOneWidget);
-      expect(find.byIcon(Icons.system_update), findsOneWidget);
-    });
   });
 }

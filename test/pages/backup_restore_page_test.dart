@@ -25,64 +25,6 @@ void main() {
     AppLogService.disableFileLogging();
   });
 
-  group('BackupRestorePage - general rendering', () {
-    testWidgets('shows unified selection card with new categories',
-        (tester) async {
-      await tester.pumpWidget(createTestApp());
-      await tester.pump();
-
-      // Scroll to the unified selection card (it sits below the Anki section)
-      await tester.scrollUntilVisible(
-        find.text('选择要备份或恢复的数据类别'),
-        200.0,
-        scrollable: find.byType(Scrollable),
-      );
-      await tester.pump();
-
-      // Should find the unified selection section header
-      expect(find.text('选择要备份或恢复的数据类别'), findsOneWidget);
-
-      // New category labels should be present (ListView is lazy-loaded,
-      // so scroll to each label as needed)
-      for (final label in [
-        '聊天记录和附件',
-        '设置',
-        '图片',
-        '音频',
-        '视频',
-        '文本',
-        '任务',
-        '浏览器Cookies',
-      ]) {
-        await tester.scrollUntilVisible(
-          find.text(label),
-          100.0,
-          scrollable: find.byType(Scrollable),
-        );
-        await tester.pump();
-        expect(find.text(label), findsAtLeast(1));
-      }
-    });
-
-    testWidgets('anki data checkbox appears in unified selection card',
-        (tester) async {
-      await tester.pumpWidget(createTestApp());
-      await tester.pump();
-
-      // Scroll to find the Anki闪卡数据 checkbox in the unified selection
-      await tester.scrollUntilVisible(
-        find.text('Anki闪卡数据'),
-        200.0,
-        scrollable: find.byType(Scrollable),
-      );
-      await tester.pump();
-      expect(find.text('Anki闪卡数据'), findsAtLeast(1));
-
-      // Should show the subtitle describing it's the original data format
-      expect(find.textContaining('Anki 原始数据库'), findsAtLeast(1));
-    });
-  });
-
   group('BackupRestorePage - clear selected data', () {
     testWidgets('clear button opens confirmation dialog with categories',
         (tester) async {

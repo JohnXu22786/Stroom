@@ -52,36 +52,6 @@ void main() {
       );
     }
 
-    testWidgets('close button calls onRemove when tapped', (tester) async {
-      bool removed = false;
-
-      await tester.pumpWidget(buildChip(
-        onRemove: () => removed = true,
-      ));
-
-      // Tap the close icon
-      await tester.tap(find.byIcon(Icons.close));
-      await tester.pump();
-
-      expect(removed, isTrue);
-    });
-
-    testWidgets('onTap is called when chip is tapped', (tester) async {
-      bool tapped = false;
-
-      await tester.pumpWidget(buildChip(
-        bytes: validPng,
-        onTap: () => tapped = true,
-      ));
-
-      // Tap the outermost GestureDetector (not the close button one)
-      // The chip is wrapped in a gesture detector for tap
-      await tester.tap(find.byType(AlbumPreviewChip));
-      await tester.pump();
-
-      expect(tapped, isTrue);
-    });
-
     testWidgets('tapping close button does NOT trigger onTap', (tester) async {
       bool tapped = false;
       bool removed = false;

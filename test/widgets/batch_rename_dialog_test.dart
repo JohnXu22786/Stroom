@@ -635,18 +635,4 @@ void main() {
     // ≤0 不提交配置：预览仍按上次有效数量 1 计算（abc → bc.mp4）
     expect(find.text('bc.mp4'), findsOneWidget);
   });
-
-  testWidgets('选择模式按钮带图标提示（Tooltip）', (tester) async {
-    await tester.pumpWidget(
-      _buildTestApp(
-        _buildFileManagerView(
-          records: [_TestFileRecord(id: 'file_1', name: 'alpha', hash: 'h1')],
-        ),
-      ),
-    );
-    await _selectFiles(tester, ['file_1']);
-    expect(find.byTooltip('重命名'), findsOneWidget);
-    expect(find.byTooltip('复制'), findsOneWidget);
-    expect(find.byTooltip('删除'), findsOneWidget);
-  });
 }

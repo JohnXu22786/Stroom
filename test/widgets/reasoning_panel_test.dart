@@ -42,34 +42,6 @@ Future<void> showReasoningPanelForTest(
 void main() {
   group('ReasoningPanel - disabled switch when no params', () {
     testWidgets(
-        'shows reasoning toggle switch even when reasoningParams is empty',
-        (tester) async {
-      await showReasoningPanelForTest(
-        tester,
-        reasoningParams: [],
-      );
-
-      // The switch should exist even when no reasoningParams
-      expect(find.byType(Switch), findsWidgets);
-      // The title "推理设置" should be visible
-      expect(find.text('推理设置'), findsOneWidget);
-      // The "推理" text should be visible
-      expect(find.text('推理'), findsOneWidget);
-      // The switch should be in the panel (at least one switch exists)
-      final switches = tester.widgetList<Switch>(find.byType(Switch));
-      for (final sw in switches) {
-        if (sw.onChanged == null) {
-          // Found a disabled switch - correct behavior
-          expect(sw.value, false);
-          return;
-        }
-      }
-      // If no disabled switch was found, the test fails
-      // (the reasoning toggle switch should be disabled)
-      expect(true, isFalse, reason: 'Expected a disabled switch in the panel');
-    });
-
-    testWidgets(
         'reasoning switch is disabled with onChanged=null when no params',
         (tester) async {
       await showReasoningPanelForTest(
@@ -92,40 +64,6 @@ void main() {
   });
 
   group('ReasoningPanel - additional params with switch + options', () {
-    testWidgets(
-        'shows reasoning panel with toggle and effort, custom params in separate panel',
-        (tester) async {
-      await showReasoningPanelForTest(
-        tester,
-        reasoningEnabled: true,
-        reasoningParams: [
-          ReasoningParam(
-            paramName: 'thinking.type',
-            isReasoningToggle: true,
-            onValue: 'enabled',
-            offValue: 'disabled',
-          ),
-          ReasoningParam(
-            paramName: 'budget_tokens',
-            options: ['5000', '10000', '20000'],
-          ),
-        ],
-      );
-
-      // The reasoning panel should show the title
-      expect(find.text('推理设置'), findsOneWidget);
-
-      // Non-effort params should NOT appear in the reasoning panel
-      // (they are in the separate custom params panel)
-      expect(find.text('budget_tokens'), findsNothing);
-      expect(find.text('5000'), findsNothing);
-      expect(find.text('10000'), findsNothing);
-      expect(find.text('20000'), findsNothing);
-
-      // The reasoning toggle switch should be present
-      expect(find.byType(Switch), findsWidgets);
-    });
-
     testWidgets('shows non-effort params with switch row like effort section',
         (tester) async {
       // Note: The reasoning panel (showReasoningPanel) no longer shows

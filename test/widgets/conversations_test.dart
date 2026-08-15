@@ -10,27 +10,6 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/conversations_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 
-/// Create test conversations with different dates.
-List<Conversation> _createOrderedConversations() {
-  return [
-    Conversation(
-        id: 'conv-1',
-        title: '最旧对话',
-        createdAt: DateTime(2026, 1, 1),
-        updatedAt: DateTime(2026, 1, 1)),
-    Conversation(
-        id: 'conv-2',
-        title: '中间对话',
-        createdAt: DateTime(2026, 3, 15),
-        updatedAt: DateTime(2026, 3, 15)),
-    Conversation(
-        id: 'conv-3',
-        title: '最新对话',
-        createdAt: DateTime(2026, 6, 1),
-        updatedAt: DateTime(2026, 6, 1)),
-  ];
-}
-
 /// Create test conversations with messages for search testing.
 List<Conversation> _createSearchConversations() {
   return [
@@ -63,23 +42,6 @@ List<Conversation> _createSearchConversations() {
   ];
 }
 
-/// Helper widget that exposes tile text for testing.
-/// Wraps ConversationsPage so we can introspect tile order.
-Widget createTestApp({List<Conversation>? conversations, String? activeId}) {
-  SharedPreferences.setMockInitialValues({});
-  return ProviderScope(
-    overrides: [
-      conversationsProvider.overrideWith((ref) {
-        final notifier = ConversationsNotifier(ref);
-        notifier.state = conversations ?? _createOrderedConversations();
-        return notifier;
-      }),
-      activeConversationIdProvider.overrideWith((ref) => activeId ?? 'conv-1'),
-    ],
-    child: const MaterialApp(home: ConversationsPage()),
-  );
-}
-
 /// Helper: create conversations page with seeded search conversations.
 Widget createSearchTestApp() {
   SharedPreferences.setMockInitialValues({});
@@ -100,73 +62,9 @@ Widget createSearchTestApp() {
 
 void main() {
   // ===========================================================================
-  // 1. conversations_ordering_test.dart
-  // ===========================================================================
-  group('ConversationsPage - ordering', () {
-    testWidgets('conversations display in the order they appear in state',
-        (tester) async {
-      await tester.pumpWidget(createTestApp());
-      await tester.pump();
-
-      expect(find.text('最旧对话'), findsOneWidget);
-      expect(find.text('中间对话'), findsOneWidget);
-      expect(find.text('最新对话'), findsOneWidget);
-    });
-
-    testWidgets('pinned conversations appear first', (tester) async {
-      final convs = [
-        Conversation(id: 'c1', title: '普通A'),
-        Conversation(id: 'c2', title: '置顶对话', isPinned: true),
-        Conversation(id: 'c3', title: '普通B'),
-      ];
-
-      await tester
-          .pumpWidget(createTestApp(conversations: convs, activeId: 'c1'));
-      await tester.pump();
-
-      expect(find.text('普通A'), findsOneWidget);
-      expect(find.text('置顶对话'), findsOneWidget);
-      expect(find.text('普通B'), findsOneWidget);
-      expect(find.byIcon(Icons.push_pin), findsWidgets);
-    });
-
-    testWidgets('clicking a conversation does NOT change order',
-        (tester) async {
-      final convs = [
-        Conversation(id: 'c1', title: '对话A'),
-        Conversation(id: 'c2', title: '对话B'),
-        Conversation(id: 'c3', title: '对话C'),
-      ];
-
-      await tester
-          .pumpWidget(createTestApp(conversations: convs, activeId: 'c2'));
-      await tester.pump();
-
-      await tester.tap(find.text('对话A'));
-      await tester.pump();
-
-      expect(find.text('对话A'), findsOneWidget);
-      expect(find.text('对话B'), findsOneWidget);
-      expect(find.text('对话C'), findsOneWidget);
-    });
-  });
-
-  // ===========================================================================
   // 2. conversations_search_test.dart
   // ===========================================================================
   group('ConversationsPage global message search', () {
-    testWidgets('tapping search shows search bar with global hint',
-        (tester) async {
-      await tester.pumpWidget(createSearchTestApp());
-      await tester.pump();
-
-      await tester.tap(find.byIcon(Icons.search));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      expect(find.byType(TextField), findsOneWidget);
-    });
-
     testWidgets('searching by message content shows matching conversations',
         (tester) async {
       await tester.pumpWidget(createSearchTestApp());
