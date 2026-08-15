@@ -8,14 +8,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/tool_call.dart';
 import '../pages/chat/chat_types.dart' show legacyToBlocks;
 import 'app_log_service.dart';
-import 'auto_backup_service.dart';
 import 'backup_location_manager.dart';
 import 'data_integrity_checker.dart';
 import 'data_safety_manager.dart';
 import 'manifest_database.dart';
 import 'snapshot_service.dart';
 
-part 'data_migration_backup.dart';
 part 'data_migration_old_configs.dart';
 
 /// 旧版（v3 及之前）使用的全局数据格式版本号 key。
@@ -306,9 +304,6 @@ class DataMigrationService {
         .join(', ');
     await AppLogService.info('DataMigrationService', '需要数据格式迁移: $detail');
 
-    // 需要迁移：清理旧备份
-    await cleanOldBackups();
-
     try {
       // 创建迁移前快照（私有目录结构化快照，无视 1 小时规则）。
       // 快照失败（或并发快照被取消）时绝不继续迁移：没有安全快照
@@ -382,35 +377,6 @@ class DataMigrationService {
       restartRequired: true,
     );
   }
-
-  // ================================================================
-  // 备份管理
-  // ================================================================
-
-  /// 获取外部备份根目录路径。
-  ///
-  /// 备份位置不在应用数据目录内，以防止应用数据被删除时备份也丢失。
-  ///
-  /// 位置策略（所有位置均对用户可见/可访问）：
-  /// - Windows: %USERPROFILE%\Documents\Stroom\AutoBackups\
-  /// - macOS:   ~/Documents/Stroom/AutoBackups/
-  /// - Linux:   ~/Documents/Stroom/AutoBackups/
-  /// - Android: 通过 SAF 选择 Documents 目录（优先），
-  ///   用户选择后调用 takePersistableUriPermission 固化权限。
-  /// - iOS:     `<app_group>`/Documents/Stroom/AutoBackups/（通过文件 App 可访问）
-  /// - 测试环境: `Directory.systemTemp/stroom_backup_test_<随机后缀>/`（每个测试 isolate 独立）
-  ///
-  /// 获取外部备份根目录（委托 [DataMigrationBackup]，实现见
-  /// data_migration_backup.dart）。
-  static Future<String> getExternalBackupRootPath() =>
-      DataMigrationBackup.getExternalBackupRootPath();
-
-  /// 创建当前数据的完整 ZIP 备份（委托 [DataMigrationBackup]）。
-  static Future<String?> createBackup() => DataMigrationBackup.createBackup();
-
-  /// 清理旧备份，保留至少 3 个最新的（委托 [DataMigrationBackup]）。
-  static Future<void> cleanOldBackups() =>
-      DataMigrationBackup.cleanOldBackups();
 
   // ================================================================
   // 迁移步骤
