@@ -128,6 +128,31 @@ Future<SaveAction?> showDiscardOrSaveDialog(BuildContext context) {
 // ImageEditorPage
 // ====================================================================
 
+/// Builds the [ProImageEditorConfigs] used by [ImageEditorPage].
+///
+/// Extracted as a standalone function for testability.
+///
+/// - The main editor's top-right button is a **save** icon ([Icons.save]):
+///   pressing it saves the edited image (via the save dialog). Sub-editors
+///   (crop, paint, text, ...) keep their checkmark confirm buttons
+///   ([Icons.done] by default) — a checkmark means "apply this edit",
+///   the save icon means "save the image".
+/// - The built-in loading dialog (shown while the final image is being
+///   generated) uses a Chinese message so the user gets clear feedback
+///   during the processing.
+ProImageEditorConfigs buildImageEditorConfigs() {
+  return const ProImageEditorConfigs(
+    designMode: ImageEditorDesignMode.material,
+    mainEditor: MainEditorConfigs(
+      icons: MainEditorIcons(doneIcon: Icons.save),
+    ),
+    i18n: I18n(
+      done: '保存',
+      doneLoadingMsg: '正在生成图片，请稍候…',
+    ),
+  );
+}
+
 /// Image editor page powered by [ProImageEditor].
 ///
 /// Takes [imageBytes] as input, applies edits, and pops with an
@@ -271,9 +296,7 @@ class _ImageEditorPageState extends State<ImageEditorPage> {
         onImageEditingComplete: _onImageEditingComplete,
         onCloseEditor: _onCloseEditor,
       ),
-      configs: const ProImageEditorConfigs(
-        designMode: ImageEditorDesignMode.material,
-      ),
+      configs: buildImageEditorConfigs(),
     );
   }
 }
