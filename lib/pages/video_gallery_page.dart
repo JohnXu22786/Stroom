@@ -3,9 +3,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cross_platform_video_thumbnails/cross_platform_video_thumbnails.dart';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:get_thumbnail_video/index.dart' show ImageFormat;
+import 'package:get_thumbnail_video/video_thumbnail.dart' show VideoThumbnail;
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:video_player/video_player.dart';
@@ -18,6 +21,7 @@ import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/system_pick_utils.dart';
+import '../utils/thumbnail_utils.dart';
 import '../widgets/file_manager_view.dart';
 import '../widgets/file_manager_utils.dart';
 import 'files_page_shared.dart';
@@ -176,25 +180,29 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         // Try to obtain video duration and thumbnail from the file
         int videoDurationMs = 0;
         final videoPath = await VideoManifest.readFilePath(storageFileName);
-        if (videoPath != null && videoPath.isNotEmpty) {
-          try {
-            videoDurationMs = await _probeVideoDuration(videoPath);
-            final thumbBytes = await _generateThumbnailFromPath(videoPath);
-            if (thumbBytes != null) {
-              await VideoManifest.writeThumbnail(hash, thumbBytes);
-            }
-          } catch (_) {
-            // Duration/thumbnail detection failed
-          }
-        }
-        if (videoPath == null || videoPath.isEmpty) {
-          // Fallback: try from bytes (e.g., web without direct path)
+        if (kIsWeb || videoPath == null || videoPath.isEmpty) {
+          // Web 没有真实文件路径（readFilePath 返回虚拟 key），
+          // 直接从字节生成缩略图。
           try {
             final thumbBytes = await _generateThumbnailFromBytes(bytes);
             if (thumbBytes != null) {
               await VideoManifest.writeThumbnail(hash, thumbBytes);
             }
           } catch (_) {}
+        } else {
+          try {
+            videoDurationMs = await _probeVideoDuration(videoPath);
+          } catch (_) {
+            // 时长探测失败不影响缩略图生成（下面继续尝试）
+          }
+          try {
+            final thumbBytes = await _generateThumbnailFromPath(videoPath);
+            if (thumbBytes != null) {
+              await VideoManifest.writeThumbnail(hash, thumbBytes);
+            }
+          } catch (_) {
+            // Thumbnail detection failed
+          }
         }
         await VideoManifest.addRecord(
           VideoRecord(
@@ -308,25 +316,29 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         );
         // Try to obtain video duration and thumbnail from the file
         int videoDurationMs = 0;
-        if (videoPath.isNotEmpty) {
-          try {
-            videoDurationMs = await _probeVideoDuration(videoPath);
-            final thumbBytes = await _generateThumbnailFromPath(videoPath);
-            if (thumbBytes != null) {
-              await VideoManifest.writeThumbnail(hash, thumbBytes);
-            }
-          } catch (_) {
-            // Duration/thumbnail detection failed
-          }
-        }
-        if (videoPath.isEmpty) {
-          // Fallback: try from bytes (e.g., web without direct path)
+        if (kIsWeb || videoPath.isEmpty) {
+          // Web 没有真实文件路径（writeFile 返回虚拟 key），
+          // 直接从字节生成缩略图。
           try {
             final thumbBytes = await _generateThumbnailFromBytes(bytes);
             if (thumbBytes != null) {
               await VideoManifest.writeThumbnail(hash, thumbBytes);
             }
           } catch (_) {}
+        } else {
+          try {
+            videoDurationMs = await _probeVideoDuration(videoPath);
+          } catch (_) {
+            // 时长探测失败不影响缩略图生成（下面继续尝试）
+          }
+          try {
+            final thumbBytes = await _generateThumbnailFromPath(videoPath);
+            if (thumbBytes != null) {
+              await VideoManifest.writeThumbnail(hash, thumbBytes);
+            }
+          } catch (_) {
+            // Thumbnail detection failed
+          }
         }
         await VideoManifest.addRecord(
           VideoRecord(
@@ -765,8 +777,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     Future<Uint8List?> generateThumbnailForFile(VideoRecord file) async {
       try {
         final videoPath = await VideoManifest.readFilePath(file.storagePath);
-        if (videoPath == null || videoPath.isEmpty) {
-          // Fallback: read bytes and try from bytes
+        if (kIsWeb || videoPath == null || videoPath.isEmpty) {
+          // Web 没有真实文件路径（readFilePath 返回虚拟 key），
+          // 直接从存储读回视频字节并生成缩略图。
           final videoBytes = await VideoManifest.readFile(file.storagePath);
           if (videoBytes != null) {
             final thumbBytes = await _generateThumbnailFromBytes(videoBytes);
@@ -1048,9 +1061,30 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     );
   }
 
-  /// Generate thumbnail from a video file path using
-  /// [CrossPlatformVideoThumbnails].
+  /// Generate a thumbnail from a video file path.
+  ///
+  /// Platform dispatch:
+  /// - Android/iOS: `get_thumbnail_video`（系统原生 API 取帧，
+  ///   MediaMetadataRetriever / AVAssetImageGenerator）
+  /// - 桌面（Windows/macOS/Linux）: FFmpeg 子进程（cross_platform_video_thumbnails）
   Future<Uint8List?> _generateThumbnailFromPath(String videoPath) async {
+    if (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS) {
+      try {
+        final thumb = await VideoThumbnail.thumbnailData(
+          video: videoPath,
+          imageFormat: ImageFormat.JPEG,
+          maxWidth: 320,
+          quality: 80,
+        ).timeout(const Duration(seconds: 30));
+        if (thumb.isNotEmpty) {
+          return thumb;
+        }
+      } catch (e) {
+        debugPrint('_generateThumbnailFromPath (mobile) error: $e');
+      }
+      return null;
+    }
     try {
       await _ensureThumbnailInitialized();
       final result = await CrossPlatformVideoThumbnails.generateThumbnail(
@@ -1062,7 +1096,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           quality: 0.8,
           format: ThumbnailFormat.jpeg,
         ),
-      );
+      ).timeout(const Duration(seconds: 30));
       if (result.data.isNotEmpty) {
         return Uint8List.fromList(result.data);
       }
@@ -1073,33 +1107,22 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
   }
 
   /// Generate thumbnail from video bytes (fallback for when file path is
-  /// unavailable, e.g. on some web deployments). Writes bytes to a temp file,
-  /// generates thumbnail, then cleans up.
+  /// unavailable, e.g. on web where [readFilePath] returns a virtual key).
+  /// On web, delegates to [generateThumbnailFromBytes] (blob URL + canvas);
+  /// on native, writes bytes to a temp file and uses per-platform generation.
   Future<Uint8List?> _generateThumbnailFromBytes(Uint8List videoBytes) async {
-    // On web, we cannot create temp files — rely on path-based generation.
-    if (kIsWeb) return null;
+    if (kIsWeb) {
+      return generateThumbnailFromBytes(videoBytes);
+    }
     try {
-      await _ensureThumbnailInitialized();
-      // Write bytes to a temporary file so the package can read it
+      // Write bytes to a temporary file so the per-platform generator can read
       final tempDir = Directory.systemTemp;
       final tempFile = File(
         '${tempDir.path}/stroom_thumb_${DateTime.now().millisecondsSinceEpoch}.mp4',
       );
       try {
         await tempFile.writeAsBytes(videoBytes);
-        final result = await CrossPlatformVideoThumbnails.generateThumbnail(
-          tempFile.path,
-          ThumbnailOptions(
-            timePosition: 1.0,
-            width: 320,
-            height: 240,
-            quality: 0.8,
-            format: ThumbnailFormat.jpeg,
-          ),
-        );
-        if (result.data.isNotEmpty) {
-          return Uint8List.fromList(result.data);
-        }
+        return await _generateThumbnailFromPath(tempFile.path);
       } finally {
         // Clean up temp file
         try {
