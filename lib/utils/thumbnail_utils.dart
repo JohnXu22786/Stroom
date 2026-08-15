@@ -3,5 +3,4 @@
 /// - Native: stub implementation
 library;
 
-export 'web_thumbnail_stub.dart'
-    if (dart.library.html) 'web_thumbnail.dart';
+export 'web_thumbnail_stub.dart' if (dart.library.html) 'web_thumbnail.dart';
