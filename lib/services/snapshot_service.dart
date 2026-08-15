@@ -10,6 +10,7 @@ import 'app_log_service.dart';
 import 'backup_service.dart';
 import 'data_migration_service.dart';
 import 'storage_service.dart';
+import '../utils/atomic_file.dart';
 
 /// 私有目录结构化快照清单条目。
 class SnapshotEntry {
@@ -108,7 +109,9 @@ class SnapshotService {
     return File(p.join(dir.path, manifestName));
   }
 
-  /// 读取快照索引。缺失/损坏返回空列表（索引可重建，不阻塞）。
+  /// 读取快照索引。缺失返回空列表；**损坏时扫描目录重建**（磁盘上
+  /// 的快照才是真实数据，索引只是加速缓存 —— 索引损坏绝不能导致
+  /// "无快照可回滚"）。
   static Future<List<SnapshotEntry>> readIndex() async {
     try {
       final file = await _indexFile();
@@ -116,15 +119,55 @@ class SnapshotService {
       final raw = await file.readAsString();
       if (raw.trim().isEmpty) return [];
       final decoded = jsonDecode(raw);
-      if (decoded is! Map<String, dynamic>) return [];
+      if (decoded is! Map<String, dynamic>) {
+        return _rebuildIndexFromDisk();
+      }
       final list = decoded['snapshots'];
-      if (list is! List) return [];
-      return list
+      if (list is! List) return _rebuildIndexFromDisk();
+      final entries = list
           .whereType<Map<String, dynamic>>()
           .map(SnapshotEntry.fromJson)
           .toList();
+      if (entries.isEmpty && list.isNotEmpty) return _rebuildIndexFromDisk();
+      return entries;
     } catch (e) {
-      debugPrint('[SnapshotService] 读取快照索引失败（重建）: $e');
+      debugPrint('[SnapshotService] 读取快照索引失败，扫描目录重建: $e');
+      return _rebuildIndexFromDisk();
+    }
+  }
+
+  /// 从磁盘扫描重建索引（SHA 重算）。
+  static Future<List<SnapshotEntry>> _rebuildIndexFromDisk() async {
+    try {
+      final dir = await snapshotsDir;
+      final entries = <SnapshotEntry>[];
+      final files = (await dir.list().toList())
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.zip'))
+          .toList();
+      for (final f in files) {
+        final name = f.path.split(Platform.pathSeparator).last;
+        final ts = _extractTimestamp(name);
+        if (ts == null) continue;
+        try {
+          final bytes = await f.readAsBytes();
+          final sha = sha256.convert(bytes).toString();
+          final partVersions =
+              await DataMigrationService.getStoredPartVersions();
+          entries.add(SnapshotEntry(
+            file: name,
+            sha256: sha,
+            createdAt: ts.toIso8601String(),
+            partVersions: partVersions,
+          ));
+        } catch (e) {
+          debugPrint('[SnapshotService] 重建索引跳过文件 $name: $e');
+        }
+      }
+      await _writeIndex(entries);
+      return entries;
+    } catch (e) {
+      debugPrint('[SnapshotService] 重建索引失败: $e');
       return [];
     }
   }
@@ -133,7 +176,8 @@ class SnapshotService {
   static Future<void> _writeIndex(List<SnapshotEntry> entries) async {
     try {
       final file = await _indexFile();
-      await file.writeAsString(
+      await AtomicFile.writeString(
+        file,
         jsonEncode({'snapshots': entries.map((e) => e.toJson()).toList()}),
       );
     } catch (e) {
@@ -212,9 +256,13 @@ class SnapshotService {
     return false;
   }
 
-  /// 按文件名提取快照时间（backup_YYYY-MM-DDTHH-MM-SS.zip）。
+  /// 按文件名提取快照时间（backup_YYYY-MM-DDTHH-MM-SS[.ffffff].zip）。
+  ///
+  /// 必须锚定 `.zip` 结尾：写入中的 `backup_*.zip.tmp` 残留不算快照，
+  /// 否则 1 小时规则会被崩溃残留的 tmp 文件静默停摆。
   static DateTime? _extractTimestamp(String name) {
-    final match = RegExp(r'^backup_(\d{4}-\d{2}-\d{2})T(\d{2}-\d{2}-\d{2})')
+    final match = RegExp(
+            r'^backup_(\d{4}-\d{2}-\d{2})T(\d{2}-\d{2}-\d{2})(?:\.\d+)?\.zip$')
         .firstMatch(name);
     if (match == null) return null;
     try {
@@ -226,10 +274,27 @@ class SnapshotService {
   }
 
   /// 清理超出保留策略的旧快照（策略与旧 AutoBackups 一致）。
+  ///
+  /// 同时清理崩溃残留的 `*.zip.tmp` 写入中文件。
   static Future<void> cleanupOldSnapshots() async {
     try {
       final dir = await snapshotsDir;
       if (!await dir.exists()) return;
+
+      // 清理残留 tmp（写入中断留下的半成品）
+      final tmpLeftovers = (await dir.list().toList())
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.tmp'))
+          .toList();
+      for (final f in tmpLeftovers) {
+        try {
+          await f.delete();
+          debugPrint('[SnapshotService] 清理残留 tmp: ${f.path}');
+        } catch (e) {
+          debugPrint('[SnapshotService] 清理 tmp 失败: $e');
+        }
+      }
+
       final files = (await dir.list().toList())
           .whereType<File>()
           .where((f) => f.path.endsWith('.zip'))

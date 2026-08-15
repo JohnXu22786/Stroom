@@ -15,7 +15,6 @@ import '../services/app_log_service.dart';
 import '../services/backup_service.dart';
 import '../services/data_migration_service.dart';
 import '../services/data_safety_manager.dart';
-import 'package:file_picker/file_picker.dart';
 
 // ====================================================================
 // StartupApp — 应用启动入口
@@ -225,6 +224,27 @@ class _StartupAppState extends State<StartupApp>
         migrationResult = const MigrationResult(needsMigration: false);
       }
       if (!mounted) return;
+
+      // 迁移可能在检查过程中触发冻结（迁移后校验失败 → 恢复迁移前
+      // 快照 + 冻结）。Task 0 的阻断页只覆盖了 Task 0 之前的状态，
+      // 这里必须复查：冻结 → 显示阻断页，拒绝进入主应用。
+      final postMigrationStatus = await DataSafetyManager.loadStatus();
+      if (!mounted) return;
+      if (postMigrationStatus.isFrozen) {
+        final desc = (postMigrationStatus.failedMigration != null)
+            ? '数据格式迁移失败（${postMigrationStatus.failedMigration}）。\n\n'
+                '已自动恢复到迁移前的数据。为保护数据，请回退到旧版本应用，'
+                '或等待修复版本发布后再升级。'
+            : '数据损坏且无法自动修复。\n\n'
+                '应用已冻结以防止进一步破坏。请使用「导出数据」'
+                '保存数据文件，然后手动导入或重新安装。';
+        debugPrint('[StartupApp] 迁移后检测到冻结，显示阻断页');
+        setState(() {
+          _isWorking = false;
+          _dataSafetyBlocked = desc;
+        });
+        return;
+      }
 
       // Ensure "1/5" status is visible in the UI before moving on
       await Future<void>.delayed(
@@ -706,20 +726,12 @@ class _DataSafetyBlockPageState extends State<_DataSafetyBlockPage> {
     if (_exporting) return;
     setState(() => _exporting = true);
     try {
-      final dateStr =
-          DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
-      final path = await FilePicker.saveFile(
-        dialogTitle: '导出数据备份（全量）',
-        fileName: 'stroom_export_$dateStr.zip',
-      );
-      if (path == null) return; // 用户取消
-      await BackupService.createBackup(
-        outputPath: path,
-        selection: BackupSelection.all,
-      );
+      // 双平台统一路径：原生走 FilePicker 保存；Web 走内存构建 +
+      // 浏览器下载（exportBackup 内部处理）。
+      await BackupService.exportBackup(context, selection: BackupSelection.all);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('数据已导出到:\n$path')),
+        const SnackBar(content: Text('数据导出完成')),
       );
     } catch (e) {
       if (!mounted) return;

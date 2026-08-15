@@ -222,6 +222,45 @@ void main() {
           reason: '媒体记录必须进结构化快照');
     });
 
+    testWidgets(
+        'structuredOnly restore keeps media and attachment files untouched',
+        (WidgetTester t) async {
+      // 准备：附件文件 + 图片文件 + 记录（磁盘/WebFileStore）
+      await WebFileStore.write(
+          'attachments/ref_attach.bin', Uint8List.fromList([1, 2, 3]));
+      await WebFileStore.write(
+          'pictures/ref_hash.jpg', Uint8List.fromList([9, 9, 9]));
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_before',
+        'name': 'before',
+        'hash': 'ref_hash',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'width': 10,
+        'height': 10,
+      });
+
+      // 结构化快照（记录进、文件不进）
+      final bytes = await BackupService.buildBackupBytesForTest(
+        selection: BackupSelection.structuredOnly,
+      );
+
+      // 恢复（structuredOnly）：记录被替换，但媒体/附件文件必须保留
+      await BackupService.restoreFromBytesForTest(
+        bytes,
+        selection: BackupSelection.structuredOnly,
+      );
+
+      expect(await WebFileStore.read('attachments/ref_attach.bin'), isNotNull,
+          reason: '结构化恢复不能删除附件文件');
+      expect(await WebFileStore.read('pictures/ref_hash.jpg'), isNotNull,
+          reason: '结构化恢复不能删除媒体文件');
+      final records = await ManifestDatabase.getAllImageRecords();
+      expect(records.length, equals(1), reason: '媒体记录照常恢复');
+    });
+
     testWidgets('backup with pictures-only includes only pictures in archive',
         (WidgetTester t) async {
       // Insert test records for multiple types

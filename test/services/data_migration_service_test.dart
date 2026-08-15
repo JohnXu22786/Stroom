@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/data_migration_service.dart';
+import 'package:stroom/services/data_safety_manager.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/snapshot_service.dart';
 import 'package:stroom/services/storage_service.dart';
@@ -835,6 +836,68 @@ void main() {
       );
       // 版本正常提升（不再无限重试迁移）。
       await _expectAllPartsCurrent();
+    });
+  });
+
+  group('DataMigrationService - post-migration validation freeze', () {
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions': '{"chat":0,"settings":0}',
+        'conversations': '[{"id":"pre_migration_conv"}]',
+      });
+      ManifestDatabase.enableTestMode();
+      AppStorage.resetCache();
+      // 清理上一个用例可能残留的坏任务文件（迁移后校验会扫描它们）
+      final appDir = await AppStorage.directory;
+      final badTasks = File(p.join(appDir, 'synthesis', 'tasks.json'));
+      if (await badTasks.exists()) await badTasks.delete();
+    });
+
+    tearDown(() async {
+      // 清理冻结状态、快照与坏任务文件，避免影响其他测试
+      final appDir = await AppStorage.directory;
+      final stateFile = File(p.join(appDir, DataSafetyManager.stateFileName));
+      if (await stateFile.exists()) await stateFile.delete();
+      final snapDir = await SnapshotService.snapshotsDir;
+      if (await snapDir.exists()) await snapDir.delete(recursive: true);
+      final badTasks = File(p.join(appDir, 'synthesis', 'tasks.json'));
+      if (await badTasks.exists()) await badTasks.delete();
+    });
+
+    test(
+        'migration with corrupt post-migration data restores pre-migration '
+        'snapshot and freezes', () async {
+      // 模拟"迁移代码产出校验不过的数据"：迁移前把任务文件写坏 ——
+      // 迁移本身不动 tasks.json，迁移后完整性校验必然失败。
+      final appDir = await AppStorage.directory;
+      final badTasks = File(p.join(appDir, 'synthesis', 'tasks.json'));
+      await badTasks.create(recursive: true);
+      await badTasks.writeAsString('{broken');
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isFalse);
+
+      // 已冻结并记录失败迁移
+      final status = await DataSafetyManager.loadStatus();
+      expect(status.state, DataSafetyState.frozen);
+      expect(status.failedMigration, isNotNull);
+
+      // 恢复的是迁移前快照：conversations 回到快照内容
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('conversations'), contains('pre_migration_conv'),
+          reason: '迁移失败后应恢复迁移前快照的数据');
+
+      // 关键：恢复后不重跑迁移 —— 版本记录保持快照中的旧值（chat=0），
+      // 用户回退旧版应用可正常使用（旧版读到旧版本记录，哨兵不拦截）。
+      final stored = await DataMigrationService.getStoredPartVersions();
+      expect(stored['chat'], equals(0), reason: '恢复后版本记录必须保持迁移前旧值（不能重新迁移）');
+    });
+
+    test('clean post-migration data does not freeze', () async {
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+      final status = await DataSafetyManager.loadStatus();
+      expect(status.state, isNot(DataSafetyState.frozen));
     });
   });
 }

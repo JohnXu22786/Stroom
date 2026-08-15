@@ -122,5 +122,41 @@ void main() {
       expect(content.contains('chat_data.json'), isTrue);
       expect(content.contains('conv_snap'), isTrue);
     });
+
+    test('corrupt index is rebuilt from disk, snapshots still usable',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"idx_conv"}]',
+      });
+      final file = await SnapshotService.createSnapshot();
+      expect(file, isNotNull);
+
+      // 弄坏索引
+      final indexFile =
+          File(p.join(snapDir.path, SnapshotService.manifestName));
+      await indexFile.writeAsString('{corrupted!!!');
+
+      final index = await SnapshotService.readIndex();
+      expect(index.length, 1, reason: '索引损坏时从磁盘扫描重建（快照仍在磁盘上）');
+      expect(index.first.file, p.basename(file!.path));
+      expect(index.first.sha256, isNotEmpty);
+    });
+
+    test('tmp leftover does not trigger the 1-hour rule and is cleaned',
+        () async {
+      // 模拟崩溃残留的写入中文件（setUp 删除了快照目录，先重建）
+      await snapDir.create(recursive: true);
+      final tmpFile =
+          File(p.join(snapDir.path, 'backup_2026-01-01T00-00-00.zip.tmp'));
+      await tmpFile.writeAsString('half-written');
+
+      // 残留 tmp 不算快照 → 1 小时规则不命中
+      expect(await SnapshotService.hasSnapshotWithinHour(), isFalse,
+          reason: '写入中的 tmp 残留不能算作快照');
+
+      // 清理时删除 tmp 残留
+      await SnapshotService.cleanupOldSnapshots();
+      expect(await tmpFile.exists(), isFalse, reason: 'cleanup 应清理 tmp 残留');
+    });
   });
 }

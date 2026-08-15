@@ -283,6 +283,11 @@ class DataSafetyManager {
 
   /// 从最近一版快照恢复（迁移失败时回退到迁移前状态）。
   ///
+  /// 恢复后**不执行数据迁移**（skipPostRestoreMigration）：迁移失败
+  /// 场景下迁移代码本身有缺陷，恢复旧格式后立即重跑同一条坏迁移只会
+  /// 再次破坏数据；保持旧格式 + 旧版本记录，用户回退旧版应用仍可
+  /// 正常使用（旧版读到旧版本记录，版本哨兵不拦截）。
+  ///
   /// 返回是否成功；快照缺失/校验失败返回 false。
   static Future<bool> restoreLatestSnapshot() async {
     final snapshots = await SnapshotService.listSnapshots();
@@ -294,7 +299,10 @@ class DataSafetyManager {
     try {
       final dir = await SnapshotService.snapshotsDir;
       final file = File(p.join(dir.path, entry.file));
-      if (!await file.exists()) return false;
+      if (!await file.exists()) {
+        debugPrint('[DataSafetyManager] 最近快照缺失: ${entry.file}');
+        return false;
+      }
       final bytes = await file.readAsBytes();
       if (sha256.convert(bytes).toString() != entry.sha256) {
         debugPrint('[DataSafetyManager] 最近快照校验失败（SHA 不符）');
@@ -303,6 +311,7 @@ class DataSafetyManager {
       await BackupService.restoreBackup(
         file.path,
         selection: BackupSelection.structuredOnly,
+        skipPostRestoreMigration: true,
       );
       return true;
     } catch (e) {
@@ -325,7 +334,10 @@ class DataSafetyManager {
     try {
       final appDir = await AppStorage.directory;
 
-      // 收集当前引用集合（附件 basename + 媒体 hash basename）
+      // 收集当前引用集合（附件 basename + 媒体文件全名）。
+      // 任何收集失败都直接中止清理：引用集合不完整时扫描删除
+      // 会把真实数据误判为孤儿（最典型的场景：conversations 损坏
+      // 导致 collectAttachmentPaths 失败，全部附件被当作孤儿）。
       final referenced = <String>{};
       try {
         final attachments = await collectAttachmentPaths();
@@ -333,7 +345,8 @@ class DataSafetyManager {
           referenced.add(p.basename(storagePath));
         }
       } catch (e) {
-        debugPrint('[DataSafetyManager] 收集附件引用失败: $e');
+        debugPrint('[DataSafetyManager] 收集附件引用失败，中止孤儿清理: $e');
+        return;
       }
       try {
         final records = <Map<String, dynamic>>[
@@ -344,14 +357,19 @@ class DataSafetyManager {
         ];
         for (final record in records) {
           final hash = record['hash'] as String?;
-          if (hash != null) {
-            final format = record['format'] as String? ?? 'jpg';
-            referenced.add('$hash.$format');
-            referenced.add('${hash}_thumb_v2.png');
+          if (hash == null) continue;
+          final format = record['format'] as String? ?? 'jpg';
+          // 媒体文件本体 + 缩略图 + TTS 转写旁车文本
+          referenced.add('$hash.$format');
+          referenced.add('${hash}_thumb_v2.png');
+          if (format != 'jpg') {
+            referenced.add('${hash}_thumb.jpg');
           }
+          referenced.add('$hash.txt');
         }
       } catch (e) {
-        debugPrint('[DataSafetyManager] 收集媒体引用失败: $e');
+        debugPrint('[DataSafetyManager] 收集媒体引用失败，中止孤儿清理: $e');
+        return;
       }
 
       // 扫描附件与媒体目录

@@ -73,12 +73,16 @@ class BackupSelection {
   - `catcatch_provider.dart` `_persistTasks`（catcatch/tasks.json）
   - `persistable_notifier.dart` `persist`（task_flows/*.json）
   - `task_session_tracker.dart`（app_launches.json、task_list_last_read.json）
-  - `manifest_operations.dart` `writeFile`（媒体文件：同名 hash 半文件会被读到）
-  - `attachment_storage.dart` `saveFile/saveEditedFile/saveCompressedImage`
-  - `tts_storage_service.dart` `writeFile`
-- 已原子：background/tasks.json、browser_cookies.json、备份 ZIP、WebFileStore（IndexedDB 事务）。
+  - `background_task_provider.dart`（统一走 AtomicFile）
+- **媒体/附件文件不做原子化**（`manifest_operations.writeFile`、`attachment_storage.saveFile`、
+  `tts_storage_service.writeFile`）：这些文件是**内容寻址**（hash 命名）+ 先写文件后写记录的
+  顺序 —— 写入中断只会留下一个无引用的半文件（孤儿），不会出现"被引用的坏文件"；
+  孤儿由 `DataSafetyManager.cleanupOrphans`（3 天缓冲）兜底。
+- 已原子：browser_cookies.json（自带 tmp 后缀实现）、备份/快照 ZIP、WebFileStore（IndexedDB 事务）。
 - prefs 大键（conversations/provider_entries）：平台写入非原子，无法直接改造 ——
   由快照 + 启动校验 + 损坏隔离（现有 `*.corrupt.*` 机制）兜底，不额外双写。
+- 平台说明：Windows 上「先 delete 再 rename」之间崩溃会短暂缺失目标文件
+  （沿袭旧实现，可接受；数据完整性由快照链兜底）。
 
 ## 4. 完整性校验（Step 2）
 
@@ -157,7 +161,10 @@ class BackupSelection {
 - 私有目录：Android `/data/data/...`、iOS 沙盒、桌面 AppStorage.directory
   （现有路径体系）；卸载/清数据 = 快照随应用消失 —— 由系统云备份
   （iCloud / 厂商备份）兜底。
-- Web：快照走 WebFileStore/IndexedDB，恢复语义一致（校验/回滚同逻辑）。
+- **Web：不创建快照、不做自动回滚**（`SnapshotService.createSnapshot` 返回 null，
+  迁移前后快照/校验跳过）。Web 检出损坏 → 冻结页（数据保持原样，可导出）。
+  这是有意的偏差：Web 存储（IndexedDB/浏览器）没有与原生一致的原子文件语义，
+  快照链收益低；安全策略优先"冻结不破坏"。
 
 ## 10. 测试计划（Step 8）
 

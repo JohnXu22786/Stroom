@@ -347,7 +347,11 @@ class DataMigrationService {
           await AppLogService.error('DataMigrationService',
               '迁移后数据校验失败，恢复迁移前快照并冻结', check.corruptions.first.message);
           try {
-            await DataSafetyManager.restoreLatestSnapshot();
+            final restored = await DataSafetyManager.restoreLatestSnapshot();
+            if (!restored) {
+              await AppLogService.error(
+                  'DataMigrationService', '恢复迁移前快照失败（无可用快照）');
+            }
           } catch (e) {
             debugPrint('[DataMigrationService] 恢复迁移前快照失败: $e');
           }

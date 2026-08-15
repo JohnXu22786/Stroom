@@ -175,6 +175,7 @@ class BackupService {
     String zipPath, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
+    bool skipPostRestoreMigration = false,
   }) async {
     await AppLogService.info(
         'BackupService', 'restoreBackup: zipPath=$zipPath');
@@ -184,7 +185,9 @@ class BackupService {
     }
     final bytes = await File(zipPath).readAsBytes();
     await _restoreFromBytes(bytes,
-        onProgress: onProgress, selection: selection);
+        onProgress: onProgress,
+        selection: selection,
+        skipPostRestoreMigration: skipPostRestoreMigration);
   }
 
   // ================================================================
@@ -933,6 +936,12 @@ class BackupService {
   ///
   /// [selection] 控制只恢复哪些数据类别。默认全量恢复。
   ///
+  /// [skipPostRestoreMigration] 为 true 时，恢复后不执行
+  /// `migrateDataFormatIfNeeded`（数据保持快照中的旧格式与旧版本记录）。
+  /// 仅迁移失败回退场景使用：此时迁移代码本身有缺陷，恢复后立即重跑
+  /// 同一条坏迁移只会再次破坏数据；保持旧格式 + 旧版本记录才能让
+  /// 用户回退旧版应用正常使用（旧版读到旧版本记录，版本哨兵不拦截）。
+  ///
   /// 兼容 v1 和 v2 备份格式：
   /// - v1: preferences.json（聊天+设置合并），attachments/ 分开
   /// - v2: chat_data.json（聊天记录）+ settings.json（设置），
@@ -941,6 +950,7 @@ class BackupService {
     Uint8List bytes, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
+    bool skipPostRestoreMigration = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -1312,7 +1322,10 @@ class BackupService {
     // 数据迁移：确保恢复后的数据格式是最新的
     // 旧格式备份（pre-migration）中包含 chat_configs、null IDs 等，
     // 需要迁移到当前数据格式才能正常使用。
-    await DataMigrationService.migrateDataFormatIfNeeded();
+    // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
+    if (!skipPostRestoreMigration) {
+      await DataMigrationService.migrateDataFormatIfNeeded();
+    }
     onProgress?.call(1.0);
   }
 
