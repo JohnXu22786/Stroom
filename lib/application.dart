@@ -19,11 +19,10 @@ import 'providers/notification_provider.dart';
 import 'providers/background_task_provider.dart';
 import 'providers/task_provider.dart' show TaskStatus;
 import 'services/app_log_service.dart';
-import 'services/auto_backup_service.dart';
 import 'services/background_service.dart';
 import 'services/desktop_app_service.dart';
 import 'services/notification_service.dart';
-import 'startup/backup_startup_check.dart';
+import 'services/snapshot_service.dart';
 import 'widgets/update_dialog.dart';
 import 'widgets/quit_confirmation_dialog.dart';
 import 'widgets/tap_outside_unfocus.dart';
@@ -167,7 +166,7 @@ class _ApplicationState extends ConsumerState<Application>
 
   /// 执行启动后流程：
   /// - 检查更新（有更新必须弹窗）
-  /// - 检查备份存储授权 + 自动备份（并行运行）
+  /// - 创建私有目录结构化快照（静默，1 小时规则限频；失败只记日志）
   Future<void> _runPostStartupTasks() async {
     if (_postStartupTasksStarted) return;
     _postStartupTasksStarted = true;
@@ -178,42 +177,28 @@ class _ApplicationState extends ConsumerState<Application>
 
     // 并行执行两个启动后任务：
     // 1. 检查更新（含清理残留安装包）
-    // 2. 检查备份存储授权并自动备份
+    // 2. 静默创建结构化快照
     await Future.wait([
       _checkForUpdatesOnStartup(),
-      _checkBackupOnStartup(),
+      _createStartupSnapshot(),
     ]);
     await AppLogService.info('Application', '启动后任务执行完成');
   }
 
-  /// 启动后检查备份存储：
-  /// - 如果未授权目录，立即弹窗要求授权
-  /// - 授权后自动执行备份
-  /// - 未授权不允许继续使用应用
-  Future<void> _checkBackupOnStartup() async {
+  /// 启动后静默创建结构化快照。
+  ///
+  /// 新架构下自动备份完全隐形：私有目录、结构化数据、启动动画后
+  /// 执行、1 小时规则限频。快照失败 ≠ 数据损坏 —— 只记日志跳过，
+  /// 由数据完整性校验 + 自动回滚体系兜底，不打扰用户。
+  Future<void> _createStartupSnapshot() async {
     try {
-      // 获取 Navigator context 用于显示对话框
-      final navigatorContext = _navigatorKey.currentContext;
-      if (navigatorContext == null || !navigatorContext.mounted) return;
-
-      final result = await BackupStartupCheck.runCheck(navigatorContext);
-
-      // 长时间异步后检查 mounted 状态
-      if (!mounted) return;
-
-      if (!result.storageReady) {
-        // 用户点击了"退出应用"或授权失败 — 真正退出应用
-        debugPrint('[Application] 备份存储未就绪，退出应用');
-        _exitApp();
-        return;
-      }
-
-      if (result.autoBackupPerformed) {
-        debugPrint('[Application] 启动后备份检查完成: 已就绪');
+      final snapshot = await SnapshotService.createSnapshot();
+      if (snapshot != null) {
+        debugPrint('[Application] 启动后快照完成: ${snapshot.path}');
       }
     } catch (e, stack) {
-      debugPrint('[Application] 启动后备份检查失败: $e');
-      debugPrint('[Application] Backup check stack: $stack');
+      debugPrint('[Application] 启动后快照失败: $e');
+      debugPrint('[Application] Snapshot stack: $stack');
     }
   }
 
@@ -265,21 +250,6 @@ class _ApplicationState extends ConsumerState<Application>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // 如果应用真正进入后台或被销毁，且后台备份正在运行，则取消备份。
-    //
-    // 注意：仅在 paused / detached 时取消，不在 inactive 时取消 ——
-    // inactive 在移动端会因通知栏下拉/权限弹窗触发，在桌面端会因
-    // 窗口失焦/最小化触发（关闭到托盘后应用仍在运行），这些场景
-    // 下取消备份会误伤仍在进行的任务。
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
-      if (AutoBackupService.isRunning) {
-        debugPrint('[Application] 应用进入后台，取消正在运行的自动备份');
-        AutoBackupService.cancel();
-      }
-      return;
-    }
-
     if (state != AppLifecycleState.resumed) return;
 
     // Android：回到前台时补武装保活看门狗。

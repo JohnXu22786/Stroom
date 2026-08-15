@@ -9,6 +9,7 @@ import '../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../providers/task_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../services/storage_service.dart';
+import '../../utils/atomic_file.dart';
 
 final taskListLastReadProvider =
     StateProvider<DateTime>((ref) => DateTime(2000));
@@ -17,7 +18,9 @@ Future<void> persistTaskListLastRead(DateTime dt) async {
   try {
     final dirPath = await AppStorage.directory;
     final file = File(p.join(dirPath, 'task_list_last_read.json'));
-    await file.writeAsString(jsonEncode({'lastRead': dt.toIso8601String()}));
+    // 原子写入：覆盖写同一路径，中途崩溃会留下半截 JSON。
+    await AtomicFile.writeString(
+        file, jsonEncode({'lastRead': dt.toIso8601String()}));
   } catch (e) {
     debugPrint('Failed to persist lastRead: $e');
   }
@@ -88,7 +91,8 @@ Future<void> _persistAppLaunches(List<DateTime> launches) async {
     final dirPath = await AppStorage.directory;
     final file = File(p.join(dirPath, 'app_launches.json'));
     final data = launches.map((dt) => dt.toIso8601String()).toList();
-    await file.writeAsString(jsonEncode({'launches': data}));
+    // 原子写入：防止中途崩溃留下半截 JSON。
+    await AtomicFile.writeString(file, jsonEncode({'launches': data}));
   } catch (e) {
     debugPrint('[persistAppLaunches] Failed: $e');
   }

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:path/path.dart' as p;
 
 import '../../services/storage_service.dart';
+import '../../utils/atomic_file.dart';
 
 mixin PersistableNotifier<T> on StateNotifier<T> {
   String get persistenceFileName;
@@ -26,7 +27,9 @@ mixin PersistableNotifier<T> on StateNotifier<T> {
   Future<void> persist() async {
     try {
       final file = await _dataFile();
-      await file.writeAsString(jsonEncode(toJsonList(state)));
+      // 原子写入：防止中途崩溃留下半截 JSON（任务流数据覆盖写同一
+      // 路径，半途写坏会丢失全部流程状态）。
+      await AtomicFile.writeString(file, jsonEncode(toJsonList(state)));
     } catch (e) {
       // Silently ignore persistence errors - data is still in memory
     }

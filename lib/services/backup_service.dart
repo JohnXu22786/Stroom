@@ -89,6 +89,14 @@ class BackupSelection {
   /// 浏览器Cookies持久化数据（browser_cookies.json）
   final bool browserCookies;
 
+  /// 是否包含媒体文件与附件文件（图片/音频/视频/文本/附件本体）。
+  ///
+  /// 默认 true（手动备份全量）。设为 false 时只收集结构化数据：
+  /// 媒体**记录**（stroom_manifest.json）与聊天记录照常打包，
+  /// 但媒体/附件**文件**不进备份 —— 用于私有目录结构化快照
+  /// （文件是内容寻址的，损坏风险低；结构化数据才是损坏高发区）。
+  final bool includeMediaFiles;
+
   const BackupSelection({
     this.chatRecordsAndAttachments = true,
     this.settings = true,
@@ -99,10 +107,14 @@ class BackupSelection {
     this.tasks = true,
     this.ankiData = true,
     this.browserCookies = true,
+    this.includeMediaFiles = true,
   });
 
   /// 全量选择（所有类别）。
   static const all = BackupSelection();
+
+  /// 结构化数据快照选择：记录/配置/任务全包含，媒体与附件文件排除。
+  static const structuredOnly = BackupSelection(includeMediaFiles: false);
 
   /// 根据选择结果返回包含的类别名称列表（用于 UI 显示）。
   List<String> get selectedLabels {
@@ -163,6 +175,7 @@ class BackupService {
     String zipPath, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
+    bool skipPostRestoreMigration = false,
   }) async {
     await AppLogService.info(
         'BackupService', 'restoreBackup: zipPath=$zipPath');
@@ -172,7 +185,9 @@ class BackupService {
     }
     final bytes = await File(zipPath).readAsBytes();
     await _restoreFromBytes(bytes,
-        onProgress: onProgress, selection: selection);
+        onProgress: onProgress,
+        selection: selection,
+        skipPostRestoreMigration: skipPostRestoreMigration);
   }
 
   // ================================================================
@@ -312,6 +327,12 @@ class BackupService {
           p.join(appDir, 'synthesis', 'tasks.json'), useStreaming);
       await _addPlanFile(diskFiles, memoryFiles, 'catcatch/tasks.json',
           p.join(appDir, 'catcatch', 'tasks.json'), useStreaming);
+      await _addPlanFile(diskFiles, memoryFiles, 'background/tasks.json',
+          p.join(appDir, 'background', 'tasks.json'), useStreaming);
+      await _addPlanFile(diskFiles, memoryFiles, 'task_flows/flows.json',
+          p.join(appDir, 'task_flows', 'flows.json'), useStreaming);
+      await _addPlanFile(diskFiles, memoryFiles, 'task_flows/executions.json',
+          p.join(appDir, 'task_flows', 'executions.json'), useStreaming);
     }
     if (selection.ankiData) {
       try {
@@ -355,22 +376,24 @@ class BackupService {
       manifestImageRecords = records;
       manifestImageFolders = await ManifestDatabase.getAllFolders(
           recordTable: ManifestTables.imageRecords);
-      for (var i = 0; i < records.length; i++) {
-        final record = records[i];
-        final hash = record['hash'] as String?;
-        final format = record['format'] as String? ?? 'jpg';
-        if (hash == null) continue;
-        await _addPlanFile(diskFiles, memoryFiles, 'pictures/$hash.$format',
-            p.join(appDir, 'pictures', '$hash.$format'), useStreaming);
-        await _addPlanFile(
-            diskFiles,
-            memoryFiles,
-            'pictures/${imageThumbFileName(hash)}',
-            p.join(appDir, 'pictures', imageThumbFileName(hash)),
-            useStreaming);
-        if (i % 10 == 0) {
-          await _yieldToEventLoop();
-          checkCancelled();
+      if (selection.includeMediaFiles) {
+        for (var i = 0; i < records.length; i++) {
+          final record = records[i];
+          final hash = record['hash'] as String?;
+          final format = record['format'] as String? ?? 'jpg';
+          if (hash == null) continue;
+          await _addPlanFile(diskFiles, memoryFiles, 'pictures/$hash.$format',
+              p.join(appDir, 'pictures', '$hash.$format'), useStreaming);
+          await _addPlanFile(
+              diskFiles,
+              memoryFiles,
+              'pictures/${imageThumbFileName(hash)}',
+              p.join(appDir, 'pictures', imageThumbFileName(hash)),
+              useStreaming);
+          if (i % 10 == 0) {
+            await _yieldToEventLoop();
+            checkCancelled();
+          }
         }
       }
     }
@@ -384,18 +407,20 @@ class BackupService {
       manifestAudioRecords = records;
       manifestAudioFolders = await ManifestDatabase.getAllFolders(
           recordTable: ManifestTables.audioRecords);
-      for (var i = 0; i < records.length; i++) {
-        final record = records[i];
-        final hash = record['hash'] as String?;
-        final format = record['format'] as String? ?? 'wav';
-        if (hash == null) continue;
-        await _addPlanFile(diskFiles, memoryFiles, 'tts_audio/$hash.$format',
-            p.join(appDir, 'tts_audio', '$hash.$format'), useStreaming);
-        await _addPlanFile(diskFiles, memoryFiles, 'tts_audio/$hash.txt',
-            p.join(appDir, 'tts_audio', '$hash.txt'), useStreaming);
-        if (i % 10 == 0) {
-          await _yieldToEventLoop();
-          checkCancelled();
+      if (selection.includeMediaFiles) {
+        for (var i = 0; i < records.length; i++) {
+          final record = records[i];
+          final hash = record['hash'] as String?;
+          final format = record['format'] as String? ?? 'wav';
+          if (hash == null) continue;
+          await _addPlanFile(diskFiles, memoryFiles, 'tts_audio/$hash.$format',
+              p.join(appDir, 'tts_audio', '$hash.$format'), useStreaming);
+          await _addPlanFile(diskFiles, memoryFiles, 'tts_audio/$hash.txt',
+              p.join(appDir, 'tts_audio', '$hash.txt'), useStreaming);
+          if (i % 10 == 0) {
+            await _yieldToEventLoop();
+            checkCancelled();
+          }
         }
       }
     }
@@ -409,16 +434,18 @@ class BackupService {
       manifestVideoRecords = records;
       manifestVideoFolders = await ManifestDatabase.getAllFolders(
           recordTable: ManifestTables.videoRecords);
-      for (var i = 0; i < records.length; i++) {
-        final record = records[i];
-        final hash = record['hash'] as String?;
-        final format = record['format'] as String? ?? 'mp4';
-        if (hash == null) continue;
-        await _addPlanFile(diskFiles, memoryFiles, 'videos/$hash.$format',
-            p.join(appDir, 'videos', '$hash.$format'), useStreaming);
-        if (i % 10 == 0) {
-          await _yieldToEventLoop();
-          checkCancelled();
+      if (selection.includeMediaFiles) {
+        for (var i = 0; i < records.length; i++) {
+          final record = records[i];
+          final hash = record['hash'] as String?;
+          final format = record['format'] as String? ?? 'mp4';
+          if (hash == null) continue;
+          await _addPlanFile(diskFiles, memoryFiles, 'videos/$hash.$format',
+              p.join(appDir, 'videos', '$hash.$format'), useStreaming);
+          if (i % 10 == 0) {
+            await _yieldToEventLoop();
+            checkCancelled();
+          }
         }
       }
     }
@@ -432,15 +459,17 @@ class BackupService {
       manifestTextRecords = records;
       manifestTextFolders = await ManifestDatabase.getAllFolders(
           recordTable: ManifestTables.textRecords);
-      for (var i = 0; i < records.length; i++) {
-        final record = records[i];
-        final hash = record['hash'] as String?;
-        if (hash == null) continue;
-        await _addPlanFile(diskFiles, memoryFiles, 'texts/$hash.txt',
-            p.join(appDir, 'texts', '$hash.txt'), useStreaming);
-        if (i % 10 == 0) {
-          await _yieldToEventLoop();
-          checkCancelled();
+      if (selection.includeMediaFiles) {
+        for (var i = 0; i < records.length; i++) {
+          final record = records[i];
+          final hash = record['hash'] as String?;
+          if (hash == null) continue;
+          await _addPlanFile(diskFiles, memoryFiles, 'texts/$hash.txt',
+              p.join(appDir, 'texts', '$hash.txt'), useStreaming);
+          if (i % 10 == 0) {
+            await _yieldToEventLoop();
+            checkCancelled();
+          }
         }
       }
     }
@@ -449,7 +478,7 @@ class BackupService {
     checkCancelled();
 
     // 附件
-    if (selection.chatRecordsAndAttachments) {
+    if (selection.chatRecordsAndAttachments && selection.includeMediaFiles) {
       final attachmentPaths = await collectAttachmentPaths();
       for (final storagePath in attachmentPaths) {
         final parts = storagePath.split('/');
@@ -752,9 +781,18 @@ class BackupService {
             p.join(appDir, 'synthesis', 'tasks.json'));
         await addTaskFileToArchive(archive, 'catcatch/tasks.json',
             p.join(appDir, 'catcatch', 'tasks.json'));
+        await addTaskFileToArchive(archive, 'background/tasks.json',
+            p.join(appDir, 'background', 'tasks.json'));
+        await addTaskFileToArchive(archive, 'task_flows/flows.json',
+            p.join(appDir, 'task_flows', 'flows.json'));
+        await addTaskFileToArchive(archive, 'task_flows/executions.json',
+            p.join(appDir, 'task_flows', 'executions.json'));
       } else {
         addStringToArchive(archive, 'synthesis/tasks.json', '[]');
         addStringToArchive(archive, 'catcatch/tasks.json', '[]');
+        addStringToArchive(archive, 'background/tasks.json', '[]');
+        addStringToArchive(archive, 'task_flows/flows.json', '[]');
+        addStringToArchive(archive, 'task_flows/executions.json', '[]');
       }
     }
     onProgress?.call(0.35);
@@ -787,7 +825,7 @@ class BackupService {
     // 5. 二进制文件（按存储格式：pictures/, tts_audio/, videos/, texts/, attachments/）
     debugPrint('[BackupService] _buildBackupBytes: adding binary files');
 
-    if (selection.pictures) {
+    if (selection.pictures && selection.includeMediaFiles) {
       for (var i = 0; i < imageRecords.length; i++) {
         final record = imageRecords[i];
         final hash = record['hash'] as String?;
@@ -807,7 +845,7 @@ class BackupService {
     await _yieldToEventLoop();
     checkCancelled();
 
-    if (selection.audio) {
+    if (selection.audio && selection.includeMediaFiles) {
       for (var i = 0; i < audioRecords.length; i++) {
         final record = audioRecords[i];
         final hash = record['hash'] as String?;
@@ -827,7 +865,7 @@ class BackupService {
     await _yieldToEventLoop();
     checkCancelled();
 
-    if (selection.videos) {
+    if (selection.videos && selection.includeMediaFiles) {
       for (var i = 0; i < videoRecords.length; i++) {
         final record = videoRecords[i];
         final hash = record['hash'] as String?;
@@ -845,7 +883,7 @@ class BackupService {
     await _yieldToEventLoop();
     checkCancelled();
 
-    if (selection.texts) {
+    if (selection.texts && selection.includeMediaFiles) {
       for (var i = 0; i < textRecords.length; i++) {
         final record = textRecords[i];
         final hash = record['hash'] as String?;
@@ -862,7 +900,7 @@ class BackupService {
     await _yieldToEventLoop();
     checkCancelled();
 
-    if (selection.chatRecordsAndAttachments) {
+    if (selection.chatRecordsAndAttachments && selection.includeMediaFiles) {
       final attachmentPaths = await collectAttachmentPaths();
       final pathList = attachmentPaths.toList();
       for (var i = 0; i < pathList.length; i++) {
@@ -898,6 +936,12 @@ class BackupService {
   ///
   /// [selection] 控制只恢复哪些数据类别。默认全量恢复。
   ///
+  /// [skipPostRestoreMigration] 为 true 时，恢复后不执行
+  /// `migrateDataFormatIfNeeded`（数据保持快照中的旧格式与旧版本记录）。
+  /// 仅迁移失败回退场景使用：此时迁移代码本身有缺陷，恢复后立即重跑
+  /// 同一条坏迁移只会再次破坏数据；保持旧格式 + 旧版本记录才能让
+  /// 用户回退旧版应用正常使用（旧版读到旧版本记录，版本哨兵不拦截）。
+  ///
   /// 兼容 v1 和 v2 备份格式：
   /// - v1: preferences.json（聊天+设置合并），attachments/ 分开
   /// - v2: chat_data.json（聊天记录）+ settings.json（设置），
@@ -906,6 +950,7 @@ class BackupService {
     Uint8List bytes, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
+    bool skipPostRestoreMigration = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -1149,6 +1194,8 @@ class BackupService {
       'attachments',
       'synthesis',
       'catcatch',
+      'background',
+      'task_flows',
       'anki',
     ];
     final skipFiles = {
@@ -1176,18 +1223,21 @@ class BackupService {
     bool shouldRestoreDir(String dir) {
       switch (dir) {
         case 'pictures':
-          return selection.pictures;
+          return selection.pictures && selection.includeMediaFiles;
         case 'tts_audio':
-          return selection.audio;
+          return selection.audio && selection.includeMediaFiles;
         case 'videos':
-          return selection.videos;
+          return selection.videos && selection.includeMediaFiles;
         case 'texts':
-          return selection.texts;
+          return selection.texts && selection.includeMediaFiles;
         case 'synthesis':
         case 'catcatch':
+        case 'background':
+        case 'task_flows':
           return selection.tasks;
         case 'attachments':
-          return selection.chatRecordsAndAttachments;
+          return selection.chatRecordsAndAttachments &&
+              selection.includeMediaFiles;
         case 'anki':
           return selection.ankiData;
         default:
@@ -1272,7 +1322,10 @@ class BackupService {
     // 数据迁移：确保恢复后的数据格式是最新的
     // 旧格式备份（pre-migration）中包含 chat_configs、null IDs 等，
     // 需要迁移到当前数据格式才能正常使用。
-    await DataMigrationService.migrateDataFormatIfNeeded();
+    // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
+    if (!skipPostRestoreMigration) {
+      await DataMigrationService.migrateDataFormatIfNeeded();
+    }
     onProgress?.call(1.0);
   }
 
@@ -1647,7 +1700,8 @@ class BackupService {
 
     // 聊天附件：附件全部存储在 attachments/ 目录，整目录/前缀删除
     // 即可同时清掉引用文件与无引用的孤儿文件。
-    if (selection.chatRecordsAndAttachments) {
+    // （includeMediaFiles=false 的结构化快照恢复不动附件文件）
+    if (selection.chatRecordsAndAttachments && selection.includeMediaFiles) {
       if (kIsWeb || WebFileStore.isTestMode) {
         try {
           await WebFileStore.deleteByPrefix('attachments/');
@@ -1662,7 +1716,8 @@ class BackupService {
 
     // 媒体：先按数据库记录逐文件删除（Web/测试模式同样生效），
     // 原生模式再删除整个目录以清理无记录的孤儿文件。
-    if (selection.pictures) {
+    // （includeMediaFiles=false 的结构化快照恢复不动媒体文件）
+    if (selection.pictures && selection.includeMediaFiles) {
       final records = await ManifestDatabase.getAllImageRecords();
       for (final record in records) {
         final hash = record['hash'] as String?;
@@ -1682,7 +1737,7 @@ class BackupService {
       }
       if (!await _deleteDirectory('pictures')) deleteFailed = true;
     }
-    if (selection.audio) {
+    if (selection.audio && selection.includeMediaFiles) {
       final records = await ManifestDatabase.getAllAudioRecords();
       for (final record in records) {
         final hash = record['hash'] as String?;
@@ -1697,7 +1752,7 @@ class BackupService {
       }
       if (!await _deleteDirectory('tts_audio')) deleteFailed = true;
     }
-    if (selection.videos) {
+    if (selection.videos && selection.includeMediaFiles) {
       final records = await ManifestDatabase.getAllVideoRecords();
       for (final record in records) {
         final hash = record['hash'] as String?;
@@ -1709,7 +1764,7 @@ class BackupService {
       }
       if (!await _deleteDirectory('videos')) deleteFailed = true;
     }
-    if (selection.texts) {
+    if (selection.texts && selection.includeMediaFiles) {
       final records = await ManifestDatabase.getAllTextRecords();
       for (final record in records) {
         final hash = record['hash'] as String?;
@@ -1725,6 +1780,11 @@ class BackupService {
     if (selection.tasks) {
       if (!await _deleteFile('synthesis', 'tasks.json')) deleteFailed = true;
       if (!await _deleteFile('catcatch', 'tasks.json')) deleteFailed = true;
+      if (!await _deleteFile('background', 'tasks.json')) deleteFailed = true;
+      if (!await _deleteFile('task_flows', 'flows.json')) deleteFailed = true;
+      if (!await _deleteFile('task_flows', 'executions.json')) {
+        deleteFailed = true;
+      }
     }
 
     // Anki 闪卡数据库

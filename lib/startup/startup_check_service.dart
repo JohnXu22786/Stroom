@@ -99,6 +99,34 @@ class StartupCheckService {
   }
 
   // ================================================================
+  // 2. 版本哨兵：拒绝读取超前版本数据
+  // ================================================================
+
+  /// 检查是否存在「数据格式版本超前于当前应用」的部分（版本哨兵）。
+  ///
+  /// 返回超前部分的描述（如 `chat v2 > v1, settings v2 > v1`）；
+  /// 无超前返回 null。
+  ///
+  /// 必须早于一切数据校验/修复/迁移执行：超前格式的数据对当前
+  /// 代码可能无法解析，先做校验会把"版本超前"误判为"数据损坏"
+  /// 而错误回滚。正确行为是拒绝启动，提示用户安装新版本。
+  static Future<String?> checkVersionAhead() async {
+    try {
+      final stored = await DataMigrationService.getStoredPartVersions();
+      final ahead = DataParts.all
+          .where((p) => (stored[p] ?? 0) > (DataParts.currentVersions[p] ?? 0))
+          .toList();
+      if (ahead.isEmpty) return null;
+      return ahead
+          .map((p) => '$p v${stored[p]} > v${DataParts.currentVersions[p]}')
+          .join(', ');
+    } catch (e) {
+      debugPrint('[StartupCheckService] 版本哨兵检查失败（放行）: $e');
+      return null;
+    }
+  }
+
+  // ================================================================
   // 是否在测试环境中运行
   // ================================================================
 

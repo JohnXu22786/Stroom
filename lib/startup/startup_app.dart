@@ -12,7 +12,9 @@ import 'startup_page.dart';
 import '../application.dart';
 import '../providers/update_provider.dart';
 import '../services/app_log_service.dart';
+import '../services/backup_service.dart';
 import '../services/data_migration_service.dart';
+import '../services/data_safety_manager.dart';
 
 // ====================================================================
 // StartupApp — 应用启动入口
@@ -49,6 +51,10 @@ class _StartupAppState extends State<StartupApp>
   String _statusMessage = '';
   String? _progressDetail;
   bool _migrationPerformed = false;
+
+  /// 数据安全防线阻断原因（版本哨兵 / 迁移失败冻结 / 无法修复冻结）。
+  /// 非 null 时启动页显示阻断页（拒绝进入主应用），不再渐出。
+  String? _dataSafetyBlocked;
 
   /// Fade-out animation controller and opacity for smooth transition.
   late final AnimationController _fadeController;
@@ -141,17 +147,64 @@ class _StartupAppState extends State<StartupApp>
       // 依次执行所有检查，逐个进行
       // ===============================================================
       //
-      // 全部5个检查依次执行（而非并行）。
+      // 全部6个检查依次执行（而非并行）。
       // 每步先通过 setState 更新状态文字（同步），
       // 然后短暂等待让 UI 有机会渲染新文字，
       // 最后执行对应的后端任务。
       //
+      // 0. 数据安全防线（版本哨兵 → 冻结处理 → 自愈回滚）—— 任何
+      //    数据读取之前，且必须先于迁移
       // 1. 检查数据格式版本（迁移）
       // 2. 验证数据格式（Isolate 后台执行）
       // 3. 检查数据完整性（Isolate 后台执行）
       // 4. 记录检查结果日志
       // 5. 完成启动准备 → 过渡到主应用
       // ===============================================================
+
+      // ---- Task 0: 数据安全防线 ----
+      _setStatus('正在检查数据安全...', '0/5');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      if (!mounted) return;
+
+      // 版本哨兵必须最先执行：超前格式数据对当前代码可能无法解析，
+      // 先做校验/回滚会把"版本超前"误判为"数据损坏"而错误回滚。
+      final versionAhead = await StartupCheckService.checkVersionAhead();
+      if (!mounted) return;
+      if (versionAhead != null) {
+        debugPrint('[StartupApp] 版本哨兵触发: $versionAhead');
+        setState(() {
+          _isWorking = false;
+          _dataSafetyBlocked = '数据由更新版本的应用创建（$versionAhead）。\n\n'
+              '当前版本无法安全读取这些数据。请安装最新版本的应用，'
+              '数据未做任何改动。';
+        });
+        return;
+      }
+
+      // 冻结处理（迁移失败/无法修复）+ 损坏自愈回滚
+      final repairResult = await DataSafetyManager.checkAndRepair();
+      if (!mounted) return;
+      if (repairResult.skippedDueToFreeze || repairResult.frozen) {
+        final status = await DataSafetyManager.loadStatus();
+        if (!mounted) return;
+        final desc = (status.failedMigration != null)
+            ? '数据格式迁移失败（${status.failedMigration}）。\n\n'
+                '为保护数据未做任何改动。请回退到旧版本应用，'
+                '或等待修复版本发布后再升级。'
+            : '数据损坏且无法自动修复。\n\n'
+                '应用已冻结以防止进一步破坏。请使用「导出数据」'
+                '保存数据文件，然后手动导入或重新安装。';
+        setState(() {
+          _isWorking = false;
+          _dataSafetyBlocked = desc;
+        });
+        return;
+      }
+      if (repairResult.repaired) {
+        debugPrint('[StartupApp] 数据已从快照自动恢复');
+      }
+      // 启动时清理孤儿文件（best-effort，失败不影响启动）
+      unawaited(DataSafetyManager.cleanupOrphans().catchError((_) {}));
 
       // ---- Task 1: 检查数据格式版本 ----
       _setStatus('正在检查数据格式版本...', '1/5');
@@ -171,6 +224,27 @@ class _StartupAppState extends State<StartupApp>
         migrationResult = const MigrationResult(needsMigration: false);
       }
       if (!mounted) return;
+
+      // 迁移可能在检查过程中触发冻结（迁移后校验失败 → 恢复迁移前
+      // 快照 + 冻结）。Task 0 的阻断页只覆盖了 Task 0 之前的状态，
+      // 这里必须复查：冻结 → 显示阻断页，拒绝进入主应用。
+      final postMigrationStatus = await DataSafetyManager.loadStatus();
+      if (!mounted) return;
+      if (postMigrationStatus.isFrozen) {
+        final desc = (postMigrationStatus.failedMigration != null)
+            ? '数据格式迁移失败（${postMigrationStatus.failedMigration}）。\n\n'
+                '已自动恢复到迁移前的数据。为保护数据，请回退到旧版本应用，'
+                '或等待修复版本发布后再升级。'
+            : '数据损坏且无法自动修复。\n\n'
+                '应用已冻结以防止进一步破坏。请使用「导出数据」'
+                '保存数据文件，然后手动导入或重新安装。';
+        debugPrint('[StartupApp] 迁移后检测到冻结，显示阻断页');
+        setState(() {
+          _isWorking = false;
+          _dataSafetyBlocked = desc;
+        });
+        return;
+      }
 
       // Ensure "1/5" status is visible in the UI before moving on
       await Future<void>.delayed(
@@ -465,12 +539,17 @@ class _StartupAppState extends State<StartupApp>
                 useMaterial3: true,
                 colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
               ),
-              home: StartupPage(
-                isWorking: _isWorking,
-                statusMessage: _statusMessage,
-                progressDetail: _progressDetail,
-                migrationPerformed: _migrationPerformed,
-              ),
+              home: _dataSafetyBlocked != null
+                  ? _DataSafetyBlockPage(
+                      message: _dataSafetyBlocked!,
+                      onExit: _exitApp,
+                    )
+                  : StartupPage(
+                      isWorking: _isWorking,
+                      statusMessage: _statusMessage,
+                      progressDetail: _progressDetail,
+                      migrationPerformed: _migrationPerformed,
+                    ),
             ),
           ),
       ],
@@ -623,6 +702,105 @@ class _ErrorCatcher extends StatefulWidget {
 
   @override
   State<_ErrorCatcher> createState() => _ErrorCatcherState();
+}
+
+/// 数据安全阻断页：版本哨兵（数据由更新版本创建）或冻结
+/// （迁移失败 / 无法自动修复）时全屏展示，拒绝进入主应用。
+///
+/// 只读页面：提供「导出数据」（全量导出到用户选择的位置，只读操作）
+/// 与「退出应用」，绝不提供任何写入入口，防止破坏被保护的数据。
+class _DataSafetyBlockPage extends StatefulWidget {
+  final String message;
+  final VoidCallback? onExit;
+
+  const _DataSafetyBlockPage({required this.message, this.onExit});
+
+  @override
+  State<_DataSafetyBlockPage> createState() => _DataSafetyBlockPageState();
+}
+
+class _DataSafetyBlockPageState extends State<_DataSafetyBlockPage> {
+  bool _exporting = false;
+
+  Future<void> _exportData() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      // 双平台统一路径：原生走 FilePicker 保存；Web 走内存构建 +
+      // 浏览器下载（exportBackup 内部处理）。
+      await BackupService.exportBackup(context, selection: BackupSelection.all);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('数据导出完成')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出失败: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      // 阻断页不允许返回键关闭（数据保护）
+      canPop: false,
+      child: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.shield_outlined,
+                    size: 72, color: Colors.red.shade400),
+                const SizedBox(height: 16),
+                Text(
+                  '数据安全保护',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  widget.message,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey.shade600,
+                        height: 1.6,
+                      ),
+                ),
+                const SizedBox(height: 28),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _exporting ? null : _exportData,
+                      icon: _exporting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save_alt),
+                      label: const Text('导出数据'),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton.icon(
+                      onPressed: widget.onExit ?? () => SystemNavigator.pop(),
+                      icon: const Icon(Icons.exit_to_app),
+                      label: const Text('退出应用'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _ErrorCatcherState extends State<_ErrorCatcher> {

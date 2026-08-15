@@ -143,6 +143,20 @@ void main() {
       expect(labels.length, equals(1));
       expect(labels.first, equals('浏览器Cookies'));
     });
+
+    test('structuredOnly keeps all categories but excludes media files', () {
+      final sel = BackupSelection.structuredOnly;
+      expect(sel.includeMediaFiles, isFalse);
+      expect(sel.chatRecordsAndAttachments, isTrue);
+      expect(sel.settings, isTrue);
+      expect(sel.pictures, isTrue);
+      expect(sel.audio, isTrue);
+      expect(sel.videos, isTrue);
+      expect(sel.texts, isTrue);
+      expect(sel.tasks, isTrue);
+      expect(sel.ankiData, isTrue);
+      expect(sel.browserCookies, isTrue);
+    });
   });
 
   // ==================================================================
@@ -150,6 +164,103 @@ void main() {
   // ==================================================================
 
   group('Selective backup produces archives with only selected data', () {
+    testWidgets(
+        'structuredOnly snapshot includes records/settings but no media or '
+        'attachment files', (WidgetTester t) async {
+      // 媒体记录（应进快照）
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_snap_1',
+        'name': 'snap_img',
+        'hash': 'snap_img_hash',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'width': 100,
+        'height': 100,
+      });
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"conv1"}]',
+        'active_conversation_id': 'conv1',
+        'assistants': '[{"id":"a1","name":"助手"}]',
+        'data_format_version': 2,
+      });
+
+      final bytes = await BackupService.buildBackupBytesForTest(
+        selection: BackupSelection.structuredOnly,
+      );
+      final archive = ZipDecoder().decodeBytes(bytes);
+      final fileNames =
+          archive.files.where((f) => f.isFile).map((f) => f.name).toSet();
+
+      // 结构化数据全部在内
+      expect(fileNames, contains('chat_data.json'));
+      expect(fileNames, contains('settings.json'));
+      expect(fileNames, contains('stroom_manifest.json'));
+      expect(fileNames, contains('synthesis/tasks.json'));
+
+      // 媒体/附件文件不在内
+      expect(fileNames.any((n) => n.startsWith('pictures/')), isFalse,
+          reason: '结构化快照不应包含图片文件');
+      expect(fileNames.any((n) => n.startsWith('attachments/')), isFalse,
+          reason: '结构化快照不应包含附件文件');
+      expect(fileNames.any((n) => n.startsWith('tts_audio/')), isFalse);
+      expect(fileNames.any((n) => n.startsWith('videos/')), isFalse);
+      expect(fileNames.any((n) => n.startsWith('texts/')), isFalse);
+
+      // 但媒体记录必须在
+      Uint8List? manifestData;
+      for (final f in archive) {
+        if (f.isFile && f.name == 'stroom_manifest.json') {
+          manifestData = Uint8List.fromList(f.content as List<int>);
+          break;
+        }
+      }
+      final dbJson =
+          jsonDecode(utf8.decode(manifestData!)) as Map<String, dynamic>;
+      expect((dbJson['image_records'] as List<dynamic>).length, equals(1),
+          reason: '媒体记录必须进结构化快照');
+    });
+
+    testWidgets(
+        'structuredOnly restore keeps media and attachment files untouched',
+        (WidgetTester t) async {
+      // 准备：附件文件 + 图片文件 + 记录（磁盘/WebFileStore）
+      await WebFileStore.write(
+          'attachments/ref_attach.bin', Uint8List.fromList([1, 2, 3]));
+      await WebFileStore.write(
+          'pictures/ref_hash.jpg', Uint8List.fromList([9, 9, 9]));
+      await ManifestDatabase.insertImageRecord({
+        'id': 'img_before',
+        'name': 'before',
+        'hash': 'ref_hash',
+        'format': 'jpg',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': 100,
+        'folder': '',
+        'width': 10,
+        'height': 10,
+      });
+
+      // 结构化快照（记录进、文件不进）
+      final bytes = await BackupService.buildBackupBytesForTest(
+        selection: BackupSelection.structuredOnly,
+      );
+
+      // 恢复（structuredOnly）：记录被替换，但媒体/附件文件必须保留
+      await BackupService.restoreFromBytesForTest(
+        bytes,
+        selection: BackupSelection.structuredOnly,
+      );
+
+      expect(await WebFileStore.read('attachments/ref_attach.bin'), isNotNull,
+          reason: '结构化恢复不能删除附件文件');
+      expect(await WebFileStore.read('pictures/ref_hash.jpg'), isNotNull,
+          reason: '结构化恢复不能删除媒体文件');
+      final records = await ManifestDatabase.getAllImageRecords();
+      expect(records.length, equals(1), reason: '媒体记录照常恢复');
+    });
+
     testWidgets('backup with pictures-only includes only pictures in archive',
         (WidgetTester t) async {
       // Insert test records for multiple types

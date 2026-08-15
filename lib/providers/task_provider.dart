@@ -16,6 +16,7 @@ import 'tts_state_provider.dart';
 import 'provider_config.dart';
 import 'tts_provider.dart' as tts_provider_base;
 import '../utils/audio_trim.dart';
+import '../utils/atomic_file.dart';
 import '../utils/audio_utils.dart';
 import '../utils/file_manifest.dart';
 
@@ -415,7 +416,9 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     try {
       final file = await _tasksFile();
       final data = state.map((t) => t.toMap()).toList();
-      await file.writeAsString(jsonEncode(data));
+      // 原子写入：直接 writeAsString 中途崩溃会留下半截 JSON，
+      // 下次启动整个任务列表解析失败。
+      await AtomicFile.writeString(file, jsonEncode(data));
     } catch (e) {
       debugPrint('[TaskListNotifier] Failed to persist tasks: $e');
     }

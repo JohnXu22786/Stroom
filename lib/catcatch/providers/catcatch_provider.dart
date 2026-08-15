@@ -15,6 +15,7 @@ import '../models/media_resource.dart';
 import '../engine/task_executor.dart';
 import '../config/default_rules.dart';
 import '../engine/executor_save.dart';
+import '../../utils/atomic_file.dart';
 
 // =============================================================================
 // Provider 定义
@@ -697,7 +698,8 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     try {
       final file = await _tasksFile();
       final data = state.map((t) => t.toMap()).toList();
-      await file.writeAsString(jsonEncode(data));
+      // 原子写入：防止中途崩溃留下半截 JSON 导致任务列表丢失。
+      await AtomicFile.writeString(file, jsonEncode(data));
     } catch (e) {
       debugPrint('[CatCatchNotifier] Failed to persist tasks: $e');
     }

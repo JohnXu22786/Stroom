@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/data_migration_service.dart';
+import 'package:stroom/services/data_safety_manager.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/snapshot_service.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
@@ -15,93 +18,6 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     AppStorage.resetCache();
-  });
-
-  tearDownAll(() async {
-    // Remove the per-isolate test backup root so parallel runs do not
-    // accumulate directories in systemTemp.
-    final root = await DataMigrationService.getExternalBackupRootPath();
-    final dir = Directory(root);
-    if (await dir.exists()) {
-      await dir.delete(recursive: true);
-    }
-  });
-
-  group('DataMigrationService - accessible backup path', () {
-    test('backup root is outside app data directory', () async {
-      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-      final appDir = await AppStorage.directory;
-
-      // Verify they are NOT the same path
-      expect(backupRoot, isNot(equals(appDir)));
-      // Verify backup root is a non-empty path
-      expect(backupRoot.isNotEmpty, isTrue);
-    });
-
-    test('backup root contains backup directory name', () async {
-      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-      // Should contain either Stroom/AutoBackups or stroom_backup_test
-      expect(
-        backupRoot.contains('AutoBackups') ||
-            backupRoot.contains('AutoBackup') ||
-            backupRoot.contains('stroom_backup_test'),
-        isTrue,
-        reason: 'Backup root should reference backup directory name',
-      );
-    });
-
-    test('backup root is stable within the test isolate', () async {
-      // Regression: parallel test files share systemTemp and must each use
-      // their own per-isolate root (BackupLocationManager.testBackupRoot);
-      // within one isolate (one test file) the path must not change between
-      // calls, otherwise setUp/cleanup in the backup tests would break.
-      final root1 = await DataMigrationService.getExternalBackupRootPath();
-      final root2 = await DataMigrationService.getExternalBackupRootPath();
-      expect(root1, root2,
-          reason: 'Repeated resolution must return the same test root');
-      expect(root1.contains('stroom_backup_test'), isTrue,
-          reason: 'Test root must stay under the stroom_backup_test prefix');
-      // Discriminator: the pre-fix shared-root implementation resolved to
-      // exactly this fixed path — unique per-isolate roots must differ.
-      expect(root1,
-          isNot(equals('${Directory.systemTemp.path}/stroom_backup_test')),
-          reason: 'Test root must be unique per isolate, not the shared path');
-    });
-
-    test('backup root is NOT inside private app data directory', () async {
-      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-      final appDir = await AppStorage.directory;
-
-      // In production, backup is stored in a user-accessible location
-      // outside the app data directory on every platform (see docstring).
-      // In the test environment, both use subdirectories of temp by design.
-      expect(backupRoot, isNot(equals(appDir)),
-          reason: 'Backup root must differ from private app data directory. '
-              'It must be in a user-accessible location.');
-    });
-  });
-
-  group('DataMigrationService - user-accessible backup path requirements', () {
-    test('path returns valid backup directory name', () async {
-      // On each platform, getExternalBackupRootPath() resolves to a
-      // user-accessible location (see method docstring for details).
-      // In the test environment it falls back to Directory.systemTemp.
-      final path = await DataMigrationService.getExternalBackupRootPath();
-      expect(path, isNotNull);
-      expect(path.contains('Stroom') || path.contains('stroom'), isTrue);
-    });
-
-    test('path works with createBackup and cleanOldBackups', () async {
-      // Verify that after the path change, backup creation and cleanup
-      // still work correctly.
-      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-      final rootDir = Directory(backupRoot);
-      await rootDir.create(recursive: true);
-      await DataMigrationService.cleanOldBackups();
-      if (await rootDir.exists()) {
-        await rootDir.delete(recursive: true);
-      }
-    });
   });
 
   group('DataMigrationService - legacy global format version', () {
@@ -651,21 +567,21 @@ void main() {
       expect(prefs.getString('conversations_bak'), isNotNull);
     });
 
-    test('backup ZIP is created in external location during migration',
+    test('migration snapshot is created in private snapshots directory',
         () async {
-      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
+      // 迁移前快照现在是私有目录结构化快照（不再写外部 AutoBackups）
+      final snapDir = await SnapshotService.snapshotsDir;
 
-      // Clean any existing backup root
-      final rootDir = Directory(backupRoot);
-      if (await rootDir.exists()) {
-        await rootDir.delete(recursive: true);
+      // Clean any existing snapshots
+      if (await snapDir.exists()) {
+        await snapDir.delete(recursive: true);
       }
 
       await DataMigrationService.checkAndMigrate();
 
-      // Backup root should exist with at least one ZIP file
-      expect(await rootDir.exists(), isTrue);
-      final entries = await rootDir.list().toList();
+      // Private snapshots dir should exist with at least one ZIP file
+      expect(await snapDir.exists(), isTrue);
+      final entries = await snapDir.list().toList();
       final zips = entries
           .whereType<File>()
           .where((f) => f.path.endsWith('.zip'))
@@ -673,39 +589,9 @@ void main() {
       expect(zips.length, greaterThan(0));
 
       // Cleanup after test
-      if (await rootDir.exists()) {
-        await rootDir.delete(recursive: true);
+      if (await snapDir.exists()) {
+        await snapDir.delete(recursive: true);
       }
-    });
-  });
-
-  group('DataMigrationService - external backup', () {
-    setUp(() async {
-      // Set mock values BEFORE any getInstance call
-      SharedPreferences.setMockInitialValues({
-        'data_format_version': 0,
-        'test_key': 'test_value',
-      });
-      AppStorage.resetCache();
-    });
-
-    test('createBackup creates a backup ZIP in external location', () async {
-      final backupPath = await DataMigrationService.createBackup();
-      expect(backupPath, isNotNull);
-
-      final backupFile = File(backupPath!);
-      expect(await backupFile.exists(), isTrue);
-
-      // Verify it's a ZIP file
-      expect(backupPath.endsWith('.zip'), isTrue);
-      expect(await backupFile.length(), greaterThan(0));
-
-      // Verify it's outside app data
-      final appDir = await AppStorage.directory;
-      expect(backupFile.parent.path, isNot(equals(appDir)));
-
-      // Cleanup
-      await backupFile.delete();
     });
   });
 
@@ -733,111 +619,6 @@ void main() {
 
       // Per-part versions should all be current
       await _expectAllPartsCurrent();
-    });
-
-    test('does NOT create external backup during migration', () async {
-      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-      final rootDir = Directory(backupRoot);
-
-      // Clean any existing backup root
-      if (await rootDir.exists()) {
-        await rootDir.delete(recursive: true);
-      }
-
-      await DataMigrationService.migrateDataFormatIfNeeded();
-
-      // No backup directory should be created (unlike checkAndMigrate)
-      expect(await rootDir.exists(), isFalse);
-    });
-  });
-
-  group('DataMigrationService - cleanup', () {
-    test('cleanOldBackups handles empty backup directory', () async {
-      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-      final rootDir = Directory(backupRoot);
-
-      if (await rootDir.exists()) {
-        await rootDir.delete(recursive: true);
-      }
-      await DataMigrationService.cleanOldBackups();
-      // No exception = test passes
-    });
-
-    test('cleanOldBackups keeps max 5 backup_ entries (new policy)', () async {
-      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-      final rootDir = Directory(backupRoot);
-      await rootDir.create(recursive: true);
-
-      try {
-        // Create 7 backup_ prefixed items (4 dirs + 3 zips) on different dates
-        for (int i = 0; i < 4; i++) {
-          final t = DateTime.now().subtract(Duration(days: 2 * (i + 1)));
-          final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
-              '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
-          final d = Directory('${rootDir.path}/backup_$timeStr');
-          await d.create(recursive: true);
-        }
-        for (int i = 0; i < 3; i++) {
-          final t = DateTime.now().subtract(Duration(hours: 2 * (i + 1)));
-          final timeStr = '${t.year}-${_pad(t.month)}-${_pad(t.day)}T'
-              '${_pad(t.hour)}-${_pad(t.minute)}-${_pad(t.second)}';
-          final f = File('${rootDir.path}/backup_$timeStr.zip');
-          await f.writeAsString('dummy');
-        }
-
-        await DataMigrationService.cleanOldBackups();
-
-        // Should keep 5 of the 7 (new retention policy: max 5 total)
-        final entries = await rootDir.list().toList();
-        final backupItems = entries
-            .where((e) =>
-                (e is File && e.path.endsWith('.zip')) ||
-                (e is Directory && e.path.contains('backup_')))
-            .toList();
-        expect(backupItems.length, equals(5));
-      } finally {
-        if (await rootDir.exists()) {
-          await rootDir.delete(recursive: true);
-        }
-      }
-    });
-
-    test('cleanOldBackups does not crash on invalid entries', () async {
-      final backupRoot = await DataMigrationService.getExternalBackupRootPath();
-      final rootDir = Directory(backupRoot);
-      await rootDir.create(recursive: true);
-
-      try {
-        // Create a file (not a directory) in the backup root
-        final file = File('${rootDir.path}/not_a_dir');
-        await file.writeAsString('test');
-
-        // Should not throw when encountering non-directory entries
-        await DataMigrationService.cleanOldBackups();
-      } finally {
-        if (await rootDir.exists()) {
-          await rootDir.delete(recursive: true);
-        }
-      }
-    });
-  });
-
-  group('DataMigrationService - SAF backup verification', () {
-    test('_latestZipName filters non-zip files and picks the newest', () {
-      // 回归：SAF 列表未排序且可能包含非 zip 文件（如访问测试临时文件），
-      // 直接取 files.last 会返回错误的「已校验」文件。
-      final files = [
-        '.saf_access_test_123.tmp',
-        'backup_2026-01-01T10-00-00.zip',
-        'notes.txt',
-        'backup_2026-08-04T22-00-00.zip',
-        'backup_2026-03-15T08-30-00.zip',
-      ];
-      expect(DataMigrationBackup.latestZipName(files),
-          'backup_2026-08-04T22-00-00.zip');
-
-      expect(DataMigrationBackup.latestZipName(['a.txt', 'b.log']), isNull);
-      expect(DataMigrationBackup.latestZipName(const []), isNull);
     });
   });
 
@@ -1055,6 +836,68 @@ void main() {
       );
       // 版本正常提升（不再无限重试迁移）。
       await _expectAllPartsCurrent();
+    });
+  });
+
+  group('DataMigrationService - post-migration validation freeze', () {
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions': '{"chat":0,"settings":0}',
+        'conversations': '[{"id":"pre_migration_conv"}]',
+      });
+      ManifestDatabase.enableTestMode();
+      AppStorage.resetCache();
+      // 清理上一个用例可能残留的坏任务文件（迁移后校验会扫描它们）
+      final appDir = await AppStorage.directory;
+      final badTasks = File(p.join(appDir, 'synthesis', 'tasks.json'));
+      if (await badTasks.exists()) await badTasks.delete();
+    });
+
+    tearDown(() async {
+      // 清理冻结状态、快照与坏任务文件，避免影响其他测试
+      final appDir = await AppStorage.directory;
+      final stateFile = File(p.join(appDir, DataSafetyManager.stateFileName));
+      if (await stateFile.exists()) await stateFile.delete();
+      final snapDir = await SnapshotService.snapshotsDir;
+      if (await snapDir.exists()) await snapDir.delete(recursive: true);
+      final badTasks = File(p.join(appDir, 'synthesis', 'tasks.json'));
+      if (await badTasks.exists()) await badTasks.delete();
+    });
+
+    test(
+        'migration with corrupt post-migration data restores pre-migration '
+        'snapshot and freezes', () async {
+      // 模拟"迁移代码产出校验不过的数据"：迁移前把任务文件写坏 ——
+      // 迁移本身不动 tasks.json，迁移后完整性校验必然失败。
+      final appDir = await AppStorage.directory;
+      final badTasks = File(p.join(appDir, 'synthesis', 'tasks.json'));
+      await badTasks.create(recursive: true);
+      await badTasks.writeAsString('{broken');
+
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isFalse);
+
+      // 已冻结并记录失败迁移
+      final status = await DataSafetyManager.loadStatus();
+      expect(status.state, DataSafetyState.frozen);
+      expect(status.failedMigration, isNotNull);
+
+      // 恢复的是迁移前快照：conversations 回到快照内容
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('conversations'), contains('pre_migration_conv'),
+          reason: '迁移失败后应恢复迁移前快照的数据');
+
+      // 关键：恢复后不重跑迁移 —— 版本记录保持快照中的旧值（chat=0），
+      // 用户回退旧版应用可正常使用（旧版读到旧版本记录，哨兵不拦截）。
+      final stored = await DataMigrationService.getStoredPartVersions();
+      expect(stored['chat'], equals(0), reason: '恢复后版本记录必须保持迁移前旧值（不能重新迁移）');
+    });
+
+    test('clean post-migration data does not freeze', () async {
+      final result = await DataMigrationService.checkAndMigrate();
+      expect(result.needsMigration, isTrue);
+      final status = await DataSafetyManager.loadStatus();
+      expect(status.state, isNot(DataSafetyState.frozen));
     });
   });
 }
