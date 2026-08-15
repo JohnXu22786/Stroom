@@ -378,7 +378,6 @@ Widget _buildCodeBlock(
     ),
   );
 }
-}
 
 /// Returns the content of the still-OPEN trailing fenced code block in
 /// [text], or `null` when every fenced block is closed.

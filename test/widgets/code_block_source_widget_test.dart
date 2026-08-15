@@ -1001,6 +1001,7 @@ void main() {
           reason: 'content growth must not move a non-streaming block');
       expect(find.byIcon(Icons.arrow_downward), findsNothing);
     });
+  });
 
   group('CodeBlockSourceView - copy button', () {
     /// Installs a mock platform-channel handler so Clipboard.setData
