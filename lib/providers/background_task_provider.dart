@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 import '../services/ios_continued_task_service.dart';
+import '../utils/atomic_file.dart';
 import 'task_provider.dart';
 
 // ============================================================================
@@ -559,56 +560,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     return _pendingWrite!;
   }
 
-  /// 原子写入任务文件：先写临时文件，再替换目标文件。
+  /// 原子写入任务文件（委托 [AtomicFile]：写临时文件 + rename 替换）。
   ///
   /// 直接 writeAsString 不是原子操作——写入中途崩溃/断电会留下
   /// 半截 JSON，下次启动恢复时整个文件解析失败、任务全部丢失。
-  /// 临时文件 + 替换保证目标文件要么是完整的旧内容，要么是完整的
-  /// 新内容。（写入链已串行化，不存在并发写同一文件的竞态。）
-  ///
-  /// Windows 上防病毒扫描可能短暂锁定临时文件导致替换失败：
-  /// 重试数次，仍失败则回退为直接写入（非原子，但不丢数据）。
+  /// （写入链已串行化，不存在并发写同一文件的竞态。）
   Future<void> _writeTasksFile(File file, String data) async {
-    final tmpFile = File('${file.path}.tmp');
-    await tmpFile.writeAsString(data);
-    for (var attempt = 0; attempt < 3; attempt++) {
-      try {
-        if (await file.exists()) {
-          await file.delete();
-        }
-        await tmpFile.rename(file.path);
-        return;
-      } catch (_) {
-        if (attempt == 2) {
-          // 兜底：直接写目标文件（非原子，但至少不丢失数据）。
-          // 若直接写也失败（罕见双重故障），尝试最后一步重命名
-          // （此时目标文件可能已删除，重命名有机会成功）。
-          try {
-            await file.writeAsString(data);
-            // 清理遗留的临时文件（best-effort）。
-            try {
-              if (await tmpFile.exists()) await tmpFile.delete();
-            } catch (_) {}
-            return;
-          } catch (_) {
-            try {
-              await tmpFile.rename(file.path);
-              return;
-            } catch (_) {
-              try {
-                if (await tmpFile.exists()) await tmpFile.delete();
-              } catch (_) {}
-              rethrow;
-            }
-          }
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      }
-    }
-    // 理论不可达：循环内必然 return 或 rethrow。
-    try {
-      if (await tmpFile.exists()) await tmpFile.delete();
-    } catch (_) {}
+    await AtomicFile.writeString(file, data);
   }
 
   Future<List<BackgroundTask>> _loadPersistedTasks() async {
