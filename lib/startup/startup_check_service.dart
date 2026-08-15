@@ -114,8 +114,7 @@ class StartupCheckService {
     try {
       final stored = await DataMigrationService.getStoredPartVersions();
       final ahead = DataParts.all
-          .where((p) =>
-              (stored[p] ?? 0) > (DataParts.currentVersions[p] ?? 0))
+          .where((p) => (stored[p] ?? 0) > (DataParts.currentVersions[p] ?? 0))
           .toList();
       if (ahead.isEmpty) return null;
       return ahead

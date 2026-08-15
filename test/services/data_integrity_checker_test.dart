@@ -59,7 +59,8 @@ void main() {
       expect(hit, isNotEmpty);
     });
 
-    test('corrupt provider_entries structure is reported (as Map crash '
+    test(
+        'corrupt provider_entries structure is reported (as Map crash '
         'guard)', () async {
       SharedPreferences.setMockInitialValues({
         'provider_entries': '[{"id":123,"type":"x"}]', // id 非字符串
@@ -84,8 +85,7 @@ void main() {
       await f.create(recursive: true);
       await f.writeAsString('[{broken');
       final report = await DataIntegrityChecker.checkCurrentData();
-      expect(
-          report.corruptions.any((i) => i.message.contains('synthesis')),
+      expect(report.corruptions.any((i) => i.message.contains('synthesis')),
           isTrue);
     });
 
@@ -94,8 +94,7 @@ void main() {
       await f.create(recursive: true);
       await f.writeAsString('not json at all');
       final report = await DataIntegrityChecker.checkCurrentData();
-      expect(
-          report.corruptions.any((i) => i.message.contains('executions')),
+      expect(report.corruptions.any((i) => i.message.contains('executions')),
           isTrue);
     });
 

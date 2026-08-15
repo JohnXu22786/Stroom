@@ -175,8 +175,7 @@ class _StartupAppState extends State<StartupApp>
         debugPrint('[StartupApp] 版本哨兵触发: $versionAhead');
         setState(() {
           _isWorking = false;
-          _dataSafetyBlocked =
-              '数据由更新版本的应用创建（$versionAhead）。\n\n'
+          _dataSafetyBlocked = '数据由更新版本的应用创建（$versionAhead）。\n\n'
               '当前版本无法安全读取这些数据。请安装最新版本的应用，'
               '数据未做任何改动。';
         });
@@ -707,9 +706,8 @@ class _DataSafetyBlockPageState extends State<_DataSafetyBlockPage> {
     if (_exporting) return;
     setState(() => _exporting = true);
     try {
-      final dateStr = DateTime.now()
-          .toIso8601String()
-          .replaceAll(RegExp(r'[:.]'), '-');
+      final dateStr =
+          DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
       final path = await FilePicker.saveFile(
         dialogTitle: '导出数据备份（全量）',
         fileName: 'stroom_export_$dateStr.zip',
@@ -745,7 +743,8 @@ class _DataSafetyBlockPageState extends State<_DataSafetyBlockPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.shield_outlined, size: 72, color: Colors.red.shade400),
+                Icon(Icons.shield_outlined,
+                    size: 72, color: Colors.red.shade400),
                 const SizedBox(height: 16),
                 Text(
                   '数据安全保护',

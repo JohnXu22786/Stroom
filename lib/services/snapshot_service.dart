@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as p;
 
 import 'app_log_service.dart';
@@ -159,8 +160,7 @@ class SnapshotService {
       await _writeIndex(index);
 
       await cleanupOldSnapshots();
-      await AppLogService.info(
-          'SnapshotService', '结构化快照完成: $zipName');
+      await AppLogService.info('SnapshotService', '结构化快照完成: $zipName');
       return File(zipPath);
     } catch (e) {
       debugPrint('[SnapshotService] 创建快照失败: $e');
@@ -190,9 +190,8 @@ class SnapshotService {
 
   /// 按文件名提取快照时间（backup_YYYY-MM-DDTHH-MM-SS.zip）。
   static DateTime? _extractTimestamp(String name) {
-    final match =
-        RegExp(r'^backup_(\d{4}-\d{2}-\d{2})T(\d{2}-\d{2}-\d{2})')
-            .firstMatch(name);
+    final match = RegExp(r'^backup_(\d{4}-\d{2}-\d{2})T(\d{2}-\d{2}-\d{2})')
+        .firstMatch(name);
     if (match == null) return null;
     try {
       return DateTime.parse(
@@ -225,11 +224,13 @@ class SnapshotService {
 
       final now = _now();
       final within24h = infos
-          .where((i) => i.modified.isAfter(now.subtract(const Duration(hours: 24))))
+          .where((i) =>
+              i.modified.isAfter(now.subtract(const Duration(hours: 24))))
           .toList()
         ..sort((a, b) => b.modified.compareTo(a.modified));
       final beyond24h = infos
-          .where((i) => !i.modified.isAfter(now.subtract(const Duration(hours: 24))))
+          .where((i) =>
+              !i.modified.isAfter(now.subtract(const Duration(hours: 24))))
           .toList();
 
       final keep = <String>{
@@ -246,7 +247,9 @@ class SnapshotService {
       }
       final sortedDays = dayToLatest.entries.toList()
         ..sort((a, b) => b.key.compareTo(a.key));
-      for (var i = 0; i < (sortedDays.length < 2 ? sortedDays.length : 2); i++) {
+      for (var i = 0;
+          i < (sortedDays.length < 2 ? sortedDays.length : 2);
+          i++) {
         keep.add(sortedDays[i].value.path);
       }
       // 下限 3：不足则从旧的补足
@@ -269,7 +272,8 @@ class SnapshotService {
       }
       // 同步索引
       final index = await readIndex();
-      final keptNames = keep.map((path) => path.split(Platform.pathSeparator).last).toSet();
+      final keptNames =
+          keep.map((path) => path.split(Platform.pathSeparator).last).toSet();
       index.removeWhere((e) => !keptNames.contains(e.file));
       await _writeIndex(index);
     } catch (e) {

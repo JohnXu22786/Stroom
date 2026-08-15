@@ -35,10 +35,8 @@ void main() {
     test('leaves no .tmp file behind after success', () async {
       final file = File('${tempDir.path}/tasks.json');
       await AtomicFile.writeString(file, 'data');
-      final leftovers = tempDir
-          .listSync()
-          .where((e) => e.path.endsWith('.tmp'))
-          .toList();
+      final leftovers =
+          tempDir.listSync().where((e) => e.path.endsWith('.tmp')).toList();
       expect(leftovers, isEmpty);
     });
 
@@ -55,7 +53,8 @@ void main() {
       expect(await file.exists(), isFalse);
     });
 
-    test('throws when even the fallback direct write fails (rare double '
+    test(
+        'throws when even the fallback direct write fails (rare double '
         'fault)', () async {
       final file = File('${tempDir.path}/tasks.json');
       // 目标路径是目录：rename 与直接写都无法成功 → 异常传播给调用方，
@@ -65,10 +64,8 @@ void main() {
         AtomicFile.writeString(file, 'data'),
         throwsA(isA<FileSystemException>()),
       );
-      final leftovers = tempDir
-          .listSync()
-          .where((e) => e.path.endsWith('.tmp'))
-          .toList();
+      final leftovers =
+          tempDir.listSync().where((e) => e.path.endsWith('.tmp')).toList();
       expect(leftovers, isEmpty);
       await Directory('${tempDir.path}/tasks.json').delete();
     });

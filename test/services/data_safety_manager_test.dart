@@ -63,8 +63,7 @@ void main() {
       expect(status.state, DataSafetyState.normal);
     });
 
-    test('corrupt data: rolls back to latest snapshot and recovers',
-        () async {
+    test('corrupt data: rolls back to latest snapshot and recovers', () async {
       // 先创建一版健康快照
       SharedPreferences.setMockInitialValues({
         'conversations': '[{"id":"good_conv"}]',
@@ -114,10 +113,10 @@ void main() {
       expect(status.frozenByVersion, appVersion);
     });
 
-    test('corrupt snapshot in chain is skipped, older good one used',
-        () async {
+    test('corrupt snapshot in chain is skipped, older good one used', () async {
       // 旧快照（健康）
-      SnapshotService.debugNow = () => DateTime.now().subtract(const Duration(hours: 2));
+      SnapshotService.debugNow =
+          () => DateTime.now().subtract(const Duration(hours: 2));
       SharedPreferences.setMockInitialValues({
         'conversations': '[{"id":"old_good"}]',
         'data_format_versions': '{"chat":1}',
@@ -152,7 +151,8 @@ void main() {
           reason: 'SHA 不符的快照应被跳过，回滚到更旧的健康快照');
     });
 
-    test('freeze is version-aware: same version stays frozen, other '
+    test(
+        'freeze is version-aware: same version stays frozen, other '
         'version is released', () async {
       // 相同版本 → 冻结保持
       await DataSafetyManager.freezeForMigrationFailure(
@@ -169,13 +169,13 @@ void main() {
         failedMigration: status.failedMigration,
       ));
       result = await DataSafetyManager.checkAndRepair();
-      expect(result.skippedDueToFreeze, isFalse,
-          reason: '不同构建应解除冻结');
+      expect(result.skippedDueToFreeze, isFalse, reason: '不同构建应解除冻结');
       final after = await DataSafetyManager.loadStatus();
       expect(after.state, DataSafetyState.normal);
     });
 
-    test('cleanupOrphans deletes unreferenced files older than 3 days '
+    test(
+        'cleanupOrphans deletes unreferenced files older than 3 days '
         'and keeps referenced/new ones', () async {
       // 引用：附件 basename + 媒体 hash
       SharedPreferences.setMockInitialValues({
@@ -202,8 +202,7 @@ void main() {
       // 被引用的文件（老 mtime 也不删）
       final referenced = File(p.join(attachmentsDir.path, 'ref_attach_1.jpg'));
       await referenced.writeAsString('x');
-      final oldReferencedTs =
-          DateTime.now().subtract(const Duration(days: 10));
+      final oldReferencedTs = DateTime.now().subtract(const Duration(days: 10));
       await referenced.setLastModified(oldReferencedTs);
 
       // 有引用媒体文件
@@ -223,14 +222,10 @@ void main() {
 
       await DataSafetyManager.cleanupOrphans();
 
-      expect(await referenced.exists(), isTrue,
-          reason: '被引用的文件不能删');
-      expect(await refMedia.exists(), isTrue,
-          reason: '被引用的媒体文件不能删');
-      expect(await orphan.exists(), isFalse,
-          reason: '无引用且超 3 天应删除');
-      expect(await fresh.exists(), isTrue,
-          reason: '3 天缓冲内的文件应保留');
+      expect(await referenced.exists(), isTrue, reason: '被引用的文件不能删');
+      expect(await refMedia.exists(), isTrue, reason: '被引用的媒体文件不能删');
+      expect(await orphan.exists(), isFalse, reason: '无引用且超 3 天应删除');
+      expect(await fresh.exists(), isTrue, reason: '3 天缓冲内的文件应保留');
     });
   });
 }

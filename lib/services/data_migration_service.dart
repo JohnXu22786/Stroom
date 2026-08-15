@@ -344,18 +344,15 @@ class DataMigrationService {
         if (check.hasCorruption) {
           debugPrint('[DataMigrationService] 迁移后校验失败（数据损坏），'
               '恢复迁移前快照并冻结: ${check.corruptions.map((i) => i.message).join('; ')}');
-          await AppLogService.error(
-              'DataMigrationService',
-              '迁移后数据校验失败，恢复迁移前快照并冻结',
-              check.corruptions.first.message);
+          await AppLogService.error('DataMigrationService',
+              '迁移后数据校验失败，恢复迁移前快照并冻结', check.corruptions.first.message);
           try {
             await DataSafetyManager.restoreLatestSnapshot();
           } catch (e) {
             debugPrint('[DataMigrationService] 恢复迁移前快照失败: $e');
           }
           await DataSafetyManager.freezeForMigrationFailure(
-            targetFormatVersion:
-                DataParts.all.fold<int>(0, (max, p) {
+            targetFormatVersion: DataParts.all.fold<int>(0, (max, p) {
               final v = DataParts.currentVersions[p] ?? 0;
               return v > max ? v : max;
             }),

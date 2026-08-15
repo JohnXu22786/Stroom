@@ -56,8 +56,7 @@ class DataSafetyStatus {
     this.updatedAt,
   });
 
-  static const normal =
-      DataSafetyStatus(state: DataSafetyState.normal);
+  static const normal = DataSafetyStatus(state: DataSafetyState.normal);
 
   bool get isFrozen => state == DataSafetyState.frozen;
   bool get isRepairing => state == DataSafetyState.repairing;
@@ -239,8 +238,7 @@ class DataSafetyManager {
       frozenByVersion: appVersion,
       updatedAt: DateTime.now(),
     ));
-    await AppLogService.error(
-        'DataSafetyManager', '自动修复失败，数据已冻结（等待手动导入）');
+    await AppLogService.error('DataSafetyManager', '自动修复失败，数据已冻结（等待手动导入）');
     return const RepairResult(corruptionFound: true, frozen: true);
   }
 

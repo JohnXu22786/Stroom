@@ -37,8 +37,7 @@ void main() {
   });
 
   group('SnapshotService', () {
-    test('createSnapshot writes a zip snapshot with index entry',
-        () async {
+    test('createSnapshot writes a zip snapshot with index entry', () async {
       SharedPreferences.setMockInitialValues({
         'conversations': '[{"id":"conv1"}]',
         'data_format_versions': '{"chat":1}',
@@ -95,16 +94,14 @@ void main() {
       await SnapshotService.createSnapshot(force: true); // 今天
 
       final index = await SnapshotService.readIndex();
-      expect(index.length, 5,
-          reason: '24h 内 3 个 + 前天/昨天各 1 个 = 5 个，其余清理');
+      expect(index.length, 5, reason: '24h 内 3 个 + 前天/昨天各 1 个 = 5 个，其余清理');
 
       final names = index.map((e) => e.file).toSet();
       final dirFiles = (await snapDir.list().toList())
           .whereType<File>()
           .where((f) => f.path.endsWith('.zip'))
           .toList();
-      expect(dirFiles.length, 5,
-          reason: '磁盘上的快照文件应与索引一致');
+      expect(dirFiles.length, 5, reason: '磁盘上的快照文件应与索引一致');
       for (final f in dirFiles) {
         expect(names, contains(p.basename(f.path)));
       }

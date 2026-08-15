@@ -328,8 +328,7 @@ class BackupService {
           p.join(appDir, 'background', 'tasks.json'), useStreaming);
       await _addPlanFile(diskFiles, memoryFiles, 'task_flows/flows.json',
           p.join(appDir, 'task_flows', 'flows.json'), useStreaming);
-      await _addPlanFile(diskFiles, memoryFiles,
-          'task_flows/executions.json',
+      await _addPlanFile(diskFiles, memoryFiles, 'task_flows/executions.json',
           p.join(appDir, 'task_flows', 'executions.json'), useStreaming);
     }
     if (selection.ankiData) {

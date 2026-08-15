@@ -205,7 +205,8 @@ class DataIntegrityChecker {
       if (db != null) {
         try {
           final rows = await db.rawQuery('PRAGMA integrity_check');
-          final result = rows.isEmpty ? '' : (rows.first.values.first as String?);
+          final result =
+              rows.isEmpty ? '' : (rows.first.values.first as String?);
           if (result != 'ok') {
             issues.add(DataIntegrityIssue(
               part: 'anki',

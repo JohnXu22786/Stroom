@@ -47,7 +47,8 @@ void main() {
     test('returns null when no part is ahead of current version', () async {
       SharedPreferences.setMockInitialValues({
         'data_format_versions': jsonEncode({
-          for (final part in DataParts.all) part: DataParts.currentVersions[part],
+          for (final part in DataParts.all)
+            part: DataParts.currentVersions[part],
         }),
       });
       final ahead = await StartupCheckService.checkVersionAhead();
@@ -76,8 +77,7 @@ void main() {
         'data_format_versions': 'not-json{{{',
       });
       final ahead = await StartupCheckService.checkVersionAhead();
-      expect(ahead, isNull,
-          reason: '版本记录损坏时按未存储处理（0），不应误判为超前');
+      expect(ahead, isNull, reason: '版本记录损坏时按未存储处理（0），不应误判为超前');
     });
   });
 
