@@ -57,6 +57,21 @@ class SnapshotService {
   static const String snapshotsDirName = 'snapshots';
   static const String manifestName = 'snapshot_index.json';
 
+  /// 测试环境下的快照根目录，每个测试 isolate（测试文件）独立。
+  ///
+  /// 并行运行的测试文件共享 systemTemp，若都使用同一个固定子目录，
+  /// 各文件 setUp 中的 `delete(recursive: true)` 会互相删除对方正在
+  /// 使用的快照（与 BackupLocationManager.testBackupRoot 同理）。
+  static String? _testSnapshotsRoot;
+
+  static String get testSnapshotsRoot {
+    final cached = _testSnapshotsRoot;
+    if (cached != null) return cached;
+    final dir = Directory.systemTemp.createTempSync('stroom_snapshots_test_');
+    _testSnapshotsRoot = dir.path;
+    return dir.path;
+  }
+
   /// 1 小时规则：最近 1 小时内有快照则跳过（与旧自动备份一致）。
   static const Duration hourRule = Duration(hours: 1);
 
@@ -66,10 +81,19 @@ class SnapshotService {
 
   static DateTime _now() => debugNow?.call() ?? DateTime.now();
 
-  /// 快照目录（私有数据目录下）。
+  /// 快照目录（私有数据目录下；测试环境为 per-isolate 唯一目录）。
   static Future<Directory> get snapshotsDir async {
-    final appDir = await AppStorage.directory;
-    final dir = Directory(p.join(appDir, snapshotsDirName));
+    String basePath;
+    try {
+      if (Platform.environment['FLUTTER_TEST'] == 'true') {
+        basePath = testSnapshotsRoot;
+      } else {
+        basePath = await AppStorage.directory;
+      }
+    } catch (e) {
+      basePath = await AppStorage.directory;
+    }
+    final dir = Directory(p.join(basePath, snapshotsDirName));
     try {
       if (!await dir.exists()) await dir.create(recursive: true);
     } catch (e) {

@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/snapshot_service.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
@@ -568,8 +569,7 @@ void main() {
     test('migration snapshot is created in private snapshots directory',
         () async {
       // 迁移前快照现在是私有目录结构化快照（不再写外部 AutoBackups）
-      final appDir = await AppStorage.directory;
-      final snapDir = Directory(p.join(appDir, 'snapshots'));
+      final snapDir = await SnapshotService.snapshotsDir;
 
       // Clean any existing snapshots
       if (await snapDir.exists()) {

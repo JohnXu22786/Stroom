@@ -20,7 +20,7 @@ void main() {
     ManifestDatabase.enableTestMode();
     AppStorage.resetCache();
     appDir = await AppStorage.directory;
-    snapDir = Directory(p.join(appDir, SnapshotService.snapshotsDirName));
+    snapDir = await SnapshotService.snapshotsDir;
     if (await snapDir.exists()) {
       await snapDir.delete(recursive: true);
     }

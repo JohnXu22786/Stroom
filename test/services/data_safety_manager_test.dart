@@ -23,7 +23,22 @@ void main() {
     ManifestDatabase.enableTestMode();
     AppStorage.resetCache();
     appDir = await AppStorage.directory;
-    snapDir = Directory(p.join(appDir, SnapshotService.snapshotsDirName));
+    // 清理共享 systemTemp 下其他测试文件可能残留的脏数据文件
+    //（checkAndRepair 会扫描这些路径，残留坏文件会造成误判损坏）
+    for (final rel in [
+      'synthesis/tasks.json',
+      'catcatch/tasks.json',
+      'background/tasks.json',
+      'task_flows/flows.json',
+      'task_flows/executions.json',
+      'browser_cookies.json',
+    ]) {
+      final f = File(p.join(appDir, rel));
+      try {
+        if (await f.exists()) await f.delete();
+      } catch (_) {}
+    }
+    snapDir = await SnapshotService.snapshotsDir;
     if (await snapDir.exists()) {
       await snapDir.delete(recursive: true);
     }
