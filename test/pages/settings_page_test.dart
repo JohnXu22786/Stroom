@@ -473,9 +473,9 @@ void main() {
   // ─────────────────────────────────────────────────────────────────────
 
   group('SettingsPage - 版本信息面板', () {
-    testWidgets(
-        'only the version icon opens the dialog; the app name text does not',
-        (tester) async {
+    testWidgets('tapping the version card opens the version info dialog', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -488,18 +488,12 @@ void main() {
       await tester.pumpWidget(_buildSettingsTestApp());
       await tester.pumpAndSettle();
 
-      // The about header shows the app name; only the icon (the near-square
-      // logo area) is tappable — the text itself must NOT open the dialog.
+      // The whole about header card is tappable — tapping the app name
+      // text (not just the logo icon) must open the dialog.
       // Scroll the last section of the long ListView into view first.
       await tester.ensureVisible(find.text('Stroom'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Stroom'));
-      await tester.pumpAndSettle();
-      expect(find.text('版本信息'), findsNothing);
-
-      await tester.ensureVisible(find.byIcon(Icons.auto_awesome));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.auto_awesome));
       await tester.pumpAndSettle();
 
       expect(find.text('版本信息'), findsOneWidget);
@@ -509,6 +503,10 @@ void main() {
       expect(find.text('本地构建'), findsOneWidget);
       // No release notes baked into the test build → section hidden.
       expect(find.text('更新内容'), findsNothing);
+
+      // The card keeps its compact #635 shape: the "点击查看版本信息"
+      // hint row from #582 must NOT be re-added (no size regression).
+      expect(find.text('点击查看版本信息'), findsNothing);
     });
 
     testWidgets('version info dialog closes via 关闭 button', (tester) async {

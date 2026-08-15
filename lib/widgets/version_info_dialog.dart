@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/app_version.dart';
 
-/// 版本信息面板：点击设置页「关于」区域版本卡片上的图标后弹出。
+/// 版本信息面板：点击设置页「关于」区域的版本卡片后弹出。
 ///
 /// 展示 CD 构建时写入的信息：
 /// - 版本号（[appVersion]，即 release 版本号）
