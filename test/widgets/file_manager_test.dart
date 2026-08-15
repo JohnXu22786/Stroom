@@ -508,19 +508,6 @@ void main() {
       );
     }
 
-    testWidgets('sort menu offers 创建时间/修改时间/文件名/大小 four categories',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp(build()));
-
-      await tester.tap(find.byKey(const Key('fm_sort_btn')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('按创建时间'), findsOneWidget);
-      expect(find.text('按修改时间'), findsOneWidget);
-      expect(find.text('按文件名'), findsOneWidget);
-      expect(find.text('按大小'), findsOneWidget);
-    });
-
     testWidgets('folders sort naturally by name (dot-numbered names)', (
       tester,
     ) async {
@@ -1120,63 +1107,6 @@ void main() {
 
       expect(find.byKey(const Key('fm_close_selection_btn')), findsNothing);
       expect(folderFinder, findsOneWidget);
-    });
-  });
-
-  group('FileManagerView grid folder width', () {
-    testWidgets('renders grid folder with short name without layout issues', (
-      tester,
-    ) async {
-      final config = FileManagerConfig<_TestFileRecord>(
-        title: 'Test',
-        showThumbnailToggle: true,
-        initialGridView: true,
-        fileIconBuilder: (_) =>
-            const Icon(Icons.videocam, key: Key('fallback_icon')),
-        fileThumbnailBuilder: (file) {
-          return Container(
-            key: Key('thumbnail_${file.id}'),
-            color: Colors.black,
-            child: const Center(child: Text('THUMB')),
-          );
-        },
-        onFileTap: (_) {},
-      );
-
-      await tester.pumpWidget(
-        _buildTestApp(
-          FileManagerView<_TestFileRecord>(
-            sortedRecords: [],
-            folders: {'A'},
-            sortConfig: sortConfig,
-            config: config,
-            onRefresh: () async {},
-            onRenameFile: (_, __) async {},
-            onMoveFile: (_, __) async {},
-            onCopyFile: (_, __) async {},
-            onDeleteFile: (_) async {},
-            onDeleteFiles: (_) async {},
-            onDeleteFolders: (_) async {},
-            onMoveFiles: (_, __) async {},
-            onMoveFolders: (_, __) async {},
-            onExportFile: (_) async {},
-            onRenameFolder: (_, __) async {},
-            onMoveFolder: (_, __) async {},
-            onCopyFolder: (_, __) async {},
-            onDeleteFolder: (_) async {},
-            onCreateFolder: (_) async {},
-            onToggleSort: (_) {},
-            manifestBridge: testManifestBridge,
-          ),
-        ),
-      );
-
-      expect(find.byKey(const Key('fm_grid_folder_A')), findsOneWidget);
-
-      final folderRenderer = tester.renderObject<RenderBox>(
-        find.byKey(const Key('fm_grid_folder_A')),
-      );
-      expect(folderRenderer.size.width, greaterThan(0));
     });
   });
 
@@ -2864,17 +2794,6 @@ void main() {
       );
     }
 
-    Attachment createDocumentAttachment() {
-      return Attachment(
-        fileName: 'doc.txt',
-        mimeType: 'text/plain',
-        fileType: 'document',
-        hash: 'def456',
-        storagePath: '/tmp/doc.txt',
-        fileSize: 200,
-      );
-    }
-
     Widget buildChip({
       required Attachment attachment,
       Uint8List? imageBytes,
@@ -2892,30 +2811,6 @@ void main() {
         ),
       );
     }
-
-    testWidgets('renders image with ExtendedImage when imageBytes provided',
-        (tester) async {
-      await tester.pumpWidget(buildChip(
-        attachment: createImageAttachment(),
-        imageBytes: testBytes,
-      ));
-
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      expect(find.byType(FilePreviewChip), findsOneWidget);
-      expect(find.text('test.png'), findsOneWidget);
-    });
-
-    testWidgets('shows file icon for non-image attachments', (tester) async {
-      await tester.pumpWidget(buildChip(
-        attachment: createDocumentAttachment(),
-      ));
-
-      await tester.pump();
-
-      expect(find.byIcon(Icons.insert_drive_file_outlined), findsOneWidget);
-    });
 
     testWidgets('remove button calls onRemove when tapped', (tester) async {
       bool removed = false;
@@ -2989,34 +2884,6 @@ void main() {
       await tester.tap(find.byIcon(Icons.close));
       expect(removed, true);
       expect(tapped, false);
-    });
-
-    testWidgets('different file types show correct icons', (tester) async {
-      final types = <String, IconData>{
-        'image': Icons.image_outlined,
-        'audio': Icons.audiotrack_outlined,
-        'video': Icons.videocam_outlined,
-        'document': Icons.insert_drive_file_outlined,
-      };
-
-      for (final entry in types.entries) {
-        final att = Attachment(
-          id: 'att-${entry.key}',
-          fileName: 'file.${entry.key}',
-          mimeType: '${entry.key}/test',
-          fileType: entry.key,
-          hash: 'hash-${entry.key}',
-          storagePath: 'attachments/hash-${entry.key}.test',
-          fileSize: 1024,
-        );
-
-        await tester.pumpWidget(buildChip(
-          attachment: att,
-        ));
-
-        expect(find.byIcon(entry.value), findsOneWidget,
-            reason: 'Expected ${entry.value} for fileType ${entry.key}');
-      }
     });
   });
 

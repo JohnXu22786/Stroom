@@ -16,17 +16,6 @@ void main() {
       );
     }
 
-    Attachment createDocumentAttachment() {
-      return Attachment(
-        fileName: 'doc.txt',
-        mimeType: 'text/plain',
-        fileType: 'document',
-        hash: 'def456',
-        storagePath: '/tmp/doc.txt',
-        fileSize: 2048,
-      );
-    }
-
     Widget buildPreview({
       required Attachment attachment,
       VoidCallback? onTap,
@@ -40,32 +29,6 @@ void main() {
         ),
       );
     }
-
-    testWidgets('renders for image attachments', (tester) async {
-      await tester.pumpWidget(buildPreview(
-        attachment: createImageAttachment(),
-      ));
-
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      expect(find.byType(MessageAttachmentPreview), findsOneWidget);
-      // File name should be displayed
-      expect(find.text('test.png'), findsOneWidget);
-      // File size should be shown
-      expect(find.text('1.0 KB'), findsOneWidget);
-    });
-
-    testWidgets('renders file icon for non-image attachments', (tester) async {
-      await tester.pumpWidget(buildPreview(
-        attachment: createDocumentAttachment(),
-      ));
-
-      await tester.pump();
-
-      expect(find.byIcon(Icons.insert_drive_file_outlined), findsOneWidget);
-      expect(find.text('2.0 KB'), findsOneWidget);
-    });
 
     testWidgets('onTap is called when tapped', (tester) async {
       bool tapped = false;

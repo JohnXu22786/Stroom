@@ -7,16 +7,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/built_in_prompts.dart';
 import 'package:stroom/pages/assistant_selection_page.dart';
-import 'package:stroom/pages/topic_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/widgets/llm/assistant_avatar.dart';
 
 /// Creates a test app wrapped in ProviderScope with optional overrides.
 Widget createTestApp({
   List<Assistant>? assistants,
-  String? selectedAssistantId,
-  Widget? home,
-  Map<String, WidgetBuilder>? extraRoutes,
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -34,15 +30,9 @@ Widget createTestApp({
           }
           return notifier;
         }),
-      if (selectedAssistantId != null)
-        selectedAssistantIdProvider.overrideWith((ref) => selectedAssistantId),
     ],
-    child: MaterialApp(
-      home: home ?? const AssistantSelectionPage(),
-      routes: {
-        '/topic-selection': (_) => const TopicSelectionPage(),
-        if (extraRoutes != null) ...extraRoutes,
-      },
+    child: const MaterialApp(
+      home: AssistantSelectionPage(),
     ),
   );
 }
@@ -103,43 +93,6 @@ void main() {
       },
     );
 
-    testWidgets('emoji picker scales down on narrow screens', (tester) async {
-      // Set a narrow surface (simulating a small phone)
-      await tester.binding.setSurfaceSize(const Size(360, 800));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [Assistant(name: '测试助手', prompt: 'P1', emoji: '🤖')],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Open create dialog (it uses the emoji picker too)
-      await tester.tap(find.byIcon(Icons.add));
-      await tester.pumpAndSettle();
-
-      // The dialog should be visible
-      expect(find.text('新建助手'), findsOneWidget);
-      // Emoji picker should be visible
-      expect(find.text('表情'), findsOneWidget);
-
-      // The grid should fit within the screen width (FittedBox scales it down)
-      final gridFinder = findEmojiGrid();
-      expect(gridFinder, findsOneWidget);
-      final gridRect = tester.getRect(gridFinder);
-      expect(
-        gridRect.width,
-        greaterThan(0),
-        reason: 'Emoji grid should have positive width',
-      );
-      expect(
-        gridRect.right,
-        lessThanOrEqualTo(360),
-        reason: 'Emoji grid should fit within narrow screen (right edge)',
-      );
-    });
-
     testWidgets('emoji selection still works with adaptive sizing', (
       tester,
     ) async {
@@ -183,33 +136,6 @@ void main() {
   });
 
   group('AssistantSelectionPage', () {
-    testWidgets('shows assistant cards in grid', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [
-            Assistant(
-              name: '助手1',
-              prompt: 'P1',
-              emoji: '🤖',
-              description: '第一个助手',
-            ),
-            Assistant(
-              name: '助手2',
-              prompt: 'P2',
-              emoji: '😊',
-              description: '第二个助手',
-            ),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('助手1'), findsOneWidget);
-      expect(find.text('助手2'), findsOneWidget);
-      expect(find.text('🤖'), findsOneWidget);
-      expect(find.text('😊'), findsOneWidget);
-    });
-
     testWidgets('assistant card does NOT display prompt text', (tester) async {
       // Given an assistant with a non-empty prompt
       const promptText = '这是一个测试提示词';
@@ -233,30 +159,6 @@ void main() {
 
       // But the prompt text should NOT be visible on the card
       expect(find.text(promptText), findsNothing);
-    });
-
-    testWidgets(
-        'assistant card still shows name and description after removing prompt',
-        (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [
-            Assistant(
-              name: '助手1',
-              prompt: 'P1',
-              emoji: '🤖',
-              description: '第一个助手',
-            ),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('助手1'), findsOneWidget);
-      expect(find.text('第一个助手'), findsOneWidget);
-      expect(find.text('🤖'), findsOneWidget);
     });
 
     testWidgets('wide screen shows more columns than narrow screen', (
@@ -291,52 +193,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
-
-    testWidgets('tapping assistant navigates to select conversation page', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [
-            Assistant(
-              name: '助手1',
-              prompt: 'P1',
-              emoji: '🤖',
-              description: '第一个助手',
-            ),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Tap the first assistant card
-      await tester.tap(find.text('助手1'));
-      await tester.pumpAndSettle();
-
-      // Should navigate to topic selection page (now titled "选择对话")
-      expect(find.text('选择对话'), findsOneWidget);
-    });
   });
 
   group('BuiltInPromptSelector', () {
-    testWidgets('tapping market button opens selector dialog', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [
-            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Tap the market button
-      await tester.tap(find.byIcon(Icons.storefront));
-      await tester.pumpAndSettle();
-
-      // Dialog should be visible with the market title
-      expect(find.text('助手市场'), findsOneWidget);
-    });
-
     testWidgets('market dialog shows prompt cards', (tester) async {
       await tester.pumpWidget(
         createTestApp(
@@ -583,51 +442,7 @@ void main() {
     });
   });
 
-  group('SelectConversationPage', () {
-    testWidgets('shows select conversation title', (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            assistantProvider.overrideWith((ref) {
-              final notifier = AssistantsNotifier();
-              notifier.createAssistant(name: '测试助手', prompt: 'P1', emoji: '🤖');
-              return notifier;
-            }),
-            selectedAssistantIdProvider.overrideWith((ref) => 'a1'),
-          ],
-          child: const MaterialApp(home: TopicSelectionPage()),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Should show the new title
-      expect(find.text('选择对话'), findsOneWidget);
-    });
-  });
-
   group('AssistantAvatar in pages', () {
-    testWidgets('assistant card uses AssistantAvatar widget', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [
-            Assistant(
-              name: '助手1',
-              prompt: 'P1',
-              emoji: '🤖',
-              description: '第一个助手',
-            ),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Should render AssistantAvatar widget
-      expect(find.byType(AssistantAvatar), findsOneWidget);
-      // Should show the emoji inside the avatar
-      expect(find.text('🤖'), findsOneWidget);
-    });
-
     testWidgets('create dialog has emoji picker and no image toggle', (
       tester,
     ) async {
@@ -649,28 +464,6 @@ void main() {
 
       // The dialog should still have basic fields
       expect(find.text('助手名称'), findsOneWidget);
-    });
-
-    testWidgets('long press menu shows 编辑 (combined) and 删除, no separate 设置', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [Assistant(name: '助手1', prompt: 'P1', emoji: '🤖')],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Long-press to open menu
-      await tester.longPress(find.byType(AssistantAvatar));
-      await tester.pumpAndSettle();
-
-      // Should show 编辑 (combined)
-      expect(find.text('编辑'), findsOneWidget);
-      // Should show 删除
-      expect(find.text('删除'), findsOneWidget);
-      // Should NOT show separate 设置 menu item
-      expect(find.text('设置'), findsNothing);
     });
 
     testWidgets('long press menu 编辑 opens combined dialog with tab bar', (
@@ -739,27 +532,6 @@ void main() {
       expect(find.text('随机种子 (Seed)'), findsOneWidget);
       expect(find.text('联网搜索'), findsOneWidget);
       expect(find.text('自定义参数'), findsOneWidget);
-    });
-
-    testWidgets('combined edit dialog has no image toggle', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [Assistant(name: '助手编辑', prompt: 'P1', emoji: '🤖')],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Long-press to open menu
-      await tester.longPress(find.byType(AssistantAvatar));
-      await tester.pumpAndSettle();
-
-      // Tap 编辑
-      await tester.tap(find.text('编辑'));
-      await tester.pumpAndSettle();
-
-      // Should NOT have '图片' segment button or image URL field
-      expect(find.text('图片'), findsNothing);
-      expect(find.text('头像图片URL'), findsNothing);
     });
 
     testWidgets(

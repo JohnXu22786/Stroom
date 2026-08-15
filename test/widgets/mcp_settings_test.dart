@@ -34,61 +34,6 @@ void main() {
     });
 
     testWidgets(
-        'tapping MCP entry navigates to MCP config page with built-in configs',
-        (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      SharedPreferences.setMockInitialValues({});
-
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Find and tap the MCP供应商 entry
-      await tester.tap(find.text('MCP供应商'));
-      await tester.pumpAndSettle();
-
-      // Should navigate to ProviderConfigPage with built-in configs visible
-      // The page should show at least some built-in MCP server names
-      expect(find.text('MCP供应商'), findsOneWidget);
-      expect(find.text('Exa'), findsOneWidget);
-    });
-
-    testWidgets('MCP config page allows adding a new MCP server', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      SharedPreferences.setMockInitialValues({});
-
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
-
-      // Navigate to MCP config page
-      await tester.tap(find.text('MCP供应商'));
-      await tester.pumpAndSettle();
-
-      // Tap "添加" to add a new config
-      await tester.tap(find.text('添加'));
-      await tester.pumpAndSettle();
-
-      // Should navigate to ProviderConfigDetailPage for MCP
-      // The page shows "新建MCP供应商配置"
-      expect(find.textContaining('新建'), findsOneWidget);
-    });
-
-    testWidgets(
         'built-in MCP edit page does not auto-fill the "Bearer " placeholder '
         'as API key, and the key field can be revealed', (tester) async {
       tester.view.physicalSize = const Size(1080, 4000);

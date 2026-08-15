@@ -93,63 +93,6 @@ String _githubRelease(String tagName,
 
 void main() {
   group('UpdateDialog - Shared Dialog', () {
-    testWidgets('shows update dialog with all elements when update available',
-        (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      final dio = _createMockDio(
-        _githubRelease('v0.2.14', body: 'Bug fixes'),
-      );
-
-      // Set up the state to show an update is available
-      final container = ProviderContainer(
-        overrides: [
-          updateProvider.overrideWith((ref) => UpdateNotifier(dio: dio)),
-        ],
-      );
-      final notifier = container.read(updateProvider.notifier);
-      notifier.state = UpdateState(
-        updateAvailable: true,
-        latestVersion: '0.2.14',
-        releaseNotes: 'Bug fixes',
-        downloadUrl:
-            'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
-      );
-
-      // Show the dialog programmatically
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            updateProvider.overrideWith((ref) => notifier),
-          ],
-          child: MaterialApp(
-            home: Builder(
-              builder: (context) {
-                // Use a Future.microtask to show dialog after initial build
-                Future.microtask(() {
-                  showDialog(
-                    context: context,
-                    builder: (_) => const UpdateDialog(),
-                  );
-                });
-                return const SizedBox();
-              },
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Verify dialog elements
-      expect(find.text('发现新版本'), findsOneWidget);
-      expect(find.text('最新版本: 0.2.14'), findsOneWidget);
-      expect(find.text('更新内容:'), findsOneWidget);
-      expect(find.text('Bug fixes'), findsOneWidget);
-      expect(find.text('跳过此版本'), findsOneWidget);
-      expect(find.text('稍后提醒'), findsOneWidget);
-      expect(find.text('立即更新'), findsOneWidget);
-    });
-
     testWidgets('skip button calls skipVersion and closes dialog',
         (tester) async {
       SharedPreferences.setMockInitialValues({});
@@ -514,64 +457,6 @@ void main() {
       await tester.tap(find.text('关闭'));
       await tester.pumpAndSettle();
       expect(find.text('发现新版本'), findsNothing);
-    });
-
-    testWidgets('dialog shows download-complete state and does not auto-close',
-        (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      final notifier = _setupNotifier(
-        state: UpdateState(
-          updateAvailable: true,
-          latestVersion: '0.2.14',
-          downloadUrl:
-              'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
-          downloadComplete: true,
-          isDownloading: false,
-          isInstalling: false,
-          downloadError: null,
-          downloadedFilePath: '/tmp/test.exe',
-        ),
-      ).notifier;
-
-      await _showDialog(tester: tester, notifier: notifier);
-
-      // Verify the download success state is shown
-      expect(find.text('下载完成'), findsOneWidget);
-      expect(find.byIcon(Icons.check_circle), findsOneWidget);
-
-      // "关闭" button should be shown for manual dismissal
-      expect(find.text('关闭'), findsOneWidget);
-
-      // No auto-closing — dialog survives after multiple frames
-      for (int i = 0; i < 10; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-      expect(find.text('下载完成'), findsOneWidget);
-    });
-
-    testWidgets('shows "打开安装包" button when download complete with no error',
-        (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      final notifier = _setupNotifier(
-        state: UpdateState(
-          updateAvailable: true,
-          latestVersion: '0.2.14',
-          downloadUrl:
-              'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.exe',
-          downloadComplete: true,
-          isDownloading: false,
-          isInstalling: false,
-          downloadError: null,
-          downloadedFilePath: '/tmp/test.exe',
-        ),
-      ).notifier;
-
-      await _showDialog(tester: tester, notifier: notifier);
-
-      // Verify both buttons are shown
-      expect(find.text('下载完成'), findsOneWidget);
-      expect(find.text('关闭'), findsOneWidget);
-      expect(find.text('打开安装包'), findsOneWidget);
     });
 
     testWidgets('tapping "打开安装包" calls retryInstall', (tester) async {

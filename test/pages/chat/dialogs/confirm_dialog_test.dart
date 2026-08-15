@@ -5,33 +5,9 @@ import 'package:stroom/pages/chat/dialogs/confirm_dialog.dart';
 void main() {
   group('ConfirmDialogs', () {
     group('showRetryEditConfirmDialog', () {
-      testWidgets('shows edit message dialog for user message', (tester) async {
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () => showRetryEditConfirmDialog(
-                  context: context,
-                  isUser: true,
-                  newerMessagesExist: true,
-                  onEdit: () {},
-                  onRetry: () {},
-                ),
-                child: const Text('Show'),
-              ),
-            ),
-          ),
-        );
-
-        await tester.tap(find.text('Show'));
-        await tester.pumpAndSettle();
-
-        expect(find.text('编辑消息'), findsOneWidget);
-        expect(find.text('确定'), findsOneWidget);
-        expect(find.text('取消'), findsOneWidget);
-      });
-
-      testWidgets('shows retry dialog for assistant message', (tester) async {
+      testWidgets('calls onRetry when 重试 tapped for assistant message',
+          (tester) async {
+        bool retried = false;
         await tester.pumpWidget(
           MaterialApp(
             home: Builder(
@@ -41,7 +17,7 @@ void main() {
                   isUser: false,
                   newerMessagesExist: false,
                   onEdit: () {},
-                  onRetry: () {},
+                  onRetry: () => retried = true,
                 ),
                 child: const Text('Show'),
               ),
@@ -52,7 +28,12 @@ void main() {
         await tester.tap(find.text('Show'));
         await tester.pumpAndSettle();
 
+        // 「重试」是对话框标题；确认按钮是「确定」。
         expect(find.text('重试'), findsOneWidget);
+        await tester.tap(find.text('确定'));
+        await tester.pumpAndSettle();
+
+        expect(retried, isTrue);
       });
 
       testWidgets('calls onEdit when确认 tapped for user message',

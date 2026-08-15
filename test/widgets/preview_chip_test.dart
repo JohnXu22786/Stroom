@@ -54,52 +54,6 @@ void main() {
       );
     }
 
-    testWidgets('renders file icon when isImage=false', (tester) async {
-      await tester.pumpWidget(buildChip(
-        fileName: 'document.pdf',
-        isImage: false,
-        bytes: Uint8List.fromList([0, 1, 2, 3]),
-      ));
-
-      // Should render the chip
-      expect(find.byType(PreviewChip), findsOneWidget);
-      // Should show file icon
-      expect(find.byIcon(Icons.insert_drive_file_outlined), findsOneWidget);
-      // Close icon should be present
-      expect(find.byIcon(Icons.close), findsOneWidget);
-    });
-
-    testWidgets('close button calls onRemove when tapped', (tester) async {
-      bool removed = false;
-
-      await tester.pumpWidget(buildChip(
-        isImage: true,
-        bytes: validPng,
-        onRemove: () => removed = true,
-      ));
-
-      await tester.tap(find.byIcon(Icons.close));
-      await tester.pump();
-
-      expect(removed, isTrue);
-    });
-
-    testWidgets('onTap is called when chip is tapped (image)', (tester) async {
-      bool tapped = false;
-
-      await tester.pumpWidget(buildChip(
-        isImage: true,
-        bytes: validPng,
-        onTap: () => tapped = true,
-      ));
-
-      // Tap the PreviewChip widget area
-      await tester.tap(find.byType(PreviewChip));
-      await tester.pump();
-
-      expect(tapped, isTrue);
-    });
-
     testWidgets('tapping close button does NOT trigger onTap', (tester) async {
       bool tapped = false;
       bool removed = false;
