@@ -14,6 +14,7 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/widgets/message_attachment_preview.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 /// Creates a ChatPage app with a conversation pre-populated with [messages].
@@ -141,6 +142,58 @@ void main() {
 
         expect(find.byType(SimpleTextMessage), findsOneWidget);
         expect(find.text('doc.txt'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'attachments keep a visible gap below the text bubble instead of '
+      'sticking to it',
+      (tester) async {
+        await _pumpLoadedChatPage(tester, [
+          _userMessage(
+            id: 'u1',
+            content: '看一下这个文件',
+            attachments: [_documentAttachment()],
+          ),
+        ]);
+
+        final bubbleRect = tester.getRect(find.byType(SimpleTextMessage));
+        final previewRect = tester.getRect(
+          find.byType(MessageAttachmentPreview),
+        );
+        // The attachment preview must not hug the bubble bottom edge:
+        // SimpleTextMessage has no margin, so the rendered gap equals the
+        // attachment area's top padding exactly. Pin both to the design
+        // value so a partial regression (e.g. 8px -> 4px) fails too.
+        expect(previewRect.top - bubbleRect.bottom, closeTo(8, 0.5));
+        final padding = tester.widget<Padding>(
+          find.byKey(const ValueKey('user-message-attachment-area')),
+        );
+        expect(
+          padding.padding.resolve(TextDirection.ltr).top,
+          closeTo(8, 0.001),
+        );
+      },
+    );
+
+    testWidgets(
+      'attachment-only message does not add extra spacing above the '
+      'previews (no bubble to separate from)',
+      (tester) async {
+        await _pumpLoadedChatPage(tester, [
+          _userMessage(
+            id: 'u1',
+            content: '',
+            attachments: [_documentAttachment()],
+          ),
+        ]);
+
+        // No bubble above → the attachment area must not carry the
+        // bubble-separation top padding.
+        final padding = tester.widget<Padding>(
+          find.byKey(const ValueKey('user-message-attachment-area')),
+        );
+        expect(padding.padding.resolve(TextDirection.ltr).top, 0);
       },
     );
   });

@@ -413,9 +413,11 @@ extension _ChatPageBubblesExt on _ChatPageState {
           ),
         if (hasAttachments)
           Padding(
-            padding: const EdgeInsets.only(
+            key: const ValueKey('user-message-attachment-area'),
+            padding: EdgeInsets.only(
               left: 4,
               right: 4,
+              top: hasText ? 8 : 0,
               bottom: 4,
             ),
             child: SizedBox(
