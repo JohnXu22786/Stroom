@@ -311,7 +311,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               // 机器人图标，与对话页面输入框的模型标识一致（同 OCR 页面）
-              child: Icon(Icons.smart_toy_outlined, size: 16, color: cs.primary),
+              child:
+                  Icon(Icons.smart_toy_outlined, size: 16, color: cs.primary),
             ),
             const SizedBox(width: 10),
             Text(
