@@ -116,7 +116,35 @@ jobs:
         shell: bash
         run: |
           cd build/macos/Build/Products/Release
-          zip -r "$GITHUB_WORKSPACE/stroom-macos-arm64-release-$TAG.zip" .
+          # 只打包 stroom.app，排除 dSYM、XCFrameworkIntermediates 等构建中间产物
+          # （否则产物约 340MB，其中近一半是调试符号，其余是 app 外的框架副本）。
+          # 1. mdk-sdk 的二进制是 x86_64+arm64 通用二进制，裁剪到目标架构
+          ARCH=arm64
+          THINNED=0
+          for bin in "stroom.app/Contents/Frameworks/mdk.framework/Versions/A/"*.dylib \
+                     "stroom.app/Contents/Frameworks/mdk.framework/Versions/A/mdk"; do
+            [ -e "$bin" ] || continue
+            if lipo -info "$bin" | grep -q "Architectures in the fat file"; then
+              lipo -thin "$ARCH" -output "$bin.thin" "$bin" && mv "$bin.thin" "$bin" || {
+                echo "WARNING: could not thin $bin for $ARCH" >&2
+                continue
+              }
+              THINNED=$((THINNED+1))
+            fi
+          done
+          if [ "$THINNED" -eq 0 ]; then
+            echo "WARNING: no mdk binaries were thinned (mdk.framework layout may have changed)" >&2
+          fi
+          # 2. lipo 修改了二进制，重新签名（CI 为 ad-hoc 签名）。
+          #    第一遍：为所有嵌套代码签名（不带 entitlements）；
+          #    第二遍：为主二进制签名并带上沙盒 entitlements
+          #    （复用仓库签入的 Release.entitlements，Xcode 构建时用的就是它）
+          codesign --force --deep --sign - "stroom.app"
+          codesign --force --sign - \
+            --entitlements "$GITHUB_WORKSPACE/macos/Runner/Release.entitlements" "stroom.app"
+          # 3. ditto 打包时保留 framework 的符号链接/硬链接
+          #    （zip -r 会把链接展开成多份重复二进制，白白多出 ~40MB）
+          ditto -c -k --keepParent "stroom.app" "$GITHUB_WORKSPACE/stroom-macos-arm64-release-$TAG.zip"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
@@ -154,7 +182,35 @@ jobs:
         shell: bash
         run: |
           cd build/macos/Build/Products/Release
-          zip -r "$GITHUB_WORKSPACE/stroom-macos-x64-release-$TAG.zip" .
+          # 只打包 stroom.app，排除 dSYM、XCFrameworkIntermediates 等构建中间产物
+          # （否则产物约 340MB，其中近一半是调试符号，其余是 app 外的框架副本）。
+          # 1. mdk-sdk 的二进制是 x86_64+arm64 通用二进制，裁剪到目标架构
+          ARCH=x86_64
+          THINNED=0
+          for bin in "stroom.app/Contents/Frameworks/mdk.framework/Versions/A/"*.dylib \
+                     "stroom.app/Contents/Frameworks/mdk.framework/Versions/A/mdk"; do
+            [ -e "$bin" ] || continue
+            if lipo -info "$bin" | grep -q "Architectures in the fat file"; then
+              lipo -thin "$ARCH" -output "$bin.thin" "$bin" && mv "$bin.thin" "$bin" || {
+                echo "WARNING: could not thin $bin for $ARCH" >&2
+                continue
+              }
+              THINNED=$((THINNED+1))
+            fi
+          done
+          if [ "$THINNED" -eq 0 ]; then
+            echo "WARNING: no mdk binaries were thinned (mdk.framework layout may have changed)" >&2
+          fi
+          # 2. lipo 修改了二进制，重新签名（CI 为 ad-hoc 签名）。
+          #    第一遍：为所有嵌套代码签名（不带 entitlements）；
+          #    第二遍：为主二进制签名并带上沙盒 entitlements
+          #    （复用仓库签入的 Release.entitlements，Xcode 构建时用的就是它）
+          codesign --force --deep --sign - "stroom.app"
+          codesign --force --sign - \
+            --entitlements "$GITHUB_WORKSPACE/macos/Runner/Release.entitlements" "stroom.app"
+          # 3. ditto 打包时保留 framework 的符号链接/硬链接
+          #    （zip -r 会把链接展开成多份重复二进制，白白多出 ~40MB）
+          ditto -c -k --keepParent "stroom.app" "$GITHUB_WORKSPACE/stroom-macos-x64-release-$TAG.zip"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
