@@ -309,8 +309,8 @@ bool isCodeBlockStillGenerating({
 /// finishes generating; the user must tap "查看代码" to see the raw HTML
 /// source (where the preview button renders the HTML in a dialog).
 /// Otherwise, renders the code using [CodeBlockSourceView] which provides
-/// a unified code display area with line numbers, a wrap toggle and the
-/// language label in the top-left corner.
+/// a unified code display area with line numbers, copy / save / wrap
+/// toolbar buttons and the language label in the top-left corner.
 ///
 /// While the block is the one currently being generated
 /// ([isCodeBlockStillGenerating]), [CodeBlockSourceView] receives
@@ -357,8 +357,8 @@ Widget _buildCodeBlock(
   }
 
   // Fallback: render using the unified source code display widget
-  // ([CodeBlockSourceView]) with line numbers, a wrap toggle and the
-  // language label (from the opening fence's info string).
+  // ([CodeBlockSourceView]) with line numbers, copy / save / wrap toolbar
+  // buttons and the language label (from the opening fence's info string).
   //
   // The same fence-completion check as mermaid/html: only the block that
   // is currently the still-open trailing fence of the streaming reply gets
@@ -494,8 +494,9 @@ bool _isClosingFenceLine(String line, String char, int openingLength) {
 /// must tap the "查看代码" button to see the raw HTML source.
 ///
 /// All other code blocks are rendered using [CodeBlockSourceView] which
-/// provides a unified code display area with line numbers, a wrap toggle
-/// and the language label (from the opening fence) in the top-left corner.
+/// provides a unified code display area with line numbers, copy / save /
+/// wrap toolbar buttons and the language label (from the opening fence)
+/// in the top-left corner.
 PreConfig codeBlockPreConfig({
   required bool isDark,
   bool isStreaming = false,

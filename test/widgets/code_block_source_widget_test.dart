@@ -1,10 +1,36 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
+// The platform interface lives under the package's src/ (not exported
+// publicly); extending it is the supported way to fake the save dialog.
+// ignore_for_file: implementation_imports
+import 'package:file_picker/src/platform/file_picker_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/code_block_source_widget.dart';
 
+import '../fake_file_picker.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  /// Pumps a standalone [CodeBlockSourceView] in a Scaffold.
+  Future<void> pumpCodeBlock(
+    WidgetTester tester, {
+    String code = 'some code',
+    String language = '',
+  }) {
+    return tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CodeBlockSourceView(code: code, language: language),
+        ),
+      ),
+    );
+  }
 
   group('CodeBlockSourceView - widget rendering', () {
     testWidgets('shows raw code as text', (tester) async {
@@ -152,7 +178,7 @@ void main() {
           reason: 'a circular button has equal width and height');
     });
 
-    testWidgets('single-button toolbar hugs its button (no trailing blank)',
+    testWidgets('toolbar pill hugs its buttons (no trailing blank)',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -164,25 +190,36 @@ void main() {
 
       // Regression: the pill container was forced to minWidth 48 while the
       // single wrap-toggle button was only 38px wide, leaving a blank gap
-      // on the right. The pill must end exactly where the button ends.
+      // on the right. The pill must start exactly where the first button
+      // (copy) starts and end exactly where the last button (wrap) ends.
       final pill = find
           .ancestor(
             of: find.byIcon(Icons.wrap_text),
             matching: find.byType(Container),
           )
           .first;
-      final button = find
+      final copyButton = find
+          .ancestor(
+            of: find.byIcon(Icons.copy),
+            matching: find.byType(InkWell),
+          )
+          .first;
+      final wrapButton = find
           .ancestor(
             of: find.byIcon(Icons.wrap_text),
             matching: find.byType(InkWell),
           )
           .first;
       final pillRect = tester.getRect(pill);
-      final btnRect = tester.getRect(button);
-      expect(pillRect.width, equals(btnRect.width),
-          reason: 'pill must not extend past its single button');
-      expect(pillRect.height, equals(btnRect.height),
-          reason: 'pill must not extend past its single button vertically');
+      final copyRect = tester.getRect(copyButton);
+      final wrapRect = tester.getRect(wrapButton);
+      expect(pillRect.left, equals(copyRect.left),
+          reason: 'pill must start where its first button starts');
+      expect(pillRect.right, equals(wrapRect.right),
+          reason: 'pill must not extend past its last button');
+      expect(pillRect.top, equals(copyRect.top),
+          reason: 'pill must not extend past its buttons vertically');
+      expect(pillRect.bottom, equals(copyRect.bottom));
     });
 
     testWidgets('action buttons appear after wrap toggle button',
@@ -963,6 +1000,356 @@ void main() {
       expect(position(tester).pixels, closeTo(scrolled, 0.5),
           reason: 'content growth must not move a non-streaming block');
       expect(find.byIcon(Icons.arrow_downward), findsNothing);
+    });
+  });
+
+  group('CodeBlockSourceView - copy button', () {
+    /// Installs a mock platform-channel handler so Clipboard.setData
+    /// futures complete (unhandled channels never resolve in tests, which
+    /// would stall the copy feedback state change). Records copied texts
+    /// into [copiedTexts] when provided.
+    void installClipboardMock(WidgetTester tester,
+        {List<String>? copiedTexts}) {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (copiedTexts != null && call.method == 'Clipboard.setData') {
+            copiedTexts.add((call.arguments as Map)['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
+    }
+
+    testWidgets('toolbar order is copy, save, wrap (left to right)',
+        (tester) async {
+      await pumpCodeBlock(tester);
+
+      expect(find.byIcon(Icons.copy), findsOneWidget);
+      expect(find.byIcon(Icons.save), findsOneWidget);
+      expect(find.byIcon(Icons.wrap_text), findsOneWidget);
+
+      final copyPos = tester.getCenter(find.byIcon(Icons.copy));
+      final savePos = tester.getCenter(find.byIcon(Icons.save));
+      final wrapPos = tester.getCenter(find.byIcon(Icons.wrap_text));
+      expect(copyPos.dx, lessThan(savePos.dx),
+          reason: 'copy must sit left of save');
+      expect(savePos.dx, lessThan(wrapPos.dx),
+          reason: 'save must sit left of wrap');
+    });
+
+    testWidgets('copy button copies the WHOLE code block to the clipboard',
+        (tester) async {
+      const code = 'line1\nline2\nline3';
+      final copiedTexts = <String>[];
+      installClipboardMock(tester, copiedTexts: copiedTexts);
+
+      await pumpCodeBlock(tester, code: code);
+
+      await tester.tap(find.byIcon(Icons.copy));
+      await tester.pump();
+
+      expect(copiedTexts, ['line1\nline2\nline3'],
+          reason: 'copy must copy every line of the block, not one line');
+    });
+
+    testWidgets('copy feedback: checkmark fades in, stays ~1s, then reverts',
+        (tester) async {
+      installClipboardMock(tester);
+      await pumpCodeBlock(tester);
+
+      // Initially the copy icon is shown.
+      expect(find.byIcon(Icons.copy), findsOneWidget);
+      expect(find.byIcon(Icons.check), findsNothing);
+
+      await tester.tap(find.byIcon(Icons.copy));
+      await tester.pump();
+      // Let the fade-in complete (the outgoing copy icon lingers while
+      // it fades out during the 200ms transition).
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Feedback is active: the checkmark replaces the copy icon.
+      expect(find.byIcon(Icons.check), findsOneWidget);
+      expect(find.byIcon(Icons.copy), findsNothing);
+
+      // Still shown 500ms later (mid-hold of the 1s window).
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byIcon(Icons.check), findsOneWidget);
+
+      // The 1s hold expires and the icon fades back to copy.
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byIcon(Icons.copy), findsOneWidget);
+      expect(find.byIcon(Icons.check), findsNothing);
+    });
+
+    testWidgets('copy feedback icon swap uses a fade transition',
+        (tester) async {
+      installClipboardMock(tester);
+      await pumpCodeBlock(tester);
+
+      // The copy button hosts an AnimatedSwitcher so the copy/check swap
+      // fades instead of popping.
+      final switcher = find
+          .descendant(
+            of: find.byType(InkWell),
+            matching: find.byType(AnimatedSwitcher),
+          )
+          .first;
+      expect(switcher, findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.copy));
+      await tester.pump();
+
+      // Mid-fade (50ms of a 200ms swap): a FadeTransition must actually
+      // be in flight (opacity strictly between 0 and 1), not an instant
+      // icon pop. An idle AnimatedSwitcher sits at opacity 1.0.
+      await tester.pump(const Duration(milliseconds: 50));
+      final fadeOpacities = tester
+          .widgetList<FadeTransition>(find.byType(FadeTransition))
+          .map((f) => f.opacity.value)
+          .toList();
+      expect(fadeOpacities.any((v) => v > 0.0 && v < 1.0), isTrue,
+          reason: 'the copy/check swap must fade, not pop');
+
+      // Let the 1s hold pass and the fade back complete.
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byIcon(Icons.copy), findsOneWidget);
+    });
+
+    testWidgets('failed clipboard write reverts the checkmark and reports',
+        (tester) async {
+      // A rejecting clipboard (e.g. web permission denial) must not leave
+      // the checkmark stuck or throw an unhandled async error.
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            throw PlatformException(code: 'denied');
+          }
+          return null;
+        },
+      );
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
+
+      await pumpCodeBlock(tester);
+
+      await tester.tap(find.byIcon(Icons.copy));
+      await tester.pump();
+
+      // The checkmark reverts and an error snackbar appears.
+      expect(find.byIcon(Icons.check), findsNothing);
+      expect(find.byIcon(Icons.copy), findsOneWidget);
+      expect(find.textContaining('复制失败'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('re-tapping copy while feedback shows restarts the 1s hold',
+        (tester) async {
+      installClipboardMock(tester);
+      await pumpCodeBlock(tester);
+
+      await tester.tap(find.byIcon(Icons.copy));
+      await tester.pump();
+
+      // Second tap 500ms later: the hold window must restart, so the
+      // checkmark must still be visible at t=1200ms even though the first
+      // 1s timer would have fired at t=1000ms.
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.byIcon(Icons.check));
+      await tester.pump();
+      expect(find.byIcon(Icons.check), findsOneWidget);
+
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(find.byIcon(Icons.check), findsOneWidget,
+          reason: 'a re-tap must reset the 1s hold window');
+
+      // After the reset window expires the copy icon returns.
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byIcon(Icons.copy), findsOneWidget);
+      expect(find.byIcon(Icons.check), findsNothing);
+    });
+
+    testWidgets('copy feedback icons carry semantic labels', (tester) async {
+      installClipboardMock(tester);
+      await pumpCodeBlock(tester);
+
+      final copyIcon = tester.widget<Icon>(find.byIcon(Icons.copy));
+      expect(copyIcon.semanticLabel, '复制');
+
+      await tester.tap(find.byIcon(Icons.copy));
+      await tester.pump();
+
+      final checkIcon = tester.widget<Icon>(find.byIcon(Icons.check));
+      expect(checkIcon.semanticLabel, '已复制');
+
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 300));
+    });
+  });
+
+  group('CodeBlockSourceView - save button', () {
+    testWidgets('save opens the file save panel with the whole code content',
+        (tester) async {
+      const code = 'print("hello")\nprint("world")';
+      final picker = FakeFilePicker();
+      final originalPicker = FilePickerPlatform.instance;
+      FilePickerPlatform.instance = picker;
+      addTearDown(() => FilePickerPlatform.instance = originalPicker);
+
+      await pumpCodeBlock(tester, code: code);
+
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pump();
+
+      expect(picker.lastBytes, isNotNull);
+      expect(utf8.decode(picker.lastBytes!), code,
+          reason: 'the saved content must be the whole code block');
+      expect(picker.lastFileName, 'code.txt',
+          reason: 'an unknown language defaults to a .txt name');
+      expect(picker.lastType, FileType.custom,
+          reason: 'custom type is required for extension filtering');
+      expect(picker.lastAllowedExtensions, isNotEmpty);
+      expect(picker.lastDialogTitle, isNotEmpty);
+    });
+
+    testWidgets('save uses the language for the default name and format list',
+        (tester) async {
+      final picker = FakeFilePicker();
+      final originalPicker = FilePickerPlatform.instance;
+      FilePickerPlatform.instance = picker;
+      addTearDown(() => FilePickerPlatform.instance = originalPicker);
+
+      await pumpCodeBlock(tester, code: 'void main() {}', language: 'dart');
+
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pump();
+
+      expect(picker.lastFileName, 'code.dart');
+      expect(picker.lastAllowedExtensions!.first, 'dart',
+          reason: 'the language extension must be the default format');
+      expect(picker.lastAllowedExtensions, containsAll(['dart', 'txt', 'md']));
+    });
+
+    testWidgets('successful save confirms the destination in a snackbar',
+        (tester) async {
+      final picker = FakeFilePicker(result: 'D:/docs/code.dart');
+      final originalPicker = FilePickerPlatform.instance;
+      FilePickerPlatform.instance = picker;
+      addTearDown(() => FilePickerPlatform.instance = originalPicker);
+
+      await pumpCodeBlock(tester, code: 'void main() {}', language: 'dart');
+
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pump();
+
+      expect(find.text('已保存到: D:/docs/code.dart'), findsOneWidget);
+    });
+
+    testWidgets('cancelling the save panel shows no snackbar', (tester) async {
+      final picker = FakeFilePicker(result: null);
+      final originalPicker = FilePickerPlatform.instance;
+      FilePickerPlatform.instance = picker;
+      addTearDown(() => FilePickerPlatform.instance = originalPicker);
+
+      await pumpCodeBlock(tester);
+
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pump();
+
+      expect(picker.lastBytes, isNotNull,
+          reason: 'the save panel was opened with content');
+      expect(find.byType(SnackBar), findsNothing,
+          reason: 'a cancelled save must not claim success');
+    });
+
+    testWidgets('failed save shows an error snackbar', (tester) async {
+      final picker = FakeFilePicker()..throwError = Exception('disk full');
+      final originalPicker = FilePickerPlatform.instance;
+      FilePickerPlatform.instance = picker;
+      addTearDown(() => FilePickerPlatform.instance = originalPicker);
+
+      await pumpCodeBlock(tester);
+
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pump();
+
+      expect(find.textContaining('保存失败'), findsOneWidget);
+    });
+
+    testWidgets('save on empty code hints and skips the save panel',
+        (tester) async {
+      final picker = FakeFilePicker();
+      final originalPicker = FilePickerPlatform.instance;
+      FilePickerPlatform.instance = picker;
+      addTearDown(() => FilePickerPlatform.instance = originalPicker);
+
+      await pumpCodeBlock(tester, code: '');
+
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pump();
+
+      expect(picker.lastBytes, isNull,
+          reason: 'no save dialog should open for empty code');
+      expect(find.text('代码为空，无法保存'), findsOneWidget);
+    });
+
+    testWidgets('double-tapping save opens the panel only once',
+        (tester) async {
+      final completer = Completer<String?>();
+      final picker = FakeFilePicker(completer: completer);
+      final originalPicker = FilePickerPlatform.instance;
+      FilePickerPlatform.instance = picker;
+      addTearDown(() => FilePickerPlatform.instance = originalPicker);
+
+      await pumpCodeBlock(tester);
+
+      // Hold the dialog open (completer unresolved), tap twice.
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pump();
+
+      expect(picker.saveCallCount, 1,
+          reason: 'a second tap while the dialog is open must be ignored');
+
+      // Completing the dialog shows the success snackbar exactly once.
+      completer.complete('C:/docs/code.txt');
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('已保存到: C:/docs/code.txt'), findsOneWidget);
+    });
+
+    testWidgets('unmounting while the save panel is open does not crash',
+        (tester) async {
+      // Regression: the save flow crosses an async gap (the native dialog).
+      // If the widget is gone when the dialog resolves, the result must be
+      // dropped silently — no snackbar, no exception.
+      final completer = Completer<String?>();
+      final picker = FakeFilePicker(completer: completer);
+      final originalPicker = FilePickerPlatform.instance;
+      FilePickerPlatform.instance = picker;
+      addTearDown(() => FilePickerPlatform.instance = originalPicker);
+
+      await pumpCodeBlock(tester);
+
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pump();
+
+      // Unmount the code block while the dialog is still "open".
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: SizedBox())),
+      );
+      completer.complete('C:/docs/code.txt');
+      await tester.pump();
+
+      expect(tester.takeException(), isNull,
+          reason: 'completing the dialog after unmount must not throw');
     });
   });
 }

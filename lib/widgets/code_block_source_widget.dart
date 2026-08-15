@@ -1,8 +1,14 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:stroom/utils/system_pick_utils.dart';
 
 /// A reusable widget that displays source code with line numbers and a
-/// wrap-toggle button, providing a consistent "code display area" UI form
-/// that matches what [HtmlCodeBlockWidget] uses.
+/// toolbar of copy / save / wrap buttons, providing a consistent "code
+/// display area" UI form that matches what [HtmlCodeBlockWidget] uses.
 ///
 /// ## Usage
 ///
@@ -11,9 +17,12 @@ import 'package:flutter/material.dart';
 /// - Mermaid's "show source code" toggle view
 /// - HTML code block display
 ///
-/// Additional action buttons (e.g. "full screen" for HTML, "view chart" for
-/// Mermaid) can be passed via [actionButtons] and appear in the top-right
-/// button row.
+/// The built-in toolbar (top-right) holds, from left to right: a copy
+/// button (copies the whole block, showing a fading checkmark feedback),
+/// a save button (opens the system file save panel to pick location, name
+/// and format), and the wrap toggle. Additional action buttons (e.g.
+/// "full screen" for HTML, "view chart" for Mermaid) can be passed via
+/// [actionButtons] and appear to the right of the wrap toggle.
 class CodeBlockSourceView extends StatefulWidget {
   /// The source code to display.
   final String code;
@@ -109,12 +118,84 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
   static const Duration _returnToTopDuration = Duration(milliseconds: 300);
   static const Curve _returnToTopCurve = Curves.easeOutCubic;
 
+  /// True while the copy button shows the checkmark feedback.
+  bool _showCopyFeedback = false;
+
+  /// Fires to revert the copy button from the checkmark back to the copy
+  /// icon after a 1s hold.
+  Timer? _copyFeedbackTimer;
+
+  /// Guards against opening the save dialog twice from double taps.
+  bool _isSaving = false;
+
+  /// Monotonic copy-tap counter. A clipboard failure from an EARLIER tap
+  /// whose write resolved late must not revert the checkmark or snackbar
+  /// when a newer tap has already taken over.
+  int _copyTapGeneration = 0;
+
   /// Cursor width passed to the code [SelectableText]. [RenderEditable]
   /// wraps its text at `available width - (_kCaretGap + cursorWidth)`, so the
   /// wrap-mode measurement below subtracts `1.0 + _selectableCursorWidth` to
   /// stay in lock-step with the actual render. Keep both in sync if this
   /// ever changes.
   static const double _selectableCursorWidth = 2.0;
+
+  /// How long the copy checkmark stays visible before fading back.
+  static const Duration _copyFeedbackHold = Duration(seconds: 1);
+
+  /// Fade duration for the copy/check icon swap.
+  static const Duration _copyFeedbackFade = Duration(milliseconds: 200);
+
+  /// Maps a code language (the opening fence's info string) to its most
+  /// common file extension. Unknown languages fall back to 'txt'.
+  static const Map<String, String> _languageExtensions = {
+    'python': 'py',
+    'py': 'py',
+    'javascript': 'js',
+    'js': 'js',
+    'typescript': 'ts',
+    'ts': 'ts',
+    'dart': 'dart',
+    'java': 'java',
+    'c': 'c',
+    'cpp': 'cpp',
+    'c++': 'cpp',
+    'csharp': 'cs',
+    'c#': 'cs',
+    'go': 'go',
+    'rust': 'rs',
+    'ruby': 'rb',
+    'php': 'php',
+    'swift': 'swift',
+    'kotlin': 'kt',
+    'sql': 'sql',
+    'html': 'html',
+    'css': 'css',
+    'json': 'json',
+    'xml': 'xml',
+    'yaml': 'yaml',
+    'yml': 'yml',
+    'markdown': 'md',
+    'md': 'md',
+    'bash': 'sh',
+    'sh': 'sh',
+    'shell': 'sh',
+    'powershell': 'ps1',
+    'ps1': 'ps1',
+    'mermaid': 'mmd',
+    'text': 'txt',
+    'plaintext': 'txt',
+  };
+
+  /// The formats offered in the save dialog: the language's own extension
+  /// first (the default), then the generic text formats.
+  List<String> _saveExtensions() {
+    final primary = _primaryExtension();
+    return {primary, 'txt', 'md'}.toList();
+  }
+
+  String _primaryExtension() =>
+      _languageExtensions[widget.language.toLowerCase()] ?? 'txt';
 
   @override
   void initState() {
@@ -170,6 +251,7 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
 
   @override
   void dispose() {
+    _copyFeedbackTimer?.cancel();
     _scrollController.removeListener(_reconcileScrollState);
     _scrollController.dispose();
     super.dispose();
@@ -661,11 +743,10 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
   /// Builds the top-right toolbar row.
   ///
   /// Toolbar buttons are PURE ICONS (no text labels) — accessibility is
-  /// preserved through the icon [Icon.semanticLabel]. The built-in wrap
-  /// toggle sits on the left; additional action buttons (common buttons
-  /// like fullscreen / save / code toggle) are placed on the right in the
-  /// order given by the consumer, matching the mermaid render toolbar
-  /// convention (fullscreen → save → code).
+  /// preserved through the icon [Icon.semanticLabel]. The built-in buttons
+  /// follow the fixed order copy → save → wrap; additional action buttons
+  /// (common buttons like fullscreen / view-chart) are placed on the right
+  /// in the order given by the consumer.
   Widget _buildButtonRow() {
     final cs = Theme.of(context).colorScheme;
 
@@ -680,6 +761,14 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Copy button (with checkmark feedback)
+          _buildCopyButton(),
+          // Save button — opens the system file save panel
+          _buildActionButton(
+            icon: Icons.save,
+            label: '保存',
+            onTap: _saveCode,
+          ),
           // Wrap toggle button (always present)
           _buildActionButton(
             icon: Icons.wrap_text,
@@ -697,11 +786,122 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
     );
   }
 
-  /// A compact circular icon button (36x36) with a circular ripple via
-  /// [CircleBorder].
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
+  /// Copies the whole code block to the clipboard and shows a checkmark
+  /// feedback on the button: the icon fades to a check, holds for 1s, then
+  /// fades back to the copy icon.
+  ///
+  /// The feedback shows immediately at tap time (not after the clipboard
+  /// write resolves) so a slow write cannot delay or flicker it; a failed
+  /// write (e.g. web permission denial) reverts the icon and reports the
+  /// error. Re-tapping while the feedback shows restarts the hold.
+  Future<void> _copyCode() async {
+    _copyFeedbackTimer?.cancel();
+    if (!_showCopyFeedback) {
+      setState(() {
+        _showCopyFeedback = true;
+      });
+    }
+    _copyFeedbackTimer = Timer(_copyFeedbackHold, () {
+      if (!mounted) return;
+      setState(() {
+        _showCopyFeedback = false;
+      });
+    });
+
+    final generation = ++_copyTapGeneration;
+    try {
+      await Clipboard.setData(ClipboardData(text: widget.code));
+    } catch (e) {
+      // Ignore failures from superseded taps (a newer tap re-armed the
+      // feedback and may still succeed).
+      if (!mounted || generation != _copyTapGeneration) return;
+      _copyFeedbackTimer?.cancel();
+      setState(() {
+        _showCopyFeedback = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('复制失败: $e'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  /// The copy button with the fade-swapping copy/check icon.
+  Widget _buildCopyButton() {
+    return _buildToolbarButton(
+      onTap: _copyCode,
+      child: AnimatedSwitcher(
+        duration: _copyFeedbackFade,
+        switchInCurve: Curves.easeIn,
+        switchOutCurve: Curves.easeOut,
+        transitionBuilder: (child, animation) =>
+            FadeTransition(opacity: animation, child: child),
+        child: Icon(
+          _showCopyFeedback ? Icons.check : Icons.copy,
+          key: ValueKey<bool>(_showCopyFeedback),
+          size: 20,
+          semanticLabel: _showCopyFeedback ? '已复制' : '复制',
+        ),
+      ),
+    );
+  }
+
+  /// Opens the system file save panel so the user can pick where to save
+  /// the whole code block, its file name and its format (extension).
+  /// The default name and format come from the block's language.
+  Future<void> _saveCode() async {
+    if (_isSaving) return;
+    _isSaving = true;
+    try {
+      if (widget.code.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('代码为空，无法保存'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+
+      final bytes = Uint8List.fromList(utf8.encode(widget.code));
+      final outputPath = await FilePicker.saveFile(
+        dialogTitle: '保存代码',
+        fileName: 'code.${_primaryExtension()}',
+        type: FileType.custom,
+        allowedExtensions: _saveExtensions(),
+        bytes: bytes,
+        initialDirectory: SystemPickDirectories.documents(),
+      );
+      if (outputPath != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已保存到: $outputPath'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('保存失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      _isSaving = false;
+    }
+  }
+
+  /// Shared toolbar button chrome: a compact circular icon button (36x36)
+  /// with a circular ripple via [CircleBorder].
+  Widget _buildToolbarButton({
+    required Widget child,
     required VoidCallback onTap,
   }) {
     return Material(
@@ -711,9 +911,21 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(8),
-          child: Icon(icon, size: 20, semanticLabel: label),
+          child: child,
         ),
       ),
+    );
+  }
+
+  /// A static-icon variant of the toolbar button.
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return _buildToolbarButton(
+      onTap: onTap,
+      child: Icon(icon, size: 20, semanticLabel: label),
     );
   }
 }
