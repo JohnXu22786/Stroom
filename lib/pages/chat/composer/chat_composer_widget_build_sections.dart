@@ -13,7 +13,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
         onReorderItem: _onReorderPendingAttachment,
         itemBuilder: (ctx, i) {
           final att = _pendingAttachments[i];
-          return ReorderableDelayedDragStartListener(
+          return _PendingAttachmentDragStartListener(
             key: ValueKey('pending_att_${att.id}'),
             index: i,
             child: FilePreviewChip(
@@ -440,6 +440,31 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// 待发附件芯片的拖拽启动监听器：长按 [kDragSortDelay]（280ms）即开始
+/// 拖拽。
+///
+/// Flutter 自带的 [ReorderableDelayedDragStartListener] 固定使用
+/// kLongPressTimeout（500ms），长按体感偏慢且与全应用其余拖拽排序的
+/// 手感不一致（DragSortArea 胶囊/行 280ms、OCR 页 300ms）——发送顺序
+/// 对 API 请求有意义，用户需要能快速重排附件，因此改用全应用统一的
+/// 短延迟。
+class _PendingAttachmentDragStartListener
+    extends ReorderableDelayedDragStartListener {
+  const _PendingAttachmentDragStartListener({
+    super.key,
+    required super.index,
+    required super.child,
+  });
+
+  @override
+  MultiDragGestureRecognizer createRecognizer() {
+    return DelayedMultiDragGestureRecognizer(
+      debugOwner: this,
+      delay: kDragSortDelay,
     );
   }
 }

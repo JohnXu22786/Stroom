@@ -423,8 +423,15 @@ extension _ChatPageBubblesExt on _ChatPageState {
             child: SizedBox(
               height: 120,
               child: ListView.builder(
+                // 不用 reverse（原实现为让横条贴住气泡右缘而 reverse，
+                // 但会把可见顺序镜像成待发/API 发送顺序的反向——模型按
+                // 请求顺序读文件，记录里却倒着显示）。shrinkWrap 让横条
+                // 收缩到内容宽度，靠外层 Column 的 end 对齐贴住右缘；
+                // 顺序即附件列表顺序（第一个文件最左，与待发条一致）。
+                // 溢出时视口默认停靠 offset 0 → 第一个文件可见，且懒
+                // 列表回收重建后同样回到首项（无状态可丢）。
+                shrinkWrap: true,
                 scrollDirection: Axis.horizontal,
-                reverse: isSentByMe,
                 itemCount: chatMsg!.attachments.length,
                 itemBuilder: (ctx, i) {
                   final att = chatMsg.attachments[i];

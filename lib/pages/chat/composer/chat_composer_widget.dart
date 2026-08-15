@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +18,7 @@ import 'package:stroom/utils/system_pick_utils.dart';
 import 'package:stroom/widgets/file_preview.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/widgets/chat_attachment_panel.dart';
+import 'package:stroom/widgets/drag_sort_area.dart' show kDragSortDelay;
 import 'package:stroom/widgets/image_preview_dialog.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
 import 'package:stroom/models/tool_call.dart';
