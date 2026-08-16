@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +19,7 @@ import '../widgets/message_attachment_preview.dart';
 import '../widgets/transform_stretch_overscroll.dart';
 import '../services/attachment_storage.dart';
 import '../utils/model_order.dart';
+import '../utils/system_pick_utils.dart';
 
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
@@ -43,10 +45,11 @@ import 'provider_config_page.dart';
 
 import 'chat/chat_types.dart';
 import 'chat/chat_initial_scroll.dart';
+import 'chat/utils/message_save_plan.dart';
 
 export 'chat/utils/format_chat_error.dart' show formatChatErrorMessage;
 import 'chat/utils/format_chat_error.dart' show formatErrorValueForDisplay;
-import 'chat/widgets/action_button.dart';
+import 'chat/widgets/message_action_row.dart';
 import 'chat/widgets/reasoning_section.dart';
 import 'chat/dialogs/error_detail_dialog.dart' show showDataDetailDialog;
 import 'chat/dialogs/confirm_dialog.dart';
@@ -189,6 +192,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final Map<String, List<MessageSegment>> _chatSegments = {};
 
   String? _streamingMsgId;
+
+  /// 防止快速连点保存按钮时弹出多个系统保存对话框。
+  bool _isSavingMarkdown = false;
 
   // ── Auto-scroll / scroll-to-bottom state ──
   /// Whether auto-scrolling is enabled. Initially false — user must click

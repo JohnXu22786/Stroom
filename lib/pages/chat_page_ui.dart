@@ -712,96 +712,167 @@ extension _ChatPageUiExt on _ChatPageState {
     );
   }
 
-  /// Action buttons (copy / retry or edit / raw data / JSON / delete).
+  /// Action buttons beneath a message bubble (copy / save / retry or edit /
+  /// raw data / JSON / delete), rendered by the shared [MessageActionRow].
   Widget _buildMessageActionButtons({
     required BuildContext context,
     required TextMessage message,
     required bool isAi,
     required bool isDark,
   }) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ActionButton(
-          icon: Icons.copy,
-          tooltip: '复制',
-          onPressed: () {
-            Clipboard.setData(
-              ClipboardData(
-                text: message.text,
-              ),
-            );
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(
-              const SnackBar(
-                content: Text('已复制'),
-                duration: Duration(
-                  seconds: 1,
-                ),
-              ),
-            );
-          },
-        ),
-        const SizedBox(width: 2),
-        if (isAi)
-          ActionButton(
-            icon: Icons.refresh,
-            tooltip: '重试',
-            onPressed: () => _confirmRetryOrEdit(
-              message.id,
-            ),
-          )
-        else
-          ActionButton(
-            icon: Icons.edit_outlined,
-            tooltip: '编辑',
-            onPressed: () => _startEditMessage(
-              message.id,
-            ),
-          ),
-        // Raw data view button: only shown for AI messages when data exists.
-        if (isAi &&
-            _history.any(
-              (m) =>
-                  m.id == message.id &&
-                  (m.rawRequest != null || m.rawResponse != null),
-            )) ...[
-          const SizedBox(width: 2),
-          ActionButton(
-            icon: Icons.data_exploration,
-            tooltip: '查看数据详情',
-            onPressed: () => _showRawDataDialog(
-              context,
-              message.id,
-            ),
-          ),
-        ],
-        if (_developerMode &&
-            isAi &&
-            _history.any(
-              (m) =>
-                  m.id == message.id &&
-                  (m.rawRequest != null || m.rawResponse != null),
-            )) ...[
-          const SizedBox(width: 2),
-          ActionButton(
-            icon: Icons.code,
-            tooltip: 'JSON 审查',
-            onPressed: () => _showJsonInspection(
-              message.id,
-            ),
-          ),
-        ],
-        const SizedBox(width: 2),
-        ActionButton(
-          icon: Icons.delete_outline,
-          tooltip: '删除',
-          onPressed: () => _confirmDeleteMessage(
-            message.id,
-          ),
-        ),
-      ],
+    final hasRawData = _history.any(
+      (m) =>
+          m.id == message.id && (m.rawRequest != null || m.rawResponse != null),
     );
+    return MessageActionRow(
+      messageText: message.text,
+      isAi: isAi,
+      showRawData: isAi && hasRawData,
+      showJsonInspection: isAi && hasRawData && _developerMode,
+      onCopy: () {
+        Clipboard.setData(ClipboardData(text: message.text));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('已复制'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      },
+      onRetryOrEdit: () => isAi
+          ? _confirmRetryOrEdit(message.id)
+          : _startEditMessage(message.id),
+      onSave: isAi ? () => _saveMessageAsMarkdown(context, message) : null,
+      onViewRawData: isAi && hasRawData
+          ? () => _showRawDataDialog(context, message.id)
+          : null,
+      onJsonInspection: isAi && hasRawData && _developerMode
+          ? () => _showJsonInspection(message.id)
+          : null,
+      onDelete: () => _confirmDeleteMessage(message.id),
+    );
+  }
+
+  /// 将消息的正式输出保存为 Markdown 文件。
+  ///
+  /// - 无多步工具调用、或有多步工具调用但步骤间没有回话反馈（只有工具
+  ///   与思考链）：直接弹出带文件名输入的保存面板。
+  /// - 多步工具调用且步骤之间有回话反馈：先弹出选择面板，让用户选择
+  ///   "保存完整消息"（所有正式输出按顺序以空行分隔）或"保存最后的消息
+  ///   "（仅最后一次正式回复）。
+  Future<void> _saveMessageAsMarkdown(
+    BuildContext context,
+    TextMessage message,
+  ) async {
+    if (_isSavingMarkdown) return;
+    final plan = buildMessageSavePlan(
+      segments: _chatSegments[message.id] ?? const <MessageSegment>[],
+      fallbackText: message.text,
+    );
+    if (plan == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('没有可保存的文本内容'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    String markdown;
+    if (plan.scope == MessageSaveScope.fullOrLast) {
+      final option = await _askSaveScopeDialog(context);
+      if (option == null) return; // 用户取消选择
+      markdown = option == MessageSaveOption.full
+          ? plan.fullMarkdown
+          : plan.lastMarkdown;
+    } else {
+      markdown = plan.fullMarkdown;
+    }
+
+    if (!mounted) return;
+    await _saveMarkdownToFile(markdown);
+  }
+
+  /// 多步工具调用且步骤之间有回话反馈时弹出的选择面板：
+  /// "保存完整消息" / "保存最后的消息" / 取消。
+  Future<MessageSaveOption?> _askSaveScopeDialog(BuildContext context) {
+    return showDialog<MessageSaveOption>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('保存消息为 Markdown'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              '该回复包含多步工具调用，选择要保存的内容：',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              icon: const Icon(Icons.article_outlined, size: 18),
+              label: const Text('保存完整消息'),
+              onPressed: () => Navigator.of(ctx).pop(MessageSaveOption.full),
+            ),
+            const SizedBox(height: 8),
+            FilledButton.tonalIcon(
+              icon: const Icon(Icons.last_page, size: 18),
+              label: const Text('保存最后的消息'),
+              onPressed: () => Navigator.of(ctx).pop(MessageSaveOption.last),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 弹出系统保存面板（带文件名输入）并把 [markdown] 内容写入 .md 文件。
+  Future<void> _saveMarkdownToFile(String markdown) async {
+    if (_isSavingMarkdown) return;
+    _isSavingMarkdown = true;
+    try {
+      final bytes = Uint8List.fromList(utf8.encode(markdown));
+      final outputPath = await FilePicker.saveFile(
+        dialogTitle: '保存消息为 Markdown',
+        fileName: 'chat_message_${_fileTimestamp()}.md',
+        type: FileType.custom,
+        allowedExtensions: ['md'],
+        bytes: bytes,
+        initialDirectory: SystemPickDirectories.documents(),
+      );
+      if (outputPath != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已保存到: $outputPath'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('保存失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      _isSavingMarkdown = false;
+    }
+  }
+
+  /// 紧凑时间戳（yyyyMMdd_HHmmss），用作默认文件名。
+  String _fileTimestamp() {
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${now.year}${two(now.month)}${two(now.day)}'
+        '_${two(now.hour)}${two(now.minute)}${two(now.second)}';
   }
 }
