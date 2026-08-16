@@ -126,8 +126,8 @@ class _ChatOverlayButtonsState extends State<ChatOverlayButtons>
     // the keyboard opened elsewhere) shows the dismiss button immediately.
     if (!_keyboardStateSeeded) {
       _keyboardStateSeeded = true;
-      _wasKeyboardVisible = _currentKeyboardInset() >
-          ChatOverlayButtons.keyboardVisibleThreshold;
+      _wasKeyboardVisible =
+          _currentKeyboardInset() > ChatOverlayButtons.keyboardVisibleThreshold;
     }
   }
 
@@ -152,8 +152,8 @@ class _ChatOverlayButtonsState extends State<ChatOverlayButtons>
   void didChangeMetrics() {
     super.didChangeMetrics();
     if (!mounted) return;
-    final isNowVisible = _currentKeyboardInset() >
-        ChatOverlayButtons.keyboardVisibleThreshold;
+    final isNowVisible =
+        _currentKeyboardInset() > ChatOverlayButtons.keyboardVisibleThreshold;
     if (isNowVisible != _wasKeyboardVisible) {
       setState(() => _wasKeyboardVisible = isNowVisible);
     }

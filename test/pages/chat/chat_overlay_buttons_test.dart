@@ -1,4 +1,4 @@
-﻿// Widget tests for the ChatOverlayButtons widget in isolation: the
+// Widget tests for the ChatOverlayButtons widget in isolation: the
 // keyboard-dismiss button must fade/scales in and out (never pop in/out
 // abruptly), the scroll-to-bottom button must follow the CURRENT list
 // metrics, and the keyboard state must come from the VIEW (the enclosing
@@ -138,8 +138,7 @@ void main() {
   group('ChatOverlayButtons', () {
     testWidgets(
         'the keyboard-dismiss button fades and scales IN on keyboard open '
-        'and fades/scales OUT on close — never a sudden pop',
-        (tester) async {
+        'and fades/scales OUT on close — never a sudden pop', (tester) async {
       await pumpDefault(tester);
       addTearDown(tester.view.reset);
       final pos = scrollController.position;
@@ -198,7 +197,8 @@ void main() {
       expect(find.byIcon(Icons.keyboard_hide), findsNothing);
     });
 
-    testWidgets('the keyboard state comes from the VIEW, not MediaQuery '
+    testWidgets(
+        'the keyboard state comes from the VIEW, not MediaQuery '
         '(the Scaffold strips viewInsets from the body)', (tester) async {
       await pumpDefault(tester);
       addTearDown(tester.view.reset);
@@ -361,4 +361,3 @@ void main() {
     });
   });
 }
-
