@@ -45,6 +45,7 @@ import 'chat/chat_types.dart';
 import 'chat/chat_initial_scroll.dart';
 
 export 'chat/utils/format_chat_error.dart' show formatChatErrorMessage;
+import 'chat/utils/format_chat_error.dart' show formatErrorValueForDisplay;
 import 'chat/widgets/action_button.dart';
 import 'chat/widgets/reasoning_section.dart';
 import 'chat/dialogs/error_detail_dialog.dart' show showDataDetailDialog;
