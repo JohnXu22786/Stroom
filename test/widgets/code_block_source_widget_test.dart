@@ -296,8 +296,8 @@ void main() {
       );
     }
 
-    Finder horizontalScrollViews() => find.byWidgetPredicate(
-        (w) => w is Scrollable && w.axis == Axis.horizontal);
+    Finder horizontalScrollViews() => find
+        .byWidgetPredicate((w) => w is Scrollable && w.axis == Axis.horizontal);
 
     String? wrapLabel(WidgetTester tester) =>
         tester.widget<Icon>(find.byIcon(Icons.wrap_text)).semanticLabel;
