@@ -269,6 +269,94 @@ void main() {
     });
   });
 
+  group('CodeBlockSourceView - default wrap state by language', () {
+    /// Pumps a standalone [CodeBlockSourceView] inside a narrow column so
+    /// wrap mode is structurally observable (no horizontal scroll view).
+    Future<void> pumpWrapped(
+      WidgetTester tester, {
+      required String language,
+      String code = 'line1\nline2',
+    }) {
+      return tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 200,
+              child: CodeBlockSourceView(
+                // Key by language so re-pumping a loop iteration forces a
+                // fresh State: the wrap default is computed in initState,
+                // which would otherwise only run for the first language.
+                key: ValueKey(language),
+                code: code,
+                language: language,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    Finder horizontalScrollViews() => find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axis == Axis.horizontal);
+
+    String? wrapLabel(WidgetTester tester) =>
+        tester.widget<Icon>(find.byIcon(Icons.wrap_text)).semanticLabel;
+
+    testWidgets('markdown blocks start wrapped', (tester) async {
+      await pumpWrapped(tester, language: 'markdown');
+      expect(wrapLabel(tester), '取消换行',
+          reason: 'markdown is prose — must wrap by default');
+      expect(horizontalScrollViews(), findsNothing,
+          reason: 'wrap mode must have no horizontal scroll view');
+    });
+
+    testWidgets('md blocks start wrapped (language is case-insensitive)',
+        (tester) async {
+      await pumpWrapped(tester, language: 'MD');
+      expect(wrapLabel(tester), '取消换行');
+      expect(horizontalScrollViews(), findsNothing);
+    });
+
+    testWidgets('text / plaintext / txt blocks start wrapped', (tester) async {
+      for (final language in ['text', 'plaintext', 'txt']) {
+        await pumpWrapped(tester, language: language);
+        expect(wrapLabel(tester), '取消换行',
+            reason: "'$language' is plain text — must wrap by default");
+        expect(horizontalScrollViews(), findsNothing,
+            reason: "'$language' must have no horizontal scroll view");
+      }
+    });
+
+    testWidgets('other languages and plain fences start no-wrap',
+        (tester) async {
+      for (final language in ['python', 'json', '']) {
+        await pumpWrapped(tester, language: language);
+        expect(wrapLabel(tester), '换行显示',
+            reason: "'$language' is code — must NOT wrap by default");
+        expect(horizontalScrollViews(), findsOneWidget,
+            reason: "'$language' must keep the horizontal scroll view");
+      }
+    });
+
+    testWidgets('wrap toggle still works from the wrapped default state',
+        (tester) async {
+      await pumpWrapped(tester, language: 'markdown');
+      expect(wrapLabel(tester), '取消换行');
+
+      // Toggle off → no-wrap (horizontal scroll view appears).
+      await tester.tap(find.byIcon(Icons.wrap_text));
+      await tester.pumpAndSettle();
+      expect(wrapLabel(tester), '换行显示');
+      expect(horizontalScrollViews(), findsOneWidget);
+
+      // Toggle back on → wrapped again.
+      await tester.tap(find.byIcon(Icons.wrap_text));
+      await tester.pumpAndSettle();
+      expect(wrapLabel(tester), '取消换行');
+      expect(horizontalScrollViews(), findsNothing);
+    });
+  });
+
   group('CodeBlockSourceView - language label', () {
     testWidgets('shows the language label in the top-left corner',
         (tester) async {
