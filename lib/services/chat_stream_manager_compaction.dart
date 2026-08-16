@@ -59,13 +59,12 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
         ' (actual=$actualInput estimated=$estimated) threshold=$threshold');
     if (currentTokens < threshold) return false;
 
-    // 2. 解析压缩助手（默认内置；用户可替换）
+    // 2. 解析压缩任务：提示词（自定义优先，默认内置）+ 模型
+    //    （配置了独立模型就用它，否则跟随对话页当前模型）
     final settings = ref.read(systemAssistantSettingsProvider);
-    final userAssistants = ref.read(assistantProvider);
-    final compactionPrompt = resolveSystemAssistantPrompt(
-      assistantId: settings.compactionAssistantId,
-      userAssistants: userAssistants,
-    );
+    final compactionPrompt =
+        resolveSystemAssistantPrompt(settings.compaction,
+            defaultAssistantId: kBuiltInCompactionAssistantId);
     if (compactionPrompt == null) return false;
 
     // 3. 划分头部（可压缩）与尾部（保留原文）。
@@ -124,11 +123,25 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
     sb.writeln('请将以上对话历史压缩为锚定摘要，严格按模板输出。');
 
     // 5. 执行压缩请求（轻量、无工具、maxTokens 适中）
-    final svc = _adapter.getOrCreateService(convId);
-    if (svc == null) return false;
+    //    独立 task service：此前 getOrCreateService 让压缩与主请求
+    //    共享同一 service（取消联动、usage 事件回调都随之共享）。
+    //    现在压缩可能与主请求使用不同模型，必须独立 service——
+    //    通过 convId 注册，让 manager.cancel 仍能中止在途压缩请求；
+    //    usage 事件显式接线到 _commitUsage（压缩只累计 cost）。
+    final requestSvc = _adapter.createTransientServiceForModel(
+      entriesState: ref.read(providerEntriesProvider),
+      modelId: settings.compaction.modelId,
+      providerName: settings.compaction.providerName,
+      modelDisplayName: settings.compaction.modelDisplayName,
+      convId: convId,
+    );
+    if (requestSvc == null) return false;
+    requestSvc.onUsageEvent = (usage, {required bool recordInput}) {
+      _commitUsage(convId, usage, recordInput: recordInput);
+    };
     String summary;
     try {
-      summary = await svc.sendPrompt(
+      summary = await requestSvc.sendPrompt(
         systemPrompt: compactionPrompt,
         history: [ChatMessage(role: 'user', content: sb.toString())],
         maxTokens: ChatStreamManager._compactionMaxTokens,
@@ -139,6 +152,10 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
     } catch (e) {
       debugPrint('[ChatStreamManager] 压缩请求失败: $e');
       return false;
+    } finally {
+      // 请求结束（成功/失败/取消）即释放任务 service，避免长会话
+      // 累积未回收的 HTTP 客户端；若已被取消路径移除则为空操作。
+      _adapter.releaseTaskService(convId);
     }
     // 压缩请求期间用户取消：不应用压缩结果（摘要持久化
     // 会覆盖用户可见状态）

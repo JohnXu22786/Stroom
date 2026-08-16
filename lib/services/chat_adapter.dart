@@ -53,6 +53,13 @@ class ChatAdapter {
   /// multiple conversations to stream concurrently without interference.
   final Map<String, ChatService> _activeServices = {};
 
+  /// 按对话登记的任务瞬时 service（压缩等内部任务），keyed by convId。
+  ///
+  /// 内部任务运行在独立的一次性 [ChatService] 上（不进入
+  /// [_activeServices]），取消对话时同样需要中止其未完成的请求，
+  /// 否则在途压缩请求会继续执行并可能写入用户可见状态。
+  final Map<String, ChatService> _pendingTaskServices = {};
+
   /// Cached parts of the last [configure] / [selectModel] call, used as
   /// a template to create new per-conversation services on demand.
   BaseChatProvider? _cachedProvider;
@@ -295,12 +302,29 @@ class ChatAdapter {
     String? providerName,
   }) {
     if (modelRef == null || modelRef.isEmpty) return null;
+    return _resolveModelRefPair(
+      entriesState,
+      modelId: modelRef,
+      providerName: providerName,
+      modelDisplayName: modelRef,
+    );
+  }
+
+  /// 按模型引用（绝对身份优先，显示名兜底）解析 (config, model) 对。
+  ///
+  /// 两遍扫描：先按供应商名精确匹配；无供应商名（旧数据）或供应商名
+  /// 已过期时退化为按模型ID/显示名找第一个（与 resolveModelRef 一致）。
+  /// 不匹配时返回 null（调用方回退到对话页当前模型）。
+  (ProviderConfigItem, ModelConfig)? _resolveModelRefPair(
+    ProviderEntriesState entriesState, {
+    String? modelId,
+    String? providerName,
+    String? modelDisplayName,
+  }) {
     final llmEntry =
         entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
     if (llmEntry == null) return null;
 
-    // 两遍扫描：先按供应商名精确匹配；无供应商名（旧数据）或供应商名
-    // 已过期时退化为按模型ID/显示名找第一个（与 resolveModelRef 一致）。
     final hasProvider = providerName != null && providerName.isNotEmpty;
     for (var pass = 0; pass < (hasProvider ? 2 : 1); pass++) {
       for (final config in llmEntry.configs) {
@@ -309,10 +333,20 @@ class ChatAdapter {
             !hasProvider || pass == 1 || config.providerName == providerName;
         if (!providerMatches) continue;
         for (final model in config.models) {
-          if (model.modelId == modelRef) return (config, model);
+          final id = modelId;
+          if (id != null &&
+              id.isNotEmpty &&
+              model.modelId == id) {
+            return (config, model);
+          }
           final displayName =
               '${model.name.isNotEmpty ? model.name : model.modelId} | ${config.providerName}';
-          if (displayName == modelRef) return (config, model);
+          final name = modelDisplayName;
+          if (name != null &&
+              name.isNotEmpty &&
+              displayName == name) {
+            return (config, model);
+          }
         }
       }
     }
@@ -328,11 +362,82 @@ class ChatAdapter {
   /// 返回 null 表示 adapter 未配置。
   ChatService? createTransientService() {
     if (_cachedProvider == null || _cachedModelConfig == null) return null;
+    return _buildTransientService(
+      _cachedProvider!,
+      _cachedModelConfig!,
+      _cachedProviderConfig,
+      _cachedEndpointType,
+    );
+  }
+
+  /// 按系统助手任务的模型引用创建一次性 [ChatService]。
+  ///
+  /// 供标题生成 / 上下文压缩等内部任务使用：任务的模型与对话页当前
+  /// 模型独立（设置面板可单独指定）。未配置引用或引用已不存在时
+  /// 回退到 [createTransientService]（对话页当前选中模型）。
+  /// 与 [createTransientService] 一样：不缓存、不进入 _activeServices。
+  ///
+  /// 传入 [convId] 时注册到 [_pendingTaskServices]，后续
+  /// [cancelService]（对话流取消、切换）会中止其中的在途请求——
+  /// 压缩请求运行在独立 service 上，不注册则取消对话时压缩请求
+  /// 仍会执行完并污染结果。
+  ChatService? createTransientServiceForModel({
+    required ProviderEntriesState entriesState,
+    String? modelId,
+    String? providerName,
+    String? modelDisplayName,
+    String? convId,
+  }) {
+    final resolved = _resolveModelRefPair(
+      entriesState,
+      modelId: modelId,
+      providerName: providerName,
+      modelDisplayName: modelDisplayName,
+    );
+    ChatService? svc;
+    if (resolved != null) {
+      final (config, modelConfig) = resolved;
+      final endpointType =
+          effectiveEndpointType(modelConfig.endpointType, config.endpointType);
+      final provider = createChatProviderFromConfig(
+        providerName: config.providerName,
+        baseUrl: config.host,
+        apiKey: config.key,
+        endpointType: endpointType,
+      );
+      svc = _buildTransientService(
+        provider,
+        modelConfig,
+        config,
+        endpointType,
+      );
+    } else {
+      svc = createTransientService();
+    }
+    if (svc == null) return null;
+    if (convId != null && convId.isNotEmpty) {
+      // 同对话的新任务注册时释放旧的瞬时 service（防御：正常流程
+      // 下同一对话同一时刻只有一个任务在途，取消路径会先移除）。
+      final prev = _pendingTaskServices[convId];
+      prev?.cancel();
+      prev?.dispose();
+      _pendingTaskServices[convId] = svc;
+    }
+    return svc;
+  }
+
+  /// 用模板配置（缓存/覆盖值）构建一次性 [ChatService]。
+  ChatService _buildTransientService(
+    BaseChatProvider provider,
+    ModelConfig modelConfig,
+    ProviderConfigItem? providerConfig,
+    String endpointType,
+  ) {
     final svc = ChatService(
-      provider: _cachedProvider!,
-      modelConfig: _cachedModelConfig!,
-      providerConfig: _cachedProviderConfig,
-      endpointType: _cachedEndpointType,
+      provider: provider,
+      modelConfig: modelConfig,
+      providerConfig: providerConfig,
+      endpointType: endpointType,
     );
     if (_cachedAssistantPrompt != null) {
       svc.setAssistantPrompt(_cachedAssistantPrompt);
@@ -351,6 +456,17 @@ class ChatAdapter {
     final svc = _activeServices.remove(convId);
     svc?.cancel();
     svc?.dispose();
+    // 同步中止该对话的任务瞬时服务（压缩等）。
+    releaseTaskService(convId);
+  }
+
+  /// 释放已完成的对话任务瞬时 service（压缩请求结束后调用）。
+  ///
+  /// 与 [cancelService] 中的清理幂等：若已被取消移除则为空操作。
+  void releaseTaskService(String convId) {
+    final taskSvc = _pendingTaskServices.remove(convId);
+    taskSvc?.cancel();
+    taskSvc?.dispose();
   }
 
   /// Cancels and disposes ALL per-conversation services.
@@ -360,6 +476,11 @@ class ChatAdapter {
       svc.dispose();
     }
     _activeServices.clear();
+    for (final svc in _pendingTaskServices.values) {
+      svc.cancel();
+      svc.dispose();
+    }
+    _pendingTaskServices.clear();
   }
 
   // Cached assistant config applied to newly created services.
@@ -371,31 +492,8 @@ class ChatAdapter {
   static bool _httpToolsRegistered = false;
 
   /// 从 ProviderEntriesState 解析出所有可选的模型列表
-  List<AvailableModel> availableModels(ProviderEntriesState entriesState) {
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
-    if (llmEntry == null || llmEntry.configs.isEmpty) return const [];
-
-    final result = <AvailableModel>[];
-    for (var ci = 0; ci < llmEntry.configs.length; ci++) {
-      final config = llmEntry.configs[ci];
-      for (var mi = 0; mi < config.models.length; mi++) {
-        final model = config.models[mi];
-        final displayName =
-            '${model.name.isNotEmpty ? model.name : model.modelId} | ${config.providerName}';
-        result.add(
-          AvailableModel(
-            displayName: displayName,
-            modelId: model.modelId,
-            providerName: config.providerName,
-            configIndex: ci,
-            modelIndex: mi,
-          ),
-        );
-      }
-    }
-    return result;
-  }
+  List<AvailableModel> availableModels(ProviderEntriesState entriesState) =>
+      availableLlmModels(entriesState);
 
   /// 从 ProviderEntriesState 读取 LLM 配置并初始化 ChatService
   void configure(ProviderEntriesState entriesState) {
@@ -715,6 +813,42 @@ String? perConversationModelToRestore({
     providerName: lastUsedProviderName,
     displayName: lastUsedModelName,
   )?.displayName;
+}
+
+/// 从 ProviderEntriesState 解析出所有可选的 LLM 模型（显示名格式与
+/// 对话页一致："模型名 | 供应商名"）。
+///
+/// 与 [ChatAdapter.availableModels] 等效；设置页等无适配器上下文的
+/// 调用方直接使用此顶层函数。
+///
+/// 过滤掉 host/key 为空的配置：这类配置的模型无法发起任何请求
+/// （[selectModel] / [_resolveModelRefPair] 都会跳过），不应出现在
+/// 可选列表与设置面板中，否则显示与真实请求行为不一致。
+List<AvailableModel> availableLlmModels(ProviderEntriesState entriesState) {
+  final llmEntry =
+      entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+  if (llmEntry == null || llmEntry.configs.isEmpty) return const [];
+
+  final result = <AvailableModel>[];
+  for (var ci = 0; ci < llmEntry.configs.length; ci++) {
+    final config = llmEntry.configs[ci];
+    if (config.host.isEmpty || config.key.isEmpty) continue;
+    for (var mi = 0; mi < config.models.length; mi++) {
+      final model = config.models[mi];
+      final displayName =
+          '${model.name.isNotEmpty ? model.name : model.modelId} | ${config.providerName}';
+      result.add(
+        AvailableModel(
+          displayName: displayName,
+          modelId: model.modelId,
+          providerName: config.providerName,
+          configIndex: ci,
+          modelIndex: mi,
+        ),
+      );
+    }
+  }
+  return result;
 }
 
 /// 按持久化的模型引用解析出当前可用的 [AvailableModel]。

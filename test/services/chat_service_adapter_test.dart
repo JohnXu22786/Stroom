@@ -1468,6 +1468,135 @@ void main() {
     });
   });
 
+  group('createTransientServiceForModel（系统助手任务模型解析）', () {
+    setUp(() {
+      adapter.configure(entriesState);
+    });
+
+    test('按 (providerName, modelId) 绝对身份解析并使用该模型', () {
+      final svc = adapter.createTransientServiceForModel(
+        entriesState: entriesState,
+        modelId: 'claude-3-opus',
+        providerName: 'Anthropic',
+        modelDisplayName: '过期显示名 | Anthropic',
+      );
+      expect(svc, isNotNull);
+      expect(svc!.modelConfig!.modelId, 'claude-3-opus');
+    });
+
+    test('仅显示名（对话页格式）也能解析', () {
+      final svc = adapter.createTransientServiceForModel(
+        entriesState: entriesState,
+        modelDisplayName: 'Claude 3 Haiku | Anthropic',
+      );
+      expect(svc, isNotNull);
+      expect(svc!.modelConfig!.modelId, 'claude-3-haiku');
+    });
+
+    test('引用无法解析时回退到对话页当前（全局缓存）模型', () {
+      final svc = adapter.createTransientServiceForModel(
+        entriesState: entriesState,
+        modelId: 'missing-model',
+        modelDisplayName: '不存在 | 任意供应商',
+      );
+      expect(svc, isNotNull);
+      expect(svc!.modelConfig!.modelId, 'gpt-4o',
+          reason: '未命中时回到全局缓存的第一个模型');
+    });
+
+    test('无引用时直接跟随对话页当前模型', () {
+      adapter.selectModel(entriesState, 1, 1); // claude-3-haiku
+      final svc = adapter.createTransientServiceForModel(
+        entriesState: entriesState,
+      );
+      expect(svc, isNotNull);
+      expect(svc!.modelConfig!.modelId, 'claude-3-haiku');
+    });
+
+    test('不改变适配器的当前选择（瞬时服务无副作用）', () {
+      adapter.selectModel(entriesState, 1, 1);
+      final svc = adapter.createTransientServiceForModel(
+        entriesState: entriesState,
+        modelId: 'gpt-4o',
+        providerName: 'OpenAI',
+      );
+      expect(svc!.modelConfig!.modelId, 'gpt-4o');
+      expect(adapter.currentConfigIndex, 1);
+      expect(adapter.currentModelIndex, 1);
+      expect(adapter.modelConfig!.modelId, 'claude-3-haiku');
+    });
+
+    test('供应商未填充 host/key 的配置被跳过', () {
+      final partialState = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_llm',
+            type: 'llm',
+            name: 'Test LLM Provider',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'Empty',
+                host: '',
+                key: '',
+                models: [
+                  ModelConfig(name: 'Empty Model', modelId: 'empty-model'),
+                ],
+              ),
+              ProviderConfigItem(
+                providerName: 'OpenAI',
+                host: 'https://api.openai.com/v1',
+                key: 'sk-test',
+                models: [
+                  ModelConfig(name: 'GPT-4o', modelId: 'gpt-4o'),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      final svc = adapter.createTransientServiceForModel(
+        entriesState: partialState,
+        modelId: 'empty-model',
+      );
+      expect(svc, isNotNull);
+      expect(svc!.modelConfig!.modelId, 'gpt-4o',
+          reason: '空配置不参与匹配，回退到全局模型');
+    });
+
+    test('availableLlmModels 过滤 host/key 为空的配置（显示与请求一致）', () {
+      final partialState = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_llm',
+            type: 'llm',
+            name: 'Test LLM Provider',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'Empty',
+                host: '',
+                key: '',
+                models: [
+                  ModelConfig(name: 'Empty Model', modelId: 'empty-model'),
+                ],
+              ),
+              ProviderConfigItem(
+                providerName: 'OpenAI',
+                host: 'https://api.openai.com/v1',
+                key: 'sk-test',
+                models: [
+                  ModelConfig(name: 'GPT-4o', modelId: 'gpt-4o'),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      final models = availableLlmModels(partialState);
+      expect(models.map((m) => m.displayName), ['GPT-4o | OpenAI'],
+          reason: '空配置的模型不可用，不应出现在可选列表中');
+    });
+  });
+
   group('ChatAdapter per-assistant services', () {
     setUp(() {
       adapter.configure(entriesState);

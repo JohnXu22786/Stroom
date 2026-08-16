@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/legacy.dart'
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
 import '../models/assistant.dart' show Assistant;
+import '../models/built_in_assistants.dart';
 import '../models/message_block.dart';
 import '../models/tool_call.dart';
 import '../pages/chat/chat_types.dart';
@@ -14,7 +15,6 @@ import '../providers/chat_stream_provider.dart';
 import '../providers/context_management_provider.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/system_assistant_provider.dart';
-import '../providers/assistant_provider.dart';
 import '../providers/provider_config.dart';
 import 'app_log_service.dart';
 import 'chat_adapter.dart';
@@ -338,7 +338,8 @@ class ChatStreamManager {
     // **立即**增量累加到对话，而非整次发送攒到流结束一次性提交：
     // - 重发/重试/编辑只会在累计值上继续增加，绝不重置、不从头重算；
     // - 每请求提交一次，service 复用/异常清理也不会重复提交（双计）。
-    // 压缩请求先于主请求执行，绑定在同一个 service 上，同样走此回调。
+    // 压缩请求运行在独立的瞬时 service 上（chat_stream_manager_
+    // compaction.dart 中显式接线 _commitUsage），此回调只覆盖主请求。
     snappedChatService?.onUsageEvent = (usage, {required bool recordInput}) {
       _commitUsage(convId, usage, recordInput: recordInput);
     };
