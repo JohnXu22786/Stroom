@@ -285,7 +285,9 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
             ignoring: fadingOut,
             child: TweenAnimationBuilder<double>(
               tween: Tween(begin: fadingOut ? 1 : 0, end: fadingOut ? 0 : 1),
-              duration: ChatComposerWidgetState._editWarningFadeOutDuration,
+              duration: fadingOut
+                  ? ChatComposerWidgetState._editWarningFadeOutDuration
+                  : ChatComposerWidgetState._editWarningFadeInDuration,
               builder: (context, value, child) =>
                   Opacity(opacity: value, child: child),
               child: Container(
