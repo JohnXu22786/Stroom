@@ -596,24 +596,6 @@ extension _ChatPageUiExt on _ChatPageState {
     _showErrorDetailDialog(context, messageId);
   }
 
-  /// Formats an error value for display in the error bubble.
-  /// If the value is a Map/List, converts to JSON string.
-  /// If the value is already a String, returns it as-is (up to 200 chars).
-  String _formatErrorValue(dynamic value) {
-    if (value is String) {
-      return value.length > 200 ? '${value.substring(0, 200)}...' : value;
-    }
-    if (value is Map || value is List) {
-      try {
-        final json = const JsonEncoder.withIndent('  ').convert(value);
-        return json.length > 200 ? '${json.substring(0, 200)}...' : json;
-      } catch (_) {
-        return value.toString();
-      }
-    }
-    return value?.toString() ?? '';
-  }
-
   /// Top bar with title and search toggle.
   Widget _buildTopBar({required String title}) {
     return Container(
