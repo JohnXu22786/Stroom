@@ -224,8 +224,8 @@ void chatAgentSemanticsGroup5() {
           'm': PerModelCompactionConfig(enabled: true, threshold: 48000),
         },
       );
-      expect(settings.effectiveCompactionThreshold(100000, modelKey: 'm'),
-          48000);
+      expect(
+          settings.effectiveCompactionThreshold(100000, modelKey: 'm'), 48000);
       expect(
         settings.effectiveCompactionThreshold(100000, modelKey: 'other'),
         50000,

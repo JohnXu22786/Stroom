@@ -132,8 +132,7 @@ void chatAgentSemanticsGroup4() {
   });
 
   group('压缩触发线规则', () {
-    test('默认触发线 = 全局百分比(95%) × 模型 context，基准用实际 lastInputTokens',
-        () async {
+    test('默认触发线 = 全局百分比(95%) × 模型 context，基准用实际 lastInputTokens', () async {
       final container = _makeContainer(
         conversations: [
           Conversation(id: 'conv-trigger', title: '', lastInputTokens: 6000),
@@ -237,8 +236,7 @@ void chatAgentSemanticsGroup4() {
       container.dispose();
     });
 
-    test('独立触发值被正确采用：位于独立值与全局 95% 之间时不压缩',
-        () async {
+    test('独立触发值被正确采用：位于独立值与全局 95% 之间时不压缩', () async {
       // context 40000：全局 95% = 38000，独立值 40000。
       // 实际 39000 处于两者之间：独立值生效 → 不压缩；
       // 若独立值被忽略（按全局 38000）→ 39000 ≥ 38000 会压缩。

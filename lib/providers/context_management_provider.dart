@@ -107,7 +107,9 @@ class ContextManagementSettings {
 
   /// 某模型的独立压缩设置（key = [compactionModelKey]）；未配置返回 null。
   PerModelCompactionConfig? perModelConfig(String? modelKey) =>
-      (modelKey == null || modelKey.isEmpty) ? null : perModelCompaction[modelKey];
+      (modelKey == null || modelKey.isEmpty)
+          ? null
+          : perModelCompaction[modelKey];
 
   /// 有效的压缩触发线（token 数）；null 表示不触发压缩。
   ///

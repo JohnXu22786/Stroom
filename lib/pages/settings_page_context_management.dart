@@ -126,7 +126,8 @@ class _CompactionSettingsPanelState
                 const SizedBox(height: 4),
                 Text(
                   '未单独设置的模型，按模型上下文窗口的该百分比触发压缩',
-                  style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                  style: TextStyle(
+                      fontSize: 12, color: colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -216,8 +217,8 @@ class _CompactionSettingsPanelState
     }
     final savedOrder = _savedModelOrder;
     if (savedOrder != null && savedOrder.isNotEmpty && result.length > 1) {
-      final ordered =
-          applySavedOrder(result.map((m) => m.displayName).toList(), savedOrder);
+      final ordered = applySavedOrder(
+          result.map((m) => m.displayName).toList(), savedOrder);
       result.sort((a, b) => ordered
           .indexOf(a.displayName)
           .compareTo(ordered.indexOf(b.displayName)));
@@ -267,9 +268,7 @@ class _PerModelRow extends StatelessWidget {
           title: Text(displayName, overflow: TextOverflow.ellipsis),
           subtitle: Text(
             perModelEnabled
-                ? (threshold != null
-                    ? '独立触发值 $threshold token'
-                    : '填写下方独立触发值')
+                ? (threshold != null ? '独立触发值 $threshold token' : '填写下方独立触发值')
                 : '跟随全局 $globalPercent%',
           ),
           value: perModelEnabled,

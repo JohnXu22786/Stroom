@@ -183,8 +183,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('点击"压缩触发设置"进入面板，展示总开关/百分比/模型',
-        (tester) async {
+    testWidgets('点击"压缩触发设置"进入面板，展示总开关/百分比/模型', (tester) async {
       tester.view.physicalSize = const Size(1080, 8000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -241,9 +240,11 @@ void main() {
           find.widgetWithText(SwitchListTile, 'Model A | ProviderA');
       await tester.tap(modelATile);
       await tester.pumpAndSettle();
-      final key = compactionModelKey(modelId: 'model-a', providerName: 'ProviderA');
+      final key =
+          compactionModelKey(modelId: 'model-a', providerName: 'ProviderA');
       final tokenField = find.byKey(ValueKey('model-token-$key'));
-      expect(tokenField, findsOneWidget, reason: 'precondition: token field visible');
+      expect(tokenField, findsOneWidget,
+          reason: 'precondition: token field visible');
 
       // 关闭总开关
       await tester.tap(find.text('上下文自动压缩'));
@@ -387,7 +388,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // 独立触发值输入框出现（具体 token 数，非百分比）
-      final key = compactionModelKey(modelId: 'model-a', providerName: 'ProviderA');
+      final key =
+          compactionModelKey(modelId: 'model-a', providerName: 'ProviderA');
       final tokenField = find.byKey(ValueKey('model-token-$key'));
       expect(tokenField, findsOneWidget);
       await tester.enterText(tokenField, '30000');

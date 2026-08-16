@@ -181,8 +181,8 @@ void main() {
           'm1': PerModelCompactionConfig(enabled: true, threshold: 48000),
         },
       );
-      expect(settings.effectiveCompactionThreshold(128000, modelKey: 'm1'),
-          48000);
+      expect(
+          settings.effectiveCompactionThreshold(128000, modelKey: 'm1'), 48000);
       // 其它模型跟随全局百分比
       expect(
         settings.effectiveCompactionThreshold(128000, modelKey: 'other'),
@@ -202,14 +202,16 @@ void main() {
       expect(
         settings.effectiveCompactionThreshold(
           128000,
-          modelKey: compactionModelKey(modelId: 'gpt-4o', providerName: 'ProviderA'),
+          modelKey:
+              compactionModelKey(modelId: 'gpt-4o', providerName: 'ProviderA'),
         ),
         48000,
       );
       expect(
         settings.effectiveCompactionThreshold(
           128000,
-          modelKey: compactionModelKey(modelId: 'gpt-4o', providerName: 'ProviderB'),
+          modelKey:
+              compactionModelKey(modelId: 'gpt-4o', providerName: 'ProviderB'),
         ),
         8000,
       );
@@ -245,8 +247,8 @@ void main() {
           'm1': PerModelCompactionConfig(enabled: true, threshold: 100000),
         },
       );
-      expect(settings.effectiveCompactionThreshold(32000, modelKey: 'm1'),
-          32000);
+      expect(
+          settings.effectiveCompactionThreshold(32000, modelKey: 'm1'), 32000);
     });
 
     test('总开关关闭 → null（不触发压缩）', () {
