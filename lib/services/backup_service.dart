@@ -1480,10 +1480,13 @@ class BackupService {
     // 安全：拒绝含 `..` 路径段或绝对/根路径的条目名（zip-slip 防护 ——
     // 备份文件是外部输入，`p.join` 会把绝对段当作路径重置，导致写出
     // 逃逸出应用数据目录；Windows 上反斜杠同样可被 p.join 识别为
-    // 分隔符，故两种都检查）。未知条目按"跳过"处理，与未知目录语义一致。
+    // 分隔符，故两种都检查）。盘符前缀（Windows 风格绝对路径）在
+    // 任何平台上都不是合法的备份相对路径，一律跳过（不依赖
+    // p.isAbsolute —— 它在 POSIX 上不识别盘符）。
+    // 未知条目按"跳过"处理，与未知目录语义一致。
     final pathSegments = relativePath.split(RegExp(r'[/\\]'));
     if (pathSegments.any((part) => part == '..') ||
-        p.isAbsolute(relativePath) ||
+        RegExp(r'^[a-zA-Z]:').hasMatch(relativePath) ||
         relativePath.startsWith('/') ||
         relativePath.startsWith(r'\')) {
       debugPrint('[BackupService] 跳过不安全路径条目: $rawKey');
