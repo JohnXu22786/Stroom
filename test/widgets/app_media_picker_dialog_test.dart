@@ -924,5 +924,206 @@ void main() {
       expect(find.text('mp4'), findsOneWidget);
       expect(find.text('mov'), findsOneWidget);
     });
+
+    // ====================================================================
+    // Path-only multi-select (onRecordsPicked, no readFile) — used by the
+    // task flow run input (resolve storage paths, buffer no bytes)
+    // ====================================================================
+
+    testWidgets(
+        'path-only multi-select: onRecordsPicked resolves all records '
+        'before the dialog pops, without readFile', (tester) async {
+      List<String> resolvedPaths = [];
+
+      final records = [
+        const _TestRecord(id: '1', name: '文件1', format: 'wav', size: 1024),
+        const _TestRecord(id: '2', name: '文件2', format: 'mp3', size: 2048),
+      ];
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () => showMediaPickerDialog(
+                  context,
+                  MediaPickerConfig<_TestRecord>(
+                    title: '测试选择器',
+                    emptyIcon: Icons.folder_outlined,
+                    emptyText: '暂无文件',
+                    fileIcon: Icons.insert_drive_file,
+                    multiSelect: true,
+                    loadRecords: () async => records,
+                    loadFolders: () async => <String>{},
+                    // readFile intentionally omitted (null) — path-only
+                    displayName: (record) => record.name,
+                    subtitleBuilder: (record) => const Text(''),
+                    onRecordsPicked: (selected) async {
+                      resolvedPaths = [
+                        for (final r in selected) '/storage/${r.id}.wav',
+                      ];
+                    },
+                  ),
+                ),
+                child: const Text('Open'),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Select both files
+      await tester.tap(find.text('文件1'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text('文件2'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Confirm: resolver runs before the dialog closes
+      await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
+      await tester.pumpAndSettle();
+
+      expect(resolvedPaths, ['/storage/1.wav', '/storage/2.wav']);
+      // Dialog closed
+      expect(find.text('测试选择器'), findsNothing);
+    });
+
+    testWidgets(
+        'path-only multi-select: unchecking a file excludes it from '
+        'onRecordsPicked', (tester) async {
+      List<String> resolvedPaths = [];
+
+      final records = [
+        const _TestRecord(id: '1', name: '文件1', format: 'wav', size: 1024),
+        const _TestRecord(id: '2', name: '文件2', format: 'mp3', size: 2048),
+      ];
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () => showMediaPickerDialog(
+                  context,
+                  MediaPickerConfig<_TestRecord>(
+                    title: '测试选择器',
+                    emptyIcon: Icons.folder_outlined,
+                    emptyText: '暂无文件',
+                    fileIcon: Icons.insert_drive_file,
+                    multiSelect: true,
+                    loadRecords: () async => records,
+                    loadFolders: () async => <String>{},
+                    displayName: (record) => record.name,
+                    subtitleBuilder: (record) => const Text(''),
+                    onRecordsPicked: (selected) async {
+                      resolvedPaths = [
+                        for (final r in selected) '/storage/${r.id}.wav',
+                      ];
+                    },
+                  ),
+                ),
+                child: const Text('Open'),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.text('文件1'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text('文件2'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      // Uncheck 文件2 — the preview bar also shows a 文件2 chip, so target
+      // the list tile (the preview bar may cover it — bring it back first).
+      final fileTwoTile = find.text('文件2').first;
+      await tester.ensureVisible(fileTwoTile);
+      await tester.tap(fileTwoTile);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
+      await tester.pumpAndSettle();
+
+      expect(resolvedPaths, ['/storage/1.wav']);
+    });
+
+    testWidgets(
+        'path-only multi-select: removing a file from the preview bar '
+        'excludes it from onRecordsPicked', (tester) async {
+      List<String> resolvedPaths = [];
+
+      final records = [
+        const _TestRecord(id: '1', name: '文件1', format: 'wav', size: 1024),
+        const _TestRecord(id: '2', name: '文件2', format: 'mp3', size: 2048),
+      ];
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () => showMediaPickerDialog(
+                  context,
+                  MediaPickerConfig<_TestRecord>(
+                    title: '测试选择器',
+                    emptyIcon: Icons.folder_outlined,
+                    emptyText: '暂无文件',
+                    fileIcon: Icons.insert_drive_file,
+                    multiSelect: true,
+                    loadRecords: () async => records,
+                    loadFolders: () async => <String>{},
+                    displayName: (record) => record.name,
+                    subtitleBuilder: (record) => const Text(''),
+                    onRecordsPicked: (selected) async {
+                      resolvedPaths = [
+                        for (final r in selected) '/storage/${r.id}.wav',
+                      ];
+                    },
+                  ),
+                ),
+                child: const Text('Open'),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Select both files, then remove 文件1 via its preview-bar chip.
+      await tester.tap(find.text('文件1'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text('文件2'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final chipCloseIcons = find.descendant(
+        of: find.byKey(const Key('media_picker_preview_bar')),
+        matching: find.byIcon(Icons.close),
+      );
+      expect(chipCloseIcons, findsNWidgets(2));
+      await tester.tap(chipCloseIcons.first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
+      await tester.pumpAndSettle();
+
+      expect(resolvedPaths, ['/storage/2.wav']);
+    });
   });
 }

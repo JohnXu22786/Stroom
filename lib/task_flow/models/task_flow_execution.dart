@@ -3,6 +3,33 @@ import 'package:uuid/uuid.dart';
 
 import '../../providers/task_provider_shared.dart';
 
+// ============================================================================
+// FlowRunInput — a single initial input for a flow run
+// ============================================================================
+
+/// One initial input for a task flow run.
+///
+/// The run-mode UI collects inputs in the style of the flow's FIRST block
+/// (see `TaskFlowBuilderPage._buildRunInputSection`):
+/// - CatCatch-first flows: one [FlowRunInput] per URL entry, with the
+///   entry's optional [durationSec] (时/分/秒 fields of the run input box).
+/// - OCR/ASR/audioSeparation-first flows: one [FlowRunInput] per picked
+///   media file path (multi-select picker).
+/// - Text-first flows (TTS/chat): a single [FlowRunInput] with the raw text.
+///
+/// Each input fans out into its OWN execution — the chain runs once per
+/// input, so every input is processed independently from start to finish.
+class FlowRunInput {
+  /// The input value: a URL, a media file path, or plain text.
+  final String text;
+
+  /// Optional duration filter (seconds), used only when the flow's first
+  /// block is CatCatch. 0 = fall back to the block's configured duration.
+  final int durationSec;
+
+  const FlowRunInput({required this.text, this.durationSec = 0});
+}
+
 /// Status of a task flow execution.
 enum FlowExecutionStatus { running, completed, failed }
 
@@ -96,6 +123,12 @@ class TaskFlowExecution {
   /// run can be RETRIED with the same input from the task list card.
   final String inputText;
 
+  /// Optional per-run duration filter (seconds) for a CatCatch-first flow
+  /// — mirrors the per-task duration field of the CatCatch page's input
+  /// box. 0 = use the block's configured `durationSec`. Persisted so a
+  /// retry re-runs with the same duration.
+  final int inputDurationSec;
+
   /// Transient flag: the flow is alive but its current block is waiting
   /// for scheduler resources (concurrent flows). Never persisted — a
   /// restored execution is never queued.
@@ -111,6 +144,7 @@ class TaskFlowExecution {
     this.subTasks = const [],
     this.error,
     this.inputText = '',
+    this.inputDurationSec = 0,
     this.queued = false,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
@@ -123,6 +157,7 @@ class TaskFlowExecution {
     String? error,
     bool clearError = false,
     String? inputText,
+    int? inputDurationSec,
     bool? queued,
   }) =>
       TaskFlowExecution(
@@ -136,6 +171,7 @@ class TaskFlowExecution {
         subTasks: subTasks ?? this.subTasks,
         error: clearError ? null : (error ?? this.error),
         inputText: inputText ?? this.inputText,
+        inputDurationSec: inputDurationSec ?? this.inputDurationSec,
         queued: queued ?? this.queued,
       );
 
@@ -162,6 +198,7 @@ class TaskFlowExecution {
         'subTasks': subTasks.map((s) => s.toMap()).toList(),
         if (error != null) 'error': error,
         if (inputText.isNotEmpty) 'inputText': inputText,
+        if (inputDurationSec > 0) 'inputDurationSec': inputDurationSec,
       };
 
   factory TaskFlowExecution.fromMap(Map<String, dynamic> map) =>
@@ -185,6 +222,7 @@ class TaskFlowExecution {
             [],
         error: map['error'] as String?,
         inputText: map['inputText'] as String? ?? '',
+        inputDurationSec: map['inputDurationSec'] as int? ?? 0,
       );
 
   static FlowExecutionStatus _parseExecStatus(String? name) {

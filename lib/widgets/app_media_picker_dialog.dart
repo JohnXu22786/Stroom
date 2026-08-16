@@ -43,9 +43,8 @@ class MediaPickerConfig<T> {
   /// Reads the raw bytes of a given record.
   ///
   /// Optional: callers that only need the record identity (e.g. resolving
-  /// its storage path via [onRecordPicked]) can omit it — single-select
-  /// then works without buffering the whole file. Multi-select mode still
-  /// requires it (selection is byte-based).
+  /// its storage path via [onRecordPicked] / [onRecordsPicked]) can omit it —
+  /// selection then works without buffering the whole file.
   final Future<Uint8List?> Function(T record)? readFile;
 
   /// Returns the display name for a record (shown as the primary text).
@@ -67,6 +66,16 @@ class MediaPickerConfig<T> {
   /// carries file name + bytes). Not invoked in multi-select mode.
   final Future<void> Function(T record)? onRecordPicked;
 
+  /// Called with the selected records right before the dialog closes in
+  /// multi-select mode (awaited before the pop). Lets callers resolve each
+  /// record's storage path or identity — the dialog's own result only
+  /// carries file names + bytes.
+  ///
+  /// When provided together with a null [readFile], multi-select works in
+  /// path-only mode: no file bytes are buffered, and the caller resolves
+  /// the paths from the records. Not invoked in single-select mode.
+  final Future<void> Function(List<T> records)? onRecordsPicked;
+
   const MediaPickerConfig({
     required this.title,
     required this.emptyIcon,
@@ -81,6 +90,7 @@ class MediaPickerConfig<T> {
     required this.subtitleBuilder,
     this.thumbnailBuilder,
     this.onRecordPicked,
+    this.onRecordsPicked,
   });
 }
 
@@ -129,6 +139,11 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
 
   // Multi-selection state: key = recordId, value = (fileName, bytes)
   final Map<String, MapEntry<String, Uint8List>> _selectedItems = {};
+
+  /// Record identity per selected key, in selection order — lets callers
+  /// resolve storage paths via [MediaPickerConfig.onRecordsPicked] when
+  /// the dialog runs in path-only multi-select mode (no bytes buffered).
+  final Map<String, T> _selectedRecords = {};
 
   /// Guard flag to prevent double [Navigator.pop] calls (e.g., rapid taps).
   bool _resultDelivered = false;
@@ -207,12 +222,16 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
   Future<void> _toggleSelection(T record) async {
     final key = _getRecordId(record);
     if (_selectedItems.containsKey(key)) {
-      setState(() => _selectedItems.remove(key));
+      setState(() {
+        _selectedItems.remove(key);
+        _selectedRecords.remove(key);
+      });
       return;
     }
 
     // Read the file data (skipped entirely in path-only mode — the caller
-    // provided no readFile, so single-select resolves via onRecordPicked).
+    // provided no readFile, so single-select resolves via onRecordPicked
+    // and multi-select resolves via onRecordsPicked).
     Uint8List? readData;
     final readFile = widget.config.readFile;
     if (readFile != null) {
@@ -249,8 +268,9 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
       return;
     }
 
-    // Multi-select is byte-based — requires readFile.
-    if (readData == null) {
+    // Multi-select is byte-based unless path-only mode is enabled (no
+    // readFile but an onRecordsPicked resolver is provided).
+    if (readData == null && widget.config.onRecordsPicked == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('无法读取文件')),
@@ -258,14 +278,18 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
       }
       return;
     }
-    final data = readData;
+    final data = readData ?? Uint8List(0);
     setState(() {
       _selectedItems[key] = MapEntry(fileName, data);
+      _selectedRecords[key] = record;
     });
   }
 
   void _clearSelection() {
-    setState(() => _selectedItems.clear());
+    setState(() {
+      _selectedItems.clear();
+      _selectedRecords.clear();
+    });
   }
 
   @override
@@ -360,10 +384,28 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                     key: const Key('media_picker_confirm_btn'),
                     onPressed: _resultDelivered
                         ? null
-                        : () {
+                        : () async {
+                            // Guard re-entrancy synchronously BEFORE the
+                            // await: a second tap while the resolver runs
+                            // must not re-enter and double-pop.
+                            if (_resultDelivered) return;
                             _resultDelivered = true;
-                            final result = _selectedItems.values.toList();
-                            Navigator.of(context).pop(result);
+                            // Path resolution (onRecordsPicked) runs before
+                            // the pop; a throwing resolver must not leave
+                            // the dialog hanging open.
+                            try {
+                              await widget.config.onRecordsPicked?.call(
+                                _selectedRecords.values.toList(),
+                              );
+                            } catch (e) {
+                              debugPrint(
+                                '[MediaPicker] onRecordsPicked failed: $e',
+                              );
+                            }
+                            if (!context.mounted) return;
+                            Navigator.of(context).pop(
+                              _selectedItems.values.toList(),
+                            );
                           },
                     icon: const Icon(Icons.check, size: 18),
                     label: Text(
@@ -615,7 +657,13 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                 return _PreviewChip(
                   label: entry.key,
                   onRemove: () {
-                    setState(() => _selectedItems.remove(mapEntry.key));
+                    setState(() {
+                      _selectedItems.remove(mapEntry.key);
+                      // Keep the record map in sync — the confirm handler
+                      // resolves paths from _selectedRecords, so a chip
+                      // removal must drop the record too.
+                      _selectedRecords.remove(mapEntry.key);
+                    });
                   },
                 );
               },

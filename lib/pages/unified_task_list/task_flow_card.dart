@@ -349,6 +349,7 @@ class _ExpandedContent extends ConsumerWidget {
               ref.read(taskFlowExecutionServiceProvider).startFlow(
                     execution.flowId,
                     execution.inputText,
+                    durationSec: execution.inputDurationSec,
                   );
             },
             child: const Text('重试'),

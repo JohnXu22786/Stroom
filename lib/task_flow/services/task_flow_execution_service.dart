@@ -87,12 +87,33 @@ class TaskFlowExecutionService {
     }
   }
 
-  Future<bool> startFlow(String flowId, String inputText) async {
-    await _startFlowInternal(flowId, inputText);
+  Future<bool> startFlow(
+    String flowId,
+    String inputText, {
+    int durationSec = 0,
+  }) async {
+    await _startFlowInternal(
+      flowId,
+      FlowRunInput(text: inputText, durationSec: durationSec),
+    );
     return true;
   }
 
-  Future<void> _startFlowInternal(String flowId, String inputText) async {
+  /// Starts the flow once per input, sequentially.
+  ///
+  /// The run-mode input section collects inputs in the first block's style
+  /// (CatCatch: multiple URL+duration entries; OCR/ASR/audioSeparation:
+  /// multiple media files; text: a single text). Each input runs the whole
+  /// chain as its own execution, so every input is processed independently
+  /// end-to-end (each URL gets its own download, each image its own OCR,
+  /// each audio its own ASR — mirroring the standalone pages).
+  Future<void> startFlowMany(String flowId, List<FlowRunInput> inputs) async {
+    for (final input in inputs) {
+      await _startFlowInternal(flowId, input);
+    }
+  }
+
+  Future<void> _startFlowInternal(String flowId, FlowRunInput input) async {
     final flow = _ref.read(taskFlowListProvider).firstWhere(
           (f) => f.id == flowId,
           orElse: () => TaskFlowDefinition(name: ''),
@@ -109,7 +130,8 @@ class TaskFlowExecutionService {
     final execId = execNotifier.addExecution(
       flowId: flow.id,
       flowName: flow.name,
-      inputText: inputText,
+      inputText: input.text,
+      inputDurationSec: input.durationSec,
     );
 
     AppLogService.info('TaskFlow', '开始执行: ${flow.name} ($execId)');
@@ -129,7 +151,7 @@ class TaskFlowExecutionService {
       placeholders[i] = subTask;
     }
 
-    String currentData = inputText;
+    String currentData = input.text;
 
     for (int i = 0; i < flow.blocks.length; i++) {
       // Let the UI render before starting each block
@@ -179,6 +201,7 @@ class TaskFlowExecutionService {
           bgNotifier: bgNotifier,
           taskListNotifier: taskListNotifier,
           providerEntries: providerState,
+          inputDurationSec: input.durationSec,
         );
         currentData = result;
       } catch (e) {
@@ -209,6 +232,7 @@ class TaskFlowExecutionService {
     required BackgroundTaskNotifier bgNotifier,
     required TaskListNotifier taskListNotifier,
     required ProviderEntriesState providerEntries,
+    int inputDurationSec = 0,
   }) async {
     // A fresh per-execution cancel token for this block, exposed via
     // cancelActiveRequest(execId) so deleting THIS flow aborts its
@@ -227,6 +251,7 @@ class TaskFlowExecutionService {
         bgNotifier: bgNotifier,
         taskListNotifier: taskListNotifier,
         providerEntries: providerEntries,
+        inputDurationSec: inputDurationSec,
       );
     } finally {
       _activeRequestCancelTokens.remove(execId);
@@ -245,6 +270,7 @@ class TaskFlowExecutionService {
     required BackgroundTaskNotifier bgNotifier,
     required TaskListNotifier taskListNotifier,
     required ProviderEntriesState providerEntries,
+    int inputDurationSec = 0,
   }) async {
     switch (def.typeKey) {
       case BlockType.catcatch:
@@ -258,6 +284,9 @@ class TaskFlowExecutionService {
           catcatchNotifier: catcatchNotifier,
           videoFolder: block.params['videoFolder'] ?? '',
           audioFolder: block.params['audioFolder'] ?? '',
+          // Per-run duration from the run-mode input box wins over the
+          // block's configured duration (0 = use the configured value).
+          durationSecOverride: inputDurationSec,
         );
       case BlockType.audioSeparation:
         return await executeAudioSeparationBlock(
