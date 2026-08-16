@@ -135,17 +135,15 @@ void main() {
         'the per-run duration reaches the catcatch block and overrides the '
         'block default; zero falls back to the block config', () async {
       // Block configured with a 300s duration filter.
-      flowId = container
-          .read(taskFlowListProvider.notifier)
-          .addFlow(
-            name: '带时长的下载流程',
-            blocks: [
-              TaskFlowBlock(
-                typeKey: BlockType.catcatch,
-                params: const {'durationSec': 300},
-              ),
-            ],
-          );
+      flowId = container.read(taskFlowListProvider.notifier).addFlow(
+        name: '带时长的下载流程',
+        blocks: [
+          TaskFlowBlock(
+            typeKey: BlockType.catcatch,
+            params: const {'durationSec': 300},
+          ),
+        ],
+      );
 
       await service.startFlowMany(flowId, [
         const FlowRunInput(text: 'https://a.com/v', durationSec: 125),
@@ -159,7 +157,8 @@ void main() {
       expect(addTaskCalls[1], ('https://b.com/v', 300));
     });
 
-    test('startFlow keeps the single-input API and preserves durationSec '
+    test(
+        'startFlow keeps the single-input API and preserves durationSec '
         '(task-list retry path)', () async {
       await service.startFlow(
         flowId,

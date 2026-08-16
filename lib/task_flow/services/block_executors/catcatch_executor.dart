@@ -22,6 +22,7 @@ Future<String> executeCatCatchBlock({
   required CatCatchNotifier catcatchNotifier,
   String videoFolder = '',
   String audioFolder = '',
+
   /// Per-run duration (seconds) from the run-mode input box. When > 0 it
   /// overrides the block's configured `durationSec`; 0 = use the block's
   /// configured value. Lets a CatCatch-first flow reuse the CatCatch

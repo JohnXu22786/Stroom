@@ -660,7 +660,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           alignment: Alignment.centerLeft,
           child: OutlinedButton.icon(
             key: const Key('taskflow_add_catcatch_input'),
-            onPressed: () => setState(() => _catcatchInputs.add(_CatCatchInputEntry())),
+            onPressed: () =>
+                setState(() => _catcatchInputs.add(_CatCatchInputEntry())),
             icon: const Icon(Icons.add_link, size: 18),
             label: const Text('添加网页资源'),
             style: OutlinedButton.styleFrom(
@@ -959,8 +960,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                     ),
                     visualDensity: VisualDensity.compact,
                     tooltip: '移除',
-                    onPressed: () =>
-                        setState(() => _mediaInputs.removeAt(i)),
+                    onPressed: () => setState(() => _mediaInputs.removeAt(i)),
                   ),
                 ],
               ),
@@ -972,8 +972,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
   bool _canStartFlow() {
     if (_firstBlockDef?.typeKey == BlockType.catcatch) {
-      return _catcatchInputs.any((e) =>
-          _isValidUrl(e.urlController.text.trim()));
+      return _catcatchInputs
+          .any((e) => _isValidUrl(e.urlController.text.trim()));
     }
     if (_runInputType == IOType.image ||
         _runInputType == IOType.audio ||
@@ -1363,9 +1363,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            inputs.length == 1
-                ? '任务流已启动'
-                : '已启动 ${inputs.length} 个任务流',
+            inputs.length == 1 ? '任务流已启动' : '已启动 ${inputs.length} 个任务流',
           ),
           duration: const Duration(seconds: 2),
         ),

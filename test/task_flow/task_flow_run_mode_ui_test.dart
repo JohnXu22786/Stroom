@@ -99,8 +99,7 @@ void main() {
       expect(find.textContaining('路径或标识'), findsNothing);
     });
 
-    testWidgets(
-        'AudioSeparation first: multi-select video picker button',
+    testWidgets('AudioSeparation first: multi-select video picker button',
         (tester) async {
       await _pumpRunMode(
         tester,
