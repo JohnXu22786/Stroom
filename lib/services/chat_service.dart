@@ -16,6 +16,7 @@ import 'chat_protocol.dart';
 import 'context_manager.dart'
     show
         kInterruptedToolResultPlaceholder,
+        kToolOutputMaxChars,
         kToolOutputTruncatedSuffix,
         truncateUtf8;
 import 'chat_service_shared.dart' show setNestedParam;
@@ -59,8 +60,8 @@ class ChatService {
 
   /// 工具结果存储上限（对齐 opencode tool-output-store MAX_BYTES = 50KB）。
   /// 50KB 内**完整保留**（UI 可展开查看、历史重建可发送），
-  /// 发送给模型时另有 2K 渲染截断（协议层 kToolOutputMaxChars，
-  /// 对齐 opencode TOOL_OUTPUT_MAX_CHARS）。
+  /// 发送给模型时另有渲染截断（上限由助手设置决定，
+  /// 默认 [kToolOutputMaxChars] 字符）。
   static const int maxToolResultBytes = 50 * 1024;
 
   /// 工具循环上限常量：
@@ -70,6 +71,32 @@ class ChatService {
   static const int kMaxToolRoundsDefault = 20;
   static const int kMaxToolRoundsMin = 1;
   static const int kMaxToolRoundsMax = 100;
+
+  /// 工具结果渲染截断上限（字符数）的可接受范围：
+  /// 低于 [kToolOutputMaxCharsMin] 或高于 [kToolOutputMaxCharsMax]
+  /// 的配置值（含持久化损坏数据）回退默认 [kToolOutputMaxChars]。
+  /// 上限取 100K 字符：超过存储上限（50KB 字节）的截断值没有意义，
+  /// 但也不至于在 UI 输入 100 万时把请求体直接撑爆。
+  static const int kToolOutputMaxCharsMin = 100;
+  static const int kToolOutputMaxCharsMax = 100000;
+
+  /// 计算生效的工具结果渲染截断上限（**字符数**，非 token/字节）：
+  ///
+  /// - 无助手（settings 为 null）：使用默认上限 [kToolOutputMaxChars]
+  ///   （保持"始终有兜底截断"的旧行为）；
+  /// - 开关关闭（[AssistantSettings.enableMaxToolOutputChars] = false）：
+  ///   返回 0 = **不截断**，完整发送存储的工具结果（存储仍有 50KB 上限）；
+  /// - 开关开启：使用配置值，仅接受 [kToolOutputMaxCharsMin,
+  ///   kToolOutputMaxCharsMax] 范围内的值，越界/损坏回退默认值。
+  static int getEffectiveToolOutputMaxChars(AssistantSettings? settings) {
+    if (settings == null) return kToolOutputMaxChars;
+    if (!settings.enableMaxToolOutputChars) return 0;
+    final v = settings.maxToolOutputChars;
+    if (v < kToolOutputMaxCharsMin || v > kToolOutputMaxCharsMax) {
+      return kToolOutputMaxChars;
+    }
+    return v;
+  }
 
   /// 计算生效的工具循环上限：
   ///
@@ -233,6 +260,7 @@ class ChatService {
       history: history,
       assistantPrompt: systemPrompt,
       contextSummary: contextSummary,
+      toolOutputMaxChars: getEffectiveToolOutputMaxChars(_assistantSettings),
     );
     final token = CancelToken();
     _internalTaskTokens.add(token);

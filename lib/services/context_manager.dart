@@ -16,10 +16,12 @@ import '../utils/token_estimator.dart';
 // - 累计超过 [pruneProtectTokens] 后才开始收集；
 //   收集总量超过 [pruneMinimumTokens] 才执行压缩
 //
-// 说明：当前历史消息发送到 API 时只含文本内容，工具结果不进请求体；
-// prune 的真实收益是 UI 渲染与 SharedPreferences 持久化体积（长 agent
-// 会话的工具结果会迅速膨胀）。占位文本保留在 result 中，未来若把
-// 工具结果纳入 API 历史（Anthropic tool_result 配对），占位符直接生效。
+// 说明：工具结果**存储**完整保留（50KB 字节内，见 ChatService
+// maxToolResultBytes），发送给模型时按截断上限渲染（truncateByChars，
+// 字符数，协议层 rebuildToolResultText 与估算侧 _renderToolResult 共用
+// 同一实现）。prune 的收益是 UI 渲染与 SharedPreferences 持久化体积
+// （长 agent 会话的工具结果会迅速膨胀）；占位文本保留在 result 中，
+// 渲染/发送时替换。
 // ============================================================================
 
 /// 工具结果被压缩后的占位文本（与协议层一致，渲染时替换）。
@@ -31,6 +33,26 @@ const String kInterruptedToolResultPlaceholder = '[工具执行被中断]';
 /// 工具结果发送渲染的截断后缀（协议层 truncateToolOutput 共用，
 /// 保证 token 估算与真实发送文本一致）。
 const String kToolOutputTruncatedSuffix = '\n... [已截断]';
+
+/// 工具结果发送渲染的**默认**截断上限（单位：字符，非 token 亦非字节）。
+///
+/// 助手设置了截断开关时以配置为准（[AssistantSettings.maxToolOutputChars]）；
+/// 无助手/未配置时使用此默认值（对齐 opencode TOOL_OUTPUT_MAX_CHARS 的
+/// "始终有兜底截断"语义）。用户配置的 5000 字符 ≈ 旧版 2K 字节上限的
+/// 2.5 倍 ASCII / 7.5 倍 CJK，避免中文工具结果被过早砍断。
+const int kToolOutputMaxChars = 5000;
+
+/// 按字符数（Unicode code point）截断字符串，不会劈开代理对/多字节字符。
+///
+/// 单位是"字符"（用户视角的可见字符，CJK 每个字计 1），与 token 估算
+/// 无关；与 [truncateUtf8]（字节上限，存储截断用）互补——发送渲染
+/// 按字符，存储上限按字节。
+String truncateByChars(String text, int maxChars) {
+  if (maxChars <= 0) return text;
+  final runes = text.runes;
+  if (runes.length <= maxChars) return text;
+  return String.fromCharCodes(runes.take(maxChars));
+}
 
 /// prune 保护的工具（对齐 opencode PRUNE_PROTECTED_TOOLS = ["skill"]）。
 ///
@@ -121,11 +143,15 @@ class ContextManager {
   ///
   /// 估算**实际会发送到 API 的内容**：消息文本 + 附件文件名 +
   /// 工具定义 + 工具链重建（tool_calls 参数与渲染后的结果——
-  /// 2K 截断 / compacted 占位 / 中断占位，与协议层渲染一致）。
+  /// 字符截断 / compacted 占位 / 中断占位，与协议层渲染一致）。
+  ///
+  /// [toolOutputMaxChars]：与协议层同一截断上限（字符数），保证估算与
+  /// 真实发送文本一致；0/负数 = 不截断（助手关闭截断开关时）。
   static int estimateHistoryTokens(
     List<ChatMessage> history, {
     String? assistantPrompt,
     List<ToolDefinition> tools = const [],
+    int? toolOutputMaxChars,
   }) {
     var total = 0;
     if (assistantPrompt != null && assistantPrompt.isNotEmpty) {
@@ -143,7 +169,7 @@ class ContextManager {
         for (final tc in toolCalls) {
           total += estimateTokens(tc.name);
           total += estimateJsonTokens(tc.arguments);
-          total += estimateTokens(_renderToolResult(tc));
+          total += estimateTokens(_renderToolResult(tc, toolOutputMaxChars));
         }
       }
     }
@@ -161,9 +187,9 @@ class ContextManager {
 /// 按 UTF-8 字节数截断字符串，并回退到完整字符边界
 /// （不会劈开多字节字符/代理对）。
 ///
-/// 估算侧（此处）与发送侧（协议层 truncateToolOutput）共用同一实现，
-/// 保证 token 估算与真实发送文本一致（CJK 内容按字符截断会高估约 3 倍，
-/// 直接影响压缩触发阈值）。
+/// 仅用于**存储层**截断（工具结果落库的 50KB 字节上限，
+/// ChatService.maxToolResultBytes）；发送渲染按字符截断走
+/// [truncateByChars]（估算侧与发送侧共用同一实现）。
 String truncateUtf8(String text, int maxBytes) {
   final bytes = utf8.encode(text);
   if (bytes.length <= maxBytes) return text;
@@ -175,20 +201,20 @@ String truncateUtf8(String text, int maxBytes) {
   return utf8.decode(bytes.sublist(0, end));
 }
 
-/// 发送给模型时工具结果的渲染截断（与协议层 kToolOutputMaxChars 一致；
-/// 本地常量避免循环 import）。
-const int _kToolOutputRenderMaxChars = 2000;
-
 /// 工具结果发送渲染（对齐协议层 rebuildToolResultText）：
-/// compacted → 占位；completed → 2K 字节截断；其余 → 中断占位。
-String _renderToolResult(ToolCallData tc) {
+/// compacted → 占位；completed → [kToolOutputMaxChars] 字符截断
+/// （[toolOutputMaxChars] 为 0/负数时不截断，与协议层一致）；
+/// 其余 → 中断占位。
+String _renderToolResult(ToolCallData tc, [int? toolOutputMaxChars]) {
   if (tc.compactedAt != null) {
     return kCompactedToolResultPlaceholder;
   }
   if (tc.status == ToolCallStatus.completed && tc.result != null) {
     final r = tc.result!;
-    return utf8.encode(r).length > _kToolOutputRenderMaxChars
-        ? '${truncateUtf8(r, _kToolOutputRenderMaxChars)}$kToolOutputTruncatedSuffix'
+    final limit = toolOutputMaxChars ?? kToolOutputMaxChars;
+    if (limit <= 0) return r;
+    return r.runes.length > limit
+        ? '${truncateByChars(r, limit)}$kToolOutputTruncatedSuffix'
         : r;
   }
   return kInterruptedToolResultPlaceholder;

@@ -75,7 +75,7 @@ void chatAgentSemanticsGroup3() {
   });
 
   group('工具结果截断', () {
-    test('存储完整（50KB 内不截断），发送给模型时渲染截断 2K', () async {
+    test('存储完整（50KB 内不截断），发送给模型时按设置渲染截断', () async {
       final provider = _RecordingProvider([
         [
           AIStreamEvent('', toolCalls: [
@@ -92,6 +92,11 @@ void chatAgentSemanticsGroup3() {
         [AIStreamEvent('done')],
       ]);
       final service = _makeService(provider);
+      // 助手配置截断上限 2000 字符：发送渲染按此截断（存储仍完整）。
+      service.setAssistantSettings(AssistantSettings(
+        maxToolOutputChars: 2000,
+        enableMaxToolOutputChars: true,
+      ));
       ChatService.registerTool(
         const ToolDefinition(
           name: 'big_tool',
@@ -116,7 +121,7 @@ void chatAgentSemanticsGroup3() {
       final complete = events.whereType<ToolCallCompleteEvent>().single;
       expect(complete.result, 'x' * 5000);
 
-      // 链中 tool 消息：发送给模型时渲染截断 2K（TOOL_OUTPUT_MAX_CHARS）
+      // 链中 tool 消息：发送给模型时渲染截断至助手配置的 2000 字符
       final toolMsg = (provider.captures[1]['messages'] as List)
           .cast<Map>()
           .where((m) => m['role'] == 'tool')
@@ -124,6 +129,101 @@ void chatAgentSemanticsGroup3() {
       expect(toolMsg['content'], startsWith('x' * 2000));
       expect(toolMsg['content'], contains('[已截断]'));
       expect((toolMsg['content'] as String).length, lessThan(5000));
+    });
+
+    test('关闭截断开关：完整发送存储的工具结果（不追加截断后缀）', () async {
+      final provider = _RecordingProvider([
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'call_full',
+              'type': 'function',
+              'function': {
+                'name': 'full_tool',
+                'arguments': '{}',
+              },
+            },
+          ]),
+        ],
+        [AIStreamEvent('done')],
+      ]);
+      final service = _makeService(provider);
+      // 关闭截断：即使结果远超默认 5000 字符也完整发送。
+      service.setAssistantSettings(AssistantSettings(
+        enableMaxToolOutputChars: false,
+      ));
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'full_tool',
+          description: 'full',
+          parameters: {'type': 'object'},
+        ),
+        (args) => 'y' * 8000,
+      );
+
+      final events = <ChatEvent>[];
+      await service
+          .sendStreamWithTools(
+            'go',
+            history: [ChatMessage(role: 'user', content: 'go')],
+            tools: ChatService.getRegisteredToolDefinitions(),
+          )
+          .listen(events.add, onError: (e) => fail('error: $e'))
+          .asFuture();
+
+      final toolMsg = (provider.captures[1]['messages'] as List)
+          .cast<Map>()
+          .where((m) => m['role'] == 'tool')
+          .single;
+      expect(toolMsg['content'], 'y' * 8000,
+          reason: '关闭截断时完整发送（仍受 50KB 存储上限约束）');
+    });
+
+    test('默认上限 5000 字符，CJK 按字符计（非字节）', () async {
+      final provider = _RecordingProvider([
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'call_cjk',
+              'type': 'function',
+              'function': {
+                'name': 'cjk_tool',
+                'arguments': '{}',
+              },
+            },
+          ]),
+        ],
+        [AIStreamEvent('done')],
+      ]);
+      // 无助手设置（默认路径）：截断上限 = 5000 字符。
+      final service = _makeService(provider);
+      // 4000 个中文字符 = 12000 UTF-8 字节：若按旧版 2K 字节截断会
+      // 被砍，按字符计（4000 < 5000）则完整保留。
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'cjk_tool',
+          description: 'cjk',
+          parameters: {'type': 'object'},
+        ),
+        (args) => '中' * 4000,
+      );
+
+      final events = <ChatEvent>[];
+      await service
+          .sendStreamWithTools(
+            'go',
+            history: [ChatMessage(role: 'user', content: 'go')],
+            tools: ChatService.getRegisteredToolDefinitions(),
+          )
+          .listen(events.add, onError: (e) => fail('error: $e'))
+          .asFuture();
+
+      final toolMsg = (provider.captures[1]['messages'] as List)
+          .cast<Map>()
+          .where((m) => m['role'] == 'tool')
+          .single;
+      expect(toolMsg['content'], '中' * 4000,
+          reason: '截断单位是字符：4000 个 CJK 字符（12000 字节）在 5000 字符上限内不截断');
     });
 
     test('超过 50KB 存储上限才截断（对齐 opencode MAX_BYTES）', () async {
