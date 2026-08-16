@@ -81,8 +81,7 @@ class _LiveStreamManager extends ChatStreamManager {
     ref!.read(streamingReasoningSectionsProvider(convId).notifier).state = [];
     ref!.read(streamingTextSectionsProvider(convId).notifier).state = [''];
     ref!.read(streamingToolCallsProvider(convId).notifier).state = [];
-    ref!.read(streamingToolCallRoundStartsProvider(convId).notifier).state =
-        [];
+    ref!.read(streamingToolCallRoundStartsProvider(convId).notifier).state = [];
     final completer = Completer<StreamResult>();
     _completers.add(completer);
     return completer.future;
@@ -267,8 +266,7 @@ void main() {
     await _pumpLoaded(tester);
 
     // Precondition: the old reply's collapsed card is visible.
-    expect(find.byType(ToolCallCard), findsOneWidget,
-        reason: '重试前应显示旧的工具调用卡片');
+    expect(find.byType(ToolCallCard), findsOneWidget, reason: '重试前应显示旧的工具调用卡片');
     expect(find.text('web_search'), findsOneWidget);
     // Collapsed: details hidden.
     expect(find.text('query: 天气'), findsNothing);
@@ -279,8 +277,7 @@ void main() {
     await tester.tap(retryButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('确定要重新生成回复吗？'), findsOneWidget,
-        reason: '应弹出重试确认对话框');
+    expect(find.text('确定要重新生成回复吗？'), findsOneWidget, reason: '应弹出重试确认对话框');
     await tester.tap(find.text('确定'));
     // Let the retry flow run: truncation, removal animation, immediate
     // stream completion, final segment build, provider sync.
@@ -293,8 +290,7 @@ void main() {
     // different tool) may remain.
     expect(find.text('web_search'), findsNothing,
         reason: '重新生成后，旧消息的折叠工具卡片应随旧消息一起消失');
-    expect(find.text('read_file'), findsOneWidget,
-        reason: '新回复自己的工具卡片应正常显示');
+    expect(find.text('read_file'), findsOneWidget, reason: '新回复自己的工具卡片应正常显示');
 
     // The new reply is on screen.
     expect(find.text('重新生成的回答'), findsOneWidget);
@@ -412,8 +408,7 @@ void main() {
     ];
     await tester.pump();
     expect(find.byType(ToolCallCard), findsOneWidget);
-    expect(find.text('query: 天气'), findsOneWidget,
-        reason: '进行中工具卡片应展开');
+    expect(find.text('query: 天气'), findsOneWidget, reason: '进行中工具卡片应展开');
 
     // Tool completes → card collapses (auto-collapse invariant).
     container.read(streamingToolCallsProvider('test-conv').notifier).state = [
@@ -426,14 +421,12 @@ void main() {
       ),
     ];
     // First text token flows → placeholder converts to a text message.
-    container
-        .read(streamingTextSectionsProvider('test-conv').notifier)
-        .state = ['查到了'];
+    container.read(streamingTextSectionsProvider('test-conv').notifier).state =
+        ['查到了'];
     container.read(streamingFullReplyProvider('test-conv').notifier).state =
         '查到了';
     await tester.pump();
-    expect(find.text('query: 天气'), findsNothing,
-        reason: '工具完成后卡片应收起为一行');
+    expect(find.text('query: 天气'), findsNothing, reason: '工具完成后卡片应收起为一行');
 
     // Stream completes with the final message (same id as placeholder).
     final aiMsgId = manager.lastStreamingMsgId!;
@@ -465,7 +458,9 @@ void main() {
       oldAssistantMsg,
     ];
     await persistHistory(container, 'test-conv', newHistory1);
-    manager.finish('test-conv', StreamResult(
+    manager.finish(
+        'test-conv',
+        StreamResult(
           history: newHistory1,
           assistantMessage: oldAssistantMsg,
           fullReply: '查到了',
@@ -488,8 +483,7 @@ void main() {
 
     // Precondition: the live reply's collapsed card is on screen.
     expect(find.text('web_search'), findsOneWidget);
-    expect(find.text('query: 天气'), findsNothing,
-        reason: '直播完成的回复卡片应收起');
+    expect(find.text('query: 天气'), findsNothing, reason: '直播完成的回复卡片应收起');
 
     // Regenerate (retry) the live reply.
     await tester.tap(find.byIcon(Icons.refresh));
@@ -525,7 +519,9 @@ void main() {
       newAssistantMsg,
     ];
     await persistHistory(container, 'test-conv', newHistory2);
-    manager.finish('test-conv', StreamResult(
+    manager.finish(
+        'test-conv',
+        StreamResult(
           history: newHistory2,
           assistantMessage: newAssistantMsg,
           fullReply: '重新生成的回答',
@@ -550,8 +546,7 @@ void main() {
     // reply's own card remains.
     expect(find.text('web_search'), findsNothing,
         reason: '重新生成后，旧回复（直播生成）的折叠工具卡片应随旧消息消失');
-    expect(find.text('read_file'), findsOneWidget,
-        reason: '新回复自己的工具卡片应正常显示');
+    expect(find.text('read_file'), findsOneWidget, reason: '新回复自己的工具卡片应正常显示');
 
     await _flushTimers(tester);
   });
@@ -608,8 +603,7 @@ void main() {
     ));
     await _pumpLoaded(tester);
 
-    expect(find.text('web_search'), findsOneWidget,
-        reason: '重试前应显示旧回复的折叠工具卡片');
+    expect(find.text('web_search'), findsOneWidget, reason: '重试前应显示旧回复的折叠工具卡片');
 
     // Retry a1 (the FIRST refresh icon — the message with the card).
     final refreshIcons = find.byIcon(Icons.refresh);
@@ -617,8 +611,8 @@ void main() {
     await tester.tap(refreshIcons.first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('确定要重试这条回复吗？此操作将删除此消息及之后的所有消息。'),
-        findsOneWidget, reason: '应弹出删除下方消息的确认对话框');
+    expect(find.text('确定要重试这条回复吗？此操作将删除此消息及之后的所有消息。'), findsOneWidget,
+        reason: '应弹出删除下方消息的确认对话框');
     await tester.tap(find.text('确定'));
     for (int i = 0; i < 40; i++) {
       await tester.pump(const Duration(milliseconds: 50));
@@ -629,8 +623,7 @@ void main() {
     expect(find.text('web_search'), findsNothing,
         reason: '重试后旧回复的折叠工具卡片应随消息一起消失');
     expect(find.text('还有呢'), findsNothing, reason: '旧回复之下的消息也应被删除');
-    expect(find.text('read_file'), findsOneWidget,
-        reason: '新回复自己的工具卡片应正常显示');
+    expect(find.text('read_file'), findsOneWidget, reason: '新回复自己的工具卡片应正常显示');
 
     await _flushTimers(tester);
   });
@@ -707,15 +700,13 @@ void main() {
         result: '搜索结果',
       ),
     ];
-    container
-        .read(streamingTextSectionsProvider('test-conv').notifier)
-        .state = ['部分回答'];
+    container.read(streamingTextSectionsProvider('test-conv').notifier).state =
+        ['部分回答'];
     container.read(streamingFullReplyProvider('test-conv').notifier).state =
         '部分回答';
     manager.partialReply = '部分回答';
     await tester.pump();
-    expect(find.text('web_search'), findsOneWidget,
-        reason: '停止前应显示折叠的工具卡片');
+    expect(find.text('web_search'), findsOneWidget, reason: '停止前应显示折叠的工具卡片');
 
     // STOP the stream. Model: the manager's finalize does NOT land (the
     // tool call was still hanging when the user stopped — cancellation not
@@ -728,7 +719,9 @@ void main() {
     }
     // Complete the abandoned stream future (the page ignores the result —
     // pageOwnedStream is false after a stop).
-    manager.finish('test-conv', StreamResult(
+    manager.finish(
+        'test-conv',
+        StreamResult(
           history: const [],
           fullReply: '部分回答',
           cancelled: true,
@@ -786,7 +779,9 @@ void main() {
       newAssistantMsg,
     ];
     await persistHistory(container, 'test-conv', newHistory);
-    manager.finish('test-conv', StreamResult(
+    manager.finish(
+        'test-conv',
+        StreamResult(
           history: newHistory,
           assistantMessage: newAssistantMsg,
           fullReply: '重新生成的回答',
@@ -812,8 +807,7 @@ void main() {
     // card may remain.
     expect(find.text('web_search'), findsNothing,
         reason: '编辑重发后，被停止的旧回复（含其折叠工具卡片）必须随之下方消息一起消失');
-    expect(find.text('read_file'), findsOneWidget,
-        reason: '新回复自己的工具卡片应正常显示');
+    expect(find.text('read_file'), findsOneWidget, reason: '新回复自己的工具卡片应正常显示');
 
     await _flushTimers(tester);
   });
@@ -860,8 +854,7 @@ void main() {
       child: const MaterialApp(home: ChatPage()),
     ));
     await _pumpLoaded(tester);
-    expect(find.text('web_search'), findsOneWidget,
-        reason: '前置：a1 的折叠工具卡片应可见');
+    expect(find.text('web_search'), findsOneWidget, reason: '前置：a1 的折叠工具卡片应可见');
 
     // Send u2 → live stream → tool card + partial text → STOP.
     await tester.enterText(find.byType(TextField), '继续查');
@@ -890,9 +883,8 @@ void main() {
         result: '更多结果',
       ),
     ];
-    container
-        .read(streamingTextSectionsProvider('test-conv').notifier)
-        .state = ['部分回答'];
+    container.read(streamingTextSectionsProvider('test-conv').notifier).state =
+        ['部分回答'];
     container.read(streamingFullReplyProvider('test-conv').notifier).state =
         '部分回答';
     manager.partialReply = '部分回答';
@@ -905,7 +897,9 @@ void main() {
     for (int i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 20));
     }
-    manager.finish('test-conv', StreamResult(
+    manager.finish(
+        'test-conv',
+        StreamResult(
           history: const [],
           fullReply: '部分回答',
           cancelled: true,
@@ -951,7 +945,9 @@ void main() {
       newAssistantMsg,
     ];
     await persistHistory(container, 'test-conv', newHistory);
-    manager.finish('test-conv', StreamResult(
+    manager.finish(
+        'test-conv',
+        StreamResult(
           history: newHistory,
           assistantMessage: newAssistantMsg,
           fullReply: '重新生成的回答',
@@ -1046,9 +1042,8 @@ void main() {
         result: '搜索结果',
       ),
     ];
-    container
-        .read(streamingTextSectionsProvider('test-conv').notifier)
-        .state = ['部分回答'];
+    container.read(streamingTextSectionsProvider('test-conv').notifier).state =
+        ['部分回答'];
     container.read(streamingFullReplyProvider('test-conv').notifier).state =
         '部分回答';
     manager.partialReply = '部分回答';
@@ -1058,7 +1053,9 @@ void main() {
     for (int i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 20));
     }
-    manager.finish('test-conv', StreamResult(
+    manager.finish(
+        'test-conv',
+        StreamResult(
           history: const [],
           fullReply: '部分回答',
           cancelled: true,
@@ -1100,4 +1097,3 @@ Future<void> persistHistory(ProviderContainer container, String convId,
       .read(conversationsProvider.notifier)
       .updateMessages(convId, history);
 }
-
