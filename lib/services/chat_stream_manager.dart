@@ -539,7 +539,10 @@ class ChatStreamManager {
     try {
       final inputTokens = usage['inputTokens'] as int?;
       final outputTokens = usage['outputTokens'] as int?;
-      final cost = usage['cost'] as double? ?? 0;
+      // num 安全取值：cost 以 int（JSON 整数值反序列化）出现时
+      // 也能累计——单个字段的类型异常不能把整次计量（含 tokens）丢弃。
+      final cost =
+          usage['cost'] is num ? (usage['cost'] as num).toDouble() : 0.0;
       final hasMetering =
           recordInput && (inputTokens != null || outputTokens != null);
       if (!hasMetering && cost <= 0) return;

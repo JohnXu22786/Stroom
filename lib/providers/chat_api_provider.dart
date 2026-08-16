@@ -82,18 +82,22 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   ///
   /// 计费（cost）纯粹采用 API 返回的值（如 OpenRouter 的 usage.total_cost），
   /// 不自作主张按价格统计（缓存/推理 token 等计价要素太多，自统计不准）。
+  /// 数值字段兼容 num 与数字字符串（部分网关返回字符串）。
   @visibleForTesting
   static Map<String, dynamic>? normalizeUsage(dynamic usage) {
     if (usage is! Map) return null;
-    final input = usage['prompt_tokens'] ?? usage['input_tokens'];
-    final output = usage['completion_tokens'] ?? usage['output_tokens'];
+    final inputD =
+        usageNumberToDouble(usage['prompt_tokens'] ?? usage['input_tokens']);
+    final outputD = usageNumberToDouble(
+        usage['completion_tokens'] ?? usage['output_tokens']);
     // API 返回的计费（美元）；OpenRouter 为 usage.total_cost，
-    // 部分兼容端点用 usage.cost
-    final cost = usage['total_cost'] ?? usage['cost'];
+    // 部分兼容端点用 usage.cost；total_cost 存在但不可解析时回退 cost
+    final costD = usageNumberToDouble(usage['total_cost']) ??
+        usageNumberToDouble(usage['cost']);
     final result = <String, dynamic>{};
-    if (input is num) result['inputTokens'] = input.toInt();
-    if (output is num) result['outputTokens'] = output.toInt();
-    if (cost is num) result['cost'] = cost.toDouble();
+    if (inputD != null) result['inputTokens'] = inputD.toInt();
+    if (outputD != null) result['outputTokens'] = outputD.toInt();
+    if (costD != null) result['cost'] = costD;
     return result.isEmpty ? null : result;
   }
 
