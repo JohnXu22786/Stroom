@@ -636,6 +636,169 @@ void main() {
       expect(find.text('取消配置（自动启用全部）'), findsNothing);
     });
 
+    testWidgets('默认设置 tab 显示工具结果截断（默认开启，5000 字符）', (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '助手编辑', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('默认设置'));
+      await tester.pumpAndSettle();
+
+      // 截断区块在工具列表下方，需要滚动到可见
+      await tester.ensureVisible(find.text('工具结果截断'));
+      await tester.pumpAndSettle();
+
+      // 默认开启：开关 on，副标题显示当前上限（字符数，非 token）
+      expect(find.text('工具结果截断'), findsOneWidget);
+      expect(find.text('启用截断'), findsOneWidget);
+      expect(find.text('超长结果截断至 5000 字符'), findsOneWidget);
+      final tile = tester.widget<SwitchListTile>(
+        find.widgetWithText(SwitchListTile, '启用截断'),
+      );
+      expect(tile.value, isTrue, reason: '截断默认开启');
+
+      // 长度输入框：label 明确"最大字符数"，helper 强调单位是字符
+      final lengthField = find.byWidgetPredicate(
+        (w) =>
+            w is TextField &&
+            w.decoration?.labelText == '最大字符数' &&
+            w.decoration?.helperText == '单位：字符（不是 token）',
+      );
+      expect(lengthField, findsOneWidget,
+          reason: '必须标明字符单位，避免被误认为 token');
+      expect(tester.widget<TextField>(lengthField).controller?.text, '5000');
+    });
+
+    testWidgets('关闭截断开关：输入框隐藏，保存后完整发送', (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '助手编辑', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('默认设置'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('工具结果截断'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('启用截断'));
+      await tester.pumpAndSettle();
+
+      // 关闭后：副标题变为"不截断"，长度输入框隐藏
+      expect(find.text('不截断，完整发送（仍受 50KB 存储上限约束）'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is TextField && w.decoration?.labelText == '最大字符数',
+        ),
+        findsNothing,
+      );
+
+      // 保存：设置持久化为"关闭截断"
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AssistantSelectionPage)),
+      );
+      final settings = container.read(assistantProvider).single.settings;
+      expect(settings.enableMaxToolOutputChars, isFalse);
+      expect(settings.maxToolOutputChars, 5000,
+          reason: '关闭截断时长度值保留（重新开启时恢复）');
+    });
+
+    testWidgets('手动修改截断长度并保存', (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '助手编辑', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('默认设置'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('工具结果截断'));
+      await tester.pumpAndSettle();
+
+      final lengthField = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.labelText == '最大字符数',
+      );
+      await tester.enterText(lengthField, '8000');
+      await tester.pumpAndSettle();
+      // 副标题即时反映新上限
+      expect(find.text('超长结果截断至 8000 字符'), findsOneWidget);
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AssistantSelectionPage)),
+      );
+      final settings = container.read(assistantProvider).single.settings;
+      expect(settings.maxToolOutputChars, 8000);
+      expect(settings.enableMaxToolOutputChars, isTrue);
+    });
+
+    testWidgets('越界长度就地报错，不落库（显示值 ≠ 生效值被拦截）', (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '助手编辑', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('默认设置'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('工具结果截断'));
+      await tester.pumpAndSettle();
+
+      final lengthField = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.labelText == '最大字符数',
+      );
+      // 超过最大有效范围（100000）：立即报错、不写入 vars
+      // （短于 3 位的输入可能是合法值的中间态，如 "120"，不报错）
+      await tester.enterText(lengthField, '5000000');
+      await tester.pumpAndSettle();
+      expect(
+        find.text('有效范围：100~100000 字符'),
+        findsOneWidget,
+        reason: '越界输入必须就地提示有效范围',
+      );
+      // 副标题仍显示生效值（未写入 vars）
+      expect(find.text('超长结果截断至 5000 字符'), findsOneWidget);
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AssistantSelectionPage)),
+      );
+      final settings = container.read(assistantProvider).single.settings;
+      expect(settings.maxToolOutputChars, 5000,
+          reason: '非法输入不落库：保存的必是生效值');
+    });
+
     testWidgets(
         '从未配置的助手切换任一工具后保存，新话题严格使用该集合（回归：'
         'tab 显示全关但新话题全开的误导）', (tester) async {

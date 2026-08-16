@@ -26,6 +26,8 @@ void showAssistantFullEditDialog(
     enableMaxTokens: assistant.settings.enableMaxTokens,
     maxToolCalls: assistant.settings.maxToolCalls,
     enableMaxToolCalls: assistant.settings.enableMaxToolCalls,
+    maxToolOutputChars: assistant.settings.maxToolOutputChars,
+    enableMaxToolOutputChars: assistant.settings.enableMaxToolOutputChars,
     streamOutput: assistant.settings.streamOutput,
     enableWebSearch: assistant.settings.enableWebSearch,
     frequencyPenalty: assistant.settings.frequencyPenalty,
@@ -149,6 +151,9 @@ void showAssistantFullEditDialog(
                         defaultModelId: vars.defaultModelId,
                         defaultProviderName: vars.defaultProviderName,
                         defaultToolNames: vars.defaultToolNames,
+                        maxToolOutputChars: vars.maxToolOutputChars,
+                        enableMaxToolOutputChars:
+                            vars.enableMaxToolOutputChars,
                         onDefaultModelChanged: (model) => setDlgState(() {
                           // 记录显示名 + 绝对身份（模型ID + 供应商名），
                           // 重命名后默认模型仍可解析。
@@ -163,6 +168,11 @@ void showAssistantFullEditDialog(
                               next == null ? null : Set<String>.from(next);
                           vars.defaultsToolsEngaged = true;
                         }),
+                        onEnableMaxToolOutputCharsChanged: (v) =>
+                            setDlgState(
+                                () => vars.enableMaxToolOutputChars = v),
+                        onMaxToolOutputCharsChanged: (v) =>
+                            setDlgState(() => vars.maxToolOutputChars = v),
                       ),
                     ],
                   ),
@@ -201,6 +211,8 @@ void showAssistantFullEditDialog(
                     enableMaxTokens: vars.enableMaxTokens,
                     maxToolCalls: vars.maxToolCalls,
                     enableMaxToolCalls: vars.enableMaxToolCalls,
+                    maxToolOutputChars: vars.maxToolOutputChars,
+                    enableMaxToolOutputChars: vars.enableMaxToolOutputChars,
                     streamOutput: vars.streamOutput,
                     enableWebSearch: vars.enableWebSearch,
                     frequencyPenalty: vars.frequencyPenalty,

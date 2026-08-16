@@ -12,8 +12,9 @@ import 'context_manager.dart'
     show
         kCompactedToolResultPlaceholder,
         kInterruptedToolResultPlaceholder,
+        kToolOutputMaxChars,
         kToolOutputTruncatedSuffix,
-        truncateUtf8;
+        truncateByChars;
 import 'openai_protocol.dart';
 
 export 'anthropic_protocol.dart' show AnthropicProtocol;
@@ -492,37 +493,40 @@ Future<Uint8List?> readRawAttachmentBytes(Attachment att) async {
 // 中立工具调用 / 结果辅助（历史重建用）
 // ============================================================================
 
-/// 发送给模型的工具结果渲染截断（对齐 opencode TOOL_OUTPUT_MAX_CHARS）。
-///
-/// 存储保留完整结果（50KB 内），只在**发送给模型时**截断——
-/// 与 opencode toModelMessages 的 toolOutputMaxChars 语义一致。
-const int kToolOutputMaxChars = 2000;
-
 /// 渲染截断工具结果（发送给模型用）。
-/// truncateUtf8 实现位于 context_manager（估算侧与发送侧共用，
-/// 见其注释——token 估算与真实发送文本必须一致）。
-String truncateToolOutput(String text) {
-  // 按 UTF-8 字节截断（kToolOutputMaxChars 语义为字节上限，
-  // 对齐 opencode TOOL_OUTPUT_MAX_CHARS），并回退到字符边界。
-  if (utf8.encode(text).length <= kToolOutputMaxChars) return text;
-  // 与 context_manager 的估算渲染共用同一后缀（kToolOutputTruncatedSuffix），
-  // 保证 token 估算与真实发送文本一致。
-  return '${truncateUtf8(text, kToolOutputMaxChars)}$kToolOutputTruncatedSuffix';
+///
+/// 存储保留完整结果（50KB 字节内），只在**发送给模型时**截断——
+/// 与 opencode toModelMessages 的 toolOutputMaxChars 语义一致。
+///
+/// [maxChars] 为**字符数**上限（用户配置的单位是字符，非 token/字节；
+/// 对齐 [AssistantSettings.maxToolOutputChars] 的语义）。
+/// - null / 缺省 = 使用默认上限 [kToolOutputMaxChars]（5000 字符）；
+/// - <= 0 = 不截断（助手关闭了截断开关，完整发送存储结果）。
+///
+/// 截断实现（[truncateByChars]）位于 context_manager（估算侧与发送侧
+/// 共用，见其注释——token 估算与真实发送文本必须一致）。
+String truncateToolOutput(String text, {int? maxChars}) {
+  final limit = maxChars ?? kToolOutputMaxChars;
+  if (limit <= 0) return text;
+  // 按字符截断（非字节），并回退到完整字符边界（不劈代理对）。
+  return text.runes.length > limit
+      ? '${truncateByChars(text, limit)}$kToolOutputTruncatedSuffix'
+      : text;
 }
 
 /// 解析历史中单个工具结果的重建文本。
 ///
 /// - 已压缩（compactedAt）：占位符（opencode compacted 渲染语义，
 ///   数据仍保留，仅发送时替换）
-/// - 完成且有结果：原文（渲染截断 2K）
+/// - 完成且有结果：原文（渲染截断，[maxChars] 语义同 [truncateToolOutput]）
 /// - 未完成/失败/结果缺失：中断占位（OpenAI/Anthropic 都要求
 ///   每个工具调用有配对结果，否则下一轮请求报错）
-String rebuildToolResultText(ToolCallData tc) {
+String rebuildToolResultText(ToolCallData tc, {int? maxChars}) {
   if (tc.compactedAt != null) {
     return kCompactedToolResultPlaceholder;
   }
   if (tc.status == ToolCallStatus.completed && tc.result != null) {
-    return truncateToolOutput(tc.result!);
+    return truncateToolOutput(tc.result!, maxChars: maxChars);
   }
   return kInterruptedToolResultPlaceholder;
 }
@@ -542,10 +546,15 @@ abstract class ChatProtocol {
   ///
   /// [contextSummary] 为上下文压缩产生的锚定摘要（对话被压缩过时传入），
   /// 以 system 级内容注入（OpenAI：附加 system 消息；Anthropic：system 拼接）。
+  ///
+  /// [toolOutputMaxChars] 为历史重建时工具结果的渲染截断上限（字符数）：
+  /// null = 默认上限（[kToolOutputMaxChars]），<= 0 = 不截断。
+  /// 由 ChatService 按助手设置计算后传入，保证重建与实时工具循环一致。
   Future<ProtocolRequest> buildRequest({
     required List<ChatMessage> history,
     String? assistantPrompt,
     String? contextSummary,
+    int? toolOutputMaxChars,
   });
 
   /// 将工具定义转换为协议要求的 JSON 数组。
@@ -563,8 +572,12 @@ abstract class ChatProtocol {
   });
 
   /// 构建工具结果消息，紧跟在助手消息之后。
+  ///
+  /// [toolOutputMaxChars] 语义同 [buildRequest]（截断上限，字符数）。
   List<Map<String, dynamic>> buildToolResultMessages(
-      List<ToolCallResult> results);
+    List<ToolCallResult> results, {
+    int? toolOutputMaxChars,
+  });
 }
 
 /// 根据端点类型创建协议实例。

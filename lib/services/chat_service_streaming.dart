@@ -50,6 +50,8 @@ extension ChatServiceStreamingExt on ChatService {
           history: history,
           assistantPrompt: _assistantPrompt,
           contextSummary: _contextSummary,
+          toolOutputMaxChars:
+              ChatService.getEffectiveToolOutputMaxChars(_assistantSettings),
         );
         final apiMessages = req.messages;
         _lastRequestBody = {
@@ -159,10 +161,13 @@ extension ChatServiceStreamingExt on ChatService {
     Future.microtask(() async {
       try {
         if (_isCancelledByUser) return;
+        final toolOutputMaxChars =
+            ChatService.getEffectiveToolOutputMaxChars(_assistantSettings);
         final req = await _protocol.buildRequest(
           history: history,
           assistantPrompt: _assistantPrompt,
           contextSummary: _contextSummary,
+          toolOutputMaxChars: toolOutputMaxChars,
         );
         var messages = req.messages;
         _lastRequestBody = {
@@ -379,7 +384,8 @@ extension ChatServiceStreamingExt on ChatService {
             roundReasoning: roundReasoning,
             thinkingSignature: _thinkingSignature,
           ));
-          messages.addAll(_protocol.buildToolResultMessages(results));
+          messages.addAll(_protocol.buildToolResultMessages(results,
+              toolOutputMaxChars: toolOutputMaxChars));
 
           // Reset per-round buffers for the next iteration
           _contentBuffer = '';

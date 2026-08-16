@@ -28,6 +28,7 @@ class AnthropicProtocol implements ChatProtocol {
     required List<ChatMessage> history,
     String? assistantPrompt,
     String? contextSummary,
+    int? toolOutputMaxChars,
   }) async {
     final result = <Map<String, dynamic>>[];
     String? system;
@@ -199,7 +200,7 @@ class AnthropicProtocol implements ChatProtocol {
             {
               'type': 'tool_result',
               'tool_use_id': tc.id,
-              'content': rebuildToolResultText(tc),
+              'content': rebuildToolResultText(tc, maxChars: toolOutputMaxChars),
             },
         ],
       });
@@ -263,7 +264,9 @@ class AnthropicProtocol implements ChatProtocol {
 
   @override
   List<Map<String, dynamic>> buildToolResultMessages(
-      List<ToolCallResult> results) {
+    List<ToolCallResult> results, {
+    int? toolOutputMaxChars,
+  }) {
     // Anthropic 官方：所有 tool_result 块放在同一条 user 消息中，
     // 每个 tool_use 必须有对应的 tool_result。
     return [
@@ -274,8 +277,9 @@ class AnthropicProtocol implements ChatProtocol {
             {
               'type': 'tool_result',
               'tool_use_id': r.toolCallId,
-              // 发送给模型时渲染截断（存储完整）
-              'content': truncateToolOutput(r.result),
+              // 发送给模型时渲染截断（存储完整；上限由助手设置决定）
+              'content':
+                  truncateToolOutput(r.result, maxChars: toolOutputMaxChars),
             },
         ],
       },

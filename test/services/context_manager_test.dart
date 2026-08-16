@@ -312,7 +312,7 @@ void main() {
 
     test('估算含工具链重建内容（与发送一致），prune 后按占位估算', () {
       final big = _assistantWithTool(id: 't', result: _bigResult(200000));
-      // 工具链重建进入请求体：估算含结果（发送渲染 2K 截断）
+      // 工具链重建进入请求体：估算含结果（默认 5000 字符渲染截断）
       final before = ContextManager.estimateHistoryTokens([big]);
       final pruned = ContextManager.pruneToolResults([
         big,
@@ -323,6 +323,38 @@ void main() {
       // compacted 后按占位符估算（体积大幅减小）
       expect(after, lessThan(before));
       expect(before, greaterThan(0));
+    });
+
+    test('估算侧与发送侧同上限：关闭截断（0）按完整结果估算，自定义上限按截断后估算', () {
+      // 6 万字符结果：默认上限（5000 字符）下只估算截断后的体积。
+      final big = _assistantWithTool(id: 't', result: 'x' * 60000);
+      final defaultEstimate =
+          ContextManager.estimateHistoryTokens([big]);
+      // 关闭截断（0 = 不截断）：完整结果进估算——体积必须显著更大。
+      final noTruncEstimate = ContextManager.estimateHistoryTokens(
+        [big],
+        toolOutputMaxChars: 0,
+      );
+      expect(noTruncEstimate, greaterThan(defaultEstimate),
+          reason: '关闭截断时估算必须按完整结果计（与协议层渲染一致）');
+      // 更小上限（1000 字符）：估算随之变小。
+      final tightEstimate = ContextManager.estimateHistoryTokens(
+        [big],
+        toolOutputMaxChars: 1000,
+      );
+      expect(tightEstimate, lessThan(defaultEstimate),
+          reason: '自定义截断上限必须参与估算（与协议层渲染一致）');
+    });
+
+    test('估算侧关闭截断（0）与完整结果体积相当', () {
+      final small = _assistantWithTool(id: 't', result: 'x' * 100);
+      final withLimit = ContextManager.estimateHistoryTokens([small]);
+      final withoutLimit = ContextManager.estimateHistoryTokens(
+        [small],
+        toolOutputMaxChars: 0,
+      );
+      expect(withoutLimit, withLimit,
+          reason: '未超上限时截断与否不影响估算（与发送一致）');
     });
   });
 }

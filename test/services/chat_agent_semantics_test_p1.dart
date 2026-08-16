@@ -215,6 +215,60 @@ void chatAgentSemanticsGroup1() {
       }
     });
 
+    test('getEffectiveToolOutputMaxChars 值域校验（字符数）', () {
+      // 无助手（null settings）：默认上限 5000 字符（保持始终截断的兜底）。
+      expect(ChatService.getEffectiveToolOutputMaxChars(null), 5000);
+      // 关闭截断开关：0 = 不截断（完整发送存储结果）。
+      expect(
+        ChatService.getEffectiveToolOutputMaxChars(
+          AssistantSettings(
+            maxToolOutputChars: 3000,
+            enableMaxToolOutputChars: false,
+          ),
+        ),
+        0,
+        reason: '关闭截断必须返回 0（协议层语义：不截断）',
+      );
+      // 开启 + 合法值：原样使用（最小 100，最大 100000）。
+      expect(
+        ChatService.getEffectiveToolOutputMaxChars(
+          AssistantSettings(maxToolOutputChars: 100, enableMaxToolOutputChars: true),
+        ),
+        100,
+      );
+      expect(
+        ChatService.getEffectiveToolOutputMaxChars(
+          AssistantSettings(
+            maxToolOutputChars: 5000,
+            enableMaxToolOutputChars: true,
+          ),
+        ),
+        5000,
+      );
+      expect(
+        ChatService.getEffectiveToolOutputMaxChars(
+          AssistantSettings(
+            maxToolOutputChars: 100000,
+            enableMaxToolOutputChars: true,
+          ),
+        ),
+        100000,
+      );
+      // 开启 + 越界/损坏值：回退默认 5000。
+      for (final invalid in [0, -1, 99, 100001, 999999999]) {
+        expect(
+          ChatService.getEffectiveToolOutputMaxChars(
+            AssistantSettings(
+              maxToolOutputChars: invalid,
+              enableMaxToolOutputChars: true,
+            ),
+          ),
+          5000,
+          reason: 'maxToolOutputChars=$invalid 应回退默认 5000',
+        );
+      }
+    });
+
     test('未设置助手参数：1 次请求，无 tool_choice 注入', () async {
       final provider = _RecordingProvider([
         [AIStreamEvent('final')],

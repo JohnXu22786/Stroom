@@ -51,6 +51,10 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       requestHistory,
       assistantPrompt: _adapter.assistantPrompt,
       tools: tools,
+      // 与发送侧同一截断上限（字符数）：估算"实际会发送的内容"，
+      // 关闭截断时 0 = 不截断，与协议层渲染一致。
+      toolOutputMaxChars:
+          ChatService.getEffectiveToolOutputMaxChars(_adapter.assistantSettings),
     );
     final currentTokens = actualInput == null
         ? estimated
@@ -113,6 +117,8 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
               tc.status == ToolCallStatus.pending) {
             continue;
           }
+          // 摘要转写仅需 200 字符的事实：用默认截断渲染即可，
+          // 与助手配置的截断上限差异在此处无实质影响。
           final result = rebuildToolResultText(tc);
           final trimmed =
               result.length > 200 ? '${result.substring(0, 200)}…' : result;
