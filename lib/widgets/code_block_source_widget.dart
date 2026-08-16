@@ -441,7 +441,7 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
   /// is the ONLY signal for content changes that never fire scroll events:
   /// a content shrink clamps the position without notifying controller
   /// listeners (the wrap toggle), and content growth re-pins the block.
-  /// Mirrors the chat list's [_updateScrollToBottomState] +
+  /// Mirrors the chat list's overlay-button recompute +
   /// [_followContentGrowth] handling of the same notification.
   bool _onMetricsNotification(ScrollMetricsNotification notification) {
     if (notification.metrics.axis != Axis.vertical) return false;

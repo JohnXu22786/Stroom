@@ -516,6 +516,13 @@ void main() {
         findsOneWidget,
         reason: 'the dismiss button appears while the keyboard is open',
       );
+      // Let the dismiss button's fade+scale-in animation finish so its
+      // rect is full-size before measuring (it pops in animated now, not
+      // instantly). The pump exceeds the overlay switch duration (250ms,
+      // ChatOverlayButtons.overlaySwitchDuration) — if that constant is
+      // ever lengthened past 260ms these pumps must grow too.
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
       // Both buttons bottom-right: the dismiss button sits to the LEFT of
       // the scroll-to-bottom button (8px gap); the scroll-to-bottom button
       // anchors the corner.
@@ -551,10 +558,11 @@ void main() {
       );
 
       // The keyboard close transition (simulated: on a device the IME
-      // collapses when unfocused) hides the button; the list itself is
-      // not moved on dismiss.
+      // collapses when unfocused) hides the button via its fade-out
+      // animation; the list itself is not moved on dismiss. Pump past the
+      // 250ms exit animation before asserting the icon left the tree.
       await closeKeyboard(tester);
-      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 300));
       expect(
         find.byIcon(Icons.keyboard_hide),
         findsNothing,
@@ -680,11 +688,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 260));
       await tester.pump();
       // Keyboard open while scrolled up: both buttons visible, dismiss
-      // LEFT of the scroll-to-bottom button.
+      // LEFT of the scroll-to-bottom button. Let the dismiss button's
+      // fade+scale-in finish so its rect is full-size before measuring.
       await tester.tap(find.byType(TextField));
       await tester.pump(const Duration(milliseconds: 16));
       await setKeyboardInset(tester, 300);
       await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
 
       final dismissBefore = _buttonRect(tester, Icons.keyboard_hide);
       final screenWidth =
@@ -860,6 +871,103 @@ void main() {
         reason: 'dismissing the keyboard while hidden must not move the '
             'list',
       );
+      await settle(tester);
+    });
+
+    testWidgets(
+        'keyboard open/close does not rebuild the chat list — the overlay '
+        'buttons own their visibility state', (tester) async {
+      await pumpChat(tester);
+      await scrollToBottom(tester);
+      await scrollUp(tester);
+      // The Chat widget instance is replaced whenever the page rebuilds
+      // (build constructs a fresh Chat + Builders). Identity therefore
+      // detects a page-level rebuild — which would re-parse every visible
+      // markdown message (MarkdownWidget re-parses on any rebuild) and
+      // drop frames during the keyboard animation.
+      final chatBefore = tester.widget<Chat>(find.byType(Chat));
+
+      // Open the keyboard: the dismiss button fades in; the page itself
+      // must NOT rebuild.
+      await tester.tap(find.byType(TextField));
+      await tester.pump(const Duration(milliseconds: 16));
+      await setKeyboardInset(tester, 300);
+      await tester.pump(const Duration(milliseconds: 260));
+      expect(
+        find.byIcon(Icons.keyboard_hide),
+        findsOneWidget,
+        reason: 'precondition: the dismiss button is shown while the '
+            'keyboard is open',
+      );
+      expect(
+        identical(chatBefore, tester.widget<Chat>(find.byType(Chat))),
+        isTrue,
+        reason: 'the keyboard OPEN transition must not rebuild the chat '
+            'list (the overlay owns the dismiss-button state)',
+      );
+
+      // Close the keyboard: the dismiss button fades out; still no page
+      // rebuild.
+      await closeKeyboard(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        find.byIcon(Icons.keyboard_hide),
+        findsNothing,
+        reason: 'precondition: the dismiss button is gone after the '
+            'keyboard closed',
+      );
+      expect(
+        identical(chatBefore, tester.widget<Chat>(find.byType(Chat))),
+        isTrue,
+        reason: 'the keyboard CLOSE transition must not rebuild the chat '
+            'list either',
+      );
+      await settle(tester);
+    });
+
+    testWidgets(
+        'keyboard open while at the bottom (scroll-to-bottom button '
+        'reappears) does not rebuild the chat list', (tester) async {
+      await pumpChat(tester);
+      await scrollToBottom(tester);
+      await scrollUp(tester);
+      // Tap the scroll button: back at the bottom, both overlay buttons
+      // hidden.
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.arrow_downward));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
+      expect(
+        find.byIcon(Icons.arrow_downward),
+        findsNothing,
+        reason: 'precondition: at the bottom the scroll button is hidden',
+      );
+      final chatBefore = tester.widget<Chat>(find.byType(Chat));
+
+      // The keyboard opens: the viewport shrinks, the list is no longer
+      // at the bottom and the scroll button must reappear — but that
+      // visibility flip lives in the overlay widget, so the message list
+      // must not rebuild.
+      await tester.tap(find.byType(TextField));
+      await tester.pump(const Duration(milliseconds: 16));
+      await setKeyboardInset(tester, 300);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(
+        find.byIcon(Icons.arrow_downward),
+        findsOneWidget,
+        reason: 'precondition: the keyboard-shrunk viewport surfaces the '
+            'scroll button again',
+      );
+      expect(
+        identical(chatBefore, tester.widget<Chat>(find.byType(Chat))),
+        isTrue,
+        reason: 'the at-bottom flip on keyboard open must rebuild only '
+            'the overlay, never the chat list',
+      );
+
+      await closeKeyboard(tester);
       await settle(tester);
     });
   });

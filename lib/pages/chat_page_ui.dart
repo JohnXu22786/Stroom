@@ -158,36 +158,15 @@ extension _ChatPageUiExt on _ChatPageState {
     });
   }
 
-  /// Recomputes the scroll-to-bottom button visibility from the CURRENT
-  /// list metrics ("is the user at the bottom?"), not from the last scroll
-  /// action. Scroll events can be swallowed or never fire at all for
-  /// metric-only changes — a viewport resize from the keyboard (the pixels
-  /// often do not move; an idle ScrollPosition does not notify its
-  /// controller listeners), the composer growing, a content-extent
-  /// correction — so the button would go stale if it only listened to
-  /// scroll events. This runs after every [ScrollMetricsNotification]
-  /// (which fires for every metric change) and after keyboard transitions,
-  /// keeping the button truthful at all times. Idempotent: no setState
-  /// when nothing changed.
-  ///
-  /// Deliberately touches ONLY [_showScrollToBottomButton], never
-  /// [_autoScrollEnabled]: the auto-scroll flag is owned by the scroll
-  /// path ([_onChatScroll]) so the content-growth follow can converge on
-  /// the true bottom over the sliver's estimate-correction frames — a
-  /// recompute here must not turn it off mid-convergence (the list would
-  /// drift forever).
-  void _updateScrollToBottomState() {
-    if (_pendingInitialScrollAdjustment) return;
-    if (!_chatScrollController.hasClients) return;
-    final pos = _chatScrollController.position;
-    final isAtBottom =
-        (pos.maxScrollExtent - pos.pixels) <= _ChatPageState._atBottomWindowPx;
-    final showButton = !isAtBottom;
-    if (showButton == _showScrollToBottomButton) return;
-    setState(() => _showScrollToBottomButton = showButton);
-  }
-
   /// Handles chat list scroll events to track auto-scroll state.
+  ///
+  /// The overlay buttons' visibility is NOT touched here: [ChatOverlayButtons]
+  /// owns it (recomputed from the current metrics on scroll events, keyboard
+  /// metrics changes and the page's ScrollMetricsNotification ticks), so a
+  /// button flip rebuilds only the small overlay subtree instead of the
+  /// whole message list. This path only tracks the auto-scroll flag the
+  /// list needs (shouldScrollToEndWhenAtBottom) and the no-more-messages
+  /// hint.
   void _onChatScroll() {
     // While the initial positioning pass runs the list is hidden and all
     // scroll events are programmatic — skip auto-scroll/button bookkeeping
@@ -211,12 +190,10 @@ extension _ChatPageUiExt on _ChatPageState {
     }
 
     if (isAtBottom) {
-      // At bottom — user sees latest messages
-      if (_showScrollToBottomButton || (!_autoScrollEnabled)) {
+      // At bottom — user sees latest messages: enable auto-scroll so new
+      // messages automatically keep them at the bottom.
+      if (!_autoScrollEnabled) {
         setState(() {
-          _showScrollToBottomButton = false;
-          // Enable auto-scroll when user is at bottom (so new messages
-          // automatically keep them at the bottom).
           if (_chatScrollController.hasClients &&
               _chatScrollController.position.maxScrollExtent > 0) {
             _autoScrollEnabled = true;
@@ -224,23 +201,21 @@ extension _ChatPageUiExt on _ChatPageState {
         });
       }
     } else {
-      // Scrolled up — disable auto-scroll and show button
-      if (!_showScrollToBottomButton || _autoScrollEnabled) {
-        setState(() {
-          _autoScrollEnabled = false;
-          _showScrollToBottomButton = true;
-        });
+      // Scrolled up — disable auto-scroll.
+      if (_autoScrollEnabled) {
+        setState(() => _autoScrollEnabled = false);
       }
     }
   }
 
   /// Called when the user taps the scroll-to-bottom button.
-  /// Enables auto-scroll and scrolls to the bottom.
+  /// Enables auto-scroll and scrolls to the bottom. The button's own
+  /// visibility hides itself via its scroll listener (the jump lands at
+  /// the bottom).
   void _onScrollToBottomTap() {
     _scrollToBottom();
     setState(() {
       _autoScrollEnabled = true;
-      _showScrollToBottomButton = false;
     });
   }
 
@@ -451,8 +426,10 @@ extension _ChatPageUiExt on _ChatPageState {
     _initialAdjustChaseFrames = 0;
     _initialAdjustStepScheduled = false;
     // Re-run the normal scroll bookkeeping once against the settled
-    // position: at the bottom it re-enables auto-scroll, elsewhere it
-    // surfaces the scroll-to-bottom button.
+    // position: at the bottom it re-enables auto-scroll. (The overlay
+    // buttons' visibility is recomputed by ChatOverlayButtons on the same
+    // final jump's scroll events and the reveal frame's metrics
+    // notifications.)
     _onChatScroll();
     if (mounted) setState(() {});
   }
@@ -749,63 +726,6 @@ extension _ChatPageUiExt on _ChatPageState {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  /// Scroll-to-bottom overlay button shown when the user is not at the
-  /// bottom. Positioned/animated by the caller (bottom-right corner);
-  /// returns just the button.
-  Widget _buildScrollToBottomButton({required bool isDark}) {
-    return Material(
-      elevation: 4,
-      shape: const CircleBorder(),
-      color: isDark ? Colors.grey[700] : Colors.grey[300],
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: _onScrollToBottomTap,
-        child: Container(
-          width: _ChatPageState._overlayButtonSize,
-          height: _ChatPageState._overlayButtonSize,
-          alignment: Alignment.center,
-          child: Icon(
-            Icons.arrow_downward,
-            size: 20,
-            color: isDark ? Colors.grey[200] : Colors.grey[700],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Dismisses the soft keyboard. Bottom-right, LEFT of the scroll-to-
-  /// bottom button while that button is visible; it takes over the corner
-  /// slot when the scroll button is hidden. The keyboard otherwise stays
-  /// up while the user reads/scrolls (the list's
-  /// [ScrollViewKeyboardDismissBehavior.manual]): it is closed either via
-  /// the keyboard's own close key or this button.
-  Widget _buildKeyboardDismissButton({required bool isDark}) {
-    return Material(
-      elevation: 4,
-      shape: const CircleBorder(),
-      color: isDark ? Colors.grey[700] : Colors.grey[300],
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: () {
-          // Hide the soft keyboard; the keyboard-close transition in
-          // didChangeMetrics restores the reading position.
-          FocusScope.of(context).unfocus();
-        },
-        child: Container(
-          width: _ChatPageState._overlayButtonSize,
-          height: _ChatPageState._overlayButtonSize,
-          alignment: Alignment.center,
-          child: Icon(
-            Icons.keyboard_hide,
-            size: 20,
-            color: isDark ? Colors.grey[200] : Colors.grey[700],
-          ),
-        ),
       ),
     );
   }
