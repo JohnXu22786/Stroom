@@ -458,19 +458,30 @@ class _ApplicationState extends ConsumerState<Application>
 
 /// Overlay widget that displays on top of the MaterialApp when a
 /// notification payload is set. Listens to [inAppNotificationProvider].
+///
+/// The banner floats below the status bar with side margins instead of
+/// covering the whole top edge. Effective brightness is resolved here
+/// (outside MaterialApp, so no Theme ancestor is available) from
+/// [themeProvider] so the frosted-glass colors follow the app's theme.
 class _InAppBannerOverlay extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final payload = ref.watch(inAppNotificationProvider);
     if (payload == null) return const SizedBox.shrink();
 
+    final themeMode = ref.watch(themeProvider);
+    final isDark = themeMode == ThemeMode.dark ||
+        (themeMode == ThemeMode.system &&
+            MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+
     return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
+      top: MediaQuery.of(context).padding.top + 12,
+      left: 12,
+      right: 12,
       child: InAppNotificationBanner(
         key: ValueKey(payload.taskId),
         payload: payload,
+        isDark: isDark,
         onDismiss: () {
           ref.read(inAppNotificationProvider.notifier).state = null;
         },

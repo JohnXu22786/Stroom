@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -296,14 +297,17 @@ class NotificationPayload {
 // In-App Banner Widget
 // ============================================================================
 
-/// Shows an animated top banner inside the app when a notification arrives.
+/// Shows an animated floating frosted-glass banner inside the app when a
+/// notification arrives.
 class InAppNotificationBanner extends StatefulWidget {
   final NotificationPayload payload;
+  final bool isDark;
   final VoidCallback onDismiss;
 
   const InAppNotificationBanner({
     super.key,
     required this.payload,
+    required this.isDark,
     required this.onDismiss,
   });
 
@@ -352,87 +356,113 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
   @override
   Widget build(BuildContext context) {
     final isSuccess = widget.payload.success;
+    final isDark = widget.isDark;
+    // 前景色：浅色主题用深色文字，深色主题用白色文字。
+    final fg = isDark ? Colors.white : Colors.black87;
+    // 成功/失败色只用在最前面的图标块上，卡片本身是毛玻璃透明。
+    final accent = isSuccess ? Colors.green.shade600 : Colors.red.shade600;
 
     return SlideTransition(
       position: _slideAnimation,
-      child: Material(
-        elevation: 6,
-        color: Colors.transparent,
-        child: Container(
-          width: double.infinity,
-          padding: EdgeInsets.only(
-            top: MediaQuery.of(context).padding.top + 8,
-            left: 16,
-            right: 16,
-            bottom: 12,
-          ),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: isSuccess
-                  ? [Colors.green.shade600, Colors.green.shade400]
-                  : [Colors.red.shade600, Colors.red.shade400],
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          // 悬浮阴影，让卡片与页面内容分离。
+          // 注意：阴影位于 BackdropFilter 之下，会被模糊采样进卡片
+          // 内部，因此透明度/偏移不宜过大，否则卡片内部会染上
+          // 不均匀的暗色（深色模式下尤其明显）。
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.15),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
             ),
-            borderRadius: const BorderRadius.only(
-              bottomLeft: Radius.circular(16),
-              bottomRight: Radius.circular(16),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  isSuccess ? Icons.check_circle : Icons.error,
-                  color: Colors.white,
-                  size: 22,
-                ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          // 毛玻璃：模糊背景 + 半透明填充 + 细描边
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      isSuccess ? '任务完成' : '任务失败',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      widget.payload.title,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        fontSize: 12,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: _dismiss,
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.white.withValues(alpha: 0.6),
+                border: Border.all(
+                  color: Colors.white.withValues(
+                    alpha: isDark ? 0.15 : 0.5,
                   ),
-                  child: const Icon(Icons.close, color: Colors.white, size: 16),
                 ),
+                borderRadius: BorderRadius.circular(16),
               ),
-            ],
+              child: Row(
+                children: [
+                  // 唯一带纯色的元素：成功打勾（绿）/ 失败（红）
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      isSuccess ? Icons.check : Icons.close,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          isSuccess ? '任务完成' : '任务失败',
+                          style: TextStyle(
+                            color: fg,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.payload.title,
+                          style: TextStyle(
+                            color: fg.withValues(alpha: 0.7),
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: _dismiss,
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: fg.withValues(alpha: 0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.close,
+                        color: fg.withValues(alpha: 0.7),
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
