@@ -98,15 +98,28 @@ class ChatService {
     return v;
   }
 
+  /// 工具循环绝对安全上限（仅兜底防失控，用户不可见）：
+  /// 开关关闭（不限次数）时，循环在模型不再调用工具、出错或用户取消
+  /// 时自然结束；若模型失控连续返回工具调用，该上限保证最多消耗
+  /// [kMaxToolRoundsHardLimit] 次 API 请求，避免无限计费。
+  /// 真实任务远达不到此值（1 轮 = 1 次 API 请求）。
+  static const int kMaxToolRoundsHardLimit = 1000;
+
   /// 计算生效的工具循环上限：
   ///
+  /// - 未配置（settings 为 null，如无助手会话）：保持默认上限 20，
+  ///   不做静默放宽——只有用户在设置页显式关闭开关才进入不限模式；
+  /// - 开关关闭：返回 null = 不限制（与设置页开关关闭时的
+  ///   "无限制"文案一致），循环仅由模型停止调用工具、出错或用户取消
+  ///   而终止（另有 [kMaxToolRoundsHardLimit] 兜底防失控）；
   /// - 开关开启：使用用户配置值，但仅接受 [kMaxToolRoundsMin,
-  ///   kMaxToolRoundsMax] 范围内的值，越界/损坏（含持久化旧数据）回退默认值；
-  /// - 开关关闭或未配置：使用默认值 [kMaxToolRoundsDefault] —— 关闭开关
-  ///   **不等于无限**，仍按默认上限 20 执行。
-  static int getEffectiveMaxToolRounds(AssistantSettings? settings) {
-    if (settings == null || !settings.enableMaxToolCalls) {
+  ///   kMaxToolRoundsMax] 范围内的值，越界/损坏（含持久化旧数据）回退默认值。
+  static int? getEffectiveMaxToolRounds(AssistantSettings? settings) {
+    if (settings == null) {
       return kMaxToolRoundsDefault;
+    }
+    if (!settings.enableMaxToolCalls) {
+      return null;
     }
     final v = settings.maxToolCalls;
     if (v < kMaxToolRoundsMin || v > kMaxToolRoundsMax) {

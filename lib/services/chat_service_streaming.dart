@@ -185,16 +185,26 @@ extension ChatServiceStreamingExt on ChatService {
         // 每次 API 响应内的多个并行工具调用属于同一"步骤"，只计 1 次；
         // 计数按用户消息重置（sendStreamWithTools 每次调用独立计数），
         // 不跨对话累计。
-        // 开关关闭 ≠ 无限：仍使用默认值 20（AI SDK 默认 step 数）。
+        // 开关关闭（设置页文案"无限制"）→ 不设上限：循环随模型停止
+        // 调用工具、出错或用户取消自然结束；仅由 kMaxToolRoundsHardLimit
+        // 兜底防止模型失控连续调用工具时无限消耗 API（正常任务远达不到）。
         // 持久化损坏/旧数据可能给出非正数或越界 maxToolCalls，
         // getEffectiveMaxToolRounds 统一回退默认值（此前 <= 0 会让
         // while 恒假——不发任何请求、空流无错误、消息不落库，用户
         // 完全无反馈）。
         final effectiveMaxRounds =
             ChatService.getEffectiveMaxToolRounds(_assistantSettings);
+        final maxRounds =
+            effectiveMaxRounds ?? ChatService.kMaxToolRoundsHardLimit;
 
-        while (!_isCancelledByUser && loopProtection < effectiveMaxRounds) {
+        // 无限模式（开关关闭）下区分"硬上限强制停止"与正常终止：
+        // 每轮开始时置 false，仅当整轮完整执行（含工具执行与消息追加）
+        // 后才置 true——循环从 while 条件检查处退出时若该标记为 true，
+        // 说明是达到上限被强制停止，而非模型停用工具/出错/取消。
+        var lastRoundHadToolCalls = false;
+        while (!_isCancelledByUser && loopProtection < maxRounds) {
           loopProtection++;
+          lastRoundHadToolCalls = false;
 
           _streamSubscription?.cancel();
           _cancelToken?.cancel();
@@ -391,6 +401,21 @@ extension ChatServiceStreamingExt on ChatService {
           _contentBuffer = '';
           _lastReasoningLength = _reasoningBuffer.length;
           _thinkingSignature = '';
+          // 本轮完整执行且未提前退出（工具已执行、消息已追加）。
+          lastRoundHadToolCalls = true;
+        }
+        // 无限模式下由硬上限强制退出（非取消/非错误/非模型停用工具）：
+        // 记录 warning，便于在日志中区分"模型失控"与正常终止。
+        // 开关开启时达限即停是用户配置的预期行为，不在此列。
+        if (!_isCancelledByUser &&
+            effectiveMaxRounds == null &&
+            loopProtection >= maxRounds &&
+            lastRoundHadToolCalls) {
+          AppLogService.warning(
+            'ChatService',
+            '工具循环达到硬上限 $maxRounds 次 API 请求（开关关闭/无限模式），'
+                '模型可能失控持续调用工具，已强制停止。',
+          );
         }
       } catch (e) {
         _lastResponseData = _provider?.lastResponseData;
