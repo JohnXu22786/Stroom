@@ -199,7 +199,8 @@ void main() {
           reason: 'prompt field should end right above the action buttons');
     });
 
-    testWidgets('create dialog system prompt field fills the remaining height', (
+    testWidgets('create dialog system prompt field fills the remaining height',
+        (
       tester,
     ) async {
       tester.view.physicalSize = const Size(800, 900);
@@ -226,13 +227,15 @@ void main() {
       final descRect = tester.getRect(
         find.widgetWithText(TextField, '描述（可选）'),
       );
-      final createRect = tester.getRect(find.widgetWithText(FilledButton, '创建'));
+      final createRect =
+          tester.getRect(find.widgetWithText(FilledButton, '创建'));
       expect(promptRect.height, greaterThan(descRect.height * 3));
       expect(promptRect.bottom, lessThan(createRect.top));
       expect(createRect.top - promptRect.bottom, lessThan(80));
     });
 
-    testWidgets('edit dialog on a very short window falls back to a scrollable '
+    testWidgets(
+        'edit dialog on a very short window falls back to a scrollable '
         'layout without overflow', (tester) async {
       // Short window: the fixed rows + expanded prompt would overflow, so
       // the editor must switch to its scrollable fallback layout.
@@ -267,7 +270,8 @@ void main() {
       expect(find.text('保存'), findsOneWidget);
     });
 
-    testWidgets('large text scale on a medium window also uses the fallback '
+    testWidgets(
+        'large text scale on a medium window also uses the fallback '
         'layout (scaled threshold)', (tester) async {
       // 560dp window is above the unscaled fill threshold (540), but with
       // system font scaling 2.0 the fixed rows would overflow the fill

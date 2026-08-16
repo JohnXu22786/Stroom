@@ -139,8 +139,7 @@ class AssistantSelectionPage extends ConsumerWidget {
               descriptionController: descriptionController,
               promptController: promptController,
               selectedEmoji: selectedEmoji,
-              onEmojiSelected: (e) =>
-                  setDlgState(() => selectedEmoji = e),
+              onEmojiSelected: (e) => setDlgState(() => selectedEmoji = e),
               autofocusName: true,
               nameHint: '输入助手名称',
               descriptionHint: '简短描述此助手的功能',

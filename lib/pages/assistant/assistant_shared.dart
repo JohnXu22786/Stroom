@@ -195,8 +195,8 @@ class AssistantEditorFields extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final fillPrompt = media.size.height >=
-        minFillWindowHeight * media.textScaler.scale(1.0);
+    final fillPrompt =
+        media.size.height >= minFillWindowHeight * media.textScaler.scale(1.0);
 
     final fields = <Widget>[
       Row(
