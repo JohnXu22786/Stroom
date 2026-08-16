@@ -328,8 +328,7 @@ void main() {
     test('估算侧与发送侧同上限：关闭截断（0）按完整结果估算，自定义上限按截断后估算', () {
       // 6 万字符结果：默认上限（5000 字符）下只估算截断后的体积。
       final big = _assistantWithTool(id: 't', result: 'x' * 60000);
-      final defaultEstimate =
-          ContextManager.estimateHistoryTokens([big]);
+      final defaultEstimate = ContextManager.estimateHistoryTokens([big]);
       // 关闭截断（0 = 不截断）：完整结果进估算——体积必须显著更大。
       final noTruncEstimate = ContextManager.estimateHistoryTokens(
         [big],
@@ -353,8 +352,7 @@ void main() {
         [small],
         toolOutputMaxChars: 0,
       );
-      expect(withoutLimit, withLimit,
-          reason: '未超上限时截断与否不影响估算（与发送一致）');
+      expect(withoutLimit, withLimit, reason: '未超上限时截断与否不影响估算（与发送一致）');
     });
   });
 }

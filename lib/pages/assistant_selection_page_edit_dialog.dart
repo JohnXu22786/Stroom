@@ -152,8 +152,7 @@ void showAssistantFullEditDialog(
                         defaultProviderName: vars.defaultProviderName,
                         defaultToolNames: vars.defaultToolNames,
                         maxToolOutputChars: vars.maxToolOutputChars,
-                        enableMaxToolOutputChars:
-                            vars.enableMaxToolOutputChars,
+                        enableMaxToolOutputChars: vars.enableMaxToolOutputChars,
                         onDefaultModelChanged: (model) => setDlgState(() {
                           // 记录显示名 + 绝对身份（模型ID + 供应商名），
                           // 重命名后默认模型仍可解析。
@@ -168,9 +167,8 @@ void showAssistantFullEditDialog(
                               next == null ? null : Set<String>.from(next);
                           vars.defaultsToolsEngaged = true;
                         }),
-                        onEnableMaxToolOutputCharsChanged: (v) =>
-                            setDlgState(
-                                () => vars.enableMaxToolOutputChars = v),
+                        onEnableMaxToolOutputCharsChanged: (v) => setDlgState(
+                            () => vars.enableMaxToolOutputChars = v),
                         onMaxToolOutputCharsChanged: (v) =>
                             setDlgState(() => vars.maxToolOutputChars = v),
                       ),

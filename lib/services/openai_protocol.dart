@@ -269,8 +269,7 @@ class OpenAIProtocol implements ChatProtocol {
           'role': 'tool',
           'tool_call_id': r.toolCallId,
           // 发送给模型时渲染截断（存储完整；上限由助手设置决定）
-          'content':
-              truncateToolOutput(r.result, maxChars: toolOutputMaxChars),
+          'content': truncateToolOutput(r.result, maxChars: toolOutputMaxChars),
         },
     ];
   }

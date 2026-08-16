@@ -671,8 +671,7 @@ void main() {
             w.decoration?.labelText == '最大字符数' &&
             w.decoration?.helperText == '单位：字符（不是 token）',
       );
-      expect(lengthField, findsOneWidget,
-          reason: '必须标明字符单位，避免被误认为 token');
+      expect(lengthField, findsOneWidget, reason: '必须标明字符单位，避免被误认为 token');
       expect(tester.widget<TextField>(lengthField).controller?.text, '5000');
     });
 
@@ -714,8 +713,7 @@ void main() {
       );
       final settings = container.read(assistantProvider).single.settings;
       expect(settings.enableMaxToolOutputChars, isFalse);
-      expect(settings.maxToolOutputChars, 5000,
-          reason: '关闭截断时长度值保留（重新开启时恢复）');
+      expect(settings.maxToolOutputChars, 5000, reason: '关闭截断时长度值保留（重新开启时恢复）');
     });
 
     testWidgets('手动修改截断长度并保存', (tester) async {
@@ -795,8 +793,7 @@ void main() {
         tester.element(find.byType(AssistantSelectionPage)),
       );
       final settings = container.read(assistantProvider).single.settings;
-      expect(settings.maxToolOutputChars, 5000,
-          reason: '非法输入不落库：保存的必是生效值');
+      expect(settings.maxToolOutputChars, 5000, reason: '非法输入不落库：保存的必是生效值');
     });
 
     testWidgets(

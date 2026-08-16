@@ -337,8 +337,7 @@ void main() {
   group('truncateToolOutput / truncateByChars（字符数语义）', () {
     test('默认上限 5000 字符：超长截断 + 后缀，短文本原样', () {
       expect(truncateToolOutput('short'), 'short');
-      expect(truncateToolOutput('x' * 5000), 'x' * 5000,
-          reason: '恰好等于上限不截断');
+      expect(truncateToolOutput('x' * 5000), 'x' * 5000, reason: '恰好等于上限不截断');
       final truncated = truncateToolOutput('x' * 5001);
       final expected = '${'x' * 5000}$kToolOutputTruncatedSuffix';
       expect(truncated, expected);

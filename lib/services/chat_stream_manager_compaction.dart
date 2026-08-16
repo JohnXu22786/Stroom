@@ -53,8 +53,8 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       tools: tools,
       // 与发送侧同一截断上限（字符数）：估算"实际会发送的内容"，
       // 关闭截断时 0 = 不截断，与协议层渲染一致。
-      toolOutputMaxChars:
-          ChatService.getEffectiveToolOutputMaxChars(_adapter.assistantSettings),
+      toolOutputMaxChars: ChatService.getEffectiveToolOutputMaxChars(
+          _adapter.assistantSettings),
     );
     final currentTokens = actualInput == null
         ? estimated

@@ -200,7 +200,8 @@ class AnthropicProtocol implements ChatProtocol {
             {
               'type': 'tool_result',
               'tool_use_id': tc.id,
-              'content': rebuildToolResultText(tc, maxChars: toolOutputMaxChars),
+              'content':
+                  rebuildToolResultText(tc, maxChars: toolOutputMaxChars),
             },
         ],
       });

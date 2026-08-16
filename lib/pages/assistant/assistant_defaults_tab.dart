@@ -455,8 +455,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                   ),
                   value: widget.enableMaxToolOutputChars,
                   activeThumbColor: cs.primary,
-                  onChanged: (v) =>
-                      widget.onEnableMaxToolOutputCharsChanged(v),
+                  onChanged: (v) => widget.onEnableMaxToolOutputCharsChanged(v),
                 ),
                 if (widget.enableMaxToolOutputChars)
                   Padding(
@@ -466,9 +465,8 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                       decoration: InputDecoration(
                         labelText: '最大字符数',
                         // 明确"字符"单位：避免用户按 token/字节理解。
-                        helperText: _lengthError == null
-                            ? '单位：字符（不是 token）'
-                            : null,
+                        helperText:
+                            _lengthError == null ? '单位：字符（不是 token）' : null,
                         errorText: _lengthError,
                         hintText: '默认 $kToolOutputMaxChars',
                         border: const OutlineInputBorder(),

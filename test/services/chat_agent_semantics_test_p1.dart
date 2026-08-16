@@ -232,7 +232,8 @@ void chatAgentSemanticsGroup1() {
       // 开启 + 合法值：原样使用（最小 100，最大 100000）。
       expect(
         ChatService.getEffectiveToolOutputMaxChars(
-          AssistantSettings(maxToolOutputChars: 100, enableMaxToolOutputChars: true),
+          AssistantSettings(
+              maxToolOutputChars: 100, enableMaxToolOutputChars: true),
         ),
         100,
       );

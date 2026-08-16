@@ -165,10 +165,9 @@ class AssistantSettings {
         enableWebSearch: enableWebSearch ?? this.enableWebSearch,
         maxToolCalls: maxToolCalls ?? this.maxToolCalls,
         enableMaxToolCalls: enableMaxToolCalls ?? this.enableMaxToolCalls,
-        maxToolOutputChars:
-            maxToolOutputChars ?? this.maxToolOutputChars,
-        enableMaxToolOutputChars: enableMaxToolOutputChars ??
-            this.enableMaxToolOutputChars,
+        maxToolOutputChars: maxToolOutputChars ?? this.maxToolOutputChars,
+        enableMaxToolOutputChars:
+            enableMaxToolOutputChars ?? this.enableMaxToolOutputChars,
         frequencyPenalty: frequencyPenalty ?? this.frequencyPenalty,
         enableFrequencyPenalty:
             enableFrequencyPenalty ?? this.enableFrequencyPenalty,
