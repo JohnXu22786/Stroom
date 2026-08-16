@@ -28,35 +28,37 @@ int countButtons(Row row) {
   return row.children.whereType<ActionButton>().length;
 }
 
+Widget buildApp({
+  required String messageText,
+  required bool isAi,
+  required bool showRawData,
+  required bool showJsonInspection,
+  VoidCallback? onSave,
+}) {
+  return MaterialApp(
+    home: Scaffold(
+      body: MessageActionRow(
+        messageText: messageText,
+        isAi: isAi,
+        showRawData: showRawData,
+        showJsonInspection: showJsonInspection,
+        onCopy: () {},
+        onRetryOrEdit: () {},
+        onSave: onSave,
+        onViewRawData: showRawData ? () {} : null,
+        onJsonInspection: showJsonInspection ? () {} : null,
+        onDelete: () {},
+      ),
+    ),
+  );
+}
+
+Future<void> pumpRow(WidgetTester tester, Widget app) async {
+  await tester.pumpWidget(app);
+}
+
 void main() {
   group('MessageActionRow button spacing', () {
-    Widget buildApp({
-      required String messageText,
-      required bool isAi,
-      required bool showRawData,
-      required bool showJsonInspection,
-    }) {
-      return MaterialApp(
-        home: Scaffold(
-          body: MessageActionRow(
-            messageText: messageText,
-            isAi: isAi,
-            showRawData: showRawData,
-            showJsonInspection: showJsonInspection,
-            onCopy: () {},
-            onRetryOrEdit: () {},
-            onViewRawData: showRawData ? () {} : null,
-            onJsonInspection: showJsonInspection ? () {} : null,
-            onDelete: () {},
-          ),
-        ),
-      );
-    }
-
-    Future<void> pumpRow(WidgetTester tester, Widget app) async {
-      await tester.pumpWidget(app);
-    }
-
     // ------------------------------------------------------------------------
     // 3-button scenarios: Copy + Edit/Retry + Delete
     // ------------------------------------------------------------------------
@@ -171,6 +173,7 @@ void main() {
         expect(find.byIcon(Icons.refresh), findsOneWidget);
         expect(find.byIcon(Icons.data_exploration), findsOneWidget);
         expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+        expect(find.byTooltip('查看响应数据'), findsOneWidget);
       },
     );
 
@@ -338,6 +341,88 @@ void main() {
           // Clear the widget tree for next combination
           await tester.pumpWidget(Container());
         }
+      },
+    );
+  });
+
+  group('MessageActionRow save button', () {
+    testWidgets(
+      'AI message with onSave: save button shown in second position',
+      (tester) async {
+        var savePressed = false;
+        await pumpRow(
+          tester,
+          buildApp(
+            messageText: 'AI response',
+            isAi: true,
+            showRawData: false,
+            showJsonInspection: false,
+            onSave: () => savePressed = true,
+          ),
+        );
+
+        final row = findButtonRow(tester);
+        expect(row, isNotNull);
+        expect(countButtons(row!), 4); // copy + save + retry + delete
+        expect(countSpacers(row), 3);
+
+        expect(find.byIcon(Icons.save), findsOneWidget);
+        expect(find.byIcon(Icons.copy), findsOneWidget);
+        expect(find.byIcon(Icons.refresh), findsOneWidget);
+        expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+
+        // Save sits in the second position: copy, spacer, save, spacer, ...
+        expect(row.children[0], isA<ActionButton>());
+        expect((row.children[0] as ActionButton).icon, Icons.copy);
+        expect(row.children[2], isA<ActionButton>());
+        expect((row.children[2] as ActionButton).icon, Icons.save);
+
+        // Tapping the save button invokes the callback.
+        await tester.tap(find.byIcon(Icons.save));
+        expect(savePressed, isTrue);
+      },
+    );
+
+    testWidgets(
+      'user message with onSave: save button hidden',
+      (tester) async {
+        await pumpRow(
+          tester,
+          buildApp(
+            messageText: 'Hello',
+            isAi: false,
+            showRawData: false,
+            showJsonInspection: false,
+            onSave: () {},
+          ),
+        );
+
+        final row = findButtonRow(tester);
+        expect(row, isNotNull);
+        expect(countButtons(row!), 3); // copy + edit + delete
+        expect(find.byIcon(Icons.save), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'AI message with onSave and raw data: 6 buttons, no orphaned spacers',
+      (tester) async {
+        await pumpRow(
+          tester,
+          buildApp(
+            messageText: 'AI response',
+            isAi: true,
+            showRawData: true,
+            showJsonInspection: true,
+            onSave: () {},
+          ),
+        );
+
+        final row = findButtonRow(tester);
+        expect(row, isNotNull);
+        expect(countButtons(row!), 6); // copy+save+retry+data+json+delete
+        expect(countSpacers(row), 5); // (buttons - 1)
+        expect(find.byIcon(Icons.save), findsOneWidget);
       },
     );
   });
