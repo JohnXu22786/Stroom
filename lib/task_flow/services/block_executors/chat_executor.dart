@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../../../models/assistant.dart';
 import '../../../models/chat_message.dart';
 import '../../../providers/background_task_provider.dart';
+import '../../../providers/conversation_provider.dart';
 import '../../../providers/task_provider_shared.dart';
 import '../../../services/app_log_service.dart';
 import '../../../services/chat_stream_manager.dart';
@@ -16,11 +17,13 @@ import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
 import 'shared_helpers.dart';
 
-/// Output record name for a chat block: 助手回复_<短名>.
+/// Background-task title for a chat block: 助手回复_<短名>.
 ///
 /// The "短名" comes from the previous block's passed-in content — a file
 /// path uses its basename, plain text uses its first 20 chars — so the
-/// record is traceable back to what was sent to the assistant.
+/// unified-task-list card is traceable back to what was sent to the
+/// assistant. (The conversation itself gets its title through the normal
+/// chat-title derivation on the conversation record.)
 ///
 /// Never throws: the file check is skipped on web (dart:io File methods
 /// throw UnsupportedError there) and any file-system error falls back to
@@ -47,6 +50,13 @@ Future<String> chatOutputTitle(String input) async {
 /// Sends [input] (the previous block's output) to the selected assistant
 /// (or the currently selected one when [assistant] is null) via
 /// [ChatStreamManager] and returns the assistant's text response.
+///
+/// The exchange persists as a REAL conversation (id `flow_<execId>_<sub>`,
+/// created up-front before streaming): the manager's periodic + final
+/// message saves land in [ConversationsNotifier] exactly like a user-typed
+/// conversation, so the record is viewable and continuable from the
+/// topic-selection page. On any failure the conversation is removed again —
+/// a failed block must not leave an orphan stub. No text file is saved.
 Future<String> executeChatBlock({
   required TaskFlowBlock block,
   required BlockTypeDefinition def,
@@ -56,6 +66,7 @@ Future<String> executeChatBlock({
   required FlowSubTask flowSubTask,
   required BackgroundTaskNotifier bgNotifier,
   required ChatStreamManager chatManager,
+  required ConversationsNotifier conversationsNotifier,
   Assistant? assistant,
   Duration maxWait = const Duration(minutes: 10),
 }) async {
@@ -63,6 +74,7 @@ Future<String> executeChatBlock({
   // path's derivation (removeFlowSubTaskTasks cancels
   // 'flow_<execution.id>_<st.id>') — both sides must use the same shape.
   final taskId = 'chat_${execId}_${flowSubTask.id}';
+  final convId = 'flow_${execId}_${flowSubTask.id}';
   execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
   execNotifier.updateSubTaskStatus(execId, flowSubTask.id, TaskStatus.running);
   final title = await chatOutputTitle(input);
@@ -75,7 +87,16 @@ Future<String> executeChatBlock({
   try {
     bgNotifier.updateStep(taskId, 0, running: true);
 
-    final convId = 'flow_${execId}_${flowSubTask.id}';
+    // Create the REAL conversation before streaming (id == convId) so the
+    // stream manager's periodic + final persists land in a real, viewable
+    // conversation — semantically identical to the user typing the message
+    // in the chat page. `activate` is skipped: a background flow must not
+    // hijack the chat tab's active conversation.
+    conversationsNotifier.createConversation(
+      id: convId,
+      assistantId: assistant?.id,
+      activate: false,
+    );
 
     // The previous block's output is sent VERBATIM as a role:user message
     // (no prefix editing). The assistant's own prompt is injected by the
@@ -98,8 +119,10 @@ Future<String> executeChatBlock({
     });
 
     // A cancelled stream (user stop or timeout) only has a partial
-    // reply — treat it as a failure, never a successful step.
+    // reply — treat it as a failure, never a successful step. The stub
+    // conversation must not linger in the topic list either.
     if (result.cancelled) {
+      await conversationsNotifier.deleteConversation(convId);
       failSubTask(
         bgNotifier,
         taskId,
@@ -119,8 +142,10 @@ Future<String> executeChatBlock({
 
     // On a stream error the manager folds the formatted error text into
     // fullReply (cancelled stays false) — an error reply must fail the
-    // block, not flow on as successful output.
+    // block, not flow on as successful output. The error exchange is not
+    // worth keeping as a conversation.
     if (result.assistantMessage?.isError == true) {
+      await conversationsNotifier.deleteConversation(convId);
       failSubTask(
         bgNotifier,
         taskId,
@@ -146,6 +171,7 @@ Future<String> executeChatBlock({
     bgNotifier.setResult(taskId, reply);
 
     if (reply.isEmpty) {
+      await conversationsNotifier.deleteConversation(convId);
       failSubTask(
         bgNotifier,
         taskId,
@@ -162,8 +188,9 @@ Future<String> executeChatBlock({
     }
 
     // The flow may have been deleted while the stream was running —
-    // don't save an orphaned text record.
+    // don't leave an orphan conversation behind.
     if (!execNotifier.state.any((e) => e.id == execId)) {
+      await conversationsNotifier.deleteConversation(convId);
       throw BlockExecutionException(
         '任务流已删除',
         blockType: def.typeKey.name,
@@ -171,19 +198,17 @@ Future<String> executeChatBlock({
       );
     }
 
-    // Save text via the shared helper (with folder dedup). The title is a
-    // friendly name — the record shows in the text gallery by name, and a
-    // raw UUID suffix would be an opaque string (dedup appends (2), (3)...).
-    final textPath = await saveTextForFlow(
-      reply,
-      saveFolder: '',
-      title: title,
-      // Guard against a flow deleted mid-save (narrow race after the
-      // existence check above).
-      shouldCommit: () => execNotifier.state.any((e) => e.id == execId),
-    );
+    // Deterministic final persist: the stream manager normally saves the
+    // full history through its own finalize path (periodic + final
+    // updateMessages keyed on convId), but a silent save failure there
+    // must not leave a stub conversation behind. updateMessages is a full
+    // replace, so re-persisting the same history is idempotent.
+    await conversationsNotifier.updateMessages(convId, result.history);
 
-    bgNotifier.completeTask(taskId, downloadedFilePath: textPath);
+    // The full [user, assistant] exchange now lives in a real conversation
+    // — viewable and continuable from the topic-selection page. The task
+    // card keeps the reply text; no text file is saved.
+    bgNotifier.completeTask(taskId);
     execNotifier.updateSubTaskStatus(
       execId,
       flowSubTask.id,
@@ -194,6 +219,7 @@ Future<String> executeChatBlock({
     return reply;
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
+    await conversationsNotifier.deleteConversation(convId);
     failSubTask(
       bgNotifier,
       taskId,

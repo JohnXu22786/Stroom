@@ -10,6 +10,7 @@ import '../../models/built_in_prompts.dart';
 import '../../providers/assistant_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/chat_manager_provider.dart';
+import '../../providers/conversation_provider.dart';
 import '../../providers/provider_config.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/task_provider_shared.dart';
@@ -339,6 +340,7 @@ class TaskFlowExecutionService {
           flowSubTask: flowSubTask,
           bgNotifier: bgNotifier,
           chatManager: _ref.read(chatStreamManagerProvider),
+          conversationsNotifier: _ref.read(conversationsProvider.notifier),
           assistant: chatAssistant,
         );
       case BlockType.custom:
