@@ -110,29 +110,14 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
 
   /// 获取当前路径下的直接子文件夹（排序后）
   ///
-  /// 当前目录自身也会出现在列表中（像根目录一样始终可见可选）——
-  /// 否则当保存文件夹恰好是浏览中的目录时，它在列表里"消失"，
-  /// 用户看不到自己的保存文件夹。
+  /// 不包含当前目录自身 —— 当前目录在子文件夹层级下作为独立的
+  /// "当前文件夹"层级显示（见 build），否则当前目录会与它的
+  /// 子文件夹同层级并列，层级关系混乱。
   List<String> get _filteredFolders {
-    final prefix = _currentPath.isEmpty ? '' : '$_currentPath/';
-    final result = <String>[];
-    for (final f in _availableFolders) {
-      if (_currentPath.isEmpty) {
-        // 根目录：只显示顶级文件夹（不含 /）。空字符串表示根目录
-        // 自身，由固定的"根目录"行表示，不重复列出。
-        if (f.isNotEmpty && !f.contains('/')) result.add(f);
-      } else if (f == _currentPath) {
-        // 当前目录自身始终显示（像根目录一样），保存文件夹 =
-        // 当前目录时不会从列表"消失"。
-        result.add(f);
-      } else if (f.startsWith(prefix)) {
-        final suffix = f.substring(prefix.length);
-        // 直接子级：不含额外的 /
-        if (!suffix.contains('/')) result.add(f);
-      }
-    }
-    result.sort(compareNatural);
-    return result;
+    // 根目录（''）由固定的"根目录"行表示，不进入列表重复列出
+    return FolderPathUtils.getChildFolderPaths(_currentPath, _availableFolders)
+      ..removeWhere((p) => p.isEmpty)
+      ..sort(compareNatural);
   }
 
   /// 判断当前是否在子文件夹中
@@ -357,14 +342,29 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
                     Icons.home_outlined,
                   ),
 
+                // 当前文件夹层级（仅子文件夹层级显示）：当前目录作为
+                // 独立层级呈现，不混入"子文件夹"列表 —— 否则当前目录
+                // 与它的子文件夹同层级并列，层级关系混乱。
+                if (_isInSubFolder &&
+                    _availableFolders.contains(_currentPath)) ...[
+                  const SizedBox(height: 8),
+                  _sectionLabel(context, '当前文件夹'),
+                  const SizedBox(height: 4),
+                  _buildFolderTile(
+                    context,
+                    cs,
+                    _currentPath,
+                    FolderPathUtils.getFolderBaseName(_currentPath),
+                    Icons.folder_open,
+                  ),
+                ],
+
                 // 现有文件夹列表
                 if (folders.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  Text(
+                  _sectionLabel(
+                    context,
                     _isInSubFolder ? '子文件夹' : '现有文件夹',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
-                        ),
                   ),
                   const SizedBox(height: 4),
                   ConstrainedBox(
@@ -475,6 +475,16 @@ class _FolderPickerDialogState extends State<FolderPickerDialog> {
           ),
         ],
       ),
+    );
+  }
+
+  /// 列表分组标题（如"现有文件夹 / 子文件夹 / 当前文件夹"）
+  Widget _sectionLabel(BuildContext context, String text) {
+    return Text(
+      text,
+      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
     );
   }
 
