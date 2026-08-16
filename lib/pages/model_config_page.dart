@@ -776,11 +776,20 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       models.insert(0, modelConfig);
     }
 
+    // 在完整副本上更新模型：保留供应商的 typeConfig / customParams /
+    // reasoningParams / endpointType（重建会丢配置，推理参数继承视图与
+    // 请求构建都依赖供应商级参数——与 provider_config_detail_page 的
+    // _insertModelResult / _updateModelInConfig 保持一致）。
+    final base = configs[widget.configIndex];
     configs[widget.configIndex] = ProviderConfigItem(
-      providerName: configs[widget.configIndex].providerName,
-      host: configs[widget.configIndex].host,
-      key: configs[widget.configIndex].key,
+      providerName: base.providerName,
+      host: base.host,
+      key: base.key,
       models: models,
+      typeConfig: base.typeConfig,
+      customParams: base.customParams,
+      reasoningParams: base.reasoningParams,
+      endpointType: base.endpointType,
     );
 
     final updated = ProviderEntry(

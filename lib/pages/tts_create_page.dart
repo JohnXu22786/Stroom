@@ -57,10 +57,16 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   // 自定义参数值覆盖
   final Map<String, TextEditingController> _customParamControllers = {};
 
-  // 当前选中的音色、语速、音量
+  // 当前选中音色、语速、音量
   String _selectedVoice = '';
   double _speed = 1.0;
   double _volume = 1.0;
+
+  // 上次 _refreshModels 消费过的 provider 状态实例。provider 状态不可变，
+  // 任何变化（新增音色、编辑模型、配置重排）都会产生新实例——旧实现只
+  // 比较模型 ID 列表，同 ID 下新增音色/改语速范围会被当作"无变化"跳过，
+  // 页面保留不含新音色的旧模型快照，音色下拉框不出现。
+  ProviderEntriesState? _lastEntriesState;
 
   // 当前模型的最大字数限制（0 表示未设置）
   int _maxWordsLimit = 0;
@@ -179,10 +185,11 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
       }
     }
 
-    // 如果数据没变化就不触发重建
-    final oldIds = _availableModels.map((e) => e.config.modelId).toList();
-    final newIds = allModels.map((e) => e.config.modelId).toList();
-    if (_listEquals(oldIds, newIds) && _ttsEntryId == ttsEntry.id) return;
+    // provider 状态没变（不可变对象，同实例 = 同数据）就不触发重建——
+    // 旧实现只比较模型 ID 列表，同 ID 下新增音色会被跳过，页面保留
+    // 不含新音色的旧模型快照，音色下拉框不出现。
+    if (identical(entriesState, _lastEntriesState)) return;
+    _lastEntriesState = entriesState;
 
     setState(() {
       _ttsEntryId = ttsEntry.id;
@@ -210,11 +217,19 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
           _selectedModelIndex =
               allModels.indexWhere((o) => o.config.modelId == prevModelId);
           _maxWordsLimit = matched.config.maxWordsPerRequest;
-          // _modelConfig 可能在模型列表为空的分支被清空（重试预设
-          // 期间），此时按匹配到的模型重建，避免空解引用崩溃
-          final mc = _modelConfig ?? matched.config;
+          // 始终采用 provider 的最新模型对象（含新增音色/更新的语速音量
+          // 范围）——旧实现优先保留 _modelConfig 快照，同 ID 下新增的音色
+          // 不生效。重试预设的自定义参数控制器已在 _initTaskData 建立，
+          // 此处不重建，保留重试任务的参数覆盖值。
+          final mc = matched.config;
           if (mc.voices.isNotEmpty) {
-            _selectedVoice = mc.voices.first.id;
+            // 仅在原选中音色已不存在时重置为第一个音色：无谓的 provider
+            // 变更（如其它供应商配置编辑）不应丢掉用户已选的音色。
+            final voiceStillExists =
+                mc.voices.any((v) => v.id == _selectedVoice);
+            if (!voiceStillExists) {
+              _selectedVoice = mc.voices.first.id;
+            }
           }
           _modelConfig = mc;
           // 以 Slider 实际渲染所用实例（mc）为基准限制语速/音量
@@ -244,14 +259,6 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
         }
       }
     });
-  }
-
-  bool _listEquals(List a, List b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
   }
 
   /// 跳转到 TTS 供应商配置页
@@ -725,7 +732,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
             TextField(
               controller: _titleController,
               decoration: const InputDecoration(
-                hintText: '输入录音标题（可选）',
+                hintText: '保存的音频文件名（可选）',
                 border: OutlineInputBorder(),
                 isDense: true,
                 contentPadding:
