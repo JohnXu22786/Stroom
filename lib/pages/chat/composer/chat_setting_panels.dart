@@ -705,7 +705,7 @@ void showCustomReasoningParamsPanel({
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        '自定义推理参数',
+                        '自定义参数',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -720,7 +720,7 @@ void showCustomReasoningParamsPanel({
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       child: Center(
                         child: Text(
-                          '当前模型未配置自定义推理参数\n请在模型设置中添加',
+                          '当前模型未配置自定义参数\n请在模型设置中添加',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 13,

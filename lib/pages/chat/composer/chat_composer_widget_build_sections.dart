@@ -164,7 +164,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
               // Custom reasoning params button — always visible regardless
               // of whether custom params are configured. When no
               // non-toggle/non-effort params exist, the button opens
-              // a panel that explains "当前模型未配置自定义推理参数".
+              // a panel that explains "当前模型未配置自定义参数".
               _SettingsChip(
                 icon: Icons.tune,
                 label: '自定义参数',
