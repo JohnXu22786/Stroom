@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/assistant.dart';
@@ -12,6 +13,7 @@ import '../providers/theme_provider.dart';
 import '../providers/provider_config.dart';
 import '../providers/update_provider.dart';
 import '../utils/app_version.dart';
+import '../utils/model_order.dart' show applySavedOrder;
 import '../widgets/update_dialog.dart';
 import '../widgets/version_info_dialog.dart';
 import 'provider_config_page.dart';

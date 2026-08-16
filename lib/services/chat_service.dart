@@ -183,6 +183,10 @@ class ChatService {
   /// The model config used by this service instance.
   ModelConfig? get modelConfig => _modelConfig;
 
+  /// 该服务所用供应商配置的显示名（供上下文管理按模型定位使用）。
+  /// 供应商配置缺失时返回 null。
+  String? get modelProviderName => _providerConfig?.providerName;
+
   /// The provider used by this service instance (for test use only).
   @visibleForTesting
   BaseChatProvider? get provider => _provider;

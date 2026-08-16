@@ -134,8 +134,8 @@ void chatAgentSemanticsGroup2() {
         [AIStreamEvent('## Objective\n- 旧对话摘要')],
         [AIStreamEvent('最终回答')],
       ]);
-      // context 5000：触发线 = 模型 context（无自定义值）；
-      // 历史 3 条大消息 ≈ 5250 tokens > 5000 → 触发
+      // context 5000：触发线 = 全局 95% × 模型 context（无独立值）= 4750；
+      // 历史 3 条大消息 ≈ 5250 tokens > 4750 → 触发
       manager.adapter.forceService(ChatService(
         provider: provider,
         modelConfig: _createModelConfig(context: 5000),

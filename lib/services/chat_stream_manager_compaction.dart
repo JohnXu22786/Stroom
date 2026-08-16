@@ -27,12 +27,22 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
     final ref = _ref;
     if (ref == null) return false;
 
-    // 1. 触发线 = 自定义压缩触发值（若启用）?? 模型设置的上下文窗口。
+    // 1. 触发线 = 全局百分比 × 模型 context（或模型独立触发值）。
     //    context 是 per-model 配置（模型页"上下文长度"），与 provider 无关。
-    final modelConfig = _adapter.modelConfig;
+    //    模型身份取自该对话的 service（而非 adapter 的全局缓存）——
+    //    task-flow 的 assistant 绑定模型也正确生效。
+    final svc = _adapter.getOrCreateService(convId);
+    if (svc == null) return false;
+    final modelConfig = svc.modelConfig;
     final modelContext = (modelConfig?.typeConfig['context'] as num?)?.toInt();
     final ctxSettings = ref.read(contextManagementSettingsProvider);
-    final threshold = ctxSettings.effectiveCompactionThreshold(modelContext);
+    final threshold = ctxSettings.effectiveCompactionThreshold(
+      modelContext,
+      modelKey: compactionModelKey(
+        modelId: modelConfig?.modelId,
+        providerName: svc.modelProviderName,
+      ),
+    );
     if (threshold == null) return false;
 
     // 基准：优先使用上次请求的实际输入计量（API usage，非估算）；
@@ -124,8 +134,7 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
     sb.writeln('请将以上对话历史压缩为锚定摘要，严格按模板输出。');
 
     // 5. 执行压缩请求（轻量、无工具、maxTokens 适中）
-    final svc = _adapter.getOrCreateService(convId);
-    if (svc == null) return false;
+    //    svc 已在步骤 1 解析并判空，这里直接复用。
     String summary;
     try {
       summary = await svc.sendPrompt(
