@@ -115,7 +115,8 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    test('setTitleTask persists model ref + prompt and clears on null', () async {
+    test('setTitleTask persists model ref + prompt and clears on null',
+        () async {
       final notifier = SystemAssistantSettingsNotifier();
       await notifier.setTitleTask(
         const SystemAssistantTaskConfig(
@@ -159,8 +160,7 @@ void main() {
       addTearDown(container.dispose);
       final settings = await _waitForSettings(
         container,
-        (s) =>
-            s.title.hasModel && s.title.hasPrompt && s.compaction.hasPrompt,
+        (s) => s.title.hasModel && s.title.hasPrompt && s.compaction.hasPrompt,
       );
       expect(settings.title.modelId, 'gpt-4o');
       expect(settings.title.providerName, 'OpenAI');
@@ -179,12 +179,13 @@ void main() {
       return jsonEncode([map]);
     }
 
-    test('user assistant is migrated to a custom prompt and legacy key '
+    test(
+        'user assistant is migrated to a custom prompt and legacy key '
         'removed', () async {
       SharedPreferences.setMockInitialValues({
         'system_title_assistant_id': 'legacy-assistant-1',
-        'assistants': await assistantsJson(
-            'legacy-assistant-1', '这个助手是我的标题提示词'),
+        'assistants':
+            await assistantsJson('legacy-assistant-1', '这个助手是我的标题提示词'),
       });
       final container = ProviderContainer();
       addTearDown(container.dispose);
@@ -194,8 +195,8 @@ void main() {
         (s) => s.title.hasPrompt,
       );
       expect(settings.title.prompt, '这个助手是我的标题提示词');
-      await _waitForPrefs((prefs) =>
-          prefs.getString('system_title_assistant_id') == null);
+      await _waitForPrefs(
+          (prefs) => prefs.getString('system_title_assistant_id') == null);
       final prefs = await SharedPreferences.getInstance();
       // 幂等：旧 key 删除
       expect(prefs.getString('system_title_assistant_id'), isNull);
@@ -231,8 +232,8 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       container.read(systemAssistantSettingsProvider); // 触发异步 _load
-      await _waitForPrefs((prefs) =>
-          prefs.getString('system_compaction_assistant_id') == null);
+      await _waitForPrefs(
+          (prefs) => prefs.getString('system_compaction_assistant_id') == null);
       final settings = container.read(systemAssistantSettingsProvider);
       expect(settings.compaction.prompt, isNull);
       final prefs = await SharedPreferences.getInstance();
@@ -281,8 +282,7 @@ void main() {
     test('迁移时去掉助手提示词首尾空白', () async {
       SharedPreferences.setMockInitialValues({
         'system_compaction_assistant_id': 'legacy-assistant-2',
-        'assistants': await assistantsJson(
-            'legacy-assistant-2', '  压缩助手提示词  '),
+        'assistants': await assistantsJson('legacy-assistant-2', '  压缩助手提示词  '),
       });
       final container = ProviderContainer();
       addTearDown(container.dispose);

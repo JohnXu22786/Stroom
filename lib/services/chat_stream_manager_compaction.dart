@@ -62,9 +62,8 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
     // 2. 解析压缩任务：提示词（自定义优先，默认内置）+ 模型
     //    （配置了独立模型就用它，否则跟随对话页当前模型）
     final settings = ref.read(systemAssistantSettingsProvider);
-    final compactionPrompt =
-        resolveSystemAssistantPrompt(settings.compaction,
-            defaultAssistantId: kBuiltInCompactionAssistantId);
+    final compactionPrompt = resolveSystemAssistantPrompt(settings.compaction,
+        defaultAssistantId: kBuiltInCompactionAssistantId);
     if (compactionPrompt == null) return false;
 
     // 3. 划分头部（可压缩）与尾部（保留原文）。

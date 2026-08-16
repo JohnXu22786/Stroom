@@ -33,7 +33,8 @@ const String _kCompactionPromptKey = 'system_compaction_prompt';
 
 // 旧格式 key（v1：选择助手 ID）。加载时迁移到新格式后删除。
 const String _kLegacyTitleAssistantIdKey = 'system_title_assistant_id';
-const String _kLegacyCompactionAssistantIdKey = 'system_compaction_assistant_id';
+const String _kLegacyCompactionAssistantIdKey =
+    'system_compaction_assistant_id';
 
 /// 单个任务的配置：模型引用 + 自定义提示词。
 ///

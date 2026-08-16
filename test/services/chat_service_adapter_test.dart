@@ -1500,8 +1500,7 @@ void main() {
         modelDisplayName: '不存在 | 任意供应商',
       );
       expect(svc, isNotNull);
-      expect(svc!.modelConfig!.modelId, 'gpt-4o',
-          reason: '未命中时回到全局缓存的第一个模型');
+      expect(svc!.modelConfig!.modelId, 'gpt-4o', reason: '未命中时回到全局缓存的第一个模型');
     });
 
     test('无引用时直接跟随对话页当前模型', () {
@@ -1559,8 +1558,7 @@ void main() {
         modelId: 'empty-model',
       );
       expect(svc, isNotNull);
-      expect(svc!.modelConfig!.modelId, 'gpt-4o',
-          reason: '空配置不参与匹配，回退到全局模型');
+      expect(svc!.modelConfig!.modelId, 'gpt-4o', reason: '空配置不参与匹配，回退到全局模型');
     });
 
     test('availableLlmModels 过滤 host/key 为空的配置（显示与请求一致）', () {

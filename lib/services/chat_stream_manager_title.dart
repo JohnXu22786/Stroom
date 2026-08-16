@@ -36,9 +36,8 @@ extension _ChatStreamManagerTitleExt on ChatStreamManager {
       // 解析标题任务：提示词（自定义优先，默认内置）+ 模型
       // （配置了独立模型就用它，否则跟随对话页当前模型）
       final settings = ref.read(systemAssistantSettingsProvider);
-      final titlePrompt =
-          resolveSystemAssistantPrompt(settings.title,
-              defaultAssistantId: kBuiltInTitleAssistantId);
+      final titlePrompt = resolveSystemAssistantPrompt(settings.title,
+          defaultAssistantId: kBuiltInTitleAssistantId);
       if (titlePrompt == null) return;
 
       final svc = _adapter.createTransientServiceForModel(

@@ -42,8 +42,7 @@ extension _SettingsPageSystemAssistantExt on _SettingsPageState {
 
   Widget _buildSystemAssistantSettings() {
     final settings = ref.watch(systemAssistantSettingsProvider);
-    final llmModels =
-        availableLlmModels(ref.watch(providerEntriesProvider));
+    final llmModels = availableLlmModels(ref.watch(providerEntriesProvider));
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -248,7 +247,8 @@ class _SystemAssistantConfigPanelState
       displayName: _draft.modelDisplayName,
     );
     if (resolved != null) return resolved.displayName;
-    if (_draft.modelDisplayName != null && _draft.modelDisplayName!.isNotEmpty) {
+    if (_draft.modelDisplayName != null &&
+        _draft.modelDisplayName!.isNotEmpty) {
       return _draft.modelDisplayName!;
     }
     return '跟随对话页当前模型';

@@ -91,8 +91,7 @@ Future<void> _waitForPrefs(bool Function(SharedPreferences prefs) cond) async {
 
 void main() {
   group('SettingsPage 系统助手配置面板', () {
-    testWidgets('点击标题生成助手打开配置面板（模型 / 提示词 / 重置按钮）',
-        (tester) async {
+    testWidgets('点击标题生成助手打开配置面板（模型 / 提示词 / 重置按钮）', (tester) async {
       _setLargeView(tester);
       SharedPreferences.setMockInitialValues({
         'provider_entries': _llmEntriesJson(),
@@ -114,8 +113,7 @@ void main() {
       final resetBtn = tester.widget<TextButton>(
         find.widgetWithText(TextButton, '重置为默认提示词'),
       );
-      expect(resetBtn.onPressed, isNull,
-          reason: '默认提示词状态下重置按钮应禁用');
+      expect(resetBtn.onPressed, isNull, reason: '默认提示词状态下重置按钮应禁用');
     });
 
     testWidgets('编辑提示词并保存 → 持久化为自定义提示词', (tester) async {
@@ -152,8 +150,7 @@ void main() {
       expect(await _prefsValue('system_title_prompt'), '我的标题提示词');
     });
 
-    testWidgets('重置默认带二次确认：取消保留自定义，确认后恢复默认并保存',
-        (tester) async {
+    testWidgets('重置默认带二次确认：取消保留自定义，确认后恢复默认并保存', (tester) async {
       _setLargeView(tester);
       SharedPreferences.setMockInitialValues({
         'provider_entries': _llmEntriesJson(),
@@ -171,16 +168,14 @@ void main() {
       // 第一次重置：取消 → 草稿不变
       await tester.tap(_inSheet('重置为默认提示词'));
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(AlertDialog, '重置为默认提示词'),
-          findsOneWidget);
+      expect(find.widgetWithText(AlertDialog, '重置为默认提示词'), findsOneWidget);
       // 对话框内的「取消」（面板底部也有取消按钮，需按对话框内查找）
       await tester.tap(find.descendant(
         of: find.byType(AlertDialog),
         matching: find.text('取消'),
       ));
       await tester.pumpAndSettle();
-      expect(_inSheet('自定义提示词A'), findsOneWidget,
-          reason: '取消后自定义提示词不应被重置');
+      expect(_inSheet('自定义提示词A'), findsOneWidget, reason: '取消后自定义提示词不应被重置');
 
       // 第二次重置：确认 → 恢复为内置默认提示词
       await tester.tap(_inSheet('重置为默认提示词'));
@@ -202,13 +197,12 @@ void main() {
       // 保存 → 自定义提示词清除（prompt key 移除）
       await tester.tap(_inSheet('保存'));
       await tester.pumpAndSettle();
-      await _waitForPrefs((prefs) => prefs.getString('system_title_prompt') == null);
+      await _waitForPrefs(
+          (prefs) => prefs.getString('system_title_prompt') == null);
       expect(await _prefsValue('system_title_prompt'), isNull);
     });
 
-    testWidgets(
-        '选择模型（对话页显示格式）→ 保存持久化绝对身份，tile 副标题同格式显示',
-        (tester) async {
+    testWidgets('选择模型（对话页显示格式）→ 保存持久化绝对身份，tile 副标题同格式显示', (tester) async {
       _setLargeView(tester);
       SharedPreferences.setMockInitialValues({
         'provider_entries': _llmEntriesJson(),
@@ -278,8 +272,7 @@ void main() {
       await tester.tap(_inSheet('GPT-4o | OpenAI'));
       await tester.pumpAndSettle();
       final pickerRows = _inSheet('跟随对话页当前模型');
-      expect(pickerRows, findsOneWidget,
-          reason: '模型选择列表顶部的跟随选项');
+      expect(pickerRows, findsOneWidget, reason: '模型选择列表顶部的跟随选项');
       await tester.tap(pickerRows);
       await tester.pumpAndSettle();
 

@@ -334,17 +334,13 @@ class ChatAdapter {
         if (!providerMatches) continue;
         for (final model in config.models) {
           final id = modelId;
-          if (id != null &&
-              id.isNotEmpty &&
-              model.modelId == id) {
+          if (id != null && id.isNotEmpty && model.modelId == id) {
             return (config, model);
           }
           final displayName =
               '${model.name.isNotEmpty ? model.name : model.modelId} | ${config.providerName}';
           final name = modelDisplayName;
-          if (name != null &&
-              name.isNotEmpty &&
-              displayName == name) {
+          if (name != null && name.isNotEmpty && displayName == name) {
             return (config, model);
           }
         }
