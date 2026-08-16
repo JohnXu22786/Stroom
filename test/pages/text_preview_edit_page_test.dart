@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,6 +40,32 @@ class _PlaceholderPage extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// 查看模式下内容 Text 的样式（SelectionArea 内唯一的 Text）
+TextStyle? _viewModeContentStyle(WidgetTester tester) {
+  final text = tester.widget<Text>(
+    find.descendant(
+      of: find.byType(SelectionArea),
+      matching: find.byType(Text),
+    ),
+  );
+  return text.style;
+}
+
+/// 以指定平台运行 [body]，保证失败时也会复位平台覆盖 —— 测试绑定在
+/// test body 结束时（早于 addTearDown）校验 foundation 调试变量已复位。
+Future<void> _withPlatform(
+  WidgetTester tester,
+  TargetPlatform platform,
+  Future<void> Function() body,
+) async {
+  debugDefaultTargetPlatformOverride = platform;
+  try {
+    await body();
+  } finally {
+    debugDefaultTargetPlatformOverride = null;
   }
 }
 
@@ -111,8 +139,8 @@ void main() {
       expect(find.byIcon(Icons.save), findsNothing);
       expect(find.byIcon(Icons.close), findsNothing);
 
-      // Content is SelectableText (read-only) not TextField
-      expect(find.byType(SelectableText), findsOneWidget);
+      // Content is wrapped in SelectionArea (read-only) not TextField
+      expect(find.byType(SelectionArea), findsOneWidget);
       expect(find.byType(TextField), findsNothing);
     });
 
@@ -138,8 +166,8 @@ void main() {
       expect(find.text('保存'), findsNothing);
       expect(find.text('放弃'), findsNothing);
 
-      // SelectableText should be replaced by TextField
-      expect(find.byType(SelectableText), findsNothing);
+      // SelectionArea should be replaced by TextField
+      expect(find.byType(SelectionArea), findsNothing);
       expect(find.byType(TextField), findsOneWidget);
 
       // TextField should contain the original content
@@ -584,7 +612,7 @@ void main() {
       expect(find.text('empty_file.txt'), findsOneWidget);
 
       // Should show empty content area (no crash)
-      expect(find.byType(SelectableText), findsOneWidget);
+      expect(find.byType(SelectionArea), findsOneWidget);
     });
 
     // ==================== Font Size Button in View Mode ====================
@@ -666,9 +694,7 @@ void main() {
       await tester.pump();
 
       // View mode should restore the persisted font size
-      final selectable =
-          tester.widget<SelectableText>(find.byType(SelectableText));
-      expect(selectable.style?.fontSize, adjustedSize);
+      expect(_viewModeContentStyle(tester)?.fontSize, adjustedSize);
     });
 
     testWidgets('font size reset persists default across page reopen',
@@ -695,9 +721,7 @@ void main() {
       await tester.pump();
 
       // View mode should restore the default 14
-      final selectable =
-          tester.widget<SelectableText>(find.byType(SelectableText));
-      expect(selectable.style?.fontSize, 14);
+      expect(_viewModeContentStyle(tester)?.fontSize, 14);
     });
 
     testWidgets('out-of-range persisted font size is clamped on load',
@@ -708,9 +732,8 @@ void main() {
       await navigateToEditor(tester);
       await tester.pump();
 
-      final selectable =
-          tester.widget<SelectableText>(find.byType(SelectableText));
-      expect(selectable.style?.fontSize, 28);
+      final selectable = _viewModeContentStyle(tester);
+      expect(selectable?.fontSize, 28);
     });
 
     testWidgets('non-finite persisted font size falls back to default',
@@ -722,9 +745,8 @@ void main() {
       await navigateToEditor(tester);
       await tester.pump();
 
-      final selectable =
-          tester.widget<SelectableText>(find.byType(SelectableText));
-      expect(selectable.style?.fontSize, 14);
+      final selectable = _viewModeContentStyle(tester);
+      expect(selectable?.fontSize, 14);
     });
 
     testWidgets(
@@ -788,7 +810,7 @@ void main() {
 
         // Content should be shown as selectable text
         expect(find.text(mmdContent), findsOneWidget);
-        expect(find.byType(SelectableText), findsOneWidget);
+        expect(find.byType(SelectionArea), findsOneWidget);
       });
 
       testWidgets(
@@ -799,6 +821,119 @@ void main() {
 
         // Should show the chart editor button in view mode
         expect(find.byIcon(Icons.account_tree), findsOneWidget);
+      });
+    });
+
+    // ==================== Scroll on Drag (desktop) ====================
+    //
+    // 在 Windows/Linux/macOS 上，SelectableText 内部的拖拽识别器是
+    // TapAndPanGestureRecognizer（接受包括触摸在内的所有指针类型）。
+    // 它的接受阈值（computePanSlop：触摸 36px/鼠标 2px）虽然大于外层
+    // SingleChildScrollView 的垂直拖拽阈值（18px/1px），但手势竞技场中
+    // 谁先 accept 谁赢——当单次移动事件跨越 pan 阈值（快速拖动、触控板
+    // 大位移）时，位于更内层的文本识别器先处理事件并胜出，导致在文本上
+    // （以及文本末尾空行形成的空白区域）拖动变成文本选择而不是滚动页面。
+    //
+    // 注意：不能用 tester.drag 复现——它的第一步移动固定是 kDragSlopDefault
+    // （20px），恰好超过滚动视图阈值（18px）但不超过 pan 阈值（36px），
+    // 会让滚动视图抢先胜出，掩盖这个缺陷。因此这里用手动手势模拟
+    // 「先小步移动、再大步跨越」的真实快速拖动。
+
+    /// 生成 [lineCount] 行文本，保证内容超出视口需要滚动
+    String longContent(int lineCount) =>
+        List.generate(lineCount, (i) => 'Scroll line $i').join('\n');
+
+    /// 页面内容滚动视图对应的 Scrollable（第一个，即外层
+    /// SingleChildScrollView 的）
+    Finder pageScrollable() => find
+        .descendant(
+          of: find.byType(SingleChildScrollView),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+
+    /// 从 [start] 开始做一次「快速拖动」：先移动 [slop] 个像素，再单次
+    /// 大步移动 [bigJump] 像素两次，最后抬手。默认向上（负 dy，从文档
+    /// 顶部向下滚动）；向下拖动时传入正的 [bigJump]。
+    ///
+    /// 三段的理由：滚动视图的拖拽在跨越阈值（18px）的那次移动才启动，
+    /// 且启动那次移动的位移被 DragStartBehavior.start 消耗（不产生滚动），
+    /// 因此需要后续再有一次大位移才能真正滚动页面——这也更接近真实的
+    /// 快速连续拖动。
+    Future<void> fastDrag(
+      WidgetTester tester,
+      Offset start, {
+      Offset slop = const Offset(0, -10),
+      Offset bigJump = const Offset(0, -60),
+    }) async {
+      final gesture = await tester.startGesture(start);
+      await gesture.moveBy(slop);
+      await gesture.moveBy(bigJump);
+      await gesture.moveBy(bigJump);
+      await gesture.up();
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+        'desktop touch drag on the text scrolls the page instead of '
+        'selecting text', (tester) async {
+      await _withPlatform(tester, TargetPlatform.windows, () async {
+        await tester.pumpWidget(_buildTestApp(testFile, longContent(100)));
+        await navigateToEditor(tester);
+
+        final scrollable = pageScrollable();
+        expect(
+          tester.state<ScrollableState>(scrollable).position.pixels,
+          0,
+          reason: '页面初始应位于顶部',
+        );
+
+        // 在文本区域上快速触摸拖动：页面必须滚动
+        await fastDrag(tester, tester.getCenter(scrollable));
+
+        expect(
+          tester.state<ScrollableState>(scrollable).position.pixels,
+          greaterThan(0),
+          reason: '在文本上拖动应滚动页面而不是被文本选择手势拦截',
+        );
+      });
+    });
+
+    testWidgets(
+        'desktop touch drag on the trailing blank area scrolls the page',
+        (tester) async {
+      await _withPlatform(tester, TargetPlatform.windows, () async {
+        // 文本末尾带大量空行：末尾空行（空白区域）位于文本小部件的
+        // 命中范围内，同样不应拦截滚动
+        final content = '${longContent(40)}\n${'\n' * 80}';
+        await tester.pumpWidget(_buildTestApp(testFile, content));
+        await navigateToEditor(tester);
+
+        final scrollable = pageScrollable();
+        final position = tester.state<ScrollableState>(scrollable).position;
+
+        // 先滚到底部附近，让末尾空行区域进入视口
+        position.jumpTo(position.maxScrollExtent);
+        await tester.pumpAndSettle();
+        expect(position.pixels, greaterThan(0));
+        final pixelsBefore = position.pixels;
+
+        // 在视口下部（末尾空行所在的空白区域）快速向下拖动（位于文档
+        // 底部时向下拖动是向文档开头滚动）：页面必须滚动。
+        // 注意拖动点必须落在滚动视图内（测试环境中 Scaffold 给 body 的
+        // 是松散约束，滚动视图会收缩到文本宽度，而不是铺满屏幕）
+        final viewportRect = tester.getRect(find.byType(SingleChildScrollView));
+        await fastDrag(
+          tester,
+          Offset(viewportRect.center.dx, viewportRect.bottom - 30),
+          bigJump: const Offset(0, 60),
+        );
+
+        expect(
+          position.pixels,
+          lessThan(pixelsBefore),
+          reason: '在末尾空白区域拖动应滚动页面而不是被文本选择手势拦截',
+        );
       });
     });
 
