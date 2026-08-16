@@ -55,6 +55,7 @@ import 'chat/dialogs/json_inspection_dialog.dart';
 import 'chat/dialogs/audio_preview_dialog.dart';
 import 'chat/dialogs/video_preview_dialog.dart';
 import 'chat/composer/chat_composer_widget.dart';
+import 'chat/chat_overlay_buttons.dart';
 
 part 'chat_page_streaming.dart';
 part 'chat_page_editing.dart';
@@ -193,15 +194,24 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// the scroll-to-bottom button to enable it. Disabled when user scrolls up.
   bool _autoScrollEnabled = false;
 
-  /// Whether the scroll-to-bottom button should be visible.
-  bool _showScrollToBottomButton = false;
-
   /// Scroll controller for the chat message list.
   late _KeyboardAwareScrollController _chatScrollController;
 
   /// Tracks whether the soft keyboard was visible in the previous metrics
-  /// change, so [didChangeMetrics] can detect show/hide transitions.
+  /// change, so [didChangeMetrics] can detect show/hide transitions for
+  /// the keyboard scroll session. The keyboard-dismiss overlay BUTTON's
+  /// own visibility is tracked by [ChatOverlayButtons] — this flag only
+  /// drives the session, never the UI (a setState here would rebuild the
+  /// whole message list on every keyboard transition).
   bool _wasKeyboardVisible = false;
+
+  /// Bumped by the [ScrollMetricsNotification] handler (every frame any
+  /// scroll metric moves, viewport-only changes included). [ChatOverlayButtons]
+  /// listens to it to recompute its button visibility from the CURRENT
+  /// metrics; without it, viewport-only changes (keyboard, composer
+  /// growth) would leave the button stale, and recomputing here would
+  /// mean a page-level setState (a full message-list rebuild) per flip.
+  final ValueNotifier<int> _overlayMetricsTick = ValueNotifier(0);
 
   /// Whether the chat list is currently being positioned so the top of the
   /// last user message is at the top of the viewport after a conversation
@@ -228,38 +238,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// background stream cannot keep the list hidden indefinitely.
   int _initialAdjustChaseFrames = 0;
 
-  /// Insets above which the soft keyboard is considered visible. Used to
-  /// start/end the keyboard session (which swallows the library's own
-  /// keyboard scroll and gates the content-growth follow). Non-keyboard
-  /// system bars live in [MediaQueryData.padding], not viewInsets, so a
-  /// small threshold cannot misfire.
-  static const double _keyboardVisibleThreshold = 20;
-
   /// Distance from the bottom within which the list counts as "at the
-  /// bottom": the scroll-to-bottom button stays hidden and auto-scroll
-  /// stays engaged. The chat list's own at-bottom window (larger than the
-  /// reasoning panel's 50px), used by both [_onChatScroll] and
-  /// [_updateScrollToBottomState].
-  static const double _atBottomWindowPx = 80;
-
-  /// Edge margin (logical px) of the scroll-to-bottom / keyboard-dismiss
-  /// overlay buttons from the chat area's bottom-right corner.
-  static const double _overlayButtonMargin = 16;
-
-  /// Diameter of the circular overlay buttons.
-  static const double _overlayButtonSize = 36;
-
-  /// Horizontal gap between the keyboard-dismiss button and the
-  /// scroll-to-bottom button when both are visible.
-  static const double _overlayButtonGap = 8;
-
-  /// Duration of the overlay switch animation: the keyboard-dismiss
-  /// button's non-linear slide between its left-of-scroll slot and the
-  /// corner, and the scroll-to-bottom button's scale+fade in/out.
-  static const Duration _overlaySwitchDuration = Duration(milliseconds: 250);
-
-  /// Non-linear curve for the overlay switch animation.
-  static const Curve _overlaySwitchCurve = Curves.easeOutCubic;
+  /// bottom": auto-scroll stays engaged. Shared with the overlay buttons'
+  /// visibility via [ChatOverlayButtons.atBottomWindowPx] (single source).
+  static const double _atBottomWindowPx = ChatOverlayButtons.atBottomWindowPx;
 
   /// True between the keyboard appearing and its dismissal. Used to keep
   /// the content-growth follow ([_followContentGrowth]) inert during the
@@ -410,6 +392,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _searchTextController.dispose();
     _chatScrollController.removeListener(_onChatScroll);
     _chatScrollController.dispose();
+    _overlayMetricsTick.dispose();
     super.dispose();
   }
 
@@ -424,7 +407,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // the whole keyboard session would never run on device. The view is
     // fresh even inside this callback.
     final bottomInset = _currentKeyboardInset();
-    final isNowVisible = bottomInset > _keyboardVisibleThreshold;
+    final isNowVisible =
+        bottomInset > ChatOverlayButtons.keyboardVisibleThreshold;
     // While the initial positioning pass runs the list is hidden; keyboard /
     // viewport changes must not fight the pass. Still track the keyboard
     // visibility flag so the post-pass close transition is not missed.
@@ -455,25 +439,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
       // not moved on dismiss.
       _restoreScrollPositionAfterKeyboard();
     }
-    // Rebuild so the keyboard-dismiss overlay button follows the keyboard
-    // state (shown while the keyboard is open).
-    if (_wasKeyboardVisible != isNowVisible) {
-      setState(() => _wasKeyboardVisible = isNowVisible);
-    }
-    // Recompute the scroll-to-bottom button visibility from the CURRENT
-    // list metrics: the keyboard resizes the viewport, which moves the
-    // at-bottom relationship WITHOUT firing a scroll event (the list
-    // pixels often do not change — only maxScrollExtent does, and an idle
-    // ScrollPosition does not notify its controller listeners). Without
-    // this refresh the button would be left stale until the next manual
-    // scroll. The ScrollMetricsNotification handler recomputes the same
-    // thing (it runs unconditionally, even while this tab is hidden);
-    // this direct refresh additionally covers every keyboard path in the
-    // metrics-change callback itself.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _updateScrollToBottomState();
-    });
+    // NO setState here — and no post-frame button recompute. The
+    // keyboard-dismiss overlay button tracks the keyboard itself
+    // ([ChatOverlayButtons] is a WidgetsBindingObserver), and the scroll-
+    // to-bottom button recomputes itself from the current metrics on the
+    // same triggers. A page-level setState on the keyboard transition
+    // rebuilt the whole chat page — and with it every visible markdown
+    // message (MarkdownWidget re-parses the markdown on any rebuild) —
+    // which dropped frames during the keyboard open/close animation.
+    // The session flags above drive the scroll behavior only.
+    _wasKeyboardVisible = isNowVisible;
   }
 
   @override
@@ -577,69 +552,29 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                 activeId: activeId,
                                 controller: controller,
                               ),
-                              // ── Scroll-to-bottom overlay button ──
-                              // Shown whenever the list is NOT at the
-                              // bottom. The AnimatedSwitcher plays the
-                              // non-linear scale-up + fade-in (appear) and
-                              // scale-down + fade-out (disappear)
-                              // transition.
-                              Positioned(
-                                right: _overlayButtonMargin,
-                                bottom: _overlayButtonMargin,
-                                child: AnimatedSwitcher(
-                                  duration: _overlaySwitchDuration,
-                                  switchInCurve: _overlaySwitchCurve,
-                                  switchOutCurve: _overlaySwitchCurve,
-                                  transitionBuilder: (child, animation) =>
-                                      FadeTransition(
-                                    opacity: animation,
-                                    child: ScaleTransition(
-                                      scale: animation,
-                                      child: child,
-                                    ),
-                                  ),
-                                  child: _showScrollToBottomButton
-                                      ? KeyedSubtree(
-                                          key: const ValueKey(
-                                              'scroll-to-bottom-button'),
-                                          child: _buildScrollToBottomButton(
-                                              isDark: isDark),
-                                        )
-                                      : const SizedBox(
-                                          key: ValueKey(
-                                              'scroll-to-bottom-placeholder'),
-                                          width: _overlayButtonSize,
-                                          height: _overlayButtonSize,
-                                        ),
+                              // ── Overlay buttons (scroll-to-bottom +
+                              // keyboard-dismiss) ──
+                              // A self-contained widget: it owns BOTH
+                              // buttons' visibility state (keyboard state
+                              // via its own WidgetsBindingObserver reading
+                              // the view insets; scroll-button state
+                              // recomputed from the current list metrics).
+                              // Keyboard transitions and at-bottom flips
+                              // therefore rebuild ONLY this small overlay
+                              // — never the message list (whose markdown
+                              // messages re-parse on every rebuild, which
+                              // dropped frames during the keyboard
+                              // animation).
+                              Positioned.fill(
+                                child: ChatOverlayButtons(
+                                  scrollController: _chatScrollController,
+                                  metricsTick: _overlayMetricsTick,
+                                  isDark: isDark,
+                                  onScrollToBottomTap: _onScrollToBottomTap,
+                                  onKeyboardDismissTap: () =>
+                                      FocusScope.of(context).unfocus(),
                                 ),
                               ),
-                              // ── Keyboard-dismiss overlay button ──
-                              // Shown while the soft keyboard is open (the
-                              // list itself never dismisses it — manual
-                              // behavior), so the user can close the
-                              // keyboard without hunting for its close key.
-                              // Driven by the keyboard-visibility flag that
-                              // didChangeMetrics setState-updates (MediaQuery
-                              // would always read 0 here — the enclosing
-                              // Scaffold strips viewInsets from the body).
-                              // Bottom-right, LEFT of the scroll-to-bottom
-                              // button when that button is visible; it
-                              // slides (non-linear, _overlaySwitchCurve)
-                              // into the scroll button's corner slot when
-                              // the scroll button hides.
-                              if (_wasKeyboardVisible)
-                                AnimatedPositioned(
-                                  duration: _overlaySwitchDuration,
-                                  curve: _overlaySwitchCurve,
-                                  right: _showScrollToBottomButton
-                                      ? _overlayButtonMargin +
-                                          _overlayButtonSize +
-                                          _overlayButtonGap
-                                      : _overlayButtonMargin,
-                                  bottom: _overlayButtonMargin,
-                                  child: _buildKeyboardDismissButton(
-                                      isDark: isDark),
-                                ),
                             ],
                           ),
                         ),

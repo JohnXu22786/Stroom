@@ -74,8 +74,18 @@ class _HomePageState extends ConsumerState<HomePage> {
   /// 根据屏幕长宽比决定导航栏位置：
   /// 屏幕较高（竖向，height > width）时用底部导航栏；
   /// 否则（较宽或正方形）用左侧导航栏。
+  ///
+  /// Uses [MediaQuery.sizeOf] (NOT `MediaQuery.of`): the whole-data
+  /// dependency would rebuild HomePage on EVERY change of the MediaQuery
+  /// data — including the soft-keyboard viewInsets animation, which runs
+  /// above the Scaffold's viewInsets-stripping wrapper and changes every
+  /// frame the keyboard opens/closes. That per-frame cascade rebuilt the
+  /// Scaffold shell, both nav bars and the offstage page content during
+  /// the keyboard animation, contributing to the dropped frames.
+  /// `sizeOf` depends only on the size aspect, so keyboard insets no
+  /// longer trigger it.
   bool _isPortrait(BuildContext context) {
-    final size = MediaQuery.of(context).size;
+    final size = MediaQuery.sizeOf(context);
     return size.height > size.width;
   }
 
