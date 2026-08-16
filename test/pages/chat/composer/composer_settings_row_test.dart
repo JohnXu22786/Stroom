@@ -73,12 +73,20 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pump(const Duration(milliseconds: 100));
 
-        // Custom params panel should open even with no params
-        expect(find.text('自定义推理参数'), findsOneWidget);
+        // Custom params panel should open even with no params. Title must
+        // match the button label — regression: it used to say 自定义推理参数.
+        // (Scoped to the sheet: the chip behind it has the same label.)
+        expect(
+          find.descendant(
+            of: find.byType(BottomSheet),
+            matching: find.text('自定义参数'),
+          ),
+          findsOneWidget,
+        );
 
         // The no-params hint should appear
         expect(
-          find.textContaining('当前模型未配置自定义推理参数'),
+          find.textContaining('当前模型未配置自定义参数'),
           findsOneWidget,
         );
       },

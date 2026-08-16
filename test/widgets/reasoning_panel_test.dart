@@ -369,8 +369,9 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      // Title should be visible
-      expect(find.text('自定义推理参数'), findsOneWidget);
+      // Title should be visible (matches the 自定义参数 button label —
+      // regression: the panel used to say 自定义推理参数)
+      expect(find.text('自定义参数'), findsOneWidget);
 
       // Param name should be visible
       expect(find.text('budget_tokens'), findsOneWidget);
@@ -415,12 +416,12 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      // Title should be visible
-      expect(find.text('自定义推理参数'), findsOneWidget);
+      // Title should be visible (matches the 自定义参数 button label)
+      expect(find.text('自定义参数'), findsOneWidget);
 
       // Empty state text should show
       expect(
-        find.textContaining('当前模型未配置自定义推理参数'),
+        find.textContaining('当前模型未配置自定义参数'),
         findsOneWidget,
       );
     });
