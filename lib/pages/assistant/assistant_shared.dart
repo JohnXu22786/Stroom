@@ -73,6 +73,187 @@ class AssistantCard extends StatelessWidget {
   }
 }
 
+/// A small square showing the current emoji. Tapping it opens the emoji
+/// picker panel ([CategorizedEmojiPicker] in a dialog). Replaces the
+/// always-visible inline picker in the assistant editors so the dialog can
+/// give more space to the system prompt field.
+class EmojiAvatarButton extends StatelessWidget {
+  final String selectedEmoji;
+  final ValueChanged<String> onEmojiSelected;
+  final double size;
+
+  const EmojiAvatarButton({
+    super.key,
+    required this.selectedEmoji,
+    required this.onEmojiSelected,
+    this.size = 48,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Tooltip(
+      message: '选择表情',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _showPickerPanel(context),
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: cs.primaryContainer.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: cs.outlineVariant),
+          ),
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                selectedEmoji,
+                style: TextStyle(fontSize: size * 0.5),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPickerPanel(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('选择表情'),
+        content: CategorizedEmojiPicker(
+          selectedEmoji: selectedEmoji,
+          onEmojiSelected: (e) {
+            onEmojiSelected(e);
+            Navigator.pop(ctx);
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shared form for the assistant create/edit dialogs: emoji square + name
+/// row, description, and the system prompt editor.
+///
+/// When the window is tall enough the system prompt expands to fill all
+/// remaining space. On very short windows the fixed rows above the prompt
+/// would overflow the dialog (an [Expanded] shrinks to zero but never
+/// reflows its fixed siblings), so a scrollable layout with a fixed-height
+/// prompt is used instead — the dialog can never overflow.
+class AssistantEditorFields extends StatelessWidget {
+  final TextEditingController nameController;
+  final TextEditingController descriptionController;
+  final TextEditingController promptController;
+  final String selectedEmoji;
+  final ValueChanged<String> onEmojiSelected;
+  final bool autofocusName;
+  final String? nameHint;
+  final String? descriptionHint;
+
+  const AssistantEditorFields({
+    super.key,
+    required this.nameController,
+    required this.descriptionController,
+    required this.promptController,
+    required this.selectedEmoji,
+    required this.onEmojiSelected,
+    this.autofocusName = false,
+    this.nameHint,
+    this.descriptionHint,
+  });
+
+  /// Windows below this height use the scrollable fallback layout.
+  /// Scaled by the text scale factor: the fixed rows above the prompt grow
+  /// with font scaling, so the fill layout needs proportionally more height
+  /// to avoid overflowing (e.g. accessibility text scaling on short windows).
+  static const double minFillWindowHeight = 540;
+
+  Widget _promptField() => TextField(
+        controller: promptController,
+        decoration: const InputDecoration(
+          labelText: '系统提示词',
+          border: OutlineInputBorder(),
+          alignLabelWithHint: true,
+        ),
+        maxLines: null,
+        expands: true,
+        textAlignVertical: TextAlignVertical.top,
+        keyboardType: TextInputType.multiline,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final fillPrompt = media.size.height >=
+        minFillWindowHeight * media.textScaler.scale(1.0);
+
+    final fields = <Widget>[
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          EmojiAvatarButton(
+            selectedEmoji: selectedEmoji,
+            onEmojiSelected: onEmojiSelected,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              controller: nameController,
+              decoration: InputDecoration(
+                labelText: '助手名称',
+                hintText: nameHint,
+                border: const OutlineInputBorder(),
+              ),
+              autofocus: autofocusName,
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      TextField(
+        controller: descriptionController,
+        decoration: InputDecoration(
+          labelText: '描述（可选）',
+          hintText: descriptionHint,
+          border: const OutlineInputBorder(),
+        ),
+        maxLines: 2,
+      ),
+      const SizedBox(height: 12),
+    ];
+
+    if (fillPrompt) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ...fields,
+          Expanded(child: _promptField()),
+        ],
+      );
+    }
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ...fields,
+          SizedBox(height: 180, child: _promptField()),
+        ],
+      ),
+    );
+  }
+}
+
 class CategorizedEmojiPicker extends StatelessWidget {
   final String selectedEmoji;
   final ValueChanged<String> onEmojiSelected;
