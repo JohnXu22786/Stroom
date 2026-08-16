@@ -104,8 +104,7 @@ void chatAgentSemanticsGroup1() {
       expect(events.whereType<ToolCallStartEvent>().length, 1);
     });
 
-    test('开关关闭时不限制：超过默认 20 轮也不停止，直到模型不再调用工具',
-        () async {
+    test('开关关闭时不限制：超过默认 20 轮也不停止，直到模型不再调用工具', () async {
       // 关闭开关（设置页文案"无限制"）→ 不设上限：即使超过默认 20 轮
       // 也不自动停止，循环直到模型返回不含工具调用的文本轮为止。
       final provider = _RecordingProvider([
@@ -134,8 +133,7 @@ void chatAgentSemanticsGroup1() {
       expect(events.whereType<ToolCallCompleteEvent>().length, 25);
     });
 
-    test('开关关闭时硬上限 1000 兜底：模型失控也不超过 1000 次请求',
-        () async {
+    test('开关关闭时硬上限 1000 兜底：模型失控也不超过 1000 次请求', () async {
       // 无限模式仍保留防失控兜底：模型持续返回工具调用时，
       // 最多 1000 次 API 请求后干净结束（恰好 1000，不多发第 1001 次）。
       final provider = _RecordingProvider(

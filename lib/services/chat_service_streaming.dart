@@ -414,7 +414,7 @@ extension ChatServiceStreamingExt on ChatService {
           AppLogService.warning(
             'ChatService',
             '工具循环达到硬上限 $maxRounds 次 API 请求（开关关闭/无限模式），'
-            '模型可能失控持续调用工具，已强制停止。',
+                '模型可能失控持续调用工具，已强制停止。',
           );
         }
       } catch (e) {
