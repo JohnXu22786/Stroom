@@ -132,45 +132,17 @@ class AssistantSelectionPage extends ConsumerWidget {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlgState) => AlertDialog(
           title: const Text('新建助手'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Emoji picker (only emoji avatar supported)
-                CategorizedEmojiPicker(
-                  selectedEmoji: selectedEmoji,
-                  onEmojiSelected: (e) => setDlgState(() => selectedEmoji = e),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: '助手名称',
-                    hintText: '输入助手名称',
-                    border: OutlineInputBorder(),
-                  ),
-                  autofocus: true,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: descriptionController,
-                  decoration: const InputDecoration(
-                    labelText: '描述（可选）',
-                    hintText: '简短描述此助手的功能',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: promptController,
-                  decoration: const InputDecoration(
-                    labelText: '系统提示词',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 4,
-                ),
-              ],
+          content: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: AssistantEditorFields(
+              nameController: nameController,
+              descriptionController: descriptionController,
+              promptController: promptController,
+              selectedEmoji: selectedEmoji,
+              onEmojiSelected: (e) => setDlgState(() => selectedEmoji = e),
+              autofocusName: true,
+              nameHint: '输入助手名称',
+              descriptionHint: '简短描述此助手的功能',
             ),
           ),
           actions: [

@@ -47,7 +47,7 @@ void main() {
     }
 
     testWidgets(
-      'emoji picker is centered on wide screen (not stuck at 320px)',
+      'emoji picker panel opens from the square and stays centered on wide screen',
       (tester) async {
         // Set a wide surface (simulating a tablet/desktop)
         await tester.binding.setSurfaceSize(const Size(800, 600));
@@ -66,12 +66,20 @@ void main() {
         await tester.tap(find.text('编辑'));
         await tester.pumpAndSettle();
 
-        // Find the emoji grid inside the dialog
+        // The picker now lives behind the small emoji square in 基本设置:
+        // tapping the square opens the picker panel dialog.
+        expect(findEmojiGrid(), findsNothing,
+            reason: 'picker is no longer inline in the edit dialog');
+        await tester.tap(find.byType(EmojiAvatarButton));
+        await tester.pumpAndSettle();
+        expect(find.text('选择表情'), findsOneWidget);
+
+        // Find the emoji grid inside the panel
         final gridFinder = findEmojiGrid();
         expect(gridFinder, findsOneWidget);
 
         // The picker is wrapped in Center + FittedBox, so on a wide screen
-        // the emoji grid should be centered within the dialog content.
+        // the emoji grid should be centered within the panel content.
         expect(find.text('编辑助手'), findsOneWidget);
         expect(find.text('保存'), findsOneWidget);
 
@@ -93,7 +101,7 @@ void main() {
       },
     );
 
-    testWidgets('emoji selection still works with adaptive sizing', (
+    testWidgets('picking an emoji in the panel updates the square', (
       tester,
     ) async {
       // Use medium screen size
@@ -113,8 +121,11 @@ void main() {
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
 
-      // The current emoji '😊' should be shown
-      // Tap a different emoji in the grid to change selection
+      // The current emoji '😊' should be shown in the square
+      // Tap the square to open the picker panel
+      await tester.tap(find.byType(EmojiAvatarButton));
+      await tester.pumpAndSettle();
+
       // First tap the emoji tab to make sure we're on the right category
       await tester.tap(find.text('表情').first);
       await tester.pumpAndSettle();
@@ -129,9 +140,198 @@ void main() {
       await tester.tap(emojiFinder.first);
       await tester.pumpAndSettle();
 
-      // Verify the dialog is still working (not crashed)
+      // The panel closes on selection and the edit dialog is still working
       expect(find.text('编辑助手'), findsOneWidget);
       expect(find.text('保存'), findsOneWidget);
+      expect(findEmojiGrid(), findsNothing,
+          reason: 'picker panel should close after picking');
+
+      // The square now shows the picked emoji
+      final square = tester.widget<EmojiAvatarButton>(
+        find.byType(EmojiAvatarButton),
+      );
+      expect(square.selectedEmoji, '😀');
+    });
+
+    testWidgets('edit dialog system prompt field fills the remaining height', (
+      tester,
+    ) async {
+      // Tall surface so the dialog has plenty of room to expand
+      tester.view.physicalSize = const Size(800, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '测试助手', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // The prompt field must be a growing field, not a fixed 4-line box
+      final promptField = find.widgetWithText(TextField, '系统提示词');
+      final promptWidget = tester.widget<TextField>(promptField);
+      expect(promptWidget.maxLines, isNull,
+          reason: 'system prompt must not have a fixed line count');
+      expect(promptWidget.expands, isTrue,
+          reason: 'system prompt must expand into the remaining space');
+
+      // Geometry: it should occupy most of the dialog height — far taller
+      // than the 2-line description field — and end right above the buttons
+      // (no fixed-height stub in the middle of the dialog).
+      final promptRect = tester.getRect(promptField);
+      final descRect = tester.getRect(
+        find.widgetWithText(TextField, '描述（可选）'),
+      );
+      final saveRect = tester.getRect(
+        find.widgetWithText(FilledButton, '保存'),
+      );
+      expect(promptRect.height, greaterThan(descRect.height * 3),
+          reason: 'prompt field should fill the remaining dialog space');
+      expect(promptRect.bottom, lessThan(saveRect.top),
+          reason: 'prompt field must not overlap the action buttons');
+      expect(saveRect.top - promptRect.bottom, lessThan(80),
+          reason: 'prompt field should end right above the action buttons');
+    });
+
+    testWidgets('create dialog system prompt field fills the remaining height',
+        (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '测试助手', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap the add button in the app bar to open create dialog
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+
+      final promptField = find.widgetWithText(TextField, '系统提示词');
+      final promptWidget = tester.widget<TextField>(promptField);
+      expect(promptWidget.maxLines, isNull);
+      expect(promptWidget.expands, isTrue);
+
+      final promptRect = tester.getRect(promptField);
+      final descRect = tester.getRect(
+        find.widgetWithText(TextField, '描述（可选）'),
+      );
+      final createRect =
+          tester.getRect(find.widgetWithText(FilledButton, '创建'));
+      expect(promptRect.height, greaterThan(descRect.height * 3));
+      expect(promptRect.bottom, lessThan(createRect.top));
+      expect(createRect.top - promptRect.bottom, lessThan(80));
+    });
+
+    testWidgets(
+        'edit dialog on a very short window falls back to a scrollable '
+        'layout without overflow', (tester) async {
+      // Short window: the fixed rows + expanded prompt would overflow, so
+      // the editor must switch to its scrollable fallback layout.
+      tester.view.physicalSize = const Size(800, 380);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '测试助手', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // No overflow exception was thrown; the editor switched to its
+      // scrollable fallback layout inside the dialog (the prompt field's
+      // ancestor), and all fields remain reachable.
+      expect(
+        find.ancestor(
+          of: find.widgetWithText(TextField, '系统提示词'),
+          matching: find.byType(SingleChildScrollView),
+        ),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(TextField, '系统提示词'), findsOneWidget);
+      expect(find.widgetWithText(TextField, '助手名称'), findsOneWidget);
+      expect(find.text('保存'), findsOneWidget);
+    });
+
+    testWidgets(
+        'large text scale on a medium window also uses the fallback '
+        'layout (scaled threshold)', (tester) async {
+      // 560dp window is above the unscaled fill threshold (540), but with
+      // system font scaling 2.0 the fixed rows would overflow the fill
+      // layout — the scaled threshold must switch to the scrollable fallback.
+      tester.view.physicalSize = const Size(800, 560);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(
+        tester.platformDispatcher.clearTextScaleFactorTestValue,
+      );
+
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '测试助手', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // No overflow exception; the prompt lives in the scrollable fallback.
+      expect(
+        find.ancestor(
+          of: find.widgetWithText(TextField, '系统提示词'),
+          matching: find.byType(SingleChildScrollView),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('保存'), findsOneWidget);
+    });
+
+    testWidgets('emoji square sits before the assistant name field', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [Assistant(name: '助手编辑', prompt: 'P1', emoji: '🤖')],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // 基本设置 layout: emoji square first, name field to its right,
+      // both on the same row.
+      final squareRect = tester.getRect(find.byType(EmojiAvatarButton));
+      final nameRect = tester.getRect(
+        find.widgetWithText(TextField, '助手编辑'),
+      );
+      expect(squareRect.right, lessThan(nameRect.left),
+          reason: 'emoji square should be before (left of) the name field');
+      expect((squareRect.center.dy - nameRect.center.dy).abs(), lessThan(30),
+          reason: 'emoji square and name field should be on the same row');
     });
   });
 
@@ -457,8 +657,9 @@ void main() {
       await tester.tap(find.byIcon(Icons.add));
       await tester.pumpAndSettle();
 
-      // Should still show "表情" in the dialog (emoji picker is shown by default)
-      // But should NOT have any "图片" segment button or image URL field
+      // The emoji picker now lives behind the small emoji square in the
+      // dialog (only opened on tap), so no picker content is shown by
+      // default. But there should be no image-avatar options either.
       expect(find.text('图片'), findsNothing);
       expect(find.text('头像图片URL（可选）'), findsNothing);
 
@@ -557,10 +758,11 @@ void main() {
       expect(find.text('参数设置'), findsOneWidget);
       expect(find.text('默认设置'), findsOneWidget);
 
-      // The dialog's TabBar (first in tree; the emoji picker's scrollable
-      // category TabBar is a descendant) must be scrollable and centered so
-      // the tab group is centered — not left-aligned — with the highlight
-      // (label-sized indicator) aligned to the selected tab label.
+      // The dialog's TabBar (the emoji picker's category TabBar only exists
+      // while its popup panel is open, so this is the only one in the tree)
+      // must be scrollable and centered so the tab group is centered — not
+      // left-aligned — with the highlight (label-sized indicator) aligned to
+      // the selected tab label.
       final dialogTabBar = tester.widget<TabBar>(find.byType(TabBar).first);
       expect(dialogTabBar.isScrollable, isTrue,
           reason: 'scrollable TabBar is required for TabAlignment.center');

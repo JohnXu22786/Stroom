@@ -77,61 +77,18 @@ void showAssistantFullEditDialog(
                   child: TabBarView(
                     children: [
                       // ============ Tab 1: 基本设置 ============
-                      SingleChildScrollView(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 12),
-                            // Emoji picker (only emoji avatar supported)
-                            CategorizedEmojiPicker(
-                              selectedEmoji: selectedEmoji,
-                              onEmojiSelected: (e) =>
-                                  setDlgState(() => selectedEmoji = e),
-                            ),
-                            const SizedBox(height: 12),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              child: TextField(
-                                controller: nameController,
-                                decoration: const InputDecoration(
-                                  labelText: '助手名称',
-                                  border: OutlineInputBorder(),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              child: TextField(
-                                controller: descriptionController,
-                                decoration: const InputDecoration(
-                                  labelText: '描述（可选）',
-                                  border: OutlineInputBorder(),
-                                ),
-                                maxLines: 2,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              child: TextField(
-                                controller: promptController,
-                                decoration: const InputDecoration(
-                                  labelText: '系统提示词',
-                                  border: OutlineInputBorder(),
-                                ),
-                                maxLines: 4,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
+                      // Emoji is picked through a small square that opens a
+                      // picker panel, and the prompt editor fills all the
+                      // remaining height (see [AssistantEditorFields]).
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                        child: AssistantEditorFields(
+                          nameController: nameController,
+                          descriptionController: descriptionController,
+                          promptController: promptController,
+                          selectedEmoji: selectedEmoji,
+                          onEmojiSelected: (e) =>
+                              setDlgState(() => selectedEmoji = e),
                         ),
                       ),
 
