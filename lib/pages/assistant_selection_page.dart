@@ -9,6 +9,7 @@ import '../providers/chat_manager_provider.dart';
 import '../providers/provider_config.dart';
 import '../services/chat_adapter.dart' show resolveModelRef;
 import '../widgets/code_editor_field.dart';
+import '../widgets/drag_sort_area.dart';
 import 'assistant/assistant_defaults_tab.dart';
 import 'assistant/assistant_shared.dart';
 import 'assistant/built_in_prompt_selector.dart';
@@ -75,29 +76,52 @@ class AssistantSelectionPage extends ConsumerWidget {
                 ],
               ),
             )
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                return GridView.builder(
-                  padding: const EdgeInsets.all(16),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 220,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.85,
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 与话题页一致的提示文案：新加入的长按拖拽手势需要被发现
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      '长按拖拽即可调整助手顺序',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
                   ),
-                  itemCount: assistants.length,
-                  itemBuilder: (context, index) {
-                    final assistant = assistants[index];
-                    return AssistantCard(
-                      assistant: assistant,
-                      onTap: () =>
-                          _onAssistantSelected(context, ref, assistant),
-                      onLongPress: () =>
-                          _showAssistantMenu(context, ref, assistant),
-                    );
-                  },
-                );
-              },
+                  DragSortArea(
+                    // 与旧 GridView 相同的几何：
+                    // SliverGridDelegateWithMaxCrossAxisExtent(
+                    //   maxCrossAxisExtent: 220, spacing: 12, aspectRatio: 0.85)
+                    wrap: false,
+                    grid: true,
+                    gridMaxCrossAxisExtent: 220,
+                    gridCrossAxisSpacing: 12,
+                    gridMainAxisSpacing: 12,
+                    gridChildAspectRatio: 0.85,
+                    values: [for (final a in assistants) a.id],
+                    onReorder: (from, to) =>
+                        ref.read(assistantProvider.notifier).reorderAssistant(
+                              from,
+                              to,
+                            ),
+                    itemBuilder: (context, index, id) {
+                      final assistant = assistants[index];
+                      return AssistantCard(
+                        assistant: assistant,
+                        onTap: () =>
+                            _onAssistantSelected(context, ref, assistant),
+                        // 长按已让给拖拽排序，编辑/删除入口移到卡片右上角 ⋮
+                        onMenu: () =>
+                            _showAssistantMenu(context, ref, assistant),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
     );
   }

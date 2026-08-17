@@ -519,6 +519,31 @@ void main() {
       expect(notifier2.state[1].id, a2.id);
     });
 
+    test('reorderAssistant moves the item and persists the order', () async {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = AssistantsNotifier();
+
+      notifier.createAssistant(name: '助手1', prompt: 'P1');
+      notifier.createAssistant(name: '助手2', prompt: 'P2');
+      notifier.createAssistant(name: '助手3', prompt: 'P3');
+
+      // onReorderItem 语义：from 移除后插入到 to。
+      notifier.reorderAssistant(0, 2);
+
+      expect(
+        notifier.state.map((a) => a.name).toList(),
+        ['助手2', '助手3', '助手1'],
+      );
+
+      // 顺序持久化：重新加载后仍是重排后的顺序
+      final prefs = await SharedPreferences.getInstance();
+      final json = prefs.getString('assistants');
+      expect(json, isNotNull);
+      final decoded = (jsonDecode(json!) as List).cast<Map<String, dynamic>>();
+      expect((decoded[0]['name'] as String), '助手2');
+      expect((decoded[2]['name'] as String), '助手1');
+    });
+
     test('toJson produces valid JSON array', () {
       SharedPreferences.setMockInitialValues({});
       final notifier = AssistantsNotifier();

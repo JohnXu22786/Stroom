@@ -288,4 +288,21 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
     state = state.where((a) => a.id != id).toList();
     _persist();
   }
+
+  /// Moves the assistant at [from] to the [to] position.
+  ///
+  /// [from]/[to] are「移除后插入」indices — the same semantics as Flutter's
+  /// `ReorderableListView.onReorderItem` (and the existing conversation
+  /// reorder helper): the item at [from] is removed from the list first,
+  /// then inserted at [to] on the truncated list. The order is persisted.
+  void reorderAssistant(int from, int to) {
+    if (from < 0 || from >= state.length) return;
+    if (to < 0 || to >= state.length) return;
+    if (from == to) return;
+    final list = List.of(state);
+    final item = list.removeAt(from);
+    list.insert(to, item);
+    state = list;
+    _persist();
+  }
 }

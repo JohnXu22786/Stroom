@@ -7,13 +7,16 @@ import '../../widgets/llm/assistant_avatar.dart';
 class AssistantCard extends StatelessWidget {
   final Assistant assistant;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
+
+  /// 卡片右上角 ⋮ 按钮按下回调：打开编辑/删除菜单。
+  /// （长按手势已让给拖拽排序，见 AssistantSelectionPage。）
+  final VoidCallback onMenu;
 
   const AssistantCard({
     super.key,
     required this.assistant,
     required this.onTap,
-    required this.onLongPress,
+    required this.onMenu,
   });
 
   @override
@@ -34,39 +37,55 @@ class AssistantCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        onLongPress: onLongPress,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AssistantAvatar(assistant: assistant, size: 56),
-              const SizedBox(height: 12),
-              Text(
-                assistant.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: cs.onSurface,
-                ),
-              ),
-              const SizedBox(height: 4),
-              if (assistant.description.isNotEmpty)
-                Text(
-                  assistant.description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: cs.onSurfaceVariant,
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  AssistantAvatar(assistant: assistant, size: 56),
+                  const SizedBox(height: 12),
+                  Text(
+                    assistant.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
                   ),
-                ),
-            ],
-          ),
+                  const SizedBox(height: 4),
+                  if (assistant.description.isNotEmpty)
+                    Text(
+                      assistant.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            // 右上角菜单按钮：内部的点击优先于卡片 InkWell 的 onTap
+            Positioned(
+              top: 4,
+              right: 4,
+              child: IconButton(
+                icon: Icon(Icons.more_vert, size: 18, color: cs.onSurfaceVariant),
+                tooltip: '更多操作',
+                onPressed: onMenu,
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+              ),
+            ),
+          ],
         ),
       ),
     );

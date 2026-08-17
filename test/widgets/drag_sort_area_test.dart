@@ -21,6 +21,54 @@ Future<void> _longPressDrag(
   await tester.pumpAndSettle();
 }
 
+/// 网格模式的测试宿主：与页面一致的几何——300 宽，2 列，
+/// 每格 145×145（maxCrossAxisExtent 140 + 间距 10）。
+class _GridHarness extends StatefulWidget {
+  final List<String> initial;
+  final void Function(int from, int to) onReorder;
+  const _GridHarness({required this.initial, required this.onReorder});
+  @override
+  State<_GridHarness> createState() => _GridHarnessState();
+}
+
+class _GridHarnessState extends State<_GridHarness> {
+  late List<String> values = List.of(widget.initial);
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: SizedBox(
+            width: 300,
+            height: 480,
+            child: SingleChildScrollView(
+              child: DragSortArea(
+                wrap: false,
+                grid: true,
+                gridMaxCrossAxisExtent: 140,
+                gridCrossAxisSpacing: 10,
+                gridMainAxisSpacing: 10,
+                gridChildAspectRatio: 1.0,
+                values: values,
+                onReorder: (from, to) {
+                  widget.onReorder(from, to);
+                  setState(() {
+                    final v = values.removeAt(from);
+                    values.insert(to, v);
+                  });
+                },
+                itemBuilder: (context, i, v) =>
+                    Center(child: Text(v, style: const TextStyle(fontSize: 16))),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 有状态的测试宿主：onReorder 真正重排 values（与真实页面一致），
 /// 并记录提交的 (from, to)。
 class _Harness extends StatefulWidget {
@@ -327,6 +375,103 @@ void main() {
       await gesture.up();
       await tester.pumpAndSettle();
       expect(reorders, [(2, 0)]);
+    });
+  });
+
+  group('DragSortArea grid', () {
+    Widget wrap({
+      required List<String> values,
+      required void Function(int, int) onReorder,
+    }) {
+      return _GridHarness(initial: values, onReorder: onReorder);
+    }
+
+    testWidgets('long-press dragging a card to a neighbor cell reorders it',
+        (tester) async {
+      final reorders = <(int, int)>[];
+      await tester.pumpWidget(
+        wrap(values: ['a', 'b', 'c', 'd'], onReorder: (f, t) => reorders.add((f, t))),
+      );
+      await tester.pumpAndSettle();
+
+      // 2×2 网格（每格 145）：a 右侧 155px 落入 b
+      await _longPressDrag(tester, find.text('a'), const Offset(155, 0));
+      expect(reorders, [(0, 1)]);
+    });
+
+    testWidgets('dragging to another row reorders to the target cell',
+        (tester) async {
+      final reorders = <(int, int)>[];
+      await tester.pumpWidget(
+        wrap(values: ['a', 'b', 'c', 'd'], onReorder: (f, t) => reorders.add((f, t))),
+      );
+      await tester.pumpAndSettle();
+
+      // a(0,0) → d(1,1)：向右下一格（155, 155）
+      await _longPressDrag(tester, find.text('a'), const Offset(155, 155));
+      expect(reorders, [(0, 3)]);
+    });
+
+    testWidgets('dragging before the drag delay (short hold) does not start',
+        (tester) async {
+      final reorders = <(int, int)>[];
+      await tester.pumpWidget(
+        wrap(values: ['a', 'b', 'c', 'd'], onReorder: (f, t) => reorders.add((f, t))),
+      );
+      await tester.pumpAndSettle();
+
+      // 按住 200ms（< kDragSortDelay 280ms）就移动：不启动拖拽
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.text('a')));
+      await tester.pump(const Duration(milliseconds: 200));
+      await gesture.moveBy(const Offset(155, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(reorders, isEmpty,
+          reason: '280ms 延迟前移动应取消拖拽而非排序');
+    });
+
+    testWidgets('dropping back on the origin does not reorder', (tester) async {
+      final reorders = <(int, int)>[];
+      await tester.pumpWidget(
+        wrap(values: ['a', 'b', 'c', 'd'], onReorder: (f, t) => reorders.add((f, t))),
+      );
+      await tester.pumpAndSettle();
+
+      await _longPressDrag(tester, find.text('b'), const Offset(2, 0));
+      expect(reorders, isEmpty);
+    });
+
+    testWidgets('dragging shows a drop slot and ghost at the target position',
+        (tester) async {
+      final reorders = <(int, int)>[];
+      await tester.pumpWidget(
+        wrap(values: ['a', 'b', 'c', 'd'], onReorder: (f, t) => reorders.add((f, t))),
+      );
+      await tester.pumpAndSettle();
+
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.text('a')));
+      await tester.pump(const Duration(milliseconds: 600));
+      await gesture.moveBy(const Offset(155, 0));
+      await tester.pump(); // 预览帧（动画起点）
+      await tester.pump(const Duration(milliseconds: 250)); // 让位动画完成
+      expect(find.byKey(const ValueKey('drag-slot')), findsOneWidget,
+          reason: '拖拽中应显示目标槽位');
+      // 槽位 = 被拖项的落点（幽灵条目），两矩形必须重合
+      final slotRect = tester.getRect(find.byKey(const ValueKey('drag-slot')));
+      final ghostRect = tester.getRect(find.byKey(const ValueKey('entry-0')));
+      expect(slotRect, ghostRect, reason: '槽位必须与被拖项落点重合，否则松手后会回跳');
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(reorders, [(0, 1)]);
+      // 松手后条目按预览位置就位：被拖项 a 已排到索引 1（key 随索引变）
+      expect(
+        tester.getRect(find.byKey(const ValueKey('entry-1'))),
+        slotRect,
+        reason: '松手后 a 应停在槽位指示的落点（预览即最终排布）',
+      );
     });
   });
 }
