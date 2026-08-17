@@ -77,7 +77,8 @@ class AssistantCard extends StatelessWidget {
               top: 4,
               right: 4,
               child: IconButton(
-                icon: Icon(Icons.more_vert, size: 18, color: cs.onSurfaceVariant),
+                icon:
+                    Icon(Icons.more_vert, size: 18, color: cs.onSurfaceVariant),
                 tooltip: '更多操作',
                 onPressed: onMenu,
                 visualDensity: VisualDensity.compact,

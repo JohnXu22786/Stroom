@@ -58,8 +58,8 @@ class _GridHarnessState extends State<_GridHarness> {
                     values.insert(to, v);
                   });
                 },
-                itemBuilder: (context, i, v) =>
-                    Center(child: Text(v, style: const TextStyle(fontSize: 16))),
+                itemBuilder: (context, i, v) => Center(
+                    child: Text(v, style: const TextStyle(fontSize: 16))),
               ),
             ),
           ),
@@ -390,7 +390,9 @@ void main() {
         (tester) async {
       final reorders = <(int, int)>[];
       await tester.pumpWidget(
-        wrap(values: ['a', 'b', 'c', 'd'], onReorder: (f, t) => reorders.add((f, t))),
+        wrap(
+            values: ['a', 'b', 'c', 'd'],
+            onReorder: (f, t) => reorders.add((f, t))),
       );
       await tester.pumpAndSettle();
 
@@ -403,7 +405,9 @@ void main() {
         (tester) async {
       final reorders = <(int, int)>[];
       await tester.pumpWidget(
-        wrap(values: ['a', 'b', 'c', 'd'], onReorder: (f, t) => reorders.add((f, t))),
+        wrap(
+            values: ['a', 'b', 'c', 'd'],
+            onReorder: (f, t) => reorders.add((f, t))),
       );
       await tester.pumpAndSettle();
 
@@ -416,7 +420,9 @@ void main() {
         (tester) async {
       final reorders = <(int, int)>[];
       await tester.pumpWidget(
-        wrap(values: ['a', 'b', 'c', 'd'], onReorder: (f, t) => reorders.add((f, t))),
+        wrap(
+            values: ['a', 'b', 'c', 'd'],
+            onReorder: (f, t) => reorders.add((f, t))),
       );
       await tester.pumpAndSettle();
 
@@ -428,14 +434,15 @@ void main() {
       await tester.pump();
       await gesture.up();
       await tester.pumpAndSettle();
-      expect(reorders, isEmpty,
-          reason: '280ms 延迟前移动应取消拖拽而非排序');
+      expect(reorders, isEmpty, reason: '280ms 延迟前移动应取消拖拽而非排序');
     });
 
     testWidgets('dropping back on the origin does not reorder', (tester) async {
       final reorders = <(int, int)>[];
       await tester.pumpWidget(
-        wrap(values: ['a', 'b', 'c', 'd'], onReorder: (f, t) => reorders.add((f, t))),
+        wrap(
+            values: ['a', 'b', 'c', 'd'],
+            onReorder: (f, t) => reorders.add((f, t))),
       );
       await tester.pumpAndSettle();
 
@@ -447,7 +454,9 @@ void main() {
         (tester) async {
       final reorders = <(int, int)>[];
       await tester.pumpWidget(
-        wrap(values: ['a', 'b', 'c', 'd'], onReorder: (f, t) => reorders.add((f, t))),
+        wrap(
+            values: ['a', 'b', 'c', 'd'],
+            onReorder: (f, t) => reorders.add((f, t))),
       );
       await tester.pumpAndSettle();
 

@@ -167,7 +167,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -249,7 +249,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -290,7 +290,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -316,7 +316,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -393,7 +393,8 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('long-press dragging a card reorders the assistants and persists',
+    testWidgets(
+        'long-press dragging a card reorders the assistants and persists',
         (tester) async {
       await tester.pumpWidget(
         createTestApp(
@@ -420,12 +421,9 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(AssistantSelectionPage)),
       );
-      final order = container
-          .read(assistantProvider)
-          .map((a) => a.name)
-          .toList();
-      expect(order, ['助手乙', '助手甲', '助手丙', '助手丁'],
-          reason: '长按拖动应重排助手列表');
+      final order =
+          container.read(assistantProvider).map((a) => a.name).toList();
+      expect(order, ['助手乙', '助手甲', '助手丙', '助手丁'], reason: '长按拖动应重排助手列表');
 
       // 顺序持久化：prefs 里保存的是重排后的顺序
       final prefs = await SharedPreferences.getInstance();
@@ -454,8 +452,7 @@ void main() {
 
       expect(find.text('编辑'), findsNothing);
       expect(find.text('删除'), findsNothing);
-      expect(find.text('选择助手'), findsOneWidget,
-          reason: '长按不应触发跳转，仍停留在选择助手页');
+      expect(find.text('选择助手'), findsOneWidget, reason: '长按不应触发跳转，仍停留在选择助手页');
       // 未发生排序（松手原位）：顺序保持不变
       final container = ProviderScope.containerOf(
         tester.element(find.byType(AssistantSelectionPage)),
@@ -482,8 +479,7 @@ void main() {
 
       expect(find.text('编辑'), findsOneWidget);
       expect(find.text('删除'), findsOneWidget);
-      expect(find.text('选择助手'), findsOneWidget,
-          reason: '打开菜单不应触发跳转');
+      expect(find.text('选择助手'), findsOneWidget, reason: '打开菜单不应触发跳转');
     });
   });
 
@@ -938,7 +934,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -977,7 +973,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -1018,7 +1014,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -1055,7 +1051,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
