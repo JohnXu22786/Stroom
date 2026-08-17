@@ -8,14 +8,16 @@ import '../../providers/chat_manager_provider.dart';
 import '../../providers/provider_config.dart';
 import '../../services/chat_adapter.dart' show AvailableModel, resolveModelRef;
 import '../../services/chat_service.dart';
+import '../../services/context_manager.dart' show kToolOutputMaxChars;
 import '../../services/http_tool_service.dart';
 import '../../services/todo_tool_service.dart';
 import '../../services/web_search_service.dart';
 import '../../utils/model_order.dart' show applySavedOrder;
 
-/// "默认设置" tab of the assistant edit dialog: the default model and the
+/// "默认设置" tab of the assistant edit dialog: the default model, the
 /// default enabled tools that NEW conversations (topics) created under this
-/// assistant start with.
+/// assistant start with, and the tool-result truncation applied when sending
+/// to the model.
 ///
 /// - Default model: null ("暂不设置") leaves the assistant without a fixed
 ///   default — new topics fall back to the chat page's list (first model in
@@ -29,6 +31,9 @@ import '../../utils/model_order.dart' show applySavedOrder;
 /// their own per-conversation model/tool state, and changes made inside a
 /// topic (model switch, tool toggles) persist for that topic independently
 /// of other conversations and of these defaults.
+///
+/// 工具结果截断不同：它是发送时的渲染行为（存在助手设置里），
+/// 应用于该助手下的**全部**话题（含已存在的），新建/旧话题一视同仁。
 class AssistantDefaultsTab extends ConsumerStatefulWidget {
   final String? defaultModelName;
 
@@ -41,6 +46,12 @@ class AssistantDefaultsTab extends ConsumerStatefulWidget {
   /// null = 从未配置默认工具：新话题自动启用全部工具（本 tab 显示为全部开启）。
   final Set<String>? defaultToolNames;
 
+  /// 工具结果渲染截断上限（字符数，非 token/字节），默认 5000。
+  final int maxToolOutputChars;
+
+  /// 工具结果截断开关（默认开启）。
+  final bool enableMaxToolOutputChars;
+
   /// 用户选择默认模型时回调完整的 [AvailableModel]（null = 暂不设置），
   /// 供对话框同时保存显示名与绝对身份（供应商 + 模型ID）。
   final ValueChanged<AvailableModel?> onDefaultModelChanged;
@@ -49,14 +60,22 @@ class AssistantDefaultsTab extends ConsumerStatefulWidget {
   /// 新默认工具集合。tab 本身不再产生 null（"恢复未配置"按钮已移除）。
   final ValueChanged<Set<String>?> onDefaultToolsChanged;
 
+  /// 用户改动截断开关/长度时回调，由对话框写入 vars 并随保存落库。
+  final ValueChanged<bool> onEnableMaxToolOutputCharsChanged;
+  final ValueChanged<int> onMaxToolOutputCharsChanged;
+
   const AssistantDefaultsTab({
     super.key,
     required this.defaultModelName,
     required this.defaultModelId,
     required this.defaultProviderName,
     required this.defaultToolNames,
+    required this.maxToolOutputChars,
+    required this.enableMaxToolOutputChars,
     required this.onDefaultModelChanged,
     required this.onDefaultToolsChanged,
+    required this.onEnableMaxToolOutputCharsChanged,
+    required this.onMaxToolOutputCharsChanged,
   });
 
   @override
@@ -70,10 +89,37 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
   /// 按配置添加顺序显示。
   List<String>? _savedModelOrder;
 
+  /// 工具结果截断长度输入框的控制器。state 持有（而非 build 内联创建）：
+  /// 避免每次重建都新建 controller（丢失焦点/泄漏），
+  /// 也保证用户输入与 widget 值同步。
+  late final TextEditingController _truncationLengthController;
+
+  /// 长度输入框的校验错误文案；null = 当前输入有效。
+  /// 与 dialog 的 vars 解耦：非法输入不写入 vars（显示值 ≠ 生效值），
+  /// 而是就地提示有效范围，保存时落库的必是生效值。
+  String? _lengthError;
+
   @override
   void initState() {
     super.initState();
     _loadSavedModelOrder();
+    _truncationLengthController = TextEditingController(
+      text: '${widget.maxToolOutputChars}',
+    );
+    // 持久化数据损坏（越界值）时打开即标记错误：显示值与生效值
+    // 的差异就地可见，而不是静默按默认值截断。
+    final v = widget.maxToolOutputChars;
+    if (v < ChatService.kToolOutputMaxCharsMin ||
+        v > ChatService.kToolOutputMaxCharsMax) {
+      _lengthError =
+          '有效范围：${ChatService.kToolOutputMaxCharsMin}~${ChatService.kToolOutputMaxCharsMax} 字符';
+    }
+  }
+
+  @override
+  void dispose() {
+    _truncationLengthController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSavedModelOrder() async {
@@ -205,7 +251,9 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '以下默认值仅应用于在该助手下新建的话题；已存在的话题保留各自的模型与工具设置，不受影响。',
+                      '以下默认模型与默认工具仅应用于在该助手下新建的话题；'
+                      '已存在的话题保留各自的模型与工具设置，不受影响。'
+                      '工具结果截断应用于该助手的全部话题。',
                       style: TextStyle(
                           fontSize: 12, color: cs.onTertiaryContainer),
                     ),
@@ -371,6 +419,85 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                         ),
                     ],
                   ),
+          ),
+          const SizedBox(height: 12),
+
+          // ── 工具结果截断 ──
+          // 与默认模型/默认工具不同：这是**发送时**的渲染行为（存储仍
+          // 完整保留 50KB 内），应用于该助手的全部话题（含已存在的），
+          // 不是"新建话题才生效"的默认值——subtitle 里已说明。
+          _SectionCard(
+            icon: Icons.content_cut_outlined,
+            title: '工具结果截断',
+            subtitle: '发送给模型前，单个工具结果的字符数上限；应用于该助手的全部话题（含已存在的）。',
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SwitchListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    '启用截断',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  subtitle: Text(
+                    widget.enableMaxToolOutputChars
+                        ? '超长结果截断至 ${widget.maxToolOutputChars} 字符'
+                        : '不截断，完整发送（仍受 50KB 存储上限约束）',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                  value: widget.enableMaxToolOutputChars,
+                  activeThumbColor: cs.primary,
+                  onChanged: (v) => widget.onEnableMaxToolOutputCharsChanged(v),
+                ),
+                if (widget.enableMaxToolOutputChars)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                    child: TextField(
+                      controller: _truncationLengthController,
+                      decoration: InputDecoration(
+                        labelText: '最大字符数',
+                        // 明确"字符"单位：避免用户按 token/字节理解。
+                        helperText:
+                            _lengthError == null ? '单位：字符（不是 token）' : null,
+                        errorText: _lengthError,
+                        hintText: '默认 $kToolOutputMaxChars',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (v) {
+                        final n = int.tryParse(v);
+                        final inRange = n != null &&
+                            n >= ChatService.kToolOutputMaxCharsMin &&
+                            n <= ChatService.kToolOutputMaxCharsMax;
+                        setState(() {
+                          // 长度 < 3 的输入（如 "1"、"12"）可能是合法值的
+                          // 中间态（合法值至少 3 位，如 "120"），不报错；
+                          // 完整输入越界时就地提示有效范围。
+                          _lengthError = (v.isNotEmpty &&
+                                  !inRange &&
+                                  v.length >= 3)
+                              ? '有效范围：${ChatService.kToolOutputMaxCharsMin}~${ChatService.kToolOutputMaxCharsMax} 字符'
+                              : null;
+                        });
+                        // 越界/非法输入：不写入 vars（保存落库的必是
+                        // 生效值），由 errorText 就地提示。
+                        if (inRange) {
+                          widget.onMaxToolOutputCharsChanged(n);
+                        }
+                      },
+                    ),
+                  ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
 

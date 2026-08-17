@@ -20,6 +20,7 @@ class OpenAIProtocol implements ChatProtocol {
     required List<ChatMessage> history,
     String? assistantPrompt,
     String? contextSummary,
+    int? toolOutputMaxChars,
   }) async {
     final result = <Map<String, dynamic>>[];
 
@@ -214,7 +215,7 @@ class OpenAIProtocol implements ChatProtocol {
         result.add({
           'role': 'tool',
           'tool_call_id': tc.id,
-          'content': rebuildToolResultText(tc),
+          'content': rebuildToolResultText(tc, maxChars: toolOutputMaxChars),
         });
       }
     }
@@ -259,14 +260,16 @@ class OpenAIProtocol implements ChatProtocol {
 
   @override
   List<Map<String, dynamic>> buildToolResultMessages(
-      List<ToolCallResult> results) {
+    List<ToolCallResult> results, {
+    int? toolOutputMaxChars,
+  }) {
     return [
       for (final r in results)
         {
           'role': 'tool',
           'tool_call_id': r.toolCallId,
-          // 发送给模型时渲染截断（存储完整）
-          'content': truncateToolOutput(r.result),
+          // 发送给模型时渲染截断（存储完整；上限由助手设置决定）
+          'content': truncateToolOutput(r.result, maxChars: toolOutputMaxChars),
         },
     ];
   }

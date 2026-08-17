@@ -91,6 +91,61 @@ void main() {
               'reasoningEffort should be removed from AssistantSettings toMap');
     });
 
+    // ========================================================================
+    // 工具结果截断（maxToolOutputChars / enableMaxToolOutputChars）
+    // ========================================================================
+
+    test('tool output truncation defaults: 5000 字符、默认开启', () {
+      final s = AssistantSettings.defaults();
+      expect(s.maxToolOutputChars, 5000);
+      expect(s.enableMaxToolOutputChars, isTrue);
+    });
+
+    test('tool output truncation round-trip', () {
+      final original = AssistantSettings(
+        maxToolOutputChars: 8000,
+        enableMaxToolOutputChars: true,
+      );
+      final restored = AssistantSettings.fromMap(original.toMap());
+      expect(restored.maxToolOutputChars, 8000);
+      expect(restored.enableMaxToolOutputChars, isTrue);
+    });
+
+    test('tool output truncation disabled round-trip', () {
+      final original = AssistantSettings(
+        maxToolOutputChars: 1234,
+        enableMaxToolOutputChars: false,
+      );
+      final restored = AssistantSettings.fromMap(original.toMap());
+      expect(restored.maxToolOutputChars, 1234);
+      expect(restored.enableMaxToolOutputChars, isFalse,
+          reason: '关闭截断必须跨序列化存活（保存"不截断"后不能复活为截断）');
+    });
+
+    test('legacy settings map without truncation fields defaults to on+5000',
+        () {
+      // 旧数据没有这两个字段：默认开启、5000 字符（与构造默认一致）。
+      final map = <String, dynamic>{
+        'temperature': 0.7,
+        'topP': 0.9,
+      };
+      final restored = AssistantSettings.fromMap(map);
+      expect(restored.maxToolOutputChars, 5000);
+      expect(restored.enableMaxToolOutputChars, isTrue);
+    });
+
+    test('copyWith updates truncation fields without touching others', () {
+      final base = AssistantSettings();
+      final updated = base.copyWith(
+        maxToolOutputChars: 3000,
+        enableMaxToolOutputChars: false,
+      );
+      expect(updated.maxToolOutputChars, 3000);
+      expect(updated.enableMaxToolOutputChars, isFalse);
+      expect(updated.temperature, base.temperature);
+      expect(updated.maxToolCalls, base.maxToolCalls);
+    });
+
     test('assistant toMap/fromMap round-trip', () {
       final settings = AssistantSettings(
         temperature: 0.5,

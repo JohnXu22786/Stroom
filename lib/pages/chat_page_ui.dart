@@ -158,36 +158,15 @@ extension _ChatPageUiExt on _ChatPageState {
     });
   }
 
-  /// Recomputes the scroll-to-bottom button visibility from the CURRENT
-  /// list metrics ("is the user at the bottom?"), not from the last scroll
-  /// action. Scroll events can be swallowed or never fire at all for
-  /// metric-only changes — a viewport resize from the keyboard (the pixels
-  /// often do not move; an idle ScrollPosition does not notify its
-  /// controller listeners), the composer growing, a content-extent
-  /// correction — so the button would go stale if it only listened to
-  /// scroll events. This runs after every [ScrollMetricsNotification]
-  /// (which fires for every metric change) and after keyboard transitions,
-  /// keeping the button truthful at all times. Idempotent: no setState
-  /// when nothing changed.
-  ///
-  /// Deliberately touches ONLY [_showScrollToBottomButton], never
-  /// [_autoScrollEnabled]: the auto-scroll flag is owned by the scroll
-  /// path ([_onChatScroll]) so the content-growth follow can converge on
-  /// the true bottom over the sliver's estimate-correction frames — a
-  /// recompute here must not turn it off mid-convergence (the list would
-  /// drift forever).
-  void _updateScrollToBottomState() {
-    if (_pendingInitialScrollAdjustment) return;
-    if (!_chatScrollController.hasClients) return;
-    final pos = _chatScrollController.position;
-    final isAtBottom =
-        (pos.maxScrollExtent - pos.pixels) <= _ChatPageState._atBottomWindowPx;
-    final showButton = !isAtBottom;
-    if (showButton == _showScrollToBottomButton) return;
-    setState(() => _showScrollToBottomButton = showButton);
-  }
-
   /// Handles chat list scroll events to track auto-scroll state.
+  ///
+  /// The overlay buttons' visibility is NOT touched here: [ChatOverlayButtons]
+  /// owns it (recomputed from the current metrics on scroll events, keyboard
+  /// metrics changes and the page's ScrollMetricsNotification ticks), so a
+  /// button flip rebuilds only the small overlay subtree instead of the
+  /// whole message list. This path only tracks the auto-scroll flag the
+  /// list needs (shouldScrollToEndWhenAtBottom) and the no-more-messages
+  /// hint.
   void _onChatScroll() {
     // While the initial positioning pass runs the list is hidden and all
     // scroll events are programmatic — skip auto-scroll/button bookkeeping
@@ -211,12 +190,10 @@ extension _ChatPageUiExt on _ChatPageState {
     }
 
     if (isAtBottom) {
-      // At bottom — user sees latest messages
-      if (_showScrollToBottomButton || (!_autoScrollEnabled)) {
+      // At bottom — user sees latest messages: enable auto-scroll so new
+      // messages automatically keep them at the bottom.
+      if (!_autoScrollEnabled) {
         setState(() {
-          _showScrollToBottomButton = false;
-          // Enable auto-scroll when user is at bottom (so new messages
-          // automatically keep them at the bottom).
           if (_chatScrollController.hasClients &&
               _chatScrollController.position.maxScrollExtent > 0) {
             _autoScrollEnabled = true;
@@ -224,23 +201,21 @@ extension _ChatPageUiExt on _ChatPageState {
         });
       }
     } else {
-      // Scrolled up — disable auto-scroll and show button
-      if (!_showScrollToBottomButton || _autoScrollEnabled) {
-        setState(() {
-          _autoScrollEnabled = false;
-          _showScrollToBottomButton = true;
-        });
+      // Scrolled up — disable auto-scroll.
+      if (_autoScrollEnabled) {
+        setState(() => _autoScrollEnabled = false);
       }
     }
   }
 
   /// Called when the user taps the scroll-to-bottom button.
-  /// Enables auto-scroll and scrolls to the bottom.
+  /// Enables auto-scroll and scrolls to the bottom. The button's own
+  /// visibility hides itself via its scroll listener (the jump lands at
+  /// the bottom).
   void _onScrollToBottomTap() {
     _scrollToBottom();
     setState(() {
       _autoScrollEnabled = true;
-      _showScrollToBottomButton = false;
     });
   }
 
@@ -451,8 +426,10 @@ extension _ChatPageUiExt on _ChatPageState {
     _initialAdjustChaseFrames = 0;
     _initialAdjustStepScheduled = false;
     // Re-run the normal scroll bookkeeping once against the settled
-    // position: at the bottom it re-enables auto-scroll, elsewhere it
-    // surfaces the scroll-to-bottom button.
+    // position: at the bottom it re-enables auto-scroll. (The overlay
+    // buttons' visibility is recomputed by ChatOverlayButtons on the same
+    // final jump's scroll events and the reveal frame's metrics
+    // notifications.)
     _onChatScroll();
     if (mounted) setState(() {});
   }
@@ -596,24 +573,6 @@ extension _ChatPageUiExt on _ChatPageState {
     _showErrorDetailDialog(context, messageId);
   }
 
-  /// Formats an error value for display in the error bubble.
-  /// If the value is a Map/List, converts to JSON string.
-  /// If the value is already a String, returns it as-is (up to 200 chars).
-  String _formatErrorValue(dynamic value) {
-    if (value is String) {
-      return value.length > 200 ? '${value.substring(0, 200)}...' : value;
-    }
-    if (value is Map || value is List) {
-      try {
-        final json = const JsonEncoder.withIndent('  ').convert(value);
-        return json.length > 200 ? '${json.substring(0, 200)}...' : json;
-      } catch (_) {
-        return value.toString();
-      }
-    }
-    return value?.toString() ?? '';
-  }
-
   /// Top bar with title and search toggle.
   Widget _buildTopBar({required String title}) {
     return Container(
@@ -753,153 +712,167 @@ extension _ChatPageUiExt on _ChatPageState {
     );
   }
 
-  /// Scroll-to-bottom overlay button shown when the user is not at the
-  /// bottom. Positioned/animated by the caller (bottom-right corner);
-  /// returns just the button.
-  Widget _buildScrollToBottomButton({required bool isDark}) {
-    return Material(
-      elevation: 4,
-      shape: const CircleBorder(),
-      color: isDark ? Colors.grey[700] : Colors.grey[300],
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: _onScrollToBottomTap,
-        child: Container(
-          width: _ChatPageState._overlayButtonSize,
-          height: _ChatPageState._overlayButtonSize,
-          alignment: Alignment.center,
-          child: Icon(
-            Icons.arrow_downward,
-            size: 20,
-            color: isDark ? Colors.grey[200] : Colors.grey[700],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Dismisses the soft keyboard. Bottom-right, LEFT of the scroll-to-
-  /// bottom button while that button is visible; it takes over the corner
-  /// slot when the scroll button is hidden. The keyboard otherwise stays
-  /// up while the user reads/scrolls (the list's
-  /// [ScrollViewKeyboardDismissBehavior.manual]): it is closed either via
-  /// the keyboard's own close key or this button.
-  Widget _buildKeyboardDismissButton({required bool isDark}) {
-    return Material(
-      elevation: 4,
-      shape: const CircleBorder(),
-      color: isDark ? Colors.grey[700] : Colors.grey[300],
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: () {
-          // Hide the soft keyboard; the keyboard-close transition in
-          // didChangeMetrics restores the reading position.
-          FocusScope.of(context).unfocus();
-        },
-        child: Container(
-          width: _ChatPageState._overlayButtonSize,
-          height: _ChatPageState._overlayButtonSize,
-          alignment: Alignment.center,
-          child: Icon(
-            Icons.keyboard_hide,
-            size: 20,
-            color: isDark ? Colors.grey[200] : Colors.grey[700],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Action buttons (copy / retry or edit / raw data / JSON / delete).
+  /// Action buttons beneath a message bubble (copy / save / retry or edit /
+  /// raw data / JSON / delete), rendered by the shared [MessageActionRow].
   Widget _buildMessageActionButtons({
     required BuildContext context,
     required TextMessage message,
     required bool isAi,
     required bool isDark,
   }) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ActionButton(
-          icon: Icons.copy,
-          tooltip: '复制',
-          onPressed: () {
-            Clipboard.setData(
-              ClipboardData(
-                text: message.text,
-              ),
-            );
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(
-              const SnackBar(
-                content: Text('已复制'),
-                duration: Duration(
-                  seconds: 1,
-                ),
-              ),
-            );
-          },
-        ),
-        const SizedBox(width: 2),
-        if (isAi)
-          ActionButton(
-            icon: Icons.refresh,
-            tooltip: '重试',
-            onPressed: () => _confirmRetryOrEdit(
-              message.id,
-            ),
-          )
-        else
-          ActionButton(
-            icon: Icons.edit_outlined,
-            tooltip: '编辑',
-            onPressed: () => _startEditMessage(
-              message.id,
-            ),
-          ),
-        // Raw data view button: only shown for AI messages when data exists.
-        if (isAi &&
-            _history.any(
-              (m) =>
-                  m.id == message.id &&
-                  (m.rawRequest != null || m.rawResponse != null),
-            )) ...[
-          const SizedBox(width: 2),
-          ActionButton(
-            icon: Icons.data_exploration,
-            tooltip: '查看数据详情',
-            onPressed: () => _showRawDataDialog(
-              context,
-              message.id,
-            ),
-          ),
-        ],
-        if (_developerMode &&
-            isAi &&
-            _history.any(
-              (m) =>
-                  m.id == message.id &&
-                  (m.rawRequest != null || m.rawResponse != null),
-            )) ...[
-          const SizedBox(width: 2),
-          ActionButton(
-            icon: Icons.code,
-            tooltip: 'JSON 审查',
-            onPressed: () => _showJsonInspection(
-              message.id,
-            ),
-          ),
-        ],
-        const SizedBox(width: 2),
-        ActionButton(
-          icon: Icons.delete_outline,
-          tooltip: '删除',
-          onPressed: () => _confirmDeleteMessage(
-            message.id,
-          ),
-        ),
-      ],
+    final hasRawData = _history.any(
+      (m) =>
+          m.id == message.id && (m.rawRequest != null || m.rawResponse != null),
     );
+    return MessageActionRow(
+      messageText: message.text,
+      isAi: isAi,
+      showRawData: isAi && hasRawData,
+      showJsonInspection: isAi && hasRawData && _developerMode,
+      onCopy: () {
+        Clipboard.setData(ClipboardData(text: message.text));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('已复制'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      },
+      onRetryOrEdit: () => isAi
+          ? _confirmRetryOrEdit(message.id)
+          : _startEditMessage(message.id),
+      onSave: isAi ? () => _saveMessageAsMarkdown(context, message) : null,
+      onViewRawData: isAi && hasRawData
+          ? () => _showRawDataDialog(context, message.id)
+          : null,
+      onJsonInspection: isAi && hasRawData && _developerMode
+          ? () => _showJsonInspection(message.id)
+          : null,
+      onDelete: () => _confirmDeleteMessage(message.id),
+    );
+  }
+
+  /// 将消息的正式输出保存为 Markdown 文件。
+  ///
+  /// - 无多步工具调用、或有多步工具调用但步骤间没有回话反馈（只有工具
+  ///   与思考链）：直接弹出带文件名输入的保存面板。
+  /// - 多步工具调用且步骤之间有回话反馈：先弹出选择面板，让用户选择
+  ///   "保存完整消息"（所有正式输出按顺序以空行分隔）或"保存最后的消息
+  ///   "（仅最后一次正式回复）。
+  Future<void> _saveMessageAsMarkdown(
+    BuildContext context,
+    TextMessage message,
+  ) async {
+    if (_isSavingMarkdown) return;
+    final plan = buildMessageSavePlan(
+      segments: _chatSegments[message.id] ?? const <MessageSegment>[],
+      fallbackText: message.text,
+    );
+    if (plan == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('没有可保存的文本内容'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    String markdown;
+    if (plan.scope == MessageSaveScope.fullOrLast) {
+      final option = await _askSaveScopeDialog(context);
+      if (option == null) return; // 用户取消选择
+      markdown = option == MessageSaveOption.full
+          ? plan.fullMarkdown
+          : plan.lastMarkdown;
+    } else {
+      markdown = plan.fullMarkdown;
+    }
+
+    if (!mounted) return;
+    await _saveMarkdownToFile(markdown);
+  }
+
+  /// 多步工具调用且步骤之间有回话反馈时弹出的选择面板：
+  /// "保存完整消息" / "保存最后的消息" / 取消。
+  Future<MessageSaveOption?> _askSaveScopeDialog(BuildContext context) {
+    return showDialog<MessageSaveOption>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('保存消息为 Markdown'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              '该回复包含多步工具调用，选择要保存的内容：',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              icon: const Icon(Icons.article_outlined, size: 18),
+              label: const Text('保存完整消息'),
+              onPressed: () => Navigator.of(ctx).pop(MessageSaveOption.full),
+            ),
+            const SizedBox(height: 8),
+            FilledButton.tonalIcon(
+              icon: const Icon(Icons.last_page, size: 18),
+              label: const Text('保存最后的消息'),
+              onPressed: () => Navigator.of(ctx).pop(MessageSaveOption.last),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 弹出系统保存面板（带文件名输入）并把 [markdown] 内容写入 .md 文件。
+  Future<void> _saveMarkdownToFile(String markdown) async {
+    if (_isSavingMarkdown) return;
+    _isSavingMarkdown = true;
+    try {
+      final bytes = Uint8List.fromList(utf8.encode(markdown));
+      final outputPath = await FilePicker.saveFile(
+        dialogTitle: '保存消息为 Markdown',
+        fileName: 'chat_message_${_fileTimestamp()}.md',
+        type: FileType.custom,
+        allowedExtensions: ['md'],
+        bytes: bytes,
+        initialDirectory: SystemPickDirectories.documents(),
+      );
+      if (outputPath != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已保存到: $outputPath'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('保存失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      _isSavingMarkdown = false;
+    }
+  }
+
+  /// 紧凑时间戳（yyyyMMdd_HHmmss），用作默认文件名。
+  String _fileTimestamp() {
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${now.year}${two(now.month)}${two(now.day)}'
+        '_${two(now.hour)}${two(now.minute)}${two(now.second)}';
   }
 }

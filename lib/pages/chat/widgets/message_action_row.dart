@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'action_button.dart';
 
-/// Action button row for chat messages (copy, retry/edit, raw data view,
-/// JSON inspection, delete).
+/// Action button row for chat messages (copy, save, retry/edit, raw data
+/// view, JSON inspection, delete).
 ///
 /// Builds children dynamically to avoid orphaned [SizedBox] spacers when
 /// conditional buttons are hidden. Ensures consistent 2px gaps between
@@ -16,6 +16,7 @@ class MessageActionRow extends StatelessWidget {
     required this.showJsonInspection,
     required this.onCopy,
     required this.onRetryOrEdit,
+    this.onSave,
     this.onViewRawData,
     this.onJsonInspection,
     required this.onDelete,
@@ -38,6 +39,10 @@ class MessageActionRow extends StatelessWidget {
 
   /// Called when the retry (AI) or edit (user) button is pressed.
   final VoidCallback onRetryOrEdit;
+
+  /// Called when the save-as-Markdown button is pressed. When non-null, a
+  /// save button is shown in the second position (AI messages only).
+  final VoidCallback? onSave;
 
   /// Called when the raw data button is pressed. Ignored when [showRawData] is
   /// false.
@@ -73,7 +78,20 @@ class MessageActionRow extends StatelessWidget {
       ),
     ];
 
-    // [2] Retry (AI) / Edit (user) — always visible
+    // [2] Save as Markdown — AI messages only, shown when a callback is
+    // provided.
+    if (isAi && onSave != null) {
+      children.add(const SizedBox(width: _spacerWidth));
+      children.add(
+        ActionButton(
+          icon: Icons.save,
+          tooltip: '保存为 Markdown',
+          onPressed: onSave!,
+        ),
+      );
+    }
+
+    // [3] Retry (AI) / Edit (user) — always visible
     children.add(const SizedBox(width: _spacerWidth));
     children.add(
       ActionButton(
@@ -83,7 +101,7 @@ class MessageActionRow extends StatelessWidget {
       ),
     );
 
-    // [3] Raw data (查看请求数据 / 查看响应数据) — conditional
+    // [4] Raw data (查看请求数据 / 查看响应数据) — conditional
     if (showRawData) {
       children.add(const SizedBox(width: _spacerWidth));
       children.add(
@@ -95,7 +113,7 @@ class MessageActionRow extends StatelessWidget {
       );
     }
 
-    // [4] JSON inspection — conditional (developer mode + AI)
+    // [5] JSON inspection — conditional (developer mode + AI)
     if (showJsonInspection) {
       children.add(const SizedBox(width: _spacerWidth));
       children.add(
@@ -107,7 +125,7 @@ class MessageActionRow extends StatelessWidget {
       );
     }
 
-    // [5] Delete — always visible
+    // [6] Delete — always visible
     children.add(const SizedBox(width: _spacerWidth));
     children.add(
       ActionButton(

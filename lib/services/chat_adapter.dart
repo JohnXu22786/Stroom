@@ -72,6 +72,10 @@ class ChatAdapter {
   /// 当前缓存的对话助手 system prompt（供上下文管理注入用）。
   String? get assistantPrompt => _cachedAssistantPrompt;
 
+  /// 当前缓存的对话助手设置（供上下文管理估算用：
+  /// 工具结果渲染截断上限与发送侧保持同一来源）。
+  AssistantSettings? get assistantSettings => _cachedAssistantSettings;
+
   /// The first active [ChatService] instance, or null if none are running.
   /// **Warning**: nondeterministic when multiple conversations are streaming
   /// concurrently. Use [getOrCreateService] with an explicit convId for

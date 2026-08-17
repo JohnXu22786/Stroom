@@ -6,6 +6,43 @@ part of 'chat_page.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ChatPageEditingExt on _ChatPageState {
+  /// Removes [messageId]'s controller item and all per-message caches.
+  ///
+  /// Shared by the edit / retry truncation loops. The controller removal is
+  /// id-based (the message must be looked up at removal time — the loop
+  /// mutates the controller list, so positions shift).
+  Future<void> _removeMessageFromController(String messageId) async {
+    final ctrlMsg =
+        _controller?.messages.where((m) => m.id == messageId).firstOrNull;
+    if (ctrlMsg != null) {
+      await _controller?.removeMessage(ctrlMsg);
+    }
+    // Clean up cached maps for removed messages to prevent memory leaks.
+    _chatSegments.remove(messageId);
+    _reasoningContents.remove(messageId);
+    _finalizedMessages.remove(messageId);
+    _isReasoningCompletedForMsg.remove(messageId);
+    _messageKeys.remove(messageId);
+  }
+
+  /// Removes every controller message that is NOT part of [_history].
+  ///
+  /// Edit/retry truncation only iterates messages found in [_history], but
+  /// a STOPPED partial reply (or any other aborted stream) lives ONLY in the
+  /// controller + segment cache — it never entered [_history]. Without this
+  /// sweep such a message survives the truncation and its tool call cards /
+  /// reasoning buttons linger on screen as ghosts after the edit/regenerate.
+  Future<void> _removeOrphanMessagesFromController() async {
+    final keptIds = _history.map((m) => m.id).toSet();
+    final orphanIds = (_controller?.messages ?? [])
+        .where((m) => !keptIds.contains(m.id))
+        .map((m) => m.id)
+        .toList();
+    for (final orphanId in orphanIds) {
+      await _removeMessageFromController(orphanId);
+    }
+  }
+
   void _confirmRetryOrEdit(String messageId) {
     final index = _history.indexWhere((m) => m.id == messageId);
     if (index == -1) return;
@@ -108,17 +145,7 @@ extension _ChatPageEditingExt on _ChatPageState {
           final removed = _history.sublist(index);
           _history.removeRange(index, _history.length);
           for (final r in removed) {
-            final ctrlMsg =
-                _controller?.messages.where((m) => m.id == r.id).firstOrNull;
-            if (ctrlMsg != null) {
-              await _controller?.removeMessage(ctrlMsg);
-            }
-            // Clean up cached maps for removed messages to prevent memory leaks.
-            _chatSegments.remove(r.id);
-            _reasoningContents.remove(r.id);
-            _finalizedMessages.remove(r.id);
-            _isReasoningCompletedForMsg.remove(r.id);
-            _messageKeys.remove(r.id);
+            await _removeMessageFromController(r.id);
             // NOTE: 这里**不删除**附件文件——编辑态下 composer 直接
             // 复用原消息的同一批 Attachment 对象（storagePath 相同），
             // 删除文件会让新消息的附件读取失败（_onMessageSend 随后
@@ -126,6 +153,9 @@ extension _ChatPageEditingExt on _ChatPageState {
             // 编辑路径没有 isReferencedElsewhere 保护。真正的孤儿文件
             // 清理在 _deleteMessage（带引用检查）中完成。
           }
+          // 截断点之下、不在 _history 中的孤儿消息（如 Stop 掉的部分
+          // 回复）也要一并移除——否则其工具卡片会残留为幽灵卡片。
+          await _removeOrphanMessagesFromController();
           // Safety: keep pagination index within bounds
           _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
           // 历史被截断：使进行中的加载失效（其 0.5 秒最少显示延迟
@@ -168,18 +198,11 @@ extension _ChatPageEditingExt on _ChatPageState {
           final removed = _history.sublist(index);
           _history.removeRange(index, _history.length);
           for (final r in removed) {
-            final ctrlMsg =
-                _controller?.messages.where((m) => m.id == r.id).firstOrNull;
-            if (ctrlMsg != null) {
-              await _controller?.removeMessage(ctrlMsg);
-            }
-            // Clean up cached maps for removed messages to prevent memory leaks.
-            _chatSegments.remove(r.id);
-            _reasoningContents.remove(r.id);
-            _finalizedMessages.remove(r.id);
-            _isReasoningCompletedForMsg.remove(r.id);
-            _messageKeys.remove(r.id);
+            await _removeMessageFromController(r.id);
           }
+          // 截断点之下、不在 _history 中的孤儿消息（如 Stop 掉的部分
+          // 回复）也要一并移除——否则其工具卡片会残留为幽灵卡片。
+          await _removeOrphanMessagesFromController();
           // Safety: keep pagination index within bounds
           _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
           // 历史被截断：使进行中的加载失效（其 0.5 秒最少显示延迟
@@ -217,7 +240,15 @@ extension _ChatPageEditingExt on _ChatPageState {
       return;
     }
     final index = _history.indexWhere((m) => m.id == messageId);
-    if (index == -1) return;
+    // 孤儿消息：只存在于 controller/缓存、不在 _history 中（如 Stop 掉
+    // 的部分回复）。直接移除 controller 项与缓存——否则其工具卡片会
+    // 一直残留（幽灵卡片）。孤儿本就不在 _history 里，无需 _saveMessages
+    // （若其 finalize 延迟落库，下次重载会从 provider 恢复，属正常语义）。
+    if (index == -1) {
+      await _removeMessageFromController(messageId);
+      if (mounted) setState(() {});
+      return;
+    }
     final msg = _history[index];
 
     for (final att in msg.attachments) {

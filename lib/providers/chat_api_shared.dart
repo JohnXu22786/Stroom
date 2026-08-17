@@ -54,6 +54,27 @@ Future<Map<String, dynamic>?> parseStreamErrorBody(DioException e) async {
   return null;
 }
 
+/// 把 API usage 里的数值字段转为 double。
+///
+/// 部分网关/兼容端点把 cost/token 数以**字符串**返回（如
+/// `"total_cost": "0.0000123"`、`"prompt_tokens": "123"`）——只认 num
+/// 会把这类"API 已返回的计费"静默丢弃，导致累计缺失。这里 num 与
+/// 数字字符串统一接受；解析失败返回 null（不把垃圾值当计费）。
+/// 非有限值（NaN/±Infinity，字符串解析可能产生）同样丢弃，避免
+/// totalCost 被污染成 Infinity/NaN。
+double? usageNumberToDouble(dynamic value) {
+  double? result;
+  if (value is num) {
+    result = value.toDouble();
+  } else if (value is String) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    result = double.tryParse(trimmed);
+  }
+  if (result == null || !result.isFinite) return null;
+  return result;
+}
+
 // ============================================================================
 // 抽象基类 — BaseChatProvider
 // ============================================================================

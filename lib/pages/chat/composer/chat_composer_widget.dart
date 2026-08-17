@@ -87,8 +87,8 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   /// The chat page sets this when the edited message has newer messages
   /// below it (re-sending the edit would delete them). When set, the
   /// warning pill replaces the edit capsule immediately on entry (fading
-  /// in), then fades out on auto-hide (2s) or close so the edit capsule
-  /// fades back in.
+  /// in), then fades out on auto-hide (2s of full visibility after the
+  /// fade-in) or close so the edit capsule fades back in.
   final bool showEditWarningOnEntry;
 
   /// Bumped by the chat page on every explicit edit entry
@@ -144,13 +144,21 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   /// edit capsule fades back in only after the pill is gone.
   bool _editWarningFadingOut = false;
 
-  /// Timer that auto-hides the warning pill after 2 seconds.
+  /// Timer that auto-hides the warning pill: fires once the fade-in has
+  /// completed and the pill has been fully visible for
+  /// [_editWarningAutoHideDelay].
   Timer? _editWarningTimer;
 
   /// Timer that removes the pill from the tree once its fade-out finished.
   Timer? _editWarningFadeOutTimer;
 
-  /// How long the warning stays visible before auto-hiding.
+  /// How long the pill's fade-in lasts on entry (clearly visible fade).
+  static const Duration _editWarningFadeInDuration =
+      Duration(milliseconds: 300);
+
+  /// How long the warning stays fully visible before auto-hiding. The
+  /// countdown starts only after the fade-in completes, so the pill is
+  /// readable for a full 2 seconds.
   static const Duration _editWarningAutoHideDelay = Duration(seconds: 2);
 
   /// How long the pill's fade-out (and the capsule's fade-in) lasts.
@@ -397,7 +405,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   /// Arms the edit data-loss warning for the current edit session: the
   /// warning pill replaces the edit capsule immediately on the next build
   /// (the fade-in is handled by the pill's own TweenAnimationBuilder) and
-  /// auto-hides after [_editWarningAutoHideDelay].
+  /// auto-hides after the fade-in plus [_editWarningAutoHideDelay] — the
+  /// pill stays fully visible for a full 2 seconds.
   ///
   /// No-op unless the page says re-sending the edit can delete messages
   /// below ([ChatComposerWidget.showEditWarningOnEntry]) — but the pill
@@ -412,7 +421,10 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
     _editWarningFadingOut = false;
     if (!widget.showEditWarningOnEntry) return;
     _editWarningVisible = true;
-    _editWarningTimer = Timer(_editWarningAutoHideDelay, _dismissEditWarning);
+    _editWarningTimer = Timer(
+      _editWarningFadeInDuration + _editWarningAutoHideDelay,
+      _dismissEditWarning,
+    );
   }
 
   /// Dismisses the warning pill (close button or auto-hide). Dismissing

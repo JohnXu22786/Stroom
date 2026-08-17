@@ -67,7 +67,30 @@ class CodeBlockSourceView extends StatefulWidget {
 }
 
 class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
+  /// Whether the code is soft-wrapped to the block width (as opposed to
+  /// scrolling horizontally in no-wrap mode).
+  ///
+  /// Defaults to ON for prose-like languages (markdown / plain text), whose
+  /// long lines are meant to be read wrapped, and OFF for everything else
+  /// (real code stays one logical line per visual line). The user can
+  /// always flip it with the wrap toggle button.
   bool _wrapEnabled = false;
+
+  /// Languages whose code blocks start wrapped: prose formats where
+  /// line length is not syntax-significant. All other languages (and plain
+  /// fences without a language) start no-wrap with horizontal scroll.
+  static bool _shouldWrapByDefault(String language) {
+    switch (language.toLowerCase()) {
+      case 'markdown':
+      case 'md':
+      case 'text':
+      case 'plaintext':
+      case 'txt':
+        return true;
+      default:
+        return false;
+    }
+  }
 
   /// Scroll controller of the vertical code-area scroll view, used by the
   /// streaming auto-scroll logic.
@@ -200,6 +223,7 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
   @override
   void initState() {
     super.initState();
+    _wrapEnabled = _shouldWrapByDefault(widget.language);
     _scrollController.addListener(_reconcileScrollState);
     if (widget.isStreaming) {
       // Entering mid-stream (e.g. page re-entry while a block streams):
@@ -441,7 +465,7 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
   /// is the ONLY signal for content changes that never fire scroll events:
   /// a content shrink clamps the position without notifying controller
   /// listeners (the wrap toggle), and content growth re-pins the block.
-  /// Mirrors the chat list's [_updateScrollToBottomState] +
+  /// Mirrors the chat list's overlay-button recompute +
   /// [_followContentGrowth] handling of the same notification.
   bool _onMetricsNotification(ScrollMetricsNotification notification) {
     if (notification.metrics.axis != Axis.vertical) return false;

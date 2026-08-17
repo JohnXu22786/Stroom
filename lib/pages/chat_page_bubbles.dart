@@ -35,8 +35,8 @@ extension _ChatPageBubblesExt on _ChatPageState {
     // Response Body error (new — shown second)
     if (responseBodyData != null || responseError != null) {
       final bodyText = responseBodyData != null
-          ? _formatErrorValue(responseBodyData)
-          : _formatErrorValue(responseError);
+          ? formatErrorValueForDisplay(responseBodyData)
+          : formatErrorValueForDisplay(responseError);
       errorWidgets.add(
         SelectableText(
           bodyText,
