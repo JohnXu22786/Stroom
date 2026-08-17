@@ -16,6 +16,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/markdown_extensions.dart';
 import '../widgets/message_attachment_preview.dart';
+import '../widgets/temporary_countdown_capsule.dart';
 import '../widgets/transform_stretch_overscroll.dart';
 import '../services/attachment_storage.dart';
 import '../utils/model_order.dart';
@@ -503,12 +504,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
     String title = '新对话';
     String currentDraftText = '';
     List<Attachment> currentDraftAttachments = const [];
+    Conversation? currentConversation;
     if (activeId != null) {
       final conv = conversations.where((c) => c.id == activeId).firstOrNull;
       if (conv != null) {
         if (conv.title.isNotEmpty) title = conv.title;
         currentDraftText = conv.draftText;
         currentDraftAttachments = conv.draftAttachments;
+        currentConversation = conv;
       }
     }
 
@@ -520,7 +523,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           child: Column(
             children: [
               // ── Top bar ──
-              _buildTopBar(title: title),
+              _buildTopBar(title: title, conversation: currentConversation),
               // ── 上下文统计行（标题栏下方悬挂，opencode sidebar 风格）──
               if (activeId != null) _buildContextStatusLine(activeId),
               // ── Search bar ──

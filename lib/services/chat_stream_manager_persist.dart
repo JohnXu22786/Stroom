@@ -64,6 +64,7 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
       ref.read(conversationsProvider.notifier).updateMessages(
             s.convId,
             partialHistory,
+            resetTemporaryCountdown: true,
           );
     } catch (e) {
       debugPrint('[ChatStreamManager] 定期持久化失败: $e');
@@ -83,9 +84,9 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
       return;
     }
     try {
-      await ref
-          .read(conversationsProvider.notifier)
-          .updateMessages(convId, List<ChatMessage>.from(history));
+      await ref.read(conversationsProvider.notifier).updateMessages(
+          convId, List<ChatMessage>.from(history),
+          resetTemporaryCountdown: true);
       final lastMsg = history.isNotEmpty ? history.last : null;
       await AppLogService.info(
           'ChatStreamManager',

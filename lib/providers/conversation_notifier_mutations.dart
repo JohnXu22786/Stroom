@@ -75,6 +75,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     if (_ref.read(activeConversationIdProvider) == id) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
+    _syncTemporaryTimer();
     await _persist();
     await _persistActiveId();
   }
@@ -127,6 +128,24 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     _persist();
   }
 
+  /// 开启/关闭临时对话模式。
+  ///
+  /// 开启：从当前时刻起倒计时 [kTemporaryConversationDuration]（24 小时），
+  /// 到期自动删除；关闭：清除倒计时，对话本身保留。重新开启会得到
+  /// 一个全新的 24 小时窗口（倒计时的重置方式之一）。
+  Future<void> toggleTemporary(String id) async {
+    state = state.map((c) {
+      if (c.id != id) return c;
+      final turnOn = !c.isTemporary;
+      c.isTemporary = turnOn;
+      c.temporaryExpiresAt =
+          turnOn ? DateTime.now().add(kTemporaryConversationDuration) : null;
+      return c;
+    }).toList();
+    _syncTemporaryTimer();
+    await _persist();
+  }
+
   /// Reorders a conversation from [oldIndex] to [newIndex] in the list.
   ///
   /// [newIndex] 为"移除 [oldIndex] 之后"的插入索引（与 Flutter
@@ -151,6 +170,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     if (idSet.contains(_ref.read(activeConversationIdProvider))) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
+    _syncTemporaryTimer();
     await _persist();
     await _persistActiveId();
   }
@@ -187,12 +207,22 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
 
   /// Replaces the message list of a conversation (e.g. after sending or
   /// loading a different conversation).
-  Future<void> updateMessages(
-      String conversationId, List<ChatMessage> messages) async {
+  ///
+  /// [resetTemporaryCountdown] 仅由"产生对话"路径（发送/流式持久化）置
+  /// true：临时对话的 24 小时倒计时只在这些事件上重置。切换对话前的
+  /// 存档保存、编辑截断、删除消息等非产生事件不得重置（否则会无意中
+  /// 延长临时对话的生命周期）。
+  Future<void> updateMessages(String conversationId, List<ChatMessage> messages,
+      {bool resetTemporaryCountdown = false}) async {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.messages = messages;
       c.updatedAt = DateTime.now();
+      // 临时对话：每次产生对话（发送/流式持久化）都重置 24 小时倒计时。
+      if (resetTemporaryCountdown && c.isTemporary) {
+        c.temporaryExpiresAt =
+            DateTime.now().add(kTemporaryConversationDuration);
+      }
       // Derive title from the conversation overview if title is empty.
       if (c.title.isEmpty && messages.isNotEmpty) {
         final firstUser = messages.firstWhere(

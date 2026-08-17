@@ -573,8 +573,12 @@ extension _ChatPageUiExt on _ChatPageState {
     _showErrorDetailDialog(context, messageId);
   }
 
-  /// Top bar with title and search toggle.
-  Widget _buildTopBar({required String title}) {
+  /// Top bar with title, temporary-conversation toggle and search toggle.
+  Widget _buildTopBar({required String title, Conversation? conversation}) {
+    final cs = Theme.of(context).colorScheme;
+    final isTemporary = conversation?.isTemporary ?? false;
+    final temporaryExpiresAt =
+        isTemporary ? conversation!.temporaryExpiresAt : null;
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -607,6 +611,9 @@ extension _ChatPageUiExt on _ChatPageState {
                   setState(() => _developerMode = !_developerMode),
               child: Row(
                 children: [
+                  // 临时对话倒计时胶囊（标题前）
+                  if (temporaryExpiresAt != null)
+                    TemporaryCountdownCapsule(expiresAt: temporaryExpiresAt),
                   Flexible(
                     child: Text(
                       title,
@@ -643,6 +650,25 @@ extension _ChatPageUiExt on _ChatPageState {
                 ],
               ),
             ),
+          ),
+          // ── 临时对话开关（搜索按钮左侧）──
+          // 图标为虚线框对话气泡风格：开启后气泡内带打勾
+          // （原生 Material 图标组：chat_bubble_outline ↔ mark_chat_read_outlined）。
+          IconButton(
+            icon: Icon(
+              isTemporary
+                  ? Icons.mark_chat_read_outlined
+                  : Icons.chat_bubble_outline,
+              color: isTemporary ? cs.primary : null,
+            ),
+            tooltip: isTemporary ? '关闭临时对话' : '临时对话',
+            onPressed: conversation == null
+                ? null
+                : () {
+                    ref
+                        .read(conversationsProvider.notifier)
+                        .toggleTemporary(conversation.id);
+                  },
           ),
           // ── Search toggle ──
           IconButton(

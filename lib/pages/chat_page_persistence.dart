@@ -36,14 +36,22 @@ extension _ChatPagePersistenceExt on _ChatPageState {
     }
   }
 
-  Future<void> _saveMessages({String? capturedConvId}) async {
+  /// 保存当前 `_history` 到对话。
+  ///
+  /// [resetTemporaryCountdown] 仅在"产生对话"时置 true（发送消息）：
+  /// 用于触发临时对话 24 小时倒计时重置。切换对话前的存档保存、
+  /// 编辑截断、删除消息等非产生事件保持 false。
+  Future<void> _saveMessages({
+    String? capturedConvId,
+    bool resetTemporaryCountdown = false,
+  }) async {
     final historySnapshot = List<ChatMessage>.from(_history);
     try {
       final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
       if (convId == null) return;
-      await ref.read(conversationsProvider.notifier).updateMessages(convId, [
-        ...historySnapshot,
-      ]);
+      await ref.read(conversationsProvider.notifier).updateMessages(
+          convId, [...historySnapshot],
+          resetTemporaryCountdown: resetTemporaryCountdown);
     } catch (e, s) {
       // Fallback: save directly to SharedPreferences if the notifier is
       // unavailable (e.g. during background streaming after page disposal).
@@ -228,7 +236,10 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       // page is disposed during generation, the next page instance can load
       // this message even before the manager's periodic partial save runs.
       final historyForStream = List<ChatMessage>.from(_history);
-      final saveFuture = _saveMessages(capturedConvId: convId);
+      final saveFuture = _saveMessages(
+        capturedConvId: convId,
+        resetTemporaryCountdown: true,
+      );
 
       await _startStreaming(
         text,
