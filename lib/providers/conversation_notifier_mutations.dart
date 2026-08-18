@@ -10,8 +10,17 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   // Mutations
   // --------------------------------------------------------------------------
 
-  /// Creates a new conversation with an empty title, adds it to the list,
-  /// and sets it as the active conversation.
+  /// Creates a new conversation with an empty title and adds it to the list.
+  ///
+  /// By default the new conversation becomes the active one (the chat page
+  /// opens on it). Background producers (task-flow chat blocks) pass
+  /// [activate] false so the conversation is created quietly without
+  /// hijacking the chat tab's active conversation.
+  ///
+  /// [id] explicitly pins the conversation id (used by flow-created
+  /// conversations so the stream manager's per-conversation persist and the
+  /// flow's cancel/cleanup paths agree on one id); when null a UUID is
+  /// generated, so [Conversation.id] stays unique as usual.
   ///
   /// When [assistantId] points to an existing assistant, the NEW conversation
   /// is seeded with the assistant's conversation defaults:
@@ -35,7 +44,11 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// 立即持久化（_persistNow）：空对话在未发消息前被杀进程即永久丢失；
   /// _persistCore 的 _loadHasRun 守卫保证启动窗口内不覆写磁盘，
   /// _load 完成时会把内存新对话合并落盘。
-  String createConversation({String? assistantId}) {
+  String createConversation({
+    String? id,
+    String? assistantId,
+    bool activate = true,
+  }) {
     final now = DateTime.now();
     final assistant = assistantId == null
         ? null
@@ -45,6 +58,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
             .firstOrNull;
     final hasToolDefaults = assistant?.defaultToolNames != null;
     final conv = Conversation(
+      id: id,
       title: '',
       createdAt: now,
       updatedAt: now,
@@ -59,8 +73,10 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       lastUsedProviderName: assistant?.defaultProviderName,
     );
     state = pinnedFirstStable([conv, ...state]);
-    _ref.read(activeConversationIdProvider.notifier).state = conv.id;
-    _persistActiveId();
+    if (activate) {
+      _ref.read(activeConversationIdProvider.notifier).state = conv.id;
+      _persistActiveId();
+    }
     // 立即持久化新对话（_persistNow 而非防抖 _persist）：空对话在
     // 未发消息前被杀进程即永久丢失；防抖还会在测试/快速连续创建时
     // 留下 pending timer。
