@@ -43,6 +43,12 @@ class AssistantSettings {
   final bool enableWebSearch;
   final int maxToolCalls;
   final bool enableMaxToolCalls;
+
+  /// 工具结果发送给模型前的渲染截断上限（**字符数**，非 token/字节）。
+  /// 默认 5000 字符；关闭开关（[enableMaxToolOutputChars] = false）时
+  /// 完整发送存储的工具结果（存储仍有 50KB 上限）。
+  final int maxToolOutputChars;
+  final bool enableMaxToolOutputChars;
   final double frequencyPenalty;
   final bool enableFrequencyPenalty;
   final double presencePenalty;
@@ -62,6 +68,8 @@ class AssistantSettings {
     this.enableWebSearch = false,
     this.maxToolCalls = 20,
     this.enableMaxToolCalls = true,
+    this.maxToolOutputChars = 5000,
+    this.enableMaxToolOutputChars = true,
     this.frequencyPenalty = 0.0,
     this.enableFrequencyPenalty = false,
     this.presencePenalty = 0.0,
@@ -84,6 +92,8 @@ class AssistantSettings {
         'enableWebSearch': enableWebSearch,
         'maxToolCalls': maxToolCalls,
         'enableMaxToolCalls': enableMaxToolCalls,
+        'maxToolOutputChars': maxToolOutputChars,
+        'enableMaxToolOutputChars': enableMaxToolOutputChars,
         'frequencyPenalty': frequencyPenalty,
         'enableFrequencyPenalty': enableFrequencyPenalty,
         'presencePenalty': presencePenalty,
@@ -105,6 +115,10 @@ class AssistantSettings {
         enableWebSearch: (map['enableWebSearch'] as bool?) ?? false,
         maxToolCalls: (map['maxToolCalls'] as int?) ?? 20,
         enableMaxToolCalls: (map['enableMaxToolCalls'] as bool?) ?? true,
+        // 旧数据缺失时默认开启、5000 字符（与构造默认一致）。
+        maxToolOutputChars: (map['maxToolOutputChars'] as int?) ?? 5000,
+        enableMaxToolOutputChars:
+            (map['enableMaxToolOutputChars'] as bool?) ?? true,
         frequencyPenalty: (map['frequencyPenalty'] as num?)?.toDouble() ?? 0.0,
         enableFrequencyPenalty:
             (map['enableFrequencyPenalty'] as bool?) ?? false,
@@ -130,6 +144,8 @@ class AssistantSettings {
     bool? enableWebSearch,
     int? maxToolCalls,
     bool? enableMaxToolCalls,
+    int? maxToolOutputChars,
+    bool? enableMaxToolOutputChars,
     double? frequencyPenalty,
     bool? enableFrequencyPenalty,
     double? presencePenalty,
@@ -149,6 +165,9 @@ class AssistantSettings {
         enableWebSearch: enableWebSearch ?? this.enableWebSearch,
         maxToolCalls: maxToolCalls ?? this.maxToolCalls,
         enableMaxToolCalls: enableMaxToolCalls ?? this.enableMaxToolCalls,
+        maxToolOutputChars: maxToolOutputChars ?? this.maxToolOutputChars,
+        enableMaxToolOutputChars:
+            enableMaxToolOutputChars ?? this.enableMaxToolOutputChars,
         frequencyPenalty: frequencyPenalty ?? this.frequencyPenalty,
         enableFrequencyPenalty:
             enableFrequencyPenalty ?? this.enableFrequencyPenalty,

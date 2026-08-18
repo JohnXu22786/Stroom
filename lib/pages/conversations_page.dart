@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/conversation_provider.dart';
 import '../services/attachment_storage.dart';
+import '../widgets/temporary_countdown_capsule.dart';
 import 'conversations_shared.dart';
 
 class ConversationsPage extends ConsumerStatefulWidget {
@@ -397,13 +398,17 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               value: _selectedIds.contains(conv.id),
               onChanged: (_) => _toggleSelection(conv.id),
             )
-          : ReorderableDragStartListener(
-              index: index,
-              child: Icon(
-                Icons.drag_handle,
-                color: cs.onSurfaceVariant,
-              ),
-            ),
+          : conv.isTemporary
+              // 临时对话：左侧图标换成"虚线气泡 + 打勾"（纯指示，
+              // 不是按钮；拖拽把手让位于该图标）。
+              ? Icon(Icons.mark_chat_read_outlined, color: cs.primary)
+              : ReorderableDragStartListener(
+                  index: index,
+                  child: Icon(
+                    Icons.drag_handle,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
       title: Row(
         children: [
           if (conv.isPinned)
@@ -411,6 +416,9 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               padding: const EdgeInsets.only(right: 4),
               child: Icon(Icons.push_pin, size: 14, color: cs.primary),
             ),
+          // 临时对话倒计时胶囊（标题前）
+          if (conv.isTemporary && conv.temporaryExpiresAt != null)
+            TemporaryCountdownCapsule(expiresAt: conv.temporaryExpiresAt!),
           Expanded(
             child: Text(
               conv.title.isEmpty ? '新对话' : conv.title,
@@ -462,6 +470,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                             .read(conversationsProvider.notifier)
                             .autoRenameConversation(conv.id);
                         break;
+                      case 'toggle_temporary':
+                        ref
+                            .read(conversationsProvider.notifier)
+                            .toggleTemporary(conv.id);
+                        break;
                       case 'pin':
                         ref
                             .read(conversationsProvider.notifier)
@@ -481,6 +494,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                       value: 'auto_rename',
                       child:
                           Text('自动命名', style: TextStyle(color: cs.onSurface)),
+                    ),
+                    PopupMenuItem(
+                      value: 'toggle_temporary',
+                      child: Text(
+                        conv.isTemporary ? '关闭临时对话' : '临时对话',
+                        style: TextStyle(color: cs.onSurface),
+                      ),
                     ),
                     PopupMenuItem(
                       value: 'pin',

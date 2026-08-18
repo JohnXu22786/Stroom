@@ -665,7 +665,7 @@ void main() {
         // Just inserted: the fade-in starts at opacity ~0.
         expect(find.text(warningText), findsOneWidget);
         expect(fadeOpacity(tester, pillKey), lessThan(0.05));
-        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 300));
         expect(fadeOpacity(tester, pillKey), greaterThan(0.95));
 
         // Close: fade-out over 200ms while the pill stays in the tree.
@@ -696,9 +696,14 @@ void main() {
         await pumpArmedComposer(tester);
         expect(find.text(warningText), findsOneWidget);
 
-        // Countdown fires: the fade-out starts, the pill is still in the
-        // tree.
+        // The countdown starts after the fade-in completes: 2s of full
+        // visibility, then the fade-out starts (the pill is still in the
+        // tree).
         await tester.pump(const Duration(seconds: 2));
+        expect(find.text(warningText), findsOneWidget);
+        await tester.pump(const Duration(milliseconds: 300));
+        // Fade-in (300ms) + 2s hold = 2.3s: the countdown has just fired,
+        // the fade-out is underway but the pill is not removed yet.
         expect(find.text(warningText), findsOneWidget);
 
         await tester.pump(const Duration(milliseconds: 250));

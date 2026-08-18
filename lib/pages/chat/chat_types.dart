@@ -371,9 +371,19 @@ String formatTokenCount(int tokens) {
   return '${m.toStringAsFixed(m >= 10 ? 1 : 2)}M';
 }
 
-/// 格式化花费（美元）：<0.01 显示 4 位小数，否则 2 位。
+/// 格式化花费（美元）：常规值 2 位小数；小额 4 位；极小额（API 返回的
+/// 真实计费，如 0.0000369）保留 8 位小数并去尾零——4 位小数会把
+/// 1e-5 量级的累计显示成 0.0000，让人误以为没计费。
+///
+/// 显示位数可以少，但对话记录的 [Conversation.totalCost] 始终以完整
+/// 精度累计（显示只是格式化，绝不影响后台计费）。
 String formatCost(double cost) {
   if (cost <= 0) return '0.00';
-  if (cost < 0.01) return cost.toStringAsFixed(4);
-  return cost.toStringAsFixed(2);
+  if (cost >= 0.01) return cost.toStringAsFixed(2);
+  if (cost >= 0.0001) return cost.toStringAsFixed(4);
+  // 极小额：保留 8 位小数并去掉尾零；仍被舍成 0（< 5e-9）时改用
+  // 科学计数法，保证"已累计"可见。
+  var s = cost.toStringAsFixed(8).replaceFirst(RegExp(r'0+$'), '');
+  if (s.endsWith('.')) return cost.toStringAsPrecision(2);
+  return s;
 }

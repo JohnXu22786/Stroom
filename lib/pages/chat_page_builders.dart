@@ -15,23 +15,23 @@ extension _ChatPageBuildersExt on _ChatPageState {
       // content grows (streaming message, mermaid auto-fit, sliver extent
       // estimate corrections) AND when the viewport resizes (keyboard,
       // composer, window). _followContentGrowth ignores the scrolling
-      // cases and only re-pins when auto-scroll is engaged; the scroll-to-
-      // bottom button state is recomputed from the CURRENT metrics on
+      // cases and only re-pins when auto-scroll is engaged; the overlay
+      // buttons recompute their visibility from the CURRENT metrics on
       // every notification — a viewport-only change moves the at-bottom
       // relationship without firing a scroll event, and only this
       // notification carries it (an idle ScrollPosition does not notify
       // its controller listeners).
       onNotification: (_) {
         // Re-pin first: the follow's post-frame jump must run BEFORE the
-        // button recompute, otherwise a content growth would read as "not
+        // overlay recompute, otherwise a content growth would read as "not
         // at the bottom" and flash the button on for a frame until the
-        // follow's jump lands and _onChatScroll hides it again. Both
+        // follow's jump lands and the overlay hides it again. Both
         // callbacks are registered in this order and run in that order
-        // post-frame.
+        // post-frame: _followContentGrowth registers its post-frame jump
+        // synchronously here, and the tick's listener (which registers the
+        // overlay's post-frame recompute) runs immediately after.
         _followContentGrowth();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _updateScrollToBottomState();
-        });
+        _overlayMetricsTick.value++;
         return false;
       },
       child: NotificationListener<ScrollNotification>(

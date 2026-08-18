@@ -233,14 +233,15 @@ class MathCanvasState extends State<MathCanvas> {
   /// How much extra to sample beyond the visible viewport, as a fraction
   /// of the viewport range on each side.
   ///
-  /// A value of 0.5 means we sample 50% beyond each edge, so the total
-  /// sampled range is 2× the viewport width. This ensures that during
-  /// typical pan gestures the curves remain fully visible without
-  /// requiring a costly resample on every frame.
+  /// A value of 1.0 means we sample 100% beyond each edge, so the total
+  /// sampled range is 3× the viewport width. This ensures that during
+  /// pan gestures the curves remain fully visible without requiring a
+  /// costly resample on every frame.
   ///
-  /// Tuned to cover a ~50% viewport pan before the edge of the sampled
-  /// data is reached, which comfortably accommodates normal interaction.
-  static const double _renderMarginScale = 0.5;
+  /// Tuned to cover one full canvas-width of finger travel before the
+  /// edge of the sampled data is reached (pan is 1:1 with the finger),
+  /// which comfortably accommodates normal interaction.
+  static const double _renderMarginScale = 1.0;
 
   /// Sample a single formula at the current viewport, extended by
   /// [_renderMarginScale] on each side for smooth drag rendering.
@@ -256,7 +257,7 @@ class MathCanvasState extends State<MathCanvas> {
       // Contour segments — each is a short line across one grid cell.
       // Extend bounds and proportionally increase grid cells so that
       // contour detail remains consistent across the visible area.
-      final scale = 1.0 + 2.0 * _renderMarginScale; // e.g. 2.0 for 0.5 margin
+      final scale = 1.0 + 2.0 * _renderMarginScale; // e.g. 3.0 for 1.0 margin
       return parsed.sampleContourSegments(
         xMin: _xMin - marginX,
         xMax: _xMax + marginX,
@@ -268,7 +269,7 @@ class MathCanvasState extends State<MathCanvas> {
     }
     // Sample well beyond viewport bounds to ensure curves reach the
     // canvas edges during pan/zoom without visible holes in the graph.
-    // With _renderMarginScale=0.5, this yields scalePoints=2.0 (2× points).
+    // With _renderMarginScale=1.0, this yields scalePoints=3.0 (3× points).
     final scalePoints = 1.0 + 2.0 * _renderMarginScale;
     final pts = parsed.samplePoints(
       xMin: _xMin - marginX,
@@ -298,23 +299,24 @@ class MathCanvasState extends State<MathCanvas> {
     // Determine if this is a pan or zoom
     if (details.pointerCount == 1 ||
         (scale == 1.0 && focalPoint != _lastFocalPoint)) {
-      // Pan (with damping factor 0.5 for smoother control)
-      const damping = 0.5;
-      final dx = _lastFocalPoint == null
-          ? 0.0
-          : (focalPoint.dx - _lastFocalPoint!.dx) * damping;
-      final dy = _lastFocalPoint == null
-          ? 0.0
-          : (focalPoint.dy - _lastFocalPoint!.dy) * damping;
-
-      final xRange = _xMax - _xMin;
-      final yRange = _yMax - _yMin;
+      // Pan 1:1 — the graph tracks the finger exactly.
+      //
+      // GraphPainter renders both axes with the same pixels-per-unit
+      // scale (canvasWidth / xRange; it re-derives the y range from the
+      // viewport and canvas aspect ratio to keep units isotropic), so the
+      // viewport must shift by that same math-per-pixel amount on both
+      // axes. A plain 0.5 damping factor used to halve the movement.
+      final dx =
+          _lastFocalPoint == null ? 0.0 : focalPoint.dx - _lastFocalPoint!.dx;
+      final dy =
+          _lastFocalPoint == null ? 0.0 : focalPoint.dy - _lastFocalPoint!.dy;
+      final perPixel = (_xMax - _xMin) / _canvasWidth;
 
       setState(() {
-        _xMin -= (dx / _canvasWidth) * xRange;
-        _xMax -= (dx / _canvasWidth) * xRange;
-        _yMin += (dy / _canvasHeight) * yRange;
-        _yMax += (dy / _canvasHeight) * yRange;
+        _xMin -= dx * perPixel;
+        _xMax -= dx * perPixel;
+        _yMin += dy * perPixel;
+        _yMax += dy * perPixel;
       });
     } else if (scale != 1.0 && _lastScale != null) {
       // Zoom: scale around focal point

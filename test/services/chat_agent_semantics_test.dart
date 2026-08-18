@@ -11,6 +11,7 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/pages/chat/chat_types.dart'
     show formatCost, formatTokenCount;
+import 'package:stroom/providers/anthropic_chat_provider.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/chat_manager_provider.dart';

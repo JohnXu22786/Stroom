@@ -193,6 +193,12 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     final def = _definition;
     final screenHeight = MediaQuery.of(context).size.height;
 
+    // Subscribe the panel to provider changes: the provider may still be
+    // loading when the sheet opens (app start), so models/voices can be
+    // absent at first — without a watch the panel would keep showing
+    // 未配置模型 / 所有TTS模型均未配置音色 until reopened.
+    ref.watch(providerEntriesProvider);
+
     if (def == null) {
       return SafeArea(
         child: Padding(
@@ -348,6 +354,31 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     const SizedBox(width: 8),
                     FilledButton(
                       onPressed: () {
+                        // Re-clamp persisted model indices into the
+                        // CURRENT model range at confirm time: the
+                        // initState clamp is skipped when the provider is
+                        // still loading, and models may have been removed
+                        // while the sheet was open. Without this an
+                        // out-of-range index would survive confirm and
+                        // fail at execution.
+                        if (_definition != null) {
+                          for (final p in _definition!.params) {
+                            if (p.type != BlockParamType.modelSelector) {
+                              continue;
+                            }
+                            final models = _modelsOf(p.configType);
+                            if (models.isEmpty) continue;
+                            final raw = _params[p.key];
+                            final idx = raw is num
+                                ? raw.toInt()
+                                : (int.tryParse('$raw') ?? 0);
+                            final clamped =
+                                idx.clamp(0, models.length - 1).toInt();
+                            if (clamped != idx) {
+                              _params[p.key] = clamped;
+                            }
+                          }
+                        }
                         // Confirm-time voice/model reconciliation:
                         // - a voice that exists on ANOTHER model moves
                         //   modelIndex to its owning model (same pair the
@@ -465,6 +496,13 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         }
         final clampedIndex =
             currentIndex.clamp(0, math.max(0, models.length - 1)).toInt();
+        // The initState clamp may have been skipped when the panel opened
+        // before the provider finished loading — persist the clamped value
+        // so a confirm doesn't save an out-of-range index that would fail
+        // at execution.
+        if (clampedIndex != currentIndex) {
+          _params[param.key] = clampedIndex;
+        }
         final selectedModel = models[clampedIndex].model;
         final customParams =
             (selectedModel.customParams as List<dynamic>? ?? const []);

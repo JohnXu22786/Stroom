@@ -4,14 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../models/assistant.dart';
 import '../models/built_in_assistants.dart';
-import '../providers/assistant_provider.dart';
 import '../providers/context_management_provider.dart';
 import '../providers/system_assistant_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/provider_config.dart';
 import '../providers/update_provider.dart';
+import '../services/chat_adapter.dart'
+    show AvailableModel, availableLlmModels, resolveModelRef;
 import '../utils/app_version.dart';
 import '../utils/model_order.dart' show applySavedOrder;
 import '../widgets/update_dialog.dart';

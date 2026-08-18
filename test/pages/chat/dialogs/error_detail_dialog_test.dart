@@ -286,6 +286,82 @@ void main() {
       expect(find.textContaining('bad request'), findsOneWidget);
     });
 
+    testWidgets(
+        'Response Body renders raw JSON string as pretty JSON (not escaped)',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com/chat'},
+                rawResponse: {
+                  'statusCode': 400,
+                  'headers': {
+                    'content-type': ['application/json'],
+                  },
+                  'data': {
+                    'raw': '{"error":{"message":"bad request"}}',
+                  },
+                },
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Response Body'));
+      await tester.pumpAndSettle();
+
+      // The raw JSON string body is parsed and pretty-printed:
+      // indented, and the escaped raw wrapper ('raw' key) is gone.
+      expect(find.textContaining('"message": "bad request"'), findsOneWidget);
+      expect(find.textContaining('"raw"'), findsNothing);
+      expect(find.textContaining('\\"message\\"'), findsNothing);
+    });
+
+    testWidgets('Response Body shows complete JSON without truncation',
+        (tester) async {
+      final longValue = '错' * 500;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {'url': 'https://api.example.com/chat'},
+                rawResponse: {
+                  'statusCode': 400,
+                  'headers': {
+                    'content-type': ['application/json']
+                  },
+                  'data': {
+                    'error': {'message': longValue}
+                  },
+                },
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Response Body'));
+      await tester.pumpAndSettle();
+
+      // Full content is present, no "..." truncation suffix.
+      expect(find.textContaining(longValue), findsOneWidget);
+      expect(find.textContaining('...'), findsNothing);
+    });
+
     testWidgets('Response Body hidden when data key is absent', (tester) async {
       await tester.pumpWidget(
         MaterialApp(

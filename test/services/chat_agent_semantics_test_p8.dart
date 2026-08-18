@@ -198,6 +198,104 @@ void chatAgentSemanticsGroup8() {
       container.dispose();
     });
 
+    test('多步工具调用：极小额 cost 每轮完整累计（不四舍五入不丢失）', () async {
+      final container =
+          _makeContainer(conversations: [convWithTitle('conv-tiny')]);
+      final manager = container.read(chatStreamManagerProvider);
+      // 2 轮工具 + 1 轮文本，单轮 cost 低至 1e-5 量级（API 真实计费）
+      final provider = _UsageQueueProvider([
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 't1',
+              'type': 'function',
+              'function': {
+                'name': 'loop_tool',
+                'arguments': '{"i": 1}',
+              },
+            },
+          ]),
+        ],
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 't2',
+              'type': 'function',
+              'function': {
+                'name': 'loop_tool',
+                'arguments': '{"i": 2}',
+              },
+            },
+          ]),
+        ],
+        [AIStreamEvent('完成')],
+      ]);
+      provider.usageQueue = [
+        {'inputTokens': 100, 'outputTokens': 10, 'cost': 0.0000012},
+        {'inputTokens': 200, 'outputTokens': 20, 'cost': 0.0000034},
+        {'inputTokens': 300, 'outputTokens': 30, 'cost': 0.0000056},
+      ];
+      manager.adapter.forceService(_makeService(provider));
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'loop_tool',
+          description: 'loop',
+          parameters: {'type': 'object'},
+        ),
+        (args) => 'ok',
+      );
+
+      await manager.startStreaming(
+        text: 'go',
+        convId: 'conv-tiny',
+        history: [ChatMessage(role: 'user', content: 'go')],
+        tools: ChatService.getRegisteredToolDefinitions(),
+      );
+
+      final conv = container
+          .read(conversationsProvider)
+          .where((c) => c.id == 'conv-tiny')
+          .first;
+      // 0.0000012 + 0.0000034 + 0.0000056 = 0.0000102：极小额也逐轮
+      // 以 API 原值累计，任何一步被舍入都会偏离该精确值
+      expect(conv.totalCost, closeTo(0.0000102, 1e-12),
+          reason: '极小额 cost 必须完整累计（0.0000012+0.0000034+0.0000056）');
+      // 显示层不把非零累计显示成 $0.0000（旧 formatCost 对 <0.0001
+      // 固定 4 位小数会把 0.0000102 显示成 0.0000；后台仍为完整精度）
+      expect(formatCost(conv.totalCost), isNot('0.0000'));
+      container.dispose();
+    });
+
+    test('usage 中 cost 为整数（非 double）时计量不整体丢失', () async {
+      final container =
+          _makeContainer(conversations: [convWithTitle('conv-intcost')]);
+      final manager = container.read(chatStreamManagerProvider);
+      final provider = _UsageQueueProvider([
+        [AIStreamEvent('回答')],
+      ]);
+      // cost 以 int 形式出现（JSON 整数值反序列化可能为 int）：
+      // 单个字段类型异常不能把整次计量（含 tokens）一起丢掉
+      provider.usageQueue = [
+        {'inputTokens': 100, 'outputTokens': 10, 'cost': 1},
+      ];
+      manager.adapter.forceService(_makeService(provider));
+
+      await manager.startStreaming(
+        text: 'hi',
+        convId: 'conv-intcost',
+        history: [ChatMessage(role: 'user', content: 'hi')],
+      );
+
+      final conv = container
+          .read(conversationsProvider)
+          .where((c) => c.id == 'conv-intcost')
+          .first;
+      expect(conv.totalCost, 1.0, reason: 'cost 为 int 时也应累计（不能因类型断言抛错而整体丢失）');
+      expect(conv.lastInputTokens, 100);
+      expect(conv.lastOutputTokens, 10);
+      container.dispose();
+    });
+
     test('Stop→re-Send 且两流都有 usage：旧流 cost + 新流 cost 各自计一次', () async {
       final container =
           _makeContainer(conversations: [convWithTitle('conv-rs2')]);

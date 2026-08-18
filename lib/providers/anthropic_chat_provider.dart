@@ -86,6 +86,35 @@ class AnthropicChatProvider extends BaseChatProvider {
   @override
   Map<String, dynamic>? get lastUsage => _lastUsage;
 
+  /// 合并 Anthropic 一次 usage 事件（message_start / message_delta /
+  /// 非流式响应体）到 [localUsage]。
+  ///
+  /// - 输入 = input_tokens + cache_read + cache_creation（缓存 token
+  ///   同样占用上下文）；仅当 > 0 时写入（message_delta 无输入字段）。
+  /// - 输出 = output_tokens。
+  /// - cost：兼容 num 与数字字符串（部分网关）；两端点重复上报
+  ///   total_cost 时取较大值而非累加，避免双计。
+  @visibleForTesting
+  static void mergeAnthropicUsage(Map<String, dynamic> localUsage, Map usage) {
+    final input = usageNumberToDouble(usage['input_tokens'])?.toInt() ?? 0;
+    final cacheRead =
+        usageNumberToDouble(usage['cache_read_input_tokens'])?.toInt() ?? 0;
+    final cacheCreation =
+        usageNumberToDouble(usage['cache_creation_input_tokens'])?.toInt() ?? 0;
+    final inputTotal = input + cacheRead + cacheCreation;
+    if (inputTotal > 0) localUsage['inputTokens'] = inputTotal;
+    final output = usageNumberToDouble(usage['output_tokens'])?.toInt();
+    if (output != null) localUsage['outputTokens'] = output;
+    final cost = usageNumberToDouble(usage['total_cost']) ??
+        usageNumberToDouble(usage['cost']);
+    if (cost != null) {
+      final existing = (localUsage['cost'] as num?)?.toDouble() ?? 0;
+      if (cost > existing) {
+        localUsage['cost'] = cost;
+      }
+    }
+  }
+
   // TODO: 可从 CustomParam 中提取模型列表，目前暂无可信数据源，留空。
   @override
   List<String> get supportedModelIds => [];
@@ -224,20 +253,7 @@ class AnthropicChatProvider extends BaseChatProvider {
           response.data is Map ? (response.data as Map)['usage'] : null;
       if (usage is Map) {
         _lastUsage = {};
-        var input = usage['input_tokens'] is num
-            ? (usage['input_tokens'] as num).toInt()
-            : 0;
-        if (usage['cache_read_input_tokens'] is num) {
-          input += (usage['cache_read_input_tokens'] as num).toInt();
-        }
-        if (usage['cache_creation_input_tokens'] is num) {
-          input += (usage['cache_creation_input_tokens'] as num).toInt();
-        }
-        if (input > 0) _lastUsage!['inputTokens'] = input;
-        final output = usage['output_tokens'];
-        if (output is num) _lastUsage!['outputTokens'] = output.toInt();
-        final cost = usage['total_cost'] ?? usage['cost'];
-        if (cost is num) _lastUsage!['cost'] = cost.toDouble();
+        mergeAnthropicUsage(_lastUsage!, usage);
         // 无任何可用计量（端点只回空 usage）时置 null，
         // 与流式路径语义一致（空 map 会让诊断槽出现假值）
         if (_lastUsage!.isEmpty) _lastUsage = null;
@@ -360,7 +376,7 @@ class AnthropicChatProvider extends BaseChatProvider {
           final data = jsonDecode(dataStr) as Map<String, dynamic>;
           _lastResponseData = data;
 
-          // 收集实际 token 计量：
+          // 收集实际 token 计量（合并到 [mergeAnthropicUsage]）：
           // - message_start 的 usage.input_tokens（+ cache_read/cache_creation
           //   计入上下文占用）
           // - message_delta 的 usage.output_tokens
@@ -370,40 +386,13 @@ class AnthropicChatProvider extends BaseChatProvider {
             final usage = msg?['usage'];
             if (usage is Map) {
               localUsage ??= {};
-              // 输入 = input_tokens + 缓存读取/创建（缓存 token 同样占用上下文）
-              var input = usage['input_tokens'] is num
-                  ? (usage['input_tokens'] as num).toInt()
-                  : 0;
-              if (usage['cache_read_input_tokens'] is num) {
-                input += (usage['cache_read_input_tokens'] as num).toInt();
-              }
-              if (usage['cache_creation_input_tokens'] is num) {
-                input += (usage['cache_creation_input_tokens'] as num).toInt();
-              }
-              if (input > 0) localUsage['inputTokens'] = input;
-              final cost = usage['total_cost'] ?? usage['cost'];
-              if (cost is num) {
-                // 兼容两端点重复上报 total_cost：取较大值而非累加，避免双计
-                final existing = (localUsage['cost'] as num?)?.toDouble() ?? 0;
-                if (cost.toDouble() > existing) {
-                  localUsage['cost'] = cost.toDouble();
-                }
-              }
+              mergeAnthropicUsage(localUsage, usage);
             }
           } else if (data['type'] == 'message_delta') {
             final usage = data['usage'];
             if (usage is Map) {
               localUsage ??= {};
-              final output = usage['output_tokens'];
-              if (output is num) localUsage['outputTokens'] = output.toInt();
-              final cost = usage['total_cost'] ?? usage['cost'];
-              if (cost is num) {
-                // 与 message_start 的 cost 取较大值（兼容重复上报）
-                final existing = (localUsage['cost'] as num?)?.toDouble() ?? 0;
-                if (cost.toDouble() > existing) {
-                  localUsage['cost'] = cost.toDouble();
-                }
-              }
+              mergeAnthropicUsage(localUsage, usage);
             }
           }
 

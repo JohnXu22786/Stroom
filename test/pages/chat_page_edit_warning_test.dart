@@ -168,11 +168,13 @@ void main() {
       expect(find.text(_warningText), findsOneWidget);
       expect(find.text(_capsuleText), findsNothing);
 
-      // The countdown fires: the pill fades out (still in the tree)…
+      // The countdown starts after the fade-in completes (300ms fade-in +
+      // 2s hold = 2.3s): at 2s the pill is still fully visible…
       await tester.pump(const Duration(seconds: 2));
       expect(find.text(_warningText), findsOneWidget);
-      // …then is removed and the edit capsule is back in its row.
-      await tester.pump(_fadeDuration);
+      // …then the countdown fires, the pill fades out and is removed, and
+      // the edit capsule is back in its row.
+      await tester.pump(const Duration(milliseconds: 600));
       expect(find.text(_warningText), findsNothing);
       expect(find.text(_capsuleText), findsOneWidget);
     });
@@ -222,10 +224,10 @@ void main() {
         await tester.pump();
         expect(find.text(_warningText), findsOneWidget);
 
-        // Let the warning auto-hide (fade-out completes), then cancel via
-        // the capsule's X.
+        // Let the warning auto-hide (fade-in 300ms + 2s hold, then the
+        // fade-out completes), then cancel via the capsule's X.
         await tester.pump(const Duration(seconds: 2));
-        await tester.pump(_fadeDuration);
+        await tester.pump(const Duration(milliseconds: 600));
         expect(find.text(_capsuleText), findsOneWidget);
 
         await tester.tap(_editCapsuleCloseButton());

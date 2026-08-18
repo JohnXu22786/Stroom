@@ -6,11 +6,12 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
-import 'package:archive/archive.dart';
+import 'package:archive/archive.dart' hide ZLibDecoder;
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'backup_location_manager.dart';
 import 'backup_service_shared.dart';
 import 'data_migration_service.dart';
 import 'manifest_database.dart';
@@ -39,6 +40,20 @@ class BackupCancelledException implements Exception {
 class BackupValidationException implements Exception {
   final String message;
   const BackupValidationException(this.message);
+
+  @override
+  String toString() => message;
+}
+
+/// 恢复中途（已删除选中类别的现有数据之后）发现归档条目损坏时抛出。
+///
+/// 与 [BackupValidationException] 区分：校验期失败意味着"什么都没动"，
+/// 而此异常意味着恢复可能已部分完成，调用方必须提示用户重启应用。
+/// 由流式恢复的条目解压层抛出，校验期调用方将其包装为
+/// [BackupValidationException]。
+class _RestoreEntryCorruptException implements Exception {
+  final String message;
+  const _RestoreEntryCorruptException(this.message);
 
   @override
   String toString() => message;
@@ -183,8 +198,9 @@ class BackupService {
       throw UnsupportedError(
           'restoreBackup is not available on web. Use importBackup instead.');
     }
-    final bytes = await File(zipPath).readAsBytes();
-    await _restoreFromBytes(bytes,
+    // 流式恢复：只解析中央目录 + 按条目分块解压落盘，
+    // 峰值内存 O(块大小)，不再把整个备份包 readAsBytes 进内存。
+    await _restoreFromZipFile(zipPath,
         onProgress: onProgress,
         selection: selection,
         skipPostRestoreMigration: skipPostRestoreMigration);
@@ -979,8 +995,244 @@ class BackupService {
     debugPrint(
         '[BackupService] _restoreFromBytes: archive decoded (${fileMap.length} files)');
 
+    // ================================================================
+    // 预解析并校验备份中的全部 JSON 数据（在删除任何现有文件之前）。
+    // 无效备份直接中止恢复，避免"选中类别的文件已被删除但恢复失败"
+    // 造成的数据丢失。
+    // ================================================================
+    final metadata =
+        _validateAndParseMetadata((name) => fileMap[name], selection);
+    onProgress?.call(0.15);
+    await _yieldToEventLoop();
+
+    // 勾选即清空：先清除选中类别的现有文件。
+    // 即使备份中缺少对应文件，选中的类别也会被清空（与数据库/偏好设置
+    // 类别的语义一致）。必须在数据库记录替换之前执行，因为媒体文件按
+    // 当前数据库记录逐个删除。
+    // 删除失败（如 Windows 上文件被占用）时中止恢复并提示重启重试，
+    // 与清除功能的行为一致。
+    if (await _deleteSelectedFiles(selection)) {
+      throw Exception('部分数据文件删除失败，请重启应用后重试');
+    }
+
+    // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
+    debugPrint('[BackupService] _restoreFromBytes: restoring database');
+    await _restoreRecordsAndPrefs(metadata, selection);
+    onProgress?.call(0.55);
+    await _yieldToEventLoop();
+
+    // 恢复浏览器Cookies持久化数据（选中则恢复，未选中则保持原样）
+    if (selection.browserCookies) {
+      final bcData = fileMap['browser_cookies.json'];
+      if (bcData != null) {
+        await writeBackupFile('', 'browser_cookies.json', bcData);
+      }
+    }
+
+    // 恢复二进制文件和任务文件（兼容新旧两种路径格式）
+    // 新格式: pictures/, tts_audio/, videos/, texts/, attachments/, synthesis/, catcatch/
+    // 旧格式: files/pictures/, files/tts_audio/, ..., tasks/synthesis_tasks.json
+    debugPrint(
+        '[BackupService] _restoreFromBytes: restoring binary files (selection: ${selection.selectedLabels})');
+    var restoreIndex = 0;
+    for (final entry in fileMap.entries) {
+      final handled = await _restoreArchiveEntry(
+        entry.key,
+        selection,
+        (subDir, fileName) async {
+          final builder = BytesBuilder(copy: false);
+          builder.add(entry.value);
+          await writeBackupFile(subDir, fileName, builder.takeBytes());
+        },
+      );
+      if (handled) {
+        restoreIndex++;
+        // 每处理 20 个文件让出事件循环
+        if (restoreIndex % 20 == 0) await _yieldToEventLoop();
+      }
+    }
+
+    // 未选中的类别保持原样：不清理、不覆盖其现有文件/记录，
+    // 只有选中的类别会被备份中的数据替换。
+    // 选中类别的现有文件已在恢复开始时清除（见 _deleteSelectedFiles），
+    // 这里只需写入备份中包含的文件。
+
+    // 数据迁移：确保恢复后的数据格式是最新的
+    // 旧格式备份（pre-migration）中包含 chat_configs、null IDs 等，
+    // 需要迁移到当前数据格式才能正常使用。
+    // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
+    if (!skipPostRestoreMigration) {
+      await DataMigrationService.migrateDataFormatIfNeeded();
+    }
+    onProgress?.call(1.0);
+  }
+
+  // ================================================================
+  // 流式恢复（原生）：_restoreFromBytes 的磁盘流式等价实现
+  // ================================================================
+
+  /// 从磁盘 ZIP 文件流式恢复（原生平台，[restoreBackup] 使用）。
+  ///
+  /// 与 [_restoreFromBytes]（Web/内存版）的恢复语义完全一致，但内存
+  /// 策略不同：
+  /// 1. 只解析 ZIP 中央目录（文件末尾小块），不把整个备份包读进内存；
+  /// 2. 元数据文件（manifest / 数据库清单 / 偏好设置）按需少量读取；
+  /// 3. 二进制条目按 64KB 分块流式解压并直接落盘（见 [_ZipStreamReader]）。
+  ///
+  /// 峰值内存 O(最大元数据文件 + 分块缓冲)，不随备份体积增长 ——
+  /// 手动导入含数百 MB 视频的备份不再 OOM（与旧自动备份的流式创建对称）。
+  static Future<void> _restoreFromZipFile(
+    String zipPath, {
+    void Function(double progress)? onProgress,
+    BackupSelection selection = BackupSelection.all,
+    bool skipPostRestoreMigration = false,
+  }) async {
+    onProgress?.call(0.0);
+    await _yieldToEventLoop();
+
+    late _ZipStreamReader reader;
+    try {
+      reader = _ZipStreamReader(zipPath);
+    } catch (e) {
+      debugPrint('[BackupService] _restoreFromZipFile: 无法解析备份文件: $e');
+      throw BackupValidationException('无效的备份文件：无法读取 ($e)');
+    }
+    onProgress?.call(0.1);
+    await _yieldToEventLoop();
+    try {
+      // ================================================================
+      // 预解析并校验备份中的全部 JSON 数据（在删除任何现有文件之前）。
+      // 无效备份直接中止恢复，避免"选中类别的文件已被删除但恢复失败"
+      // 造成的数据丢失。
+      //
+      // 注意：此处读取元数据时把条目损坏（_RestoreEntryCorruptException）
+      // 包装为 BackupValidationException —— 校验期失败意味着什么都没动；
+      // 删除之后的读取（cookies / 二进制条目）不再包装，让调用方提示
+      // "恢复未完成，请重启"（流式恢复的固有差异：条目内容在删除后才
+      // 逐块解压，二进制条目的损坏只能在中途发现）。
+      // ================================================================
+      final metadata = _validateAndParseMetadata(
+        (name) {
+          try {
+            return reader.readMetaFile(name);
+          } on _RestoreEntryCorruptException catch (e) {
+            throw BackupValidationException('无效的备份文件：$e');
+          }
+        },
+        selection,
+      );
+      onProgress?.call(0.15);
+      await _yieldToEventLoop();
+
+      // 勾选即清空：先清除选中类别的现有文件（语义与内存版一致）。
+      if (await _deleteSelectedFiles(selection)) {
+        throw Exception('部分数据文件删除失败，请重启应用后重试');
+      }
+
+      // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
+      debugPrint('[BackupService] _restoreFromZipFile: restoring database');
+      await _restoreRecordsAndPrefs(metadata, selection);
+      onProgress?.call(0.55);
+      await _yieldToEventLoop();
+
+      // 恢复浏览器Cookies持久化数据（选中则恢复，未选中则保持原样）
+      // （此处在删除之后：读取失败按恢复中途失败传播）
+      if (selection.browserCookies) {
+        final bcData = reader.readMetaFile('browser_cookies.json');
+        if (bcData != null) {
+          await writeBackupFile('', 'browser_cookies.json', bcData);
+        }
+      }
+
+      // 恢复二进制文件和任务文件：逐条目分块流式落盘
+      // （新格式: pictures/, tts_audio/, ...；旧格式: files/, tasks/ 前缀）
+      // （条目损坏在此处按恢复中途失败传播，调用方需提示重启）
+      debugPrint('[BackupService] _restoreFromZipFile: restoring binary files '
+          '(selection: ${selection.selectedLabels})');
+      var restoreIndex = 0;
+      for (final entry in reader.entries) {
+        final handled = await _restoreArchiveEntry(
+          entry.name,
+          selection,
+          (subDir, fileName) =>
+              _writeZipEntryStreamed(reader, entry, subDir, fileName),
+        );
+        if (handled) {
+          restoreIndex++;
+          // 每处理 20 个文件让出事件循环
+          if (restoreIndex % 20 == 0) await _yieldToEventLoop();
+        }
+      }
+
+      // 未选中的类别保持原样：不清理、不覆盖其现有文件/记录，
+      // 只有选中的类别会被备份中的数据替换。
+      // 选中类别的现有文件已在恢复开始时清除（见 _deleteSelectedFiles），
+      // 这里只需写入备份中包含的文件。
+
+      // 数据迁移：确保恢复后的数据格式是最新的
+      // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
+      if (!skipPostRestoreMigration) {
+        await DataMigrationService.migrateDataFormatIfNeeded();
+      }
+      onProgress?.call(1.0);
+    } finally {
+      reader.close();
+    }
+  }
+
+  /// 把单个 ZIP 条目分块写出到应用数据目录。
+  ///
+  /// 测试模式（[WebFileStore.isTestMode]）：收集后经 [writeBackupFile]
+  /// 写入（与内存版测试路径一致）；原生：直接分块写磁盘，峰值内存
+  /// O(块大小)，不随条目大小增长。
+  ///
+  /// 写出失败时删除半成品文件，避免损坏的半个文件被后续逻辑使用。
+  static Future<void> _writeZipEntryStreamed(
+    _ZipStreamReader reader,
+    _ZipEntryInfo entry,
+    String subDir,
+    String fileName,
+  ) async {
+    if (WebFileStore.isTestMode) {
+      final builder = BytesBuilder(copy: false);
+      reader.extractEntry(entry, builder.add);
+      await writeBackupFile(subDir, fileName, builder.takeBytes());
+      return;
+    }
+    final appDir = await AppStorage.directory;
+    final dir = Directory(p.join(appDir, subDir));
+    await dir.create(recursive: true);
+    final dest = File(p.join(dir.path, fileName));
+    final raf = dest.openSync(mode: FileMode.write);
+    try {
+      reader.extractEntry(entry, raf.writeFromSync);
+    } catch (_) {
+      try {
+        raf.closeSync();
+      } catch (_) {}
+      try {
+        await dest.delete();
+      } catch (_) {}
+      rethrow;
+    }
+    raf.closeSync();
+  }
+
+  /// 预解析并校验备份中的全部 JSON 元数据（在任何删除操作之前调用）。
+  ///
+  /// [readFile] 读取归档中的文件（不存在返回 `null`）。
+  /// 无效备份抛 [BackupValidationException]。
+  ///
+  /// 兼容 v1 和 v2 备份格式：
+  /// - v1: preferences.json（聊天+设置合并），attachments/ 分开
+  /// - v2: chat_data.json（聊天记录）+ settings.json（设置），
+  ///       attachments/ 作为聊天记录和附件的一部分
+  static _RestoreMetadata _validateAndParseMetadata(
+    Uint8List? Function(String name) readFile,
+    BackupSelection selection,
+  ) {
     // 验证 manifest（兼容 v1 和 v2）
-    final manifestJson = fileMap['manifest.json'];
+    final manifestJson = readFile('manifest.json');
     if (manifestJson == null) {
       throw BackupValidationException('无效的备份文件：缺少 manifest.json');
     }
@@ -1004,17 +1256,11 @@ class BackupService {
       throw BackupValidationException('不支持的备份版本: $version (仅支持 v1 和 v2)');
     }
     final isV1Format = version == 1;
-    onProgress?.call(0.15);
-    await _yieldToEventLoop();
 
-    // ================================================================
-    // 预解析并校验备份中的全部 JSON 数据（在删除任何现有文件之前）。
-    // 无效备份直接中止恢复，避免"选中类别的文件已被删除但恢复失败"
-    // 造成的数据丢失。
-    // ================================================================
+    // 数据库清单（stroom_manifest.json，兼容旧路径 database/manifest_data.json）
     Map<String, dynamic>? dbData;
-    final dbJson = fileMap['stroom_manifest.json'] ??
-        fileMap['database/manifest_data.json'];
+    final dbJson = readFile('stroom_manifest.json') ??
+        readFile('database/manifest_data.json');
     if (dbJson != null) {
       try {
         final decoded = jsonDecode(utf8.decode(dbJson));
@@ -1061,11 +1307,14 @@ class BackupService {
         throw BackupValidationException('无效的备份文件：数据库记录损坏 ($e)');
       }
     }
+
+    // 偏好设置：只校验选中类别的文件（未选中的类别不参与恢复，
+    // 其文件损坏不应阻止其他类别的恢复）
     Map<String, dynamic>? v1Prefs;
     Map<String, dynamic>? chatPrefs;
     Map<String, dynamic>? settingsPrefs;
     Map<String, dynamic>? validatePrefsFile(String name) {
-      final raw = fileMap[name];
+      final raw = readFile(name);
       if (raw == null) return null;
       try {
         final decoded = jsonDecode(utf8.decode(raw));
@@ -1078,8 +1327,6 @@ class BackupService {
       }
     }
 
-    // 只校验选中类别的偏好设置文件（未选中的类别不参与恢复，
-    // 其文件损坏不应阻止其他类别的恢复）
     if (isV1Format) {
       if (selection.chatRecordsAndAttachments || selection.settings) {
         v1Prefs = validatePrefsFile('preferences.json');
@@ -1093,20 +1340,27 @@ class BackupService {
       }
     }
 
-    // 勾选即清空：先清除选中类别的现有文件。
-    // 即使备份中缺少对应文件，选中的类别也会被清空（与数据库/偏好设置
-    // 类别的语义一致）。必须在数据库记录替换之前执行，因为媒体文件按
-    // 当前数据库记录逐个删除。
-    // 删除失败（如 Windows 上文件被占用）时中止恢复并提示重启重试，
-    // 与清除功能的行为一致。
-    if (await _deleteSelectedFiles(selection)) {
-      throw Exception('部分数据文件删除失败，请重启应用后重试');
-    }
+    return _RestoreMetadata(
+      isV1: isV1Format,
+      dbData: dbData,
+      v1Prefs: v1Prefs,
+      chatPrefs: chatPrefs,
+      settingsPrefs: settingsPrefs,
+    );
+  }
 
+  /// 恢复数据库记录与 SharedPreferences（删除操作已在调用前完成）。
+  ///
+  /// 注意：偏好设置必须将要恢复的所有数据合并后一次性调用
+  /// [_restorePreferencesFromJson]，因为该方法会清除选中类别的现有键。
+  /// 分两次调用会导致先恢复的数据被后一次清除。
+  static Future<void> _restoreRecordsAndPrefs(
+    _RestoreMetadata metadata,
+    BackupSelection selection,
+  ) async {
     // 恢复数据库记录（使用已解析校验的数据）
-    debugPrint('[BackupService] _restoreFromBytes: restoring database');
-    if (dbData != null) {
-      await _restoreDatabaseFromJson(dbData, selection: selection);
+    if (metadata.dbData != null) {
+      await _restoreDatabaseFromJson(metadata.dbData!, selection: selection);
     } else if (selection.pictures ||
         selection.audio ||
         selection.videos ||
@@ -1135,21 +1389,17 @@ class BackupService {
             recordTable: ManifestTables.textRecords);
       }
     }
-    onProgress?.call(0.4);
-    await _yieldToEventLoop();
 
     // 恢复 SharedPreferences（兼容 v1/v2 格式）
-    // 注意：必须将要恢复的所有数据合并后一次性调用 _restorePreferencesFromJson，
-    // 因为该方法会清除选中类别的现有键。分两次调用会导致先恢复的数据被后一次清除。
-    if (isV1Format) {
+    if (metadata.isV1) {
       // v1 格式：preferences.json 包含所有键（聊天+设置合并）
       // 按 key 分类拆分：只恢复选中类别对应的键，未选中的类别保持原样
       if (selection.chatRecordsAndAttachments || selection.settings) {
         debugPrint(
-            '[BackupService] _restoreFromBytes: restoring v1 preferences');
+            '[BackupService] _restoreRecordsAndPrefs: restoring v1 preferences');
         final restorePrefs = <String, dynamic>{};
-        if (v1Prefs != null) {
-          for (final entry in v1Prefs.entries) {
+        if (metadata.v1Prefs != null) {
+          for (final entry in metadata.v1Prefs!.entries) {
             final isChat = _isChatPrefKey(entry.key);
             if ((isChat && selection.chatRecordsAndAttachments) ||
                 (!isChat && selection.settings)) {
@@ -1163,170 +1413,105 @@ class BackupService {
       // v2 格式：chat_data.json + settings.json 分开，合并后一次性恢复
       final mergedPrefs = <String, dynamic>{};
       if (selection.chatRecordsAndAttachments) {
-        debugPrint('[BackupService] _restoreFromBytes: merging chat_data.json');
-        if (chatPrefs != null) {
-          mergedPrefs.addAll(chatPrefs);
+        debugPrint(
+            '[BackupService] _restoreRecordsAndPrefs: merging chat_data.json');
+        if (metadata.chatPrefs != null) {
+          mergedPrefs.addAll(metadata.chatPrefs!);
         }
       }
       if (selection.settings) {
-        debugPrint('[BackupService] _restoreFromBytes: merging settings.json');
-        if (settingsPrefs != null) {
-          mergedPrefs.addAll(settingsPrefs);
+        debugPrint(
+            '[BackupService] _restoreRecordsAndPrefs: merging settings.json');
+        if (metadata.settingsPrefs != null) {
+          mergedPrefs.addAll(metadata.settingsPrefs!);
         }
       }
       if (selection.chatRecordsAndAttachments || selection.settings) {
         await _restorePreferencesFromJson(mergedPrefs, selection: selection);
       }
     }
-    onProgress?.call(0.55);
-    await _yieldToEventLoop();
+  }
 
-    debugPrint(
-        '[BackupService] _restoreFromBytes: restoring binary files (selection: ${selection.selectedLabels})');
-    // 恢复二进制文件和任务文件（兼容新旧两种路径格式）
-    // 新格式: pictures/, tts_audio/, videos/, texts/, attachments/, synthesis/, catcatch/
-    // 旧格式: files/pictures/, files/tts_audio/, ..., tasks/synthesis_tasks.json
-    const knownDirs = [
-      'pictures',
-      'tts_audio',
-      'videos',
-      'texts',
-      'attachments',
-      'synthesis',
-      'catcatch',
-      'background',
-      'task_flows',
-      'anki',
-    ];
-    final skipFiles = {
-      'manifest.json',
-      'stroom_manifest.json',
-      'database/manifest_data.json',
-      'preferences.json',
-      'chat_data.json',
-      'settings.json',
-      'browser_cookies.json',
-    };
+  /// 将归档条目 [rawKey] 恢复为应用数据文件（含旧格式路径重映射与
+  /// selection 过滤）。返回是否实际处理了该条目。
+  ///
+  /// 两个恢复路径共用此调度逻辑（内存版 [_restoreFromBytes] 与流式版
+  /// [_restoreFromZipFile]），避免两套路径的映射规则漂移。
+  ///
+  /// [writeEntry] 负责把条目内容写出到 (subDir, fileName)。
+  static Future<bool> _restoreArchiveEntry(
+    String rawKey,
+    BackupSelection selection,
+    Future<void> Function(String subDir, String fileName) writeEntry,
+  ) async {
+    var key = rawKey;
 
-    // 恢复浏览器Cookies持久化数据（选中则恢复，未选中则保持原样）
-    if (selection.browserCookies) {
-      final bcData = fileMap['browser_cookies.json'];
-      if (bcData != null) {
-        await writeBackupFile('', 'browser_cookies.json', bcData);
-      }
+    // 跳过元数据文件
+    if (_restoreSkipFiles.contains(key)) return false;
+
+    // 旧格式 binary: 去掉 files/ 前缀
+    if (key.startsWith('files/')) {
+      key = key.substring('files/'.length);
     }
 
-    // 根据 selection 决定哪些目录需要恢复
-    // v1 格式：attachments 由旧的 conversations 标志控制（因为 v1 的
-    // conversations 包含了设置+聊天记录，不包含附件），但为了兼容，
-    // v1 导入时 attachments 由 chatRecordsAndAttachments 控制
-    bool shouldRestoreDir(String dir) {
-      switch (dir) {
-        case 'pictures':
-          return selection.pictures && selection.includeMediaFiles;
-        case 'tts_audio':
-          return selection.audio && selection.includeMediaFiles;
-        case 'videos':
-          return selection.videos && selection.includeMediaFiles;
-        case 'texts':
-          return selection.texts && selection.includeMediaFiles;
-        case 'synthesis':
-        case 'catcatch':
-        case 'background':
-        case 'task_flows':
-          return selection.tasks;
-        case 'attachments':
-          return selection.chatRecordsAndAttachments &&
-              selection.includeMediaFiles;
-        case 'anki':
-          return selection.ankiData;
-        default:
-          return false;
-      }
+    // 旧格式 task: tasks/synthesis_tasks.json → synthesis/tasks.json
+    if (key.startsWith('tasks/')) {
+      key = key.substring('tasks/'.length);
+      // synthesis_tasks.json → synthesis/tasks.json
+      if (key == 'synthesis_tasks.json') key = 'synthesis/tasks.json';
+      if (key == 'catcatch_tasks.json') key = 'catcatch/tasks.json';
     }
 
-    var restoreIndex = 0;
-    for (final entry in fileMap.entries) {
-      var key = entry.key;
-
-      // 跳过元数据文件
-      if (skipFiles.contains(key)) {
-        restoreIndex++;
-        continue;
+    // 匹配已知存储目录
+    String? matchedDir;
+    for (final dir in _restoreKnownDirs) {
+      if (key.startsWith('$dir/')) {
+        matchedDir = dir;
+        break;
       }
+    }
+    if (matchedDir == null) return false;
 
-      // 旧格式 binary: 去掉 files/ 前缀
-      if (key.startsWith('files/')) {
-        key = key.substring('files/'.length);
-      }
+    // 根据 selection 跳过不需要恢复的目录
+    if (!_shouldRestoreDir(matchedDir, selection)) return false;
 
-      // 旧格式 task: tasks/synthesis_tasks.json → synthesis/tasks.json
-      if (key.startsWith('tasks/')) {
-        key = key.substring('tasks/'.length);
-        // synthesis_tasks.json → synthesis/tasks.json
-        if (key == 'synthesis_tasks.json') key = 'synthesis/tasks.json';
-        if (key == 'catcatch_tasks.json') key = 'catcatch/tasks.json';
-      }
+    final relativePath = key.substring(matchedDir.length + 1);
 
-      // 匹配已知存储目录
-      String? matchedDir;
-      for (final dir in knownDirs) {
-        if (key.startsWith('$dir/')) {
-          matchedDir = dir;
-          break;
-        }
-      }
-      if (matchedDir == null) {
-        restoreIndex++;
-        continue;
-      }
-
-      // 根据 selection 跳过不需要恢复的目录
-      if (!shouldRestoreDir(matchedDir)) {
-        restoreIndex++;
-        continue;
-      }
-
-      final relativePath = key.substring(matchedDir.length + 1);
-
-      if (matchedDir == 'anki') {
-        // 实际数据库位于应用数据目录根目录 collection.anki2
-        //（备份归档内的路径为 anki/collection.anki2）。
-        // 先关闭可能打开的数据库连接（Windows 上文件被占用时无法写入）。
-        await AnkiDatabase.closeOpenedInstance();
-        await writeBackupFile('', relativePath, entry.value);
-        restoreIndex++;
-        continue;
-      }
-
-      if (matchedDir == 'synthesis' || matchedDir == 'catcatch') {
-        if (relativePath == 'tasks.json') {
-          await writeBackupFile(matchedDir, 'tasks.json', entry.value);
-        }
-        restoreIndex++;
-        continue;
-      }
-
-      // 普通二进制文件
-      await writeBackupFile(matchedDir, relativePath, entry.value);
-      restoreIndex++;
-      // 每处理 20 个文件让出事件循环
-      if (restoreIndex % 20 == 0) await _yieldToEventLoop();
+    // 安全：拒绝含 `..` 路径段或绝对/根路径的条目名（zip-slip 防护 ——
+    // 备份文件是外部输入，`p.join` 会把绝对段当作路径重置，导致写出
+    // 逃逸出应用数据目录；Windows 上反斜杠同样可被 p.join 识别为
+    // 分隔符，故两种都检查）。盘符前缀（Windows 风格绝对路径）在
+    // 任何平台上都不是合法的备份相对路径，一律跳过（不依赖
+    // p.isAbsolute —— 它在 POSIX 上不识别盘符）。
+    // 未知条目按"跳过"处理，与未知目录语义一致。
+    final pathSegments = relativePath.split(RegExp(r'[/\\]'));
+    if (pathSegments.any((part) => part == '..') ||
+        RegExp(r'^[a-zA-Z]:').hasMatch(relativePath) ||
+        relativePath.startsWith('/') ||
+        relativePath.startsWith(r'\')) {
+      debugPrint('[BackupService] 跳过不安全路径条目: $rawKey');
+      return false;
     }
 
-    // 未选中的类别保持原样：不清理、不覆盖其现有文件/记录，
-    // 只有选中的类别会被备份中的数据替换。
-    // 选中类别的现有文件已在恢复开始时清除（见 _deleteSelectedFiles），
-    // 这里只需写入备份中包含的文件。
-
-    // 数据迁移：确保恢复后的数据格式是最新的
-    // 旧格式备份（pre-migration）中包含 chat_configs、null IDs 等，
-    // 需要迁移到当前数据格式才能正常使用。
-    // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
-    if (!skipPostRestoreMigration) {
-      await DataMigrationService.migrateDataFormatIfNeeded();
+    if (matchedDir == 'anki') {
+      // 实际数据库位于应用数据目录根目录 collection.anki2
+      //（备份归档内的路径为 anki/collection.anki2）。
+      // 先关闭可能打开的数据库连接（Windows 上文件被占用时无法写入）。
+      await AnkiDatabase.closeOpenedInstance();
+      await writeEntry('', relativePath);
+      return true;
     }
-    onProgress?.call(1.0);
+
+    if (matchedDir == 'synthesis' || matchedDir == 'catcatch') {
+      if (relativePath == 'tasks.json') {
+        await writeEntry(matchedDir, 'tasks.json');
+      }
+      return true;
+    }
+
+    // 普通二进制文件
+    await writeEntry(matchedDir, relativePath);
+    return true;
   }
 
   // ================================================================
@@ -1535,6 +1720,14 @@ class BackupService {
   ///
   /// [onProgress] 可选回调，报告备份构建进度（0.0 ~ 1.0）。
   /// [selection] 控制哪些数据类别包含在备份中。默认全量。
+  ///
+  /// 内存策略（与旧自动备份一致，避免大备份 OOM）：
+  /// - Web：没有 dart:io，只能整体构建后在浏览器下载（内存构建）。
+  /// - Android/iOS：流式构建到系统临时文件（64KB 分块、后台 isolate），
+  ///   再写入备份位置 —— Android 经 SAF 分块上传（整包过 Binder 会抛
+  ///   TransactionTooLargeException），iOS/桌面 dart:io 直接复制。
+  /// - 桌面：先让用户选择保存位置（`saveFile` 不传 bytes 只返回路径），
+  ///   再流式写入该路径。
   static Future<void> exportBackup(
     BuildContext context, {
     void Function(double progress)? onProgress,
@@ -1546,19 +1739,64 @@ class BackupService {
           DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
       final defaultName = 'stroom_backup_$dateStr.zip';
 
-      // 在内存中构建归档（传递进度回调）
-      final bytes =
-          await _buildBackupBytes(onProgress: onProgress, selection: selection);
+      String? savedLocation;
+      if (kIsWeb) {
+        // Web：内存构建 + 浏览器下载（Web 无法流式写本地文件）
+        final bytes = await _buildBackupBytes(
+            onProgress: onProgress, selection: selection);
+        savedLocation =
+            await FilePicker.saveFile(fileName: defaultName, bytes: bytes);
+      } else if (Platform.isAndroid || Platform.isIOS) {
+        // Android/iOS：流式构建到系统临时文件，再写入备份位置
+        final tempPath = p.join(Directory.systemTemp.path, defaultName);
+        try {
+          await createBackup(
+              outputPath: tempPath,
+              onProgress: onProgress,
+              selection: selection);
+          await BackupLocationManager.writeBackupFileFromPath(
+              defaultName, tempPath);
+        } finally {
+          try {
+            await File(tempPath).delete();
+          } catch (_) {}
+        }
+        final displayPath = await BackupLocationManager.getDisplayPath();
+        savedLocation =
+            displayPath.isEmpty ? defaultName : '$displayPath/$defaultName';
+      } else {
+        // 桌面：先选保存位置（不传 bytes → 只返回路径，不写文件），
+        // 再流式写入 —— 峰值内存不随备份体积增长。
+        final outputPath = await FilePicker.saveFile(
+          fileName: defaultName,
+          initialDirectory: SystemPickDirectories.documents(),
+        );
+        if (outputPath == null) {
+          // 用户取消保存
+          await AppLogService.info('BackupService', 'exportBackup: 用户取消');
+          return;
+        }
+        try {
+          await createBackup(
+              outputPath: outputPath,
+              onProgress: onProgress,
+              selection: selection);
+        } catch (e) {
+          // 构建失败时清理用户位置留下的半成品 zip
+          try {
+            final partial = File(outputPath);
+            if (await partial.exists()) {
+              await partial.delete();
+            }
+          } catch (_) {}
+          rethrow;
+        }
+        savedLocation = outputPath;
+      }
 
-      final outputPath = await FilePicker.saveFile(
-        fileName: defaultName,
-        bytes: bytes,
-        initialDirectory: SystemPickDirectories.documents(),
-      );
-
-      if (outputPath != null && context.mounted) {
+      if (savedLocation != null && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('备份已保存到: $outputPath')),
+          SnackBar(content: Text('备份已保存到: $savedLocation')),
         );
       }
       await AppLogService.info('BackupService', 'exportBackup: success');
@@ -2088,4 +2326,476 @@ class _FileOutputStream extends OutputStream {
 
   @override
   void closeSync() => _file.closeSync();
+}
+
+// ====================================================================
+// 流式恢复 — ZIP 中央目录解析 + 条目分块解压落盘
+// ====================================================================
+
+/// 恢复时跳过/映射的归档条目集合（内存版与流式版恢复共用）。
+const Set<String> _restoreSkipFiles = {
+  'manifest.json',
+  'stroom_manifest.json',
+  'database/manifest_data.json',
+  'preferences.json',
+  'chat_data.json',
+  'settings.json',
+  'browser_cookies.json',
+};
+
+/// 恢复时识别的存储目录（兼容新旧两种路径格式）。
+const List<String> _restoreKnownDirs = [
+  'pictures',
+  'tts_audio',
+  'videos',
+  'texts',
+  'attachments',
+  'synthesis',
+  'catcatch',
+  'background',
+  'task_flows',
+  'anki',
+];
+
+/// 根据 selection 决定哪些目录需要恢复。
+///
+/// v1 格式：attachments 由旧的 conversations 标志控制（因为 v1 的
+/// conversations 包含了设置+聊天记录，不包含附件），但为了兼容，
+/// v1 导入时 attachments 由 chatRecordsAndAttachments 控制。
+bool _shouldRestoreDir(String dir, BackupSelection selection) {
+  switch (dir) {
+    case 'pictures':
+      return selection.pictures && selection.includeMediaFiles;
+    case 'tts_audio':
+      return selection.audio && selection.includeMediaFiles;
+    case 'videos':
+      return selection.videos && selection.includeMediaFiles;
+    case 'texts':
+      return selection.texts && selection.includeMediaFiles;
+    case 'synthesis':
+    case 'catcatch':
+    case 'background':
+    case 'task_flows':
+      return selection.tasks;
+    case 'attachments':
+      return selection.chatRecordsAndAttachments && selection.includeMediaFiles;
+    case 'anki':
+      return selection.ankiData;
+    default:
+      return false;
+  }
+}
+
+/// 备份元数据校验结果（[_restoreFromBytes] / [_restoreFromZipFile] 共用）。
+class _RestoreMetadata {
+  final bool isV1;
+  final Map<String, dynamic>? dbData;
+  final Map<String, dynamic>? v1Prefs;
+  final Map<String, dynamic>? chatPrefs;
+  final Map<String, dynamic>? settingsPrefs;
+
+  const _RestoreMetadata({
+    required this.isV1,
+    this.dbData,
+    this.v1Prefs,
+    this.chatPrefs,
+    this.settingsPrefs,
+  });
+}
+
+/// ZIP 中央目录条目信息（流式恢复用）。
+class _ZipEntryInfo {
+  final String name;
+  final int compressionMethod;
+  final int compressedSize;
+  final int uncompressedSize;
+  final int localHeaderOffset;
+
+  const _ZipEntryInfo({
+    required this.name,
+    required this.compressionMethod,
+    required this.compressedSize,
+    required this.uncompressedSize,
+    required this.localHeaderOffset,
+  });
+}
+
+/// 流式 ZIP 读取器：只解析中央目录（文件末尾小块），条目内容按
+/// 64KB 分块从磁盘读取 —— store 直接复制、deflate 流式解压，
+/// 峰值内存 O(块大小)，不随备份体积增长。
+///
+/// 与 archive 包的 [ZipDecoder] 相对：decodeStream 会把每个条目的
+/// 压缩数据急切读进内存（zip_file.dart: `_rawContent = readBytes(...)`），
+/// 大备份（数百 MB 视频）在手动导入时必然 OOM。
+class _ZipStreamReader {
+  static const int kChunkSize = 65536;
+
+  /// 元数据文件（manifest / 数据库清单 / 偏好设置）的合理尺寸上限；
+  /// 超过即视为损坏，防止恶意/损坏条目声明超大尺寸拖垮内存。
+  static const int _maxMetaFileBytes = 64 * 1024 * 1024;
+
+  static const int _localHeaderSignature = 0x04034b50;
+  static const int _centralDirSignature = 0x02014b50;
+  static const int _zip64EocdLocatorSignature = 0x07064b50;
+  static const int _zip64EocdSignature = 0x06064b50;
+  static const int _zip64ExtraId = 0x0001;
+
+  /// 条目数上限（防止损坏文件声称天文数字的条目导致空转）。
+  static const int _maxEntryCount = 1000000;
+
+  final RandomAccessFile _file;
+  final List<_ZipEntryInfo> _entries;
+  final Map<String, _ZipEntryInfo> _byName;
+
+  _ZipStreamReader._fromFile(this._file, this._entries)
+      : _byName = {for (final e in _entries) e.name: e};
+
+  /// 解析 [path] 指向的 ZIP 文件。结构损坏时抛 [FormatException]
+  /// （由调用方包装为 [BackupValidationException]）。
+  factory _ZipStreamReader(String path) {
+    final file = File(path).openSync();
+    try {
+      return _ZipStreamReader._fromFile(file, _readCentralDirectory(file));
+    } catch (_) {
+      file.closeSync();
+      rethrow;
+    }
+  }
+
+  List<_ZipEntryInfo> get entries => _entries;
+
+  void close() => _file.closeSync();
+
+  /// 读取单个条目内容（仅限小型元数据文件）。
+  ///
+  /// 实际解压字节数超出 [_maxMetaFileBytes] 即抛 [_RestoreEntryCorruptException]
+  /// （防 zip 炸弹：声明的尺寸可以撒谎，实际输出必须受控）。
+  Uint8List? readMetaFile(String name) {
+    final entry = _byName[name];
+    if (entry == null) return null;
+    if (entry.uncompressedSize > _maxMetaFileBytes) {
+      throw const _RestoreEntryCorruptException('元数据文件尺寸异常');
+    }
+    final builder = BytesBuilder(copy: false);
+    var total = 0;
+    extractEntry(entry, (chunk) {
+      total += chunk.length;
+      if (total > _maxMetaFileBytes) {
+        throw const _RestoreEntryCorruptException('元数据文件解压后超出安全上限');
+      }
+      builder.add(chunk);
+    });
+    return builder.takeBytes();
+  }
+
+  /// 把条目内容分块推送给 [onChunk]（同步执行，块内不持有状态）。
+  ///
+  /// 条目损坏（本地头签名错误、数据截断、解压失败、不支持的压缩方式、
+  /// 解压尺寸与声明不符）时抛 [_RestoreEntryCorruptException]：
+  /// - 校验期调用方（[_restoreFromZipFile] 元数据读取）包装为
+  ///   [BackupValidationException]（未删除任何数据）；
+  /// - 删除之后的恢复循环直接传播（恢复可能已部分完成）。
+  void extractEntry(
+      _ZipEntryInfo entry, void Function(Uint8List chunk) onChunk) {
+    // 定位条目数据区：本地头（30 字节固定）+ 文件名 + extra 之后。
+    // 条目在备份中的存储方式由中央目录的尺寸字段决定（archive 包的
+    // 写入器不会使用 data descriptor，尺寸总是已知）。
+    try {
+      _file.setPositionSync(entry.localHeaderOffset);
+      final localHeader = _readExact(_file, 30);
+      if (_le32(localHeader, 0) != _localHeaderSignature) {
+        throw const _RestoreEntryCorruptException('本地头损坏');
+      }
+      final nameLen = _le16(localHeader, 26);
+      final extraLen = _le16(localHeader, 28);
+      final dataOffset = entry.localHeaderOffset + 30 + nameLen + extraLen;
+      _file.setPositionSync(dataOffset);
+
+      var remaining = entry.compressedSize;
+      if (entry.compressionMethod == 0) {
+        // store：直接分块复制，不经内存缓冲。
+        // store 条目压缩尺寸必须等于解压尺寸 —— 计数核对，防止
+        // 声明的 uncompressedSize 与实际数据不符时静默恢复半个文件。
+        var written = 0;
+        while (remaining > 0) {
+          final n = remaining < kChunkSize ? remaining : kChunkSize;
+          final chunk = _readExact(_file, n);
+          onChunk(chunk);
+          written += chunk.length;
+          remaining -= chunk.length;
+        }
+        if (written != entry.uncompressedSize) {
+          throw _RestoreEntryCorruptException('条目 ${entry.name} 尺寸不符 '
+              '(实际 $written / 声明 ${entry.uncompressedSize})');
+        }
+      } else if (entry.compressionMethod == 8) {
+        // deflate：raw inflate 流式解压（dart:io zlib 分块转换）。
+        // dart:io 对截断的 deflate 流不报错，只输出已解压的部分 ——
+        // 必须按中央目录声明的 uncompressedSize 核对实际输出字节数，
+        // 否则损坏的备份会静默恢复出截断的文件。
+        var outputBytes = 0;
+        final decoder = ZLibDecoder(raw: true);
+        final conversion = decoder.startChunkedConversion(
+          _ChunkSink((chunk) {
+            outputBytes += chunk.length;
+            onChunk(chunk);
+          }),
+        );
+        try {
+          while (remaining > 0) {
+            final n = remaining < kChunkSize ? remaining : kChunkSize;
+            final chunk = _readExact(_file, n);
+            conversion.add(chunk);
+            remaining -= chunk.length;
+          }
+          // close 也可能在流末尾报错（截断/损坏），必须在 try 内
+          conversion.close();
+        } catch (e) {
+          debugPrint('[BackupService] 条目 ${entry.name} 解压失败: $e');
+          throw _RestoreEntryCorruptException('条目 ${entry.name} 解压失败 ($e)');
+        }
+        if (outputBytes != entry.uncompressedSize) {
+          throw _RestoreEntryCorruptException('条目 ${entry.name} 解压尺寸不符 '
+              '(实际 $outputBytes / 声明 ${entry.uncompressedSize})');
+        }
+      } else {
+        throw _RestoreEntryCorruptException('条目 ${entry.name} 使用不支持的'
+            '压缩方式 (${entry.compressionMethod})');
+      }
+    } on FormatException catch (e) {
+      // _readExact 的截断/结构错误：统一为条目损坏
+      throw _RestoreEntryCorruptException('条目 ${entry.name} 数据不完整 ($e)');
+    }
+  }
+
+  // ---- 中央目录解析 ----
+
+  static List<_ZipEntryInfo> _readCentralDirectory(RandomAccessFile file) {
+    final fileLength = file.lengthSync();
+    if (fileLength < 22) {
+      throw const FormatException('文件过小，不是有效的 ZIP 归档');
+    }
+
+    // 1. 定位 EOCD：文件末尾最多 64KB+22 字节内反向搜索签名。
+    //    注释可长达 65535 字节，故搜索窗口 = 64KB + EOCD 固定长度。
+    final tailLen = fileLength < kChunkSize + 22 ? fileLength : kChunkSize + 22;
+    file.setPositionSync(fileLength - tailLen);
+    final tail = file.readSync(tailLen);
+
+    int? eocdRelOffset;
+    for (var i = tail.length - 22; i >= 0; i--) {
+      if (tail[i] == 0x50 &&
+          tail[i + 1] == 0x4b &&
+          tail[i + 2] == 0x05 &&
+          tail[i + 3] == 0x06) {
+        final commentLen = _le16(tail, i + 20);
+        // EOCD 记录必须正好延伸到文件末尾
+        if (i + 22 + commentLen == tail.length) {
+          eocdRelOffset = i;
+          break;
+        }
+      }
+    }
+    if (eocdRelOffset == null) {
+      throw const FormatException('找不到 ZIP 中央目录（EOCD）');
+    }
+    final eocdOffset = (fileLength - tailLen) + eocdRelOffset;
+
+    var entryCount = _le16(tail, eocdRelOffset + 10);
+    var cdSize = _le32(tail, eocdRelOffset + 12);
+    var cdOffset = _le32(tail, eocdRelOffset + 16);
+
+    // 2. ZIP64：EOCD 任一字段满值时读取 zip64 EOCD（位于 EOCD 前
+    //    20 字节的定位器指向它）。
+    //    注意：entryCount == 0xFFFF 同时是"恰好 65535 个条目"的合法
+    //    编码 —— 定位器签名不匹配时回退到 32 位值，而不是报错。
+    if (entryCount == 0xFFFF ||
+        cdSize == 0xFFFFFFFF ||
+        cdOffset == 0xFFFFFFFF) {
+      final locatorPos = eocdOffset - 20;
+      if (locatorPos >= 0) {
+        file.setPositionSync(locatorPos);
+        final locator = _readExact(file, 20);
+        if (_le32(locator, 0) == _zip64EocdLocatorSignature) {
+          final zip64EocdPos = _le64(locator, 8);
+          if (zip64EocdPos < 0 || zip64EocdPos >= fileLength) {
+            throw const FormatException('ZIP64 EOCD 偏移异常');
+          }
+          file.setPositionSync(zip64EocdPos);
+          final zip64Eocd = _readExact(file, 56);
+          if (_le32(zip64Eocd, 0) != _zip64EocdSignature) {
+            throw const FormatException('ZIP64 EOCD 签名错误');
+          }
+          entryCount = _le64(zip64Eocd, 32);
+          cdSize = _le64(zip64Eocd, 40);
+          cdOffset = _le64(zip64Eocd, 48);
+        }
+      }
+    }
+    // 64 位值不允许为负（≥2^63 的尺寸/偏移不是合法 ZIP 数据）
+    if (entryCount < 0 || cdSize < 0 || cdOffset < 0) {
+      throw const FormatException('ZIP64 字段溢出（负数）');
+    }
+    if (entryCount > _maxEntryCount) {
+      throw FormatException('ZIP 条目数异常: $entryCount');
+    }
+    // 中央目录必须位于文件内（APPNOTE 4.3.16 边界校验）
+    if (cdOffset > eocdOffset || cdOffset + cdSize > eocdOffset) {
+      throw const FormatException('中央目录超出文件范围');
+    }
+
+    // 3. 中央目录条目（固定 46 字节头 + 文件名 + extra + 注释）。
+    file.setPositionSync(cdOffset);
+    final entries = <_ZipEntryInfo>[];
+    for (var i = 0; i < entryCount; i++) {
+      final header = _readExact(file, 46);
+      if (_le32(header, 0) != _centralDirSignature) {
+        throw FormatException('中央目录条目 $i 签名错误');
+      }
+      final method = _le16(header, 10);
+      var compSize = _le32(header, 20);
+      var uncompSize = _le32(header, 24);
+      final nameLen = _le16(header, 28);
+      final extraLen = _le16(header, 30);
+      final commentLen = _le16(header, 32);
+      var localOffset = _le32(header, 42);
+
+      final nameBytes = _readExact(file, nameLen);
+      final extraBytes = _readExact(file, extraLen);
+      _readExact(file, commentLen); // 丢弃注释
+
+      // ZIP64 extra（id 0x0001）：值按 [uncompressed(8), compressed(8),
+      // offset(8), disk(4)] 顺序出现，只包含被置满值的字段。
+      if (compSize == 0xFFFFFFFF ||
+          uncompSize == 0xFFFFFFFF ||
+          localOffset == 0xFFFFFFFF) {
+        final zip64 = _parseZip64Extra(
+          extraBytes,
+          needUncompressed: uncompSize == 0xFFFFFFFF,
+          needCompressed: compSize == 0xFFFFFFFF,
+          needOffset: localOffset == 0xFFFFFFFF,
+        );
+        if (uncompSize == 0xFFFFFFFF) uncompSize = zip64.$1!;
+        if (compSize == 0xFFFFFFFF) compSize = zip64.$2!;
+        if (localOffset == 0xFFFFFFFF) localOffset = zip64.$3!;
+      }
+      // 64 位值不允许为负（≥2^63 不是合法尺寸/偏移）；负的压缩尺寸
+      // 会让分块循环被跳过、静默恢复出空文件。
+      if (compSize < 0 || uncompSize < 0 || localOffset < 0) {
+        throw FormatException('条目 $i ZIP64 字段溢出（负数）');
+      }
+
+      entries.add(_ZipEntryInfo(
+        name: utf8.decode(nameBytes, allowMalformed: true),
+        compressionMethod: method,
+        compressedSize: compSize,
+        uncompressedSize: uncompSize,
+        localHeaderOffset: localOffset,
+      ));
+    }
+    return entries;
+  }
+
+  /// 解析条目 extra 字段中的 ZIP64 数据。
+  ///
+  /// 每个字段读取前做边界检查（extra 声明的尺寸可能小于实际需要的
+  /// 字段），字段值不允许为负（≥2^63 不是合法尺寸）。
+  static (int?, int?, int?) _parseZip64Extra(
+    Uint8List extra, {
+    required bool needUncompressed,
+    required bool needCompressed,
+    required bool needOffset,
+  }) {
+    var i = 0;
+    while (i + 4 <= extra.length) {
+      final id = _le16(extra, i);
+      final size = _le16(extra, i + 2);
+      final dataStart = i + 4;
+      if (id == _zip64ExtraId) {
+        var p = dataStart;
+        int? uncompressed;
+        int? compressed;
+        int? offset;
+        if (needUncompressed) {
+          // 同时核对声明的字段尺寸与实际缓冲区边界（声明可以撒谎）
+          if (p + 8 > extra.length || p + 8 > dataStart + size) {
+            throw const FormatException('ZIP64 extra 字段截断');
+          }
+          uncompressed = _le64(extra, p);
+          p += 8;
+        }
+        if (needCompressed) {
+          if (p + 8 > extra.length || p + 8 > dataStart + size) {
+            throw const FormatException('ZIP64 extra 字段截断');
+          }
+          compressed = _le64(extra, p);
+          p += 8;
+        }
+        if (needOffset) {
+          if (p + 8 > extra.length || p + 8 > dataStart + size) {
+            throw const FormatException('ZIP64 extra 字段截断');
+          }
+          offset = _le64(extra, p);
+          p += 8;
+        }
+        if ((uncompressed != null && uncompressed < 0) ||
+            (compressed != null && compressed < 0) ||
+            (offset != null && offset < 0)) {
+          throw const FormatException('ZIP64 extra 字段溢出（负数）');
+        }
+        return (uncompressed, compressed, offset);
+      }
+      i = dataStart + size;
+    }
+    throw const FormatException('缺少 ZIP64 extra 字段');
+  }
+
+  /// 精确读取 [count] 字节；文件提前结束时抛 [FormatException]
+  /// （防止损坏条目声明的尺寸与实际数据不符时无限循环）。
+  static Uint8List _readExact(RandomAccessFile file, int count) {
+    final builder = BytesBuilder(copy: false);
+    var remaining = count;
+    while (remaining > 0) {
+      final chunk = file.readSync(remaining);
+      if (chunk.isEmpty) {
+        throw const FormatException('文件提前结束（ZIP 结构不完整）');
+      }
+      builder.add(chunk);
+      remaining -= chunk.length;
+    }
+    return builder.takeBytes();
+  }
+
+  // ---- 小端读取 ----
+
+  static int _le16(Uint8List b, int offset) => b[offset] | (b[offset + 1] << 8);
+
+  static int _le32(Uint8List b, int offset) =>
+      b[offset] |
+      (b[offset + 1] << 8) |
+      (b[offset + 2] << 16) |
+      (b[offset + 3] << 24);
+
+  static int _le64(Uint8List b, int offset) {
+    final lo = _le32(b, offset);
+    final hi = _le32(b, offset + 4);
+    return (hi << 32) | lo;
+  }
+}
+
+/// 把 deflate 解压输出块转发给 [onChunk]。
+class _ChunkSink implements ByteConversionSink {
+  final void Function(Uint8List chunk) onChunk;
+
+  _ChunkSink(this.onChunk);
+
+  @override
+  void add(List<int> chunk) => onChunk(Uint8List.fromList(chunk));
+
+  @override
+  void addSlice(List<int> chunk, int start, int end, bool isLast) =>
+      onChunk(Uint8List.fromList(chunk.sublist(start, end)));
+
+  @override
+  void close() {}
 }

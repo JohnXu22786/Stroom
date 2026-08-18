@@ -109,6 +109,16 @@ void chatAgentSemanticsGroup5() {
       expect(formatCost(0.0123), '0.01');
       expect(formatCost(1.234), '1.23');
     });
+
+    test('formatCost 极小额不显示成 0.0000（累计可见）', () {
+      // 1e-5 量级的真实计费：4 位小数会舍成 0.0000，让人误以为没计费；
+      // 显示必须让非零累计可见（后台 totalCost 仍保持完整精度）。
+      expect(formatCost(0.0000369), '0.0000369');
+      expect(formatCost(0.00005), '0.00005');
+      expect(formatCost(0.0000001), '0.0000001');
+      // < 5e-9 用科学计数法兜底，保证"已累计"可见
+      expect(formatCost(0.000000001), '1.0e-9');
+    });
   });
 
   group('normalizeUsage（OpenAI 兼容）', () {
@@ -142,6 +152,76 @@ void chatAgentSemanticsGroup5() {
 
     test('空 usage 返回 null', () {
       expect(OpenAICompatibleChatProvider.normalizeUsage({}), isNull);
+    });
+
+    test('字符串数值（网关把 total_cost/prompt_tokens 返回为字符串）也记录', () {
+      // 部分网关/兼容端点把数值以字符串返回：只认 num 会把这些
+      // "API 已返回的计费"静默丢弃，导致累计缺失。
+      final usage = OpenAICompatibleChatProvider.normalizeUsage({
+        'prompt_tokens': '123',
+        'completion_tokens': '45',
+        'total_cost': '0.0000123',
+      });
+      expect(usage!['inputTokens'], 123);
+      expect(usage['outputTokens'], 45);
+      expect(usage['cost'], closeTo(0.0000123, 1e-12));
+    });
+
+    test('非数值字符串 cost 不写入（不把垃圾值当计费）', () {
+      final usage = OpenAICompatibleChatProvider.normalizeUsage({
+        'prompt_tokens': 10,
+        'completion_tokens': 5,
+        'total_cost': 'n/a',
+      });
+      expect(usage, {'inputTokens': 10, 'outputTokens': 5});
+    });
+
+    test('非有限字符串（NaN/Infinity）不写入（避免污染 totalCost）', () {
+      for (final bad in ['Infinity', '-Infinity', 'NaN']) {
+        final usage = OpenAICompatibleChatProvider.normalizeUsage({
+          'prompt_tokens': 10,
+          'completion_tokens': 5,
+          'total_cost': bad,
+        });
+        expect(usage, {'inputTokens': 10, 'outputTokens': 5},
+            reason: '$bad 不是有效计费，必须丢弃');
+      }
+    });
+  });
+
+  group('mergeAnthropicUsage（Anthropic usage 计量合并）', () {
+    test('message_start：输入含缓存 token，cost 接受字符串数值', () {
+      final local = <String, dynamic>{};
+      AnthropicChatProvider.mergeAnthropicUsage(local, {
+        'input_tokens': 100,
+        'cache_read_input_tokens': 20,
+        'cache_creation_input_tokens': '5',
+      });
+      expect(local['inputTokens'], 125);
+    });
+
+    test('message_delta：输出 token + 重复上报 cost 取较大值避免双计', () {
+      final local = <String, dynamic>{};
+      AnthropicChatProvider.mergeAnthropicUsage(local, {'input_tokens': 100});
+      AnthropicChatProvider.mergeAnthropicUsage(local, {
+        'output_tokens': 30,
+        'total_cost': '0.0000456',
+      });
+      expect(local['outputTokens'], 30);
+      expect(local['cost'], closeTo(0.0000456, 1e-12));
+      // 两端点重复上报较小 cost 不覆盖已记录值
+      AnthropicChatProvider.mergeAnthropicUsage(local, {
+        'output_tokens': 31,
+        'total_cost': 0.00001,
+      });
+      expect(local['cost'], closeTo(0.0000456, 1e-12));
+      expect(local['outputTokens'], 31);
+    });
+
+    test('空 usage（无任何可用计量）不写入', () {
+      final local = <String, dynamic>{};
+      AnthropicChatProvider.mergeAnthropicUsage(local, {});
+      expect(local, isEmpty);
     });
   });
 

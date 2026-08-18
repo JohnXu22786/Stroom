@@ -215,6 +215,73 @@ void main() {
 
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets(
+        'voices added to the selected model in settings appear in the '
+        'page when the provider state updates (no stale model)', (
+      tester,
+    ) async {
+      // The page opens while the model has NO voices (voice section
+      // hidden). The user then adds voices in the model settings — the
+      // provider state updates with the SAME model ids but new voices.
+      // The page must refresh the model objects instead of keeping the
+      // stale voice-less snapshot.
+      final notifier = ProviderEntriesNotifier();
+      notifier.state = ProviderEntriesState(entries: [_createTtsEntry()]);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            taskListProvider.overrideWith((ref) => TaskListNotifier(ref)),
+            providerEntriesProvider.overrideWith((ref) => notifier),
+          ],
+          child: const MaterialApp(
+            home: TTSCreatePage(),
+            localizationsDelegates: [
+              DefaultMaterialLocalizations.delegate,
+              DefaultWidgetsLocalizations.delegate,
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // No voices yet — the 音色 selector must be hidden.
+      expect(find.text('音色'), findsNothing);
+
+      // The provider updates: same model id, now with a voice.
+      notifier.state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_tts',
+            type: 'tts',
+            name: 'TTS供应商',
+            configs: [
+              ProviderConfigItem(
+                providerName: 'OpenAI',
+                host: 'https://api.openai.com/v1',
+                key: 'test-key',
+                models: [
+                  ModelConfig(
+                    name: 'TTS-1',
+                    modelId: 'tts-1',
+                    voices: [
+                      VoiceEntry(name: '晓晓', id: 'zh-CN-XiaoxiaoNeural'),
+                    ],
+                  ),
+                  ModelConfig(name: 'TTS-2', modelId: 'tts-2'),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      // The 音色 dropdown must now appear with the saved voice.
+      expect(find.text('音色'), findsOneWidget);
+      expect(find.textContaining('晓晓'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   group('TTSCreatePage - save-to folder selector', () {

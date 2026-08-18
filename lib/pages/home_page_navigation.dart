@@ -174,6 +174,15 @@ extension _HomePageNavigationExt on _HomePageState {
             );
           case '/chat':
             return MaterialPageRoute(
+              // Keep this const: whenever HomePage rebuilds (tab switch,
+              // rotation, window resize, ...) this route builder re-runs
+              // (Navigator.didUpdateWidget → changedExternalState → page
+              // cache cleared). The const lets the framework's identical-
+              // instance fast path skip rebuilding the whole chat page —
+              // which would otherwise re-parse every visible markdown
+              // message, a heavy cost on every rebuild. (HomePage itself
+              // no longer rebuilds per keyboard frame — see home_page.dart
+              // _isPortrait.)
               builder: (_) => const ChatPage(),
               settings: settings,
             );

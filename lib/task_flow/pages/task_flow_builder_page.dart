@@ -2,8 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../utils/duration_parser.dart';
 import '../../utils/file_manifest.dart';
 import '../../utils/image_manifest.dart';
 import '../../utils/video_manifest.dart';
@@ -11,6 +13,7 @@ import '../../widgets/app_media_picker_dialog.dart';
 import '../models/block_type_definition.dart';
 import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
+import '../models/task_flow_execution.dart';
 import '../providers/task_flow_provider.dart';
 import '../services/task_flow_execution_service.dart';
 import '../utils/block_param_display.dart';
@@ -42,10 +45,41 @@ class TaskFlowBuilderPage extends ConsumerStatefulWidget {
       _TaskFlowBuilderPageState();
 }
 
+/// One CatCatch-style run input entry: a URL plus optional 时/分/秒 duration
+/// fields — mirrors the CatCatch page's task card.
+class _CatCatchInputEntry {
+  final TextEditingController urlController;
+  final TextEditingController hourController;
+  final TextEditingController minuteController;
+  final TextEditingController secondController;
+
+  _CatCatchInputEntry()
+      : urlController = TextEditingController(),
+        hourController = TextEditingController(),
+        minuteController = TextEditingController(),
+        secondController = TextEditingController();
+
+  void dispose() {
+    urlController.dispose();
+    hourController.dispose();
+    minuteController.dispose();
+    secondController.dispose();
+  }
+}
+
 class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _descController;
   late final TextEditingController _inputController;
+
+  /// Run-mode inputs collected in the FIRST block's style:
+  /// - CatCatch-first: one entry per URL (+ optional duration fields).
+  final List<_CatCatchInputEntry> _catcatchInputs = [];
+
+  /// Run-mode media inputs (paths) picked via the in-app multi-select
+  /// picker for OCR (images), ASR (audio) and audioSeparation (video)
+  /// first blocks.
+  final List<String> _mediaInputs = [];
 
   List<TaskFlowBlock> _blocks = [];
   bool _isEditing = false;
@@ -97,6 +131,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     _nameController.dispose();
     _descController.dispose();
     _inputController.dispose();
+    for (final entry in _catcatchInputs) {
+      entry.dispose();
+    }
     super.dispose();
   }
 
@@ -509,7 +546,24 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     );
   }
 
+  /// The flow's first block definition — the run input section adapts to
+  /// THIS block's input style ("直接运行该功能块"), not the flow's generic
+  /// input type: CatCatch gets its URL + 时/分/秒 box, media blocks get a
+  /// multi-select picker, text blocks keep the plain text field.
+  BlockTypeDefinition? get _firstBlockDef {
+    if (_blocks.isEmpty) return null;
+    return _blocks.first.getDefinition();
+  }
+
+  /// The effective input type for the run input section: the first block's
+  /// declared input, falling back to the flow's initial input type.
+  IOType get _runInputType =>
+      _firstBlockDef?.inputType ?? _inputType.userFacing;
+
   Widget _buildRunInputSection(ColorScheme cs) {
+    final firstDef = _firstBlockDef;
+    final label = firstDef?.label ?? _inputType.userFacing.label;
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -526,7 +580,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 Icon(Icons.input, size: 18, color: cs.primary),
                 const SizedBox(width: 8),
                 Text(
-                  '输入（${_inputType.userFacing.label}）',
+                  '输入（$label）',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -535,36 +589,14 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            // Media inputs (image/audio/video) get an in-app picker button
-            // — the flow executor consumes a file path, and these types are
-            // backed by app storage. Text/url/file stay manual.
-            if (_inputType == IOType.image ||
-                _inputType == IOType.audio ||
-                _inputType == IOType.video) ...[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: _pickMediaInput,
-                  icon: Icon(
-                    _inputType == IOType.image
-                        ? Icons.image_outlined
-                        : _inputType == IOType.audio
-                            ? Icons.audiotrack
-                            : Icons.videocam_outlined,
-                    size: 16,
-                  ),
-                  label: const Text('选择应用内媒体'),
-                  style: OutlinedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-            // userFacing: url/file/any all display as text (a URL is
-            // plain text input — the blocks treat them identically).
-            if (_inputType.userFacing == IOType.text)
+            const SizedBox(height: 12),
+            if (firstDef?.typeKey == BlockType.catcatch)
+              _buildCatCatchRunInput(cs)
+            else if (_runInputType == IOType.image ||
+                _runInputType == IOType.audio ||
+                _runInputType == IOType.video)
+              _buildMediaRunInput(cs)
+            else
               TextField(
                 controller: _inputController,
                 decoration: InputDecoration(
@@ -578,19 +610,6 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 ),
                 style: const TextStyle(fontSize: 14),
                 maxLines: 3,
-              )
-            else
-              TextField(
-                controller: _inputController,
-                decoration: InputDecoration(
-                  hintText: '输入 ${_inputType.userFacing.label} 路径或标识',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  filled: true,
-                  fillColor: cs.surface,
-                ),
-                style: const TextStyle(fontSize: 14),
               ),
             Padding(
               padding: const EdgeInsets.only(top: 12),
@@ -598,9 +617,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 width: double.infinity,
                 height: 44,
                 child: FilledButton.icon(
-                  onPressed: _inputController.text.trim().isNotEmpty
-                      ? _startFlow
-                      : null,
+                  onPressed: _canStartFlow() ? _startFlow : null,
                   icon: const Icon(Icons.play_arrow, size: 18),
                   label: const Text('开始任务流'),
                 ),
@@ -610,6 +627,366 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         ),
       ),
     );
+  }
+
+  // ====================================================================
+  // Run input — CatCatch first block: the CatCatch page's main box
+  // (URL + 时/分/秒 duration + preview). Multiple entries supported.
+  // ====================================================================
+
+  Widget _buildCatCatchRunInput(ColorScheme cs) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (int i = 0; i < _catcatchInputs.length; i++) ...[
+          _buildCatCatchInputCard(cs, i),
+          if (i < _catcatchInputs.length - 1) const SizedBox(height: 10),
+        ],
+        if (_catcatchInputs.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: Text(
+                '暂无输入，点击下方按钮添加网页资源 URL',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                ),
+              ),
+            ),
+          ),
+        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            key: const Key('taskflow_add_catcatch_input'),
+            onPressed: () =>
+                setState(() => _catcatchInputs.add(_CatCatchInputEntry())),
+            icon: const Icon(Icons.add_link, size: 18),
+            label: const Text('添加网页资源'),
+            style: OutlinedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCatCatchInputCard(ColorScheme cs, int index) {
+    final entry = _catcatchInputs[index];
+    final preview = _catcatchDurationPreview(entry);
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: entry.urlController,
+                    decoration: InputDecoration(
+                      hintText: '请输入视频/音频网页URL',
+                      prefixIcon: const Icon(Icons.link, size: 20),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: cs.surface,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                    keyboardType: TextInputType.url,
+                    textInputAction: TextInputAction.next,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.close,
+                      size: 18,
+                      color: cs.error,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        entry.dispose();
+                        _catcatchInputs.removeAt(index);
+                      });
+                    },
+                    tooltip: '删除此输入',
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: entry.hourController,
+                    decoration: InputDecoration(
+                      labelText: '时',
+                      hintText: '0',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: cs.surface,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    textInputAction: TextInputAction.next,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: entry.minuteController,
+                    decoration: InputDecoration(
+                      labelText: '分',
+                      hintText: '0',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: cs.surface,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    textInputAction: TextInputAction.next,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: entry.secondController,
+                    decoration: InputDecoration(
+                      labelText: '秒',
+                      hintText: '0',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: cs.surface,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    textInputAction: TextInputAction.done,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 8, left: 4),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.timer_outlined,
+                    size: 16,
+                    color: cs.primary,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '预览: ',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    preview,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: cs.primary,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '时:分:秒',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 2, left: 4),
+              child: Text(
+                '可选：按时长筛选视频资源。留空则展示全部资源供选择',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  int _catcatchEntrySeconds(_CatCatchInputEntry entry) {
+    final h = int.tryParse(entry.hourController.text.trim()) ?? 0;
+    final m = int.tryParse(entry.minuteController.text.trim()) ?? 0;
+    final s = int.tryParse(entry.secondController.text.trim()) ?? 0;
+    return totalSeconds(hours: h, minutes: m, seconds: s);
+  }
+
+  String _catcatchDurationPreview(_CatCatchInputEntry entry) {
+    final total = _catcatchEntrySeconds(entry);
+    return formatHms(
+      DurationResult(
+        hours: total ~/ 3600,
+        minutes: (total % 3600) ~/ 60,
+        seconds: total % 60,
+      ),
+    );
+  }
+
+  bool _isValidUrl(String trimmed) {
+    final uri = Uri.tryParse(trimmed);
+    return uri != null && uri.hasScheme && uri.hasAuthority;
+  }
+
+  // ====================================================================
+  // Run input — media first block (OCR/ASR/audioSeparation): the in-app
+  // multi-select picker. "必须确切的选择" — no manual path/identifier
+  // typing, the user picks real files from app storage.
+  // ====================================================================
+
+  Widget _buildMediaRunInput(ColorScheme cs) {
+    final isImage = _runInputType == IOType.image;
+    final isAudio = _runInputType == IOType.audio;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            key: const Key('taskflow_pick_media_input'),
+            onPressed: _pickMediaInputs,
+            icon: Icon(
+              isImage
+                  ? Icons.image_outlined
+                  : isAudio
+                      ? Icons.audiotrack
+                      : Icons.videocam_outlined,
+              size: 16,
+            ),
+            label: Text(
+              isImage
+                  ? '选择图片（可多选）'
+                  : isAudio
+                      ? '选择音频（可多选）'
+                      : '选择视频（可多选）',
+            ),
+            style: OutlinedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ),
+        if (_mediaInputs.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          for (int i = 0; i < _mediaInputs.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  Icon(
+                    isImage
+                        ? Icons.image
+                        : isAudio
+                            ? Icons.audiotrack
+                            : Icons.videocam,
+                    size: 16,
+                    color: cs.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _fileName(_mediaInputs[i]),
+                      style: const TextStyle(fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      Icons.close,
+                      size: 16,
+                      color: cs.error.withValues(alpha: 0.8),
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: '移除',
+                    onPressed: () => setState(() => _mediaInputs.removeAt(i)),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+
+  bool _canStartFlow() {
+    if (_firstBlockDef?.typeKey == BlockType.catcatch) {
+      return _catcatchInputs
+          .any((e) => _isValidUrl(e.urlController.text.trim()));
+    }
+    if (_runInputType == IOType.image ||
+        _runInputType == IOType.audio ||
+        _runInputType == IOType.video) {
+      return _mediaInputs.isNotEmpty;
+    }
+    return _inputController.text.trim().isNotEmpty;
+  }
+
+  String _fileName(String path) {
+    final sep = path.contains('\\') ? '\\' : '/';
+    final parts = path.split(sep);
+    return parts.isNotEmpty ? parts.last : path;
   }
 
   Widget _buildRunInitialInput(ColorScheme cs) {
@@ -665,7 +1042,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 2),
                         child: Text(
-                          '输入类型: ${_inputType.userFacing.label}',
+                          '输入类型: ${_runInputType.label}',
                           style: TextStyle(
                             fontSize: 12,
                             color: cs.onSurfaceVariant,
@@ -776,17 +1153,20 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   // Run mode – start execution
   // =========================================================================
 
-  /// Opens the in-app media picker for the current input type and fills
-  /// the resolved storage path into the input field.
+  /// Opens the in-app media picker in MULTI-SELECT mode for the first
+  /// block's input type (OCR → images, ASR → audio, audioSeparation →
+  /// video) and appends the resolved storage paths to [_mediaInputs].
   ///
-  /// Only types backed by app storage (image/audio/video) get a picker —
-  /// text/url/file inputs stay manual (there is no arbitrary file storage).
-  Future<void> _pickMediaInput() async {
-    final ioType = _inputType;
+  /// Path-only mode: no file bytes are buffered — the dialog resolves each
+  /// record's storage path via [MediaPickerConfig.onRecordsPicked] before
+  /// closing. Media inputs are backed by app storage; text/url/file inputs
+  /// stay manual (there is no arbitrary file storage).
+  Future<void> _pickMediaInputs() async {
+    final ioType = _runInputType;
     switch (ioType) {
       case IOType.image:
-        await _pickFrom<ImageRecord>(
-          title: '选择应用内图片',
+        await _pickMediaPaths<ImageRecord>(
+          title: '选择应用内图片（可多选）',
           emptyIcon: Icons.image_outlined,
           emptyText: '暂无图片',
           fileIcon: Icons.image,
@@ -796,8 +1176,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           resolvePath: (r) => ImageManifest.readFilePath(r.storagePath),
         );
       case IOType.audio:
-        await _pickFrom<AudioRecord>(
-          title: '选择应用内音频',
+        await _pickMediaPaths<AudioRecord>(
+          title: '选择应用内音频（可多选）',
           emptyIcon: Icons.multitrack_audio_outlined,
           emptyText: '暂无音频',
           fileIcon: Icons.audiotrack,
@@ -807,8 +1187,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           resolvePath: (r) => FileManifest.readFilePath(r.storagePath),
         );
       case IOType.video:
-        await _pickFrom<VideoRecord>(
-          title: '选择应用内视频',
+        await _pickMediaPaths<VideoRecord>(
+          title: '选择应用内视频（可多选）',
           emptyIcon: Icons.videocam_outlined,
           emptyText: '暂无视频',
           fileIcon: Icons.videocam,
@@ -822,7 +1202,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     }
   }
 
-  Future<void> _pickFrom<T>({
+  Future<void> _pickMediaPaths<T>({
     required String title,
     required IconData emptyIcon,
     required String emptyText,
@@ -832,9 +1212,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     required Future<Set<String>> Function() loadFolders,
     required Future<String?> Function(T record) resolvePath,
   }) async {
-    String? pickedPath;
-    // Path-only mode: no readFile — the dialog resolves the path via
-    // onRecordPicked without buffering the whole file in memory.
+    final paths = <String>[];
+    // Multi-select path-only mode: no readFile — the dialog resolves each
+    // record's path via onRecordsPicked without buffering the files.
     final result = await showMediaPickerDialog<T>(
       context,
       MediaPickerConfig<T>(
@@ -843,6 +1223,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         emptyText: emptyText,
         fileIcon: fileIcon,
         fileIconColor: fileIconColor,
+        multiSelect: true,
         loadRecords: loadRecords,
         loadFolders: loadFolders,
         displayName: (record) {
@@ -858,24 +1239,33 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             style: const TextStyle(fontSize: 12, color: Colors.grey),
           );
         },
-        onRecordPicked: (record) async {
-          // Resolved before the dialog pops; the path lands in
-          // [pickedPath] for the caller below.
-          pickedPath = await resolvePath(record);
+        onRecordsPicked: (records) async {
+          // Resolved before the dialog pops; the paths land in [paths]
+          // for the caller below.
+          for (final record in records) {
+            final path = await resolvePath(record);
+            if (path != null && path.isNotEmpty) paths.add(path);
+          }
         },
       ),
     );
 
-    if (result == null || pickedPath == null || !mounted) return;
+    if (result == null || paths.isEmpty || !mounted) return;
     // On web readFilePath returns a WebFileStore key, not a filesystem
     // path — skip the existence check there (dart:io File throws).
-    if (!kIsWeb && !File(pickedPath!).existsSync()) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('文件不存在，请重新选择')));
-      return;
+    final valid = paths.where((p) {
+      if (kIsWeb) return true;
+      return File(p).existsSync();
+    }).toList();
+    if (valid.length != paths.length) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('部分文件不存在，已跳过')),
+      );
     }
-    _inputController.text = pickedPath!;
+    // Skip paths already selected — re-picking the same file must not
+    // fan out a duplicate execution.
+    final fresh = valid.where((p) => !_mediaInputs.contains(p)).toList();
+    setState(() => _mediaInputs.addAll(fresh));
   }
 
   String _formatBytes(int bytes) {
@@ -884,9 +1274,33 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
+  /// Collects the run inputs in the first block's style and fans the flow
+  /// out — one execution per input.
+  List<FlowRunInput> _collectRunInputs() {
+    if (_firstBlockDef?.typeKey == BlockType.catcatch) {
+      return [
+        for (final entry in _catcatchInputs)
+          if (_isValidUrl(entry.urlController.text.trim()))
+            FlowRunInput(
+              text: entry.urlController.text.trim(),
+              durationSec: _catcatchEntrySeconds(entry),
+            ),
+      ];
+    }
+    if (_runInputType == IOType.image ||
+        _runInputType == IOType.audio ||
+        _runInputType == IOType.video) {
+      return [
+        for (final path in _mediaInputs) FlowRunInput(text: path),
+      ];
+    }
+    final text = _inputController.text.trim();
+    return text.isEmpty ? const [] : [FlowRunInput(text: text)];
+  }
+
   Future<void> _startFlow() async {
-    final inputText = _inputController.text.trim();
-    if (inputText.isEmpty) return;
+    final inputs = _collectRunInputs();
+    if (inputs.isEmpty) return;
 
     final flow = ref
         .read(taskFlowListProvider)
@@ -934,14 +1348,25 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
     final service = ref.read(taskFlowExecutionServiceProvider);
 
-    // Fire-and-forget: startFlow can take minutes (polling loops).
-    // Concurrent flows are allowed — the resource scheduler queues blocks
-    // when the device is busy. The unified task list shows live progress.
-    service.startFlow(_editingFlowId!, inputText);
+    // Fire-and-forget: startFlowMany can take minutes (polling loops).
+    // Each input runs the whole chain as its own execution — the resource
+    // scheduler queues blocks when the device is busy. The unified task
+    // list shows live progress per execution.
+    if (inputs.length == 1) {
+      service.startFlow(_editingFlowId!, inputs.first.text,
+          durationSec: inputs.first.durationSec);
+    } else {
+      service.startFlowMany(_editingFlowId!, inputs);
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('任务流已启动'), duration: Duration(seconds: 2)),
+        SnackBar(
+          content: Text(
+            inputs.length == 1 ? '任务流已启动' : '已启动 ${inputs.length} 个任务流',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
       );
       Navigator.of(context).pop();
     }

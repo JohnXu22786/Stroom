@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,6 +8,7 @@ import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/background_task_provider.dart';
+import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -20,6 +22,7 @@ import 'package:stroom/task_flow/services/block_executors/shared_helpers.dart';
 import 'package:stroom/task_flow/services/block_executors/asr_executor.dart';
 import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
 import 'package:stroom/utils/file_manifest.dart';
+import 'package:stroom/utils/text_manifest.dart';
 
 class _FakeChatStreamManager extends ChatStreamManager {
   _FakeChatStreamManager(this.onStart, {this.onCancel, this.captureHistory});
@@ -219,8 +222,13 @@ void main() {
     late BackgroundTaskNotifier bgNotifier;
     late FlowSubTask flowSubTask;
     late String execId;
+    late ProviderContainer container;
 
     setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      ManifestDatabase.enableTestMode();
+      container = ProviderContainer();
+      addTearDown(container.dispose);
       execNotifier = TaskFlowExecutionNotifier();
       bgNotifier = BackgroundTaskNotifier();
       execId = execNotifier.addExecution(flowId: 'f1', flowName: '测试流');
@@ -234,16 +242,19 @@ void main() {
       execNotifier.addSubTask(execId, flowSubTask);
     });
 
+    ConversationsNotifier conversationsNotifier() =>
+        container.read(conversationsProvider.notifier);
+
     test(
         'sends the previous block output VERBATIM as a role:user message '
-        'and names the saved record 助手回复_<short name>', () async {
-      // The success path persists the text record — set up the in-memory
-      // manifest store.
-      SharedPreferences.setMockInitialValues({});
-      ManifestDatabase.enableTestMode();
+        'and persists the exchange as a real conversation (no text file)',
+        () async {
       final fakeManager = _FakeChatStreamManager(
         () async => StreamResult(
-          history: const [],
+          history: [
+            ChatMessage(role: 'user', content: '上一步传递的内容'),
+            ChatMessage(role: 'assistant', content: '好的，已处理'),
+          ],
           assistantMessage: ChatMessage(
             role: 'assistant',
             content: '好的，已处理',
@@ -261,6 +272,7 @@ void main() {
         flowSubTask: flowSubTask,
         bgNotifier: bgNotifier,
         chatManager: fakeManager,
+        conversationsNotifier: conversationsNotifier(),
       );
 
       expect(reply, '好的，已处理');
@@ -270,14 +282,62 @@ void main() {
       expect(fakeManager.captureHistory!.length, 1);
       expect(fakeManager.captureHistory!.single.role, 'user');
       expect(fakeManager.captureHistory!.single.content, '上一步传递的内容');
-      // The background task + saved record use 助手回复_<short name>.
+      // The exchange lives in a REAL conversation keyed by the flow convId
+      // — viewable and continuable from the topic-selection page.
+      final convs = container.read(conversationsProvider);
+      expect(convs, hasLength(1));
+      final conv = convs.single;
+      expect(conv.id, 'flow_${execId}_${flowSubTask.id}');
+      expect(conv.messages, hasLength(2));
+      expect(conv.messages[0].role, 'user');
+      expect(conv.messages[0].content, '上一步传递的内容');
+      expect(conv.messages[1].role, 'assistant');
+      expect(conv.messages[1].content, '好的，已处理');
+      // The flow conversation is created quietly: a background flow must
+      // not hijack the chat tab's active conversation.
+      expect(container.read(activeConversationIdProvider), isNull);
+      // No text record is written to the gallery anymore.
+      expect(await TextManifest.loadRecords(), isEmpty);
+      // The background task keeps 助手回复_<short name> and completes
+      // without an "open file" target.
       expect(bgNotifier.state[0].title, '助手回复_上一步传递的内容');
       expect(bgNotifier.state[0].status, TaskStatus.completed);
+      expect(bgNotifier.state[0].downloadedFilePath, isNull);
+    });
+
+    test('a configured block assistant is bound to the saved conversation',
+        () async {
+      final fakeManager = _FakeChatStreamManager(
+        () async => StreamResult(
+          history: [
+            ChatMessage(role: 'user', content: '输入'),
+            ChatMessage(role: 'assistant', content: '好的'),
+          ],
+          assistantMessage: ChatMessage(role: 'assistant', content: '好的'),
+          fullReply: '好的',
+        ),
+      );
+
+      await executeChatBlock(
+        block: TaskFlowBlock(typeKey: BlockType.chat),
+        def: BlockTypeDefinition.chat,
+        input: '输入',
+        execId: execId,
+        execNotifier: execNotifier,
+        flowSubTask: flowSubTask,
+        bgNotifier: bgNotifier,
+        chatManager: fakeManager,
+        conversationsNotifier: conversationsNotifier(),
+        assistant: Assistant(id: 'u1', name: '翻译助手', prompt: '你是翻译'),
+      );
+
+      expect(container.read(conversationsProvider).single.assistantId, 'u1');
     });
 
     test(
         'fails the sub-task and bg task when the stream is cancelled '
-        'instead of succeeding with a partial reply', () async {
+        'instead of succeeding with a partial reply, and removes the '
+        'stub conversation', () async {
       final fakeManager = _FakeChatStreamManager(
         () async => const StreamResult(
           history: [],
@@ -296,10 +356,13 @@ void main() {
           flowSubTask: flowSubTask,
           bgNotifier: bgNotifier,
           chatManager: fakeManager,
+          conversationsNotifier: conversationsNotifier(),
         ),
         throwsA(isA<BlockExecutionException>()),
       );
 
+      // A failed block must not leave an orphan stub conversation.
+      expect(container.read(conversationsProvider), isEmpty);
       expect(bgNotifier.state[0].status, TaskStatus.failed);
       expect(execNotifier.state[0].subTasks[0].status, TaskStatus.failed);
       expect(execNotifier.state[0].status, FlowExecutionStatus.failed);
@@ -324,19 +387,22 @@ void main() {
           flowSubTask: flowSubTask,
           bgNotifier: bgNotifier,
           chatManager: fakeManager,
+          conversationsNotifier: conversationsNotifier(),
           maxWait: const Duration(milliseconds: 50),
         ),
         throwsA(isA<BlockExecutionException>()),
       );
 
       expect(cancelled, isTrue);
+      expect(container.read(conversationsProvider), isEmpty);
       expect(bgNotifier.state[0].status, TaskStatus.failed);
       expect(execNotifier.state[0].subTasks[0].status, TaskStatus.failed);
     });
 
     test(
         'fails the sub-task when the stream ends with an error reply '
-        '(error text must not become flow output)', () async {
+        '(error text must not become flow output), and removes the '
+        'stub conversation', () async {
       final fakeManager = _FakeChatStreamManager(
         () async => StreamResult(
           history: const [],
@@ -361,10 +427,12 @@ void main() {
           flowSubTask: flowSubTask,
           bgNotifier: bgNotifier,
           chatManager: fakeManager,
+          conversationsNotifier: conversationsNotifier(),
         ),
         throwsA(isA<BlockExecutionException>()),
       );
 
+      expect(container.read(conversationsProvider), isEmpty);
       expect(bgNotifier.state[0].status, TaskStatus.failed);
       expect(execNotifier.state[0].subTasks[0].status, TaskStatus.failed);
       expect(execNotifier.state[0].status, FlowExecutionStatus.failed);
@@ -379,6 +447,103 @@ void main() {
         bgNotifier.state[0].rawResponse,
         const {'statusCode': 500, 'error': 'server error'},
       );
+    });
+
+    test(
+        'fails and removes the stub conversation when the assistant '
+        'returns no content', () async {
+      final fakeManager = _FakeChatStreamManager(
+        () async => StreamResult(
+          history: [
+            ChatMessage(role: 'user', content: '输入'),
+          ],
+          fullReply: '',
+        ),
+      );
+
+      await expectLater(
+        executeChatBlock(
+          block: TaskFlowBlock(typeKey: BlockType.chat),
+          def: BlockTypeDefinition.chat,
+          input: '输入',
+          execId: execId,
+          execNotifier: execNotifier,
+          flowSubTask: flowSubTask,
+          bgNotifier: bgNotifier,
+          chatManager: fakeManager,
+          conversationsNotifier: conversationsNotifier(),
+        ),
+        throwsA(isA<BlockExecutionException>()),
+      );
+
+      expect(container.read(conversationsProvider), isEmpty);
+      expect(bgNotifier.state[0].status, TaskStatus.failed);
+      expect(execNotifier.state[0].subTasks[0].status, TaskStatus.failed);
+      expect(execNotifier.state[0].status, FlowExecutionStatus.failed);
+    });
+
+    test(
+        'a flow deleted mid-stream leaves no orphan conversation even '
+        'when the stream finished successfully', () async {
+      final fakeManager = _FakeChatStreamManager(
+        () async => StreamResult(
+          history: [
+            ChatMessage(role: 'user', content: '输入'),
+            ChatMessage(role: 'assistant', content: '好的'),
+          ],
+          assistantMessage: ChatMessage(role: 'assistant', content: '好的'),
+          fullReply: '好的',
+        ),
+      );
+
+      // The flow execution is removed while the stream is in flight (flow
+      // card delete / 清除所有) — the reply must NOT be saved.
+      execNotifier.removeExecution(execId);
+
+      await expectLater(
+        executeChatBlock(
+          block: TaskFlowBlock(typeKey: BlockType.chat),
+          def: BlockTypeDefinition.chat,
+          input: '输入',
+          execId: execId,
+          execNotifier: execNotifier,
+          flowSubTask: flowSubTask,
+          bgNotifier: bgNotifier,
+          chatManager: fakeManager,
+          conversationsNotifier: conversationsNotifier(),
+        ),
+        throwsA(isA<BlockExecutionException>()),
+      );
+
+      expect(container.read(conversationsProvider), isEmpty);
+    });
+
+    test(
+        'a synchronously-throwing stream fails the block and removes '
+        'the stub conversation', () async {
+      final fakeManager = _FakeChatStreamManager(
+        () => throw Exception('stream crashed'),
+      );
+
+      await expectLater(
+        executeChatBlock(
+          block: TaskFlowBlock(typeKey: BlockType.chat),
+          def: BlockTypeDefinition.chat,
+          input: '输入',
+          execId: execId,
+          execNotifier: execNotifier,
+          flowSubTask: flowSubTask,
+          bgNotifier: bgNotifier,
+          chatManager: fakeManager,
+          conversationsNotifier: conversationsNotifier(),
+        ),
+        throwsA(isA<BlockExecutionException>()),
+      );
+
+      expect(container.read(conversationsProvider), isEmpty);
+      expect(bgNotifier.state[0].status, TaskStatus.failed);
+      expect(execNotifier.state[0].subTasks[0].status, TaskStatus.failed);
+      expect(execNotifier.state[0].status, FlowExecutionStatus.failed);
     });
   });
 }

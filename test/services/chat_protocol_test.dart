@@ -11,7 +11,10 @@ import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/services/chat_protocol.dart';
 import 'package:stroom/services/context_manager.dart'
-    show kCompactedToolResultPlaceholder, kInterruptedToolResultPlaceholder;
+    show
+        kCompactedToolResultPlaceholder,
+        kInterruptedToolResultPlaceholder,
+        kToolOutputTruncatedSuffix;
 
 /// 测试用 PathProvider：把"应用文档目录"指向临时目录，让
 /// AttachmentStorage 的磁盘读写（含压缩缓存）落到真实临时文件上。
@@ -301,6 +304,71 @@ void main() {
       });
       expect(blocks[1]['tool_use_id'], 'call_2');
     });
+
+    test('toolOutputMaxChars 参数控制实时工具循环的渲染截断', () {
+      final big = ToolCallResult(toolCallId: 'call_big', result: 'x' * 6000);
+      // OpenAI：截断至 1000 字符 + 后缀
+      final openAi = OpenAIProtocol().buildToolResultMessages(
+        [big],
+        toolOutputMaxChars: 1000,
+      );
+      final openAiContent = openAi.single['content'] as String;
+      expect(openAiContent, startsWith('x' * 1000));
+      expect(openAiContent, contains('[已截断]'));
+      // Anthropic：同样受参数控制
+      final anthropic = AnthropicProtocol().buildToolResultMessages(
+        [big],
+        toolOutputMaxChars: 1000,
+      );
+      final blocks = (anthropic.single['content'] as List).cast<Map>();
+      final blockContent = blocks.single['content'] as String;
+      expect(blockContent, startsWith('x' * 1000));
+      expect(blockContent, contains('[已截断]'));
+    });
+
+    test('toolOutputMaxChars<=0 关闭截断：完整发送', () {
+      final big = ToolCallResult(toolCallId: 'call_big', result: 'x' * 6000);
+      final msgs = OpenAIProtocol()
+          .buildToolResultMessages([big], toolOutputMaxChars: 0);
+      expect(msgs.single['content'], 'x' * 6000);
+    });
+  });
+
+  group('truncateToolOutput / truncateByChars（字符数语义）', () {
+    test('默认上限 5000 字符：超长截断 + 后缀，短文本原样', () {
+      expect(truncateToolOutput('short'), 'short');
+      expect(truncateToolOutput('x' * 5000), 'x' * 5000, reason: '恰好等于上限不截断');
+      final truncated = truncateToolOutput('x' * 5001);
+      final expected = '${'x' * 5000}$kToolOutputTruncatedSuffix';
+      expect(truncated, expected);
+    });
+    test('按字符而非字节计：4000 个中文字符（12000 字节）在 5000 字符内不截断', () {
+      final r = truncateToolOutput('中' * 4000);
+      expect(r, '中' * 4000,
+          reason: 'CJK 每字符计 1：12000 字节 ≪ 50KB 存储上限，5000 字符内完整');
+    });
+
+    test('CJK 超长按字符截断，不劈代理对/多字节字符', () {
+      final r = truncateToolOutput('中' * 6000, maxChars: 1000);
+      expect(r, startsWith('中' * 1000));
+      expect(r, contains('[已截断]'));
+      // 截断后内容全部是可解码的完整字符
+      expect(utf8.decode(utf8.encode(r)), r);
+    });
+
+    test('代理对（emoji）不被劈开', () {
+      // 😀 为 U+1F600（代理对，String.length==2）：截断边界必须
+      // 落在完整字符上。
+      final text = 'a😀b😀c😀';
+      final r = truncateToolOutput(text, maxChars: 3);
+      expect(r, 'a😀b$kToolOutputTruncatedSuffix');
+      expect(r, isNot(contains('\uFFFD')));
+    });
+
+    test('maxChars<=0 关闭截断：完整返回', () {
+      expect(truncateToolOutput('x' * 6000, maxChars: 0), 'x' * 6000);
+      expect(truncateToolOutput('x' * 6000, maxChars: -1), 'x' * 6000);
+    });
   });
 
   group('normalizeToolCall', () {
@@ -477,6 +545,65 @@ void main() {
       final blocks =
           ((req.messages[1]['content'] as List).first as Map)['content'];
       expect(blocks, kCompactedToolResultPlaceholder);
+    });
+
+    test('历史重建受 toolOutputMaxChars 控制（与实时循环同上限）', () async {
+      final req = await OpenAIProtocol().buildRequest(
+        history: [
+          assistantWithTools([
+            ToolCallData(
+              id: 'call_big',
+              name: 'web_search',
+              arguments: const {},
+              status: ToolCallStatus.completed,
+              result: 'x' * 6000,
+            ),
+          ]),
+        ],
+        toolOutputMaxChars: 1000,
+      );
+      final content = req.messages[1]['content'] as String;
+      expect(content, startsWith('x' * 1000));
+      expect(content, contains('[已截断]'));
+    });
+
+    test('历史重建 toolOutputMaxChars<=0：完整发送存储结果', () async {
+      final req = await OpenAIProtocol().buildRequest(
+        history: [
+          assistantWithTools([
+            ToolCallData(
+              id: 'call_big',
+              name: 'web_search',
+              arguments: const {},
+              status: ToolCallStatus.completed,
+              result: 'x' * 6000,
+            ),
+          ]),
+        ],
+        toolOutputMaxChars: 0,
+      );
+      expect(req.messages[1]['content'], 'x' * 6000);
+    });
+
+    test('Anthropic 历史重建同样受 toolOutputMaxChars 控制', () async {
+      final req = await AnthropicProtocol().buildRequest(
+        history: [
+          assistantWithTools([
+            ToolCallData(
+              id: 'toolu_big',
+              name: 'web_search',
+              arguments: const {},
+              status: ToolCallStatus.completed,
+              result: 'x' * 6000,
+            ),
+          ]),
+        ],
+        toolOutputMaxChars: 1000,
+      );
+      final blocks = ((req.messages[1]['content'] as List).first as Map);
+      final content = blocks['content'] as String;
+      expect(content, startsWith('x' * 1000));
+      expect(content, contains('[已截断]'));
     });
 
     test('附件与工具链并存（content parts + tool_calls）', () async {

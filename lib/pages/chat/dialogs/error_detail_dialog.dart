@@ -1,6 +1,5 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:stroom/utils/data_sanitizer.dart';
+import '../utils/format_chat_error.dart';
 
 /// Represents a selectable data section within the detail dialog.
 class _DataSection {
@@ -317,8 +316,6 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
       orElse: () => sections.first,
     );
 
-    final encoder = const JsonEncoder.withIndent('  ');
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -343,7 +340,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
               color: isDark ? Colors.black : Colors.grey[200],
               borderRadius: BorderRadius.circular(8),
             ),
-            child: _buildValueDisplay(section.value, encoder, isDark),
+            child: _buildValueDisplay(section.value, isDark),
           ),
         ],
       ),
@@ -351,26 +348,9 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
   }
 
   /// Builds the display widget for a section value.
-  Widget _buildValueDisplay(
-    dynamic value,
-    JsonEncoder encoder,
-    bool isDark,
-  ) {
-    if (value is String) {
-      return SelectableText(
-        value,
-        style: TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 12,
-          color: isDark ? Colors.grey[300] : Colors.grey[800],
-        ),
-      );
-    }
-
-    // For Map or List values, format as JSON
-    final sanitized = DataSanitizer.sanitizeForDisplay(value);
+  Widget _buildValueDisplay(dynamic value, bool isDark) {
     return SelectableText(
-      encoder.convert(sanitized),
+      formatErrorValueForDisplay(value),
       style: TextStyle(
         fontFamily: 'monospace',
         fontSize: 12,

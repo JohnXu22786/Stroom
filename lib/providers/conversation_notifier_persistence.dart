@@ -133,6 +133,12 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       // _persist (with empty state) doesn't write an empty list over the
       // previous good save before _load completes.
       _loadHasRun = true;
+      if (mounted) {
+        // 启动临时对话 tick 并立即清理加载期间已到期的临时对话
+        // （不等首轮 tick，避免过期对话在启动瞬间仍可见）。
+        _syncTemporaryTimer();
+        unawaited(_checkTemporaryExpiry());
+      }
       // 启动窗口内用户创建的新对话已合并进内存：立即落盘
       // （_loadHasRun 已置位，_persistCore 守卫放行），防止
       // "下次持久化前退出"丢失新对话。
@@ -182,8 +188,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
 
   Future<void> _persistActiveId() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      // 在 await 之前捕获 activeId：notifier 可能在 getInstance 的
+      // 异步间隙被 dispose，之后再用 _ref.read 会抛错。
       final activeId = _ref.read(activeConversationIdProvider);
+      final prefs = await SharedPreferences.getInstance();
       if (activeId != null) {
         await prefs.setString('active_conversation_id', activeId);
       } else {
@@ -305,6 +313,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 lastInputTokens: c.lastInputTokens,
                 lastOutputTokens: c.lastOutputTokens,
                 totalCost: c.totalCost,
+                isTemporary: c.isTemporary,
+                temporaryExpiresAt: c.temporaryExpiresAt,
               ))
           .toList();
       final json = jsonEncode(stripped.map((e) => e.toMap()).toList());

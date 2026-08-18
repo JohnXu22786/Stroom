@@ -104,11 +104,40 @@ void chatAgentSemanticsGroup1() {
       expect(events.whereType<ToolCallStartEvent>().length, 1);
     });
 
-    test('开关关闭时使用默认上限 20（非无限）', () async {
-      // 关闭开关 + 用户值 30 → 生效上限为默认 20（关闭开关不等于无限，
-      // 仍按默认上限执行）
+    test('开关关闭时不限制：超过默认 20 轮也不停止，直到模型不再调用工具', () async {
+      // 关闭开关（设置页文案"无限制"）→ 不设上限：即使超过默认 20 轮
+      // 也不自动停止，循环直到模型返回不含工具调用的文本轮为止。
+      final provider = _RecordingProvider([
+        ...List.generate(25, (i) => toolRound(i + 1)),
+        [AIStreamEvent('最终回答')],
+      ]);
+      final service = _makeService(provider);
+      service.setAssistantSettings(
+        AssistantSettings(maxToolCalls: 30, enableMaxToolCalls: false),
+      );
+
+      final events = <ChatEvent>[];
+      await service
+          .sendStreamWithTools(
+            'go',
+            history: [ChatMessage(role: 'user', content: 'go')],
+            tools: ChatService.getRegisteredToolDefinitions(),
+          )
+          .listen(events.add, onError: (e) => fail('error: $e'))
+          .asFuture();
+
+      // 25 轮工具全部执行 + 1 轮文本收尾 = 26 次 API 请求
+      // （修复前：开关关闭仍按默认 20 截断 → 仅 20 次请求）
+      expect(provider.captures, hasLength(26));
+      expect(events.whereType<ToolCallStartEvent>().length, 25);
+      expect(events.whereType<ToolCallCompleteEvent>().length, 25);
+    });
+
+    test('开关关闭时硬上限 1000 兜底：模型失控也不超过 1000 次请求', () async {
+      // 无限模式仍保留防失控兜底：模型持续返回工具调用时，
+      // 最多 1000 次 API 请求后干净结束（恰好 1000，不多发第 1001 次）。
       final provider = _RecordingProvider(
-        List.generate(25, (i) => toolRound(i + 1)),
+        List.generate(1001, (i) => toolRound(i + 1)),
       );
       final service = _makeService(provider);
       service.setAssistantSettings(
@@ -125,8 +154,10 @@ void chatAgentSemanticsGroup1() {
           .listen(events.add, onError: (e) => fail('error: $e'))
           .asFuture();
 
-      expect(provider.captures, hasLength(20));
-      expect(events.whereType<ToolCallStartEvent>().length, 20);
+      expect(provider.captures, hasLength(1000),
+          reason: '硬上限恰好 1000 次请求，不追加第 1001 次');
+      expect(events.whereType<ToolCallStartEvent>().length, 1000);
+      expect(events.whereType<ToolCallCompleteEvent>().length, 1000);
     });
 
     test('默认配置（enable=true, maxToolCalls=20）→ 恰好 20 次请求', () async {
@@ -182,13 +213,14 @@ void chatAgentSemanticsGroup1() {
     });
 
     test('getEffectiveMaxToolRounds 值域校验', () {
-      // 未配置 / 关闭：默认 20
+      // 未配置（settings 为 null，无助手会话）：默认 20，不做静默放宽
       expect(ChatService.getEffectiveMaxToolRounds(null), 20);
+      // 显式关闭开关：null = 不限（与设置页"无限制"文案一致）
       expect(
         ChatService.getEffectiveMaxToolRounds(
           AssistantSettings(maxToolCalls: 50, enableMaxToolCalls: false),
         ),
-        20,
+        isNull,
       );
       // 开启 + 合法值：1..100 原样使用
       expect(
@@ -211,6 +243,61 @@ void chatAgentSemanticsGroup1() {
           ),
           20,
           reason: 'maxToolCalls=$invalid 应回退默认 20',
+        );
+      }
+    });
+
+    test('getEffectiveToolOutputMaxChars 值域校验（字符数）', () {
+      // 无助手（null settings）：默认上限 5000 字符（保持始终截断的兜底）。
+      expect(ChatService.getEffectiveToolOutputMaxChars(null), 5000);
+      // 关闭截断开关：0 = 不截断（完整发送存储结果）。
+      expect(
+        ChatService.getEffectiveToolOutputMaxChars(
+          AssistantSettings(
+            maxToolOutputChars: 3000,
+            enableMaxToolOutputChars: false,
+          ),
+        ),
+        0,
+        reason: '关闭截断必须返回 0（协议层语义：不截断）',
+      );
+      // 开启 + 合法值：原样使用（最小 100，最大 100000）。
+      expect(
+        ChatService.getEffectiveToolOutputMaxChars(
+          AssistantSettings(
+              maxToolOutputChars: 100, enableMaxToolOutputChars: true),
+        ),
+        100,
+      );
+      expect(
+        ChatService.getEffectiveToolOutputMaxChars(
+          AssistantSettings(
+            maxToolOutputChars: 5000,
+            enableMaxToolOutputChars: true,
+          ),
+        ),
+        5000,
+      );
+      expect(
+        ChatService.getEffectiveToolOutputMaxChars(
+          AssistantSettings(
+            maxToolOutputChars: 100000,
+            enableMaxToolOutputChars: true,
+          ),
+        ),
+        100000,
+      );
+      // 开启 + 越界/损坏值：回退默认 5000。
+      for (final invalid in [0, -1, 99, 100001, 999999999]) {
+        expect(
+          ChatService.getEffectiveToolOutputMaxChars(
+            AssistantSettings(
+              maxToolOutputChars: invalid,
+              enableMaxToolOutputChars: true,
+            ),
+          ),
+          5000,
+          reason: 'maxToolOutputChars=$invalid 应回退默认 5000',
         );
       }
     });
