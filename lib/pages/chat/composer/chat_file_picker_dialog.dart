@@ -191,89 +191,115 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     });
   }
 
+  /// The tab currently visible to the user.
+  _FileTabType get _activeTabType => _FileTabType.values[_tabController.index];
+
+  /// Whether the active tab is showing the root folder (no parent to
+  /// navigate up to).
+  bool get _isRoot => (_currentFolders[_activeTabType] ?? '').isEmpty;
+
+  /// Navigate [type]'s folder view up one level.
+  void _navigateUp(_FileTabType type) {
+    final parentFolder =
+        FolderPathUtils.getParentFolderPath(_currentFolders[type] ?? '');
+    setState(() {
+      _currentFolders[type] = parentFolder;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final hasSelection = _selectedItems.isNotEmpty;
 
-    return Scaffold(
-      backgroundColor: cs.surface,
-      appBar: AppBar(
-        title: const Text('选择文件'),
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.of(context).pop(null),
-        ),
-        actions: [
-          if (hasSelection)
-            TextButton(
-              key: const Key('file_picker_clear_btn'),
-              onPressed: _clearSelection,
-              child: Text(
-                '清除 (${_selectedItems.length})',
-                style: const TextStyle(color: Colors.red),
-              ),
-            ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: TabBar(
-            controller: _tabController,
-            isScrollable: false,
-            labelColor: cs.primary,
-            unselectedLabelColor: cs.onSurfaceVariant,
-            tabs: _FileTabType.values.map((type) {
-              return Tab(
-                key: Key('file_picker_tab_${type.name}'),
-                icon: Icon(_tabIcons[type]),
-                text: _tabLabels[type],
-              );
-            }).toList(),
+    return PopScope(
+      // System back inside a subfolder navigates up one level; only at
+      // the root does it close the picker (mirrors _AppMediaPickerDialog).
+      canPop: _isRoot,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !_isRoot) {
+          _navigateUp(_activeTabType);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: cs.surface,
+        appBar: AppBar(
+          title: const Text('选择文件'),
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(null),
           ),
-        ),
-      ),
-      body: Column(
-        children: [
-          // Tab content
-          Expanded(
-            key: const Key('file_picker_content'),
-            child: TabBarView(
+          actions: [
+            if (hasSelection)
+              TextButton(
+                key: const Key('file_picker_clear_btn'),
+                onPressed: _clearSelection,
+                child: Text(
+                  '清除 (${_selectedItems.length})',
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+          ],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(48),
+            child: TabBar(
               controller: _tabController,
-              children: _FileTabType.values.map((type) {
-                return _buildTabContent(type);
+              isScrollable: false,
+              labelColor: cs.primary,
+              unselectedLabelColor: cs.onSurfaceVariant,
+              tabs: _FileTabType.values.map((type) {
+                return Tab(
+                  key: Key('file_picker_tab_${type.name}'),
+                  icon: Icon(_tabIcons[type]),
+                  text: _tabLabels[type],
+                );
               }).toList(),
             ),
           ),
-
-          // Preview bar (bottom)
-          if (hasSelection) _buildPreviewBar(cs),
-
-          // Confirm button
-          SafeArea(
-            top: false,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-              decoration: BoxDecoration(
-                color: cs.surface,
-                border: Border(
-                  top: BorderSide(color: cs.outlineVariant, width: 0.5),
-                ),
-              ),
-              child: FilledButton.icon(
-                key: const Key('file_picker_confirm_btn'),
-                onPressed: () {
-                  final result = _selectedItems.values.toList();
-                  Navigator.of(context).pop(result);
-                },
-                icon: const Icon(Icons.check, size: 18),
-                label:
-                    Text(hasSelection ? '确定 (${_selectedItems.length})' : '确定'),
+        ),
+        body: Column(
+          children: [
+            // Tab content
+            Expanded(
+              key: const Key('file_picker_content'),
+              child: TabBarView(
+                controller: _tabController,
+                children: _FileTabType.values.map((type) {
+                  return _buildTabContent(type);
+                }).toList(),
               ),
             ),
-          ),
-        ],
+
+            // Preview bar (bottom)
+            if (hasSelection) _buildPreviewBar(cs),
+
+            // Confirm button
+            SafeArea(
+              top: false,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  border: Border(
+                    top: BorderSide(color: cs.outlineVariant, width: 0.5),
+                  ),
+                ),
+                child: FilledButton.icon(
+                  key: const Key('file_picker_confirm_btn'),
+                  onPressed: () {
+                    final result = _selectedItems.values.toList();
+                    Navigator.of(context).pop(result);
+                  },
+                  icon: const Icon(Icons.check, size: 18),
+                  label: Text(
+                      hasSelection ? '确定 (${_selectedItems.length})' : '确定'),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -394,11 +420,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: InkWell(
-        onTap: () {
-          setState(() {
-            _currentFolders[type] = parentFolder;
-          });
-        },
+        onTap: () => _navigateUp(type),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           child: Row(
