@@ -22,12 +22,20 @@ Future<String> executeCatCatchBlock({
   required CatCatchNotifier catcatchNotifier,
   String videoFolder = '',
   String audioFolder = '',
+
+  /// Per-run duration (seconds) from the run-mode input box. When > 0 it
+  /// overrides the block's configured `durationSec`; 0 = use the block's
+  /// configured value. Lets a CatCatch-first flow reuse the CatCatch
+  /// page's URL + 时/分/秒 input box semantics.
+  int durationSecOverride = 0,
   Duration stallTimeout = const Duration(minutes: 10),
 }) async {
   final taskId = const Uuid().v4();
   execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
   execNotifier.updateSubTaskStatus(execId, flowSubTask.id, TaskStatus.running);
-  final durationSec = asIntParam(block.params, 'durationSec', 0);
+  final durationSec = durationSecOverride > 0
+      ? durationSecOverride
+      : asIntParam(block.params, 'durationSec', 0);
   catcatchNotifier.addTask(
     input,
     durationSec,

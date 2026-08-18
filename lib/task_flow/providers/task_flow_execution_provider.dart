@@ -54,12 +54,14 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     required String flowName,
     List<FlowSubTask> subTasks = const [],
     String inputText = '',
+    int inputDurationSec = 0,
   }) {
     final execution = TaskFlowExecution(
       flowId: flowId,
       flowName: flowName,
       subTasks: subTasks,
       inputText: inputText,
+      inputDurationSec: inputDurationSec,
     );
     state = [execution, ...state];
     _persistExecutions();
