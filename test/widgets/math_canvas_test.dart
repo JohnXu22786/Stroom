@@ -252,16 +252,16 @@ void main() {
       final points = key.currentState!.curvePoints;
       expect(points.length, greaterThanOrEqualTo(2));
 
-      // With ~50% margin on each side, sampling range should be ~[-10, 10].
-      // The actual margin is 0.5 × (xMax - xMin) = 0.5 × 10 = 5.
+      // With 100% margin on each side, sampling range is [-15, 15].
+      // The actual margin is 1.0 × (xMax - xMin) = 1.0 × 10 = 10.
       // Verify points extend well beyond the viewport bounds (-5, 5).
       final firstX = points.first['x']!;
       final lastX = points.last['x']!;
       expect(firstX, lessThanOrEqualTo(-7.0),
           reason:
-              'First sampled x ($firstX) should extend ~50% beyond xMin=-5');
+              'First sampled x ($firstX) should extend ~100% beyond xMin=-5');
       expect(lastX, greaterThanOrEqualTo(7.0),
-          reason: 'Last sampled x ($lastX) should extend ~50% beyond xMax=5');
+          reason: 'Last sampled x ($lastX) should extend ~100% beyond xMax=5');
     });
 
     testWidgets('sampled point count scales proportionally with extended range',
@@ -281,17 +281,17 @@ void main() {
       );
       await tester.pump();
 
-      // Set viewport [-10, 10] (default) — range = 20, margin = 10,
-      // so sampling range = 40, scalePoints = 40/20 = 2.0.
-      // numPoints = 300 * 2.0 = 600.
+      // Set viewport [-10, 10] (default) — range = 20, margin = 20,
+      // so sampling range = 60, scalePoints = 60/20 = 3.0.
+      // numPoints = 300 * 3.0 = 900.
       await key.currentState!.setExpression('x', null);
       await tester.pump();
 
       final points = key.currentState!.curvePoints;
-      // For f(x)=x over [-20, 20], all 600 points are finite.
+      // For f(x)=x over [-30, 30], all 900 points are finite.
       expect(points.length, greaterThanOrEqualTo(500),
           reason:
-              'With 2× range scaling, point count should be ~600, not the base 300');
+              'With 3× range scaling, point count should be ~900, not the base 300');
     });
 
     testWidgets(
@@ -331,8 +331,8 @@ void main() {
             reason: 'All implicit segment y values should be finite');
       }
 
-      // With 50% margin (y bounds [-7.5, 7.5]), the parabola y=x^2 at x=±2.5
-      // has y=6.25, which should be within the extended y bounds.
+      // With 100% margin (y bounds [-15, 15]), the parabola y=x^2 at x=±3
+      // has y=9, which should be within the extended y bounds.
       // Verify y-values extend beyond the original viewport yMax=5.
       final ys = points.map((p) => p['y']!).toList();
       final maxY = ys.reduce((a, b) => a > b ? a : b);
@@ -368,17 +368,17 @@ void main() {
       final points = key.currentState!.curvePoints;
       final xs = points.map((p) => p['x']!).toList()..sort();
 
-      // With 50% margin (= 10 units on each side), sampling range is [-20, 20].
+      // With 100% margin (= 20 units on each side), sampling range is [-30, 30].
       // Verify the data extends well beyond the original viewport [-10, 10].
       expect(xs.first, lessThanOrEqualTo(-19.0),
           reason:
-              'First sampled x (${xs.first}) should extend ~50% beyond viewport xMin=-10');
+              'First sampled x (${xs.first}) should extend ~100% beyond viewport xMin=-10');
       expect(xs.last, greaterThanOrEqualTo(19.0),
           reason:
-              'Last sampled x (${xs.last}) should extend ~50% beyond viewport xMax=10');
+              'Last sampled x (${xs.last}) should extend ~100% beyond viewport xMax=10');
 
       // This confirms that if the user pans 50% of viewport width (from [-10,10]
-      // to roughly [0,20]), the already-sampled data at [-20,20] still fully
+      // to roughly [0,20]), the already-sampled data at [-30,30] still fully
       // covers the visible area — curves stay visible without needing a resample.
     });
   });
@@ -669,6 +669,105 @@ void main() {
       // At x=2, y should be positive and large for x^4
       expect(ys.any((y) => y > 10), isTrue,
           reason: 'x^4 should have values > 10 near x=2');
+    });
+  });
+
+  group('MathCanvas - pan tracks the finger 1:1', () {
+    // The canvas will shift its viewport in math units by
+    // fingerDelta * (xRange / canvasWidth) so the drawn graph moves
+    // exactly as far on screen as the finger does.
+    const canvasWidth = 400.0;
+    const canvasHeight = 300.0;
+
+    Future<(GlobalKey<MathCanvasState>, double)> pumpCanvas(
+        WidgetTester tester) async {
+      final key = GlobalKey<MathCanvasState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            // Non-square canvas on purpose: the painter renders both
+            // axes with the same pixels-per-unit scale (derived from
+            // xRange / width), so the pan math must too.
+            body: SizedBox(
+              width: canvasWidth,
+              height: canvasHeight,
+              child: MathCanvas(key: key),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      final vp = key.currentState!.viewport;
+      return (key, vp.$3 - vp.$1);
+    }
+
+    testWidgets('horizontal drag moves the graph exactly as far as the finger',
+        (tester) async {
+      final (key, xRange) = await pumpCanvas(tester);
+
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.byType(MathCanvas)));
+      await tester.pump();
+      // Move well past the pan slop first so the scale recognizer accepts
+      // the gesture and starts emitting updates; only the tracked move
+      // below is measured.
+      await gesture.moveBy(const Offset(150, 0));
+      await tester.pump();
+
+      final vp0 = key.currentState!.viewport;
+
+      // Tracked move: exactly 30 logical pixels to the right.
+      await gesture.moveBy(const Offset(30, 0));
+      await tester.pump();
+      final vp1 = key.currentState!.viewport;
+
+      // 1:1 tracking: viewport shifts by 30 * (xRange / width) math units,
+      // which renders as exactly 30 pixels of graph movement.
+      final expectedShift = 30 * xRange / canvasWidth;
+      expect(vp1.$1 - vp0.$1, closeTo(-expectedShift, 1e-9),
+          reason: 'xMin should track the finger at 1x, not half speed');
+      expect(vp1.$3 - vp0.$3, closeTo(-expectedShift, 1e-9),
+          reason: 'xMax should track the finger at 1x, not half speed');
+      // A pure horizontal drag must leave the y viewport untouched.
+      expect(vp1.$2, closeTo(vp0.$2, 1e-9));
+      expect(vp1.$4, closeTo(vp0.$4, 1e-9));
+
+      await gesture.up();
+      await tester.pump();
+    });
+
+    testWidgets('vertical drag moves the graph exactly as far as the finger',
+        (tester) async {
+      final (key, xRange) = await pumpCanvas(tester);
+
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.byType(MathCanvas)));
+      await tester.pump();
+      await gesture.moveBy(const Offset(0, 150));
+      await tester.pump();
+
+      final vp0 = key.currentState!.viewport;
+
+      // Tracked move: exactly 30 logical pixels downward.
+      await gesture.moveBy(const Offset(0, 30));
+      await tester.pump();
+      final vp1 = key.currentState!.viewport;
+
+      // Dragging down moves the graph down, so yMin/yMax must increase.
+      // The painter renders the y axis with the same pixels-per-unit
+      // scale as the x axis (xRange / width), so the same conversion
+      // applies here.
+      final expectedShift = 30 * xRange / canvasWidth;
+      expect(vp1.$2 - vp0.$2, closeTo(expectedShift, 1e-9),
+          reason: 'yMin should track the finger at 1x on a non-square canvas');
+      expect(vp1.$4 - vp0.$4, closeTo(expectedShift, 1e-9),
+          reason: 'yMax should track the finger at 1x on a non-square canvas');
+      // A pure vertical drag must leave the x viewport untouched.
+      expect(vp1.$1, closeTo(vp0.$1, 1e-9));
+      expect(vp1.$3, closeTo(vp0.$3, 1e-9));
+
+      await gesture.up();
+      await tester.pump();
     });
   });
 }
