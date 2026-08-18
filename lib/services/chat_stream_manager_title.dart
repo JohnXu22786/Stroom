@@ -33,16 +33,19 @@ extension _ChatStreamManagerTitleExt on ChatStreamManager {
       );
       if (lastUser.content.trim().isEmpty) return;
 
-      // 解析标题助手（默认内置；用户可替换）
+      // 解析标题任务：提示词（自定义优先，默认内置）+ 模型
+      // （配置了独立模型就用它，否则跟随对话页当前模型）
       final settings = ref.read(systemAssistantSettingsProvider);
-      final userAssistants = ref.read(assistantProvider);
-      final titlePrompt = resolveSystemAssistantPrompt(
-        assistantId: settings.titleAssistantId,
-        userAssistants: userAssistants,
-      );
+      final titlePrompt = resolveSystemAssistantPrompt(settings.title,
+          defaultAssistantId: kBuiltInTitleAssistantId);
       if (titlePrompt == null) return;
 
-      final svc = _adapter.createTransientService();
+      final svc = _adapter.createTransientServiceForModel(
+        entriesState: ref.read(providerEntriesProvider),
+        modelId: settings.title.modelId,
+        providerName: settings.title.providerName,
+        modelDisplayName: settings.title.modelDisplayName,
+      );
       if (svc == null) return;
 
       // 标题请求是真实 API 请求（每次发送都会产生），其 cost 同样是
