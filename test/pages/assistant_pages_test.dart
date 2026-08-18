@@ -8,7 +8,6 @@ import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/built_in_prompts.dart';
 import 'package:stroom/pages/assistant_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
-import 'package:stroom/widgets/llm/assistant_avatar.dart';
 
 /// Creates a test app wrapped in ProviderScope with optional overrides.
 Widget createTestApp({
@@ -61,7 +60,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Open edit dialog
-        await tester.longPress(find.byType(AssistantAvatar));
+        await tester.tap(find.byIcon(Icons.more_vert).first);
         await tester.pumpAndSettle();
         await tester.tap(find.text('编辑'));
         await tester.pumpAndSettle();
@@ -116,7 +115,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open edit dialog
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -168,7 +167,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -250,7 +249,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -291,7 +290,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -317,7 +316,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -392,6 +391,95 @@ void main() {
       // Rebuild with wide screen
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'long-press dragging a card reorders the assistants and persists',
+        (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(name: '助手甲', prompt: 'P1', emoji: '🤖'),
+            Assistant(name: '助手乙', prompt: 'P2', emoji: '😊'),
+            Assistant(name: '助手丙', prompt: 'P3', emoji: '🎉'),
+            Assistant(name: '助手丁', prompt: 'P4', emoji: '🔥'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 长按第一张卡片（助手甲，第 1 列），向右拖进第 2 列 → 与助手乙换位
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.text('助手甲')));
+      await tester.pump(const Duration(milliseconds: 600));
+      await gesture.moveBy(const Offset(195, 0));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AssistantSelectionPage)),
+      );
+      final order =
+          container.read(assistantProvider).map((a) => a.name).toList();
+      expect(order, ['助手乙', '助手甲', '助手丙', '助手丁'], reason: '长按拖动应重排助手列表');
+
+      // 顺序持久化：prefs 里保存的是重排后的顺序
+      final prefs = await SharedPreferences.getInstance();
+      final json = prefs.getString('assistants');
+      expect(json, isNotNull);
+      final decoded = (jsonDecode(json!) as List).cast<Map<String, dynamic>>();
+      expect((decoded.first['name'] as String), '助手乙');
+    });
+
+    testWidgets('long-press starts drag: no menu popup and no navigation', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(name: '拖拽卡', prompt: 'P1', emoji: '🤖'),
+            Assistant(name: '另一卡', prompt: 'P2', emoji: '😊'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 长按卡片（此前是弹菜单）——现在应只启动拖拽，松手不弹菜单也不跳转
+      await tester.longPress(find.text('拖拽卡'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('编辑'), findsNothing);
+      expect(find.text('删除'), findsNothing);
+      expect(find.text('选择助手'), findsOneWidget, reason: '长按不应触发跳转，仍停留在选择助手页');
+      // 未发生排序（松手原位）：顺序保持不变
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AssistantSelectionPage)),
+      );
+      expect(
+        container.read(assistantProvider).map((a) => a.name).toList(),
+        ['拖拽卡', '另一卡'],
+      );
+    });
+
+    testWidgets('menu button opens the edit/delete sheet', (tester) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(name: '菜单卡', prompt: 'P1', emoji: '🤖'),
+            Assistant(name: '另一卡', prompt: 'P2', emoji: '😊'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.more_vert).first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('编辑'), findsOneWidget);
+      expect(find.text('删除'), findsOneWidget);
+      expect(find.text('选择助手'), findsOneWidget, reason: '打开菜单不应触发跳转');
     });
   });
 
@@ -667,7 +755,7 @@ void main() {
       expect(find.text('助手名称'), findsOneWidget);
     });
 
-    testWidgets('long press menu 编辑 opens combined dialog with tab bar', (
+    testWidgets('⋮ menu 编辑 opens combined dialog with tab bar', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -677,8 +765,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Long-press to open menu
-      await tester.longPress(find.byType(AssistantAvatar));
+      // 用卡片右上角 ⋮ 按钮打开菜单
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
 
       // Tap 编辑
@@ -714,7 +802,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open edit dialog
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -745,8 +833,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Long-press to open menu
-      await tester.longPress(find.byType(AssistantAvatar));
+      // 用卡片右上角 ⋮ 按钮打开菜单
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
 
       // Tap 编辑
@@ -794,7 +882,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open edit dialog
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -846,7 +934,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -885,7 +973,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -926,7 +1014,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -963,7 +1051,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -1009,7 +1097,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open edit dialog
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -1061,7 +1149,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -1103,7 +1191,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -1172,7 +1260,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -1226,7 +1314,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -1281,7 +1369,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open edit dialog
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -1361,7 +1449,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open edit dialog
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -1401,7 +1489,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open edit dialog and change ONLY the name (默认设置 tab untouched)
-      await tester.longPress(find.byType(AssistantAvatar));
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
@@ -1422,7 +1510,7 @@ void main() {
               '"已配置默认工具"——否则新话题会从自动启用全部工具变成全部关闭');
     });
 
-    testWidgets('long press menu 删除 shows confirmation dialog', (tester) async {
+    testWidgets('⋮ menu 删除 shows confirmation dialog', (tester) async {
       await tester.pumpWidget(
         createTestApp(
           assistants: [Assistant(name: '助手删除', prompt: 'P1', emoji: '🤖')],
@@ -1433,8 +1521,8 @@ void main() {
       // Verify assistant exists
       expect(find.text('助手删除'), findsOneWidget);
 
-      // Long-press to open menu
-      await tester.longPress(find.byType(AssistantAvatar));
+      // 用卡片右上角 ⋮ 按钮打开菜单
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
 
       // Tap 删除
@@ -1462,8 +1550,8 @@ void main() {
       // Verify assistant exists before deletion
       expect(find.text('要删除的助手'), findsOneWidget);
 
-      // Long-press to open menu
-      await tester.longPress(find.byType(AssistantAvatar));
+      // 用卡片右上角 ⋮ 按钮打开菜单
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
 
       // Tap 删除
@@ -1491,8 +1579,8 @@ void main() {
       // Verify assistant exists
       expect(find.text('保留的助手'), findsOneWidget);
 
-      // Long-press to open menu
-      await tester.longPress(find.byType(AssistantAvatar));
+      // 用卡片右上角 ⋮ 按钮打开菜单
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
 
       // Tap 删除
@@ -1517,8 +1605,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Long-press to open menu
-      await tester.longPress(find.byType(AssistantAvatar));
+      // 用卡片右上角 ⋮ 按钮打开菜单
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
 
       // Tap 编辑
@@ -1538,8 +1626,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Long-press to open menu
-      await tester.longPress(find.byType(AssistantAvatar));
+      // 用卡片右上角 ⋮ 按钮打开菜单
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
 
       // Tap 编辑
@@ -1577,8 +1665,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Long-press to open menu
-      await tester.longPress(find.byType(AssistantAvatar));
+      // 用卡片右上角 ⋮ 按钮打开菜单
+      await tester.tap(find.byIcon(Icons.more_vert).first);
       await tester.pumpAndSettle();
 
       // Tap 编辑 to open combined dialog

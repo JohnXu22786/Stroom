@@ -451,7 +451,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
 ///
 /// Flutter 自带的 [ReorderableDelayedDragStartListener] 固定使用
 /// kLongPressTimeout（500ms），长按体感偏慢且与全应用其余拖拽排序的
-/// 手感不一致（DragSortArea 胶囊/行 280ms、OCR 页 300ms）——发送顺序
+/// 手感不一致（DragSortArea 胶囊/行/网格 280ms、OCR 页 300ms）——发送顺序
 /// 对 API 请求有意义，用户需要能快速重排附件，因此改用全应用统一的
 /// 短延迟。
 class _PendingAttachmentDragStartListener

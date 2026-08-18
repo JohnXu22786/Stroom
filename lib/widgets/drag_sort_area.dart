@@ -5,11 +5,16 @@ import 'package:flutter/material.dart';
 /// 长按触发拖拽的延迟（约 280ms，比默认 500ms 跟手）。
 const Duration kDragSortDelay = Duration(milliseconds: 280);
 
-/// 可拖拽排序的胶囊（自动换行）或行（垂直）列表。
+/// 可拖拽排序的胶囊（自动换行）、网格或行（垂直）列表。
 ///
 /// 交互：
 /// - 胶囊模式（[wrap] = true）：长按胶囊本身约 280ms 后拖拽；点击胶囊
 ///   触发 [onTap]；[deletable] 返回 true 时右上角显示删除按钮。
+/// - 网格模式（[grid] = true）：长按格子本身（[itemBuilder] 构建的内容）
+///   约 280ms 后拖拽，几何与 `SliverGridDelegateWithMaxCrossAxisExtent`
+///   一致（[gridMaxCrossAxisExtent]/[gridCrossAxisSpacing]/
+///   [gridMainAxisSpacing]/[gridChildAspectRatio]）；拖到视口上下边缘时
+///   自动滚动页面（与 ReorderableListView 的边缘自动滚动一致）。
 /// - 行模式（[wrap] = false）：长按行内 [DragSortRowHandle]（把手）拖拽，
 ///   行内容由 [itemBuilder] 构建（避免与输入框的文本选择冲突）。
 ///
@@ -21,12 +26,28 @@ const Duration kDragSortDelay = Duration(milliseconds: 280);
 ///   `onReorderItem` 语义一致），列表经 [AnimatedPositioned] 平滑滑入
 ///   目标位置（预览排序动画）。
 class DragSortArea extends StatefulWidget {
-  /// 有序值列表。胶囊模式要求值唯一（布局按值定位）；行模式允许重复
+  /// 有序值列表。胶囊模式要求值唯一（布局按值定位）；行/网格模式允许重复
   /// （布局按索引定位，行值可自由编辑）。
   final List<String> values;
 
-  /// true = 胶囊自动换行布局；false = 垂直行布局。
+  /// true = 胶囊自动换行布局；false = 垂直行或网格布局（见 [grid]）。
   final bool wrap;
+
+  /// true = 网格布局（[wrap] 必须为 false）。
+  final bool grid;
+
+  /// 网格布局：每格最大宽度（决定列数，与
+  /// `SliverGridDelegateWithMaxCrossAxisExtent.maxCrossAxisExtent` 一致）。
+  final double gridMaxCrossAxisExtent;
+
+  /// 网格布局：列间距。
+  final double gridCrossAxisSpacing;
+
+  /// 网格布局：行间距。
+  final double gridMainAxisSpacing;
+
+  /// 网格布局：格宽高比（宽 / 高）。
+  final double gridChildAspectRatio;
 
   /// 行布局的行高（不含行间距）。
   final double rowExtent;
@@ -43,7 +64,8 @@ class DragSortArea extends StatefulWidget {
   /// 胶囊布局：删除回调。
   final void Function(String value)? onDelete;
 
-  /// 行布局：行内容构建器（内含 [DragSortRowHandle] 作为拖拽把手）。
+  /// 行/网格布局：条目内容构建器。行内含 [DragSortRowHandle] 作为拖拽
+  /// 把手；网格内整格长按拖拽。
   final Widget Function(BuildContext context, int index, String value)?
       itemBuilder;
 
@@ -55,6 +77,11 @@ class DragSortArea extends StatefulWidget {
     super.key,
     required this.values,
     required this.wrap,
+    this.grid = false,
+    this.gridMaxCrossAxisExtent = 220,
+    this.gridCrossAxisSpacing = 12,
+    this.gridMainAxisSpacing = 12,
+    this.gridChildAspectRatio = 0.85,
     this.rowExtent = 56,
     this.selected,
     this.deletable,
@@ -62,7 +89,7 @@ class DragSortArea extends StatefulWidget {
     this.onDelete,
     this.itemBuilder,
     required this.onReorder,
-  });
+  }) : assert(!(wrap && grid), 'wrap 与 grid 互斥');
 
   @override
   State<DragSortArea> createState() => _DragSortAreaState();
@@ -108,7 +135,7 @@ class DragSortRowHandle extends StatelessWidget {
         width: controller.maxWidth,
         child: feedback,
       ),
-      childWhenDragging: Opacity(opacity: 0.4, child: child),
+      childWhenDragging: Opacity(opacity: 1.0, child: child),
       child: child,
     );
   }
@@ -148,16 +175,50 @@ class _DragSortAreaState extends State<DragSortArea> {
   /// 当前布局宽度（反馈副本用：Overlay 上布局需要限定宽度）。
   double get maxWidth => _maxWidth;
 
+  /// 网格模式下当前布局的几何（LayoutBuilder 里计算）。
+  double _gridCellWidth = 0;
+  double _gridCellHeight = 0;
+
+  /// 拖拽中的边缘自动滚动（仅网格模式生效）。
+  EdgeDraggingAutoScroller? _autoScroller;
+
+  /// 最近一次拖拽指针的全局坐标（边缘滚动时重新计算插入点）。
+  Offset? _lastDragGlobal;
+
+  /// 条目之间的横向间隙（网格用列间距，其余 8）。
+  double get _itemGap => widget.grid ? widget.gridCrossAxisSpacing : 8;
+
+  /// 行之间的纵向间隙（网格用行间距，其余 8）。
+  double get _rowGap => widget.grid ? widget.gridMainAxisSpacing : 8;
+
   void dragStarted(int index) {
     setState(() {
       _dragIndex = index;
       _insertIndex = index;
     });
+    if (!widget.grid) return;
+    _lastDragGlobal = null;
+    final scrollable = context.findAncestorStateOfType<ScrollableState>();
+    if (scrollable == null) return;
+    _autoScroller = EdgeDraggingAutoScroller(
+      scrollable,
+      velocityScalar: 50,
+      onScrollViewScrolled: _onScrollDuringDrag,
+    );
   }
 
   void dragUpdate(Offset globalPosition) {
     final d = _dragIndex;
-    if (d == null) return;
+    if (d == null || !mounted) return;
+    _lastDragGlobal = globalPosition;
+    // 拖到视口上下边缘时自动滚动（只有网格会超过一屏）
+    _autoScroller?.startAutoScrollIfNecessary(
+      Rect.fromCenter(
+        center: globalPosition,
+        width: _gridCellWidth,
+        height: _gridCellHeight,
+      ),
+    );
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
     setState(() {
@@ -165,9 +226,40 @@ class _DragSortAreaState extends State<DragSortArea> {
     });
   }
 
+  /// 自动滚动改变了视口偏移，指针相对内容的位置随之变化——按当前
+  /// 指针全局坐标重新计算插入点（否则边缘滚动期间插入位置静止不动）。
+  void _onScrollDuringDrag() {
+    final g = _lastDragGlobal;
+    final d = _dragIndex;
+    if (g == null || d == null || !mounted) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    setState(() {
+      _insertIndex = _computeInsertIndex(box.globalToLocal(g), d);
+    });
+  }
+
+  void _stopAutoScroll() {
+    _autoScroller?.stopAutoScroll();
+    _autoScroller = null;
+    _lastDragGlobal = null;
+  }
+
+  @override
+  void dispose() {
+    // 拖拽中组件被移除（如拖拽浮层尚未松手时返回上级页面）也会触发
+    // dispose——必须停掉自动滚动，否则其内部循环会对已销毁的 ScrollPosition
+    // 继续滚动、并回调 _onScrollDuringDrag 对已销毁的 State 调用 setState。
+    _stopAutoScroll();
+    super.dispose();
+  }
+
   void dragEnd() {
+    _stopAutoScroll();
     final d = _dragIndex;
     final t = _insertIndex;
+    // 页面已在拖拽中被移除（返回上级等）：不更新 UI，也不提交排序
+    if (!mounted) return;
     setState(() {
       _dragIndex = null;
       _insertIndex = null;
@@ -178,6 +270,8 @@ class _DragSortAreaState extends State<DragSortArea> {
   }
 
   void dragCanceled() {
+    _stopAutoScroll();
+    if (!mounted) return;
     setState(() {
       _dragIndex = null;
       _insertIndex = null;
@@ -247,7 +341,11 @@ class _DragSortAreaState extends State<DragSortArea> {
       [List<double> minWidths = const []]) {
     final rects = <Rect>[];
     var x = 0.0, y = 0.0, rowBottom = 0.0;
-    final itemHeight = widget.wrap ? _kPillHeight : widget.rowExtent;
+    final itemHeight = widget.grid
+        ? _gridCellHeight
+        : widget.wrap
+            ? _kPillHeight
+            : widget.rowExtent;
     for (var i = 0; i < widths.length; i++) {
       var w = widths[i];
       if (w > _maxWidth) w = _maxWidth;
@@ -257,10 +355,10 @@ class _DragSortAreaState extends State<DragSortArea> {
       if (i < minWidths.length && w < minWidths[i]) w = minWidths[i];
       if (x + w > _maxWidth && x > 0) {
         x = 0;
-        y = rowBottom + 8;
+        y = rowBottom + _rowGap;
       }
       rects.add(Rect.fromLTWH(x, y, w, itemHeight));
-      x += w + 8;
+      x += w + _itemGap;
       rowBottom = math.max(rowBottom, y + itemHeight);
     }
     return rects;
@@ -276,6 +374,7 @@ class _DragSortAreaState extends State<DragSortArea> {
   }
 
   double _widthOf(int k) {
+    if (widget.grid) return _gridCellWidth;
     if (!widget.wrap) return _maxWidth;
     final value = widget.values[k];
     final selected = widget.selected?.call(value) ?? false;
@@ -315,9 +414,51 @@ class _DragSortAreaState extends State<DragSortArea> {
   }
 
   Widget _item(int k) {
-    final value = widget.values[k];
-    if (widget.wrap) return _buildPill(k, value);
-    return widget.itemBuilder!(context, k, value);
+    if (widget.wrap) return _buildPill(k, widget.values[k]);
+    if (widget.grid) return _buildGridItem(k);
+    return widget.itemBuilder!(context, k, widget.values[k]);
+  }
+
+  /// 网格条目：整格长按即拖拽（[itemBuilder] 返回卡片内容）。
+  /// 反馈浮层不接收指针：拖拽中误点浮层不应触发起始动作。
+  Widget _buildGridItem(int k) {
+    final child = widget.itemBuilder!(context, k, widget.values[k]);
+    // childWhenDragging 保持原样（opacity 1.0）：拖拽中条目由 build 里的
+    // 外层 Opacity(0.45) 统一变半透明——若内层再叠一层 opacity 透明度会
+    // 变成 ~0.2，与胶囊拖拽的外观不一致。
+    return LongPressDraggable<String>(
+      data: 'drag-grid-$k',
+      delay: kDragSortDelay,
+      feedbackOffset: Offset(-_gridCellWidth / 2, -_gridCellHeight / 2),
+      ignoringFeedbackPointer: true,
+      onDragStarted: () => dragStarted(k),
+      onDragUpdate: (d) => dragUpdate(d.globalPosition),
+      onDragEnd: (details) => dragEnd(),
+      onDraggableCanceled: (velocity, offset) => dragCanceled(),
+      feedback: Container(
+        width: _gridCellWidth,
+        height: _gridCellHeight,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 12,
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Opacity(
+          opacity: 0.95,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: child,
+          ),
+        ),
+      ),
+      childWhenDragging: Opacity(opacity: 1.0, child: child),
+      child: child,
+    );
   }
 
   Widget _buildPill(int k, String value) {
@@ -413,7 +554,11 @@ class _DragSortAreaState extends State<DragSortArea> {
       height: size.height,
       decoration: BoxDecoration(
         color: cs.primaryContainer.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(widget.wrap ? 20 : 8),
+        borderRadius: BorderRadius.circular(widget.wrap
+            ? 20
+            : widget.grid
+                ? 16
+                : 8),
         border: Border.all(
           color: cs.primary.withValues(alpha: 0.7),
           width: 1.5,
@@ -429,6 +574,20 @@ class _DragSortAreaState extends State<DragSortArea> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           _maxWidth = constraints.maxWidth;
+          if (widget.grid) {
+            // 与 SliverGridDelegateWithMaxCrossAxisExtent 相同的几何：
+            // 列数 = ceil(宽 / (最大格宽 + 列间距))，列内各格均分。
+            final cols = math.max(
+              1,
+              (_maxWidth /
+                      (widget.gridMaxCrossAxisExtent +
+                          widget.gridCrossAxisSpacing))
+                  .ceil(),
+            );
+            _gridCellWidth =
+                (_maxWidth - (cols - 1) * widget.gridCrossAxisSpacing) / cols;
+            _gridCellHeight = _gridCellWidth / widget.gridChildAspectRatio;
+          }
           final cs = Theme.of(context).colorScheme;
           final values = widget.values;
           final n = values.length;
