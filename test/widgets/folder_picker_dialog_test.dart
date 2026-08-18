@@ -152,6 +152,90 @@ void main() {
       expect(find.text('beach'), findsOneWidget);
     });
 
+    testWidgets(
+        'current directory is its own level, never a sibling of its subfolders',
+        (tester) async {
+      String? result;
+      await tester.pumpWidget(_buildTestApp(
+        Builder(builder: (context) {
+          return ElevatedButton(
+            onPressed: () async {
+              result = await FolderPickerDialog.show(
+                context,
+                availableFolders: {'A', 'A/B'},
+              );
+            },
+            child: const Text('Open'),
+          );
+        }),
+      ));
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      // Enter folder A (created B inside A beforehand, so A contains B).
+      await tester.tap(find.text('A'));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.text('A'));
+      await tester.pumpAndSettle();
+
+      // Two distinct levels: A as the current folder, B as its subfolder.
+      expect(find.text('当前文件夹'), findsOneWidget);
+      expect(find.text('子文件夹'), findsOneWidget);
+      expect(find.text('A'), findsOneWidget);
+      expect(find.text('B'), findsOneWidget);
+
+      // Regression: A must NOT be listed inside the subfolder list
+      // (same level as B) — only B belongs there.
+      final subfolderList = find.byType(ListView);
+      expect(
+        find.descendant(of: subfolderList, matching: find.text('A')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: subfolderList, matching: find.text('B')),
+        findsOneWidget,
+      );
+
+      // The current-folder row stays selectable: tap it and confirm.
+      await tester.tap(find.text('A'));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+      expect(result, 'A');
+    });
+
+    testWidgets('empty folder shows only the current-folder level',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(
+        Builder(builder: (context) {
+          return ElevatedButton(
+            onPressed: () => FolderPickerDialog.show(
+              context,
+              availableFolders: {'A'},
+            ),
+            child: const Text('Open'),
+          );
+        }),
+      ));
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      // Enter the empty folder A.
+      await tester.tap(find.text('A'));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.text('A'));
+      await tester.pumpAndSettle();
+
+      // Only the current-folder level is shown; no subfolder section,
+      // and A itself is not duplicated anywhere.
+      expect(find.text('当前文件夹'), findsOneWidget);
+      expect(find.text('A'), findsOneWidget);
+      expect(find.text('子文件夹'), findsNothing);
+      expect(find.text('现有文件夹'), findsNothing);
+    });
+
     testWidgets('current directory (save folder) stays visible and selectable',
         (tester) async {
       String? result;
