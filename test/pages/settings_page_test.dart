@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/settings_page.dart';
+import 'package:stroom/providers/context_management_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
@@ -79,6 +80,36 @@ String _savedDataWithoutOcr() {
   return jsonEncode(entries);
 }
 
+/// 带两个模型的 LLM 供应商数据（用于压缩触发设置面板的模型列表）。
+String _llmEntryWithModels() {
+  return jsonEncode([
+    {
+      'id': 'builtin_llm',
+      'type': 'llm',
+      'name': 'LLM供应商',
+      'configs': [
+        {
+          'providerName': 'ProviderA',
+          'host': 'https://api.a.com/v1',
+          'key': 'key-a',
+          'models': [
+            {
+              'name': 'Model A',
+              'modelId': 'model-a',
+              'typeConfig': {'context': 128000},
+            },
+            {
+              'name': 'Model B',
+              'modelId': 'model-b',
+              'typeConfig': {'context': 64000},
+            },
+          ],
+        },
+      ],
+    },
+  ]);
+}
+
 void main() {
   // ─────────────────────────────────────────────────────────────────────
   // From settings_page_asr_test.dart
@@ -140,113 +171,20 @@ void main() {
   });
 
   // ─────────────────────────────────────────────────────────────────────
-  // 上下文管理设置（压缩触发值字段交互）
+  // 上下文管理设置（压缩触发设置面板）
   // ─────────────────────────────────────────────────────────────────────
 
-  group('SettingsPage - context management compaction threshold', () {
-    testWidgets('invalid input reverts on blur, valid input persists',
-        (tester) async {
-      tester.view.physicalSize = const Size(1080, 6000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      SharedPreferences.setMockInitialValues({});
-
-      await tester.pumpWidget(_buildSettingsTestApp());
-      await tester.pumpAndSettle();
-
-      // 滚动到"自定义压缩触发值"开关并开启
-      final toggleFinder = find.text('自定义压缩触发值').first;
-      await tester.scrollUntilVisible(toggleFinder, 300,
+  group('SettingsPage - 压缩触发设置面板', () {
+    Future<void> openCompactionPanel(WidgetTester tester) async {
+      final tileFinder = find.text('压缩触发设置').first;
+      await tester.scrollUntilVisible(tileFinder, 300,
           scrollable: find.byType(Scrollable).first);
-      await tester.tap(toggleFinder);
+      await tester.tap(tileFinder);
       await tester.pumpAndSettle();
+    }
 
-      // 输入框出现：输入非法文本
-      final fieldFinder = find.byType(TextFormField);
-      expect(fieldFinder, findsOneWidget);
-      await tester.enterText(fieldFinder, 'abc');
-      await tester.pump();
-
-      // 失焦（提交）→ 非法输入回退为空（provider 保持 null）
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pump();
-      expect(
-        tester.widget<TextFormField>(fieldFinder).controller?.text ?? '',
-        isEmpty,
-      );
-
-      // 输入有效值 48000 → 提交 → provider 持久化
-      await tester.enterText(fieldFinder, '48000');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getInt('context_compaction_threshold'), 48000);
-      expect(prefs.getBool('context_compaction_threshold_enabled'), isTrue);
-    });
-
-    testWidgets(
-        'tapping outside the field blurs it (invalid input still '
-        'reverts)', (tester) async {
-      tester.view.physicalSize = const Size(1080, 6000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      SharedPreferences.setMockInitialValues({});
-
-      await tester.pumpWidget(_buildSettingsTestApp());
-      await tester.pumpAndSettle();
-
-      // 滚动到"自定义压缩触发值"开关并开启
-      final toggleFinder = find.text('自定义压缩触发值').first;
-      await tester.scrollUntilVisible(toggleFinder, 300,
-          scrollable: find.byType(Scrollable).first);
-      await tester.tap(toggleFinder);
-      await tester.pumpAndSettle();
-
-      // 输入框出现：输入非法文本并聚焦
-      final fieldFinder = find.byType(TextFormField);
-      expect(fieldFinder, findsOneWidget);
-      await tester.enterText(fieldFinder, 'abc');
-      await tester.pump();
-      final editableFinder = find.descendant(
-        of: fieldFinder,
-        matching: find.byType(EditableText),
-      );
-      bool fieldFocused() => tester
-          .state<EditableTextState>(editableFinder)
-          .widget
-          .focusNode
-          .hasFocus;
-      await tester.tap(fieldFinder);
-      await tester.pump();
-      expect(fieldFocused(), isTrue,
-          reason: 'precondition: the field is focused');
-
-      // 点击字段外的区域 → 字段必须失焦（自定义 onTapOutside 同时
-      // 回退非法输入；此前该字段在任何平台上都不会失焦）
-      await tester.tap(find.text('上下文管理').first);
-      await tester.pump();
-      expect(fieldFocused(), isFalse,
-          reason: 'tapping outside the compaction threshold field must '
-              'blur it (the cursor must not stay stuck)');
-      expect(
-        tester.widget<TextFormField>(fieldFinder).controller?.text,
-        isEmpty,
-        reason: 'the invalid input is reverted on blur',
-      );
-    });
-
-    testWidgets(
-        'clearing the field falls back to model context and closes '
-        'the custom toggle', (tester) async {
-      tester.view.physicalSize = const Size(1080, 6000);
+    testWidgets('点击"压缩触发设置"进入面板，展示总开关/百分比/模型', (tester) async {
+      tester.view.physicalSize = const Size(1080, 8000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
         tester.view.resetPhysicalSize();
@@ -254,35 +192,241 @@ void main() {
       });
 
       SharedPreferences.setMockInitialValues({
-        'context_compaction_threshold_enabled': true,
-        'context_compaction_threshold': 48000,
+        'provider_entries': _llmEntryWithModels(),
       });
 
       await tester.pumpWidget(_buildSettingsTestApp());
       await tester.pumpAndSettle();
 
-      final toggleFinder = find.text('自定义压缩触发值').first;
-      await tester.scrollUntilVisible(toggleFinder, 300,
-          scrollable: find.byType(Scrollable).first);
-      final tile = find.widgetWithText(SwitchListTile, '自定义压缩触发值');
-      final switchWidget = tester.widget<Switch>(
-        find.descendant(of: tile, matching: find.byType(Switch)),
-      );
-      expect(switchWidget.value, isTrue);
+      await openCompactionPanel(tester);
 
-      final fieldFinder = find.byType(TextFormField);
-      // 清空输入 → 提交 → 阈值清除且开关关闭
-      await tester.enterText(fieldFinder, '');
+      // 面板内容
+      expect(find.text('压缩触发设置'), findsOneWidget);
+      expect(find.text('上下文自动压缩'), findsOneWidget);
+      expect(find.text('全局触发百分比'), findsOneWidget);
+      expect(find.text('按模型设置'), findsOneWidget);
+      // 模型显示格式同对话页："模型名 | 供应商名"
+      expect(find.text('Model A | ProviderA'), findsOneWidget);
+      expect(find.text('Model B | ProviderA'), findsOneWidget);
+      // 默认全局百分比 95
+      expect(
+        tester
+            .widget<TextFormField>(
+                find.byKey(const Key('global-percent-field')))
+            .controller
+            ?.text,
+        '95',
+      );
+    });
+
+    testWidgets('总开关关闭后下方设置全部置灰且不可操作', (tester) async {
+      tester.view.physicalSize = const Size(1080, 8000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': _llmEntryWithModels(),
+      });
+
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
+      await openCompactionPanel(tester);
+
+      // 预置一个开启的模型独立设置（带可见的 token 输入框）
+      final modelATile =
+          find.widgetWithText(SwitchListTile, 'Model A | ProviderA');
+      await tester.tap(modelATile);
+      await tester.pumpAndSettle();
+      final key =
+          compactionModelKey(modelId: 'model-a', providerName: 'ProviderA');
+      final tokenField = find.byKey(ValueKey('model-token-$key'));
+      expect(tokenField, findsOneWidget,
+          reason: 'precondition: token field visible');
+
+      // 关闭总开关
+      await tester.tap(find.text('上下文自动压缩'));
+      await tester.pumpAndSettle();
+
+      // 下方设置区整体置灰
+      final body = tester.widget<Opacity>(
+        find.byKey(const Key('compaction-settings-body')),
+      );
+      expect(body.opacity, lessThan(1));
+
+      // 模型开关被禁用
+      final modelSwitch = tester.widget<Switch>(
+        find.descendant(of: modelATile, matching: find.byType(Switch)),
+      );
+      expect(modelSwitch.onChanged, isNull);
+
+      // 全局百分比输入框与重置按钮被禁用
+      final percentField = tester.widget<TextFormField>(
+        find.byKey(const Key('global-percent-field')),
+      );
+      expect(percentField.enabled, isFalse);
+      final resetIcon = tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.refresh),
+      );
+      expect(resetIcon.onPressed, isNull);
+
+      // 可见的模型 token 输入框同样被禁用
+      final tokenTextFormField = tester.widget<TextFormField>(
+        find.descendant(of: tokenField, matching: find.byType(TextFormField)),
+      );
+      expect(
+        tokenTextFormField.enabled,
+        isFalse,
+        reason: '总开关关闭时可见的独立触发值输入框也必须置灰',
+      );
+
+      // 恢复总开关后模型开关可操作（值未被改动）
+      await tester.tap(find.text('上下文自动压缩'));
+      await tester.pumpAndSettle();
+      final again = tester.widget<Switch>(
+        find.descendant(of: modelATile, matching: find.byType(Switch)),
+      );
+      expect(again.onChanged, isNotNull);
+      expect(
+        tester
+            .widget<TextFormField>(find.descendant(
+                of: tokenField, matching: find.byType(TextFormField)))
+            .enabled,
+        isTrue,
+        reason: '恢复总开关后输入框重新可用',
+      );
+    });
+
+    testWidgets('修改全局百分比并一键重置回 95', (tester) async {
+      tester.view.physicalSize = const Size(1080, 8000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': _llmEntryWithModels(),
+      });
+
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
+      await openCompactionPanel(tester);
+
+      final percentField = find.byKey(const Key('global-percent-field'));
+      await tester.enterText(percentField, '80');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getInt('context_compaction_threshold'), isNull);
+      expect(prefs.getInt('context_compaction_global_percent'), 80);
+
+      // 一键重置回 95（仅图标按钮）
+      await tester.tap(find.byIcon(Icons.refresh));
+      await tester.pumpAndSettle();
+      expect(prefs.getInt('context_compaction_global_percent'), 95);
       expect(
-        prefs.getBool('context_compaction_threshold_enabled'),
+        tester.widget<TextFormField>(percentField).controller?.text,
+        '95',
+      );
+    });
+
+    testWidgets('非法/越界的全局百分比失焦回退上次有效值', (tester) async {
+      tester.view.physicalSize = const Size(1080, 8000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      SharedPreferences.setMockInitialValues({});
+
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
+      await openCompactionPanel(tester);
+
+      final percentField = find.byKey(const Key('global-percent-field'));
+      await tester.enterText(percentField, 'abc');
+      await tester.pump();
+      // 越界值 150 也不保存
+      await tester.enterText(percentField, '150');
+      await tester.pump();
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt('context_compaction_global_percent'), isNull,
+          reason: '非法/越界输入不推给 provider（保持默认）');
+
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      expect(
+        tester.widget<TextFormField>(percentField).controller?.text,
+        '95',
+        reason: '失焦时回退显示上次有效值',
+      );
+    });
+
+    testWidgets('模型开关开启后填写独立触发值并持久化', (tester) async {
+      tester.view.physicalSize = const Size(1080, 8000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': _llmEntryWithModels(),
+      });
+
+      await tester.pumpWidget(_buildSettingsTestApp());
+      await tester.pumpAndSettle();
+      await openCompactionPanel(tester);
+
+      // 开启 Model A 的独立设置
+      final modelATile =
+          find.widgetWithText(SwitchListTile, 'Model A | ProviderA');
+      await tester.tap(modelATile);
+      await tester.pumpAndSettle();
+
+      // 独立触发值输入框出现（具体 token 数，非百分比）
+      final key =
+          compactionModelKey(modelId: 'model-a', providerName: 'ProviderA');
+      final tokenField = find.byKey(ValueKey('model-token-$key'));
+      expect(tokenField, findsOneWidget);
+      await tester.enterText(tokenField, '30000');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      final prefs = await SharedPreferences.getInstance();
+      final perModel =
+          jsonDecode(prefs.getString('context_compaction_per_model')!) as Map;
+      expect((perModel[key] as Map)['enabled'], isTrue);
+      expect((perModel[key] as Map)['threshold'], 30000);
+
+      // Model B 未被配置（跟随全局）
+      expect(
+        perModel.containsKey(
+            compactionModelKey(modelId: 'model-b', providerName: 'ProviderA')),
         isFalse,
       );
-      // 字段随开关关闭而消失
-      expect(find.byType(TextFormField), findsNothing);
+
+      // 清空输入 → 独立值置空（回退全局百分比），但开关保持开启
+      await tester.enterText(tokenField, '');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      final afterClear =
+          jsonDecode(prefs.getString('context_compaction_per_model')!) as Map;
+      expect((afterClear[key] as Map)['enabled'], isTrue,
+          reason: '误清输入不应关闭模型的独立设置开关');
+      expect((afterClear[key] as Map)['threshold'], isNull);
+      // 输入框仍在、开关仍为开启态
+      expect(find.byKey(ValueKey('model-token-$key')), findsOneWidget);
+      expect(
+        tester
+            .widget<Switch>(
+                find.descendant(of: modelATile, matching: find.byType(Switch)))
+            .value,
+        isTrue,
+      );
     });
   });
   // ─────────────────────────────────────────────────────────────────────

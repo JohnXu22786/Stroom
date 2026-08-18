@@ -245,6 +245,11 @@ class ChatAdapter {
 
     // Fallback: the global cached model (requires the adapter to have
     // been configured — e.g. the chat page opened this session).
+    // 先返回该对话已有的 service（可能是带 assistant 绑定的路径创建的），
+    // 避免全局缓存为空（如本会话尚未打开过对话页）时误判为未配置——
+    // 上下文压缩等内部调用依赖这里拿到与主请求一致的模型身份。
+    final existing = _activeServices[convId];
+    if (existing != null) return existing;
     if (_cachedProvider == null || _cachedModelConfig == null) return null;
     return _activeServices.putIfAbsent(convId, () {
       final svc = _buildService(

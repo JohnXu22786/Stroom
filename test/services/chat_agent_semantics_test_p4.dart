@@ -132,14 +132,14 @@ void chatAgentSemanticsGroup4() {
   });
 
   group('压缩触发线规则', () {
-    test('默认触发线 = 模型 context，基准用实际 lastInputTokens', () async {
+    test('默认触发线 = 全局百分比(95%) × 模型 context，基准用实际 lastInputTokens', () async {
       final container = _makeContainer(
         conversations: [
           Conversation(id: 'conv-trigger', title: '', lastInputTokens: 6000),
         ],
       );
       final manager = container.read(chatStreamManagerProvider);
-      // context 5000：实际 6000 ≥ 5000 → 触发压缩（摘要）+ 主请求
+      // context 5000：全局 95% → 4750；实际 6000 ≥ 4750 → 触发压缩（摘要）+ 主请求
       final provider = _RecordingProvider([
         [AIStreamEvent('## Objective\n- 摘要')],
         [AIStreamEvent('回答')],
@@ -165,6 +165,43 @@ void chatAgentSemanticsGroup4() {
           .where((c) => c.id == 'conv-trigger')
           .first;
       expect(conv.contextSummary, contains('Objective'));
+      container.dispose();
+    });
+
+    test('默认全局百分比 95%：实际计量位于 95% 与 100% 之间时也触发', () async {
+      final container = _makeContainer(
+        conversations: [
+          Conversation(id: 'conv-p95', title: '', lastInputTokens: 4800),
+        ],
+      );
+      final manager = container.read(chatStreamManagerProvider);
+      final provider = _RecordingProvider([
+        [AIStreamEvent('## Objective\n- 摘要')],
+        [AIStreamEvent('回答')],
+      ]);
+      // context 5000：95% → 4750；4800 ≥ 4750 → 触发。
+      // 若百分比被忽略（按 100% context=5000），4800 < 5000 不会触发。
+      manager.adapter.forceService(ChatService(
+        provider: provider,
+        modelConfig: _createModelConfig(context: 5000),
+      ));
+
+      await manager.startStreaming(
+        text: 'q3',
+        convId: 'conv-p95',
+        history: [
+          ChatMessage(role: 'assistant', content: 'old ' * 200),
+          ChatMessage(role: 'user', content: 'q1'),
+          ChatMessage(role: 'user', content: 'q2'),
+        ],
+      );
+
+      final conv = container
+          .read(conversationsProvider)
+          .where((c) => c.id == 'conv-p95')
+          .first;
+      expect(conv.contextSummary, contains('Objective'),
+          reason: '默认 95% 触发线 = 4750 < 4800，应触发压缩');
       container.dispose();
     });
 
@@ -199,14 +236,21 @@ void chatAgentSemanticsGroup4() {
       container.dispose();
     });
 
-    test('未达自定义触发值时按自定义阈值判断（30000 < 40000 不压缩）', () async {
+    test('独立触发值被正确采用：位于独立值与全局 95% 之间时不压缩', () async {
+      // context 40000：全局 95% = 38000，独立值 40000。
+      // 实际 39000 处于两者之间：独立值生效 → 不压缩；
+      // 若独立值被忽略（按全局 38000）→ 39000 ≥ 38000 会压缩。
       final container = _makeContainer(
         conversations: [
-          Conversation(id: 'conv-custom', title: '', lastInputTokens: 30000),
+          Conversation(id: 'conv-custom', title: '', lastInputTokens: 39000),
         ],
         ctxSettings: const ContextManagementSettings(
-          customCompactionThresholdEnabled: true,
-          compactionThreshold: 40000,
+          perModelCompaction: {
+            'test-model': PerModelCompactionConfig(
+              enabled: true,
+              threshold: 40000,
+            ),
+          },
         ),
       );
       final manager = container.read(chatStreamManagerProvider);
@@ -216,7 +260,7 @@ void chatAgentSemanticsGroup4() {
       ]);
       manager.adapter.forceService(ChatService(
         provider: provider,
-        modelConfig: _createModelConfig(context: 100000),
+        modelConfig: _createModelConfig(context: 40000),
       ));
 
       await manager.startStreaming(
@@ -229,24 +273,28 @@ void chatAgentSemanticsGroup4() {
         ],
       );
 
-      // 实际 30000 < 模型 context 100000，但 ≥ 自定义 40000？不——
-      // 30000 < 40000 → 不压缩。用 50000 才触发。
+      // 实际 39000 < 独立值 40000 → 不压缩
       final conv = container
           .read(conversationsProvider)
           .where((c) => c.id == 'conv-custom')
           .first;
-      expect(conv.contextSummary, isNull, reason: '30000 < 自定义 40000，不压缩');
+      expect(conv.contextSummary, isNull,
+          reason: '39000 < 独立值 40000（若忽略独立值按全局 38000 会压缩）');
       container.dispose();
     });
 
-    test('自定义触发值 ≥ 实际计量时触发压缩', () async {
+    test('模型独立触发值 ≥ 实际计量时触发压缩', () async {
       final container = _makeContainer(
         conversations: [
           Conversation(id: 'conv-custom2', title: '', lastInputTokens: 45000),
         ],
         ctxSettings: const ContextManagementSettings(
-          customCompactionThresholdEnabled: true,
-          compactionThreshold: 40000,
+          perModelCompaction: {
+            'test-model': PerModelCompactionConfig(
+              enabled: true,
+              threshold: 40000,
+            ),
+          },
         ),
       );
       final manager = container.read(chatStreamManagerProvider);
@@ -274,7 +322,7 @@ void chatAgentSemanticsGroup4() {
           .where((c) => c.id == 'conv-custom2')
           .first;
       expect(conv.contextSummary, contains('Objective'),
-          reason: '45000 ≥ 自定义 40000 → 压缩（尽管 < 模型 context）');
+          reason: '45000 ≥ 独立值 40000 → 压缩（尽管 < 模型 context）');
       container.dispose();
     });
   });

@@ -257,25 +257,30 @@ void chatAgentSemanticsGroup5() {
     test('SharedPreferences 往返 + 默认值', () async {
       SharedPreferences.setMockInitialValues({});
       final container = ProviderContainer();
-      // 默认：prune 开、自定义阈值关
+      // 默认：prune 开、总开关开、全局 95%、无模型独立设置
       final settings = container.read(contextManagementSettingsProvider);
       // 等异步 _load 完成（避免其覆盖后续修改——产品代码已有
       // _userModified 保护，但测试先等加载完成更稳）
       await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(settings.pruneEnabled, isTrue);
-      expect(settings.customCompactionThresholdEnabled, isFalse);
-      expect(settings.compactionThreshold, isNull);
+      expect(settings.compactionEnabled, isTrue);
+      expect(settings.globalCompactionPercent, kDefaultCompactionPercent);
+      expect(settings.perModelCompaction, isEmpty);
 
       // 修改并持久化（await 确保写入完成后再读回）
       final notifier =
           container.read(contextManagementSettingsProvider.notifier);
       await notifier.setPruneEnabled(false);
-      await notifier.setCustomCompactionThresholdEnabled(true);
-      await notifier.setCompactionThreshold(48000);
+      await notifier.setCompactionEnabled(false);
+      await notifier.setGlobalCompactionPercent(80);
+      await notifier.setPerModelEnabled('test-model', true);
+      await notifier.setPerModelThreshold('test-model', 48000);
 
       // prefs 直接验证写入
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getBool('context_prune_enabled'), isFalse);
+      expect(prefs.getBool('context_compaction_enabled'), isFalse);
+      expect(prefs.getInt('context_compaction_global_percent'), 80);
 
       // 新容器读回：先 read 触发工厂（_load 异步开始），
       // 等加载完成后第二次 read 才拿到持久化值
@@ -284,21 +289,30 @@ void chatAgentSemanticsGroup5() {
       await Future<void>.delayed(const Duration(milliseconds: 100));
       final reloaded = container2.read(contextManagementSettingsProvider);
       expect(reloaded.pruneEnabled, isFalse);
-      expect(reloaded.customCompactionThresholdEnabled, isTrue);
-      expect(reloaded.compactionThreshold, 48000);
+      expect(reloaded.compactionEnabled, isFalse);
+      expect(reloaded.globalCompactionPercent, 80);
+      expect(reloaded.perModelCompaction['test-model']?.enabled, isTrue);
+      expect(reloaded.perModelCompaction['test-model']?.threshold, 48000);
       container.dispose();
       container2.dispose();
     });
 
-    test('effectiveCompactionThreshold：自定义优先，否则模型 context', () {
+    test('effectiveCompactionThreshold：独立值优先，否则全局百分比', () {
       const settings = ContextManagementSettings(
-        customCompactionThresholdEnabled: true,
-        compactionThreshold: 48000,
+        globalCompactionPercent: 50,
+        perModelCompaction: {
+          'm': PerModelCompactionConfig(enabled: true, threshold: 48000),
+        },
       );
-      expect(settings.effectiveCompactionThreshold(100000), 48000);
+      expect(
+          settings.effectiveCompactionThreshold(100000, modelKey: 'm'), 48000);
+      expect(
+        settings.effectiveCompactionThreshold(100000, modelKey: 'other'),
+        50000,
+      );
 
       const defaultSettings = ContextManagementSettings();
-      expect(defaultSettings.effectiveCompactionThreshold(100000), 100000);
+      expect(defaultSettings.effectiveCompactionThreshold(100000), 95000);
       expect(defaultSettings.effectiveCompactionThreshold(null), isNull);
     });
   });
