@@ -9,7 +9,7 @@ import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 
 /// Pumps a ChatPage with a single seeded conversation, mirroring
-/// createChatTestApp (test/pages/chat_page_test.dart) but with a resolvable
+/// createChatTestApp (tests/pages/chat_page/chat_page_test.dart) but with a resolvable
 /// conversation so the top bar shows an enabled temp toggle.
 Widget _appFor({
   required String activeId,

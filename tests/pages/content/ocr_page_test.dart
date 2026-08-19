@@ -1792,7 +1792,7 @@ void main() {
   });
 
   // ─────────────────────────────────────────────────────────────────────
-  // Merged from: test/pages/ocr_page_preview_edit_test.dart
+  // Merged from: tests/pages/ocr_page_preview_edit_test.dart
   // ─────────────────────────────────────────────────────────────────────
 
   group('OcrPage - preview dialog two edit buttons', () {

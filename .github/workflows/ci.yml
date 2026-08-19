@@ -48,18 +48,26 @@ jobs:
             echo "Not a PR — skipping diff coverage check."
             exit 0
           fi
-          echo "### Changed lib/ files vs test/ coverage ###"
+          echo "### Changed lib/ files vs tests/ coverage ###"
           echo ""
           UNCOVERED=0
           while IFS= read -r file; do
             [ -z "$file" ] && continue
-            test_f="test/${file#lib/}"
+            test_f="tests/${file#lib/}"
             test_f="${test_f%.dart}_test.dart"
             if [ -f "$test_f" ]; then
               echo "  ✅ $file"
             else
-              echo "  ⚠️  $file → missing $test_f"
-              UNCOVERED=1
+              # Tests are sometimes grouped in a sub-directory of the mapped
+              # path (e.g. tests/pages/<subdir>/x_test.dart). Look one level deep.
+              dir=$(dirname "$test_f")
+              base=$(basename "$test_f")
+              if compgen -G "$dir/*/$base" >/dev/null; then
+                echo "  ✅ $file ($(compgen -G "$dir/*/$base" | head -1))"
+              else
+                echo "  ⚠️  $file → missing $test_f"
+                UNCOVERED=1
+              fi
             fi
           done < <(git diff --name-only "$BASE_SHA" -- 'lib/**/*.dart')
           echo ""
@@ -79,27 +87,35 @@ jobs:
       matrix:
         include:
           - label: Core
-            pattern: test/*_test.dart
+            pattern: tests/*_test.dart
           - label: Anki
-            pattern: test/anki
+            pattern: tests/anki
           - label: Widgets
-            pattern: test/widgets
+            pattern: tests/widgets
           - label: Pages
-            pattern: test/pages/*_test.dart test/pages/unified_task_list
+            pattern: tests/pages/*_test.dart tests/pages/unified_task_list
+          - label: Pages-ChatPage
+            pattern: tests/pages/chat_page
+          - label: Pages-Settings
+            pattern: tests/pages/settings
+          - label: Pages-Content
+            pattern: tests/pages/content
           - label: Pages-Chat
-            pattern: test/pages/chat
+            pattern: tests/pages/chat
           - label: Providers
-            pattern: test/providers
+            pattern: tests/providers
           - label: Services
-            pattern: test/services
+            pattern: tests/services
           - label: Utils
-            pattern: test/utils
+            pattern: tests/utils
           - label: Models
-            pattern: test/models
+            pattern: tests/models
           - label: Startup
-            pattern: test/startup
+            pattern: tests/startup
+          - label: TaskFlow
+            pattern: tests/task_flow
           - label: CatCatch
-            pattern: test/catcatch
+            pattern: tests/catcatch
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
