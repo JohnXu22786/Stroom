@@ -1,10 +1,10 @@
 // Merged from:
-//   test/pages/llm_model_config_page_test.dart
-//   test/pages/llm_model_config_page_dialog_test.dart
-//   test/pages/llm_model_config_no_duplicate_test.dart
-//   test/pages/simple_model_config_page_test.dart
-//   test/model_config_dup_crosscheck_test.dart
-//   test/model_config_reasoning_test.dart
+//   tests/pages/llm_model_config_page_test.dart
+//   tests/pages/llm_model_config_page_dialog_test.dart
+//   tests/pages/llm_model_config_no_duplicate_test.dart
+//   tests/pages/simple_model_config_page_test.dart
+//   tests/model_config_dup_crosscheck_test.dart
+//   tests/model_config_reasoning_test.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/tts_models.dart';

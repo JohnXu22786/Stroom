@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 // run in unit test mode. Integration tests with flutter_driver or
 // integration_test are needed for the full InAppWebView page rendering.
 // Panel-behavior tests (rendering, selection, minimize, drag) live in
-// test/catcatch/draggable_floating_panel_test.dart.
+// tests/catcatch/draggable_floating_panel_test.dart.
 
 import 'package:stroom/catcatch/widgets/draggable_floating_panel.dart';
 

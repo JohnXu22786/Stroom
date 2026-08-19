@@ -2,7 +2,7 @@
 //   - provider_config_asr_test.dart
 //   - provider_config_ocr_test.dart
 //   - provider_host_hint_test.dart
-//   - provider_params_redesign_test.dart (in test/ root)
+//   - provider_params_redesign_test.dart (in tests/ root)
 import 'dart:convert';
 
 import 'package:flutter/material.dart';

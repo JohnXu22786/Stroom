@@ -1,11 +1,11 @@
 // Merged from:
-//   test/pages/settings_page_asr_test.dart
-//   test/pages/settings_page_background_optimization_test.dart
-//   test/pages/settings_page_camera_test.dart
-//   test/pages/settings_page_license_test.dart
-//   test/pages/settings_page_ocr_test.dart
-//   test/pages/settings_page_update_test.dart
-//   test/pages/notification_settings_page_test.dart
+//   tests/pages/settings_page_asr_test.dart
+//   tests/pages/settings_page_background_optimization_test.dart
+//   tests/pages/settings_page_camera_test.dart
+//   tests/pages/settings_page_license_test.dart
+//   tests/pages/settings_page_ocr_test.dart
+//   tests/pages/settings_page_update_test.dart
+//   tests/pages/notification_settings_page_test.dart
 import 'dart:convert';
 
 import 'package:flutter/material.dart';

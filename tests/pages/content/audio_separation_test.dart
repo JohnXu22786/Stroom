@@ -1,6 +1,6 @@
 // Merged from:
-//   test/pages/audio_separation_page_test.dart
-//   test/pages/audio_separation_task_list_test.dart
+//   tests/pages/audio_separation_page_test.dart
+//   tests/pages/audio_separation_task_list_test.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

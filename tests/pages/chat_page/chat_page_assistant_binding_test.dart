@@ -6,7 +6,7 @@
 //
 // This locks the glue between `_startStreaming`'s resolution and the
 // adapter cache → service → protocol request path (the pure-resolution
-// priority itself is unit-tested in test/assistant_send_resolution_test.dart).
+// priority itself is unit-tested in tests/assistant_send_resolution_test.dart).
 
 import 'dart:async';
 
