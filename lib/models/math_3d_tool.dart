@@ -120,28 +120,28 @@ class ToolInfo {
       tool: ConstructionTool.extrudePrism,
       name: '拉伸棱柱',
       iconData: Icons.layers,
-      tooltip: '点击多边形底面，拖拽或输入高度',
+      tooltip: '依次点击三角形底面三个顶点，再拖拽设置垂直高度',
       group: 6,
     ),
     ConstructionTool.cone: ToolInfo(
       tool: ConstructionTool.cone,
       name: '圆锥',
       iconData: Icons.expand_less,
-      tooltip: '点击底面圆心，再点击顶点',
+      tooltip: '点击底面圆心、半径点，再点击顶点',
       group: 6,
     ),
     ConstructionTool.cylinder: ToolInfo(
       tool: ConstructionTool.cylinder,
       name: '圆柱',
       iconData: Icons.wifi_tethering,
-      tooltip: '点击底面圆心，再点击顶面圆心',
+      tooltip: '点击底面圆心、半径点，再点击顶面圆心',
       group: 6,
     ),
     ConstructionTool.pyramid: ToolInfo(
       tool: ConstructionTool.pyramid,
       name: '棱锥',
       iconData: Icons.change_history,
-      tooltip: '点击多边形底面，再点击顶点',
+      tooltip: '依次点击三角形底面三个顶点，再点击棱锥顶点',
       group: 6,
     ),
   };
@@ -271,12 +271,20 @@ class ConstructionWorkflow {
       tool: ConstructionTool.extrudePrism,
       steps: [
         ConstructionStep(
-          instruction: '选择要拉伸的多边形',
-          instructionEn: 'Select a polygon to extrude',
+          instruction: '选择三角形底面的第一个顶点',
+          instructionEn: 'Select the first base vertex',
         ),
         ConstructionStep(
-          instruction: '点击或拖拽设置高度',
-          instructionEn: 'Click/drag to set height',
+          instruction: '选择三角形底面的第二个顶点',
+          instructionEn: 'Select the second base vertex',
+        ),
+        ConstructionStep(
+          instruction: '选择三角形底面的第三个顶点',
+          instructionEn: 'Select the third base vertex',
+        ),
+        ConstructionStep(
+          instruction: '点击或拖拽设置垂直高度',
+          instructionEn: 'Click or drag to set perpendicular height',
         ),
       ],
     ),
@@ -288,8 +296,12 @@ class ConstructionWorkflow {
           instructionEn: 'Click base center point',
         ),
         ConstructionStep(
-          instruction: '点击顶点确定高度',
-          instructionEn: 'Click apex to set height',
+          instruction: '点击底面圆周上一点确定半径',
+          instructionEn: 'Click a point on the base circle',
+        ),
+        ConstructionStep(
+          instruction: '点击顶点确定方向和高度',
+          instructionEn: 'Click the apex to set direction and height',
         ),
       ],
     ),
@@ -301,8 +313,12 @@ class ConstructionWorkflow {
           instructionEn: 'Click base center',
         ),
         ConstructionStep(
-          instruction: '点击顶面圆心确定高度',
-          instructionEn: 'Click top center to set height',
+          instruction: '点击底面圆周上一点确定半径',
+          instructionEn: 'Click a point on the base circle',
+        ),
+        ConstructionStep(
+          instruction: '点击顶面圆心确定方向和高度',
+          instructionEn: 'Click the top center to set direction and height',
         ),
       ],
     ),
@@ -310,12 +326,20 @@ class ConstructionWorkflow {
       tool: ConstructionTool.pyramid,
       steps: [
         ConstructionStep(
-          instruction: '选择多边形底面',
-          instructionEn: 'Select a polygon base',
+          instruction: '选择三角形底面的第一个顶点',
+          instructionEn: 'Select the first base vertex',
         ),
         ConstructionStep(
-          instruction: '点击顶点确定高度',
-          instructionEn: 'Click apex to set height',
+          instruction: '选择三角形底面的第二个顶点',
+          instructionEn: 'Select the second base vertex',
+        ),
+        ConstructionStep(
+          instruction: '选择三角形底面的第三个顶点',
+          instructionEn: 'Select the third base vertex',
+        ),
+        ConstructionStep(
+          instruction: '点击棱锥顶点',
+          instructionEn: 'Click the pyramid apex',
         ),
       ],
     ),

@@ -29,6 +29,8 @@ class ConstructionState {
   int _stepIndex = 0;
   Object3D? _previewObject;
   Object3D? _result;
+  String? _validationMessage;
+  Vector3D _workingPlaneNormal = Vector3D.unitZ;
 
   ConstructionState({required this.tool});
 
@@ -53,6 +55,7 @@ class ConstructionState {
 
   /// The instruction for the current step.
   String get currentInstruction {
+    if (_validationMessage != null) return _validationMessage!;
     final workflow = ConstructionWorkflow.workflows[tool];
     if (workflow == null || _stepIndex >= workflow.steps.length) {
       return '完成构造';
@@ -64,7 +67,78 @@ class ConstructionState {
   bool get isComplete => _result != null;
 
   /// Add a point to the construction and return the action to take.
-  ConstructionAction addPoint(Point3D point) {
+  ConstructionAction addPoint(
+    Point3D point, {
+    Vector3D? workingPlaneNormal,
+  }) {
+    if (!_isFinitePoint(point)) {
+      return _reject('无法放置无效坐标，请重新选择位置');
+    }
+
+    // Reject degenerate inputs before they become part of the construction.
+    // A zero-length edge or a collinear plane is not a useful object and would
+    // otherwise produce invalid normals or invisible geometry.
+    if (tool == ConstructionTool.line &&
+        _points.isNotEmpty &&
+        _points.last.distanceTo(point) < 1e-9) {
+      return _reject('两点不能重合，请重新选择第二个点');
+    }
+    if ((tool == ConstructionTool.sphere || tool == ConstructionTool.circle) &&
+        _points.isNotEmpty &&
+        _points.last.distanceTo(point) < 1e-9) {
+      return _reject('半径必须大于 0，请重新选择半径点');
+    }
+    if (tool == ConstructionTool.plane &&
+        _points.length == 2 &&
+        (_points[1] - _points[0]).cross(point - _points[0]).magnitude < 1e-9) {
+      return _reject('三个点不能共线，请重新选择第三个点');
+    }
+    if ((tool == ConstructionTool.cube ||
+            tool == ConstructionTool.extrudePrism ||
+            tool == ConstructionTool.pyramid) &&
+        _points.length == 1 &&
+        _points.last.distanceTo(point) < 1e-9) {
+      return _reject('底面顶点不能重合，请重新选择');
+    }
+    if ((tool == ConstructionTool.extrudePrism ||
+            tool == ConstructionTool.pyramid) &&
+        _points.length == 2 &&
+        (_points[1] - _points[0]).cross(point - _points[0]).magnitude < 1e-9) {
+      return _reject('底面三个点不能共线，请重新选择第三个点');
+    }
+    if ((tool == ConstructionTool.extrudePrism ||
+            tool == ConstructionTool.pyramid) &&
+        _points.length == 3) {
+      final baseNormal =
+          (_points[1] - _points[0]).cross(_points[2] - _points[0]).normalized();
+      if ((point - _points[0]).dot(baseNormal).abs() < 1e-9) {
+        return _reject('高度必须离开底面，请重新选择顶点');
+      }
+    }
+    if ((tool == ConstructionTool.cone || tool == ConstructionTool.cylinder) &&
+        _points.length == 1 &&
+        _points[0].distanceTo(point) < 1e-9) {
+      return _reject('底面半径必须大于 0，请重新选择半径点');
+    }
+    if ((tool == ConstructionTool.cone || tool == ConstructionTool.cylinder) &&
+        _points.length == 2) {
+      final axis = point - _points[0];
+      if (axis.magnitude < 1e-9) {
+        return _reject('高度必须大于 0，请重新选择顶部位置');
+      }
+      final axisUnit = axis.normalized();
+      final radiusVector = _points[1] - _points[0];
+      final projectedRadius =
+          radiusVector - axisUnit * radiusVector.dot(axisUnit);
+      if (projectedRadius.magnitude < 1e-9) {
+        return _reject('半径方向不能与高度方向平行，请重新选择顶部位置');
+      }
+    }
+
+    _validationMessage = null;
+    if (workingPlaneNormal != null && workingPlaneNormal.magnitude > 1e-9) {
+      _workingPlaneNormal = workingPlaneNormal.normalized();
+    }
     _points.add(point);
     // Advance to next step, capped at the last workflow step
     final maxStep = totalSteps - 1;
@@ -140,7 +214,11 @@ class ConstructionState {
 
       case ConstructionTool.circle:
         if (_points.length >= 2) {
-          _result = _createCircle(_points[0], _points[1]);
+          _result = _createCircle(
+            _points[0],
+            _points[1],
+            planeNormal: _workingPlaneNormal,
+          );
           _updatePreview();
           return ConstructionAction.complete;
         }
@@ -149,7 +227,11 @@ class ConstructionState {
 
       case ConstructionTool.cube:
         if (_points.length >= 2) {
-          _result = _createCube(_points[0], _points[1]);
+          _result = _createCube(
+            _points[0],
+            _points[1],
+            planeNormal: _workingPlaneNormal,
+          );
           _updatePreview();
           return ConstructionAction.complete;
         }
@@ -157,17 +239,42 @@ class ConstructionState {
         return ConstructionAction.advanceStep;
 
       case ConstructionTool.extrudePrism:
-      case ConstructionTool.pyramid:
-      case ConstructionTool.cone:
-      case ConstructionTool.cylinder:
-        // These need an existing polygon/base and a height point
-        if (_points.length >= 2) {
-          _result = Object3D.line(
+        if (_points.length >= 4) {
+          _result = _createTriangularPrism(
             _points[0],
             _points[1],
-            color: 0xFFFF9800,
-            label: tool.name,
+            _points[2],
+            _points[3],
           );
+          _updatePreview();
+          return ConstructionAction.complete;
+        }
+        _updatePreview();
+        return ConstructionAction.advanceStep;
+      case ConstructionTool.pyramid:
+        if (_points.length >= 4) {
+          _result = _createPyramid(
+            _points[0],
+            _points[1],
+            _points[2],
+            _points[3],
+          );
+          _updatePreview();
+          return ConstructionAction.complete;
+        }
+        _updatePreview();
+        return ConstructionAction.advanceStep;
+      case ConstructionTool.cone:
+        if (_points.length >= 3) {
+          _result = _createCone(_points[0], _points[1], _points[2]);
+          _updatePreview();
+          return ConstructionAction.complete;
+        }
+        _updatePreview();
+        return ConstructionAction.advanceStep;
+      case ConstructionTool.cylinder:
+        if (_points.length >= 3) {
+          _result = _createCylinder(_points[0], _points[1], _points[2]);
           _updatePreview();
           return ConstructionAction.complete;
         }
@@ -180,7 +287,14 @@ class ConstructionState {
   ///
   /// This is deliberately separate from [addPoint]: a drag should show the
   /// object being built, while only pointer-up advances the workflow.
-  void updatePreviewPoint(Point3D point) {
+  void updatePreviewPoint(
+    Point3D point, {
+    Vector3D? workingPlaneNormal,
+  }) {
+    if (!_isFinitePoint(point)) return;
+    if (workingPlaneNormal != null && workingPlaneNormal.magnitude > 1e-9) {
+      _workingPlaneNormal = workingPlaneNormal.normalized();
+    }
     if (_points.isEmpty) {
       _previewObject = Object3D.point(point, color: 0x60808080);
       return;
@@ -189,10 +303,81 @@ class ConstructionState {
     final start = _points.last;
     switch (tool) {
       case ConstructionTool.sphere:
+        {
+          final radius = start.distanceTo(point);
+          _previewObject = radius < 1e-9
+              ? Object3D.point(start, color: 0x60808080)
+              : Object3D.sphere(
+                  center: start,
+                  radius: radius,
+                  color: 0x404CAF50,
+                );
+          return;
+        }
       case ConstructionTool.circle:
+        {
+          final radius = start.distanceTo(point);
+          _previewObject = radius < 1e-9
+              ? Object3D.point(start, color: 0x60808080)
+              : _createCircle(
+                  start,
+                  point,
+                  planeNormal: _workingPlaneNormal,
+                  color: 0x804CAF50,
+                );
+          return;
+        }
       case ConstructionTool.line:
       case ConstructionTool.cube:
         _previewObject = Object3D.line(start, point, color: 0x60808080);
+        return;
+      case ConstructionTool.cone:
+        if (_points.length >= 2 &&
+            _hasRoundSolidGeometry(
+              _points[0],
+              _points[1],
+              point,
+            )) {
+          _previewObject = _createCone(_points[0], _points[1], point);
+        } else {
+          _previewObject = Object3D.line(start, point, color: 0x60808080);
+        }
+        return;
+      case ConstructionTool.cylinder:
+        if (_points.length >= 2 &&
+            _hasRoundSolidGeometry(
+              _points[0],
+              _points[1],
+              point,
+            )) {
+          _previewObject = _createCylinder(_points[0], _points[1], point);
+        } else {
+          _previewObject = Object3D.line(start, point, color: 0x60808080);
+        }
+        return;
+      case ConstructionTool.extrudePrism:
+        if (_points.length >= 3) {
+          _previewObject = _createTriangularPrism(
+            _points[0],
+            _points[1],
+            _points[2],
+            point,
+          );
+        } else {
+          _previewObject = Object3D.line(start, point, color: 0x60808080);
+        }
+        return;
+      case ConstructionTool.pyramid:
+        if (_points.length >= 3) {
+          _previewObject = _createPyramid(
+            _points[0],
+            _points[1],
+            _points[2],
+            point,
+          );
+        } else {
+          _previewObject = Object3D.line(start, point, color: 0x60808080);
+        }
         return;
       default:
         _previewObject = Object3D.line(start, point, color: 0x60808080);
@@ -258,50 +443,53 @@ class ConstructionState {
   }
 
   /// Create a circle from center and a point on the circle.
-  static Object3D _createCircle(Point3D center, Point3D onCircle) {
+  static Object3D _createCircle(
+    Point3D center,
+    Point3D onCircle, {
+    Vector3D? planeNormal,
+    int color = 0xFF2196F3,
+  }) {
     final radius = center.distanceTo(onCircle);
     // Generate circle vertices as a polyline
     final segments = 32;
     final points = <Point3D>[];
     // Direction from center to onCircle
     final dir = (onCircle - center).normalized();
-    final up = Vector3D(0, 1, 0);
-    var axis = dir.cross(up).normalized();
-    if (axis.magnitude < 0.1) {
-      axis = dir.cross(Vector3D(0, 0, 1)).normalized();
+    var perp = (planeNormal ?? Vector3D.unitZ).cross(dir).normalized();
+    if (perp.magnitude < 0.1) {
+      perp = dir.cross(Vector3D.unitY).normalized();
     }
-    final perp = dir.cross(axis);
 
     for (int i = 0; i <= segments; i++) {
       final theta = 2 * dart_math.pi * i / segments;
-      final x =
-          center.x +
+      final x = center.x +
           radius *
               (dart_math.cos(theta) * dir.x + dart_math.sin(theta) * perp.x);
-      final y =
-          center.y +
+      final y = center.y +
           radius *
               (dart_math.cos(theta) * dir.y + dart_math.sin(theta) * perp.y);
-      final z =
-          center.z +
+      final z = center.z +
           radius *
               (dart_math.cos(theta) * dir.z + dart_math.sin(theta) * perp.z);
       points.add(Point3D(x, y, z));
     }
 
-    return Object3D.curve(points: points, color: 0xFF2196F3, label: 'Circle');
+    return Object3D.curve(points: points, color: color, label: 'Circle');
   }
 
   /// Create a cube from two base edge points.
-  static Object3D _createCube(Point3D a, Point3D b) {
+  static Object3D _createCube(
+    Point3D a,
+    Point3D b, {
+    Vector3D planeNormal = Vector3D.unitZ,
+  }) {
     final edge = b - a;
     final height = edge.magnitude;
 
     // Build the 8 vertices of the cube
-    // Assume base is on a plane perpendicular to Y
     final vx = edge.normalized();
-    final up = Vector3D(0, 1, 0);
-    var vz = vx.cross(up).normalized();
+    final up = planeNormal.normalized();
+    var vz = up.cross(vx).normalized();
     if (vz.magnitude < 0.1) {
       vz = vx.cross(Vector3D(0, 0, 1)).normalized();
     }
@@ -341,11 +529,181 @@ class ConstructionState {
     );
   }
 
+  static Object3D _createTriangularPrism(
+    Point3D a,
+    Point3D b,
+    Point3D c,
+    Point3D heightPoint,
+  ) {
+    final normal = (b - a).cross(c - a).normalized();
+    final height = (heightPoint - a).dot(normal);
+    final offset = normal * height;
+    final vertices = <Point3D>[a, b, c, a + offset, b + offset, c + offset];
+    final indices = <int>[
+      0,
+      2,
+      1,
+      3,
+      4,
+      5,
+      0,
+      1,
+      4,
+      0,
+      4,
+      3,
+      1,
+      2,
+      5,
+      1,
+      5,
+      4,
+      2,
+      0,
+      3,
+      2,
+      3,
+      5,
+    ];
+    return Object3D.polyhedron(
+      vertices: vertices,
+      indices: indices,
+      color: 0x80FF9800,
+      label: 'Prism',
+    );
+  }
+
+  static Object3D _createPyramid(
+    Point3D a,
+    Point3D b,
+    Point3D c,
+    Point3D apex,
+  ) {
+    return Object3D.polyhedron(
+      vertices: [a, b, c, apex],
+      indices: [
+        0,
+        2,
+        1,
+        0,
+        1,
+        3,
+        1,
+        2,
+        3,
+        2,
+        0,
+        3,
+      ],
+      color: 0x80FF9800,
+      label: 'Pyramid',
+    );
+  }
+
+  static Object3D _createCone(
+    Point3D center,
+    Point3D radiusPoint,
+    Point3D apex,
+  ) {
+    final axis = (apex - center).normalized();
+    final rawRadius = radiusPoint - center;
+    final radial = rawRadius - axis * rawRadius.dot(axis);
+    final radius = radial.magnitude;
+    final u = radial.normalized();
+    final v = axis.cross(u).normalized();
+    const segments = 24;
+    final vertices = <Point3D>[center];
+    for (var i = 0; i < segments; i++) {
+      final angle = 2 * dart_math.pi * i / segments;
+      final direction = u * dart_math.cos(angle) + v * dart_math.sin(angle);
+      vertices.add(center + direction * radius);
+    }
+    final apexIndex = vertices.length;
+    vertices.add(apex);
+    final indices = <int>[];
+    for (var i = 0; i < segments; i++) {
+      final next = (i + 1) % segments;
+      indices.addAll([0, next + 1, i + 1]);
+      indices.addAll([i + 1, next + 1, apexIndex]);
+    }
+    return Object3D.polyhedron(
+      vertices: vertices,
+      indices: indices,
+      color: 0x80FF9800,
+      label: 'Cone',
+    );
+  }
+
+  static Object3D _createCylinder(
+    Point3D center,
+    Point3D radiusPoint,
+    Point3D topCenter,
+  ) {
+    final axis = (topCenter - center).normalized();
+    final rawRadius = radiusPoint - center;
+    final radial = rawRadius - axis * rawRadius.dot(axis);
+    final radius = radial.magnitude;
+    final u = radial.normalized();
+    final v = axis.cross(u).normalized();
+    const segments = 24;
+    final vertices = <Point3D>[center, topCenter];
+    for (var i = 0; i < segments; i++) {
+      final angle = 2 * dart_math.pi * i / segments;
+      final direction = u * dart_math.cos(angle) + v * dart_math.sin(angle);
+      vertices.add(center + direction * radius);
+    }
+    final topRingStart = vertices.length;
+    for (var i = 0; i < segments; i++) {
+      final angle = 2 * dart_math.pi * i / segments;
+      final direction = u * dart_math.cos(angle) + v * dart_math.sin(angle);
+      vertices.add(topCenter + direction * radius);
+    }
+    final indices = <int>[];
+    for (var i = 0; i < segments; i++) {
+      final next = (i + 1) % segments;
+      final bottom = i + 2;
+      final nextBottom = next + 2;
+      final top = topRingStart + i;
+      final nextTop = topRingStart + next;
+      indices.addAll([0, nextBottom, bottom]);
+      indices.addAll([1, top, nextTop]);
+      indices.addAll([bottom, nextBottom, nextTop, bottom, nextTop, top]);
+    }
+    return Object3D.polyhedron(
+      vertices: vertices,
+      indices: indices,
+      color: 0x80FF9800,
+      label: 'Cylinder',
+    );
+  }
+
+  static bool _hasRoundSolidGeometry(
+    Point3D center,
+    Point3D radiusPoint,
+    Point3D topPoint,
+  ) {
+    final axis = topPoint - center;
+    if (axis.magnitude < 1e-9) return false;
+    final axisUnit = axis.normalized();
+    final radial = radiusPoint - center;
+    return (radial - axisUnit * radial.dot(axisUnit)).magnitude > 1e-9;
+  }
+
   /// Reset the construction state.
   void reset() {
     _points.clear();
     _result = null;
     _previewObject = null;
+    _validationMessage = null;
+    _workingPlaneNormal = Vector3D.unitZ;
     _stepIndex = 0;
   }
+
+  ConstructionAction _reject(String message) {
+    _validationMessage = message;
+    return ConstructionAction.awaitInput;
+  }
+
+  static bool _isFinitePoint(Point3D point) =>
+      point.x.isFinite && point.y.isFinite && point.z.isFinite;
 }
