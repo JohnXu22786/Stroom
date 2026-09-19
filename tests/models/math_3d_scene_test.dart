@@ -15,10 +15,10 @@ void main() {
         phi: 0,
       );
       final pos = cam.position;
-      // phi=0, theta=0: position should be (0, 0, 10)
+      // GeoGebra coordinates are Z-up. At theta=0 the camera is on +Y.
       expect(pos.x, closeTo(0, 1e-10));
-      expect(pos.y, closeTo(0, 1e-10));
-      expect(pos.z, closeTo(10, 1e-10));
+      expect(pos.y, closeTo(10, 1e-10));
+      expect(pos.z, closeTo(0, 1e-10));
     });
 
     test('phi is clamped during orbit operation', () {
@@ -37,14 +37,14 @@ void main() {
     test('orbit rotation updates theta', () {
       final cam = Camera3D();
       final updated = cam.orbit(deltaTheta: 0.5, deltaPhi: 0);
-      expect(updated.theta, closeTo(0.5, 1e-10));
-      expect(updated.phi, closeTo(dart_math.pi / 4, 1e-10));
+      expect(updated.theta, closeTo(dart_math.pi * 0.75 + 0.5, 1e-10));
+      expect(updated.phi, closeTo(dart_math.pi / 6, 1e-10));
     });
 
     test('orbit rotation updates phi', () {
       final cam = Camera3D();
       final updated = cam.orbit(deltaTheta: 0, deltaPhi: 0.3);
-      expect(updated.phi, closeTo(dart_math.pi / 4 + 0.3, 1e-10));
+      expect(updated.phi, closeTo(dart_math.pi / 6 + 0.3, 1e-10));
     });
 
     test('zoom changes distance by factor', () {
@@ -58,15 +58,14 @@ void main() {
         target: Point3D(0, 0, 0),
         distance: 10,
         theta: 0,
-        phi: 0, // looking along Z axis
+        phi: 0, // looking along the horizontal -Y direction
       );
       final updated = cam.pan(deltaX: 100, deltaY: 200);
-      // Pan sensitivity: distance * 0.005
-      // deltaX=100 → target.x changes by -100 * 10 * 0.005 = -5
-      expect(updated.target.x, closeTo(-5, 1e-10));
-      // deltaY=200 → target.y changes by 200 * 10 * 0.005 = 10
-      expect(updated.target.y, closeTo(10, 1e-10));
-      expect(updated.target.z, closeTo(0, 1e-10));
+      // Pan sensitivity: distance * 0.002. Horizontal drag follows the
+      // camera-right basis, while vertical drag follows world Z here.
+      expect(updated.target.x, closeTo(2, 1e-10));
+      expect(updated.target.y, closeTo(0, 1e-10));
+      expect(updated.target.z, closeTo(4, 1e-10));
     });
   });
 
@@ -122,7 +121,7 @@ void main() {
       final cam = Camera3D(
         target: Point3D(0, 0, 0),
         distance: 10,
-        theta: 0,
+        theta: dart_math.pi,
         phi: 0,
       );
       final proj = Projection3D.parallel(width: 800, height: 600, scale: 50);
@@ -135,7 +134,7 @@ void main() {
       final cam = Camera3D(
         target: Point3D(0, 0, 0),
         distance: 10,
-        theta: 0,
+        theta: dart_math.pi,
         phi: 0,
       );
       final proj = Projection3D.parallel(width: 800, height: 600, scale: 50);

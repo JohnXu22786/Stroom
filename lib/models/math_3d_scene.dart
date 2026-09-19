@@ -24,7 +24,10 @@ class ScreenPoint {
 
 /// A 3D camera controlled via spherical coordinates around a target point.
 ///
-/// theta: azimuthal angle (rotation around Y axis)
+/// GeoGebra-style coordinates are used throughout: xOy is the ground plane
+/// and Z is the vertical axis.
+///
+/// theta: azimuthal angle (rotation around Z axis)
 /// phi: polar angle (elevation from horizontal)
 /// distance: distance from camera to target
 class Camera3D {
@@ -36,8 +39,8 @@ class Camera3D {
   const Camera3D({
     this.target = Point3D.origin,
     this.distance = 10,
-    this.theta = 0,
-    this.phi = 0.7853981633974483, // ~45 degrees
+    this.theta = dart_math.pi * 0.75,
+    this.phi = dart_math.pi / 6, // 30 degrees above the xOy plane
   });
 
   /// Compute the camera position in world space from spherical coords.
@@ -51,8 +54,8 @@ class Camera3D {
 
     return Point3D(
       target.x + distance * cosPhi * sinTheta,
-      target.y + distance * sinPhi,
-      target.z + distance * cosPhi * cosTheta,
+      target.y + distance * cosPhi * cosTheta,
+      target.z + distance * sinPhi,
     );
   }
 
@@ -89,21 +92,22 @@ class Camera3D {
     // Build right and up vectors from current view direction
     final pos = position;
     final forward = (target - pos).normalized();
-    final worldUp = Vector3D(0, 1, 0);
+    final worldUp = Vector3D(0, 0, 1);
 
     // Right vector: cross(forward, worldUp)
     var right = forward.cross(worldUp);
     if (right.magnitude < 1e-10) {
-      // Looking straight up/down, use Z as reference
-      right = forward.cross(Vector3D(0, 0, 1));
+      // Looking straight up/down, use Y as reference.
+      right = forward.cross(Vector3D(0, 1, 0));
     }
     right = right.normalized();
 
     // Up vector: cross(right, forward)
     final up = right.cross(forward).normalized();
 
-    // Scale by distance for intuitive pan speed
-    final scale = distance * 0.005;
+    // Match the orthographic viewport: at the default distance a 100 px drag
+    // moves the scene by roughly two grid units on a 600 px tall canvas.
+    final scale = distance * 0.002;
 
     final newTarget = Point3D(
       target.x + (-deltaX * right.x + deltaY * up.x) * scale,
@@ -125,10 +129,10 @@ class Camera3D {
   List<double> viewMatrix() {
     final pos = position;
     final f = (target - pos).normalized();
-    final worldUp = Vector3D(0, 1, 0);
+    final worldUp = Vector3D(0, 0, 1);
     var r = f.cross(worldUp).normalized();
     if (r.magnitude < 1e-10) {
-      r = f.cross(Vector3D(0, 0, 1)).normalized();
+      r = f.cross(Vector3D(0, 1, 0)).normalized();
     }
     final u = r.cross(f).normalized();
 
@@ -296,26 +300,30 @@ class Projection3D {
   /// Returns a [ScreenPoint] with (x, y) in pixel coordinates
   /// and z as depth (for z-sorting).
   ScreenPoint project(Point3D worldPoint) {
-    final projMatrix = projectionMatrix();
-    final p = _transformPoint(projMatrix, worldPoint);
+    final aspect = width / height;
+    final depth = -worldPoint.z;
 
     if (type == ProjectionType.perspective) {
-      if (p.z.abs() > 1e-10) {
-        final invW = 1 / p.z;
-        return ScreenPoint(
-          (p.x * invW + 1) * width / 2,
-          (1 - p.y * invW) * height / 2,
-          p.z,
-        );
-      }
+      final fovRad = fov * dart_math.pi / 180;
+      final focalScale = 1 / dart_math.tan(fovRad / 2);
+      // Camera space looks down -Z. Keep values finite for points on or
+      // behind the eye plane; clipping is handled by the painter.
+      final safeDepth = depth.abs() < 1e-9
+          ? (depth.isNegative ? -1e-9 : 1e-9)
+          : depth;
+      final ndcX = worldPoint.x * focalScale / (aspect * safeDepth);
+      final ndcY = worldPoint.y * focalScale / safeDepth;
+      return ScreenPoint(
+        (ndcX + 1) * width / 2,
+        (1 - ndcY) * height / 2,
+        depth,
+      );
     }
 
-    // Parallel: NDC to screen
-    return ScreenPoint(
-      (p.x + 1) * width / 2,
-      (1 - p.y) * height / 2,
-      p.z,
-    );
+    final halfW = scale * aspect;
+    final ndcX = worldPoint.x / halfW;
+    final ndcY = worldPoint.y / scale;
+    return ScreenPoint((ndcX + 1) * width / 2, (1 - ndcY) * height / 2, depth);
   }
 }
 
@@ -328,9 +336,7 @@ class Scene3D {
   final Camera3D camera;
   final List<Object3D> _objects = [];
 
-  Scene3D({
-    Camera3D? camera,
-  }) : camera = camera ?? Camera3D();
+  Scene3D({Camera3D? camera}) : camera = camera ?? Camera3D();
 
   /// Unmodifiable view of the objects in the scene.
   List<Object3D> get objects => List.unmodifiable(_objects);
@@ -445,18 +451,6 @@ class Scene3D {
 
     if (!minX.isFinite) return;
 
-    final centerX = (minX + maxX) / 2;
-    final centerY = (minY + maxY) / 2;
-    final centerZ = (minZ + maxZ) / 2;
-    final sizeX = (maxX - minX).abs();
-    final sizeY = (maxY - minY).abs();
-    final sizeZ = (maxZ - minZ).abs();
-    final maxSize = [sizeX, sizeY, sizeZ]
-        .where((s) => s > 0)
-        .fold(1.0, (a, b) => a > b ? a : b);
-
-    final newDistance = maxSize * 1.5 + 2;
-
     // Update camera (since camera is final, we'd need a new Scene3D)
     // For now, this is a utility method — caller applies the result.
   }
@@ -468,68 +462,17 @@ class Scene3D {
 
 /// Identity 4x4 matrix (column-major).
 List<double> identityMatrix4() {
-  return [
-    1,
-    0,
-    0,
-    0,
-    0,
-    1,
-    0,
-    0,
-    0,
-    0,
-    1,
-    0,
-    0,
-    0,
-    0,
-    1,
-  ];
+  return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 }
 
 /// Translation 4x4 matrix (column-major).
 List<double> translateMatrix4(double tx, double ty, double tz) {
-  return [
-    1,
-    0,
-    0,
-    0,
-    0,
-    1,
-    0,
-    0,
-    0,
-    0,
-    1,
-    0,
-    tx,
-    ty,
-    tz,
-    1,
-  ];
+  return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, tx, ty, tz, 1];
 }
 
 /// Scale 4x4 matrix (column-major).
 List<double> scaleMatrix4(double sx, double sy, double sz) {
-  return [
-    sx,
-    0,
-    0,
-    0,
-    0,
-    sy,
-    0,
-    0,
-    0,
-    0,
-    sz,
-    0,
-    0,
-    0,
-    0,
-    1,
-  ];
+  return [sx, 0, 0, 0, 0, sy, 0, 0, 0, 0, sz, 0, 0, 0, 0, 1];
 }
 
 /// Multiply two 4x4 column-major matrices: A * B.
@@ -551,15 +494,18 @@ List<double> multiplyMatrix4(List<double> a, List<double> b) {
 /// Returns the transformed point in homogeneous space (z is the w component
 /// for perspective divide).
 Point3D _transformPoint(List<double> matrix, Point3D point) {
-  final x = matrix[0] * point.x +
+  final x =
+      matrix[0] * point.x +
       matrix[4] * point.y +
       matrix[8] * point.z +
       matrix[12];
-  final y = matrix[1] * point.x +
+  final y =
+      matrix[1] * point.x +
       matrix[5] * point.y +
       matrix[9] * point.z +
       matrix[13];
-  final z = matrix[2] * point.x +
+  final z =
+      matrix[2] * point.x +
       matrix[6] * point.y +
       matrix[10] * point.z +
       matrix[14];
@@ -572,7 +518,10 @@ Point3D _transformPoint(List<double> matrix, Point3D point) {
 
 /// Transform a world 3D point through camera view and projection to screen.
 ScreenPoint worldToScreen(
-    Point3D worldPoint, Camera3D camera, Projection3D projection) {
+  Point3D worldPoint,
+  Camera3D camera,
+  Projection3D projection,
+) {
   // World → View (camera space)
   final viewMatrix = camera.viewMatrix();
   final viewPoint = _transformPoint(viewMatrix, worldPoint);
