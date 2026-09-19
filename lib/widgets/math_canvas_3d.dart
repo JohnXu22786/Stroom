@@ -100,6 +100,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   Point3D? _constGroundPos; // ground (z=0) position during construction
   double _constHeight = 0; // height offset from ground during drag
   Offset? _constStartPoint; // screen position where point gesture started
+  Vector3D? _constPlaneNormal; // stable working-plane normal for this gesture
   bool _constPointPlaced = false; // whether the point was committed
 
   // Gesture state
@@ -320,6 +321,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       _constPointPlaced = false;
       _constGroundPos = null;
       _constStartPoint = null;
+      _constPlaneNormal = null;
       _constructionPreview = null;
     });
     widget.onToolInstruction?.call(_construction?.currentInstruction ?? '');
@@ -471,18 +473,21 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     _lastFocalPoint = details.localFocalPoint;
     _initialScaleDistance = _cameraDistance;
 
-    // In construction mode, start tracking for point + height placement
+    // In construction mode, start tracking a point on the active working
+    // plane. The first point uses a coordinate plane; later points use a
+    // screen-facing plane through the previous construction point.
     if (_currentTool != ConstructionTool.move && _construction != null) {
       _constStartPoint = details.localFocalPoint;
-      _constGroundPos = _screenToPointOnPlane(
+      _constGroundPos = _screenToConstructionPlane(
         details.localFocalPoint.dx,
         details.localFocalPoint.dy,
+        snap: true,
+        normalOverride: _constructionPlaneNormal,
       );
+      _constPlaneNormal = _constructionPlaneNormal;
       _constHeight = 0;
       _constPointPlaced = false;
-      _constructionPreview = _construction?.previewForPoint(
-        _constGroundPos ?? Point3D.origin,
-      );
+      _updateConstructionPreview(_constGroundPos);
     }
   }
 
@@ -491,19 +496,14 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     final focalPoint = details.localFocalPoint;
     final scale = details.scale;
 
-    // ===== Construction mode: tap → point on ground, drag → adjust height
+    // ===== Construction mode: tap → point on a working plane, drag →
+    // adjust height or move across the screen-facing construction plane.
     if (_currentTool != ConstructionTool.move &&
         _construction != null &&
         !_constPointPlaced) {
       if (_constGroundPos != null && _constStartPoint != null) {
-        // GeoGebra fixes x/y at press time, then uses vertical movement for z.
-        final pixelsPerWorldUnit =
-            _canvasHeight / (_cameraDistance * _orthographicDistanceScale * 2);
-        _constHeight =
-            -((focalPoint.dy - _constStartPoint!.dy) / pixelsPerWorldUnit);
-        _constructionPreview = _construction?.previewForPoint(
-          Point3D(_constGroundPos!.x, _constGroundPos!.y, _constHeight),
-        );
+        final preview = _constructionPointForDrag(focalPoint);
+        _updateConstructionPreview(preview);
       }
       _lastFocalPoint = focalPoint;
       return; // Don't orbit during construction
@@ -541,21 +541,22 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
   void _onScaleEnd(ScaleEndDetails details) {
     if (_mousePointer != null) return;
-    // ===== Construction mode: finalize the point with height
+    // ===== Construction mode: finalize the point with the latest spatial
+    // position. A second sphere point therefore remains in 3D instead of
+    // falling back to z=0.
     if (_currentTool != ConstructionTool.move &&
         _construction != null &&
         !_constPointPlaced &&
         _constGroundPos != null) {
       _constPointPlaced = true;
-      final finalPos = Point3D(
-        _constGroundPos!.x,
-        _constGroundPos!.y,
-        _constHeight,
+      final finalPos = _constructionPointForDrag(
+        _lastFocalPoint ?? _constStartPoint!,
       );
       _handleConstructionPoint(finalPos);
 
       _constGroundPos = null;
       _constStartPoint = null;
+      _constPlaneNormal = null;
       _lastFocalPoint = null;
       widget.onViewportChange?.call();
       return;
@@ -567,16 +568,18 @@ class MathCanvas3DState extends State<MathCanvas3D> {
         !_constPointPlaced &&
         _constGroundPos == null &&
         _constStartPoint != null) {
-      // Place point on the ground plane at the tap position
+      // Place point on the active working plane at the tap position.
       _constPointPlaced = true;
-      final groundPos = _screenToPointOnPlane(
+      final groundPos = _screenToConstructionPlane(
         _constStartPoint!.dx,
         _constStartPoint!.dy,
+        snap: true,
       );
       _handleConstructionPoint(groundPos);
 
       _constGroundPos = null;
       _constStartPoint = null;
+      _constPlaneNormal = null;
       _lastFocalPoint = null;
       widget.onViewportChange?.call();
       return;
@@ -585,6 +588,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     _lastFocalPoint = null;
     _constStartPoint = null;
     _constGroundPos = null;
+    _constPlaneNormal = null;
     _constructionPreview = null;
     widget.onViewportChange?.call();
   }
@@ -633,54 +637,252 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     return _cameraDistance.clamp(0.25, 500) * _orthographicDistanceScale;
   }
 
-  /// Convert a local canvas position to a 3D point on the xOy ground plane.
-  Point3D _screenToPointOnPlane(double screenX, double screenY) {
-    final cam = Camera3D(
-      target: _cameraTarget,
-      distance: _cameraDistance,
-      theta: _cameraTheta,
-      phi: _cameraPhi,
-    );
-
+  Ray3D _screenRay(double screenX, double screenY) {
+    final cam = camera;
     final viewMatrix = cam.viewMatrix();
     final pos = cam.position;
     final right = Vector3D(viewMatrix[0], viewMatrix[4], viewMatrix[8]);
     final up = Vector3D(viewMatrix[1], viewMatrix[5], viewMatrix[9]);
     final forward = (_cameraTarget - pos).normalized();
-
     final ndcX = 2 * screenX / _canvasWidth - 1;
     final ndcY = 1 - 2 * screenY / _canvasHeight;
     final aspect = _canvasWidth / _canvasHeight;
-    late Point3D rayOrigin;
-    late Vector3D rayDirection;
 
     if (_projectionType == ProjectionType.parallel) {
       final halfHeight = _computeScaleForCanvas();
       final offset =
           right * (ndcX * halfHeight * aspect) + up * (ndcY * halfHeight);
-      rayOrigin = pos + offset;
-      rayDirection = forward;
-    } else {
-      final tanHalfFov = dart_math.tan(dart_math.pi / 6); // 60° FOV
-      rayOrigin = pos;
-      rayDirection = (forward +
-              right * (ndcX * tanHalfFov * aspect) +
-              up * (ndcY * tanHalfFov))
-          .normalized();
+      return Ray3D(pos + offset, forward);
     }
 
-    if (rayDirection.z.abs() < 1e-10) {
-      return Point3D(_cameraTarget.x, _cameraTarget.y, 0);
-    }
-    final distance = -rayOrigin.z / rayDirection.z;
-    if (!distance.isFinite) {
-      return Point3D(_cameraTarget.x, _cameraTarget.y, 0);
-    }
-    return Point3D(
-      rayOrigin.x + rayDirection.x * distance,
-      rayOrigin.y + rayDirection.y * distance,
-      0,
+    final tanHalfFov = dart_math.tan(dart_math.pi / 6);
+    return Ray3D(
+      pos,
+      (forward +
+              right * (ndcX * tanHalfFov * aspect) +
+              up * (ndcY * tanHalfFov))
+          .normalized(),
     );
+  }
+
+  Projection3D _currentProjection() {
+    return _projectionType == ProjectionType.parallel
+        ? Projection3D.parallel(
+            width: _canvasWidth,
+            height: _canvasHeight,
+            scale: _computeScaleForCanvas(),
+          )
+        : Projection3D.perspective(
+            width: _canvasWidth,
+            height: _canvasHeight,
+            fov: 60,
+          );
+  }
+
+  Vector3D get _constructionPlaneNormal {
+    if ((_construction?.points ?? const <Point3D>[]).isEmpty) {
+      return Vector3D.unitZ;
+    }
+    return (_cameraTarget - camera.position).normalized();
+  }
+
+  Point3D? _nearestSnappedPoint(double screenX, double screenY) {
+    if (_canvasWidth <= 0 || _canvasHeight <= 0) return null;
+    final projection = _currentProjection();
+    final candidates = <Point3D>[Point3D.origin];
+    final surfaceCandidates = <Point3D>[];
+
+    void addSegmentCandidate(Point3D a, Point3D b) {
+      final aScreen = worldToScreen(a, camera, projection);
+      final bScreen = worldToScreen(b, camera, projection);
+      final dx = bScreen.x - aScreen.x;
+      final dy = bScreen.y - aScreen.y;
+      final lengthSquared = dx * dx + dy * dy;
+      final t = lengthSquared < 1e-9
+          ? 0.0
+          : ((screenX - aScreen.x) * dx + (screenY - aScreen.y) * dy) /
+              lengthSquared;
+      final clampedT = t.clamp(0.0, 1.0).toDouble();
+      candidates.add(
+        Point3D(
+          a.x + (b.x - a.x) * clampedT,
+          a.y + (b.y - a.y) * clampedT,
+          a.z + (b.z - a.z) * clampedT,
+        ),
+      );
+    }
+
+    final ray = _screenRay(screenX, screenY);
+    for (final object in _objects) {
+      switch (object.type) {
+        case Object3DType.point:
+          candidates.add(object.point);
+        case Object3DType.line:
+          candidates.addAll([object.pointA, object.pointB]);
+          addSegmentCandidate(object.pointA, object.pointB);
+        case Object3DType.surface:
+        case Object3DType.polyhedron:
+        case Object3DType.curve:
+          candidates.addAll(object.vertices);
+          for (var i = 1; i < object.vertices.length; i++) {
+            addSegmentCandidate(object.vertices[i - 1], object.vertices[i]);
+          }
+        case Object3DType.sphere:
+          candidates.add(object.sphereCenter);
+          final centerToRay = object.sphereCenter - ray.origin;
+          final alongRay = centerToRay.dot(ray.direction);
+          final closest = ray.origin + ray.direction * alongRay;
+          final distanceToRay = closest.distanceTo(object.sphereCenter);
+          final radius = object.sphereRadius.abs();
+          if (distanceToRay <= radius && alongRay >= 0) {
+            final offset = dart_math.sqrt(
+              dart_math.max(
+                  0.0, radius * radius - distanceToRay * distanceToRay),
+            );
+            final hitDistance = dart_math.max(0.0, alongRay - offset);
+            surfaceCandidates.add(ray.pointAt(hitDistance));
+          }
+        case Object3DType.vector:
+          candidates.addAll([object.point, object.point + object.vector]);
+          addSegmentCandidate(object.point, object.point + object.vector);
+        case Object3DType.plane:
+          final normal = Vector3D(
+            object.planeA,
+            object.planeB,
+            object.planeC,
+          );
+          final normalSquared = normal.dot(normal);
+          if (normalSquared < 1e-12) break;
+          final planeOrigin = Point3D(
+            object.planeA * object.planeD / normalSquared,
+            object.planeB * object.planeD / normalSquared,
+            object.planeC * object.planeD / normalSquared,
+          );
+          final hit = intersectRayPlane(
+            ray,
+            point: planeOrigin,
+            normal: normal,
+          );
+          if (hit != null && hit.distanceTo(planeOrigin) <= 7.5) {
+            surfaceCandidates.add(hit);
+          }
+      }
+    }
+
+    Point3D? nearestIn(List<Point3D> points) {
+      Point3D? nearest;
+      var nearestDistance = 14.0;
+      for (final candidate in points) {
+        final screen = worldToScreen(candidate, camera, projection);
+        final dx = screen.x - screenX;
+        final dy = screen.y - screenY;
+        final pixelDistance = dart_math.sqrt(dx * dx + dy * dy);
+        if (pixelDistance < nearestDistance) {
+          nearestDistance = pixelDistance;
+          nearest = candidate;
+        }
+      }
+      return nearest;
+    }
+
+    return nearestIn(candidates) ?? nearestIn(surfaceCandidates);
+  }
+
+  Point3D _screenToConstructionPlane(
+    double screenX,
+    double screenY, {
+    required bool snap,
+    Vector3D? normalOverride,
+  }) {
+    if (snap) {
+      final snapped = _nearestSnappedPoint(screenX, screenY);
+      if (snapped != null) return snapped;
+    }
+
+    final ray = _screenRay(screenX, screenY);
+    final points = _construction?.points ?? const <Point3D>[];
+    final normal = normalOverride ??
+        (points.isEmpty ? Vector3D.unitZ : _constructionPlaneNormal);
+    final planePoint = points.isEmpty ? Point3D.origin : points.last;
+    final hit = intersectRayPlane(ray, point: planePoint, normal: normal);
+    if (hit != null) return hit;
+
+    final ground = intersectRayPlane(
+      ray,
+      point: Point3D.origin,
+      normal: Vector3D.unitZ,
+    );
+    if (ground != null) return ground;
+
+    // In a front or side view the camera ray is parallel to xOy. Choose the
+    // visible vertical coordinate plane so a click still carries both a
+    // horizontal and a vertical coordinate instead of collapsing to target.
+    final verticalNormal = ray.direction.x.abs() > ray.direction.y.abs()
+        ? Vector3D.unitX
+        : Vector3D.unitY;
+    final verticalPlane = intersectRayPlane(
+      ray,
+      point: _cameraTarget,
+      normal: verticalNormal,
+    );
+    return verticalPlane ?? _cameraTarget;
+  }
+
+  Point3D _constructionPointForDrag(Offset focalPoint) {
+    final points = _construction?.points ?? const <Point3D>[];
+    if (points.isNotEmpty) {
+      final point = _screenToConstructionPlane(
+        focalPoint.dx,
+        focalPoint.dy,
+        snap: true,
+        normalOverride: _constPlaneNormal,
+      );
+      return _snapToConstructionGeometry(point);
+    }
+
+    final pixelsPerWorldUnit =
+        _canvasHeight / (_cameraDistance * _orthographicDistanceScale * 2);
+    _constHeight = -((focalPoint.dy - (_constStartPoint?.dy ?? focalPoint.dy)) /
+        pixelsPerWorldUnit);
+    final base = _constGroundPos ?? Point3D.origin;
+    return _snapToConstructionGeometry(
+      Point3D(base.x, base.y, base.z + _constHeight),
+    );
+  }
+
+  Point3D _snapToConstructionGeometry(Point3D point) {
+    double snap(double value) {
+      final step = value.abs() < 5 ? 0.5 : 1.0;
+      final rounded = (value / step).round() * step;
+      return (value - rounded).abs() < 0.08 ? rounded : value;
+    }
+
+    final points = _construction?.points ?? const <Point3D>[];
+    final normal = _constPlaneNormal;
+    if (points.isNotEmpty && normal != null && normal.magnitude > 1e-9) {
+      final view = camera.viewMatrix();
+      final right = Vector3D(view[0], view[4], view[8]).normalized();
+      final up = right.cross(normal).normalized();
+      final anchor = points.last;
+      final relative = point - anchor;
+      final snappedU = snap(relative.dot(right));
+      final snappedV = snap(relative.dot(up));
+      return anchor + right * snappedU + up * snappedV;
+    }
+
+    return Point3D(snap(point.x), snap(point.y), snap(point.z));
+  }
+
+  void _updateConstructionPreview(Point3D? point) {
+    if (point == null || _construction == null) return;
+    setState(() {
+      _construction!.updatePreviewPoint(
+        point,
+        workingPlaneNormal: _constPlaneNormal,
+      );
+      _constructionPreview = _construction?.previewObject;
+      _objectsVersion++;
+    });
   }
 
   /// Handle a placed 3D point during construction.
@@ -688,7 +890,10 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   void _handleConstructionPoint(Point3D worldPt) {
     if (_construction == null) return;
 
-    final action = _construction!.addPoint(worldPt);
+    final action = _construction!.addPoint(
+      worldPt,
+      workingPlaneNormal: _constPlaneNormal,
+    );
     switch (action) {
       case ConstructionAction.complete:
         final obj = _construction!.result;
