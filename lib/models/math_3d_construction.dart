@@ -77,15 +77,22 @@ class ConstructionState {
 
       case ConstructionTool.point:
         // Single click = point is placed
-        _result = Object3D.point(point,
-            color: 0xFF2196F3, label: 'P${_points.length}');
+        _result = Object3D.point(
+          point,
+          color: 0xFF2196F3,
+          label: 'P${_points.length}',
+        );
         _updatePreview();
         return ConstructionAction.complete;
 
       case ConstructionTool.line:
         if (_points.length >= 2) {
-          _result = Object3D.line(_points[0], _points[1],
-              color: 0xFF4CAF50, label: 'Line${_points.length}');
+          _result = Object3D.line(
+            _points[0],
+            _points[1],
+            color: 0xFF4CAF50,
+            label: 'Line${_points.length}',
+          );
           _updatePreview();
           return ConstructionAction.complete;
         }
@@ -155,14 +162,46 @@ class ConstructionState {
       case ConstructionTool.cylinder:
         // These need an existing polygon/base and a height point
         if (_points.length >= 2) {
-          _result = Object3D.line(_points[0], _points[1],
-              color: 0xFFFF9800, label: tool.name);
+          _result = Object3D.line(
+            _points[0],
+            _points[1],
+            color: 0xFFFF9800,
+            label: tool.name,
+          );
           _updatePreview();
           return ConstructionAction.complete;
         }
         _updatePreview();
         return ConstructionAction.advanceStep;
     }
+  }
+
+  /// Update the transient preview without committing a construction point.
+  ///
+  /// This is deliberately separate from [addPoint]: a drag should show the
+  /// object being built, while only pointer-up advances the workflow.
+  void updatePreviewPoint(Point3D point) {
+    if (_points.isEmpty) {
+      _previewObject = Object3D.point(point, color: 0x60808080);
+      return;
+    }
+
+    final start = _points.last;
+    switch (tool) {
+      case ConstructionTool.sphere:
+      case ConstructionTool.circle:
+      case ConstructionTool.line:
+      case ConstructionTool.cube:
+        _previewObject = Object3D.line(start, point, color: 0x60808080);
+        return;
+      default:
+        _previewObject = Object3D.line(start, point, color: 0x60808080);
+    }
+  }
+
+  /// Remove a transient preview after a gesture ends or a tool is cancelled.
+  void clearPreview() {
+    _previewObject = null;
   }
 
   /// Create a preview line or marker showing the current state.
@@ -235,23 +274,22 @@ class ConstructionState {
 
     for (int i = 0; i <= segments; i++) {
       final theta = 2 * dart_math.pi * i / segments;
-      final x = center.x +
+      final x =
+          center.x +
           radius *
               (dart_math.cos(theta) * dir.x + dart_math.sin(theta) * perp.x);
-      final y = center.y +
+      final y =
+          center.y +
           radius *
               (dart_math.cos(theta) * dir.y + dart_math.sin(theta) * perp.y);
-      final z = center.z +
+      final z =
+          center.z +
           radius *
               (dart_math.cos(theta) * dir.z + dart_math.sin(theta) * perp.z);
       points.add(Point3D(x, y, z));
     }
 
-    return Object3D.curve(
-      points: points,
-      color: 0xFF2196F3,
-      label: 'Circle',
-    );
+    return Object3D.curve(points: points, color: 0xFF2196F3, label: 'Circle');
   }
 
   /// Create a cube from two base edge points.

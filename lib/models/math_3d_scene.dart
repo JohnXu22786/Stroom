@@ -18,6 +18,35 @@ class ScreenPoint {
   String toString() => 'Screen($x, $y, z=$z)';
 }
 
+/// A ray in world space, used by the construction tools to turn a screen
+/// gesture into a point on a working plane.
+class Ray3D {
+  final Point3D origin;
+  final Vector3D direction;
+
+  const Ray3D(this.origin, this.direction);
+
+  Point3D pointAt(double distance) => origin + direction * distance;
+}
+
+/// Intersect a world-space ray with an infinite plane.
+///
+/// Returns null when the ray is parallel to the plane or the hit is behind
+/// the ray origin. Keeping this in the scene math makes construction input
+/// testable without needing a Flutter canvas.
+Point3D? intersectRayPlane(
+  Ray3D ray, {
+  required Point3D point,
+  required Vector3D normal,
+}) {
+  final denominator = ray.direction.dot(normal);
+  if (denominator.abs() < 1e-10) return null;
+
+  final distance = (point - ray.origin).dot(normal) / denominator;
+  if (!distance.isFinite || distance < 0) return null;
+  return ray.pointAt(distance);
+}
+
 // ======================================================================
 // Camera3D: Spherical-coordinate orbiting camera
 // ======================================================================

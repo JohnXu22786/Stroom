@@ -71,7 +71,7 @@ class ToolInfo {
       tool: ConstructionTool.point,
       name: '点',
       iconData: Icons.fiber_manual_record,
-      tooltip: '点击放置点（按住拖拽调整高度）',
+      tooltip: '点击放置点；拖拽可调整空间高度，靠近对象时自动吸附',
       group: 1,
     ),
     ConstructionTool.line: ToolInfo(
@@ -99,7 +99,7 @@ class ToolInfo {
       tool: ConstructionTool.sphere,
       name: '球体',
       iconData: Icons.language,
-      tooltip: '点击球心，再点击球面点',
+      tooltip: '点击球心，再在空间工作平面拖拽半径点',
       group: 5,
     ),
     ConstructionTool.circle: ToolInfo(
@@ -173,8 +173,9 @@ class ConstructionWorkflow {
       tool: ConstructionTool.point,
       steps: [
         ConstructionStep(
-          instruction: '点击放置点（按住拖拽调整z坐标）',
-          instructionEn: 'Click to place point (drag to adjust z)',
+          instruction: '点击或拖拽放置空间点（靠近对象会自动吸附）',
+          instructionEn:
+              'Click or drag to place a spatial point (snaps near objects)',
           clickCount: 1,
         ),
       ],
