@@ -3,7 +3,6 @@ import 'dart:math' as dart_math;
 import 'package:flutter/material.dart';
 
 import '../models/math_3d_object.dart';
-import '../models/math_3d_tool.dart';
 import '../models/math_drawing_state.dart';
 import '../models/math_expression.dart' show MathExpression;
 import '../models/math_expression_3d.dart';
@@ -49,12 +48,14 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     _tabController.addListener(_onTabChanged);
 
     // Start with one formula row
-    _formulas.add(_FormulaState(
-      controller: TextEditingController(text: widget.initialExpression ?? ''),
-      color: formulaPalette[0],
-      autoColor: true,
-      visible: true,
-    ));
+    _formulas.add(
+      _FormulaState(
+        controller: TextEditingController(text: widget.initialExpression ?? ''),
+        color: formulaPalette[0],
+        autoColor: true,
+        visible: true,
+      ),
+    );
   }
 
   @override
@@ -70,8 +71,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   void _onTabChanged() {
     if (!_tabController.indexIsChanging) {
       setState(() {
-        _currentView =
-            _tabController.index == 0 ? ViewMode.mode2D : ViewMode.mode3D;
+        _currentView = _tabController.index == 0
+            ? ViewMode.mode2D
+            : ViewMode.mode3D;
       });
     }
   }
@@ -108,12 +110,14 @@ class _MathDrawingPageState extends State<MathDrawingPage>
         _showError(parsed.parseError ?? '表达式错误: $text');
         return;
       }
-      entries.add(FormulaEntry(
-        rawExpression: text,
-        parsed: parsed,
-        color: f.color,
-        autoColor: f.autoColor,
-      ));
+      entries.add(
+        FormulaEntry(
+          rawExpression: text,
+          parsed: parsed,
+          color: f.color,
+          autoColor: f.autoColor,
+        ),
+      );
     }
     if (entries.isEmpty) {
       _canvasKey.currentState?.setFormulas([]);
@@ -137,7 +141,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       if (text.isEmpty) continue;
       if (!f.visible) continue;
 
-      final colorInt = f.color.value;
+      final colorInt = f.color.toARGB32();
 
       // Try parsing as 3D surface z = f(x, y)
       final surfaceExpr = Expression3D.surface(text);
@@ -151,29 +155,31 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           gridY: 30,
         );
         if (mesh.vertices.isNotEmpty) {
-          objects.add(Object3D.surface(
-            vertices: mesh.vertices,
-            indices: mesh.indices,
-            normals: mesh.normals,
-            color: colorInt,
-            opacity: 0.85,
-            label: text,
-          ));
+          objects.add(
+            Object3D.surface(
+              vertices: mesh.vertices,
+              indices: mesh.indices,
+              normals: mesh.normals,
+              color: colorInt,
+              opacity: 0.85,
+              label: text,
+            ),
+          );
           continue;
         }
       }
 
       // Try parsing as parametric curve
-      final curveExpr =
-          Expression3D.parametricCurve(text, tMax: 2 * dart_math.pi);
+      final curveExpr = Expression3D.parametricCurve(
+        text,
+        tMax: 2 * dart_math.pi,
+      );
       if (curveExpr.isValid) {
         final points = curveExpr.sampleCurve(numSamples: 100);
         if (points.isNotEmpty) {
-          objects.add(Object3D.curve(
-            points: points,
-            color: colorInt,
-            label: text,
-          ));
+          objects.add(
+            Object3D.curve(points: points, color: colorInt, label: text),
+          );
           continue;
         }
       }
@@ -197,17 +203,21 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   }
 
   void _addFormula() {
-    final used =
-        _formulas.where((f) => f.autoColor).map((f) => f.color).toSet();
+    final used = _formulas
+        .where((f) => f.autoColor)
+        .map((f) => f.color)
+        .toSet();
     final color = nextFormulaColor(used);
 
     setState(() {
-      _formulas.add(_FormulaState(
-        controller: TextEditingController(),
-        color: color,
-        autoColor: true,
-        visible: true,
-      ));
+      _formulas.add(
+        _FormulaState(
+          controller: TextEditingController(),
+          color: color,
+          autoColor: true,
+          visible: true,
+        ),
+      );
     });
   }
 
@@ -237,8 +247,10 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               Navigator.pop(ctx);
               _removeFormula(index);
             },
-            child: Text('删除',
-                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            child: Text(
+              '删除',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
           ),
         ],
       ),
@@ -302,11 +314,13 @@ class _MathDrawingPageState extends State<MathDrawingPage>
 
   void _showError(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 2),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   void _onResetView() {
@@ -345,10 +359,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           Expanded(
             child: IndexedStack(
               index: _currentView == ViewMode.mode2D ? 0 : 1,
-              children: [
-                _buildCanvas(cs),
-                _build3DCanvas(cs),
-              ],
+              children: [_buildCanvas(cs), _build3DCanvas(cs)],
             ),
           ),
         ],
@@ -363,17 +374,25 @@ class _MathDrawingPageState extends State<MathDrawingPage>
         controller: _tabController,
         tabs: const [
           Tab(
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.show_chart, size: 18),
-            SizedBox(width: 6),
-            Text('2D 绘图'),
-          ])),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.show_chart, size: 18),
+                SizedBox(width: 6),
+                Text('2D 绘图'),
+              ],
+            ),
+          ),
           Tab(
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.view_in_ar, size: 18),
-            SizedBox(width: 6),
-            Text('3D'),
-          ])),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.view_in_ar, size: 18),
+                SizedBox(width: 6),
+                Text('3D'),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -397,7 +416,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
 
   Widget _buildFormulaRow(ColorScheme cs, int index) {
     final f = _formulas[index];
-    final hasChanged = f.controller.text.trim().isNotEmpty &&
+    final hasChanged =
+        f.controller.text.trim().isNotEmpty &&
         f.controller.text.trim() != f.committedText;
 
     return Padding(
@@ -416,8 +436,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               decoration: BoxDecoration(
                 color: f.color,
                 shape: BoxShape.circle,
-                border:
-                    hasChanged ? Border.all(color: cs.primary, width: 2) : null,
+                border: hasChanged
+                    ? Border.all(color: cs.primary, width: 2)
+                    : null,
               ),
             ),
           ),
@@ -431,17 +452,23 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               decoration: InputDecoration(
                 hintText: '公式 ${index + 1}',
                 isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 6,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
                 filled: true,
                 fillColor: f.color.withValues(alpha: 0.06),
                 // Undo button: appears only when text has been modified
                 suffixIcon: hasChanged
                     ? IconButton(
-                        icon: Icon(Icons.undo,
-                            size: 16, color: cs.onSurfaceVariant),
+                        icon: Icon(
+                          Icons.undo,
+                          size: 16,
+                          color: cs.onSurfaceVariant,
+                        ),
                         tooltip: '撤销修改',
                         onPressed: () {
                           f.controller.text = f.committedText;
@@ -451,8 +478,10 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                           setState(() {});
                         },
                         padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints(minWidth: 24, minHeight: 24),
+                        constraints: const BoxConstraints(
+                          minWidth: 24,
+                          minHeight: 24,
+                        ),
                       )
                     : null,
               ),
@@ -503,8 +532,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           _buildActionButton(
             icon: Icons.check_circle_outline,
             iconSize: 20,
-            color:
-                hasChanged ? cs.primary : cs.onSurface.withValues(alpha: 0.2),
+            color: hasChanged
+                ? cs.primary
+                : cs.onSurface.withValues(alpha: 0.2),
             tooltip: '绘制',
             onPressed: _canPlot ? _plotAll : null,
           ),
@@ -567,11 +597,13 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             onError: (msg) {
               debugPrint('[MathDrawing] Canvas error: $msg');
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text(msg),
-                  behavior: SnackBarBehavior.floating,
-                  duration: const Duration(seconds: 3),
-                ));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(msg),
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
               }
             },
           ),
@@ -592,7 +624,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           activeTool: _current3DTool,
           instruction: _current3DTool != ConstructionTool.move
               ? (_canvas3DKey.currentState?.constructionInstruction ??
-                  _toolInstruction)
+                    _toolInstruction)
               : null,
           onToolSelected: (tool) {
             setState(() {
@@ -602,8 +634,6 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             _canvas3DKey.currentState?.setTool(tool);
           },
         ),
-        // View settings row (projection, axes, grid)
-        if (_current3DTool == ConstructionTool.move) _buildViewSettingsRow(cs),
         // 3D canvas
         Expanded(
           child: Padding(
@@ -621,9 +651,10 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                   onReady: () {},
                   onViewportChange: () {},
                   onObjectCreated: (obj) {
-                    _canvas3DKey.currentState?.setObjects(
-                      [...?_canvas3DKey.currentState?.objects, obj],
-                    );
+                    _canvas3DKey.currentState?.setObjects([
+                      ...?_canvas3DKey.currentState?.objects,
+                      obj,
+                    ]);
                   },
                   onToolInstruction: (instruction) {
                     setState(() {
@@ -636,91 +667,6 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildViewSettingsRow(ColorScheme cs) {
-    final state3D = _canvas3DKey.currentState;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            // Projection toggle
-            _buildToolButton(
-              icon: state3D?.projectionType == ProjectionType.perspective
-                  ? Icons.view_in_ar
-                  : Icons.grid_3x3,
-              tooltip: '切换投影类型',
-              onPressed: () {
-                final current =
-                    state3D?.projectionType ?? ProjectionType.parallel;
-                state3D?.setProjectionType(
-                  current == ProjectionType.parallel
-                      ? ProjectionType.perspective
-                      : ProjectionType.parallel,
-                );
-                setState(() {});
-              },
-            ),
-            const SizedBox(width: 4),
-            // Reset view
-            _buildToolButton(
-              icon: Icons.center_focus_strong,
-              tooltip: '重置视图',
-              onPressed: () => state3D?.resetView(),
-            ),
-            const SizedBox(width: 4),
-            // Toggle axes
-            _buildToolButton(
-              icon: Icons.crop_square,
-              tooltip: '显示/隐藏坐标轴',
-              isActive: state3D?.showAxes ?? true,
-              onPressed: () {
-                state3D?.toggleAxes();
-                setState(() {});
-              },
-            ),
-            const SizedBox(width: 4),
-            // Toggle grid
-            _buildToolButton(
-              icon: Icons.grid_on,
-              tooltip: '显示/隐藏网格',
-              isActive: state3D?.showGrid ?? true,
-              onPressed: () {
-                state3D?.toggleGrid();
-                setState(() {});
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildToolButton({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onPressed,
-    bool isActive = true,
-  }) {
-    return IconButton(
-      icon: Icon(icon, size: 20),
-      tooltip: tooltip,
-      onPressed: onPressed,
-      style: ButtonStyle(
-        backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-          if (states.contains(WidgetState.pressed)) return null;
-          return isActive ? null : Colors.grey.withValues(alpha: 0.1);
-        }),
-        foregroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-          return isActive ? null : Colors.grey;
-        }),
-      ),
-      visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints(
-          minWidth: 36, minHeight: 36, maxWidth: 36, maxHeight: 36),
     );
   }
 }

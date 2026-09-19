@@ -63,8 +63,8 @@ class ToolInfo {
     ConstructionTool.move: ToolInfo(
       tool: ConstructionTool.move,
       name: '移动',
-      iconData: Icons.pan_tool,
-      tooltip: '拖拽旋转视图',
+      iconData: Icons.near_me_outlined,
+      tooltip: '拖拽旋转；Shift/Ctrl+拖拽平移；右键拖拽始终旋转',
       group: 0,
     ),
     ConstructionTool.point: ToolInfo(
@@ -166,10 +166,7 @@ class ConstructionWorkflow {
   final ConstructionTool tool;
   final List<ConstructionStep> steps;
 
-  const ConstructionWorkflow({
-    required this.tool,
-    required this.steps,
-  });
+  const ConstructionWorkflow({required this.tool, required this.steps});
 
   static const Map<ConstructionTool, ConstructionWorkflow> workflows = {
     ConstructionTool.point: ConstructionWorkflow(
