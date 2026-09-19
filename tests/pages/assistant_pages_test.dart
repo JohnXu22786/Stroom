@@ -8,6 +8,7 @@ import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/built_in_prompts.dart';
 import 'package:stroom/pages/assistant_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
+import 'package:stroom/widgets/llm/assistant_avatar.dart';
 
 /// Creates a test app wrapped in ProviderScope with optional overrides.
 Widget createTestApp({
@@ -358,6 +359,32 @@ void main() {
 
       // But the prompt text should NOT be visible on the card
       expect(find.text(promptText), findsNothing);
+    });
+
+    testWidgets('assistant avatar stays centered after adding card menu', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createTestApp(
+          assistants: [
+            Assistant(
+              name: '居中助手',
+              prompt: 'P1',
+              emoji: '🤖',
+              description: '用于验证卡片内容布局',
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final cardRect = tester.getRect(find.byType(AssistantCard));
+      final avatarRect = tester.getRect(find.byType(AssistantAvatar));
+      expect(
+        (avatarRect.center.dx - cardRect.center.dx).abs(),
+        lessThan(1),
+        reason: 'assistant avatar should remain horizontally centered in card',
+      );
     });
 
     testWidgets('wide screen shows more columns than narrow screen', (
