@@ -308,9 +308,8 @@ class Projection3D {
       final focalScale = 1 / dart_math.tan(fovRad / 2);
       // Camera space looks down -Z. Keep values finite for points on or
       // behind the eye plane; clipping is handled by the painter.
-      final safeDepth = depth.abs() < 1e-9
-          ? (depth.isNegative ? -1e-9 : 1e-9)
-          : depth;
+      final safeDepth =
+          depth.abs() < 1e-9 ? (depth.isNegative ? -1e-9 : 1e-9) : depth;
       final ndcX = worldPoint.x * focalScale / (aspect * safeDepth);
       final ndcY = worldPoint.y * focalScale / safeDepth;
       return ScreenPoint(
@@ -333,7 +332,7 @@ class Projection3D {
 
 /// A 3D scene containing objects, a camera, and projection settings.
 class Scene3D {
-  final Camera3D camera;
+  Camera3D camera;
   final List<Object3D> _objects = [];
 
   Scene3D({Camera3D? camera}) : camera = camera ?? Camera3D();
@@ -451,8 +450,19 @@ class Scene3D {
 
     if (!minX.isFinite) return;
 
-    // Update camera (since camera is final, we'd need a new Scene3D)
-    // For now, this is a utility method — caller applies the result.
+    final center = Point3D(
+      (minX + maxX) / 2,
+      (minY + maxY) / 2,
+      (minZ + maxZ) / 2,
+    );
+    final maxExtent = dart_math.max(
+      dart_math.max(maxX - minX, maxY - minY),
+      maxZ - minZ,
+    );
+    camera = camera.copyWith(
+      target: center,
+      distance: dart_math.max(4, maxExtent * 1.35),
+    );
   }
 }
 
@@ -494,18 +504,15 @@ List<double> multiplyMatrix4(List<double> a, List<double> b) {
 /// Returns the transformed point in homogeneous space (z is the w component
 /// for perspective divide).
 Point3D _transformPoint(List<double> matrix, Point3D point) {
-  final x =
-      matrix[0] * point.x +
+  final x = matrix[0] * point.x +
       matrix[4] * point.y +
       matrix[8] * point.z +
       matrix[12];
-  final y =
-      matrix[1] * point.x +
+  final y = matrix[1] * point.x +
       matrix[5] * point.y +
       matrix[9] * point.z +
       matrix[13];
-  final z =
-      matrix[2] * point.x +
+  final z = matrix[2] * point.x +
       matrix[6] * point.y +
       matrix[10] * point.z +
       matrix[14];

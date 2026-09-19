@@ -93,6 +93,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
   // Construction state
   ConstructionState? _construction;
+  Object3D? _constructionPreview;
   ConstructionTool _currentTool = ConstructionTool.move;
 
   // Construction gesture tracking (for 3D point placement with height)
@@ -104,7 +105,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   // Gesture state
   Offset? _lastFocalPoint;
   double?
-  _initialScaleDistance; // camera distance at gesture start (for stable zoom)
+      _initialScaleDistance; // camera distance at gesture start (for stable zoom)
   final FocusNode _focusNode = FocusNode(debugLabel: 'MathCanvas3D');
   int? _mousePointer;
   Offset? _lastMousePosition;
@@ -122,11 +123,11 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
   /// Get the current camera state.
   Camera3D get camera => Camera3D(
-    target: _cameraTarget,
-    distance: _cameraDistance,
-    theta: _cameraTheta,
-    phi: _cameraPhi,
-  );
+        target: _cameraTarget,
+        distance: _cameraDistance,
+        theta: _cameraTheta,
+        phi: _cameraPhi,
+      );
 
   /// Get the current projection type.
   ProjectionType get projectionType => _projectionType;
@@ -148,6 +149,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     setState(() {
       _projectionType = type;
     });
+    widget.onViewportChange?.call();
   }
 
   /// Toggle axis visibility.
@@ -295,6 +297,9 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   /// Get the current construction state (null if no tool is active).
   ConstructionState? get constructionState => _construction;
 
+  /// Get the transient object shown while the active tool awaits input.
+  Object3D? get constructionPreview => _constructionPreview;
+
   /// Get the active construction tool.
   ConstructionTool get activeTool => _currentTool;
 
@@ -307,12 +312,15 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       _currentTool = tool;
       if (tool == ConstructionTool.move) {
         _construction = null;
+        _constructionPreview = null;
       } else {
         _construction = ConstructionState(tool: tool);
+        _constructionPreview = null;
       }
       _constPointPlaced = false;
       _constGroundPos = null;
       _constStartPoint = null;
+      _constructionPreview = null;
     });
     widget.onToolInstruction?.call(_construction?.currentInstruction ?? '');
   }
@@ -375,8 +383,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     _mouseGesture = secondary
         ? _NavigationGesture.orbit
         : (_panModifierPressed
-              ? _NavigationGesture.pan
-              : _NavigationGesture.orbit);
+            ? _NavigationGesture.pan
+            : _NavigationGesture.orbit);
   }
 
   void _onPointerMove(PointerMoveEvent event) {
@@ -472,6 +480,9 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       );
       _constHeight = 0;
       _constPointPlaced = false;
+      _constructionPreview = _construction?.previewForPoint(
+        _constGroundPos ?? Point3D.origin,
+      );
     }
   }
 
@@ -490,6 +501,9 @@ class MathCanvas3DState extends State<MathCanvas3D> {
             _canvasHeight / (_cameraDistance * _orthographicDistanceScale * 2);
         _constHeight =
             -((focalPoint.dy - _constStartPoint!.dy) / pixelsPerWorldUnit);
+        _constructionPreview = _construction?.previewForPoint(
+          Point3D(_constGroundPos!.x, _constGroundPos!.y, _constHeight),
+        );
       }
       _lastFocalPoint = focalPoint;
       return; // Don't orbit during construction
@@ -498,19 +512,16 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     // ===== Standard orbit/pan/zoom (Move tool or no construction active)
     if (details.pointerCount == 1) {
       // Single finger: orbit
-      final dx = _lastFocalPoint == null
-          ? 0.0
-          : (focalPoint.dx - _lastFocalPoint!.dx);
-      final dy = _lastFocalPoint == null
-          ? 0.0
-          : (focalPoint.dy - _lastFocalPoint!.dy);
+      final dx =
+          _lastFocalPoint == null ? 0.0 : (focalPoint.dx - _lastFocalPoint!.dx);
+      final dy =
+          _lastFocalPoint == null ? 0.0 : (focalPoint.dy - _lastFocalPoint!.dy);
 
       _orbitBy(Offset(dx, dy));
     } else if (details.pointerCount >= 2) {
       // GeoGebra combines two-finger translation and pinch in one gesture.
-      final delta = _lastFocalPoint == null
-          ? Offset.zero
-          : focalPoint - _lastFocalPoint!;
+      final delta =
+          _lastFocalPoint == null ? Offset.zero : focalPoint - _lastFocalPoint!;
       final startDistance = _initialScaleDistance ?? _cameraDistance;
       final newDistance = (startDistance / scale).clamp(0.25, 500.0).toDouble();
       final panned = Camera3D(
@@ -574,6 +585,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     _lastFocalPoint = null;
     _constStartPoint = null;
     _constGroundPos = null;
+    _constructionPreview = null;
     widget.onViewportChange?.call();
   }
 
@@ -593,9 +605,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
   void _onPointerPanZoomUpdate(PointerPanZoomUpdateEvent event) {
     final initialDistance = _panZoomInitialDistance ?? _cameraDistance;
-    final newDistance = (initialDistance / event.scale)
-        .clamp(0.25, 500.0)
-        .toDouble();
+    final newDistance =
+        (initialDistance / event.scale).clamp(0.25, 500.0).toDouble();
     final panned = Camera3D(
       target: _cameraTarget,
       distance: newDistance,
@@ -652,11 +663,10 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     } else {
       final tanHalfFov = dart_math.tan(dart_math.pi / 6); // 60° FOV
       rayOrigin = pos;
-      rayDirection =
-          (forward +
-                  right * (ndcX * tanHalfFov * aspect) +
-                  up * (ndcY * tanHalfFov))
-              .normalized();
+      rayDirection = (forward +
+              right * (ndcX * tanHalfFov * aspect) +
+              up * (ndcY * tanHalfFov))
+          .normalized();
     }
 
     if (rayDirection.z.abs() < 1e-10) {
@@ -705,6 +715,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
     // Update preview objects
     _objectsVersion++;
+    _constructionPreview = _construction?.previewObject;
   }
 
   // ==================================================================
@@ -778,87 +789,87 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   }
 
   List<PopupMenuEntry<_ViewAction>> _viewMenuItems() => [
-    _menuToggle(
-      value: _ViewAction.toggleAxes,
-      icon: Icons.straighten,
-      label: '坐标轴',
-      selected: _showAxes,
-    ),
-    _menuToggle(
-      value: _ViewAction.togglePlane,
-      icon: Icons.crop_square,
-      label: 'xOy 平面',
-      selected: _showPlane,
-    ),
-    _menuToggle(
-      value: _ViewAction.toggleGrid,
-      icon: Icons.grid_on,
-      label: '网格',
-      selected: _showGrid,
-    ),
-    const PopupMenuDivider(),
-    PopupMenuItem(
-      value: _ViewAction.parallelProjection,
-      child: Row(
-        children: [
-          const Icon(Icons.view_in_ar, size: 20),
-          const SizedBox(width: 12),
-          const Expanded(child: Text('平行投影')),
-          if (_projectionType == ProjectionType.parallel)
-            const Icon(Icons.check, size: 18),
-        ],
-      ),
-    ),
-    PopupMenuItem(
-      value: _ViewAction.perspectiveProjection,
-      child: Row(
-        children: [
-          const Icon(Icons.vrpano, size: 20),
-          const SizedBox(width: 12),
-          const Expanded(child: Text('透视投影')),
-          if (_projectionType == ProjectionType.perspective)
-            const Icon(Icons.check, size: 18),
-        ],
-      ),
-    ),
-    const PopupMenuDivider(),
-    const PopupMenuItem(
-      value: _ViewAction.standardView,
-      child: ListTile(
-        dense: true,
-        contentPadding: EdgeInsets.zero,
-        leading: Icon(Icons.home_outlined, size: 20),
-        title: Text('标准视图'),
-      ),
-    ),
-    const PopupMenuItem(
-      value: _ViewAction.topView,
-      child: ListTile(
-        dense: true,
-        contentPadding: EdgeInsets.zero,
-        leading: Icon(Icons.vertical_align_bottom, size: 20),
-        title: Text('俯视 xOy'),
-      ),
-    ),
-    const PopupMenuItem(
-      value: _ViewAction.frontView,
-      child: ListTile(
-        dense: true,
-        contentPadding: EdgeInsets.zero,
-        leading: Icon(Icons.crop_landscape, size: 20),
-        title: Text('正视 xOz'),
-      ),
-    ),
-    const PopupMenuItem(
-      value: _ViewAction.sideView,
-      child: ListTile(
-        dense: true,
-        contentPadding: EdgeInsets.zero,
-        leading: Icon(Icons.crop_portrait, size: 20),
-        title: Text('侧视 yOz'),
-      ),
-    ),
-  ];
+        _menuToggle(
+          value: _ViewAction.toggleAxes,
+          icon: Icons.straighten,
+          label: '坐标轴',
+          selected: _showAxes,
+        ),
+        _menuToggle(
+          value: _ViewAction.togglePlane,
+          icon: Icons.crop_square,
+          label: 'xOy 平面',
+          selected: _showPlane,
+        ),
+        _menuToggle(
+          value: _ViewAction.toggleGrid,
+          icon: Icons.grid_on,
+          label: '网格',
+          selected: _showGrid,
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: _ViewAction.parallelProjection,
+          child: Row(
+            children: [
+              const Icon(Icons.view_in_ar, size: 20),
+              const SizedBox(width: 12),
+              const Expanded(child: Text('平行投影')),
+              if (_projectionType == ProjectionType.parallel)
+                const Icon(Icons.check, size: 18),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: _ViewAction.perspectiveProjection,
+          child: Row(
+            children: [
+              const Icon(Icons.vrpano, size: 20),
+              const SizedBox(width: 12),
+              const Expanded(child: Text('透视投影')),
+              if (_projectionType == ProjectionType.perspective)
+                const Icon(Icons.check, size: 18),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: _ViewAction.standardView,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.home_outlined, size: 20),
+            title: Text('标准视图'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: _ViewAction.topView,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.vertical_align_bottom, size: 20),
+            title: Text('俯视 xOy'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: _ViewAction.frontView,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.crop_landscape, size: 20),
+            title: Text('正视 xOz'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: _ViewAction.sideView,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.crop_portrait, size: 20),
+            title: Text('侧视 yOz'),
+          ),
+        ),
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -906,6 +917,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
                           showPlane: _showPlane,
                           showGrid: _showGrid,
                           objects: _objects,
+                          constructionPreview: _constructionPreview,
                           objectsVersion: _objectsVersion,
                           canvasWidth: _canvasWidth,
                           canvasHeight: _canvasHeight,
@@ -986,6 +998,7 @@ class MathCanvas3DPainter extends CustomPainter {
   final bool showPlane;
   final bool showGrid;
   final List<Object3D> objects;
+  final Object3D? constructionPreview;
   final int objectsVersion;
   final double canvasWidth;
   final double canvasHeight;
@@ -1004,6 +1017,7 @@ class MathCanvas3DPainter extends CustomPainter {
     this.showPlane = true,
     this.showGrid = false,
     this.objects = const [],
+    this.constructionPreview,
     this.objectsVersion = 0,
     this.canvasWidth = 800,
     this.canvasHeight = 600,
@@ -1078,12 +1092,13 @@ class MathCanvas3DPainter extends CustomPainter {
     Camera3D camera,
     Projection3D projection,
   ) {
-    const extent = 6.0;
+    final extent = dart_math.max(6.0, camera.distance * 1.2);
+    final center = camera.target;
     final corners = [
-      const Point3D(-extent, -extent, 0),
-      const Point3D(extent, -extent, 0),
-      const Point3D(extent, extent, 0),
-      const Point3D(-extent, extent, 0),
+      Point3D(center.x - extent, center.y - extent, 0),
+      Point3D(center.x + extent, center.y - extent, 0),
+      Point3D(center.x + extent, center.y + extent, 0),
+      Point3D(center.x - extent, center.y + extent, 0),
     ].map((point) => worldToScreen(point, camera, projection)).toList();
     final path = Path()
       ..moveTo(corners[0].x, corners[0].y)
@@ -1109,24 +1124,46 @@ class MathCanvas3DPainter extends CustomPainter {
       ..color = gridColor
       ..strokeWidth = 0.5;
 
-    // Draw grid lines on the xOy-plane (z=0) from -10 to 10.
-    const gridRange = 10.0;
+    // Keep the grid around the view target so panning does not reveal a blank
+    // canvas while retaining the same world-unit spacing.
+    final gridRange = dart_math.max(10.0, camera.distance * 1.5);
+    final gridCenter = camera.target;
     const step = 1.0;
     final lines = <List<Offset>>[];
 
     // Lines along X (constant Y).
-    for (double y = -gridRange; y <= gridRange; y += step) {
-      if (y.abs() < 1e-10) continue;
-      final p1 = worldToScreen(Point3D(-gridRange, y, 0), camera, projection);
-      final p2 = worldToScreen(Point3D(gridRange, y, 0), camera, projection);
+    for (double y = gridCenter.y - gridRange;
+        y <= gridCenter.y + gridRange;
+        y += step) {
+      if ((y - gridCenter.y).abs() < 1e-10) continue;
+      final p1 = worldToScreen(
+        Point3D(gridCenter.x - gridRange, y, 0),
+        camera,
+        projection,
+      );
+      final p2 = worldToScreen(
+        Point3D(gridCenter.x + gridRange, y, 0),
+        camera,
+        projection,
+      );
       lines.add([Offset(p1.x, p1.y), Offset(p2.x, p2.y)]);
     }
 
     // Lines along Y (constant X).
-    for (double x = -gridRange; x <= gridRange; x += step) {
-      if (x.abs() < 1e-10) continue;
-      final p1 = worldToScreen(Point3D(x, -gridRange, 0), camera, projection);
-      final p2 = worldToScreen(Point3D(x, gridRange, 0), camera, projection);
+    for (double x = gridCenter.x - gridRange;
+        x <= gridCenter.x + gridRange;
+        x += step) {
+      if ((x - gridCenter.x).abs() < 1e-10) continue;
+      final p1 = worldToScreen(
+        Point3D(x, gridCenter.y - gridRange, 0),
+        camera,
+        projection,
+      );
+      final p2 = worldToScreen(
+        Point3D(x, gridCenter.y + gridRange, 0),
+        camera,
+        projection,
+      );
       lines.add([Offset(p1.x, p1.y), Offset(p2.x, p2.y)]);
     }
 
@@ -1198,8 +1235,7 @@ class MathCanvas3DPainter extends CustomPainter {
         final screen = worldToScreen(point, camera, projection);
         final axisDirection = (tipPt - startPt);
         if (axisDirection.distance < 1) continue;
-        final normal =
-            Offset(-axisDirection.dy, axisDirection.dx) /
+        final normal = Offset(-axisDirection.dy, axisDirection.dx) /
             axisDirection.distance;
         final center = Offset(screen.x, screen.y);
         canvas.drawLine(center - normal * 3, center + normal * 3, axisPaint);
@@ -1291,6 +1327,28 @@ class MathCanvas3DPainter extends CustomPainter {
           _collectVector(renderables, obj, camera, projection);
         case Object3DType.curve:
           _collectCurve(renderables, obj, camera, projection);
+      }
+    }
+
+    final preview = constructionPreview;
+    if (preview != null) {
+      switch (preview.type) {
+        case Object3DType.point:
+          _collectPoint(renderables, preview, camera, projection);
+        case Object3DType.line:
+          _collectLine(renderables, preview, camera, projection);
+        case Object3DType.plane:
+          _collectPlane(renderables, preview, camera, projection);
+        case Object3DType.surface:
+          _collectSurface(renderables, preview, camera, projection);
+        case Object3DType.sphere:
+          _collectSphere(renderables, preview, camera, projection);
+        case Object3DType.polyhedron:
+          _collectPolyhedron(renderables, preview, camera, projection);
+        case Object3DType.vector:
+          _collectVector(renderables, preview, camera, projection);
+        case Object3DType.curve:
+          _collectCurve(renderables, preview, camera, projection);
       }
     }
 
@@ -1728,7 +1786,9 @@ class MathCanvas3DPainter extends CustomPainter {
         oldDelegate.canvasHeight != canvasHeight ||
         oldDelegate.backgroundColor != backgroundColor ||
         oldDelegate.axisColor != axisColor ||
-        oldDelegate.gridColor != gridColor;
+        oldDelegate.gridColor != gridColor ||
+        oldDelegate.labelColor != labelColor ||
+        oldDelegate.constructionPreview != constructionPreview;
   }
 }
 

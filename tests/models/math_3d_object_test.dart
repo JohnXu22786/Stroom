@@ -107,6 +107,36 @@ void main() {
   });
 
   group('SurfaceMesh utility', () {
+    test('rejects empty grid dimensions', () {
+      expect(
+        () => SurfaceMesh.fromFunction(
+          xMin: -1,
+          xMax: 1,
+          yMin: -1,
+          yMax: 1,
+          gridX: 0,
+          gridY: 1,
+          f: (x, y) => x + y,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('rejects inverted or non-finite bounds', () {
+      expect(
+        () => SurfaceMesh.fromFunction(
+          xMin: 1,
+          xMax: -1,
+          yMin: -1,
+          yMax: 1,
+          gridX: 1,
+          gridY: 1,
+          f: (x, y) => x + y,
+        ),
+        throwsArgumentError,
+      );
+    });
+
     test('creates grid mesh for z = f(x,y) function', () {
       final mesh = SurfaceMesh.fromFunction(
         xMin: -1,
