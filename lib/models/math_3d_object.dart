@@ -452,6 +452,15 @@ class SurfaceMesh {
     required int gridY,
     required double Function(double x, double y) f,
   }) {
+    if (gridX < 1 || gridY < 1) {
+      throw ArgumentError('gridX and gridY must be at least 1');
+    }
+    if (![xMin, xMax, yMin, yMax].every((value) => value.isFinite) ||
+        xMin >= xMax ||
+        yMin >= yMax) {
+      throw ArgumentError('mesh bounds must be finite and increasing');
+    }
+
     final cols = gridX + 1;
     final rows = gridY + 1;
     final vertices = <Point3D>[];

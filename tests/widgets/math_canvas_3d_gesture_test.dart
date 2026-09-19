@@ -113,7 +113,8 @@ void main() {
       expect(state.camera.target, equals(Point3D.origin));
     });
 
-    testWidgets('right mouse drag always rotates like GeoGebra', (tester) async {
+    testWidgets('right mouse drag always rotates like GeoGebra',
+        (tester) async {
       final state = await setupCanvas(tester, tool: ConstructionTool.point);
       final initialTheta = state.camera.theta;
       final center = tester.getCenter(find.byType(MathCanvas3D));
@@ -130,7 +131,8 @@ void main() {
       expect(state.camera.theta, lessThan(initialTheta));
     });
 
-    testWidgets('Shift plus primary drag pans without orbiting', (tester) async {
+    testWidgets('Shift plus primary drag pans without orbiting',
+        (tester) async {
       final state = await setupCanvas(tester);
       final initialCamera = state.camera;
       final center = tester.getCenter(find.byType(MathCanvas3D));
@@ -283,6 +285,35 @@ void main() {
 
       expect(objects, hasLength(1));
       expect(objects.single.point.z, greaterThan(0));
+    });
+
+    testWidgets('construction gesture exposes a live preview', (tester) async {
+      final key = GlobalKey<MathCanvas3DState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 800,
+              height: 600,
+              child: MathCanvas3D(
+                key: key,
+                currentTool: ConstructionTool.line,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final center = tester.getCenter(find.byType(MathCanvas3D));
+      final gesture = await tester.startGesture(center);
+      await gesture.moveBy(const Offset(0, -20));
+      await tester.pump();
+
+      expect(key.currentState!.constructionPreview, isNotNull);
+      await gesture.up();
+      await tester.pump();
     });
 
     testWidgets('tapping twice in line tool creates a line object',

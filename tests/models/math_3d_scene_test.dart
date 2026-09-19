@@ -114,6 +114,17 @@ void main() {
       final scene = Scene3D();
       expect(scene.sceneCenter, equals(Point3D(0, 0, 0)));
     });
+
+    test('fitToView updates the camera around finite objects', () {
+      final scene = Scene3D();
+      scene.add(Object3D.point(const Point3D(10, 20, 30)));
+      scene.add(Object3D.point(const Point3D(14, 24, 34)));
+
+      scene.fitToView();
+
+      expect(scene.camera.target, equals(const Point3D(12, 22, 32)));
+      expect(scene.camera.distance, closeTo(5.4, 1e-10));
+    });
   });
 
   group('3D to 2D pipeline', () {
