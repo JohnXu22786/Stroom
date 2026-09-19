@@ -71,9 +71,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   void _onTabChanged() {
     if (!_tabController.indexIsChanging) {
       setState(() {
-        _currentView = _tabController.index == 0
-            ? ViewMode.mode2D
-            : ViewMode.mode3D;
+        _currentView =
+            _tabController.index == 0 ? ViewMode.mode2D : ViewMode.mode3D;
       });
     }
   }
@@ -203,10 +202,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   }
 
   void _addFormula() {
-    final used = _formulas
-        .where((f) => f.autoColor)
-        .map((f) => f.color)
-        .toSet();
+    final used =
+        _formulas.where((f) => f.autoColor).map((f) => f.color).toSet();
     final color = nextFormulaColor(used);
 
     setState(() {
@@ -416,8 +413,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
 
   Widget _buildFormulaRow(ColorScheme cs, int index) {
     final f = _formulas[index];
-    final hasChanged =
-        f.controller.text.trim().isNotEmpty &&
+    final hasChanged = f.controller.text.trim().isNotEmpty &&
         f.controller.text.trim() != f.committedText;
 
     return Padding(
@@ -436,9 +432,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               decoration: BoxDecoration(
                 color: f.color,
                 shape: BoxShape.circle,
-                border: hasChanged
-                    ? Border.all(color: cs.primary, width: 2)
-                    : null,
+                border:
+                    hasChanged ? Border.all(color: cs.primary, width: 2) : null,
               ),
             ),
           ),
@@ -532,9 +527,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           _buildActionButton(
             icon: Icons.check_circle_outline,
             iconSize: 20,
-            color: hasChanged
-                ? cs.primary
-                : cs.onSurface.withValues(alpha: 0.2),
+            color:
+                hasChanged ? cs.primary : cs.onSurface.withValues(alpha: 0.2),
             tooltip: '绘制',
             onPressed: _canPlot ? _plotAll : null,
           ),
@@ -624,7 +618,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           activeTool: _current3DTool,
           instruction: _current3DTool != ConstructionTool.move
               ? (_canvas3DKey.currentState?.constructionInstruction ??
-                    _toolInstruction)
+                  _toolInstruction)
               : null,
           onToolSelected: (tool) {
             setState(() {

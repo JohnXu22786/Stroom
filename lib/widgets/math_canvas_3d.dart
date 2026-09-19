@@ -93,6 +93,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
   // Construction state
   ConstructionState? _construction;
+  Object3D? _constructionPreview;
   ConstructionTool _currentTool = ConstructionTool.move;
 
   // Construction gesture tracking (for 3D point placement with height)
@@ -149,6 +150,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     setState(() {
       _projectionType = type;
     });
+    widget.onViewportChange?.call();
   }
 
   /// Toggle axis visibility.
@@ -296,6 +298,9 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   /// Get the current construction state (null if no tool is active).
   ConstructionState? get constructionState => _construction;
 
+  /// Get the transient object shown while the active tool awaits input.
+  Object3D? get constructionPreview => _constructionPreview;
+
   /// Get the active construction tool.
   ConstructionTool get activeTool => _currentTool;
 
@@ -308,13 +313,16 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       _currentTool = tool;
       if (tool == ConstructionTool.move) {
         _construction = null;
+        _constructionPreview = null;
       } else {
         _construction = ConstructionState(tool: tool);
+        _constructionPreview = null;
       }
       _constPointPlaced = false;
       _constGroundPos = null;
       _constStartPoint = null;
       _constPlaneNormal = null;
+      _constructionPreview = null;
     });
     widget.onToolInstruction?.call(_construction?.currentInstruction ?? '');
   }
@@ -581,6 +589,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     _constStartPoint = null;
     _constGroundPos = null;
     _constPlaneNormal = null;
+    _constructionPreview = null;
     widget.onViewportChange?.call();
   }
 
@@ -871,6 +880,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
         point,
         workingPlaneNormal: _constPlaneNormal,
       );
+      _constructionPreview = _construction?.previewObject;
       _objectsVersion++;
     });
   }
@@ -910,6 +920,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
     // Update preview objects
     _objectsVersion++;
+    _constructionPreview = _construction?.previewObject;
   }
 
   // ==================================================================
@@ -1073,9 +1084,6 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       builder: (context, constraints) {
         _canvasWidth = constraints.maxWidth;
         _canvasHeight = constraints.maxHeight;
-        final renderObjects = <Object3D>[..._objects];
-        final preview = _construction?.previewObject;
-        if (preview != null) renderObjects.add(preview);
 
         return Focus(
           focusNode: _focusNode,
@@ -1113,7 +1121,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
                           showAxes: _showAxes,
                           showPlane: _showPlane,
                           showGrid: _showGrid,
-                          objects: renderObjects,
+                          objects: _objects,
+                          constructionPreview: _constructionPreview,
                           objectsVersion: _objectsVersion,
                           canvasWidth: _canvasWidth,
                           canvasHeight: _canvasHeight,
@@ -1194,6 +1203,7 @@ class MathCanvas3DPainter extends CustomPainter {
   final bool showPlane;
   final bool showGrid;
   final List<Object3D> objects;
+  final Object3D? constructionPreview;
   final int objectsVersion;
   final double canvasWidth;
   final double canvasHeight;
@@ -1212,6 +1222,7 @@ class MathCanvas3DPainter extends CustomPainter {
     this.showPlane = true,
     this.showGrid = false,
     this.objects = const [],
+    this.constructionPreview,
     this.objectsVersion = 0,
     this.canvasWidth = 800,
     this.canvasHeight = 600,
@@ -1286,12 +1297,13 @@ class MathCanvas3DPainter extends CustomPainter {
     Camera3D camera,
     Projection3D projection,
   ) {
-    const extent = 6.0;
+    final extent = dart_math.max(6.0, camera.distance * 1.2);
+    final center = camera.target;
     final corners = [
-      const Point3D(-extent, -extent, 0),
-      const Point3D(extent, -extent, 0),
-      const Point3D(extent, extent, 0),
-      const Point3D(-extent, extent, 0),
+      Point3D(center.x - extent, center.y - extent, 0),
+      Point3D(center.x + extent, center.y - extent, 0),
+      Point3D(center.x + extent, center.y + extent, 0),
+      Point3D(center.x - extent, center.y + extent, 0),
     ].map((point) => worldToScreen(point, camera, projection)).toList();
     final path = Path()
       ..moveTo(corners[0].x, corners[0].y)
@@ -1317,24 +1329,46 @@ class MathCanvas3DPainter extends CustomPainter {
       ..color = gridColor
       ..strokeWidth = 0.5;
 
-    // Draw grid lines on the xOy-plane (z=0) from -10 to 10.
-    const gridRange = 10.0;
+    // Keep the grid around the view target so panning does not reveal a blank
+    // canvas while retaining the same world-unit spacing.
+    final gridRange = dart_math.max(10.0, camera.distance * 1.5);
+    final gridCenter = camera.target;
     const step = 1.0;
     final lines = <List<Offset>>[];
 
     // Lines along X (constant Y).
-    for (double y = -gridRange; y <= gridRange; y += step) {
-      if (y.abs() < 1e-10) continue;
-      final p1 = worldToScreen(Point3D(-gridRange, y, 0), camera, projection);
-      final p2 = worldToScreen(Point3D(gridRange, y, 0), camera, projection);
+    for (double y = gridCenter.y - gridRange;
+        y <= gridCenter.y + gridRange;
+        y += step) {
+      if ((y - gridCenter.y).abs() < 1e-10) continue;
+      final p1 = worldToScreen(
+        Point3D(gridCenter.x - gridRange, y, 0),
+        camera,
+        projection,
+      );
+      final p2 = worldToScreen(
+        Point3D(gridCenter.x + gridRange, y, 0),
+        camera,
+        projection,
+      );
       lines.add([Offset(p1.x, p1.y), Offset(p2.x, p2.y)]);
     }
 
     // Lines along Y (constant X).
-    for (double x = -gridRange; x <= gridRange; x += step) {
-      if (x.abs() < 1e-10) continue;
-      final p1 = worldToScreen(Point3D(x, -gridRange, 0), camera, projection);
-      final p2 = worldToScreen(Point3D(x, gridRange, 0), camera, projection);
+    for (double x = gridCenter.x - gridRange;
+        x <= gridCenter.x + gridRange;
+        x += step) {
+      if ((x - gridCenter.x).abs() < 1e-10) continue;
+      final p1 = worldToScreen(
+        Point3D(x, gridCenter.y - gridRange, 0),
+        camera,
+        projection,
+      );
+      final p2 = worldToScreen(
+        Point3D(x, gridCenter.y + gridRange, 0),
+        camera,
+        projection,
+      );
       lines.add([Offset(p1.x, p1.y), Offset(p2.x, p2.y)]);
     }
 
@@ -1498,6 +1532,28 @@ class MathCanvas3DPainter extends CustomPainter {
           _collectVector(renderables, obj, camera, projection);
         case Object3DType.curve:
           _collectCurve(renderables, obj, camera, projection);
+      }
+    }
+
+    final preview = constructionPreview;
+    if (preview != null) {
+      switch (preview.type) {
+        case Object3DType.point:
+          _collectPoint(renderables, preview, camera, projection);
+        case Object3DType.line:
+          _collectLine(renderables, preview, camera, projection);
+        case Object3DType.plane:
+          _collectPlane(renderables, preview, camera, projection);
+        case Object3DType.surface:
+          _collectSurface(renderables, preview, camera, projection);
+        case Object3DType.sphere:
+          _collectSphere(renderables, preview, camera, projection);
+        case Object3DType.polyhedron:
+          _collectPolyhedron(renderables, preview, camera, projection);
+        case Object3DType.vector:
+          _collectVector(renderables, preview, camera, projection);
+        case Object3DType.curve:
+          _collectCurve(renderables, preview, camera, projection);
       }
     }
 
@@ -1935,7 +1991,9 @@ class MathCanvas3DPainter extends CustomPainter {
         oldDelegate.canvasHeight != canvasHeight ||
         oldDelegate.backgroundColor != backgroundColor ||
         oldDelegate.axisColor != axisColor ||
-        oldDelegate.gridColor != gridColor;
+        oldDelegate.gridColor != gridColor ||
+        oldDelegate.labelColor != labelColor ||
+        oldDelegate.constructionPreview != constructionPreview;
   }
 }
 

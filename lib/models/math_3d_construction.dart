@@ -179,17 +179,30 @@ class ConstructionState {
             _points.first.distanceTo(_points.last) < 0.5) {
           // Remove the duplicate closing point
           final vertices = List<Point3D>.from(_points)..removeLast();
-          if (vertices.length >= 3) {
+          if (vertices.length >= 3 && _hasArea(vertices)) {
             _result = _createPolygon(vertices);
             _updatePreview();
             return ConstructionAction.complete;
           }
+          _points.removeLast();
+          _stepIndex =
+              _points.length < totalSteps ? _points.length : totalSteps - 1;
+          _updatePreview();
+          return ConstructionAction.awaitInput;
         }
         _updatePreview();
         return ConstructionAction.advanceStep;
 
       case ConstructionTool.plane:
         if (_points.length >= 3) {
+          final normal =
+              (_points[1] - _points[0]).cross(_points[2] - _points[0]);
+          if (normal.magnitude < 1e-10) {
+            _points.removeLast();
+            _stepIndex = _points.length;
+            _updatePreview();
+            return ConstructionAction.awaitInput;
+          }
           _result = _createPlane(_points[0], _points[1], _points[2]);
           _updatePreview();
           return ConstructionAction.complete;
@@ -200,6 +213,12 @@ class ConstructionState {
       case ConstructionTool.sphere:
         if (_points.length >= 2) {
           final radius = _points[0].distanceTo(_points[1]);
+          if (radius < 1e-10) {
+            _points.removeLast();
+            _stepIndex = _points.length;
+            _updatePreview();
+            return ConstructionAction.awaitInput;
+          }
           _result = Object3D.sphere(
             center: _points[0],
             radius: radius,
@@ -387,6 +406,35 @@ class ConstructionState {
   /// Remove a transient preview after a gesture ends or a tool is cancelled.
   void clearPreview() {
     _previewObject = null;
+  }
+
+  /// Return a non-mutating preview for the point currently under the cursor.
+  Object3D? previewForPoint(Point3D point) {
+    if (!point.x.isFinite || !point.y.isFinite || !point.z.isFinite) {
+      return null;
+    }
+
+    final previewPoints = [..._points, point];
+    if (previewPoints.length == 1) {
+      return Object3D.point(previewPoints.first, color: 0x60808080);
+    }
+    if (tool == ConstructionTool.polygon) {
+      return Object3D.curve(points: previewPoints, color: 0x60808080);
+    }
+    return Object3D.line(
+      previewPoints[previewPoints.length - 2],
+      previewPoints.last,
+      color: 0x60808080,
+    );
+  }
+
+  static bool _hasArea(List<Point3D> vertices) {
+    final origin = vertices.first;
+    var area = Vector3D.zero;
+    for (var i = 1; i < vertices.length - 1; i++) {
+      area = area + (vertices[i] - origin).cross(vertices[i + 1] - origin);
+    }
+    return area.magnitude > 1e-10;
   }
 
   /// Create a preview line or marker showing the current state.
