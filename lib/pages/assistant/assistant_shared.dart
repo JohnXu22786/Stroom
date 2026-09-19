@@ -38,6 +38,9 @@ class AssistantCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Stack(
+          // Keep the card content bounded by the full card size so the
+          // centered column retains the grid cell's vertical constraints.
+          fit: StackFit.expand,
           children: [
             Padding(
               padding: const EdgeInsets.all(16),

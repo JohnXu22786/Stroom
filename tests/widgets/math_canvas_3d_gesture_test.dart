@@ -1,6 +1,8 @@
 import 'dart:math' as dart_math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/math_3d_object.dart';
 import 'package:stroom/models/math_3d_scene.dart';
@@ -97,8 +99,8 @@ void main() {
       await tester.pump();
 
       // Verify camera changed after orbit
-      expect(state.camera.theta, isNot(closeTo(0, 1e-10)));
-      expect(state.camera.phi, isNot(closeTo(dart_math.pi / 4, 1e-10)));
+      expect(state.camera.theta, isNot(closeTo(dart_math.pi * 0.75, 1e-10)));
+      expect(state.camera.phi, isNot(closeTo(dart_math.pi / 6, 1e-10)));
 
       // Reset
       state.resetView();
@@ -106,14 +108,54 @@ void main() {
 
       // Should match defaults
       expect(state.camera.distance, closeTo(10, 1e-10));
-      expect(state.camera.theta, closeTo(0, 1e-10));
-      expect(state.camera.phi, closeTo(dart_math.pi / 4, 1e-10));
+      expect(state.camera.theta, closeTo(dart_math.pi * 0.75, 1e-10));
+      expect(state.camera.phi, closeTo(dart_math.pi / 6, 1e-10));
       expect(state.camera.target, equals(Point3D.origin));
+    });
+
+    testWidgets('right mouse drag always rotates like GeoGebra',
+        (tester) async {
+      final state = await setupCanvas(tester, tool: ConstructionTool.point);
+      final initialTheta = state.camera.theta;
+      final center = tester.getCenter(find.byType(MathCanvas3D));
+
+      final pointer = await tester.startGesture(
+        center,
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await pointer.moveBy(const Offset(80, 0));
+      await pointer.up();
+      await tester.pump();
+
+      expect(state.camera.theta, lessThan(initialTheta));
+    });
+
+    testWidgets('Shift plus primary drag pans without orbiting',
+        (tester) async {
+      final state = await setupCanvas(tester);
+      final initialCamera = state.camera;
+      final center = tester.getCenter(find.byType(MathCanvas3D));
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      final pointer = await tester.startGesture(
+        center,
+        kind: PointerDeviceKind.mouse,
+        buttons: kPrimaryMouseButton,
+      );
+      await pointer.moveBy(const Offset(80, 30));
+      await pointer.up();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+
+      expect(state.camera.theta, closeTo(initialCamera.theta, 1e-10));
+      expect(state.camera.phi, closeTo(initialCamera.phi, 1e-10));
+      expect(state.camera.target, isNot(equals(initialCamera.target)));
     });
   });
 
   group('MathCanvas3D - pinch zoom', () {
-    testWidgets('pinch in (scale<1) zooms IN (distance decreases)',
+    testWidgets('pinch in (scale<1) zooms OUT (distance increases)',
         (tester) async {
       final state = await setupCanvas(tester);
       final initialDistance = state.camera.distance;
@@ -141,11 +183,11 @@ void main() {
       await pointer2.up();
       await tester.pump();
 
-      // Pinch in (scale < 1) should decrease distance (zoom in)
-      expect(state.camera.distance, lessThan(initialDistance));
+      // Pinch in reveals more of the scene, matching GeoGebra and map apps.
+      expect(state.camera.distance, greaterThan(initialDistance));
     });
 
-    testWidgets('pinch out (scale>1) zooms OUT (distance increases)',
+    testWidgets('pinch out (scale>1) zooms IN (distance decreases)',
         (tester) async {
       final state = await setupCanvas(tester);
       final initialDistance = state.camera.distance;
@@ -173,18 +215,32 @@ void main() {
       await pointer2.up();
       await tester.pump();
 
-      // Pinch out (scale > 1) should increase distance (zoom out)
-      expect(state.camera.distance, greaterThan(initialDistance));
+      // Spreading fingers magnifies the scene.
+      expect(state.camera.distance, lessThan(initialDistance));
     });
   });
 
   group('MathCanvas3D - scroll wheel zoom', () {
-    // Scroll wheel events are difficult to simulate in widget tests.
-    // The direction is tested via unit-level Camera3D.zoom() semantics.
-    test('zoom factor math is correct', () {
-      final cam = Camera3D(distance: 10);
-      final zoomed = cam.zoom(factor: 2); // zoom in
-      expect(zoomed.distance, closeTo(5, 1e-10));
+    testWidgets('wheel up zooms in and wheel down zooms out', (tester) async {
+      final state = await setupCanvas(tester);
+      final center = tester.getCenter(find.byType(MathCanvas3D));
+
+      await tester.sendEventToBinding(PointerScrollEvent(
+        position: center,
+        kind: PointerDeviceKind.mouse,
+        scrollDelta: const Offset(0, -120),
+      ));
+      await tester.pump();
+      final zoomedInDistance = state.camera.distance;
+      expect(zoomedInDistance, lessThan(10));
+
+      await tester.sendEventToBinding(PointerScrollEvent(
+        position: center,
+        kind: PointerDeviceKind.mouse,
+        scrollDelta: const Offset(0, 240),
+      ));
+      await tester.pump();
+      expect(state.camera.distance, greaterThan(zoomedInDistance));
     });
   });
 
@@ -210,6 +266,54 @@ void main() {
       expect(createdObjects!.isNotEmpty, isTrue,
           reason: 'Tap in point tool should create a point object');
       expect(createdObjects!.first.type, Object3DType.point);
+    });
+
+    testWidgets('dragging upward in point tool changes the z coordinate',
+        (tester) async {
+      final objects = <Object3D>[];
+      await setupCanvas(
+        tester,
+        tool: ConstructionTool.point,
+        onObjectCreated: objects.add,
+      );
+      final center = tester.getCenter(find.byType(MathCanvas3D));
+
+      final gesture = await tester.startGesture(center);
+      await gesture.moveBy(const Offset(0, -90));
+      await gesture.up();
+      await tester.pump();
+
+      expect(objects, hasLength(1));
+      expect(objects.single.point.z, greaterThan(0));
+    });
+
+    testWidgets('construction gesture exposes a live preview', (tester) async {
+      final key = GlobalKey<MathCanvas3DState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 800,
+              height: 600,
+              child: MathCanvas3D(
+                key: key,
+                currentTool: ConstructionTool.line,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final center = tester.getCenter(find.byType(MathCanvas3D));
+      final gesture = await tester.startGesture(center);
+      await gesture.moveBy(const Offset(0, -20));
+      await tester.pump();
+
+      expect(key.currentState!.constructionPreview, isNotNull);
+      await gesture.up();
+      await tester.pump();
     });
 
     testWidgets('tapping twice in line tool creates a line object',
