@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 class _Documents extends PathProviderPlatform {
   _Documents(this.path);
@@ -26,6 +27,9 @@ void main() {
     PathProviderPlatform.instance = _Documents(directory.path);
     AppStorage.resetCache();
     ManifestDatabase.enableTestMode();
+    // These migration fixtures deliberately exercise the native flow file,
+    // unlike backup widget tests which use the in-memory storage backend.
+    WebFileStore.disableTestMode();
     SharedPreferences.setMockInitialValues({
       'data_format_versions': jsonEncode({
         ...DataParts.currentVersions,
@@ -55,6 +59,20 @@ void main() {
     PathProviderPlatform.instance = previous;
     AppStorage.resetCache();
     await directory.delete(recursive: true);
+  });
+
+  testWidgets(
+      'memory-backed restore never migrates unrelated native flow files',
+      (tester) async {
+    final file = File('${directory.path}/task_flows/flows.json');
+    await tester.runAsync(() async {
+      await file.parent.create(recursive: true);
+      await file.writeAsString('unrelated-native-data');
+    });
+    WebFileStore.enableTestMode();
+    final result = await DataMigrationService.migrateDataFormatIfNeeded();
+    expect(result.needsMigration, isTrue);
+    expect(await tester.runAsync(file.readAsString), 'unrelated-native-data');
   });
 
   test('startup migration persists unique identities once and is idempotent',

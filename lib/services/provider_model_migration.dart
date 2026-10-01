@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../utils/atomic_file.dart';
+import '../utils/web_file_store.dart';
 import 'storage_service.dart';
 
 /// Startup-only migration. Runtime model selection never reads legacy indices.
@@ -80,8 +81,9 @@ class ProviderModelMigration {
   }
 
   static Future<void> migrateFlows() async {
-    // Flow persistence is currently native-only (PersistableNotifier).
-    if (kIsWeb) return;
+    // Flow persistence is native-only (PersistableNotifier). The memory
+    // backend used by backup tests must not read or rewrite native user data.
+    if (kIsWeb || WebFileStore.isTestMode) return;
     final directory = await AppStorage.directory;
     final file = File('$directory/task_flows/flows.json');
     if (!await file.exists()) return;
