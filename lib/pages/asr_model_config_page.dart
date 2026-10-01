@@ -291,6 +291,7 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
     typeConfig['enablePrompt'] = _enablePrompt;
 
     final result = ModelConfig(
+      id: widget.model?.id,
       name: name,
       modelId: modelId,
       typeConfig: typeConfig,

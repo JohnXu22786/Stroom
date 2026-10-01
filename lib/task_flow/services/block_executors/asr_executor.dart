@@ -255,20 +255,20 @@ Future<String> executeAsrBlock({
     );
   }
 
-  final modelIndex = asIntParam(block.params, 'modelIndex', 0);
   final saveFolder = asStringParam(block.params, 'saveFolder', '');
   // Model-level selection, same granularity as the ASR page: the shared
   // flattened list (configs without host/key are excluded).
-  final models = flattenProviderModels(providerEntries, 'asr');
+  final selected =
+      resolveProviderModel(providerEntries, 'asr', block.params['modelRef']);
 
-  if (models.isEmpty || modelIndex >= models.length) {
+  if (selected == null) {
     failSubTask(
       bgNotifier,
       taskId,
       execNotifier,
       execId,
       flowSubTask.id,
-      '未配置ASR模型或索引越界',
+      '未配置ASR模型或模型引用已失效，请重新选择',
     );
     throw BlockExecutionException(
       '未配置ASR模型',
@@ -277,8 +277,8 @@ Future<String> executeAsrBlock({
     );
   }
 
-  final config = models[modelIndex].config;
-  final model = models[modelIndex].model;
+  final config = selected.config;
+  final model = selected.model;
 
   try {
     bgNotifier.updateStep(taskId, 0, running: true);

@@ -33,7 +33,7 @@ enum BlockParamType {
   filePath,
 
   /// Model selector (references a configured model of [configType],
-  /// e.g. 'asr' — the executor indexes the same flattened list).
+  /// e.g. 'asr' — resolved by persistent config/model identities).
   modelSelector,
 
   /// Voice selector (dropdown of the voices of the selected TTS model).
@@ -154,11 +154,10 @@ class BlockTypeDefinition {
     color: Color(0xFF009688),
     params: [
       BlockParamDefinition(
-        key: 'modelIndex',
+        key: 'modelRef',
         label: '识别模型',
         type: BlockParamType.modelSelector,
         configType: 'ocr',
-        defaultValue: 0,
       ),
       BlockParamDefinition(
         key: 'saveFolder',
@@ -178,10 +177,9 @@ class BlockTypeDefinition {
     color: Color(0xFF673AB7),
     params: [
       BlockParamDefinition(
-        key: 'modelIndex',
+        key: 'modelRef',
         label: '识别模型',
         type: BlockParamType.modelSelector,
-        defaultValue: 0,
       ),
       BlockParamDefinition(
         key: 'saveFolder',
@@ -247,11 +245,10 @@ class BlockTypeDefinition {
     color: Color(0xFF00BCD4),
     params: [
       BlockParamDefinition(
-        key: 'modelIndex',
+        key: 'modelRef',
         label: '合成模型',
         type: BlockParamType.modelSelector,
         configType: 'tts',
-        defaultValue: 0,
       ),
       BlockParamDefinition(
         key: 'voice',

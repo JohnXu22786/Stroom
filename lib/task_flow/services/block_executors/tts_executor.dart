@@ -23,18 +23,18 @@ Future<String> executeTtsBlock({
 }) async {
   // Model-level selection, same granularity as the TTS page: the shared
   // flattened list (configs without host/key excluded).
-  final modelIndex = asIntParam(block.params, 'modelIndex', 0);
-  final models = flattenProviderModels(providerEntries, 'tts');
-  if (models.isEmpty || modelIndex >= models.length) {
+  final selected =
+      resolveProviderModel(providerEntries, 'tts', block.params['modelRef']);
+  if (selected == null) {
     throw BlockExecutionException(
-      '未配置TTS模型或索引越界',
+      '未配置TTS模型或模型引用已失效，请重新选择',
       blockType: def.typeKey.name,
       blockTitle: def.label,
     );
   }
 
-  final config = models[modelIndex].config;
-  final model = models[modelIndex].model;
+  final config = selected.config;
+  final model = selected.model;
 
   final title = input.length > 20 ? input.substring(0, 20) : input;
   final voice = asStringParam(block.params, 'voice', '');

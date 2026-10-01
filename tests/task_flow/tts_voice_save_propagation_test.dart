@@ -21,6 +21,7 @@ void main() {
           name: 'TTS供应商',
           configs: [
             ProviderConfigItem(
+              id: 'config-id',
               providerName: 'EdgeTTS',
               host: 'https://example.com',
               key: 'k',
@@ -36,6 +37,7 @@ void main() {
               endpointType: 'anthropic',
               models: [
                 ModelConfig(
+                  id: 'model-id',
                   name: 'edge',
                   modelId: 'edge',
                   maxWordsPerRequest: 1000,
@@ -228,6 +230,10 @@ void main() {
         .first;
     expect(model.voices.length, 1);
     expect(model.voices.first.name, '云希');
+    expect(model.id, 'model-id');
+    expect(
+        container.read(providerEntriesProvider).entries.first.configs.first.id,
+        'config-id');
 
     // And the block editor must offer it.
     await tester.pumpWidget(
@@ -421,8 +427,8 @@ void main() {
   });
 
   testWidgets(
-      'an out-of-range modelIndex is clamped into the loaded models on '
-      'confirm (late-load panel cannot persist a bad index)', (tester) async {
+      'a legacy index requires reselection even when models load while the panel is open',
+      (tester) async {
     final notifier = ProviderEntriesNotifier()
       ..state = const ProviderEntriesState();
     final container = ProviderContainer(
@@ -489,11 +495,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Confirm without touching the dropdowns: the persisted index must be
-    // the clamped 0 — a raw 5 would fail at execution.
+    // Confirming unrelated settings must not silently choose the first model.
+    expect(find.text('模型未选择或已失效，请重新选择'), findsOneWidget);
     await tester.tap(find.text('确认'));
     await tester.pumpAndSettle();
     expect(result, isNotNull);
-    expect(result!.params['modelIndex'], 0);
+    expect(result!.params.containsKey('modelIndex'), isFalse);
+    expect(result!.params['modelRef'], isNull);
   });
 }

@@ -12,6 +12,7 @@ import 'backup_location_manager.dart';
 import 'data_integrity_checker.dart';
 import 'data_safety_manager.dart';
 import 'manifest_database.dart';
+import 'provider_model_migration.dart';
 import 'snapshot_service.dart';
 
 part 'data_migration_old_configs.dart';
@@ -121,16 +122,18 @@ abstract final class DataParts {
   ///   old chat_configs → provider_entries + 修复 null id/type）
   /// - pictures/audio/videos/texts v1: 移除共享 folders 表，
   ///   全部改为每种类型独立的文件夹表（旧全局 v1→v2 迁移）
-  /// - tasks/anki/browserCookies: 无迁移历史，当前版本 0（机制就位，
+  /// - settings v2: 供应商配置和模型的持久身份。
+  /// - tasks v1: 旧任务流模型下标改为需要重新确认的引用。
+  /// - anki/browserCookies: 无迁移历史，当前版本 0（机制就位，
   ///   未来各自格式变更时从 1 开始递增）
   static const Map<String, int> currentVersions = {
     chat: 1,
-    settings: 1,
+    settings: 2,
     pictures: 1,
     audio: 1,
     videos: 1,
     texts: 1,
-    tasks: 0,
+    tasks: 1,
     anki: 0,
     browserCookies: 0,
   };
@@ -446,7 +449,12 @@ class DataMigrationService {
       case DataParts.settings:
         if (version == 0) {
           await _migrateSettingsV0ToV1();
+        } else if (version == 1) {
+          await ProviderModelMigration.migrateSettings();
         }
+        break;
+      case DataParts.tasks:
+        if (version == 0) await ProviderModelMigration.migrateFlows();
         break;
       case DataParts.chat:
         if (version == 0) {

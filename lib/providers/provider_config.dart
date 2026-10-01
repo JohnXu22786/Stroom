@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/mcp.dart';
 import '../models/tts_models.dart';
+import '../services/provider_model_migration.dart';
 
 export '../models/tts_models.dart';
 
@@ -24,12 +25,15 @@ class ProviderEntriesState {
 final providerEntriesProvider =
     StateNotifierProvider<ProviderEntriesNotifier, ProviderEntriesState>((ref) {
   final notifier = ProviderEntriesNotifier();
-  notifier.load();
+  notifier._loading = notifier.load();
   return notifier;
 });
 
 class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   ProviderEntriesNotifier() : super(const ProviderEntriesState());
+
+  Future<void> _loading = Future<void>.value();
+  Future<void> get ready => _loading;
 
   Future<void> load() async {
     try {
@@ -49,7 +53,11 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       if (json != null && json.isNotEmpty) {
         final List<dynamic> rawList;
         try {
-          rawList = jsonDecode(json) as List;
+          jsonDecode(json) as List;
+          // Covers old settings imported after startup as well: persist IDs
+          // before publishing models to selectors or task flows.
+          await ProviderModelMigration.migrateSettings();
+          rawList = jsonDecode(prefs.getString('provider_entries')!) as List;
         } catch (e) {
           // 结构性损坏（非法 JSON）：备份原始数据再回退默认预置，
           // 否则后续任意 CRUD 的 _persist 会用默认值覆盖写坏，

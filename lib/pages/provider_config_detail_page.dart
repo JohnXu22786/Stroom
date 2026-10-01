@@ -197,6 +197,7 @@ class _ProviderConfigDetailPageState
           var configs = currentEntry.configs.map((c) => c.copy()).toList();
           // Use the models from pending or from the returned result
           final configWithModels = ProviderConfigItem(
+            id: result.id,
             providerName: result.providerName,
             host: result.host,
             key: result.key,
@@ -328,6 +329,7 @@ class _ProviderConfigDetailPageState
       // 视图与请求构建都依赖供应商级参数）。
       final base = configs[_configIndex];
       configs[_configIndex] = ProviderConfigItem(
+        id: base.id,
         providerName: base.providerName,
         host: base.host,
         key: base.key,
@@ -570,6 +572,7 @@ class _ProviderConfigDetailPageState
       final models = List<ModelConfig>.from(base.models);
       models[modelIndex] = result;
       configs[_configIndex] = ProviderConfigItem(
+        id: base.id,
         providerName: base.providerName,
         host: base.host,
         key: base.key,
@@ -687,6 +690,7 @@ class _ProviderConfigDetailPageState
     // reasoningParams / endpointType（重建会丢配置，推理参数继承
     // 视图与请求构建都依赖供应商级参数）。
     configs[_configIndex] = ProviderConfigItem(
+      id: config.id,
       providerName: config.providerName,
       host: config.host,
       key: config.key,

@@ -63,12 +63,15 @@ Assistant? resolveAssistantForSend({
 final assistantProvider =
     StateNotifierProvider<AssistantsNotifier, List<Assistant>>((ref) {
   final notifier = AssistantsNotifier();
-  notifier._load();
+  notifier._loading = notifier._load();
   return notifier;
 });
 
 class AssistantsNotifier extends StateNotifier<List<Assistant>> {
   AssistantsNotifier() : super([]);
+
+  Future<void> _loading = Future<void>.value();
+  Future<void> get ready => _loading;
 
   // --------------------------------------------------------------------------
   // Persistence

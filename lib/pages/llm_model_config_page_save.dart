@@ -278,6 +278,7 @@ extension _SaveExt on _LlmModelConfigPageState {
     }
 
     final result = ModelConfig(
+      id: widget.model?.id,
       name: name,
       modelId: modelId,
       typeConfig: typeConfig,

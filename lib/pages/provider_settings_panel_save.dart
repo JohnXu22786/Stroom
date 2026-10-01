@@ -211,6 +211,7 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
     }
 
     return ProviderConfigItem(
+      id: widget.config.id,
       providerName: _nameController.text.trim(),
       host: _hostController.text.trim(),
       key: _keyController.text.trim(),

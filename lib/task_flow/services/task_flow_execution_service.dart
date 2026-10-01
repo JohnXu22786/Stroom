@@ -23,6 +23,7 @@ import '../providers/task_flow_execution_provider.dart';
 import '../providers/task_flow_provider.dart';
 import 'block_executors/block_executors.dart';
 import 'task_flow_scheduler.dart';
+import 'task_flow_validator.dart';
 
 final taskFlowExecutionServiceProvider = Provider<TaskFlowExecutionService>(
   (ref) => TaskFlowExecutionService._(ref),
@@ -93,35 +94,49 @@ class TaskFlowExecutionService {
     String inputText, {
     int durationSec = 0,
   }) async {
-    await _startFlowInternal(
-      flowId,
-      FlowRunInput(text: inputText, durationSec: durationSec),
-    );
+    await startFlowMany(
+        flowId, [FlowRunInput(text: inputText, durationSec: durationSec)]);
     return true;
   }
 
-  /// Starts the flow once per input, sequentially.
-  ///
-  /// The run-mode input section collects inputs in the first block's style
-  /// (CatCatch: multiple URL+duration entries; OCR/ASR/audioSeparation:
-  /// multiple media files; text: a single text). Each input runs the whole
-  /// chain as its own execution, so every input is processed independently
-  /// end-to-end (each URL gets its own download, each image its own OCR,
-  /// each audio its own ASR — mirroring the standalone pages).
+  /// Validate all inputs before starting any work; await the entire batch.
   Future<void> startFlowMany(String flowId, List<FlowRunInput> inputs) async {
+    final flow = await _prepareFlow(flowId, inputs);
+    await _runMany(flow, inputs);
+  }
+
+  /// UI entry point: report validation failures before returning, then run in
+  /// the background. History retry uses the same validation as normal launch.
+  Future<void> launchFlowMany(String flowId, List<FlowRunInput> inputs) async {
+    final flow = await _prepareFlow(flowId, inputs);
+    unawaited(_runMany(flow, inputs));
+  }
+
+  Future<TaskFlowDefinition> _prepareFlow(
+      String flowId, List<FlowRunInput> inputs) async {
+    await _ref.read(providerEntriesProvider.notifier).ready;
+    await _ref.read(assistantProvider.notifier).ready;
+    final flow = _ref
+        .read(taskFlowListProvider)
+        .where((f) => f.id == flowId)
+        .firstOrNull;
+    if (flow == null) {
+      throw TaskFlowValidationException('任务流已删除，请返回任务流列表重新选择', flowId: flowId);
+    }
+    await validateTaskFlow(flow, inputs,
+        providers: _ref.read(providerEntriesProvider),
+        assistants: _ref.read(assistantProvider));
+    return flow;
+  }
+
+  Future<void> _runMany(
+      TaskFlowDefinition flow, List<FlowRunInput> inputs) async {
     for (final input in inputs) {
-      await _startFlowInternal(flowId, input);
+      await _runFlow(flow, input);
     }
   }
 
-  Future<void> _startFlowInternal(String flowId, FlowRunInput input) async {
-    final flow = _ref.read(taskFlowListProvider).firstWhere(
-          (f) => f.id == flowId,
-          orElse: () => TaskFlowDefinition(name: ''),
-        );
-    if (flow.name.isEmpty) return;
-    if (flow.blocks.isEmpty) return;
-
+  Future<void> _runFlow(TaskFlowDefinition flow, FlowRunInput input) async {
     final execNotifier = _ref.read(taskFlowExecutionsProvider.notifier);
     final catcatchNotifier = _ref.read(catcatchTasksProvider.notifier);
     final bgNotifier = _ref.read(backgroundTasksProvider.notifier);
