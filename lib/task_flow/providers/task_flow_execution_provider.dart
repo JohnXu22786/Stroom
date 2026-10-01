@@ -250,6 +250,14 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     persist();
   }
 
+  /// An explicit save also flushes any debounced progress update.
+  @override
+  Future<bool> persist() {
+    _persistTimer?.cancel();
+    _persistTimer = null;
+    return super.persist();
+  }
+
   /// Restore persisted executions on startup.
   Future<void> restoreFromPersistence() async {
     await restore();
@@ -269,12 +277,13 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
       }
       return e;
     }).toList();
-    persist();
+    await persist();
   }
 
   @override
   void dispose() {
-    _persistTimer?.cancel();
+    // Capture pending progress while state is still readable.
+    if (_persistTimer != null) persist();
     super.dispose();
   }
 }

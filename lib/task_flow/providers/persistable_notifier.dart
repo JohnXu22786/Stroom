@@ -15,24 +15,47 @@ mixin PersistableNotifier<T> on StateNotifier<T> {
 
   List<dynamic> toJsonList(T state);
 
+  Future<bool> _pendingPersistence = Future<bool>.value(true);
+  Object? _persistenceError;
+
+  /// Result of the latest requested write, including background writes.
+  Future<bool> get persistenceResult => _pendingPersistence;
+
+  /// Last write failure, cleared after a successful retry.
+  Object? get persistenceError => _persistenceError;
+
   Future<File> _dataFile() async {
     final appDir = await AppStorage.directory;
     final dir = Directory(p.join(appDir, 'task_flows'));
-    try {
-      if (!await dir.exists()) await dir.create(recursive: true);
-    } catch (_) {}
+    if (!await dir.exists()) await dir.create(recursive: true);
     return File(p.join(dir.path, persistenceFileName));
   }
 
-  Future<void> persist() async {
+  /// Queue this state snapshot and report whether it reached disk.
+  /// Failed writes keep the in-memory state and do not block later retries.
+  Future<bool> persist() {
+    String? contents;
+    Object? encodingError;
     try {
-      final file = await _dataFile();
-      // 原子写入：防止中途崩溃留下半截 JSON（任务流数据覆盖写同一
-      // 路径，半途写坏会丢失全部流程状态）。
-      await AtomicFile.writeString(file, jsonEncode(toJsonList(state)));
+      // Capture before any await: a later mutation or disposal must not change
+      // the snapshot belonging to this request.
+      contents = jsonEncode(toJsonList(state));
     } catch (e) {
-      // Silently ignore persistence errors - data is still in memory
+      encodingError = e;
     }
+    return _pendingPersistence = _pendingPersistence.then((_) async {
+      try {
+        if (encodingError != null) throw encodingError!;
+        final file = await _dataFile();
+        await AtomicFile.writeString(file, contents!);
+        _persistenceError = null;
+        return true;
+      } catch (e) {
+        _persistenceError = e;
+        debugPrint('Failed to persist $persistenceFileName: $e');
+        return false;
+      }
+    });
   }
 
   Future<void> restore() async {
