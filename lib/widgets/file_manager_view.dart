@@ -3,11 +3,13 @@ import 'dart:collection';
 import 'package:flutter/material.dart';
 
 import '../utils/batch_rename.dart';
+import '../utils/batch_rename_execution.dart';
 import '../utils/file_record.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/natural_sort.dart';
 import '../utils/sort_config.dart';
 import 'batch_rename_dialog.dart';
+import 'batch_rename_run_dialog.dart';
 import 'file_manager_config.dart';
 import 'file_manager_utils.dart';
 import 'folder_picker_dialog.dart';
@@ -153,6 +155,9 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
 
   // Mutation callbacks
   final Future<void> Function() onRefresh;
+
+  /// Invalidate storage caches before checking a batch's persisted result.
+  final VoidCallback? invalidateRenameCache;
   final Future<void> Function(String id, String newName) onRenameFile;
 
   /// 重命名时同时修改文件格式（文本文件 txt/md/mmd 下拉框切换）。
@@ -216,6 +221,7 @@ class FileManagerView<T extends FileRecord> extends StatefulWidget {
     required this.sortConfig,
     required this.config,
     required this.onRefresh,
+    this.invalidateRenameCache,
     required this.onRenameFile,
     this.onRenameFileWithFormat,
     required this.onMoveFile,
@@ -255,6 +261,8 @@ class _FileManagerViewState<T extends FileRecord>
   final Set<String> _selectedIds = {};
   String _currentFolder = '';
   bool _showGridView = false;
+  bool _batchRenameActive = false;
+  BatchRenameExecution? _lastBatchRename;
 
   /// 缓存缩略图 Widget，避免勾选等操作触发 setState 时重新从磁盘读取
   static const int _maxThumbnailCache = 200;
@@ -675,6 +683,14 @@ class _FileManagerViewState<T extends FileRecord>
             },
           ),
         ] else ...[
+          if (_lastBatchRename != null)
+            IconButton(
+                key: const Key('fm_batch_rename_history'),
+                tooltip: '上次批量重命名结果与撤销',
+                icon: const Icon(Icons.history),
+                onPressed: _batchRenameActive
+                    ? null
+                    : () => _applyBatchRenamePlan(null)),
           // Extra app bar actions (e.g. task list button)
           if (widget.config.extraAppBarActions != null)
             ...widget.config.extraAppBarActions!(),
@@ -2200,7 +2216,7 @@ class _FileManagerViewState<T extends FileRecord>
   }
 
   Future<void> _renameSelected() async {
-    if (_selectedIds.isEmpty) return;
+    if (_selectedIds.isEmpty || _batchRenameActive) return;
 
     final fileIds = <String>[];
     final folderNames = <String>[];
@@ -2227,36 +2243,65 @@ class _FileManagerViewState<T extends FileRecord>
     await _applyBatchRenamePlan(plan);
   }
 
-  /// 按计划应用批量重命名。文件夹先于文件执行（计划已排好安全顺序）。
-  Future<void> _applyBatchRenamePlan(BatchRenamePlan plan) async {
-    var applied = 0;
-    var failed = 0;
-    for (final entry in plan.folderEntries) {
-      try {
-        await widget.onRenameFolder(entry.id, entry.newBaseName);
-        applied++;
-      } catch (_) {
-        failed++;
-      }
+  Future<BatchRenameSnapshot> _renameSnapshot() async {
+    // A folder callback can throw after persisting some moves but before
+    // publishing provider state. Reload storage, then wait for the rebuilt view.
+    widget.invalidateRenameCache?.call();
+    await widget.onRefresh();
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) throw StateError('文件页面已关闭');
+    return BatchRenameSnapshot([
+      for (final r in widget.sortedRecords)
+        BatchRenameItem(
+            id: r.id,
+            isFolder: false,
+            name: r.name,
+            format: r.format,
+            folder: r.folder,
+            createdAt: r.createdAt,
+            modifiedAt: r.modifiedAt,
+            size: r.size),
+    ], widget.folders);
+  }
+
+  Future<void> _applyBatchRenamePlan(BatchRenamePlan? plan) async {
+    if (_batchRenameActive) return;
+    setState(() => _batchRenameActive = true);
+    try {
+      await widget.onRefresh();
+      if (!mounted) return;
+      final result = await showBatchRenameRunDialog(
+          context: context,
+          plan: plan,
+          history: plan == null ? _lastBatchRename : null,
+          bridge: widget.manifestBridge,
+          readSnapshot: _renameSnapshot,
+          renameFile: widget.onRenameFile,
+          renameFolder: widget.onRenameFolder,
+          onChangesApplied: _followBatchRenameFolders);
+      if (!mounted) return;
+      setState(() => _lastBatchRename = result);
+      _exitSelectionMode();
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('批量重命名失败：$e')));
+    } finally {
+      if (mounted) setState(() => _batchRenameActive = false);
     }
-    for (final entry in plan.fileEntries) {
-      try {
-        await widget.onRenameFile(entry.id, entry.newBaseName);
-        applied++;
-      } catch (_) {
-        failed++;
-      }
-    }
+  }
+
+  void _followBatchRenameFolders(List<BatchRenameChange> changes) {
     if (!mounted) return;
-    _exitSelectionMode();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          failed == 0 ? '已重命名 $applied 项' : '重命名完成：成功 $applied 项，失败 $failed 项',
-        ),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    var folder = _currentFolder;
+    for (final change in changes) {
+      if (!change.forward.isFolder) continue;
+      final source = change.sourcePath;
+      if (folder == source || folder.startsWith('$source/')) {
+        folder = '${change.targetPath}${folder.substring(source.length)}';
+      }
+    }
+    if (folder != _currentFolder) _setCurrentFolder(folder);
   }
 
   // ====================================================================

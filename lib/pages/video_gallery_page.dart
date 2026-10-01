@@ -937,6 +937,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       folders: folders,
       sortConfig: sortConfig,
       config: config,
+      invalidateRenameCache: VideoManifest.invalidateCache,
       onRefresh: () async {
         await ref.read(videoRecordsProvider.notifier).loadRecords();
         await ref.read(videoFolderListProvider.notifier).loadFolders();

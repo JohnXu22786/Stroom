@@ -1,220 +1,14 @@
+import 'package:characters/characters.dart';
+
+import 'batch_rename_config.dart';
+import 'batch_rename_regex.dart';
 import 'manifest_bridge.dart';
+export 'batch_rename_config.dart';
 import 'natural_sort.dart';
 import 'sort_config.dart';
 
-// ====================================================================
-// 批量重命名 — 纯逻辑（无 UI 依赖，可单测）
-//
-// 设计对标「拖把更名器 XTools」：先对选中项排序，再按固定操作链
-// （编号 → 替换 → 删除字符 → 插入 → 大小写）逐项计算新名称，
-// 并做冲突检测与名称校验，最后给出可直接应用的 [BatchRenamePlan]。
-//
-// 操作链顺序说明（删除先于插入）：
-// - 删除字符作用于替换后的名称，随后插入补充的文本永远不会被
-//   删除吃掉——短文件名（不足删除数量）删空后可由插入拯救，
-//   不会误报「名称不能为空」。
-// - 替换先于删除：替换是文本级操作，作用于完整原始名称；
-//   删除按位置裁剪替换后的结果。
-// ====================================================================
-
-/// 编号位置
-enum BatchRenameNumberPos { prefix, suffix }
-
-/// 插入位置
-enum BatchRenameInsertPos { start, end, atIndex }
-
-/// 删除字符位置
-enum BatchRenameDeletePos { start, end }
-
-/// 大小写模式
-enum BatchRenameCaseMode { upper, lower, firstUpper }
-
-// --------------------------------------------------------------------
-// 操作配置
-// --------------------------------------------------------------------
-
-/// 编号操作：为排序后的每一项追加/前置序号
-class BatchNumberOp {
-  final bool enabled;
-  final BatchRenameNumberPos position;
-  final int start;
-  final int step;
-  final int digits;
-  final String separator;
-
-  const BatchNumberOp({
-    this.enabled = false,
-    this.position = BatchRenameNumberPos.prefix,
-    this.start = 1,
-    this.step = 1,
-    this.digits = 1,
-    this.separator = '_',
-  });
-
-  bool get effective => enabled;
-
-  BatchNumberOp copyWith({
-    bool? enabled,
-    BatchRenameNumberPos? position,
-    int? start,
-    int? step,
-    int? digits,
-    String? separator,
-  }) =>
-      BatchNumberOp(
-        enabled: enabled ?? this.enabled,
-        position: position ?? this.position,
-        start: start ?? this.start,
-        step: step ?? this.step,
-        digits: digits ?? this.digits,
-        separator: separator ?? this.separator,
-      );
-}
-
-/// 替换操作：查找并替换文本
-class BatchReplaceOp {
-  final bool enabled;
-  final String find;
-  final String replace;
-  final bool caseSensitive;
-
-  const BatchReplaceOp({
-    this.enabled = false,
-    this.find = '',
-    this.replace = '',
-    this.caseSensitive = false,
-  });
-
-  /// 查找内容为空时替换无意义
-  bool get effective => enabled && find.isNotEmpty;
-
-  BatchReplaceOp copyWith({
-    bool? enabled,
-    String? find,
-    String? replace,
-    bool? caseSensitive,
-  }) =>
-      BatchReplaceOp(
-        enabled: enabled ?? this.enabled,
-        find: find ?? this.find,
-        replace: replace ?? this.replace,
-        caseSensitive: caseSensitive ?? this.caseSensitive,
-      );
-}
-
-/// 插入操作：在开头/结尾/指定位置插入文本
-class BatchInsertOp {
-  final bool enabled;
-  final BatchRenameInsertPos position;
-  final int index;
-  final String text;
-
-  const BatchInsertOp({
-    this.enabled = false,
-    this.position = BatchRenameInsertPos.start,
-    this.index = 1,
-    this.text = '',
-  });
-
-  /// 文本为空时插入无意义
-  bool get effective => enabled && text.isNotEmpty;
-
-  BatchInsertOp copyWith({
-    bool? enabled,
-    BatchRenameInsertPos? position,
-    int? index,
-    String? text,
-  }) =>
-      BatchInsertOp(
-        enabled: enabled ?? this.enabled,
-        position: position ?? this.position,
-        index: index ?? this.index,
-        text: text ?? this.text,
-      );
-}
-
-/// 删除字符操作：从开头/结尾删除指定数量字符
-class BatchDeleteOp {
-  final bool enabled;
-  final BatchRenameDeletePos position;
-  final int count;
-
-  const BatchDeleteOp({
-    this.enabled = false,
-    this.position = BatchRenameDeletePos.start,
-    this.count = 1,
-  });
-
-  /// 数量为 0 时删除无意义
-  bool get effective => enabled && count > 0;
-
-  BatchDeleteOp copyWith({
-    bool? enabled,
-    BatchRenameDeletePos? position,
-    int? count,
-  }) =>
-      BatchDeleteOp(
-        enabled: enabled ?? this.enabled,
-        position: position ?? this.position,
-        count: count ?? this.count,
-      );
-}
-
-/// 大小写转换操作
-class BatchCaseOp {
-  final bool enabled;
-  final BatchRenameCaseMode mode;
-
-  const BatchCaseOp({
-    this.enabled = false,
-    this.mode = BatchRenameCaseMode.lower,
-  });
-
-  bool get effective => enabled;
-
-  BatchCaseOp copyWith({bool? enabled, BatchRenameCaseMode? mode}) =>
-      BatchCaseOp(enabled: enabled ?? this.enabled, mode: mode ?? this.mode);
-}
-
-/// 批量重命名完整配置（含编号排序方式）
-class BatchRenameConfig {
-  final SortField sortField;
-  final SortOrder sortOrder;
-  final BatchNumberOp numbering;
-  final BatchReplaceOp replace;
-  final BatchInsertOp insert;
-  final BatchDeleteOp delete;
-  final BatchCaseOp caseOp;
-
-  const BatchRenameConfig({
-    this.sortField = SortField.name,
-    this.sortOrder = SortOrder.ascending,
-    this.numbering = const BatchNumberOp(),
-    this.replace = const BatchReplaceOp(),
-    this.insert = const BatchInsertOp(),
-    this.delete = const BatchDeleteOp(),
-    this.caseOp = const BatchCaseOp(),
-  });
-
-  BatchRenameConfig copyWith({
-    SortField? sortField,
-    SortOrder? sortOrder,
-    BatchNumberOp? numbering,
-    BatchReplaceOp? replace,
-    BatchInsertOp? insert,
-    BatchDeleteOp? delete,
-    BatchCaseOp? caseOp,
-  }) =>
-      BatchRenameConfig(
-        sortField: sortField ?? this.sortField,
-        sortOrder: sortOrder ?? this.sortOrder,
-        numbering: numbering ?? this.numbering,
-        replace: replace ?? this.replace,
-        insert: insert ?? this.insert,
-        delete: delete ?? this.delete,
-        caseOp: caseOp ?? this.caseOp,
-      );
-}
+// Batch rename planning is pure: ordered rules, per-item overrides and complete
+// final-state conflict detection produce the same names shown in the preview.
 
 // --------------------------------------------------------------------
 // 输入项 / 结果 / 计划
@@ -252,6 +46,8 @@ class BatchRenameItem {
     this.size = 0,
   });
 
+  String get key => '${isFolder ? 'folder' : 'file'}:$id';
+
   /// 显示名：文件带扩展名，文件夹仅末级名
   String get displayName => isFolder || format.isEmpty ? name : '$name.$format';
 }
@@ -261,9 +57,16 @@ class BatchRenameResult {
   final BatchRenameItem item;
 
   /// 应用操作链后的基础名（与 [BatchRenameItem.name] 相同表示未变化）
-  final String baseName;
+  String baseName;
   final String oldDisplay;
-  final String newDisplay;
+  String newDisplay;
+  final bool included;
+  String? targetFolder;
+  String get oldPath =>
+      item.folder.isEmpty ? oldDisplay : '${item.folder}/$oldDisplay';
+  String get newPath => (targetFolder ?? item.folder).isEmpty
+      ? newDisplay
+      : '${targetFolder ?? item.folder}/$newDisplay';
 
   /// 冲突/非法名称原因；null 表示该项可应用
   String? error;
@@ -274,6 +77,7 @@ class BatchRenameResult {
     required this.oldDisplay,
     required this.newDisplay,
     this.error,
+    this.included = true,
   });
 
   bool get isChanged => baseName != item.name;
@@ -297,6 +101,7 @@ class BatchRenameEntry {
 /// 批量重命名计划：预览结果 + 应用顺序
 class BatchRenamePlan {
   final List<BatchRenameResult> results;
+  final String? configError;
 
   /// 文件夹改名指令，已按安全顺序排列（子文件夹先于父文件夹；
   /// 名称让位/互换时按腾位顺序执行）
@@ -307,6 +112,7 @@ class BatchRenamePlan {
 
   BatchRenamePlan({
     required this.results,
+    this.configError,
     required this.folderEntries,
     required this.fileEntries,
   });
@@ -315,12 +121,103 @@ class BatchRenamePlan {
   int get conflictCount => results.where((r) => r.error != null).length;
 
   /// 无冲突且确实存在改名项时才可应用
-  bool get canApply => changeCount > 0 && results.every((r) => r.error == null);
+  bool get canApply =>
+      configError == null &&
+      changeCount > 0 &&
+      results.every((r) => r.error == null);
 }
 
 // --------------------------------------------------------------------
 // 计划计算
 // --------------------------------------------------------------------
+
+/// Interactive previews use a cancellable worker for user regexes. Other
+/// operations and the final conflict/scheduling pass share the sync engine.
+Future<BatchRenamePlan> computeBatchRenamePlanAsync({
+  required List<BatchRenameItem> items,
+  required BatchRenameConfig config,
+  required ManifestBridge bridge,
+  required Set<String> allFolders,
+  required List<BatchRenameItem> allFiles,
+  required BatchRenameRegexWorker regexWorker,
+  Set<String> excludedKeys = const {},
+  Map<String, String> overrides = const {},
+}) async {
+  if (validateBatchRenameConfig(config) != null) {
+    return computeBatchRenamePlan(
+        items: items,
+        config: config,
+        bridge: bridge,
+        allFolders: allFolders,
+        allFiles: allFiles,
+        excludedKeys: excludedKeys,
+        overrides: overrides);
+  }
+  final sorted = _sortItems(items, config)
+      .where((item) => !excludedKeys.contains(item.key))
+      .toList();
+  final indices = <String, (int, int)>{};
+  final folderIndices = <String, int>{};
+  for (var i = 0; i < sorted.length; i++) {
+    final item = sorted[i];
+    final folderIndex = folderIndices[item.folder] ?? 0;
+    indices[item.key] = (i, folderIndex);
+    folderIndices[item.folder] = folderIndex + 1;
+  }
+  final names = {for (final item in sorted) item.key: item.name};
+  final errors = <String, String>{};
+  for (final op in config.operations.where((op) => op.enabled)) {
+    final active = sorted
+        .where((item) =>
+            !overrides.containsKey(item.key) && !errors.containsKey(item.key))
+        .toList();
+    if (op is BatchReplaceOp &&
+        op.effective &&
+        op.useRegex &&
+        active.isNotEmpty) {
+      final replacements = await regexWorker
+          .replace([for (final item in active) names[item.key]!], op);
+      for (var i = 0; i < active.length; i++) {
+        final key = active[i].key;
+        final value = replacements[i];
+        if (value.error != null) {
+          errors[key] = value.error!;
+        } else {
+          names[key] = value.name!;
+        }
+      }
+    } else {
+      for (final item in active) {
+        final index = indices[item.key]!;
+        try {
+          names[item.key] = _applyOps(
+              item, index.$1, index.$2, config.copyWith(rules: [op]),
+              initialName: names[item.key]);
+        } on FormatException catch (e) {
+          errors[item.key] = e.message;
+        }
+      }
+    }
+  }
+  final plan = computeBatchRenamePlan(
+      items: items,
+      config: config.copyWith(rules: []),
+      bridge: bridge,
+      allFolders: allFolders,
+      allFiles: allFiles,
+      excludedKeys: excludedKeys,
+      overrides: {
+        ...names,
+        ...overrides,
+        for (final item in sorted)
+          if (errors.containsKey(item.key)) item.key: item.name
+      });
+  for (final result in plan.results) {
+    if (errors.containsKey(result.item.key))
+      result.error = errors[result.item.key];
+  }
+  return plan;
+}
 
 /// 计算批量重命名计划。
 /// [items] 为选中的文件与文件夹；[allFiles] 为全部文件记录（用于冲突
@@ -332,6 +229,8 @@ BatchRenamePlan computeBatchRenamePlan({
   required ManifestBridge bridge,
   required Set<String> allFolders,
   required List<BatchRenameItem> allFiles,
+  Set<String> excludedKeys = const {},
+  Map<String, String> overrides = const {},
 }) {
   final selectedFileIds =
       items.where((i) => !i.isFolder).map((i) => i.id).toSet();
@@ -339,34 +238,49 @@ BatchRenamePlan computeBatchRenamePlan({
   // 1. 排序（文件夹组在前，文件组在后；编号按此顺序分配）
   final sorted = _sortItems(items, config);
 
-  // 2. 逐项应用操作链
+  // 排除项不消耗编号；手动名称在操作链之后覆盖，仍接受同等校验。
+  final configError = validateBatchRenameConfig(config);
   final results = <BatchRenameResult>[];
-  for (var i = 0; i < sorted.length; i++) {
-    final item = sorted[i];
-    final newBase = _applyOps(item, i, config);
-    final changed = newBase != item.name;
+  var sequence = 0;
+  final folderSequences = <String, int>{};
+  for (final item in sorted) {
+    final included = !excludedKeys.contains(item.key);
+    var newBase = item.name;
     String? error;
-    if (changed) {
-      error = item.isFolder
-          ? bridge.validateFolderName(newBase)
-          : bridge.validateFileName(newBase);
+    if (included) {
+      final folderIndex = folderSequences[item.folder] ?? 0;
+      try {
+        if (configError != null) throw FormatException(configError);
+        newBase = overrides[item.key] ??
+            _applyOps(item, sequence, folderIndex, config);
+        if (newBase != item.name)
+          error = _validateName(newBase, item.isFolder, bridge);
+      } on FormatException catch (e) {
+        error = e.message;
+      }
+      sequence++;
+      folderSequences[item.folder] = folderIndex + 1;
     }
-    results.add(
-      BatchRenameResult(
+    results.add(BatchRenameResult(
         item: item,
         baseName: newBase,
         oldDisplay: item.displayName,
-        newDisplay: item.isFolder || item.format.isEmpty
-            ? newBase
-            : '$newBase.${item.format}',
-        error: error,
-      ),
-    );
+        newDisplay: _displayName(item, newBase),
+        included: included,
+        error: error));
+  }
+
+  if (config.conflictStrategy == BatchRenameConflictStrategy.numberSuffix) {
+    _resolveNameConflicts(results, allFiles, allFolders, bridge);
   }
 
   // 3. 全量文件夹最终路径解析（父级改名会级联到子级，未改名文件夹同样级联）
   final folderFinalPaths =
       _computeFinalFolderPaths(results, allFolders, bridge);
+
+  for (final r in results) {
+    r.targetFolder = folderFinalPaths[r.item.folder] ?? r.item.folder;
+  }
 
   // 4. 冲突检测
   _detectFileConflicts(results, allFiles, selectedFileIds, folderFinalPaths);
@@ -387,6 +301,7 @@ BatchRenamePlan computeBatchRenamePlan({
 
   return BatchRenamePlan(
     results: results,
+    configError: configError,
     folderEntries: folderEntries,
     fileEntries: fileEntries,
   );
@@ -400,8 +315,11 @@ List<BatchRenameItem> _sortItems(
   List<BatchRenameItem> items,
   BatchRenameConfig config,
 ) {
-  int nameCmp(BatchRenameItem a, BatchRenameItem b) =>
-      compareNatural(a.name, b.name);
+  int nameCmp(BatchRenameItem a, BatchRenameItem b) {
+    var c = compareNatural(a.name, b.name);
+    if (c == 0) c = compareNatural(a.folder, b.folder);
+    return c != 0 ? c : a.id.compareTo(b.id);
+  }
 
   int fieldCmp(BatchRenameItem a, BatchRenameItem b) {
     int c;
@@ -416,7 +334,9 @@ List<BatchRenameItem> _sortItems(
         final bt = config.sortField == SortField.createdAt
             ? b.createdAt
             : b.modifiedAt;
-        if (at == null || bt == null) return nameCmp(a, b);
+        if (at == null && bt == null) return nameCmp(a, b);
+        if (at == null) return 1;
+        if (bt == null) return -1;
         c = at.compareTo(bt);
         break;
       case SortField.size:
@@ -444,62 +364,138 @@ List<BatchRenameItem> _sortItems(
 // 操作链
 // --------------------------------------------------------------------
 
-/// 固定顺序：编号 → 替换 → 删除字符 → 插入 → 大小写
-///
-/// 删除先于插入：插入补充的文本不会被删除吃掉；名称被删空后
-/// 若插入仍生效则被拯救（否则由名称校验拒绝）。
-String _applyOps(BatchRenameItem item, int index, BatchRenameConfig config) {
-  var name = item.name;
+String _displayName(BatchRenameItem item, String name) =>
+    item.isFolder || item.format.isEmpty ? name : '$name.${item.format}';
 
-  final n = config.numbering;
-  if (n.effective) {
-    final numStr = _formatNumber(n.start + index * n.step, n.digits);
-    name = n.position == BatchRenameNumberPos.prefix
-        ? '$numStr${n.separator}$name'
-        : '$name${n.separator}$numStr';
+String? _validateName(String name, bool folder, ManifestBridge bridge) {
+  if (RegExp(r'[\x00-\x1f\x7f]').hasMatch(name)) return '名称不能包含控制字符';
+  if (name != name.trim()) return '名称不能以空白开头或结尾，可添加空白清理规则';
+  return folder
+      ? bridge.validateFolderName(name)
+      : bridge.validateFileName(name);
+}
+
+/// 在分配补零字符串和编译正则之前验证上限，避免非法方案拖垮预览。
+String? validateBatchRenameConfig(BatchRenameConfig config) {
+  if (config.operations.length > 50) return '最多支持 50 条规则';
+  for (final op in config.operations) {
+    if (!op.enabled) continue;
+    switch (op) {
+      case BatchNumberOp():
+        if (op.digits < 1 || op.digits > 12) return '编号位数应为 1–12';
+        if (op.start.abs() > 999999999 || op.step.abs() > 999999999)
+          return '编号起始值和步长须在 ±999999999 以内';
+      case BatchReplaceOp():
+        if (op.find.length > 1000 || op.replace.length > 1000) return '替换规则过长';
+        if (op.useRegex && op.find.isNotEmpty) {
+          try {
+            RegExp(op.find, caseSensitive: op.caseSensitive, unicode: true);
+          } on FormatException {
+            return '正则表达式无效';
+          }
+        }
+      case BatchDeleteOp():
+        if (op.position == BatchRenameDeletePos.atIndex && op.index < 1)
+          return '删除位置必须从 1 开始';
+      case BatchInsertOp():
+        if (op.text.length > 1000) return '插入文本过长';
+      case BatchTemplateOp():
+        if (op.pattern.contains('{n}') &&
+            (op.digits < 1 ||
+                op.digits > 12 ||
+                op.start.abs() > 999999999 ||
+                op.step.abs() > 999999999))
+          return '模板编号设置无效：位数 1–12，起始和步长在 ±999999999 以内';
+        if (op.pattern.length > 1000) return '模板过长';
+        final rest = op.pattern.replaceAll(
+            RegExp(r'\{(name|n|folder|ext|created|modified)\}'), '');
+        if (rest.contains('{') || rest.contains('}')) return '未知模板变量或未闭合的大括号';
+      case BatchCaseOp() || BatchCleanupOp():
+        break;
+    }
   }
+  return null;
+}
 
-  final r = config.replace;
-  if (r.effective) {
-    name = r.caseSensitive
-        ? name.replaceAll(r.find, r.replace)
-        : _replaceAllIgnoreCase(name, r.find, r.replace);
-  }
-
-  final del = config.delete;
-  if (del.effective) {
-    final runes = name.runes.toList();
-    name = del.position == BatchRenameDeletePos.start
-        ? (runes.length <= del.count
-            ? ''
-            : String.fromCharCodes(runes.skip(del.count)))
-        : (runes.length <= del.count
-            ? ''
-            : String.fromCharCodes(runes.take(runes.length - del.count)));
-  }
-
-  final ins = config.insert;
-  if (ins.effective) {
-    name = switch (ins.position) {
-      BatchRenameInsertPos.start => '${ins.text}$name',
-      BatchRenameInsertPos.end => '$name${ins.text}',
-      BatchRenameInsertPos.atIndex => _insertAtIndex(name, ins.text, ins.index),
-    };
-  }
-
-  final c = config.caseOp;
-  if (c.effective) {
-    name = switch (c.mode) {
-      BatchRenameCaseMode.upper => name.toUpperCase(),
-      BatchRenameCaseMode.lower => name.toLowerCase(),
-      BatchRenameCaseMode.firstUpper =>
-        name.isEmpty ? name : name[0].toUpperCase() + name.substring(1),
-    };
+String _applyOps(
+    BatchRenameItem item, int index, int folderIndex, BatchRenameConfig config,
+    {String? initialName}) {
+  var name = initialName ?? item.name;
+  for (final op in config.operations) {
+    if (!op.enabled) continue;
+    switch (op) {
+      case BatchTemplateOp():
+        name = op.pattern.replaceAllMapped(RegExp(r'\{([^{}]+)\}'), (m) {
+          return switch (m[1]) {
+            'name' => item.name,
+            'folder' => item.folder.split('/').last,
+            'ext' => item.format,
+            'n' => _formatNumber(
+                op.start +
+                    (op.restartPerFolder ? folderIndex : index) * op.step,
+                op.digits),
+            'created' => _date(item.createdAt, '创建时间'),
+            'modified' => _date(item.modifiedAt, '修改时间'),
+            _ => throw const FormatException('未知模板变量'),
+          };
+        });
+      case BatchNumberOp():
+        final number = _formatNumber(
+            op.start + (op.restartPerFolder ? folderIndex : index) * op.step,
+            op.digits);
+        name = op.position == BatchRenameNumberPos.prefix
+            ? '$number${op.separator}$name'
+            : '$name${op.separator}$number';
+      case BatchReplaceOp():
+        if (!op.effective) continue;
+        name = replaceBatchRenameText(name, op);
+      case BatchDeleteOp():
+        if (!op.effective) continue;
+        final chars = name.characters.toList();
+        final start = switch (op.position) {
+          BatchRenameDeletePos.start => 0,
+          BatchRenameDeletePos.end =>
+            (chars.length - op.count).clamp(0, chars.length),
+          BatchRenameDeletePos.atIndex => (op.index - 1).clamp(0, chars.length),
+        };
+        chars.removeRange(start, (start + op.count).clamp(start, chars.length));
+        name = chars.join();
+      case BatchInsertOp():
+        if (!op.effective) continue;
+        final chars = name.characters.toList();
+        final pos = switch (op.position) {
+          BatchRenameInsertPos.start => 0,
+          BatchRenameInsertPos.end => chars.length,
+          BatchRenameInsertPos.atIndex => (op.index - 1).clamp(0, chars.length),
+        };
+        chars.insert(pos, op.text);
+        name = chars.join();
+      case BatchCaseOp():
+        name = switch (op.mode) {
+          BatchRenameCaseMode.upper => name.toUpperCase(),
+          BatchRenameCaseMode.lower => name.toLowerCase(),
+          BatchRenameCaseMode.firstUpper => name.isEmpty
+              ? name
+              : name.characters.first.toUpperCase() +
+                  name.characters.skip(1).toString(),
+          BatchRenameCaseMode.title => name.toLowerCase().replaceAllMapped(
+              RegExp(r'(^|[\s_\-])([^\s_\-])', unicode: true),
+              (m) => '${m[1]}${m[2]!.toUpperCase()}'),
+        };
+      case BatchCleanupOp():
+        if (op.collapseWhitespace) name = name.replaceAll(RegExp(r'\s+'), ' ');
+        if (op.trim) name = name.trim();
+    }
+    if (name.length > 4096) throw const FormatException('中间名称过长，请调整规则');
   }
   return name;
 }
 
-/// 序号格式化：起始值 10 + 步长 5 + 位数 3 → 010 / 015 / 020
+String _date(DateTime? value, String label) {
+  if (value == null) throw FormatException('该项目没有$label，请调整模板');
+  return '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+}
+
 String _formatNumber(int value, int digits) {
   final negative = value < 0;
   final abs = value.abs().toString();
@@ -508,36 +504,47 @@ String _formatNumber(int value, int digits) {
   return negative ? '-$padded' : padded;
 }
 
-/// 忽略大小写替换所有出现。
-/// Dart 的 [String.toLowerCase] 使用 Unicode 简单小写映射（1:1），
-/// 不会改变字符串长度，因此小写化后的索引与原文一一对应。
-String _replaceAllIgnoreCase(String input, String find, String replace) {
-  if (find.isEmpty || input.isEmpty) return input;
-  final lowerInput = input.toLowerCase();
-  final lowerFind = find.toLowerCase();
-  final sb = StringBuffer();
-  var i = 0;
-  while (i <= input.length) {
-    final idx = lowerInput.indexOf(lowerFind, i);
-    if (idx < 0) {
-      sb.write(input.substring(i));
-      break;
-    }
-    sb.write(input.substring(i, idx));
-    sb.write(replace);
-    i = idx + find.length;
+/// 为撞名的项目加后缀。目录按原父级分组：父级只移动，不会合并。
+void _resolveNameConflicts(
+    List<BatchRenameResult> results,
+    List<BatchRenameItem> allFiles,
+    Set<String> allFolders,
+    ManifestBridge bridge) {
+  final changing =
+      results.where((r) => r.isChanged && r.error == null).toList();
+  final keys = changing.map((r) => r.item.key).toSet();
+  final occupied = <String>{};
+  String key(bool folder, String parent, String name) =>
+      '${folder ? 'd' : 'f'}\u0001$parent\u0001$name';
+  for (final f in allFiles) {
+    if (!keys.contains(f.key)) occupied.add(key(false, f.folder, f.name));
   }
-  return sb.toString();
-}
-
-/// 在 1 基位置插入文本（按字符计数，越界收拢到边界）
-String _insertAtIndex(String name, String text, int index) {
-  final runes = name.runes.toList();
-  final raw = index - 1;
-  final pos = raw < 0 ? 0 : (raw > runes.length ? runes.length : raw);
-  return String.fromCharCodes(runes.take(pos)) +
-      text +
-      String.fromCharCodes(runes.skip(pos));
+  for (final f in allFolders) {
+    if (!keys.contains('folder:$f'))
+      occupied.add(key(
+          true, bridge.getParentFolderPath(f), bridge.getFolderBaseName(f)));
+  }
+  for (final r in results.where((r) => !keys.contains(r.item.key))) {
+    occupied.add(key(r.item.isFolder, r.item.folder, r.item.name));
+  }
+  // 优先保留本来无冲突的目标，避免新增后缀挤占另一个项目的目标。
+  final reserved = changing
+      .map((r) => key(r.item.isFolder, r.item.folder, r.baseName))
+      .toSet();
+  for (final r in changing) {
+    final base = r.baseName;
+    var n = 2;
+    if (occupied.contains(key(r.item.isFolder, r.item.folder, r.baseName))) {
+      do {
+        r.baseName = '$base (${n++})';
+      } while (occupied
+              .contains(key(r.item.isFolder, r.item.folder, r.baseName)) ||
+          reserved.contains(key(r.item.isFolder, r.item.folder, r.baseName)));
+      r.newDisplay = _displayName(r.item, r.baseName);
+      r.error = _validateName(r.baseName, r.item.isFolder, bridge);
+    }
+    occupied.add(key(r.item.isFolder, r.item.folder, r.baseName));
+  }
 }
 
 // --------------------------------------------------------------------
@@ -670,7 +677,12 @@ List<BatchRenameEntry> _buildFolderEntries(
   while (pending.isNotEmpty) {
     var picked = -1;
     for (var i = 0; i < pending.length; i++) {
-      if (!unprocessed.contains(folderFinalPaths[pending[i].item.id])) {
+      final r = pending[i];
+      final localTarget =
+          r.item.folder.isEmpty ? r.baseName : '${r.item.folder}/${r.baseName}';
+      final hasPendingChild =
+          unprocessed.any((path) => path.startsWith('${r.item.id}/'));
+      if (!hasPendingChild && !unprocessed.contains(localTarget)) {
         picked = i;
         break;
       }
