@@ -20,6 +20,8 @@ typedef On3DViewportChange = void Function();
 typedef On3DObjectCreated = void Function(Object3D object);
 typedef On3DToolInstruction = void Function(String instruction);
 
+enum PointDragMode { plane, height }
+
 enum _NavigationGesture { none, orbit, pan }
 
 enum _ViewAction {
@@ -51,6 +53,7 @@ class MathCanvas3D extends StatefulWidget {
   final On3DObjectCreated? onObjectCreated;
   final On3DToolInstruction? onToolInstruction;
   final ConstructionTool currentTool;
+  final int polygonSides;
 
   const MathCanvas3D({
     super.key,
@@ -59,6 +62,7 @@ class MathCanvas3D extends StatefulWidget {
     this.onObjectCreated,
     this.onToolInstruction,
     this.currentTool = ConstructionTool.move,
+    this.polygonSides = 6,
   });
 
   @override
@@ -102,6 +106,23 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   Offset? _constStartPoint; // screen position where point gesture started
   Vector3D? _constPlaneNormal; // stable working-plane normal for this gesture
   bool _constPointPlaced = false; // whether the point was committed
+
+  // Point editing uses the original pointer-down position, avoiding gesture
+  // slop offsets and keeping mouse and touch behavior identical.
+  int? _selectedPointIndex;
+  PointDragMode _pointDragMode = PointDragMode.plane;
+  int? _pointEditPointer;
+  Object3D? _pointBeforeDrag;
+  Offset? _pointerDownPosition;
+  bool _pointWasSelected = false;
+  bool _pointMoved = false;
+  bool _suppressScale = false;
+  bool _multiTouch = false;
+  final Set<int> _activePointers = {};
+
+  Object3D? get selectedPoint =>
+      _selectedPointIndex == null ? null : _objects[_selectedPointIndex!];
+  PointDragMode get pointDragMode => _pointDragMode;
 
   // Gesture state
   Offset? _lastFocalPoint;
@@ -258,6 +279,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   /// Set the objects to render.
   void setObjects(List<Object3D> objects) {
     setState(() {
+      _selectedPointIndex = null;
+      _pointEditPointer = null;
       _objects
         ..clear()
         ..addAll(objects);
@@ -268,6 +291,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   /// Clear all objects.
   void clearObjects() {
     setState(() {
+      _selectedPointIndex = null;
+      _pointEditPointer = null;
       _objects.clear();
       _objectsVersion++;
     });
@@ -308,14 +333,17 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   String? get constructionInstruction => _construction?.currentInstruction;
 
   /// Set the active construction tool.
-  void setTool(ConstructionTool tool) {
+  void setTool(ConstructionTool tool, {bool notifyInstruction = true}) {
     setState(() {
+      _cancelPointDrag();
+      _selectedPointIndex = null;
       _currentTool = tool;
       if (tool == ConstructionTool.move) {
         _construction = null;
         _constructionPreview = null;
       } else {
-        _construction = ConstructionState(tool: tool);
+        _construction =
+            ConstructionState(tool: tool, polygonSides: widget.polygonSides);
         _constructionPreview = null;
       }
       _constPointPlaced = false;
@@ -324,7 +352,9 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       _constPlaneNormal = null;
       _constructionPreview = null;
     });
-    widget.onToolInstruction?.call(_construction?.currentInstruction ?? '');
+    if (notifyInstruction) {
+      widget.onToolInstruction?.call(_construction?.currentInstruction ?? '');
+    }
   }
 
   @override
@@ -333,7 +363,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     // Initialize tool from widget, which also creates construction state
     _currentTool = widget.currentTool;
     if (_currentTool != ConstructionTool.move) {
-      _construction = ConstructionState(tool: _currentTool);
+      _construction = ConstructionState(
+          tool: _currentTool, polygonSides: widget.polygonSides);
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -347,8 +378,15 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   @override
   void didUpdateWidget(MathCanvas3D oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.currentTool != oldWidget.currentTool) {
-      setTool(widget.currentTool);
+    if (widget.currentTool != oldWidget.currentTool ||
+        widget.polygonSides != oldWidget.polygonSides) {
+      setTool(widget.currentTool, notifyInstruction: false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          widget.onToolInstruction
+              ?.call(_construction?.currentInstruction ?? '');
+        }
+      });
     }
   }
 
@@ -371,15 +409,78 @@ class MathCanvas3DState extends State<MathCanvas3D> {
         keys.contains(LogicalKeyboardKey.controlRight);
   }
 
+  int? _hitPoint(Offset position) {
+    int? nearest;
+    var distance = 20.0;
+    final projection = _currentProjection();
+    for (var i = _objects.length - 1; i >= 0; i--) {
+      final object = _objects[i];
+      if (object.type != Object3DType.point || object.opacity <= 0) continue;
+      final screen = worldToScreen(object.point, camera, projection);
+      if (!screen.x.isFinite || !screen.y.isFinite) continue;
+      if (_projectionType == ProjectionType.perspective &&
+          (object.point - camera.position)
+                  .dot((_cameraTarget - camera.position).normalized()) <=
+              0) continue;
+      final gap = (Offset(screen.x, screen.y) - position).distance;
+      if (gap < distance) {
+        nearest = i;
+        distance = gap;
+      }
+    }
+    return nearest;
+  }
+
+  void _cancelPointDrag() {
+    if (_pointBeforeDrag != null && _selectedPointIndex != null) {
+      _objects[_selectedPointIndex!] = _pointBeforeDrag!;
+      _objectsVersion++;
+    }
+    _pointBeforeDrag = null;
+    _pointEditPointer = null;
+  }
+
   void _onPointerDown(PointerDownEvent event) {
     _focusNode.requestFocus();
-    if (event.kind != PointerDeviceKind.mouse) return;
-
+    _activePointers.add(event.pointer);
+    if (_activePointers.length > 1) {
+      setState(() {
+        _cancelPointDrag();
+        _multiTouch = true;
+        _constGroundPos = null;
+        _constStartPoint = null;
+        _constructionPreview = null;
+      });
+      return;
+    }
+    _multiTouch = false;
+    _suppressScale = false;
+    _pointerDownPosition = event.localPosition;
     final secondary = event.buttons & kSecondaryMouseButton != 0;
     final primary = event.buttons & kPrimaryMouseButton != 0;
-    final mayNavigate = _currentTool == ConstructionTool.move || secondary;
+    if (!secondary &&
+        !_panModifierPressed &&
+        (_currentTool == ConstructionTool.move ||
+            _currentTool == ConstructionTool.point)) {
+      final hit = _hitPoint(event.localPosition);
+      _pointWasSelected = hit != null && hit == _selectedPointIndex;
+      setState(() {
+        _selectedPointIndex = hit;
+        if (hit != null) {
+          if (!_pointWasSelected) _pointDragMode = PointDragMode.plane;
+          _pointEditPointer = event.pointer;
+          _pointBeforeDrag = _objects[hit];
+          _pointMoved = false;
+          _suppressScale = true;
+        }
+      });
+      if (hit != null) return;
+    }
+    if (event.kind != PointerDeviceKind.mouse) return;
+    final mayNavigate = _currentTool == ConstructionTool.move ||
+        secondary ||
+        _panModifierPressed;
     if (!mayNavigate || (!primary && !secondary)) return;
-
     _mousePointer = event.pointer;
     _lastMousePosition = event.localPosition;
     _mouseGesture = secondary
@@ -390,11 +491,67 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   }
 
   void _onPointerMove(PointerMoveEvent event) {
+    if (event.pointer == _pointEditPointer && !_multiTouch) {
+      final delta = event.localPosition - _pointerDownPosition!;
+      if (!_pointMoved && delta.distance < 5) return;
+      _pointMoved = true;
+      final start = _pointBeforeDrag!.point;
+      Point3D position;
+      if (_pointDragMode == PointDragMode.height) {
+        final projection = _currentProjection();
+        final a = worldToScreen(start, camera, projection);
+        // Keep the reference in front of the eye even at the closest zoom.
+        final heightStep = projection.type == ProjectionType.perspective
+            ? dart_math.min(1.0, a.z / 2)
+            : 1.0;
+        final b = worldToScreen(
+            start + Vector3D.unitZ * heightStep, camera, projection);
+        final axis = Offset(b.x - a.x, b.y - a.y);
+        // Looking straight down makes the z axis collapse to a screen point.
+        // Keep an intuitive upward drag in that view as well.
+        var dz = axis.distanceSquared > 16
+            ? (delta.dx * axis.dx + delta.dy * axis.dy) / axis.distanceSquared
+            : -delta.dy * _computeScaleForCanvas() * 2 / _canvasHeight;
+        if (projection.type == ProjectionType.perspective &&
+            axis.distanceSquared > 16) {
+          final denominator = (1 - dz) * b.z + dz * a.z;
+          if (denominator <= 1e-6) return;
+          dz = dz * a.z / denominator;
+        }
+        if (axis.distanceSquared > 16) dz *= heightStep;
+        position = Point3D(start.x, start.y, start.z + dz);
+      } else {
+        final startRay =
+            _screenRay(_pointerDownPosition!.dx, _pointerDownPosition!.dy);
+        final ray = _screenRay(event.localPosition.dx, event.localPosition.dy);
+        final a = _intersectWorkingPlane(startRay,
+            point: start, normal: Vector3D.unitZ);
+        final b =
+            _intersectWorkingPlane(ray, point: start, normal: Vector3D.unitZ);
+        if (ray.direction.z.abs() > 0.02 && a != null && b != null) {
+          final offset = b - a;
+          position = Point3D(start.x + offset.x, start.y + offset.y, start.z);
+        } else {
+          // A horizontal plane is edge-on in front/side views.
+          final view = camera.viewMatrix();
+          final right = Vector3D(view[0], view[4], 0).normalized();
+          position = start +
+              right * (delta.dx * _computeScaleForCanvas() * 2 / _canvasHeight);
+        }
+      }
+      if (![position.x, position.y, position.z].every((v) => v.isFinite))
+        return;
+      setState(() {
+        _objects[_selectedPointIndex!] =
+            _pointBeforeDrag!.copyWith(point: position);
+        _objectsVersion++;
+      });
+      return;
+    }
     if (event.pointer != _mousePointer || _lastMousePosition == null) return;
     final delta = event.localPosition - _lastMousePosition!;
     _lastMousePosition = event.localPosition;
     if (delta == Offset.zero) return;
-
     switch (_mouseGesture) {
       case _NavigationGesture.orbit:
         _orbitBy(delta);
@@ -406,11 +563,36 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   }
 
   void _onPointerUp(PointerEvent event) {
+    _activePointers.remove(event.pointer);
+    if (event.pointer == _pointEditPointer) {
+      setState(() {
+        if (!_pointMoved && _pointWasSelected) {
+          _pointDragMode = _pointDragMode == PointDragMode.plane
+              ? PointDragMode.height
+              : PointDragMode.plane;
+        }
+        _pointBeforeDrag = null;
+        _pointEditPointer = null;
+      });
+      widget.onViewportChange?.call();
+    }
     if (event.pointer != _mousePointer) return;
     _mousePointer = null;
     _lastMousePosition = null;
     _mouseGesture = _NavigationGesture.none;
     widget.onViewportChange?.call();
+  }
+
+  void _onPointerCancel(PointerCancelEvent event) {
+    _activePointers.remove(event.pointer);
+    setState(() {
+      _cancelPointDrag();
+      _suppressScale = true;
+      _constGroundPos = null;
+      _constStartPoint = null;
+      _constructionPreview = null;
+    });
+    _onPointerUp(event);
   }
 
   void _orbitBy(Offset delta) {
@@ -472,15 +654,16 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     if (_mousePointer != null) return;
     _lastFocalPoint = details.localFocalPoint;
     _initialScaleDistance = _cameraDistance;
+    if (_suppressScale || _multiTouch) return;
 
     // In construction mode, start tracking a point on the active working
     // plane. The first point uses a coordinate plane; later points use a
     // screen-facing plane through the previous construction point.
     if (_currentTool != ConstructionTool.move && _construction != null) {
-      _constStartPoint = details.localFocalPoint;
+      _constStartPoint = _pointerDownPosition ?? details.localFocalPoint;
       _constGroundPos = _screenToConstructionPlane(
-        details.localFocalPoint.dx,
-        details.localFocalPoint.dy,
+        _constStartPoint!.dx,
+        _constStartPoint!.dy,
         snap: true,
         normalOverride: _constructionPlaneNormal,
       );
@@ -495,12 +678,15 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     if (_mousePointer != null) return;
     final focalPoint = details.localFocalPoint;
     final scale = details.scale;
+    if (details.pointerCount < 2 && (_suppressScale || _multiTouch)) return;
 
     // ===== Construction mode: tap → point on a working plane, drag →
     // adjust height or move across the screen-facing construction plane.
     if (_currentTool != ConstructionTool.move &&
         _construction != null &&
-        !_constPointPlaced) {
+        !_constPointPlaced &&
+        !_multiTouch &&
+        details.pointerCount == 1) {
       if (_constGroundPos != null && _constStartPoint != null) {
         final preview = _constructionPointForDrag(focalPoint);
         _updateConstructionPreview(preview);
@@ -541,6 +727,12 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
   void _onScaleEnd(ScaleEndDetails details) {
     if (_mousePointer != null) return;
+    if (_suppressScale || _multiTouch) {
+      _lastFocalPoint = null;
+      _constGroundPos = null;
+      _constStartPoint = null;
+      return;
+    }
     // ===== Construction mode: finalize the point with the latest spatial
     // position. A second sphere point therefore remains in 3D instead of
     // falling back to z=0.
@@ -665,6 +857,18 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     );
   }
 
+  Point3D? _intersectWorkingPlane(
+    Ray3D ray, {
+    required Point3D point,
+    required Vector3D normal,
+  }) =>
+      intersectRayPlane(
+        ray,
+        point: point,
+        normal: normal,
+        allowBehind: _projectionType == ProjectionType.parallel,
+      );
+
   Projection3D _currentProjection() {
     return _projectionType == ProjectionType.parallel
         ? Projection3D.parallel(
@@ -702,7 +906,14 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           ? 0.0
           : ((screenX - aScreen.x) * dx + (screenY - aScreen.y) * dy) /
               lengthSquared;
-      final clampedT = t.clamp(0.0, 1.0).toDouble();
+      var clampedT = t.clamp(0.0, 1.0).toDouble();
+      if (projection.type == ProjectionType.perspective &&
+          aScreen.z > 0 &&
+          bScreen.z > 0) {
+        clampedT = clampedT *
+            aScreen.z /
+            ((1 - clampedT) * bScreen.z + clampedT * aScreen.z);
+      }
       candidates.add(
         Point3D(
           a.x + (b.x - a.x) * clampedT,
@@ -719,7 +930,9 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           candidates.add(object.point);
         case Object3DType.line:
           candidates.addAll([object.pointA, object.pointB]);
-          addSegmentCandidate(object.pointA, object.pointB);
+          final endpoints = clipLineToView(object, camera, projection);
+          if (endpoints.length == 2)
+            addSegmentCandidate(endpoints[0], endpoints[1]);
         case Object3DType.surface:
         case Object3DType.polyhedron:
         case Object3DType.curve:
@@ -758,7 +971,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
             object.planeB * object.planeD / normalSquared,
             object.planeC * object.planeD / normalSquared,
           );
-          final hit = intersectRayPlane(
+          final hit = _intersectWorkingPlane(
             ray,
             point: planeOrigin,
             normal: normal,
@@ -794,7 +1007,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     required bool snap,
     Vector3D? normalOverride,
   }) {
-    if (snap) {
+    if (snap && _currentTool != ConstructionTool.point) {
       final snapped = _nearestSnappedPoint(screenX, screenY);
       if (snapped != null) return snapped;
     }
@@ -804,10 +1017,10 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     final normal = normalOverride ??
         (points.isEmpty ? Vector3D.unitZ : _constructionPlaneNormal);
     final planePoint = points.isEmpty ? Point3D.origin : points.last;
-    final hit = intersectRayPlane(ray, point: planePoint, normal: normal);
+    final hit = _intersectWorkingPlane(ray, point: planePoint, normal: normal);
     if (hit != null) return hit;
 
-    final ground = intersectRayPlane(
+    final ground = _intersectWorkingPlane(
       ray,
       point: Point3D.origin,
       normal: Vector3D.unitZ,
@@ -820,17 +1033,22 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     final verticalNormal = ray.direction.x.abs() > ray.direction.y.abs()
         ? Vector3D.unitX
         : Vector3D.unitY;
-    final verticalPlane = intersectRayPlane(
+    final verticalPlane = _intersectWorkingPlane(
       ray,
       point: _cameraTarget,
       normal: verticalNormal,
     );
-    return verticalPlane ?? _cameraTarget;
+    final fallback = verticalPlane ?? _cameraTarget;
+    return _currentTool == ConstructionTool.point
+        ? Point3D(fallback.x, fallback.y, 0)
+        : fallback;
   }
 
   Point3D _constructionPointForDrag(Offset focalPoint) {
     final points = _construction?.points ?? const <Point3D>[];
     if (points.isNotEmpty) {
+      final snapped = _nearestSnappedPoint(focalPoint.dx, focalPoint.dy);
+      if (snapped != null) return snapped;
       final point = _screenToConstructionPlane(
         focalPoint.dx,
         focalPoint.dy,
@@ -845,9 +1063,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     _constHeight = -((focalPoint.dy - (_constStartPoint?.dy ?? focalPoint.dy)) /
         pixelsPerWorldUnit);
     final base = _constGroundPos ?? Point3D.origin;
-    return _snapToConstructionGeometry(
-      Point3D(base.x, base.y, base.z + _constHeight),
-    );
+    return Point3D(base.x, base.y, base.z + _constHeight);
   }
 
   Point3D _snapToConstructionGeometry(Point3D point) {
@@ -896,11 +1112,25 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     );
     switch (action) {
       case ConstructionAction.complete:
-        final obj = _construction!.result;
-        if (obj != null) {
+        final result = _construction!.result;
+        if (result != null) {
+          final name = ToolInfo.all[_currentTool]!.name;
+          var number = 1;
+          while (_objects.any((object) => object.label == '$name$number')) {
+            number++;
+          }
+          final obj = result.copyWith(label: '$name$number');
           widget.onObjectCreated?.call(obj);
+          if (_currentTool == ConstructionTool.point) {
+            final index = _objects.indexOf(obj);
+            setState(() {
+              _selectedPointIndex = index < 0 ? null : index;
+              _pointDragMode = PointDragMode.height;
+            });
+          }
         }
-        _construction = ConstructionState(tool: _currentTool);
+        _construction = ConstructionState(
+            tool: _currentTool, polygonSides: widget.polygonSides);
         break;
       case ConstructionAction.advanceStep:
         // Continue to next step
@@ -909,7 +1139,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
         // Wait for more input
         break;
       case ConstructionAction.reset:
-        _construction = ConstructionState(tool: _currentTool);
+        _construction = ConstructionState(
+            tool: _currentTool, polygonSides: widget.polygonSides);
         break;
     }
     widget.onToolInstruction?.call(_construction?.currentInstruction ?? '');
@@ -1091,27 +1322,27 @@ class MathCanvas3DState extends State<MathCanvas3D> {
             cursor: _currentTool == ConstructionTool.move
                 ? SystemMouseCursors.grab
                 : SystemMouseCursors.precise,
-            child: Listener(
-              behavior: HitTestBehavior.opaque,
-              onPointerDown: _onPointerDown,
-              onPointerMove: _onPointerMove,
-              onPointerUp: _onPointerUp,
-              onPointerCancel: _onPointerUp,
-              onPointerSignal: _onPointerSignal,
-              onPointerPanZoomStart: _onPointerPanZoomStart,
-              onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
-              onPointerPanZoomEnd: _onPointerPanZoomEnd,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onScaleStart: _onScaleStart,
-                onScaleUpdate: _onScaleUpdate,
-                onScaleEnd: _onScaleEnd,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CustomPaint(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Listener(
+                    behavior: HitTestBehavior.opaque,
+                    onPointerDown: _onPointerDown,
+                    onPointerMove: _onPointerMove,
+                    onPointerUp: _onPointerUp,
+                    onPointerCancel: _onPointerCancel,
+                    onPointerSignal: _onPointerSignal,
+                    onPointerPanZoomStart: _onPointerPanZoomStart,
+                    onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
+                    onPointerPanZoomEnd: _onPointerPanZoomEnd,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onScaleStart: _onScaleStart,
+                      onScaleUpdate: _onScaleUpdate,
+                      onScaleEnd: _onScaleEnd,
+                      child: CustomPaint(
                         painter: MathCanvas3DPainter(
                           cameraDistance: _cameraDistance,
                           cameraTheta: _cameraTheta,
@@ -1122,6 +1353,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
                           showPlane: _showPlane,
                           showGrid: _showGrid,
                           objects: _objects,
+                          selectedPoint: selectedPoint,
+                          pointDragMode: _pointDragMode,
                           constructionPreview: _constructionPreview,
                           objectsVersion: _objectsVersion,
                           canvasWidth: _canvasWidth,
@@ -1132,51 +1365,94 @@ class MathCanvas3DState extends State<MathCanvas3D> {
                           labelColor: cs.onSurfaceVariant,
                         ),
                       ),
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Material(
-                          color: cs.surface,
-                          elevation: 2,
-                          shape: const CircleBorder(),
-                          child: PopupMenuButton<_ViewAction>(
-                            tooltip: '3D 视图设置',
-                            icon: const Icon(Icons.settings, size: 21),
-                            onSelected: _handleViewAction,
-                            itemBuilder: (_) => _viewMenuItems(),
-                            style: IconButton.styleFrom(
-                              fixedSize: const Size(40, 40),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
+                    ),
+                  ),
+                  if (selectedPoint != null)
+                    Positioned(
+                      left: 8,
+                      bottom: 8,
+                      right: 60,
+                      child: Align(
+                        alignment: Alignment.bottomLeft,
+                        child: TextButton.icon(
+                          key: const ValueKey('point-drag-mode'),
+                          style: TextButton.styleFrom(
+                            backgroundColor: cs.surfaceContainerHigh,
+                            foregroundColor: cs.onSurface,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: Icon(
+                              _pointDragMode == PointDragMode.height
+                                  ? Icons.height
+                                  : Icons.open_with,
+                              size: 20),
+                          onPressed: () => setState(() {
+                            _pointDragMode =
+                                _pointDragMode == PointDragMode.plane
+                                    ? PointDragMode.height
+                                    : PointDragMode.plane;
+                          }),
+                          label: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                  '${selectedPoint!.label ?? '点'} · ${_pointDragMode == PointDragMode.height ? '高度移动' : '平面移动'} · 点击切换',
+                                  style: const TextStyle(fontSize: 12)),
+                              Text(
+                                  'x ${selectedPoint!.point.x.toStringAsFixed(2)}  y ${selectedPoint!.point.y.toStringAsFixed(2)}  z ${selectedPoint!.point.z.toStringAsFixed(2)}',
+                                  style: const TextStyle(fontSize: 12)),
+                            ],
                           ),
                         ),
                       ),
-                      Positioned(
-                        right: 8,
-                        bottom: 8,
-                        child: Column(
-                          children: [
-                            _floatingControl(
-                              icon: Icons.filter_center_focus,
-                              tooltip: '缩放至适合',
-                              onPressed: fitToView,
-                            ),
-                            _floatingControl(
-                              icon: Icons.zoom_in,
-                              tooltip: '放大',
-                              onPressed: zoomIn,
-                            ),
-                            _floatingControl(
-                              icon: Icons.zoom_out,
-                              tooltip: '缩小',
-                              onPressed: zoomOut,
-                            ),
-                          ],
+                    ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Material(
+                      color: cs.surface,
+                      elevation: 2,
+                      shape: const CircleBorder(),
+                      child: PopupMenuButton<_ViewAction>(
+                        tooltip: '3D 视图设置',
+                        icon: const Icon(Icons.settings, size: 21),
+                        onSelected: _handleViewAction,
+                        itemBuilder: (_) => _viewMenuItems(),
+                        style: IconButton.styleFrom(
+                          fixedSize: const Size(40, 40),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                  Positioned(
+                    right: 8,
+                    bottom: 8,
+                    child: Column(
+                      children: [
+                        _floatingControl(
+                          icon: Icons.filter_center_focus,
+                          tooltip: '缩放至适合',
+                          onPressed: fitToView,
+                        ),
+                        _floatingControl(
+                          icon: Icons.zoom_in,
+                          tooltip: '放大',
+                          onPressed: zoomIn,
+                        ),
+                        _floatingControl(
+                          icon: Icons.zoom_out,
+                          tooltip: '缩小',
+                          onPressed: zoomOut,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1204,6 +1480,8 @@ class MathCanvas3DPainter extends CustomPainter {
   final bool showGrid;
   final List<Object3D> objects;
   final Object3D? constructionPreview;
+  final Object3D? selectedPoint;
+  final PointDragMode pointDragMode;
   final int objectsVersion;
   final double canvasWidth;
   final double canvasHeight;
@@ -1223,6 +1501,8 @@ class MathCanvas3DPainter extends CustomPainter {
     this.showGrid = false,
     this.objects = const [],
     this.constructionPreview,
+    this.selectedPoint,
+    this.pointDragMode = PointDragMode.plane,
     this.objectsVersion = 0,
     this.canvasWidth = 800,
     this.canvasHeight = 600,
@@ -1271,6 +1551,34 @@ class MathCanvas3DPainter extends CustomPainter {
 
     // Draw objects (sorted back-to-front)
     _drawObjects(canvas, size, camera, projection);
+    final point = selectedPoint?.point;
+    if (point != null) {
+      final screen = worldToScreen(point, camera, projection);
+      final center = Offset(screen.x, screen.y);
+      final guide = Paint()
+        ..color = const Color(0xFF7C4DFF)
+        ..strokeWidth = 1.8
+        ..style = PaintingStyle.stroke;
+      canvas.drawCircle(center, 10, guide);
+      final ground =
+          worldToScreen(Point3D(point.x, point.y, 0), camera, projection);
+      canvas.drawLine(center, Offset(ground.x, ground.y),
+          guide..color = const Color(0x807C4DFF));
+      guide.color = const Color(0xFF7C4DFF);
+      final directions = pointDragMode == PointDragMode.height
+          ? [const Offset(0, 28), const Offset(0, -28)]
+          : [
+              const Offset(28, 0),
+              const Offset(-28, 0),
+              const Offset(0, 28),
+              const Offset(0, -28)
+            ];
+      for (final direction in directions) {
+        canvas.drawLine(center + direction * 0.5, center + direction, guide);
+        _drawArrowHead(
+            canvas, center, center + direction, Paint()..color = guide.color);
+      }
+    }
   }
 
   /// Compute a reasonable scale based on camera distance.
@@ -1606,8 +1914,10 @@ class MathCanvas3DPainter extends CustomPainter {
     Camera3D camera,
     Projection3D projection,
   ) {
-    final a = worldToScreen(obj.pointA, camera, projection);
-    final b = worldToScreen(obj.pointB, camera, projection);
+    final endpoints = clipLineToView(obj, camera, projection);
+    if (endpoints.length != 2) return;
+    final a = worldToScreen(endpoints[0], camera, projection);
+    final b = worldToScreen(endpoints[1], camera, projection);
     final objAlpha = ((obj.color >> 24) & 0xFF) / 255.0;
     final color = Color(obj.color).withValues(alpha: objAlpha * obj.opacity);
     final avgZ = (a.z + b.z) / 2;
@@ -1993,7 +2303,9 @@ class MathCanvas3DPainter extends CustomPainter {
         oldDelegate.axisColor != axisColor ||
         oldDelegate.gridColor != gridColor ||
         oldDelegate.labelColor != labelColor ||
-        oldDelegate.constructionPreview != constructionPreview;
+        oldDelegate.constructionPreview != constructionPreview ||
+        oldDelegate.selectedPoint != selectedPoint ||
+        oldDelegate.pointDragMode != pointDragMode;
   }
 }
 

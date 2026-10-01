@@ -122,6 +122,8 @@ enum Object3DType {
   curve,
 }
 
+enum Line3DKind { segment, line, ray }
+
 /// A 3D object in the scene.
 ///
 /// Uses a tagged-union pattern with constructors for each type.
@@ -132,6 +134,8 @@ class Object3D {
   // Point fields
   final Point3D? _point;
   Point3D get point => _point ?? Point3D.origin;
+
+  final Line3DKind lineKind;
 
   // Line fields
   final Point3D? _pointA;
@@ -175,6 +179,7 @@ class Object3D {
 
   const Object3D._({
     required this.type,
+    this.lineKind = Line3DKind.segment,
     Point3D? point,
     Point3D? pointA,
     Point3D? pointB,
@@ -206,6 +211,29 @@ class Object3D {
         _sphereRadius = sphereRadius,
         _vector = vector;
 
+  /// Preserve geometry and appearance when naming or moving an object.
+  Object3D copyWith({Point3D? point, String? label}) => Object3D._(
+        type: type,
+        lineKind: lineKind,
+        point: point ?? _point,
+        pointA: _pointA,
+        pointB: _pointB,
+        planeA: _planeA,
+        planeB: _planeB,
+        planeC: _planeC,
+        planeD: _planeD,
+        vertices: _vertices,
+        indices: _indices,
+        normals: _normals,
+        sphereCenter: _sphereCenter,
+        sphereRadius: _sphereRadius,
+        vector: _vector,
+        color: color,
+        opacity: opacity,
+        label: label ?? this.label,
+        transformOrigin: transformOrigin,
+      );
+
   // ==================================================================
   // Factory constructors
   // ==================================================================
@@ -220,6 +248,7 @@ class Object3D {
   const factory Object3D.line(
     Point3D a,
     Point3D b, {
+    Line3DKind lineKind,
     int color,
     double opacity,
     String? label,
@@ -296,11 +325,13 @@ class _Object3DLine extends Object3D {
   const _Object3DLine(
     Point3D a,
     Point3D b, {
+    Line3DKind lineKind = Line3DKind.segment,
     int color = 0xFFAAAAAA,
     double opacity = 1.0,
     String? label,
   }) : super._(
           type: Object3DType.line,
+          lineKind: lineKind,
           pointA: a,
           pointB: b,
           color: color,
