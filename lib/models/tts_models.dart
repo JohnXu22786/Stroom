@@ -485,6 +485,8 @@ Map<String, String> ensureEffortValue(
 // ============================================================================
 
 class ModelConfig {
+  /// Local identity, independent of display names and remote API model IDs.
+  final String id;
   String name;
   String modelId;
   List<VoiceEntry> voices;
@@ -508,6 +510,7 @@ class ModelConfig {
   String? endpointType;
 
   ModelConfig({
+    String? id,
     required this.name,
     required this.modelId,
     List<VoiceEntry>? voices,
@@ -525,11 +528,13 @@ class ModelConfig {
     this.typeConfig = const {},
     this.selectedTrimPresetId,
     this.endpointType,
-  })  : voices = voices ?? [],
+  })  : id = id ?? 'model_${const Uuid().v4()}',
+        voices = voices ?? [],
         customParams = customParams ?? [],
         reasoningParams = reasoningParams ?? [];
 
   Map<String, dynamic> toMap() => {
+        'id': id,
         'name': name,
         'modelId': modelId,
         'voices': voices.map((v) => v.toMap()).toList(),
@@ -550,6 +555,7 @@ class ModelConfig {
       };
 
   factory ModelConfig.fromMap(Map<String, dynamic> map) => ModelConfig(
+        id: map['id'] as String?,
         name: map['name'] as String? ?? '',
         modelId: map['modelId'] as String? ?? '',
         voices: (map['voices'] as List?)
@@ -582,6 +588,7 @@ class ModelConfig {
       );
 
   ModelConfig copy() => ModelConfig(
+        id: id,
         name: name,
         modelId: modelId,
         voices: voices.map((v) => v.copy()).toList(),
@@ -607,6 +614,8 @@ class ModelConfig {
 // ============================================================================
 
 class ProviderConfigItem {
+  /// Local identity, independent of display names and remote API model IDs.
+  final String id;
   String providerName;
   String host;
   String key;
@@ -620,6 +629,7 @@ class ProviderConfigItem {
   String endpointType;
 
   ProviderConfigItem({
+    String? id,
     this.providerName = '',
     this.host = '',
     this.key = '',
@@ -628,11 +638,13 @@ class ProviderConfigItem {
     List<CustomParam>? customParams,
     List<ReasoningParam>? reasoningParams,
     this.endpointType = 'openai',
-  })  : models = models ?? [],
+  })  : id = id ?? 'config_${const Uuid().v4()}',
+        models = models ?? [],
         customParams = customParams ?? [],
         reasoningParams = reasoningParams ?? [];
 
   Map<String, dynamic> toMap() => {
+        'id': id,
         'providerName': providerName,
         'host': host,
         'key': key,
@@ -645,6 +657,7 @@ class ProviderConfigItem {
 
   factory ProviderConfigItem.fromMap(Map<String, dynamic> map) =>
       ProviderConfigItem(
+        id: map['id'] as String?,
         providerName: map['providerName'] as String? ?? '',
         host: map['host'] as String? ?? '',
         key: map['key'] as String? ?? '',
@@ -668,6 +681,7 @@ class ProviderConfigItem {
       );
 
   ProviderConfigItem copy() => ProviderConfigItem(
+        id: id,
         providerName: providerName,
         host: host,
         key: key,

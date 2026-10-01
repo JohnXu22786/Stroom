@@ -751,7 +751,8 @@ void main() {
       // settings 类别恢复（含旧版 data_format_version=1）后展开迁移，
       // settings 部分必须是当前版本。
       final stored = await DataMigrationService.getStoredPartVersions();
-      expect(stored[DataMigrationService.partSettings], equals(1),
+      expect(stored[DataMigrationService.partSettings],
+          equals(DataParts.currentVersions[DataParts.settings]),
           reason: 'Settings part version must be current after restore');
       expect(restoredPrefs.containsKey('data_format_versions'), isTrue,
           reason: 'Per-part version record must exist after restore');

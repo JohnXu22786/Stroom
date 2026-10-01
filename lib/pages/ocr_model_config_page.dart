@@ -294,6 +294,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     }
 
     final result = ModelConfig(
+      id: widget.model?.id,
       name: name,
       modelId: modelId,
       typeConfig: typeConfig,

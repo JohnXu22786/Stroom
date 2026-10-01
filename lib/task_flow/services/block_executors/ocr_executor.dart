@@ -170,16 +170,16 @@ Future<String> executeOcrBlock({
 
   // Model-level selection, same granularity as the OCR page: the shared
   // flattened list (configs without host/key are excluded).
-  final modelIndex = asIntParam(block.params, 'modelIndex', 0);
-  final models = flattenProviderModels(providerEntries, 'ocr');
-  if (models.isEmpty || modelIndex >= models.length) {
+  final selected =
+      resolveProviderModel(providerEntries, 'ocr', block.params['modelRef']);
+  if (selected == null) {
     failSubTask(
       bgNotifier,
       taskId,
       execNotifier,
       execId,
       flowSubTask.id,
-      '未配置OCR模型或索引越界',
+      '未配置OCR模型或模型引用已失效，请重新选择',
     );
     throw BlockExecutionException(
       '未配置OCR模型',
@@ -188,8 +188,8 @@ Future<String> executeOcrBlock({
     );
   }
 
-  final config = models[modelIndex].config;
-  final model = models[modelIndex].model;
+  final config = selected.config;
+  final model = selected.model;
 
   try {
     bgNotifier.updateStep(taskId, 0, running: true);

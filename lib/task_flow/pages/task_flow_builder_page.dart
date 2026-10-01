@@ -16,6 +16,7 @@ import '../models/task_flow_definition.dart';
 import '../models/task_flow_execution.dart';
 import '../providers/task_flow_provider.dart';
 import '../services/task_flow_execution_service.dart';
+import '../services/task_flow_validator.dart';
 import '../utils/block_param_display.dart';
 import '../widgets/block_chain_editor.dart';
 import '../widgets/block_editor_dialog.dart';
@@ -33,11 +34,15 @@ import '../widgets/flow_block_card.dart';
 class TaskFlowBuilderPage extends ConsumerStatefulWidget {
   final String? flowId;
   final bool startInRunMode;
+  final TaskFlowValidationException? validationError;
+  final FlowRunInput? initialInput;
 
   const TaskFlowBuilderPage({
     super.key,
     this.flowId,
     this.startInRunMode = false,
+    this.validationError,
+    this.initialInput,
   });
 
   @override
@@ -88,6 +93,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   bool _isRunMode = false;
   bool _enteredFromRunMode = false;
   bool _isSaving = false;
+  bool _isStarting = false;
   TaskFlowDefinition? _failedSave;
 
   String _initialName = '';
@@ -120,6 +126,25 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       _descController.text = flow.description;
       _inputType = flow.inputType;
       _blocks = List<TaskFlowBlock>.from(flow.blocks);
+    }
+
+    final initialInput = widget.initialInput;
+    if (initialInput != null) {
+      if ([IOType.audio, IOType.image, IOType.video].contains(_runInputType)) {
+        _mediaInputs.add(initialInput.text);
+      } else if (_firstBlockDef?.typeKey == BlockType.catcatch) {
+        final entry = _CatCatchInputEntry();
+        entry.urlController.text = initialInput.text;
+        entry.secondController.text = '${initialInput.durationSec}';
+        _catcatchInputs.add(entry);
+      } else {
+        _inputController.text = initialInput.text;
+      }
+    }
+    if (widget.validationError != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showValidationError(widget.validationError!);
+      });
     }
 
     _initialName = _nameController.text.trim();
@@ -589,8 +614,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
   /// The effective input type for the run input section: the first block's
   /// declared input, falling back to the flow's initial input type.
-  IOType get _runInputType =>
-      _firstBlockDef?.inputType ?? _inputType.userFacing;
+  IOType get _runInputType => _firstBlockDef?.inputType == IOType.any
+      ? _inputType.userFacing
+      : _firstBlockDef?.inputType ?? _inputType.userFacing;
 
   Widget _buildRunInputSection(ColorScheme cs) {
     final firstDef = _firstBlockDef;
@@ -649,7 +675,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 width: double.infinity,
                 height: 44,
                 child: FilledButton.icon(
-                  onPressed: _canStartFlow() ? _startFlow : null,
+                  onPressed:
+                      !_isStarting && _canStartFlow() ? _startFlow : null,
                   icon: const Icon(Icons.play_arrow, size: 18),
                   label: const Text('开始任务流'),
                 ),
@@ -1312,7 +1339,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     if (_firstBlockDef?.typeKey == BlockType.catcatch) {
       return [
         for (final entry in _catcatchInputs)
-          if (_isValidUrl(entry.urlController.text.trim()))
+          if (entry.urlController.text.trim().isNotEmpty)
             FlowRunInput(
               text: entry.urlController.text.trim(),
               durationSec: _catcatchEntrySeconds(entry),
@@ -1330,65 +1357,30 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     return text.isEmpty ? const [] : [FlowRunInput(text: text)];
   }
 
+  Future<void> _showValidationError(TaskFlowValidationException error) async {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(error.toString())));
+    if (error.isInputError) return;
+    setState(() => _isRunMode = false);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || error.blockId == null) return;
+    final index = _blocks.indexWhere((b) => b.id == error.blockId);
+    if (index >= 0) await _editBlock(index);
+  }
+
   Future<void> _startFlow() async {
+    if (_isStarting) return;
     final inputs = _collectRunInputs();
-    if (inputs.isEmpty) return;
-
-    final flow = ref
-        .read(taskFlowListProvider)
-        .where((f) => f.id == _editingFlowId)
-        .firstOrNull;
-
-    if (flow == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('任务流不存在')));
-      }
+    setState(() => _isStarting = true);
+    try {
+      await ref
+          .read(taskFlowExecutionServiceProvider)
+          .launchFlowMany(_editingFlowId!, inputs);
+    } on TaskFlowValidationException catch (error) {
+      if (mounted) await _showValidationError(error);
       return;
-    }
-
-    if (flow.blocks.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('任务流未包含任何功能块')));
-      }
-      return;
-    }
-
-    // Required-param guard (same rule as _saveFlow) — protects flows
-    // saved before the rule existed.
-    for (final block in flow.blocks) {
-      final def = block.getDefinition();
-      if (def == null) continue;
-      for (final p in def.params) {
-        if (!p.required) continue;
-        final raw = block.params[p.key]?.toString() ?? '';
-        if (raw.trim().isEmpty) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('「${def.label}」的「${p.label}」为必填项，请先在设置中配置'),
-              ),
-            );
-          }
-          return;
-        }
-      }
-    }
-
-    final service = ref.read(taskFlowExecutionServiceProvider);
-
-    // Fire-and-forget: startFlowMany can take minutes (polling loops).
-    // Each input runs the whole chain as its own execution — the resource
-    // scheduler queues blocks when the device is busy. The unified task
-    // list shows live progress per execution.
-    if (inputs.length == 1) {
-      service.startFlow(_editingFlowId!, inputs.first.text,
-          durationSec: inputs.first.durationSec);
-    } else {
-      service.startFlowMany(_editingFlowId!, inputs);
+    } finally {
+      if (mounted) setState(() => _isStarting = false);
     }
 
     if (mounted) {

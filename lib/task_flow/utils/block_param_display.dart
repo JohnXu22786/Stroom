@@ -4,16 +4,15 @@ import '../../models/tts_models.dart';
 import '../../providers/assistant_provider.dart';
 import '../../providers/provider_config.dart';
 import '../models/block_type_definition.dart';
-import '../services/block_executors/shared_helpers.dart' show asIntParam;
 import '../../utils/provider_models.dart';
 
 /// Friendly display value for a block param — raw ids (assistant uuids,
-/// voice ids like zh-CN-XiaoxiaoNeural, model indices) must never appear
+/// voice ids like zh-CN-XiaoxiaoNeural, model references) must never appear
 /// to the user. Used by the block card summary AND the run-mode 查看参数
 /// dialog, so both surfaces always agree.
 ///
 /// [params] is the block's full param map — voice resolution follows the
-/// selected model (modelIndex), exactly like the executor and the
+/// selected model reference, exactly like the executor and the
 /// settings panel.
 String friendlyParamValue(
   BlockParamDefinition? paramDef,
@@ -36,14 +35,14 @@ String friendlyParamValue(
       final v = voices.where((v) => v.id == raw).firstOrNull;
       return v != null ? v.name : '已失效';
     case BlockParamType.modelSelector:
-      final models = flattenProviderModels(
+      final selected = resolveProviderModel(
         ref.read(providerEntriesProvider),
         paramDef.configType,
+        value,
       );
-      final idx = int.tryParse(raw) ?? -1;
-      if (idx < 0 || idx >= models.length) return '已失效';
-      final m = models[idx].model;
-      final c = models[idx].config;
+      if (selected == null) return '已失效，请重新选择';
+      final m = selected.model;
+      final c = selected.config;
       final name = m.name.isNotEmpty ? m.name : m.modelId;
       return '$name | ${c.providerName}';
     case BlockParamType.filePath:
@@ -56,19 +55,14 @@ String friendlyParamValue(
   }
 }
 
-/// Voices of the TTS model selected by the block's modelIndex param —
-/// the same model the executor synthesizes with (shared
-/// flattenProviderModels list).
+/// Voices of the same persistent model reference used by the executor.
 List<VoiceEntry> selectedTtsVoices(
   WidgetRef ref,
   Map<String, dynamic> params,
-) {
-  final models = flattenProviderModels(
-    ref.read(providerEntriesProvider),
-    'tts',
-  );
-  final idx = asIntParam(params, 'modelIndex', 0);
-  if (models.isEmpty || idx >= models.length) return const [];
-  final m = models[idx].model;
-  return m.voices;
-}
+) =>
+    resolveProviderModel(
+      ref.read(providerEntriesProvider),
+      'tts',
+      params['modelRef'],
+    )?.model.voices ??
+    const [];

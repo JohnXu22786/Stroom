@@ -117,6 +117,7 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
     }
 
     final result = ModelConfig(
+      id: widget.model?.id,
       name: name,
       modelId: modelId,
       customParams: _customParams.map((p) => p.copy()).toList(),

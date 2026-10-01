@@ -138,7 +138,7 @@ void main() {
       final updated = block.copyWithParams({'saveFolder': 'custom_folder'});
       expect(updated.params['saveFolder'], 'custom_folder');
       // Other default params should still exist
-      expect(updated.params.containsKey('modelIndex'), isTrue);
+      expect(updated.params.containsKey('modelRef'), isTrue);
     });
 
     test('serialization round-trips', () {

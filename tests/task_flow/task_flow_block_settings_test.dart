@@ -15,6 +15,7 @@ import 'package:stroom/task_flow/widgets/block_editor_dialog.dart';
 import 'package:stroom/task_flow/widgets/flow_block_card.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/utils/provider_models.dart';
 
 class _FakeEntriesNotifier extends ProviderEntriesNotifier {
   _FakeEntriesNotifier(ProviderEntriesState entries) {
@@ -266,7 +267,7 @@ void main() {
     );
 
     // All three models across both configs are selectable.
-    await tester.tap(find.text('whisper-1 | OpenAI'));
+    await tester.tap(find.text('模型未选择或已失效，请重新选择'));
     await tester.pumpAndSettle();
     expect(find.text('whisper-large | OpenAI'), findsOneWidget);
     expect(find.text('distil-whisper | Groq'), findsOneWidget);
@@ -324,14 +325,13 @@ void main() {
       entries: entries,
     );
 
-    // Only the two valid configs' models are listed (the field shows the
-    // selected one; the ghost config's model is absent everywhere).
-    expect(find.text('whisper-1 | OpenAI'), findsOneWidget);
+    // Only configured models are available; selecting is explicit.
+    expect(find.text('模型未选择或已失效，请重新选择'), findsOneWidget);
     expect(find.textContaining('ghost-model'), findsNothing);
     // Index 1 in the panel == index 1 in the executor's flattened list:
     // opening the dropdown lists distil-whisper at the same index the
     // executor resolves for modelIndex 1.
-    await tester.tap(find.text('whisper-1 | OpenAI'));
+    await tester.tap(find.text('模型未选择或已失效，请重新选择'));
     await tester.pumpAndSettle();
     expect(find.text('distil-whisper | Groq'), findsOneWidget);
   });
@@ -472,7 +472,11 @@ void main() {
                 FlowBlockCard(
                   block: TaskFlowBlock(
                     typeKey: BlockType.tts,
-                    params: {'voice': 'zh-CN-XiaoxiaoNeural'},
+                    params: {
+                      'voice': 'zh-CN-XiaoxiaoNeural',
+                      'modelRef': providerModelReference(
+                          flattenProviderModels(entries, 'tts').first),
+                    },
                   ),
                   index: 1,
                 ),
@@ -545,11 +549,12 @@ void main() {
   testWidgets(
       'block card shows the MODEL name for modelSelector params '
       '(no raw index)', (tester) async {
+    final entries = _asrEntries();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => _FakeEntriesNotifier(_asrEntries()),
+            (ref) => _FakeEntriesNotifier(entries),
           ),
           assistantProvider.overrideWith(
             (ref) => _FakeAssistantsNotifier(const []),
@@ -560,7 +565,10 @@ void main() {
             body: FlowBlockCard(
               block: TaskFlowBlock(
                 typeKey: BlockType.asr,
-                params: {'modelIndex': 1},
+                params: {
+                  'modelRef': providerModelReference(
+                      flattenProviderModels(entries, 'asr')[1])
+                },
               ),
               index: 1,
             ),
@@ -661,19 +669,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(result, isNotNull);
     expect(result!.params['voice'], 'zh-CN-YunxiNeural');
-    expect(result!.params['modelIndex'], 1,
+    expect(result!.params['modelRef'],
+        providerModelReference(flattenProviderModels(entries, 'tts')[1]),
         reason: 'picking a voice from another model must switch the model');
   });
 
   testWidgets(
       'a stale voice (not in the selected model) resets on confirm '
       '(no invalid id survives)', (tester) async {
+    final entries = _ttsEntries();
     TaskFlowBlock? result;
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => _FakeEntriesNotifier(_ttsEntries()),
+            (ref) => _FakeEntriesNotifier(entries),
           ),
           assistantProvider.overrideWith(
             (ref) => _FakeAssistantsNotifier(const []),
@@ -689,7 +699,11 @@ void main() {
                       context,
                       block: TaskFlowBlock(
                         typeKey: BlockType.tts,
-                        params: {'voice': 'deleted-voice'},
+                        params: {
+                          'voice': 'deleted-voice',
+                          'modelRef': providerModelReference(
+                              flattenProviderModels(entries, 'tts').first)
+                        },
                       ),
                     );
                   },
@@ -818,7 +832,11 @@ void main() {
       tester,
       block: TaskFlowBlock(
         typeKey: BlockType.tts,
-        params: {'voice': 'shared-voice'},
+        params: {
+          'voice': 'shared-voice',
+          'modelRef': providerModelReference(
+              flattenProviderModels(entries, 'tts').first)
+        },
       ),
       entries: entries,
     );
