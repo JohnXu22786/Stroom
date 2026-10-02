@@ -38,6 +38,19 @@ class _Documents extends PathProviderPlatform {
   Future<String?> getApplicationDocumentsPath() async => path;
 }
 
+const _dispatchWait = Duration(seconds: 10);
+
+Future<void> _waitFor(bool Function() ready, String description) async {
+  final timer = Stopwatch()..start();
+  while (!ready()) {
+    if (timer.elapsed >= _dispatchWait) {
+      throw TimeoutException(
+          'Timed out waiting for $description', _dispatchWait);
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+}
+
 class _ManualDownloads extends CatCatchNotifier {
   _ManualDownloads(super.ref);
 
@@ -368,12 +381,12 @@ void main() {
       final service = container.read(taskFlowExecutionServiceProvider);
       final ids = await service
           .launchFlowMany('flow', [const FlowRunInput(text: 'input')]);
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await _waitFor(() => calls == 1, 'initial synthesis dispatch');
       await service.pauseExecution(ids.single);
       notifier.shouldHold = (records) =>
           records.any((e) => e.status == FlowExecutionStatus.running);
       final resume = service.resumeExecution(ids.single);
-      await notifier.entered.future;
+      await notifier.entered.future.timeout(_dispatchWait);
       if (action == 'cancel') {
         await service.cancelExecution(ids.single);
       } else {
@@ -468,13 +481,17 @@ void main() {
       'untouched batch input stays waiting after pause resume and cold restore',
       () async {
     final active = Completer<FlowPayload>();
-    final container = make(runner: (b, input, id, step) => active.future);
+    final firstDispatched = Completer<void>();
+    final container = make(runner: (b, input, id, step) {
+      if (!firstDispatched.isCompleted) firstDispatched.complete();
+      return active.future;
+    });
     final service = container.read(taskFlowExecutionServiceProvider);
     final ids = await service.launchFlowMany('flow', [
       const FlowRunInput(text: 'first'),
       const FlowRunInput(text: 'second')
     ]);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await firstDispatched.future.timeout(_dispatchWait);
     await service.pauseExecution(ids.last);
     await service.resumeExecution(ids.last);
     expect(
@@ -485,6 +502,13 @@ void main() {
         FlowExecutionStatus.waiting);
     service.dispose();
     active.complete(const FlowPayload.text('late'));
+    final oldNotifier = container.read(taskFlowExecutionsProvider.notifier);
+    await _waitFor(
+        () =>
+            oldNotifier.execution(ids.first)?.status ==
+            FlowExecutionStatus.interrupted,
+        'first batch input interruption');
+    expect(await oldNotifier.persist(), isTrue);
     final inputs = <String>[];
     final fresh = make(runner: (b, input, id, step) async {
       inputs.add(input.value);
@@ -496,7 +520,15 @@ void main() {
     await fresh
         .read(taskFlowExecutionServiceProvider)
         .restorePendingExecutions();
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await _waitFor(() => inputs.length == 1, 'restored second input dispatch');
+    await _waitFor(
+        () =>
+            fresh
+                .read(taskFlowExecutionsProvider.notifier)
+                .execution(ids.last)
+                ?.status ==
+            FlowExecutionStatus.completed,
+        'restored second input completion');
     expect(inputs, ['second']);
     expect(
         fresh
@@ -974,21 +1006,23 @@ void main() {
     final service = container.read(taskFlowExecutionServiceProvider);
     final scheduler = container.read(taskFlowSchedulerProvider);
     await service.launchFlowMany('chat', [const FlowRunInput(text: 'first')]);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await _waitFor(() => dispatched.contains('first'), 'first chat dispatch');
     final queued = (await service.launchFlowMany('download',
             [const FlowRunInput(text: 'https://example.com/download')]))
         .single;
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await _waitFor(
+        () => scheduler.queuedCount == 1, 'heavy download queue entry');
     expect(scheduler.queuedCount, 1);
     try {
       await service.pauseExecution(queued);
       expect(scheduler.queuedCount, 0);
       await service.launchFlowMany('chat', [const FlowRunInput(text: 'third')]);
-      await Future<void>.delayed(const Duration(milliseconds: 550));
+      await _waitFor(() => dispatched.length == 2, 'third chat dispatch');
       expect(dispatched, ['first', 'third']);
       await service.resumeExecution(queued);
       first.complete(const FlowPayload.text('done'));
-      await Future<void>.delayed(const Duration(milliseconds: 550));
+      await _waitFor(
+          () => dispatched.length == 3, 'resumed heavy download dispatch');
       expect(dispatched, ['first', 'third', 'https://example.com/download']);
     } finally {
       if (!first.isCompleted) first.complete(const FlowPayload.text('done'));
@@ -1180,7 +1214,13 @@ void main() {
     final service = container.read(taskFlowExecutionServiceProvider);
     final ids = await service.launchFlowMany(
         'flow', [FlowRunInput(text: media.path, mimeType: 'audio/mp4')]);
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final notifier = container.read(taskFlowExecutionsProvider.notifier);
+    await _waitFor(
+        () =>
+            received.length == 1 &&
+            notifier.execution(ids.single)?.status ==
+                FlowExecutionStatus.failed,
+        'initial audio MP4 failure');
     final original = container.read(taskFlowExecutionsProvider).single;
     expect(original.toMap()['inputMimeType'], 'audio/mp4');
     expect(received.single.mimeType, 'audio/mp4');
@@ -1188,7 +1228,12 @@ void main() {
         'audio/mp4');
 
     final retryIds = await service.retryExecution(ids.single);
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await _waitFor(
+        () =>
+            received.length == 2 &&
+            notifier.execution(retryIds.single)?.status ==
+                FlowExecutionStatus.failed,
+        'snapshot audio MP4 retry');
     expect(received[1].mimeType, 'audio/mp4');
     expect(
         container
@@ -1198,13 +1243,23 @@ void main() {
         'audio/mp4');
 
     await service.resumeExecution(ids.single);
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await _waitFor(
+        () =>
+            received.length == 3 &&
+            notifier.execution(ids.single)?.status ==
+                FlowExecutionStatus.completed,
+        'prefix-zero audio MP4 resume');
     expect(received[2].type, IOType.audio);
     expect(received[2].mimeType, 'audio/mp4');
 
     final latestIds =
         await service.retryExecution(ids.single, useLatestConfiguration: true);
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await _waitFor(
+        () =>
+            received.length == 4 &&
+            notifier.execution(latestIds.single)?.status ==
+                FlowExecutionStatus.completed,
+        'latest-configuration audio MP4 retry');
     expect(received[3].mimeType, 'audio/mp4');
     expect(
         container
@@ -1303,7 +1358,16 @@ void main() {
     final service = container.read(taskFlowExecutionServiceProvider);
     final ids = await service
         .launchFlowMany('flow', [const FlowRunInput(text: 'input')]);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await _waitFor(
+        () =>
+            container
+                .read(taskFlowExecutionsProvider.notifier)
+                .execution(ids.single)
+                ?.subTasks
+                .single
+                .subTaskId ==
+            'child',
+        'initial synthesis child dispatch');
     await service.pauseExecution(ids.single);
     container.read(providerEntriesProvider.notifier).state = _providers(
         'tts', 'voice',

@@ -1,3 +1,6 @@
+// This test seeds notifier state and injects the test-only block runner.
+// ignore_for_file: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -33,9 +36,39 @@ class _Documents extends PathProviderPlatform {
 class _CompletionFailNotifier extends TaskFlowExecutionNotifier {
   @override
   Future<bool> persist() {
-    if (state.any((e) => e.status == FlowExecutionStatus.completed))
+    if (state.any((e) => e.status == FlowExecutionStatus.completed)) {
       return Future.value(false);
+    }
     return super.persist();
+  }
+}
+
+const _workerTimeout = Duration(seconds: 10);
+
+Future<TaskFlowExecution> _waitForStatus(
+    ProviderContainer container, String id, FlowExecutionStatus status) async {
+  final found = Completer<TaskFlowExecution>();
+  void check(List<TaskFlowExecution> executions) {
+    final current = executions.where((e) => e.id == id).firstOrNull;
+    if (current?.status == status && !found.isCompleted) {
+      found.complete(current);
+    }
+  }
+
+  final subscription =
+      container.listen(taskFlowExecutionsProvider, (_, next) => check(next));
+  try {
+    check(container.read(taskFlowExecutionsProvider));
+    return await found.future.timeout(_workerTimeout, onTimeout: () {
+      final current = container
+          .read(taskFlowExecutionsProvider)
+          .where((e) => e.id == id)
+          .firstOrNull;
+      throw TestFailure(
+          'Timed out waiting for $id to become $status; current: ${current?.status}');
+    });
+  } finally {
+    subscription.close();
   }
 }
 
@@ -45,6 +78,7 @@ void main() {
   late PathProviderPlatform previous;
   late ProviderContainer container;
   late List<String> dispatches;
+  late StreamController<int> dispatchEvents;
   late Completer<FlowPayload> first;
   Future<FlowPayload> Function(TaskFlowBlock, FlowPayload, String, FlowSubTask)?
       runner;
@@ -59,11 +93,13 @@ void main() {
           [Assistant(id: 'assistant', name: 'A', prompt: 'Prompt').toMap()]),
     });
     dispatches = [];
+    dispatchEvents = StreamController<int>.broadcast(sync: true);
     runner = null;
     first = Completer<FlowPayload>();
     container = ProviderContainer(overrides: [
       taskFlowBlockRunnerProvider.overrideWithValue((block, input, id, step) {
         dispatches.add('${block.params['marker']}:${input.value}');
+        dispatchEvents.add(dispatches.length);
         if (runner != null) return runner!(block, input, id, step);
         return dispatches.length == 1
             ? first.future
@@ -82,9 +118,20 @@ void main() {
     ];
   });
 
+  Future<void> waitForDispatchCount(int count) async {
+    if (dispatches.length >= count) return;
+    await dispatchEvents.stream
+        .firstWhere((seen) => seen >= count)
+        .timeout(_workerTimeout, onTimeout: () {
+      throw TestFailure(
+          'Timed out waiting for $count dispatches; saw $dispatches');
+    });
+  }
+
   tearDown(() async {
     container.dispose();
     await Future<void>.delayed(const Duration(milliseconds: 220));
+    await dispatchEvents.close();
     PathProviderPlatform.instance = previous;
     AppStorage.resetCache();
     await dir.delete(recursive: true);
@@ -102,7 +149,7 @@ void main() {
     expect(ids, hasLength(2));
     expect(saved.map((e) => e['inputText']).toSet(), {'one', 'two'});
     expect(saved.every((e) => e['snapshot'] != null), isTrue);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await waitForDispatchCount(1);
     await service
         .cancelBatch(container.read(taskFlowExecutionsProvider).first.batchId!);
     first.complete(FlowPayload.fromValue('late', IOType.text));
@@ -121,7 +168,7 @@ void main() {
     final service = container.read(taskFlowExecutionServiceProvider);
     final ids =
         await service.launchFlowMany('flow', [const FlowRunInput(text: 'one')]);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await waitForDispatchCount(1);
     await service.pauseExecution(ids.single);
     first.complete(FlowPayload.fromValue('prefix', IOType.text));
     await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -129,7 +176,7 @@ void main() {
     expect(container.read(taskFlowExecutionsProvider).single.status,
         FlowExecutionStatus.paused);
     await service.resumeExecution(ids.single);
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await _waitForStatus(container, ids.single, FlowExecutionStatus.completed);
     expect(dispatches, ['original:one', 'null:prefix']);
     expect(container.read(taskFlowExecutionsProvider).single.status,
         FlowExecutionStatus.completed);
@@ -139,7 +186,7 @@ void main() {
     final service = container.read(taskFlowExecutionServiceProvider);
     final ids = await service.launchFlowMany('flow',
         [const FlowRunInput(text: 'one'), const FlowRunInput(text: 'two')]);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await waitForDispatchCount(1);
     final notifier = container.read(taskFlowExecutionsProvider.notifier);
     for (final id in ids) {
       notifier.removeExecution(id);
@@ -167,19 +214,22 @@ void main() {
     final service = container.read(taskFlowExecutionServiceProvider);
     final ids =
         await service.launchFlowMany('flow', [const FlowRunInput(text: 'one')]);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await waitForDispatchCount(1);
     first.complete(FlowPayload.fromValue('prefix', IOType.text));
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await _waitForStatus(container, ids.single, FlowExecutionStatus.completed);
     final flows = container.read(taskFlowListProvider.notifier);
     flows.state = [
       flows.state.single.updateBlockParams(
           flows.state.single.blocks.first.id, {'marker': 'edited'})
     ];
-    await service.retryExecution(ids.single);
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final snapshotRetry = await service.retryExecution(ids.single);
+    await _waitForStatus(
+        container, snapshotRetry.single, FlowExecutionStatus.completed);
     expect(dispatches[2], 'original:one');
-    await service.retryExecution(ids.single, useLatestConfiguration: true);
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final latestRetry =
+        await service.retryExecution(ids.single, useLatestConfiguration: true);
+    await _waitForStatus(
+        container, latestRetry.single, FlowExecutionStatus.completed);
     expect(dispatches[4], 'edited:one');
   });
 
@@ -193,13 +243,13 @@ void main() {
     final service = container.read(taskFlowExecutionServiceProvider);
     final ids =
         await service.launchFlowMany('flow', [const FlowRunInput(text: 'one')]);
-    await Future<void>.delayed(const Duration(milliseconds: 40));
-    final failed = container.read(taskFlowExecutionsProvider).single;
+    final failed =
+        await _waitForStatus(container, ids.single, FlowExecutionStatus.failed);
     expect(failed.status, FlowExecutionStatus.failed);
     expect(failed.subTasks.first.result!.value, 'checkpoint');
     expect(failed.subTasks.last.outcome, FlowStepOutcome.failed);
     await service.resumeExecution(ids.single);
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await _waitForStatus(container, ids.single, FlowExecutionStatus.completed);
     expect(dispatches, ['original:one', 'null:checkpoint', 'null:checkpoint']);
     expect(container.read(taskFlowExecutionsProvider).single.status,
         FlowExecutionStatus.completed);
@@ -209,14 +259,15 @@ void main() {
       () async {
     final missing = '${dir.path}/missing.wav';
     runner = (block, input, id, step) async {
-      if (dispatches.length == 1)
+      if (dispatches.length == 1) {
         return FlowPayload.file(fileReference: missing, type: IOType.audio);
+      }
       throw StateError('suffix failed');
     };
     final service = container.read(taskFlowExecutionServiceProvider);
     final ids =
         await service.launchFlowMany('flow', [const FlowRunInput(text: 'one')]);
-    await Future<void>.delayed(const Duration(milliseconds: 40));
+    await _waitForStatus(container, ids.single, FlowExecutionStatus.failed);
     await expectLater(service.resumeExecution(ids.single),
         throwsA(isA<TaskFlowValidationException>()));
     expect(dispatches, hasLength(2));
@@ -252,10 +303,10 @@ void main() {
     await container
         .read(taskFlowExecutionServiceProvider)
         .restorePendingExecutions();
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await waitForDispatchCount(1);
     expect(dispatches, ['original:saved input']);
     first.complete(FlowPayload.fromValue('prefix', IOType.text));
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await _waitForStatus(container, saved.id, FlowExecutionStatus.completed);
     expect(notifier.state.single.status, FlowExecutionStatus.completed);
   });
 
@@ -292,7 +343,7 @@ void main() {
     final service = container.read(taskFlowExecutionServiceProvider);
     final ids =
         await service.launchFlowMany('flow', [const FlowRunInput(text: 'one')]);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await waitForDispatchCount(1);
     service.dispose();
     await Future<void>.delayed(Duration.zero);
     first.complete(FlowPayload.fromValue('late', IOType.text));
@@ -386,7 +437,7 @@ void main() {
     final service = container.read(taskFlowExecutionServiceProvider);
     final ids = await service.launchFlowMany('flow',
         [const FlowRunInput(text: 'one'), const FlowRunInput(text: 'two')]);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await waitForDispatchCount(1);
     container
         .read(taskFlowExecutionsProvider.notifier)
         .removeExecution(ids.first);
@@ -407,7 +458,7 @@ void main() {
     final service = container.read(taskFlowExecutionServiceProvider);
     final ids = await service.launchFlowMany('flow',
         [const FlowRunInput(text: 'one'), const FlowRunInput(text: 'two')]);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await waitForDispatchCount(1);
     final path = '${dir.path}/task_flows/executions.json';
     await File(path).delete();
     await Directory(path).create();
@@ -527,7 +578,7 @@ void main() {
     await fresh
         .read(taskFlowExecutionServiceProvider)
         .restorePendingExecutions();
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await _waitForStatus(fresh, record.id, FlowExecutionStatus.completed);
     expect(calls, 1);
     expect(fresh.read(taskFlowExecutionsProvider).single.status,
         FlowExecutionStatus.completed);
