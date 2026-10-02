@@ -5,13 +5,19 @@ keyboard button switches the same draft to a system-keyboard LaTeX source field.
 The mathematical-input preference is remembered. Mathematical keys stay disabled
 until the editor finishes loading; the source toggle remains available. 3D continues using source input.
 
-The shared bottom keyboard follows the active formula. Its tabs cover arithmetic,
-functions, constants, structures, relations, Greek letters, Latin letters and typography.
+The shared bottom keyboard follows the active formula. Its tabs separate common
+arithmetic, exponents/logarithms, functions, constants, Greek lowercase/uppercase/
+variants, calculus, matrices, sets/logic, relations, arrows, fences/intervals,
+typography and Latin letters. Scroll the tabs or open the category directory to
+jump directly to a category; this resets its page and scroll position.
 Numbers and backspace keep their positions. Use page buttons for more symbols.
+The logarithm tab offers explicit base-ten, base-two and arbitrary-base templates
+alongside natural ln and powers of e, 2 and 10. Legacy bare log remains natural.
 Templates accept the selected expression; powers can capture the complete item
 to the left of the caret. Empty slots stay visible until filled. Tap within the
 formula to position the caret; drag or long press to select. The header identifies
 the current numerator, denominator, exponent, subscript, radical or matrix cell.
+The header also identifies upper/lower annotations and labelled arrows.
 The arrow buttons stay visible while the key grid scrolls on short screens.
 In very short landscape/window layouts, the header and category tabs scroll with
 the keys to leave the navigation row visible and avoid clipping the key area.
@@ -19,7 +25,7 @@ the keys to leave the navigation row visible and avoid clipping the key area.
 | Control | Editing behavior |
 | --- | --- |
 | Left / Right | MathLive's atom traversal enters nested structures, crosses their branches, and exits them in document order. A selection collapses toward the requested side; reaching the document boundary keeps focus in the formula. |
-| Up / Down | Switches between numerator and denominator, existing subscript and exponent, radical index and body, or matrix rows in the same column. It uses the nearest enclosing structure with a valid destination and preserves horizontal position where geometry is available. It never creates a missing branch. Leaving a sole exponent/subscript lands after the complete scripted item. |
+| Up / Down | Switches between numerator and denominator, existing subscript and exponent, radical index and body, matrix rows in the same column, or an annotation and its body/other label. It uses the nearest enclosing structure with a valid destination and preserves horizontal position where geometry is available. It never creates a missing branch. Leaving a sole exponent/subscript lands after the complete scripted item. |
 | Previous / Next | Visits filled as well as empty sibling slots. At the first/last slot it exits before/after that structure; from outside it enters the nearby structure. Empty placeholders are selected for replacement. |
 | Exit structure | Leaves the nearest enclosing structure, retaining any outer structure. |
 
@@ -47,6 +53,12 @@ reports post-render formula height, including tall templates and error hints. St
 and keep-alive state preserve each editor when formulas are removed or scrolled.
 Theme changes update the retained editor's ink, caret and error colors without
 reimporting its content or resetting the selection.
+Edited exports and clipboard selections use explicit digit-subscript groups so
+`a_{1}x` remains a product instead of becoming the identifier `a_1x`. Legacy
+underscore identifiers import with grouped subscripts and retain their names;
+multi-letter bases use roman formatting. Literal text/operator names are preserved.
+Deletion captures the formula identity before confirmation and rechecks that a
+row remains after pending editor snapshots finish.
 
 Unknown or malformed imported LaTeX remains in the source draft. Its rendered
 view explains that it must be corrected in source mode instead of exporting a
@@ -73,14 +85,18 @@ vocabulary: 24 unary functions, 3 binary functions and 8 constants, plus arithme
 powers, fractions, indexed roots, implicit multiplication and parameterized
 explicit/implicit equations. Function templates and the parser share a catalog;
 numeric tests compare every template with function_tree's actual function tables.
-Greek letters and simple letter/digit subscripts work as parameters, initially 1,
+All 24 Greek lowercase letters, 24 uppercase letters and eight variant/archaic
+forms have keys. Greek letters and simple letter/digit subscripts work as parameters, initially 1,
 and remain adjustable through parameter controls. Lowercase pi and e retain their
-constant meaning.
+constant meaning. Complex indexed expressions such as `a_{x+1}` remain editable
+but cannot be plotted; supported logarithm bases continue to evaluate normally.
 
 Floor/ceiling fences, grouped factorials, percentages, remainder and scientific
 notation keep their numeric meaning. The percent key divides its preceding item
 by 100; the mod key inserts binary remainder. Legacy ASCII function calls import
 as editable structures while retaining their source until the first edit.
+Identifiers in simple braced subscripts remain literal during import, including
+names that match constants, functions or scientific notation.
 Unsupported commands, unknown functions and multivalued signs such as ± are
 rejected rather than silently becoming a different curve. This change does not
 add symbolic calculus, complex plotting or inequality shading.

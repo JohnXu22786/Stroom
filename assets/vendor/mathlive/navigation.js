@@ -26,6 +26,14 @@ window.stroomNavigation = function(field) {
       } else if (/^\\begin\{/.test(latex)) {
         kind = 'matrix'; columns = matrixColumns(latex);
         labels = starts.map((_, i) => `第 ${Math.floor(i/columns)+1} 行，第 ${i%columns+1} 列`);
+      } else if (/^\\(?:overset|underset|stackrel)\b/.test(latex)) {
+        kind = 'annotation';
+        const lower = /^\\underset\b/.test(latex);
+        levels = ['base', lower ? 'lower' : 'upper'];
+        labels = ['主体', lower ? '下方标注' : '上方标注'];
+      } else if (/^\\x(?:right|left)arrow\b/.test(latex)) {
+        kind = 'annotation';
+        levels = ['upper', 'lower']; labels = ['上方标注', '下方标注'];
       } else if (scriptLevels(latex).length && !/^\\left/.test(latex)) {
         kind = 'script';
         levels = scriptLevels(latex);
@@ -33,8 +41,11 @@ window.stroomNavigation = function(field) {
         labels = levels.map(level => limits ? (level === '指数' ? '上限' : '下限') : level);
       } else if (/^\\left\|/.test(latex)) labels = ['绝对值内'];
       else if (/^\\left/.test(latex)) labels = ['括号内'];
-      const branches = starts.map((begin, i) => ({start:begin, end:(starts[i+1] || end)-1,
+      let branches = starts.map((begin, i) => ({start:begin, end:(starts[i+1] || end)-1,
         label:labels[i] || '结构内', level:levels[i]}));
+      // MathLive includes an empty lower branch even for an arrow with no
+      // optional label. Navigation must not turn that into a new editable slot.
+      if (/^\\x(?:right|left)arrow\s*\{/.test(latex)) branches = branches.slice(0,1);
       structures.push({start,end,depth,kind,columns,branches});
     }
     structures.sort((a,b) => b.depth-a.depth || (a.end-a.start)-(b.end-b.start));
@@ -147,6 +158,13 @@ window.stroomNavigation = function(field) {
         }
       } else if (kind === 'matrix' && current >= 0) {
         target = current + (direction === 'up' ? -structure.columns : structure.columns);
+      } else if (kind === 'annotation') {
+        const level = current >= 0 ? branches[current].level : 'base';
+        const nextLevel = direction === 'up'
+          ? (level === 'lower' && branches.some(b => b.level === 'base') ? 'base' : 'upper')
+          : (level === 'upper' && branches.some(b => b.level === 'base') ? 'base' : 'lower');
+        target = branches.findIndex(b => b.level === nextLevel);
+        if (target === current) continue;
       }
       if (target >= 0 && target < branches.length) {
         if (current >= 0) align(structure,branches[current],branches[target]);

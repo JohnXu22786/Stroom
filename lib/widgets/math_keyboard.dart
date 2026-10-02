@@ -28,6 +28,38 @@ class MathKeyboard extends StatefulWidget {
 class _MathKeyboardState extends State<MathKeyboard> {
   String _category = '常用';
   int _page = 0;
+  final _categoryScrollController = ScrollController();
+  final _keyScrollController = ScrollController();
+  final _categoryKeys = {
+    for (final category in _groups.keys) category: GlobalKey(),
+  };
+
+  @override
+  void dispose() {
+    _categoryScrollController.dispose();
+    _keyScrollController.dispose();
+    super.dispose();
+  }
+
+  void _selectCategory(String category) {
+    setState(() {
+      _category = category;
+      _page = 0;
+    });
+    if (_keyScrollController.hasClients) {
+      _keyScrollController.jumpTo(0);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final chipContext = _categoryKeys[category]?.currentContext;
+      final renderObject = chipContext?.findRenderObject();
+      if (chipContext != null && renderObject != null) {
+        Scrollable.of(chipContext).position.ensureVisible(renderObject,
+            alignment: 0.5, duration: const Duration(milliseconds: 180));
+      }
+    });
+  }
+
   static const _numbers = [
     '7',
     '8',
@@ -94,26 +126,49 @@ class _MathKeyboardState extends State<MathKeyboard> {
                         icon: const Icon(Icons.keyboard_hide)),
                   ])),
               SizedBox(
-                  height: 38,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    children: [
-                      for (final category in _groups.keys)
-                        Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: ChoiceChip(
-                              label: Text(category),
-                              selected: category == _category,
-                              showCheckmark: false,
-                              visualDensity: VisualDensity.compact,
-                              onSelected: (_) => setState(() {
-                                _category = category;
-                                _page = 0;
-                              }),
-                            )),
-                    ],
-                  )),
+                  height: 44,
+                  child: Row(children: [
+                    Expanded(
+                        child: SingleChildScrollView(
+                      controller: _categoryScrollController,
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Row(children: [
+                        for (final category in _groups.keys)
+                          Padding(
+                              key: _categoryKeys[category],
+                              padding: const EdgeInsets.only(right: 6),
+                              child: ChoiceChip(
+                                label: Text(category),
+                                selected: category == _category,
+                                showCheckmark: false,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.padded,
+                                onSelected: (_) => _selectCategory(category),
+                              )),
+                      ]),
+                    )),
+                    PopupMenuButton<String>(
+                      tooltip: '全部符号分类',
+                      icon: const Icon(Icons.apps, size: 20),
+                      constraints: const BoxConstraints(minWidth: 220),
+                      onSelected: _selectCategory,
+                      itemBuilder: (_) => [
+                        for (final category in _groups.keys)
+                          PopupMenuItem(
+                              value: category,
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(category),
+                                    Text(_categoryDescriptions[category]!,
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: cs.onSurfaceVariant)),
+                                  ])),
+                      ],
+                    ),
+                  ])),
             ];
             final compact =
                 constraints.hasBoundedHeight && constraints.maxHeight < 180;
@@ -128,7 +183,9 @@ class _MathKeyboardState extends State<MathKeyboard> {
               children: [
                 if (!compact) ...heading,
                 if (constraints.hasBoundedHeight)
-                  Flexible(child: SingleChildScrollView(child: input))
+                  Flexible(
+                      child: SingleChildScrollView(
+                          controller: _keyScrollController, child: input))
                 else
                   input,
                 // Navigation remains reachable even when tall keys scroll.
@@ -248,6 +305,39 @@ class _MathKey {
   const _MathKey(this.label, this.value, {this.command, this.description});
 }
 
+const _categoryDescriptions = {
+  '常用': '四则运算、分数、根式与下标',
+  '指数/对数': '指数、对数、倒数与科学计数法',
+  '函数': '三角、双曲与其他常用函数',
+  '常量': '圆周率、自然常数与常用数值',
+  '希腊字母': '全部小写希腊字母',
+  '希腊大写': '全部大写希腊字母',
+  '希腊变体': '常用希腊字母变体',
+  '微积分': '求和、积分、极限与导数',
+  '矩阵': '矩阵、行列式、分段式与行列编辑',
+  '集合/逻辑': '数集、集合运算与逻辑符号',
+  '关系': '等式、不等式与几何关系',
+  '箭头': '方向、映射与带注释的箭头',
+  '括号/区间': '成对括号、绝对值与区间',
+  '样式': '重音、上下标注与数学字体',
+  '字母': '拉丁字母大小写',
+};
+
+const _exponentialDescriptions = {
+  'e': '自然常数 e',
+  'exp': '指数函数 exp（底数 e）',
+  'ln': '自然对数 ln',
+  'log10': '常用对数（底数 10）',
+  'log2': '二进制对数（底数 2）',
+  'logbase': '指定底数的对数：先填底数',
+  'power': '幂：选区或左侧完整项作为底数',
+  'power2': '2 的幂',
+  'power10': '10 的幂',
+  'reciprocal': '倒数：填写分母或使用选区',
+  'negativePower': '负指数：选区或左侧完整项',
+  'scientific': '科学计数法：乘以 10 的幂',
+};
+
 final Map<String, List<_MathKey>> _groups = {
   '常用': const [
     _MathKey('x', 'x'),
@@ -260,10 +350,10 @@ final Map<String, List<_MathKey>> _groups = {
     _MathKey(r'\left(x\right)', r'\left(#0\right)'),
     _MathKey('+', '+'),
     _MathKey('-', '-'),
-    _MathKey(r'\times', r'\cdot'),
+    _MathKey(r'\cdot', r'\cdot', description: '乘法（点号）'),
     _MathKey(r'\pi', r'\pi'),
     _MathKey('e', 'e'),
-    _MathKey(r'\div', r'\frac{#@}{#?}'),
+    _MathKey(r'x\div y', r'\frac{#@}{#?}', description: '除法：左侧完整项放入分子'),
     _MathKey(r'\left|x\right|', r'\left|#0\right|'),
     _MathKey(r'\sqrt[n]{x}', r'\sqrt[#?]{#0}'),
     _MathKey(r'x_n', r'#@_{#?}'),
@@ -273,33 +363,70 @@ final Map<String, List<_MathKey>> _groups = {
     _MathKey(r'\times10^n', r'#@\cdot10^{#?}', description: '科学计数法'),
     _MathKey(r'\infty', r'\infty'),
     _MathKey(', ', ','),
+    _MathKey(r'\times', r'\times', description: '乘法（叉号）'),
+    _MathKey(r'\div', r'\div', description: '除号'),
+    _MathKey(r'\mp', r'\mp'),
+    _MathKey(r'\colon', r'\colon'),
+  ],
+  '指数/对数': [
+    for (final input in mathExponentialInputs)
+      _MathKey(input.label, input.latex,
+          description: _exponentialDescriptions[input.name] ?? input.name),
+    // Legacy bare log keeps its natural-log meaning in the numeric evaluator.
+    _MathKey(r'\log', r'\log\left(#0\right)', description: '对数 log（默认自然底数 e）'),
   ],
   '函数': [
     for (final input in mathUnaryInputs)
-      _MathKey(input.label, input.latex,
-          description: [
-            'sin',
-            'cos',
-            'tan',
-            'cot',
-            'sec',
-            'csc',
-            'asin',
-            'acos',
-            'atan'
-          ].contains(input.name)
-              ? '${input.name}（角度用弧度）'
-              : input.name),
+      if (!['ln', 'log', 'exp'].contains(input.name))
+        _MathKey(input.label, input.latex,
+            description: [
+              'sin',
+              'cos',
+              'tan',
+              'cot',
+              'sec',
+              'csc',
+              'asin',
+              'acos',
+              'atan'
+            ].contains(input.name)
+                ? '${input.name}（角度用弧度）'
+                : input.name),
     for (final input in mathBinaryInputs)
-      _MathKey(input.label, input.latex, description: input.name),
+      if (!['log', 'pow'].contains(input.name))
+        _MathKey(input.label, input.latex, description: input.name),
     for (final name in ['min', 'max', 'det', 'gcd', 'arg', 'Re', 'Im'])
       _MathKey('\\$name', '\\$name\\left(#0\\right)'),
+    for (final name in [
+      'arccot',
+      'arcsec',
+      'arccsc',
+      'arsinh',
+      'arcosh',
+      'artanh'
+    ])
+      _MathKey(
+          '\\operatorname{$name}', '\\operatorname{$name}\\left(#0\\right)',
+          description: '$name（公式排版）'),
   ],
   '常量': [
     for (final input in mathConstantInputs)
       _MathKey(input.label, input.latex, description: input.name),
+    const _MathKey(r'\infty', r'\infty'),
   ],
-  '结构': const [
+  '希腊字母': [
+    for (final name in mathGreekLowerNames)
+      _MathKey('\\$name', '\\$name', description: name),
+  ],
+  '希腊大写': [
+    for (final name in mathGreekUpperNames)
+      _MathKey('\\$name', '\\$name', description: name),
+  ],
+  '希腊变体': [
+    for (final name in mathGreekVariantNames)
+      _MathKey('\\$name', '\\$name', description: name),
+  ],
+  '微积分': const [
     _MathKey(r'\sum', r'\sum_{#?}^{#?}#0'),
     _MathKey(r'\prod', r'\prod_{#?}^{#?}#0'),
     _MathKey(r'\int', r'\int_{#?}^{#?}#0\,\mathrm{d}x'),
@@ -309,24 +436,67 @@ final Map<String, List<_MathKey>> _groups = {
     _MathKey(r'\frac{\mathrm{d}}{\mathrm{d}x}',
         r'\frac{\mathrm{d}}{\mathrm{d}x}\left(#0\right)'),
     _MathKey(r'\frac{\partial}{\partial x}', r'\frac{\partial #0}{\partial x}'),
-    _MathKey(r'\binom{n}{k}', r'\binom{#0}{#?}'),
+    _MathKey(r'\partial', r'\partial'),
+    _MathKey(r'\nabla', r'\nabla'),
+    _MathKey(r'x^{\prime}', r'#@^{\prime}', description: '导数撇号：选区或左侧完整项'),
+    _MathKey(r'\limsup', r'\limsup_{x\to#?}#0'),
+    _MathKey(r'\liminf', r'\liminf_{x\to#?}#0'),
+    _MathKey(r'\iiint', r'\iiint_{#?}#0'),
+    _MathKey(r'\bigcup', r'\bigcup_{#?}^{#?}#0'),
+    _MathKey(r'\bigcap', r'\bigcap_{#?}^{#?}#0'),
+    _MathKey(r'\coprod', r'\coprod_{#?}^{#?}#0'),
+  ],
+  '矩阵': const [
     _MathKey(r'\begin{pmatrix}a&b\\c&d\end{pmatrix}',
-        r'\begin{pmatrix}#?&#?\\#?&#?\end{pmatrix}'),
+        r'\begin{pmatrix}#?&#?\\#?&#?\end{pmatrix}',
+        description: '圆括号矩阵（2×2）'),
     _MathKey(r'\begin{bmatrix}a&b\\c&d\end{bmatrix}',
-        r'\begin{bmatrix}#?&#?\\#?&#?\end{bmatrix}'),
+        r'\begin{bmatrix}#?&#?\\#?&#?\end{bmatrix}',
+        description: '方括号矩阵（2×2）'),
+    _MathKey(r'\begin{matrix}a&b\\c&d\end{matrix}',
+        r'\begin{matrix}#?&#?\\#?&#?\end{matrix}',
+        description: '无括号矩阵（2×2）'),
+    _MathKey(r'\begin{vmatrix}a&b\\c&d\end{vmatrix}',
+        r'\begin{vmatrix}#?&#?\\#?&#?\end{vmatrix}',
+        description: '行列式（2×2）'),
+    _MathKey(r'\begin{Vmatrix}a&b\\c&d\end{Vmatrix}',
+        r'\begin{Vmatrix}#?&#?\\#?&#?\end{Vmatrix}',
+        description: '双竖线矩阵（2×2）'),
     _MathKey(r'\begin{cases}a&x>0\\b&x\le0\end{cases}',
-        r'\begin{cases}#?&#?\\#?&#?\end{cases}'),
-    _MathKey('加行', '', command: 'addRowAfter'),
-    _MathKey('加列', '', command: 'addColumnAfter'),
-    _MathKey('删行', '', command: 'removeRow'),
-    _MathKey('删列', '', command: 'removeColumn'),
-    _MathKey(r'\left[x\right]', r'\left[#0\right]'),
-    _MathKey(r'\left\{x\right\}', r'\left\{#0\right\}'),
-    _MathKey(r'\langle x\rangle', r'\left\langle#0\right\rangle'),
-    _MathKey(r'\left\|x\right\|', r'\left\|#0\right\|'),
+        r'\begin{cases}#?&#?\\#?&#?\end{cases}',
+        description: '分段式：每行填表达式和条件'),
+    _MathKey(r'\binom{n}{k}', r'\binom{#0}{#?}'),
+    _MathKey('加行', '', command: 'addRowAfter', description: '在矩阵当前行后加行'),
+    _MathKey('加列', '', command: 'addColumnAfter', description: '在矩阵当前列后加列'),
+    _MathKey('删行', '', command: 'removeRow', description: '删除矩阵当前行'),
+    _MathKey('删列', '', command: 'removeColumn', description: '删除矩阵当前列'),
+  ],
+  '集合/逻辑': [
+    for (final letter in ['N', 'Z', 'Q', 'R', 'C'])
+      _MathKey('\\mathbb{$letter}', '\\mathbb{$letter}'),
+    for (final symbol in [
+      r'\in',
+      r'\notin',
+      r'\subset',
+      r'\subseteq',
+      r'\supset',
+      r'\supseteq',
+      r'\cup',
+      r'\cap',
+      r'\setminus',
+      r'\emptyset',
+      r'\forall',
+      r'\exists',
+      r'\neg',
+      r'\land',
+      r'\lor',
+      r'\mid',
+    ])
+      _MathKey(symbol, symbol),
   ],
   '关系': [
     for (final symbol in [
+      '=',
       r'\ne',
       r'\le',
       r'\ge',
@@ -335,40 +505,53 @@ final Map<String, List<_MathKey>> _groups = {
       r'\approx',
       r'\equiv',
       r'\propto',
-      r'\in',
-      r'\notin',
-      r'\subset',
-      r'\subseteq',
-      r'\supset',
-      r'\cup',
-      r'\cap',
-      r'\emptyset',
-      r'\forall',
-      r'\exists',
-      r'\neg',
-      r'\land',
-      r'\lor',
-      r'\to',
-      r'\Rightarrow',
-      r'\Leftrightarrow',
-      r'\mapsto',
+      r'\sim',
+      r'\simeq',
+      r'\cong',
+      r'\ll',
+      r'\gg',
       r'\perp',
       r'\parallel',
       r'\angle',
       r'\circ',
       r'\cdots',
       r'\vdots',
-      r'\ddots'
+      r'\ddots',
     ])
-      _MathKey(symbol, symbol)
+      _MathKey(symbol, symbol),
   ],
-  '希腊': [
-    for (final name in mathGreekNames) _MathKey('\\$name', '\\$name'),
+  '箭头': [
+    for (final symbol in [
+      r'\to',
+      r'\leftarrow',
+      r'\leftrightarrow',
+      r'\Rightarrow',
+      r'\Leftarrow',
+      r'\Leftrightarrow',
+      r'\mapsto',
+      r'\uparrow',
+      r'\downarrow',
+      r'\updownarrow',
+    ])
+      _MathKey(symbol, symbol),
+    const _MathKey(r'\xrightarrow[b]{a}', r'\xrightarrow[#?]{#0}',
+        description: '右箭头：选区作为上方标注，再填下方标注'),
+    const _MathKey(r'\xleftarrow[b]{a}', r'\xleftarrow[#?]{#0}',
+        description: '左箭头：选区作为上方标注，再填下方标注'),
   ],
-  '字母': [
-    for (final letter
-        in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''))
-      _MathKey(letter, letter)
+  '括号/区间': const [
+    _MathKey(r'\left(x\right)', r'\left(#0\right)'),
+    _MathKey(r'\left[x\right]', r'\left[#0\right]'),
+    _MathKey(r'\left\{x\right\}', r'\left\{#0\right\}'),
+    _MathKey(r'\langle x\rangle', r'\left\langle#0\right\rangle'),
+    _MathKey(r'\left|x\right|', r'\left|#0\right|'),
+    _MathKey(r'\left\|x\right\|', r'\left\|#0\right\|'),
+    _MathKey(r'[a,b]', r'\left[#0,#?\right]', description: '闭区间 [a,b]'),
+    _MathKey(r'(a,b)', r'\left(#0,#?\right)', description: '开区间 (a,b)'),
+    _MathKey(r'[a,b)', r'\left[#0,#?\right)', description: '左闭右开区间 [a,b)'),
+    _MathKey(r'(a,b]', r'\left(#0,#?\right]', description: '左开右闭区间 (a,b]'),
+    _MathKey(r'\lfloor x\rfloor', r'\left\lfloor#0\right\rfloor'),
+    _MathKey(r'\lceil x\rceil', r'\left\lceil#0\right\rceil'),
   ],
   '样式': [
     for (final name in [
@@ -383,9 +566,14 @@ final Map<String, List<_MathKey>> _groups = {
       'underbrace',
       'overrightarrow',
       'overleftarrow',
-      'widetilde'
+      'widetilde',
+      'widehat',
     ])
       _MathKey('\\$name{x}', '\\$name{#0}'),
+    const _MathKey(r'\overset{a}{x}', r'\overset{#?}{#0}',
+        description: '上方标注：选区作为主体'),
+    const _MathKey(r'\underset{a}{x}', r'\underset{#?}{#0}',
+        description: '下方标注：选区作为主体'),
     for (final name in [
       'mathrm',
       'mathbf',
@@ -394,8 +582,13 @@ final Map<String, List<_MathKey>> _groups = {
       'mathcal',
       'mathfrak',
       'mathsf',
-      'mathtt'
+      'mathtt',
     ])
       _MathKey('\\$name{A}', '\\$name{#0}'),
+  ],
+  '字母': [
+    for (final letter
+        in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''))
+      _MathKey(letter, letter),
   ],
 };

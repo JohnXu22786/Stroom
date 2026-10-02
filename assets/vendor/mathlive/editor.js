@@ -12,20 +12,61 @@
   field.smartFence = true;
   field.defaultMode = 'math';
   let revision = -1, sequence = 0, original = '', canonical = '', selection = '', edited = false, importing = false;
+  // Text/operator names contain literal underscores, not mathematical scripts.
+  function mapMath(source, transform, literal = text => text) {
+    const groups = /\\(?:text[a-zA-Z]*|operatorname)\*?\s*\{/g;
+    let result = '', from = 0, match;
+    while ((match = groups.exec(source))) {
+      let end = groups.lastIndex, depth = 1;
+      while (end < source.length && depth) {
+        if (source[end] === '\\') { end += 2; continue; }
+        if (source[end] === '{') depth++;
+        else if (source[end] === '}') depth--;
+        end++;
+      }
+      if (depth) break;
+      result += transform(source.slice(from,match.index)) + literal(source.slice(match.index,end));
+      from = end; groups.lastIndex = end;
+    }
+    return result + transform(source.slice(from));
+  }
+  function explicitSubscripts(latex) {
+    return mapMath(latex, source => source.replace(/_\{\w+\}|\\[a-zA-Z]+|\\.|_[0-9]/g,
+      token => /^_[0-9]$/.test(token) ? '_{' + token[1] + '}' : token));
+  }
   function plainToLatex(source) {
-    // ASCII-math parsing treats these evaluator identifiers as operators or
-    // subscripts. Import them with the same structures as the constant keys.
+    // Import evaluator constants with the same structures as the keyboard.
     const constants = {
       pi:'\\pi ', e:'e', ln2:'\\ln\\left(2\\right)', ln10:'\\ln\\left(10\\right)',
       log2e:'\\log_{2}\\left(e\\right)', log10e:'\\log_{10}\\left(e\\right)',
       sqrt2:'\\sqrt{2}', sqrt1_2:'\\frac{1}{\\sqrt{2}}'
     };
+    const asConstant = token => {
+      const name = token.toLowerCase();
+      return (token === name || token === token.toUpperCase()) && Object.prototype.hasOwnProperty.call(constants,name)
+        ? constants[name] : null;
+    };
+    // Simple braced subscripts name parameters in the graph evaluator. Keep
+    // their identifiers literal while converting expression tokens/calls.
+    let marker = '\uE000';
+    while (source.includes(marker)) marker += '\uE000';
+    const literals = [];
+    const protect = value => {
+      literals.push(value);
+      return '{' + marker + (literals.length-1) + '\uE001}';
+    };
+    source = mapMath(source, text => text, protect);
+    source = source.replace(/_\{\w+\}|\\mathrm\{[a-zA-Z]\w*\}/g, protect);
+    source = source.replace(/\\[a-zA-Z]+|[a-zA-Z]\w*/g, token => {
+      if (asConstant(token) !== null) return token;
+      const script = /^([a-zA-Z][a-zA-Z0-9]*)_(\w+)$/.exec(token);
+      if (!script) return token;
+      const base = script[1].length === 1 ? script[1] : '\\mathrm{' + script[1] + '}';
+      return base + '_{' + script[2] + '}';
+    });
+    source = source.replace(/_\{\w+\}|\\mathrm\{[a-zA-Z]\w*\}/g, protect);
     source = source.replace(/\\[a-zA-Z]+|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|[a-zA-Z]\w*/g,
-      token => {
-        const name = token.toLowerCase();
-        return (token === name || token === token.toUpperCase()) && Object.prototype.hasOwnProperty.call(constants,name)
-          ? constants[name] : token;
-      });
+      token => asConstant(token) ?? token);
     source = source.replace(/(?<!\\)\b(asin|acos|atan)\b/g, name => 'arc' + name.slice(1));
     source = source.replace(/(?<![\w.])((?:\d+(?:\.\d*)?|\.\d+))[eE]([+-]?\d+)\b/g,
       (_, number, exponent) => number + '\\cdot10^{' + exponent + '}');
@@ -63,7 +104,8 @@
       result += source.slice(from,match.index) + latex;
       from = end; calls.lastIndex = end;
     }
-    return (result + source.slice(from)).replace(/(?<!\\)\bpi\b/g,'\\pi').replace(/(?<!\\)\*/g,'\\cdot ');
+    return (result + source.slice(from)).replace(/(?<!\\)\*/g,'\\cdot ')
+      .replace(new RegExp('\\{' + marker + '(\\d+)\uE001\\}', 'g'), (_, i) => literals[Number(i)]);
   }
   function splitArguments(source) {
     const result = []; let depth = 0, start = 0;
@@ -92,7 +134,7 @@
     // MathLive's input event is deferred. Read the model synchronously so a
     // Plot/toggle immediately after an insertion still sees that insertion.
     observeChanges();
-    return {revision, sequence, latex: edited ? field.getValue('latex') : original,
+    return {revision, sequence, latex: edited ? explicitSubscripts(field.getValue('latex')) : original,
       edited, location:navigation.location(), height: field.getBoundingClientRect().height + problem.getBoundingClientRect().height,
       errors: field.errors.map(e => e.code), canUndo: field.canUndo(), canRedo: field.canRedo()};
   }
@@ -123,7 +165,7 @@
       return snapshot();
     },
     snapshot,
-    selectedLatex() { return field.getValue(field.selection, 'latex'); },
+    selectedLatex() { return explicitSubscripts(field.getValue(field.selection, 'latex')); },
     activate() { field.focus(); return snapshot(); },
     blur() { field.blur(); return snapshot(); },
     theme(ink, accent, error) {

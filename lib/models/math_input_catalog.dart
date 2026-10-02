@@ -53,42 +53,90 @@ const mathConstantInputs = <MathInputTemplate>[
   MathInputTemplate('sqrt1_2', r'\frac{1}{\sqrt{2}}', r'\frac{1}{\sqrt{2}}'),
 ];
 
-const mathGreekNames = [
+/// Explicit bases avoid confusing the evaluator's legacy natural `log(x)`
+/// with the common school notation for a base-ten logarithm.
+const mathExponentialInputs = <MathInputTemplate>[
+  MathInputTemplate('e', 'e', 'e'),
+  MathInputTemplate('exp', r'e^x', r'e^{#0}'),
+  MathInputTemplate('ln', r'\ln x', r'\ln\left(#0\right)'),
+  MathInputTemplate('log10', r'\log_{10}x', r'\log_{10}\left(#0\right)'),
+  MathInputTemplate('log2', r'\log_2x', r'\log_{2}\left(#0\right)'),
+  MathInputTemplate('logbase', r'\log_ax', r'\log_{#?}\left(#0\right)'),
+  MathInputTemplate('power', r'x^a', r'#@^{#?}'),
+  MathInputTemplate('power2', r'2^x', r'2^{#0}'),
+  MathInputTemplate('power10', r'10^x', r'10^{#0}'),
+  MathInputTemplate('reciprocal', r'\frac{1}{x}', r'\frac{1}{#0}'),
+  MathInputTemplate('negativePower', r'x^{-a}', r'#@^{-{#?}}'),
+  MathInputTemplate('scientific', r'x\cdot10^a', r'#@\cdot10^{#?}'),
+];
+
+const mathGreekLowerNames = [
   'alpha',
   'beta',
   'gamma',
   'delta',
   'epsilon',
-  'varepsilon',
   'zeta',
   'eta',
   'theta',
-  'vartheta',
   'iota',
   'kappa',
   'lambda',
   'mu',
   'nu',
   'xi',
+  'omicron',
   'pi',
   'rho',
   'sigma',
   'tau',
   'upsilon',
   'phi',
-  'varphi',
   'chi',
   'psi',
   'omega',
+];
+
+const mathGreekUpperNames = [
+  'Alpha',
+  'Beta',
   'Gamma',
   'Delta',
+  'Epsilon',
+  'Zeta',
+  'Eta',
   'Theta',
+  'Iota',
+  'Kappa',
   'Lambda',
+  'Mu',
+  'Nu',
   'Xi',
+  'Omicron',
   'Pi',
+  'Rho',
   'Sigma',
+  'Tau',
   'Upsilon',
   'Phi',
+  'Chi',
   'Psi',
   'Omega',
+];
+
+const mathGreekVariantNames = [
+  'varepsilon',
+  'vartheta',
+  'varphi',
+  'varpi',
+  'varrho',
+  'varsigma',
+  'varkappa',
+  'digamma',
+];
+
+const mathGreekNames = [
+  ...mathGreekLowerNames,
+  ...mathGreekUpperNames,
+  ...mathGreekVariantNames,
 ];

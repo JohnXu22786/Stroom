@@ -4,6 +4,35 @@ import 'package:stroom/models/math_expression.dart';
 import 'package:stroom/models/math_input_catalog.dart';
 
 void main() {
+  test('explicit logarithm shortcuts keep their bases and exponential grouping',
+      () {
+    final expected = <String, double>{
+      'e': 2.718281828459045,
+      'exp': 7.38905609893065,
+      'ln': 0.6931471805599453,
+      'log10': 0.3010299956639812,
+      'log2': 1,
+      'logbase': 1,
+      'power': 4,
+      'power2': 4,
+      'power10': 100,
+      'reciprocal': 0.5,
+      'negativePower': 0.25,
+      'scientific': 200,
+    };
+    for (final key in mathExponentialInputs) {
+      final latex = key.latex
+          .replaceAll('#0', '2')
+          .replaceAll('#@', '2')
+          .replaceAll('#?', '2');
+      final formula = MathExpression.fromInput(latex);
+      expect(formula.isValid, isTrue, reason: key.name);
+      expect(formula.parameters, isEmpty, reason: key.name);
+      expect(formula.evaluator(0), closeTo(expected[key.name]!, 1e-10));
+    }
+    expect(MathExpression.fromInput(r'\log_{10}\left(0\right)').samplePoints(),
+        isEmpty);
+  });
   test('every evaluator function has a template with the same numeric meaning',
       () {
     expect(mathUnaryInputs.map((key) => key.name).toSet(),

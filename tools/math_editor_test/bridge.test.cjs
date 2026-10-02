@@ -274,6 +274,137 @@ test('slot navigation revisits filled content and exits the correct parent', asy
   } finally { dom.window.close(); }
 });
 
+test('stacked annotations and arrow labels remain editable with vertical navigation', async () => {
+  const {dom, field, bridge} = await editor();
+  try {
+    bridge.setSource('\\overset{a}{x}',1);
+    field.position = offsetOf(field,'x');
+    bridge.command('navigate','up');
+    assert.equal(bridge.snapshot().location,'上方标注');
+    bridge.command('insert','+1');
+    assert.equal(field.getValue(),'\\overset{a+1}{x}');
+    bridge.command('navigate','down');
+    assert.equal(bridge.snapshot().location,'主体');
+    bridge.command('insert','+2');
+    assert.equal(field.getValue(),'\\overset{a+1}{x+2}');
+    bridge.setSource('\\underset{b}{x}',2);
+    field.position = offsetOf(field,'x');
+    bridge.command('navigate','down');
+    assert.equal(bridge.snapshot().location,'下方标注');
+    bridge.command('insert','+3');
+    assert.equal(field.getValue(),'\\underset{b+3}{x}');
+    bridge.setSource('\\xrightarrow[b]{a}',3);
+    field.position = offsetOf(field,'a');
+    bridge.command('navigate','down');
+    assert.equal(bridge.snapshot().location,'下方标注');
+    bridge.command('insert','+4');
+    assert.equal(field.getValue(),'\\xrightarrow[b+4]{a}');
+    bridge.command('navigate','up');
+    assert.equal(bridge.snapshot().location,'上方标注');
+    bridge.setSource('\\xrightarrow{a}',4);
+    field.position = offsetOf(field,'a');
+    const position=field.position;
+    bridge.command('navigate','down');
+    assert.equal(field.position,position);
+    assert.equal(field.getValue(),'\\xrightarrow{a}');
+  } finally { dom.window.close(); }
+});
+
+test('expanded symbol families parse and remain editable in rendered math', async () => {
+  const {dom, field, bridge} = await editor();
+  // Undo rebuilds array spacing and the thin space inside limsup/liminf.
+  // Compare the expanded expression independently of those layout tokens.
+  const content = () => field.getValue('latex-expanded').replace(/\s+|\\,/g,'');
+  try {
+    for (const source of [
+      '\\omicron+\\varpi+\\varrho+\\varsigma+\\varkappa+\\digamma',
+      '\\Alpha+\\Beta+\\Epsilon+\\Zeta+\\Eta+\\Iota+\\Kappa+\\Mu+\\Nu+\\Omicron+\\Rho+\\Tau+\\Chi',
+      '\\mathbb{N}\\subseteq\\mathbb{Z}\\subseteq\\mathbb{Q}\\subseteq\\mathbb{R}\\subseteq\\mathbb{C}',
+      '\\partial+\\nabla+f^{\\prime}+\\iiint+\\bigcup+\\bigcap+\\coprod',
+      '\\limsup_{x\\to0}x+\\liminf_{x\\to0}x',
+      'A\\supseteq B\\setminus C\\mid x\\sim y\\simeq z\\cong w\\ll a\\gg b',
+      'x\\leftarrow y\\leftrightarrow z\\Leftarrow w',
+      '\\left[0,1\\right)+\\left(0,1\\right]',
+      '\\begin{vmatrix}1&2\\\\3&4\\end{vmatrix}+\\begin{Vmatrix}1&2\\\\3&4\\end{Vmatrix}',
+      '\\widehat{x}+\\overset{a}{x}+\\underset{b}{x}+\\xrightarrow[b]{a}+\\xleftarrow[b]{a}',
+      '\\operatorname{arccot}(x)+\\operatorname{arcsec}(x)+\\operatorname{arccsc}(x)',
+      '\\operatorname{arsinh}(x)+\\operatorname{arcosh}(x)+\\operatorname{artanh}(x)',
+      'x\\times2\\div3+1\\mp2\\colon3',
+    ]) {
+      bridge.setSource('',1);
+      bridge.command('insert',source);
+      assert.equal(field.errors.length,0,source);
+      const rendered=content();
+      field.position=field.lastOffset;
+      bridge.command('navigate','right');
+      bridge.command('insert','+1');
+      assert.equal(content(),rendered+'+1',source);
+      assert.equal(bridge.snapshot().latex,field.getValue('latex'),source);
+      bridge.command('command','undo');
+      assert.equal(content(),rendered,source);
+    }
+  } finally { dom.window.close(); }
+});
+
+test('compact digit subscripts keep parameter boundaries in edited exports', async () => {
+  const {dom, field, bridge} = await editor();
+  try {
+    for (const base of ['a','\\alpha']) {
+      const source = base + '_{1}x';
+      assert.equal(bridge.setSource(source,1).latex,source);
+      field.position = field.lastOffset;
+      bridge.command('insert','+1');
+      assert.equal(bridge.snapshot().latex,source+'+1');
+      bridge.setSource('',2);
+      bridge.command('insert',base);
+      bridge.command('insert','#@_{#?}');
+      bridge.command('insert','1');
+      bridge.command('navigate','out');
+      bridge.command('insert','x');
+      assert.equal(bridge.snapshot().latex,source);
+      field.selection = {ranges:[[0,field.lastOffset]],direction:'forward'};
+      assert.equal(bridge.selectedLatex(),source);
+    }
+    for (const source of ['\\text{a_1}', '\\operatorname{a_1}']) {
+      bridge.setSource(source,3);field.position=field.lastOffset;
+      bridge.command('insert','+1');
+      assert.equal(bridge.snapshot().latex,field.getValue('latex'));
+    }
+  } finally {dom.window.close();}
+});
+
+test('identifier subscripts survive import and rendered editing', async () => {
+  const {dom, field, bridge} = await editor();
+  try {
+    for (const name of ['pi','PI','ln2','ln10','log2e','log10e','sqrt2','sqrt1_2','asin','1e3']) {
+      for (const base of ['a','\\alpha']) {
+        const script = base + '_{' + name + '}';
+        const source = 'sin(' + script + '*x)+pi';
+        bridge.setSource(source,1);
+        assert.equal(field.errors.length,0,source);
+        assert.ok(field.getValue('latex').includes(script),source);
+        assert.match(field.getValue('latex'),/\\sin.*\\pi/);
+        field.position = field.lastOffset;
+        bridge.command('navigate','right');
+        bridge.command('insert','+1');
+        assert.ok(bridge.snapshot().latex.includes(script),source);
+      }
+    }
+    for (const [source, structure] of [
+      ['a_12*x+pi', 'a_{12}'],
+      ['alpha_12*x+pi', '\\mathrm{alpha}_{12}'],
+      ['foo_12*x+pi', '\\mathrm{foo}_{12}'],
+      ['pi_1*x+pi', '\\mathrm{pi}_{1}'],
+    ]) {
+      assert.equal(bridge.setSource(source,2).latex,source);
+      field.position=field.lastOffset;
+      bridge.command('insert','+1');
+      assert.ok(bridge.snapshot().latex.includes(structure),source);
+      assert.match(bridge.snapshot().latex,/\\pi/);
+    }
+  } finally { dom.window.close(); }
+});
+
 test('legacy functions and constants retain their structures after editing', async () => {
   const {dom, field, bridge} = await editor();
   try {

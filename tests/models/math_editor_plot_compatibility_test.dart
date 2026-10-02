@@ -2,6 +2,46 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/math_expression.dart';
 
 void main() {
+  test(
+      'missing Greek forms stay distinct adjustable parameters after rendering',
+      () {
+    for (final name in [
+      'omicron',
+      'varpi',
+      'varrho',
+      'varsigma',
+      'varkappa',
+      'digamma',
+      'Alpha',
+      'Beta',
+      'Epsilon',
+      'Zeta',
+      'Eta',
+      'Iota',
+      'Kappa',
+      'Mu',
+      'Nu',
+      'Omicron',
+      'Rho',
+      'Tau',
+      'Chi',
+    ]) {
+      final formula =
+          MathExpression.fromInput('\\${name}x', parameterValues: {name: 2});
+      // A LaTeX control word needs separation from an adjacent letter.
+      final separated =
+          MathExpression.fromInput('\\$name x', parameterValues: {name: 2});
+      expect(separated.isValid, isTrue, reason: name);
+      expect(separated.parameters, {name});
+      expect(separated.evaluator(3), 6);
+      expect(formula.isValid, isFalse, reason: 'invalid joined command: $name');
+      final implicit = MathExpression.fromInput('x\\${name}_{2}+y=1',
+          parameterValues: {'${name}_2': 2});
+      expect(implicit.isValid, isTrue, reason: name);
+      expect(implicit.parameters, {'${name}_2'});
+      expect(implicit.implicitEvaluator!(3, 1), 6);
+    }
+  });
   test('postfixes, fences and remainder preserve grouping and boundary values',
       () {
     for (final entry in <String, double>{
@@ -57,6 +97,13 @@ void main() {
       r'\alpha_{12}x': 'alpha_12',
       r'x\alpha_{12}': 'alpha_12',
       r'xa_{12}': 'a_12',
+      r'a_{pi}x': 'a_pi',
+      r'\alpha_{ln2}x': 'alpha_ln2',
+      r'a_{asin}x': 'a_asin',
+      r'a_{1e3}x': 'a_1e3',
+      r'\mathrm{foo}_{12}x': 'foo_12',
+      r'\mathrm{alpha}_{12}x': 'alpha_12',
+      r'\mathrm{pi}_{1}x': 'pi_1',
     }.entries) {
       final adjacent = MathExpression.fromInput(entry.key,
           parameterValues: {entry.value: 2});
@@ -90,16 +137,26 @@ void main() {
     final root = MathExpression.fromInput(r'\sqrt[3]{\left|x\right|}');
     final log =
         MathExpression.fromInput(r'\log_{2}\left(\left|x\right|\right)');
+    final variableBase = MathExpression.fromInput(r'\log_{x+1}\left(16\right)');
     expect(root.isValid, isTrue);
     expect(log.isValid, isTrue);
+    expect(variableBase.isValid, isTrue);
     expect(root.evaluator(-27), closeTo(3, 0.0001));
     expect(log.evaluator(-8), closeTo(3, 0.0001));
+    expect(variableBase.evaluator(3), closeTo(2, 0.0001));
   });
   test('incomplete and display-only math is rejected without fake curves', () {
     for (final source in [
       r'\frac{x}{\placeholder{}}',
       r'\int_{0}^{1}x\,dx',
-      r'\begin{pmatrix}1&2\\3&4\end{pmatrix}'
+      r'\begin{pmatrix}1&2\\3&4\end{pmatrix}',
+      r'a_{x+1}',
+      r'\alpha_{\frac{1}{2}}x',
+      r'a_{\pi}x',
+      r'a_{(x)}',
+      r'a_{}',
+      r'a_\pi x',
+      r'\alpha_\theta x',
     ]) {
       expect(MathExpression.fromInput(source).isValid, isFalse, reason: source);
     }

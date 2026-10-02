@@ -4,6 +4,50 @@ import 'package:stroom/widgets/math_keyboard.dart';
 
 void main() {
   testWidgets(
+      'category directory reaches logs and hidden Greek keys without losing numeric positions',
+      (tester) async {
+    final commands = <String>[];
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: Align(
+                alignment: Alignment.bottomCenter,
+                child: SizedBox(
+                    width: 320,
+                    height: 220,
+                    child: MathKeyboard(
+                      activeLabel: '公式 1',
+                      onDismiss: () {},
+                      onPlot: () {},
+                      onCommand: (kind, value) async =>
+                          commands.add('$kind:$value'),
+                    ))))));
+    final seven = find.byTooltip('7');
+    final before = tester.getRect(seven);
+    await tester.tap(find.byTooltip('全部符号分类'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('指数/对数').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('自然对数 ln'));
+    await tester.tap(seven);
+    expect(tester.getRect(seven), before);
+    expect(commands, [r'insert:\ln\left(#0\right)', 'insert:7']);
+    await tester.tap(find.byTooltip('全部符号分类'));
+    await tester.pumpAndSettle();
+    final uppercase = find.text('希腊大写').last;
+    await tester.ensureVisible(uppercase);
+    await tester.tap(uppercase);
+    await tester.pumpAndSettle();
+    final selectedTab = tester.getRect(find.ancestor(
+        of: find.text('希腊大写'), matching: find.byType(ChoiceChip)));
+    final keyboard = tester.getRect(find.byType(MathKeyboard));
+    expect(selectedTab.left, greaterThanOrEqualTo(keyboard.left));
+    expect(selectedTab.right, lessThanOrEqualTo(keyboard.right - 44));
+    await tester.tap(find.byTooltip('Alpha'));
+    expect(commands.last, r'insert:\Alpha');
+    expect(tester.getRect(seven), before);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets(
       'very short keyboard scrolls controls and keys without hiding arrows',
       (tester) async {
     final commands = <String>[];

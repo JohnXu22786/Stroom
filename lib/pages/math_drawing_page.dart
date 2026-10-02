@@ -285,12 +285,12 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     });
   }
 
-  Future<void> _removeFormula(int index) async {
+  Future<void> _removeFormula(_FormulaState removing) async {
     if (_formulas.length <= 1) return;
-    final removing = _formulas[index];
     await _flushEditors();
-    if (!mounted || !_formulas.contains(removing)) return;
-    index = _formulas.indexOf(removing);
+    if (!mounted || _formulas.length <= 1 || !_formulas.contains(removing))
+      return;
+    final index = _formulas.indexOf(removing);
     setState(() {
       if (_activeFormula == removing) {
         _activeFormula = null;
@@ -303,7 +303,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     _plotAll();
   }
 
-  void _confirmRemove(int index) {
+  void _confirmRemove(_FormulaState removing) {
+    final index = _formulas.indexOf(removing);
+    if (index < 0 || _formulas.length <= 1) return;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -317,7 +319,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              _removeFormula(index);
+              _removeFormula(removing);
             },
             child: Text(
               '删除',
@@ -620,7 +622,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               iconSize: 16,
               color: cs.error.withValues(alpha: 0.7),
               tooltip: '删除公式',
-              onPressed: () => _confirmRemove(index),
+              onPressed: () => _confirmRemove(f),
             ),
 
           // ---- Plot (✓) button ----

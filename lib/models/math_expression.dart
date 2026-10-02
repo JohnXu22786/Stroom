@@ -581,6 +581,10 @@ class MathExpression {
       throw const FormatException('此符号未定义单条曲线，请分别输入完整表达式');
     }
     var result = expr.replaceAllMapped(
+      RegExp(r'\\mathrm\{([a-zA-Z]\w*)\}_\{(\w+)\}'),
+      (match) => ' ${match[1]}_${match[2]} ',
+    );
+    result = result.replaceAllMapped(
       RegExp(r'(\\[a-zA-Z]+|[a-zA-Z])_\{(\w+)\}'),
       (match) {
         final name = match[1]!;
@@ -592,6 +596,12 @@ class MathExpression {
       },
     );
     result = _replaceIndexedLatex(result);
+    // Named identifier subscripts and logarithm bases have been consumed.
+    // Flattening a remaining structural index into ordinary tokens would turn an
+    // unsupported indexed expression into multiplication by a fake parameter.
+    if (RegExp(r'_\s*(?:\{|\\)').hasMatch(result)) {
+      throw const FormatException('此下标结构可编辑，但绘图仅支持参数名称下标');
+    }
     result = result.replaceAllMapped(RegExp(r'\\operatorname\{([a-zA-Z]+)\}'),
         (m) => _knownFunctions.contains(m[1]) ? m[1]! : m[0]!);
     result = result.replaceAll(RegExp(r'\\(?:dfrac|tfrac)\b'), r'\frac');
