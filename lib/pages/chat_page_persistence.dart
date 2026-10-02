@@ -1,5 +1,13 @@
 part of 'chat_page.dart';
 
+void _resetTemporaryExpiryOnMap(
+    Map<String, dynamic> conversationMap, DateTime startedAt) {
+  final conversation = Conversation.fromMap(conversationMap)
+    ..isTemporary = true;
+  conversation.resetTemporaryExpiry(startedAt);
+  conversationMap.addAll(conversation.toMap());
+}
+
 extension _ChatPagePersistenceExt on _ChatPageState {
   /// Saves the currently enabled tool names to the active conversation.
   /// This ensures per-conversation tool preferences persist across sessions.
@@ -39,16 +47,24 @@ extension _ChatPagePersistenceExt on _ChatPageState {
   /// 保存当前 `_history` 到对话。
   ///
   /// [resetTemporaryCountdown] 仅在"产生对话"时置 true（发送消息）：
-  /// 用于触发临时对话 24 小时倒计时重置。切换对话前的存档保存、
+  /// 用于触发临时对话 1 小时倒计时重置。切换对话前的存档保存、
   /// 编辑截断、删除消息等非产生事件保持 false。
   Future<void> _saveMessages({
     String? capturedConvId,
     bool resetTemporaryCountdown = false,
+    bool? capturedIsTemporary,
   }) async {
     final historySnapshot = List<ChatMessage>.from(_history);
+    var conversationWasTemporary = capturedIsTemporary ?? false;
     try {
       final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
       if (convId == null) return;
+      if (resetTemporaryCountdown && capturedIsTemporary == null) {
+        conversationWasTemporary = ref
+            .read(conversationsProvider)
+            .any((conversation) =>
+                conversation.id == convId && conversation.isTemporary);
+      }
       await ref.read(conversationsProvider.notifier).updateMessages(
           convId, [...historySnapshot],
           resetTemporaryCountdown: resetTemporaryCountdown);
@@ -61,6 +77,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
         final prefs = await SharedPreferences.getInstance();
         final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
         if (convId == null) return;
+        final savedAt = DateTime.now();
 
         // Tier A: read existing, modify the target conversation, write back.
         // We round-trip the other conversations through Conversation.fromMap →
@@ -95,8 +112,8 @@ extension _ChatPagePersistenceExt on _ChatPageState {
               final targetMap = <String, dynamic>{
                 'id': convId,
                 'title': '',
-                'createdAt': DateTime.now().toIso8601String(),
-                'updatedAt': DateTime.now().toIso8601String(),
+                'createdAt': savedAt.toIso8601String(),
+                'updatedAt': savedAt.toIso8601String(),
                 'messages': historySnapshot.map((m) => m.toMap()).toList(),
                 'isPinned': false,
                 'sortOrder': 0,
@@ -113,12 +130,17 @@ extension _ChatPagePersistenceExt on _ChatPageState {
                 targetMap
                   ..addAll(Map<String, dynamic>.from(existing))
                   ..['id'] = convId
-                  ..['updatedAt'] = DateTime.now().toIso8601String()
+                  ..['updatedAt'] = savedAt.toIso8601String()
                   ..['messages'] =
                       historySnapshot.map((m) => m.toMap()).toList();
                 list[existingIdx] = targetMap;
               } else {
                 list.insert(0, targetMap);
+              }
+              if (resetTemporaryCountdown &&
+                  (conversationWasTemporary ||
+                      targetMap['isTemporary'] == true)) {
+                _resetTemporaryExpiryOnMap(targetMap, savedAt);
               }
               final json = jsonEncode(list);
               await prefs.setString('conversations', json);
@@ -141,13 +163,16 @@ extension _ChatPagePersistenceExt on _ChatPageState {
           final convMap = <String, dynamic>{
             'id': convId,
             'title': '',
-            'createdAt': DateTime.now().toIso8601String(),
-            'updatedAt': DateTime.now().toIso8601String(),
+            'createdAt': savedAt.toIso8601String(),
+            'updatedAt': savedAt.toIso8601String(),
             'messages': historySnapshot.map((m) => m.toMap()).toList(),
             'isPinned': false,
             'sortOrder': 0,
             'draftText': '',
           };
+          if (resetTemporaryCountdown && conversationWasTemporary) {
+            _resetTemporaryExpiryOnMap(convMap, savedAt);
+          }
           final json = jsonEncode([convMap]);
           await prefs.setString('conversations', json);
           await AppLogService.error(
@@ -212,6 +237,10 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       // This ensures the tool preferences are persisted even if the user
       // switches conversations or navigates away during streaming.
       _saveEnabledToolsToConversation();
+      final conversationWasTemporary = ref
+          .read(conversationsProvider)
+          .any((conversation) =>
+              conversation.id == convId && conversation.isTemporary);
 
       final userMsgId = 'u${DateTime.now().microsecondsSinceEpoch}';
 
@@ -239,6 +268,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       final saveFuture = _saveMessages(
         capturedConvId: convId,
         resetTemporaryCountdown: true,
+        capturedIsTemporary: conversationWasTemporary,
       );
 
       await _startStreaming(

@@ -146,16 +146,19 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
 
   /// 开启/关闭临时对话模式。
   ///
-  /// 开启：从当前时刻起倒计时 [kTemporaryConversationDuration]（24 小时），
+  /// 开启：从当前时刻起倒计时 [kTemporaryConversationDuration]（1 小时），
   /// 到期自动删除；关闭：清除倒计时，对话本身保留。重新开启会得到
-  /// 一个全新的 24 小时窗口（倒计时的重置方式之一）。
+  /// 一个全新的 1 小时窗口（倒计时的重置方式之一）。
   Future<void> toggleTemporary(String id) async {
     state = state.map((c) {
       if (c.id != id) return c;
       final turnOn = !c.isTemporary;
       c.isTemporary = turnOn;
-      c.temporaryExpiresAt =
-          turnOn ? DateTime.now().add(kTemporaryConversationDuration) : null;
+      if (turnOn) {
+        c.resetTemporaryExpiry(DateTime.now());
+      } else {
+        c.temporaryExpiresAt = null;
+      }
       return c;
     }).toList();
     _syncTemporaryTimer();
@@ -225,7 +228,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// loading a different conversation).
   ///
   /// [resetTemporaryCountdown] 仅由"产生对话"路径（发送/流式持久化）置
-  /// true：临时对话的 24 小时倒计时只在这些事件上重置。切换对话前的
+  /// true：临时对话的 1 小时倒计时只在这些事件上重置。切换对话前的
   /// 存档保存、编辑截断、删除消息等非产生事件不得重置（否则会无意中
   /// 延长临时对话的生命周期）。
   Future<void> updateMessages(String conversationId, List<ChatMessage> messages,
@@ -234,10 +237,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       if (c.id != conversationId) return c;
       c.messages = messages;
       c.updatedAt = DateTime.now();
-      // 临时对话：每次产生对话（发送/流式持久化）都重置 24 小时倒计时。
+      // 临时对话：每次产生对话（发送/流式持久化）都重置 1 小时倒计时。
       if (resetTemporaryCountdown && c.isTemporary) {
-        c.temporaryExpiresAt =
-            DateTime.now().add(kTemporaryConversationDuration);
+        c.resetTemporaryExpiry(c.updatedAt);
       }
       // Derive title from the conversation overview if title is empty.
       if (c.title.isEmpty && messages.isNotEmpty) {

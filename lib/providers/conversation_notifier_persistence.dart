@@ -18,6 +18,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   // --------------------------------------------------------------------------
 
   Future<void> _load() async {
+    _unparsedConversationRecords = [];
     // 启动窗口内用户创建了新对话（合并进内存）时，_load 完成后
     // 需要把合并结果落盘（见 finally）：否则"下次持久化前退出"
     // 会丢失新对话。
@@ -30,16 +31,56 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           final decoded = jsonDecode(json);
           if (decoded is List) {
             final conversations = <Conversation>[];
+            var migratedTemporaryExpiries = false;
             for (final item in decoded) {
               if (item is Map) {
                 try {
-                  conversations.add(
-                      Conversation.fromMap(Map<String, dynamic>.from(item)));
+                  final conversation =
+                      Conversation.fromMap(Map<String, dynamic>.from(item));
+                  if (conversation.isTemporary &&
+                      conversation.temporaryExpiryVersion <
+                          kTemporaryConversationDurationVersion) {
+                    // Version 0 records used a 24-hour window. Store the
+                    // adjusted expiry and version in the same JSON write.
+                    conversation.temporaryExpiresAt =
+                        conversation.temporaryExpiresAt!
+                            .subtract(const Duration(hours: 23));
+                    conversation.temporaryExpiryVersion =
+                        kTemporaryConversationDurationVersion;
+                    item['temporaryExpiresAt'] = conversation
+                        .temporaryExpiresAt!
+                        .toIso8601String();
+                    item['temporaryExpiryVersion'] =
+                        kTemporaryConversationDurationVersion;
+                    migratedTemporaryExpiries = true;
+                  }
+                  conversations.add(conversation);
                 } catch (e) {
+                  _unparsedConversationRecords.add(item);
                   debugPrint('ConversationsNotifier: 跳过损坏的对话条目: $e');
                   await AppLogService.warning(
                       'ConversationsNotifier', '跳过损坏的对话条目: $e');
                 }
+              } else {
+                _unparsedConversationRecords.add(item);
+              }
+            }
+            if (migratedTemporaryExpiries) {
+              try {
+                // Encode the original list so skipped malformed entries and
+                // unknown fields remain available for recovery.
+                final migratedJson = jsonEncode(decoded);
+                final saved =
+                    await prefs.setString('conversations', migratedJson);
+                if (!saved) {
+                  debugPrint(
+                      'ConversationsNotifier: failed to save migrated temporary expiries');
+                }
+              } catch (e) {
+                debugPrint(
+                    'ConversationsNotifier: failed to migrate temporary expiries: $e');
+                await AppLogService.warning('ConversationsNotifier',
+                    '迁移临时对话倒计时失败，已保留内存中的倒计时');
               }
             }
             if (mounted) {
@@ -93,7 +134,11 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       // even after the old migration had already "run".
       try {
         if (mounted) {
-          await assignNullAssistantConversations(prefs, state);
+          await assignNullAssistantConversations(
+            prefs,
+            state,
+            preservedRecords: _unparsedConversationRecords,
+          );
           // 修复函数可能原位修改了 state 列表：重新赋值以触发
           // 监听者刷新（await 期间 notifier 可能被 dispose，需重查）。
           if (mounted) {
@@ -256,7 +301,11 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
 
     // Tier 1: full save
     try {
-      final json = jsonEncode(snapshot.map((e) => e.toMap()).toList());
+      final records = <dynamic>[
+        ...snapshot.map((conversation) => conversation.toMap()),
+        ..._unparsedConversationRecords,
+      ];
+      final json = jsonEncode(records);
       await prefs.setString('conversations', json);
       await AppLogService.debug(
           'ConversationsNotifier', '对话已持久化, 共 ${snapshot.length} 个');
@@ -315,9 +364,14 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 totalCost: c.totalCost,
                 isTemporary: c.isTemporary,
                 temporaryExpiresAt: c.temporaryExpiresAt,
+                temporaryExpiryVersion: c.temporaryExpiryVersion,
               ))
           .toList();
-      final json = jsonEncode(stripped.map((e) => e.toMap()).toList());
+      final records = <dynamic>[
+        ...stripped.map((conversation) => conversation.toMap()),
+        ..._unparsedConversationRecords,
+      ];
+      final json = jsonEncode(records);
       await prefs.setString('conversations', json);
       await AppLogService.warning(
           'ConversationsNotifier', '持久化对话成功 (剥离 rawRequest/rawResponse 后)');

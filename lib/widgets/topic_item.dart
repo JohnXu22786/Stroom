@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../providers/conversation_provider.dart';
 import '../utils/conversation_utils.dart';
+import 'temporary_countdown_capsule.dart';
 
 class TopicItem extends StatelessWidget {
   final Conversation topic;
@@ -94,6 +95,10 @@ class TopicItem extends StatelessWidget {
                             child: Icon(Icons.push_pin,
                                 size: 12, color: cs.primary),
                           ),
+                        if (topic.isTemporary &&
+                            topic.temporaryExpiresAt != null)
+                          TemporaryCountdownCapsule(
+                              expiresAt: topic.temporaryExpiresAt!),
                         Expanded(
                           child: Text(
                             title,
