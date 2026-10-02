@@ -13,9 +13,9 @@ import '../../providers/chat_manager_provider.dart';
 import '../../providers/conversation_provider.dart';
 import '../../providers/provider_config.dart';
 import '../../providers/task_provider.dart';
-import '../../providers/task_provider_shared.dart';
 import '../../services/app_log_service.dart';
 import '../models/block_type_definition.dart';
+import '../models/flow_payload.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_execution.dart';
 import '../models/task_flow_exception.dart';
@@ -63,10 +63,26 @@ String subTaskTypeFor(BlockType? typeKey) {
 ///   loudly).
 @visibleForTesting
 Assistant? resolveChatAssistant(
-    String assistantId, List<Assistant> assistants) {
+  String assistantId,
+  List<Assistant> assistants,
+) {
   if (assistantId.isEmpty) return null;
   if (assistantId.startsWith(kBuiltInPromptIdPrefix)) return null;
   return assistants.where((a) => a.id == assistantId).firstOrNull;
+}
+
+class _PreparedFlow {
+  final TaskFlowDefinition flow;
+  final ProviderEntriesState providers;
+  final List<Assistant> assistants;
+  final String fallbackChatEndpointType;
+
+  const _PreparedFlow(
+    this.flow,
+    this.providers,
+    this.assistants,
+    this.fallbackChatEndpointType,
+  );
 }
 
 class TaskFlowExecutionService {
@@ -94,26 +110,29 @@ class TaskFlowExecutionService {
     String inputText, {
     int durationSec = 0,
   }) async {
-    await startFlowMany(
-        flowId, [FlowRunInput(text: inputText, durationSec: durationSec)]);
+    await startFlowMany(flowId, [
+      FlowRunInput(text: inputText, durationSec: durationSec),
+    ]);
     return true;
   }
 
   /// Validate all inputs before starting any work; await the entire batch.
   Future<void> startFlowMany(String flowId, List<FlowRunInput> inputs) async {
-    final flow = await _prepareFlow(flowId, inputs);
-    await _runMany(flow, inputs);
+    final prepared = await _prepareFlow(flowId, inputs);
+    await _runMany(prepared, inputs);
   }
 
   /// UI entry point: report validation failures before returning, then run in
   /// the background. History retry uses the same validation as normal launch.
   Future<void> launchFlowMany(String flowId, List<FlowRunInput> inputs) async {
-    final flow = await _prepareFlow(flowId, inputs);
-    unawaited(_runMany(flow, inputs));
+    final prepared = await _prepareFlow(flowId, inputs);
+    unawaited(_runMany(prepared, inputs));
   }
 
-  Future<TaskFlowDefinition> _prepareFlow(
-      String flowId, List<FlowRunInput> inputs) async {
+  Future<_PreparedFlow> _prepareFlow(
+    String flowId,
+    List<FlowRunInput> inputs,
+  ) async {
     await _ref.read(providerEntriesProvider.notifier).ready;
     await _ref.read(assistantProvider.notifier).ready;
     final flow = _ref
@@ -123,20 +142,39 @@ class TaskFlowExecutionService {
     if (flow == null) {
       throw TaskFlowValidationException('任务流已删除，请返回任务流列表重新选择', flowId: flowId);
     }
-    await validateTaskFlow(flow, inputs,
-        providers: _ref.read(providerEntriesProvider),
-        assistants: _ref.read(assistantProvider));
-    return flow;
+    final providers = ProviderEntriesState(
+      entries: [
+        for (final entry in _ref.read(providerEntriesProvider).entries)
+          ProviderEntry.fromMap(entry.toMap()),
+      ],
+    );
+    final assistants = [
+      for (final assistant in _ref.read(assistantProvider))
+        Assistant.fromMap(assistant.toMap()),
+    ];
+    final fallbackEndpoint =
+        _ref.read(chatStreamManagerProvider).adapter.endpointType;
+    await validateTaskFlow(
+      flow,
+      inputs,
+      providers: providers,
+      assistants: assistants,
+      fallbackChatEndpointType: fallbackEndpoint,
+    );
+    return _PreparedFlow(flow, providers, assistants, fallbackEndpoint);
   }
 
   Future<void> _runMany(
-      TaskFlowDefinition flow, List<FlowRunInput> inputs) async {
+    _PreparedFlow prepared,
+    List<FlowRunInput> inputs,
+  ) async {
     for (final input in inputs) {
-      await _runFlow(flow, input);
+      await _runFlow(prepared, input);
     }
   }
 
-  Future<void> _runFlow(TaskFlowDefinition flow, FlowRunInput input) async {
+  Future<void> _runFlow(_PreparedFlow prepared, FlowRunInput input) async {
+    final flow = prepared.flow;
     final execNotifier = _ref.read(taskFlowExecutionsProvider.notifier);
     final catcatchNotifier = _ref.read(catcatchTasksProvider.notifier);
     final bgNotifier = _ref.read(backgroundTasksProvider.notifier);
@@ -167,7 +205,11 @@ class TaskFlowExecutionService {
       placeholders[i] = subTask;
     }
 
-    String currentData = input.text;
+    var currentData = FlowPayload.fromValue(
+      input.text,
+      flow.inputType,
+      mimeType: input.mimeType,
+    );
 
     for (int i = 0; i < flow.blocks.length; i++) {
       // Let the UI render before starting each block
@@ -175,7 +217,7 @@ class TaskFlowExecutionService {
       // The execution may have been deleted while the previous block ran
       // (flow card delete / 清除所有) — abort promptly so no further tasks
       // are created.
-      if (!execNotifier.state.any((e) => e.id == execId)) {
+      if (execNotifier.execution(execId) == null) {
         AppLogService.info('TaskFlow', '任务流已删除，中止执行 ($execId)');
         return;
       }
@@ -201,7 +243,6 @@ class TaskFlowExecutionService {
       }
 
       try {
-        final providerState = _ref.read(providerEntriesProvider);
         AppLogService.info(
           'TaskFlow',
           '步骤 ${i + 1}/${flow.blocks.length}: ${def.label}',
@@ -216,7 +257,9 @@ class TaskFlowExecutionService {
           catcatchNotifier: catcatchNotifier,
           bgNotifier: bgNotifier,
           taskListNotifier: taskListNotifier,
-          providerEntries: providerState,
+          providerEntries: prepared.providers,
+          assistants: prepared.assistants,
+          fallbackChatEndpointType: prepared.fallbackChatEndpointType,
           inputDurationSec: input.durationSec,
         );
         currentData = result;
@@ -225,8 +268,7 @@ class TaskFlowExecutionService {
           'TaskFlow',
           '步骤 ${i + 1} 失败: ${flow.blocks[i].getDefinition()?.label ?? "?"} — $e',
         );
-        final executions = execNotifier.state.where((x) => x.id == execId);
-        if (executions.isNotEmpty) {
+        if (execNotifier.execution(execId) != null) {
           execNotifier.failExecution(execId, error: '步骤 ${i + 1} 失败: $e');
         }
         return;
@@ -237,10 +279,10 @@ class TaskFlowExecutionService {
     AppLogService.info('TaskFlow', '完成: ${flow.name} ($execId)');
   }
 
-  Future<String> _executeBlock(
+  Future<FlowPayload> _executeBlock(
     BlockTypeDefinition def,
     TaskFlowBlock block,
-    String input,
+    FlowPayload input,
     String execId,
     TaskFlowExecutionNotifier execNotifier, {
     required FlowSubTask flowSubTask,
@@ -248,6 +290,8 @@ class TaskFlowExecutionService {
     required BackgroundTaskNotifier bgNotifier,
     required TaskListNotifier taskListNotifier,
     required ProviderEntriesState providerEntries,
+    required List<Assistant> assistants,
+    required String fallbackChatEndpointType,
     int inputDurationSec = 0,
   }) async {
     // A fresh per-execution cancel token for this block, exposed via
@@ -267,6 +311,8 @@ class TaskFlowExecutionService {
         bgNotifier: bgNotifier,
         taskListNotifier: taskListNotifier,
         providerEntries: providerEntries,
+        assistants: assistants,
+        fallbackChatEndpointType: fallbackChatEndpointType,
         inputDurationSec: inputDurationSec,
       );
     } finally {
@@ -275,10 +321,10 @@ class TaskFlowExecutionService {
     }
   }
 
-  Future<String> _executeBlockInner(
+  Future<FlowPayload> _executeBlockInner(
     BlockTypeDefinition def,
     TaskFlowBlock block,
-    String input,
+    FlowPayload input,
     String execId,
     TaskFlowExecutionNotifier execNotifier, {
     required FlowSubTask flowSubTask,
@@ -286,14 +332,28 @@ class TaskFlowExecutionService {
     required BackgroundTaskNotifier bgNotifier,
     required TaskListNotifier taskListNotifier,
     required ProviderEntriesState providerEntries,
+    required List<Assistant> assistants,
+    required String fallbackChatEndpointType,
     int inputDurationSec = 0,
   }) async {
+    if (!def.acceptsInput(input.type)) {
+      execNotifier.updateSubTaskStatus(
+        execId,
+        flowSubTask.id,
+        TaskStatus.failed,
+      );
+      throw BlockExecutionException(
+        '上一步实际输出为${input.type.label}，「${def.label}」需要${def.inputType.label}，请修改资源选择或输出类型',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     switch (def.typeKey) {
       case BlockType.catcatch:
-        return await executeCatCatchBlock(
+        final result = await executeCatCatchBlock(
           def: def,
           block: block,
-          input: input,
+          input: input.value,
           execId: execId,
           execNotifier: execNotifier,
           flowSubTask: flowSubTask,
@@ -304,50 +364,63 @@ class TaskFlowExecutionService {
           // block's configured duration (0 = use the configured value).
           durationSecOverride: inputDurationSec,
         );
+        return FlowPayload.fromValue(result, def.outputType);
       case BlockType.audioSeparation:
-        return await executeAudioSeparationBlock(
-          def: def,
-          block: block,
-          input: input,
-          execId: execId,
-          execNotifier: execNotifier,
-          flowSubTask: flowSubTask,
-          bgNotifier: bgNotifier,
+        return FlowPayload.fromValue(
+          await executeAudioSeparationBlock(
+            def: def,
+            block: block,
+            input: input.value,
+            execId: execId,
+            execNotifier: execNotifier,
+            flowSubTask: flowSubTask,
+            bgNotifier: bgNotifier,
+          ),
+          def.outputType,
         );
       case BlockType.asr:
-        return await executeAsrBlock(
-          block: block,
-          def: def,
-          input: input,
-          execId: execId,
-          execNotifier: execNotifier,
-          flowSubTask: flowSubTask,
-          bgNotifier: bgNotifier,
-          providerEntries: providerEntries,
-          cancelToken: _activeRequestCancelTokens[execId],
+        return FlowPayload.fromValue(
+          await executeAsrBlock(
+            block: block,
+            def: def,
+            input: input.value,
+            execId: execId,
+            execNotifier: execNotifier,
+            flowSubTask: flowSubTask,
+            bgNotifier: bgNotifier,
+            providerEntries: providerEntries,
+            cancelToken: _activeRequestCancelTokens[execId],
+          ),
+          def.outputType,
         );
       case BlockType.ocr:
-        return await executeOcrBlock(
-          block: block,
-          def: def,
-          input: input,
-          execId: execId,
-          execNotifier: execNotifier,
-          flowSubTask: flowSubTask,
-          bgNotifier: bgNotifier,
-          providerEntries: providerEntries,
-          cancelToken: _activeRequestCancelTokens[execId],
+        return FlowPayload.fromValue(
+          await executeOcrBlock(
+            block: block,
+            def: def,
+            input: input.value,
+            execId: execId,
+            execNotifier: execNotifier,
+            flowSubTask: flowSubTask,
+            bgNotifier: bgNotifier,
+            providerEntries: providerEntries,
+            cancelToken: _activeRequestCancelTokens[execId],
+          ),
+          def.outputType,
         );
       case BlockType.tts:
-        return await executeTtsBlock(
-          block: block,
-          def: def,
-          input: input,
-          execId: execId,
-          execNotifier: execNotifier,
-          flowSubTask: flowSubTask,
-          taskListNotifier: taskListNotifier,
-          providerEntries: providerEntries,
+        return FlowPayload.fromValue(
+          await executeTtsBlock(
+            block: block,
+            def: def,
+            input: input.value,
+            execId: execId,
+            execNotifier: execNotifier,
+            flowSubTask: flowSubTask,
+            taskListNotifier: taskListNotifier,
+            providerEntries: providerEntries,
+          ),
+          def.outputType,
         );
       case BlockType.chat:
         // Resolve the block's assistantId (empty = use the currently
@@ -355,10 +428,7 @@ class TaskFlowExecutionService {
         // on blocks — a legacy built-in prompt id resolves to null and
         // fails loudly below.
         final assistantId = block.params['assistantId']?.toString() ?? '';
-        final chatAssistant = resolveChatAssistant(
-          assistantId,
-          _ref.read(assistantProvider),
-        );
+        final chatAssistant = resolveChatAssistant(assistantId, assistants);
         // A configured assistant that no longer exists must fail loudly
         // (mirrors the ASR config resolution) — silently falling back to
         // whatever assistant the chat page last selected would produce
@@ -375,17 +445,27 @@ class TaskFlowExecutionService {
             blockTitle: def.label,
           );
         }
-        return await executeChatBlock(
-          block: block,
-          def: def,
-          input: input,
-          execId: execId,
-          execNotifier: execNotifier,
-          flowSubTask: flowSubTask,
-          bgNotifier: bgNotifier,
-          chatManager: _ref.read(chatStreamManagerProvider),
-          conversationsNotifier: _ref.read(conversationsProvider.notifier),
-          assistant: chatAssistant,
+        return FlowPayload.fromValue(
+          await executeChatBlock(
+            block: block,
+            def: def,
+            input: input.value,
+            payload: input,
+            execId: execId,
+            execNotifier: execNotifier,
+            flowSubTask: flowSubTask,
+            bgNotifier: bgNotifier,
+            chatManager: _ref.read(chatStreamManagerProvider),
+            conversationsNotifier: _ref.read(conversationsProvider.notifier),
+            assistant: chatAssistant,
+            providerEntries: providerEntries,
+            endpointType: flowChatEndpointType(
+              chatAssistant,
+              providerEntries,
+              fallback: fallbackChatEndpointType,
+            ),
+          ),
+          def.outputType,
         );
       case BlockType.custom:
         execNotifier.updateSubTaskStatus(

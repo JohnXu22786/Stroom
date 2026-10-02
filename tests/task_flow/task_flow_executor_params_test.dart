@@ -8,6 +8,7 @@ import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/background_task_provider.dart';
+import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
@@ -42,6 +43,7 @@ class _FakeChatStreamManager extends ChatStreamManager {
     Map<String, String> reasoningParamValues = const {},
     String? streamingMsgId,
     Assistant? assistant,
+    ProviderEntriesState? entriesStateOverride,
   }) {
     captureHistory = history;
     return onStart();

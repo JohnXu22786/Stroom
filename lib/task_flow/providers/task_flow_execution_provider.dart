@@ -17,6 +17,9 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     with PersistableNotifier<List<TaskFlowExecution>> {
   TaskFlowExecutionNotifier() : super([]);
 
+  TaskFlowExecution? execution(String id) =>
+      mounted ? state.where((entry) => entry.id == id).firstOrNull : null;
+
   // ===========================================================================
   // PersistableNotifier contract
   // ===========================================================================

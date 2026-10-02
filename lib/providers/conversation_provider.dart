@@ -464,7 +464,7 @@ final temporaryCountdownTickProvider = StateProvider<int>((ref) => 0);
 final conversationsProvider =
     StateNotifierProvider<ConversationsNotifier, List<Conversation>>((ref) {
   final notifier = ConversationsNotifier(ref);
-  notifier._load();
+  notifier._initialLoad = notifier._load();
   return notifier;
 });
 
@@ -472,6 +472,16 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   final Ref _ref;
 
   ConversationsNotifier(this._ref) : super([]);
+
+  Future<void> _initialLoad = Future<void>.value();
+
+  /// Preserve write order when an immediate removal follows a pending create
+  /// or message save. The later deletion must be the last value on disk.
+  Future<void> _persistQueue = Future<void>.value();
+
+  /// Resolves when saved conversations have been merged into memory. Producers
+  /// using a deterministic ID must wait before replacing a prior attempt.
+  Future<void> get ready => _initialLoad;
 
   Timer? _persistTimer;
 
@@ -531,7 +541,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
     for (final conv in expired) {
-      await _cleanupTemporaryConversationFiles(conv);
+      await _cleanupConversationFiles(conv);
     }
     // 文件清理后有异步间隙：notifier 可能已被 dispose（应用退出），
     // 此时 _persistNow/_persistActiveId 会因 Ref 失效抛错。
@@ -542,11 +552,10 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     if (mounted) _syncTemporaryTimer();
   }
 
-  /// Best-effort removal of a temporary conversation's attachment files
-  /// (auto-deletion runs without user confirmation, mirroring the manual
-  /// delete flow's cleanup). Failures are ignored: the record removal is
-  /// the critical part.
-  Future<void> _cleanupTemporaryConversationFiles(Conversation conv) async {
+  /// Best-effort removal of a removed conversation's stored attachments and
+  /// image cache. Used by temporary expiry and replacement of a flow attempt.
+  /// Failures are ignored: removing the stale record is the critical part.
+  Future<void> _cleanupConversationFiles(Conversation conv) async {
     for (final msg in conv.messages) {
       for (final att in msg.attachments) {
         try {

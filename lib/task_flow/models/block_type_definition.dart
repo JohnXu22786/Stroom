@@ -271,12 +271,9 @@ class BlockTypeDefinition {
     ],
   );
 
-  /// Chat (Assistant Conversation): any → text
-  ///
-  /// Sends the input text (the previous block's output) to the selected
-  /// assistant and returns the response. Accepts any input type —
-  /// whatever can be typed into the chat page (text, URLs, file
-  /// references) can be the input.
+  /// Chat: text, URL or the chat composer's image/audio/video/file → text.
+  /// Media is attached to the user message through the normal chat pipeline.
+  /// An unspecified `any` value is rejected rather than treated as a path.
   static const chat = BlockTypeDefinition(
     typeKey: BlockType.chat,
     label: '助手对话',
@@ -307,6 +304,19 @@ class BlockTypeDefinition {
     chat,
   ];
 
+  static const chatInputTypes = {
+    IOType.text,
+    IOType.url,
+    IOType.image,
+    IOType.audio,
+    IOType.video,
+    IOType.file,
+  };
+
+  bool acceptsInput(IOType type) => typeKey == BlockType.chat
+      ? chatInputTypes.contains(type)
+      : type.isCompatibleWith(inputType);
+
   /// Find a block type by its key.
   static BlockTypeDefinition? findBlockType(BlockType typeKey) {
     for (final b in all) {
@@ -318,7 +328,7 @@ class BlockTypeDefinition {
   /// Get block types whose input type is compatible with [outputType].
   /// This is used for showing compatible next blocks in the flow builder.
   static List<BlockTypeDefinition> getCompatibleNextBlocks(IOType outputType) {
-    return all.where((b) => outputType.isCompatibleWith(b.inputType)).toList();
+    return all.where((b) => b.acceptsInput(outputType)).toList();
   }
 
   /// Get block types that can REPLACE a block at a chain position without
@@ -339,7 +349,7 @@ class BlockTypeDefinition {
   }) {
     return all.where((b) {
       if (b.typeKey == exclude) return false;
-      if (!prevOutput.isCompatibleWith(b.inputType)) return false;
+      if (!b.acceptsInput(prevOutput)) return false;
       if (nextInput != null && !b.outputType.isCompatibleWith(nextInput)) {
         return false;
       }

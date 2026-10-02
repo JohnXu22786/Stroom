@@ -26,8 +26,9 @@ class FlowRunInput {
   /// Optional duration filter (seconds), used only when the flow's first
   /// block is CatCatch. 0 = fall back to the block's configured duration.
   final int durationSec;
+  final String? mimeType;
 
-  const FlowRunInput({required this.text, this.durationSec = 0});
+  const FlowRunInput({required this.text, this.durationSec = 0, this.mimeType});
 }
 
 /// Status of a task flow execution.

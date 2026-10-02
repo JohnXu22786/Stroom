@@ -223,6 +223,8 @@ class ChatStreamManager {
   /// [history] 当前对话的消息历史（不包含新创建的消息）
   /// [tools] 启用的工具列表
   /// [reasoning] 是否启用推理
+  /// [entriesStateOverride] task-flow's resolved configuration snapshot;
+  /// ordinary chat sends continue using the current provider entries.
   ///
   /// 返回 [StreamResult]，包含最终的对话历史和助手消息。
   Future<StreamResult> startStreaming({
@@ -235,6 +237,7 @@ class ChatStreamManager {
     Map<String, String> reasoningParamValues = const {},
     String? streamingMsgId,
     Assistant? assistant,
+    ProviderEntriesState? entriesStateOverride,
   }) async {
     // If this conversation already has a stream running, return the
     // pending future so the caller awaits the same result.
@@ -330,7 +333,7 @@ class ChatStreamManager {
     final snappedChatService = _adapter.getOrCreateService(
       convId,
       assistant: assistant,
-      entriesState: _ref?.read(providerEntriesProvider),
+      entriesState: entriesStateOverride ?? _ref?.read(providerEntriesProvider),
     );
 
     // ── 对话级计费累计（per-request 事件驱动） ──
@@ -419,7 +422,8 @@ class ChatStreamManager {
             tools: tools,
             convId: convId,
             assistant: assistant,
-            entriesState: _ref?.read(providerEntriesProvider),
+            entriesState:
+                entriesStateOverride ?? _ref?.read(providerEntriesProvider),
           );
 
     // Now safe to yield to event loop — all state is established and the
