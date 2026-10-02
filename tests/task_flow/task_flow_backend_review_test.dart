@@ -901,10 +901,15 @@ void main() {
         });
     final service = container.read(taskFlowExecutionServiceProvider);
     final scheduler = container.read(taskFlowSchedulerProvider);
+    container.read(catcatchTasksProvider);
     final id = (await service.launchFlowMany(
             'flow', [const FlowRunInput(text: 'https://example.com/first')]))
         .single;
-    await Future<void>.delayed(const Duration(milliseconds: 550));
+    await _waitFor(
+        () =>
+            downloads.idsByUrl.containsKey('https://example.com/first') &&
+            !scheduler.holds(id),
+        'manual selection slot release');
     expect(scheduler.holds(id), isFalse);
     await service.pauseExecution(id);
     await service.resumeExecution(id).timeout(const Duration(seconds: 2));
