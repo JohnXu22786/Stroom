@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/utils/file_record.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
 import 'package:stroom/utils/manifest_bridge.dart';
@@ -99,40 +100,73 @@ ManifestBridge testBridge() => ManifestBridge(
       getAllDescendantFolderPaths: FolderPathUtils.getAllDescendantFolderPaths,
     );
 
-FileManagerView<_TestFileRecord> _buildFileManagerView({
+Widget _buildFileManagerView({
   required List<_TestFileRecord> records,
   Set<String> folders = const {},
   Future<void> Function(String id, String newName)? onRenameFile,
   Future<void> Function(String oldName, String newName)? onRenameFolder,
+  List<_TestFileRecord> Function()? refreshedRecords,
+  Set<String> Function()? refreshedFolders,
+  ValueChanged<String>? onCurrentFolderChanged,
+  Future<void> Function(String)? onCreateFolder,
 }) {
   final config = FileManagerConfig<_TestFileRecord>(
     title: 'Test',
     fileIconBuilder: (_) => const Icon(Icons.insert_drive_file),
     onFileTap: (_) {},
+    onCurrentFolderChanged: onCurrentFolderChanged,
   );
-  return FileManagerView<_TestFileRecord>(
-    sortedRecords: records,
-    folders: folders,
-    sortConfig: sortConfig,
-    config: config,
-    onRefresh: () async {},
-    onRenameFile: onRenameFile ?? (_, __) async {},
-    onMoveFile: (_, __) async {},
-    onCopyFile: (_, __) async {},
-    onDeleteFile: (_) async {},
-    onDeleteFiles: (_) async {},
-    onDeleteFolders: (_) async {},
-    onMoveFiles: (_, __) async {},
-    onMoveFolders: (_, __) async {},
-    onExportFile: (_) async {},
-    onRenameFolder: onRenameFolder ?? (_, __) async {},
-    onMoveFolder: (_, __) async {},
-    onCopyFolder: (_, __) async {},
-    onDeleteFolder: (_) async {},
-    onCreateFolder: (_) async {},
-    onToggleSort: (_) {},
-    manifestBridge: testBridge(),
-  );
+  var liveRecords = records;
+  var liveFolders = {...folders};
+  return StatefulBuilder(
+      builder: (context, update) => FileManagerView<_TestFileRecord>(
+            sortedRecords: liveRecords,
+            folders: liveFolders,
+            sortConfig: sortConfig,
+            config: config,
+            onRefresh: () async {
+              if (refreshedRecords != null || refreshedFolders != null)
+                update(() {
+                  liveRecords = refreshedRecords?.call() ?? liveRecords;
+                  liveFolders = refreshedFolders?.call() ?? liveFolders;
+                });
+            },
+            onRenameFile: (id, name) async {
+              await onRenameFile?.call(id, name);
+              update(() => liveRecords = liveRecords
+                  .map((r) => r.id == id ? r.copyWithName(name) : r)
+                  .toList());
+            },
+            onMoveFile: (_, __) async {},
+            onCopyFile: (_, __) async {},
+            onDeleteFile: (_) async {},
+            onDeleteFiles: (_) async {},
+            onDeleteFolders: (_) async {},
+            onMoveFiles: (_, __) async {},
+            onMoveFolders: (_, __) async {},
+            onExportFile: (_) async {},
+            onRenameFolder: (path, name) async {
+              await onRenameFolder?.call(path, name);
+              final parent = FolderPathUtils.getParentFolderPath(path);
+              final target = parent.isEmpty ? name : '$parent/$name';
+              String move(String folder) =>
+                  folder == path || folder.startsWith('$path/')
+                      ? '$target${folder.substring(path.length)}'
+                      : folder;
+              update(() {
+                liveFolders = liveFolders.map(move).toSet();
+                liveRecords = liveRecords
+                    .map((r) => r.copyWithFolder(move(r.folder)))
+                    .toList();
+              });
+            },
+            onMoveFolder: (_, __) async {},
+            onCopyFolder: (_, __) async {},
+            onDeleteFolder: (_) async {},
+            onCreateFolder: onCreateFolder ?? (_) async {},
+            onToggleSort: (_) {},
+            manifestBridge: testBridge(),
+          ));
 }
 
 /// 进入选择模式并选中全部给定文件
@@ -142,6 +176,8 @@ Future<void> _selectFiles(WidgetTester tester, List<String> ids) async {
     if (find.byKey(const Key('fm_selection_copy_btn')).evaluate().isEmpty) {
       await tester.longPress(item);
     } else {
+      await tester.ensureVisible(item);
+      await tester.pump();
       await tester.tap(item);
     }
     await tester.pumpAndSettle();
@@ -149,6 +185,132 @@ Future<void> _selectFiles(WidgetTester tester, List<String> ids) async {
 }
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+  testWidgets('窄屏放大字体时长错误报告仍可滚动和关闭', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpWidget(_buildTestApp(_buildFileManagerView(
+      records: [_TestFileRecord(id: 'f', name: 'photo')],
+      onRenameFile: (_, __) async => throw StateError('存储错误，文件暂时不可访问。' * 30),
+    )));
+    await _selectFiles(tester, ['f']);
+    await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('batch_num_switch')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('batch_num_switch')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('batch_rename_apply_btn')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byKey(const Key('batch_run_close')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('fm_file_f')), findsOneWidget);
+  });
+  testWidgets('进入改名目录的子目录后撤销，同步面包屑、文件列表和新建目录位置', (tester) async {
+    final visited = <String>[];
+    final created = <String>[];
+    await tester.pumpWidget(_buildTestApp(_buildFileManagerView(
+      records: [_TestFileRecord(id: 'f', name: 'photo', folder: 'a/sub')],
+      folders: {'a', 'a/sub'},
+      onCurrentFolderChanged: visited.add,
+      onCreateFolder: (path) async => created.add(path),
+    )));
+    await tester.longPress(find.byKey(const Key('fm_folder_a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('batch_num_switch')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('batch_num_switch')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('batch_rename_apply_btn')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('batch_run_close')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('fm_folder_1_a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('fm_folder_1_a/sub')));
+    await tester.pumpAndSettle();
+    expect(visited.last, '1_a/sub');
+    await tester.tap(find.byKey(const Key('fm_batch_rename_history')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('batch_run_undo')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('batch_run_close')));
+    await tester.pumpAndSettle();
+    expect(visited.last, 'a/sub');
+    expect(find.byKey(const Key('fm_file_f')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('fm_create_folder_btn')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byKey(const Key('fm_create_folder_input')), 'new');
+    await tester.tap(find.byKey(const Key('fm_create_folder_confirm_btn')));
+    await tester.pumpAndSettle();
+    expect(created, ['a/sub/new']);
+  });
+
+  testWidgets('目录部分写入失败后刷新真实记录，不把旧页面缓存当作可撤销依据', (tester) async {
+    var diskRecords = [_TestFileRecord(id: 'f', name: 'photo', folder: 'b')];
+    var diskFolders = {'a', 'b'};
+    await tester.pumpWidget(_buildTestApp(_buildFileManagerView(
+      records: diskRecords,
+      folders: diskFolders,
+      refreshedRecords: () => diskRecords,
+      refreshedFolders: () => diskFolders,
+      onRenameFolder: (path, name) async {
+        if (path == 'b') {
+          diskRecords = [diskRecords.single.copyWithFolder(name)];
+          throw StateError('partial folder move');
+        }
+        diskFolders = {name, 'b'};
+      },
+    )));
+    await tester.longPress(find.byKey(const Key('fm_folder_a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('fm_folder_b')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('batch_num_switch')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('batch_num_switch')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('batch_rename_apply_btn')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('batch_run_undo')), findsNothing);
+    expect(find.text('有项目状态无法确认，请检查文件列表；为避免覆盖，不提供自动撤销。'), findsOneWidget);
+  });
+
+  testWidgets('结果关闭后可重新打开并安全撤销本次改名', (tester) async {
+    final calls = <String>[];
+    await tester.pumpWidget(_buildTestApp(_buildFileManagerView(
+      records: [_TestFileRecord(id: 'a', name: 'alpha')],
+      onRenameFile: (_, name) async => calls.add(name),
+    )));
+    await _selectFiles(tester, ['a']);
+    await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('batch_num_switch')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('batch_num_switch')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('batch_rename_apply_btn')));
+    await tester.pumpAndSettle();
+    expect(find.text('已重命名 1 项'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('batch_run_close')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('fm_batch_rename_history')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('batch_run_undo')));
+    await tester.pumpAndSettle();
+    expect(find.text('已撤销 1 项'), findsOneWidget);
+    expect(calls, ['1_alpha', 'alpha']);
+  });
   testWidgets('批量重命名：编号 → 预览 → 应用调用 onRenameFile', (tester) async {
     final renames = <(String, String)>[];
     await tester.pumpWidget(
@@ -176,6 +338,9 @@ void main() {
     await _selectFiles(tester, ['file_1', 'file_2']);
 
     // 打开批量重命名面板
+    await tester
+        .ensureVisible(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('batch_rename_dialog')), findsOneWidget);
@@ -186,6 +351,8 @@ void main() {
     expect(tester.widget<FilledButton>(applyBtn).onPressed, isNull);
 
     // 启用编号
+    await tester.ensureVisible(find.byKey(const Key('batch_num_switch')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('batch_num_switch')));
     await tester.pumpAndSettle();
 
@@ -194,6 +361,8 @@ void main() {
     expect(find.text('2_vacation.mp4'), findsOneWidget);
 
     // 应用
+    await tester.ensureVisible(applyBtn);
+    await tester.pump();
     await tester.tap(applyBtn);
     await tester.pumpAndSettle();
 
@@ -228,8 +397,14 @@ void main() {
     );
 
     await _selectFiles(tester, ['file_1', 'file_2']);
+    await tester
+        .ensureVisible(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
     await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('batch_num_switch')));
+    await tester.pump();
 
     await tester.tap(find.byKey(const Key('batch_num_switch')));
     await tester.pumpAndSettle();
@@ -238,6 +413,8 @@ void main() {
     expect(find.text('2_beta.mov'), findsOneWidget);
 
     // 切换为降序
+    await tester.ensureVisible(find.text('降序'));
+    await tester.pump();
     await tester.tap(find.text('降序'));
     await tester.pumpAndSettle();
     expect(find.text('1_beta.mov'), findsOneWidget);
@@ -271,6 +448,9 @@ void main() {
     );
 
     await _selectFiles(tester, ['file_1', 'file_2']);
+    await tester
+        .ensureVisible(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
     await tester.pumpAndSettle();
 
@@ -281,8 +461,12 @@ void main() {
     expect(find.text('大小'), findsOneWidget);
 
     // 切到「修改时间」升序：recent（1/1）→ 1，old（1/3）→ 2
+    await tester.ensureVisible(find.text('修改时间'));
+    await tester.pump();
     await tester.tap(find.text('修改时间'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('batch_num_switch')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('batch_num_switch')));
     await tester.pumpAndSettle();
     expect(find.text('1_recent.txt'), findsOneWidget);
@@ -302,10 +486,15 @@ void main() {
     );
 
     await _selectFiles(tester, ['file_1', 'file_2']);
+    await tester
+        .ensureVisible(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
     await tester.pumpAndSettle();
 
     // 启用替换：photo → pic（与未改名的 pic 冲突）
+    await tester.ensureVisible(find.byKey(const Key('batch_replace_switch')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('batch_replace_switch')));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -351,17 +540,28 @@ void main() {
     // 选中文件夹与文件：长按文件夹进入选择模式，再点选文件
     await tester.longPress(find.byKey(const Key('fm_folder_MyFolder')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('fm_file_file_1')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('fm_file_file_1')));
     await tester.pumpAndSettle();
+
+    await tester
+        .ensureVisible(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pump();
 
     await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
     await tester.pumpAndSettle();
 
     // 文件夹在前：MyFolder → 1_MyFolder，notes → 2_notes.txt
+    await tester.ensureVisible(find.byKey(const Key('batch_num_switch')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('batch_num_switch')));
     await tester.pumpAndSettle();
     expect(find.text('1_MyFolder'), findsOneWidget);
     expect(find.text('2_notes.txt'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('batch_rename_apply_btn')));
+    await tester.pump();
 
     await tester.tap(find.byKey(const Key('batch_rename_apply_btn')));
     await tester.pumpAndSettle();
@@ -384,9 +584,16 @@ void main() {
       ),
     );
     await _selectFiles(tester, ['file_1']);
+    await tester
+        .ensureVisible(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('batch_rename_dialog')), findsOneWidget);
+
+    await tester
+        .ensureVisible(find.byKey(const Key('batch_rename_cancel_btn')));
+    await tester.pump();
 
     await tester.tap(find.byKey(const Key('batch_rename_cancel_btn')));
     await tester.pumpAndSettle();
@@ -410,11 +617,19 @@ void main() {
       ),
     );
     await _selectFiles(tester, ['file_1', 'file_2']);
+    await tester
+        .ensureVisible(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.byKey(const Key('batch_num_switch')));
+    await tester.pump();
+
     await tester.tap(find.byKey(const Key('batch_num_switch')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('batch_rename_apply_btn')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('batch_rename_apply_btn')));
     await tester.pumpAndSettle();
 
@@ -434,15 +649,21 @@ void main() {
       ),
     );
     await _selectFiles(tester, ['file_1', 'file_2']);
+    await tester
+        .ensureVisible(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('batch_rename_dialog')), findsOneWidget);
 
     // 启用编号与删除字符，预览正常（RenderFlex 溢出会令测试失败）。
     // 删除默认数量 1 → 编号后的 '1_alpha' 去掉首位 '1'。
+    await tester.ensureVisible(find.byKey(const Key('batch_num_switch')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('batch_num_switch')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('batch_delete_switch')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('batch_delete_switch')));
     await tester.pumpAndSettle();
     expect(find.text('_alpha.mp4'), findsOneWidget);
@@ -469,19 +690,24 @@ void main() {
       ),
     );
     await _selectFiles(tester, ['file_1']);
+    await tester
+        .ensureVisible(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
     await tester.pumpAndSettle();
 
     // 操作顺序提示与删除区块说明文案
     expect(
-      find.text('操作顺序：编号 → 替换 → 删除字符 → 插入 → 大小写'),
+      find.text('规则从上到下依次执行；可复制、移动或关闭。扩展名保持不变。'),
       findsOneWidget,
     );
 
     // 启用删除字符（默认数量 1）→ 有改动 → 应用按钮可用
+    await tester.ensureVisible(find.byKey(const Key('batch_delete_switch')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('batch_delete_switch')));
     await tester.pumpAndSettle();
-    expect(find.text('删除后若名称为空则无法应用；可配合「插入」补充文本'), findsOneWidget);
+    expect(find.text('名称删空后需由后续插入规则补充，才能执行。'), findsOneWidget);
     final applyBtn = find.byKey(const Key('batch_rename_apply_btn'));
     expect(tester.widget<FilledButton>(applyBtn).onPressed, isNotNull);
 
@@ -521,6 +747,8 @@ void main() {
     expect(find.text('c.mp4'), findsOneWidget);
 
     // 应用后按新数量执行
+    await tester.ensureVisible(applyBtn);
+    await tester.pump();
     await tester.tap(applyBtn);
     await tester.pumpAndSettle();
     expect(renames, [('file_1', 'c')]);
@@ -538,6 +766,9 @@ void main() {
       ),
     );
     await _selectFiles(tester, ['file_1']);
+    await tester
+        .ensureVisible(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
     await tester.pumpAndSettle();
 
@@ -545,6 +776,8 @@ void main() {
     final countField = find.byKey(const Key('batch_delete_count_field'));
 
     // 启用删除并清空数量 → 提示出现、应用禁用
+    await tester.ensureVisible(find.byKey(const Key('batch_delete_switch')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('batch_delete_switch')));
     await tester.pumpAndSettle();
     await tester.enterText(countField, '');
@@ -554,9 +787,13 @@ void main() {
 
     // 关闭区块（字段隐藏、提示消失），再重新开启：
     // 字段仍为空 → 提示必须重新出现，应用仍禁用（不得按过期配置放行）
+    await tester.ensureVisible(find.byKey(const Key('batch_delete_switch')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('batch_delete_switch')));
     await tester.pumpAndSettle();
     expect(find.text('不能为空'), findsNothing);
+    await tester.ensureVisible(find.byKey(const Key('batch_delete_switch')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('batch_delete_switch')));
     await tester.pumpAndSettle();
     expect(find.text('不能为空'), findsOneWidget);
@@ -574,6 +811,9 @@ void main() {
       ),
     );
     await _selectFiles(tester, ['file_1']);
+    await tester
+        .ensureVisible(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
     await tester.pumpAndSettle();
 
@@ -581,8 +821,11 @@ void main() {
 
     // 启用插入，切到「指定位置」，输入文本 → 有改动 → 应用可用
     await tester.ensureVisible(find.byKey(const Key('batch_insert_switch')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('batch_insert_switch')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('指定位置'));
+    await tester.pump();
     await tester.tap(find.text('指定位置'));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -602,6 +845,8 @@ void main() {
     expect(tester.widget<FilledButton>(applyBtn).onPressed, isNull);
 
     // 切回「开头」→ 位置字段隐藏，无效输入不再阻塞应用
+    await tester.ensureVisible(find.text('开头'));
+    await tester.pump();
     await tester.tap(find.text('开头'));
     await tester.pumpAndSettle();
     expect(find.text('不能为空'), findsNothing);
@@ -619,8 +864,14 @@ void main() {
       ),
     );
     await _selectFiles(tester, ['file_1']);
+    await tester
+        .ensureVisible(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
     await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('batch_delete_switch')));
+    await tester.pump();
 
     await tester.tap(find.byKey(const Key('batch_delete_switch')));
     await tester.pumpAndSettle();

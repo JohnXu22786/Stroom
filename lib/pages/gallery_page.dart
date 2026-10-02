@@ -749,6 +749,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       folders: folders,
       sortConfig: sortConfig,
       config: config,
+      invalidateRenameCache: ImageManifest.invalidateCache,
       onRefresh: () async {
         await ref.read(imageRecordsProvider.notifier).loadRecords();
         await ref.read(imageFolderListProvider.notifier).loadFolders();
