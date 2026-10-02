@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:math' as dart_math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/math_3d_object.dart';
 import '../models/math_drawing_state.dart';
@@ -10,16 +13,20 @@ import '../models/formula_entry.dart';
 import '../widgets/math_canvas.dart';
 import '../widgets/math_canvas_3d.dart';
 import '../widgets/math_3d_toolbar.dart';
+import '../widgets/math_formula_field.dart';
+import '../widgets/math_keyboard.dart';
 
 /// 数学绘图页面 — 多公式、等价的公式行、颜色选择、显隐切换。
 class MathDrawingPage extends StatefulWidget {
   final String? initialExpression;
   final bool initialShowWebView;
+  final bool? initialMathematicalMode;
 
   const MathDrawingPage({
     super.key,
     this.initialExpression,
     this.initialShowWebView = true,
+    this.initialMathematicalMode,
   });
 
   @override
@@ -40,6 +47,12 @@ class _MathDrawingPageState extends State<MathDrawingPage>
 
   /// All formula rows (each is equal).
   final List<_FormulaState> _formulas = [];
+  final ScrollController _formulaScroll = ScrollController();
+  _FormulaState? _activeFormula;
+  bool _mathMode = true;
+  bool _keyboardVisible = false;
+  bool _modeTouched = false;
+  static const _modePreference = 'math_drawing_mathematical_input';
 
   @override
   void initState() {
@@ -47,6 +60,10 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabChanged);
 
+    _mathMode = widget.initialMathematicalMode ?? MathFormulaField.supported;
+    if (widget.initialMathematicalMode == null && MathFormulaField.supported) {
+      unawaited(_restoreMode());
+    }
     // Start with one formula row
     _formulas.add(
       _FormulaState(
@@ -63,18 +80,68 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     for (final f in _formulas) {
       f.controller.dispose();
     }
+    _formulaScroll.dispose();
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     super.dispose();
   }
 
-  void _onTabChanged() {
-    if (!_tabController.indexIsChanging) {
-      setState(() {
-        _currentView =
-            _tabController.index == 0 ? ViewMode.mode2D : ViewMode.mode3D;
-      });
+  Future<void> _restoreMode() async {
+    final preferences = await SharedPreferences.getInstance();
+    if (mounted && !_modeTouched) {
+      setState(() => _mathMode = preferences.getBool(_modePreference) ?? true);
     }
+  }
+
+  void _setMode(bool mathematical, _FormulaState formula) {
+    _modeTouched = true;
+    setState(() {
+      _mathMode = mathematical;
+      _activeFormula = formula;
+      _keyboardVisible = mathematical && _currentView == ViewMode.mode2D;
+    });
+    unawaited(SharedPreferences.getInstance()
+        .then((prefs) => prefs.setBool(_modePreference, mathematical)));
+  }
+
+  void _activateFormula(_FormulaState formula) {
+    if (!_mathMode || _currentView != ViewMode.mode2D) return;
+    _modeTouched = true;
+    FocusManager.instance.primaryFocus?.unfocus();
+    unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
+    setState(() {
+      _activeFormula = formula;
+      _keyboardVisible = true;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final rowContext = formula.rowKey.currentContext;
+      if (mounted && rowContext != null) {
+        Scrollable.ensureVisible(rowContext,
+            alignment: 0.5, duration: const Duration(milliseconds: 120));
+      }
+    });
+  }
+
+  Future<void> _flushEditors() async {
+    for (final formula in List<_FormulaState>.of(_formulas)) {
+      await formula.editorKey.currentState?.flush();
+    }
+  }
+
+  void _dismissKeyboard() {
+    unawaited(_activeFormula?.editorKey.currentState?.dismiss());
+    setState(() => _keyboardVisible = false);
+  }
+
+  Future<void> _onTabChanged() async {
+    final target =
+        _tabController.index == 0 ? ViewMode.mode2D : ViewMode.mode3D;
+    if (_tabController.indexIsChanging || target == _currentView) return;
+    _dismissKeyboard();
+    await _flushEditors();
+    if (!mounted || (_tabController.index == 0) != (target == ViewMode.mode2D))
+      return;
+    setState(() => _currentView = target);
   }
 
   // ==================================================================
@@ -84,13 +151,16 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   bool get _canPlot {
     return _formulas.any((f) {
       final text = f.controller.text.trim();
-      return text.isNotEmpty && text != f.committedText;
+      return text != f.committedText;
     });
   }
 
   /// Plot all visible formulas that have changes.
-  void _plotAll() {
-    if (_currentView == ViewMode.mode2D) {
+  Future<void> _plotAll() async {
+    final view = _currentView;
+    await _flushEditors();
+    if (!mounted) return;
+    if (view == ViewMode.mode2D) {
       _plotAll2D();
     } else {
       _plotAll3D();
@@ -106,7 +176,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
 
       final parsed = MathExpression.fromInput(text);
       if (!parsed.isValid) {
-        _showError(parsed.parseError ?? '表达式错误: $text');
+        _showError(text.contains(r'\placeholder')
+            ? '公式仍有空槽，请填写后再绘图。'
+            : '此公式暂不能绘图，编辑内容已保留。${parsed.parseError ?? ""}');
         return;
       }
       entries.add(
@@ -118,11 +190,6 @@ class _MathDrawingPageState extends State<MathDrawingPage>
         ),
       );
     }
-    if (entries.isEmpty) {
-      _canvasKey.currentState?.setFormulas([]);
-      return;
-    }
-
     // Mark all rows as committed
     setState(() {
       for (final f in _formulas) {
@@ -218,9 +285,17 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     });
   }
 
-  void _removeFormula(int index) {
+  Future<void> _removeFormula(_FormulaState removing) async {
     if (_formulas.length <= 1) return;
+    await _flushEditors();
+    if (!mounted || _formulas.length <= 1 || !_formulas.contains(removing))
+      return;
+    final index = _formulas.indexOf(removing);
     setState(() {
+      if (_activeFormula == removing) {
+        _activeFormula = null;
+        _keyboardVisible = false;
+      }
       _formulas[index].controller.dispose();
       _formulas.removeAt(index);
     });
@@ -228,7 +303,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     _plotAll();
   }
 
-  void _confirmRemove(int index) {
+  void _confirmRemove(_FormulaState removing) {
+    final index = _formulas.indexOf(removing);
+    if (index < 0 || _formulas.length <= 1) return;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -242,7 +319,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              _removeFormula(index);
+              _removeFormula(removing);
             },
             child: Text(
               '删除',
@@ -254,9 +331,12 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     );
   }
 
-  void _toggleVisibility(int index) {
+  Future<void> _toggleVisibility(int index) async {
+    final formula = _formulas[index];
+    await _flushEditors();
+    if (!mounted || !_formulas.contains(formula)) return;
     setState(() {
-      _formulas[index].visible = !_formulas[index].visible;
+      formula.visible = !formula.visible;
     });
     // Re-plot to update canvas
     _plotAll();
@@ -336,32 +416,75 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('数学绘图'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.center_focus_strong, size: 20),
-            tooltip: '重置视图',
-            onPressed: _onResetView,
+    return PopScope(
+        canPop: !_keyboardVisible,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && _keyboardVisible) _dismissKeyboard();
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('数学绘图'),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.center_focus_strong, size: 20),
+                tooltip: '重置视图',
+                onPressed: _onResetView,
+              ),
+            ],
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          _buildTabBar(cs),
-          // Formula list (always shown)
-          _buildFormulaList(cs),
-          // Canvas + 3D canvas kept alive via IndexedStack
-          Expanded(
-            child: IndexedStack(
-              index: _currentView == ViewMode.mode2D ? 0 : 1,
-              children: [_buildCanvas(cs), _build3DCanvas(cs)],
-            ),
-          ),
-        ],
-      ),
-    );
+          body: LayoutBuilder(
+              builder: (context, constraints) => Column(
+                    children: [
+                      _buildTabBar(cs),
+                      // Formula list (always shown)
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                            maxHeight: (constraints.maxHeight - 48)
+                                    .clamp(0.0, double.infinity) *
+                                (_keyboardVisible ? 0.28 : 0.4)),
+                        child: _buildFormulaList(cs),
+                      ),
+                      // Canvas + 3D canvas kept alive via IndexedStack
+                      Expanded(
+                        child: IndexedStack(
+                          index: _currentView == ViewMode.mode2D ? 0 : 1,
+                          children: [_buildCanvas(cs), _build3DCanvas(cs)],
+                        ),
+                      ),
+                      if (_keyboardVisible &&
+                          _activeFormula != null &&
+                          _currentView == ViewMode.mode2D)
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                              maxHeight: (constraints.maxHeight - 48)
+                                      .clamp(0.0, double.infinity) *
+                                  0.56),
+                          child: MathKeyboard(
+                            enabled: !widget.initialShowWebView ||
+                                (_activeFormula
+                                        ?.editorKey.currentState?.ready ??
+                                    false),
+                            activeLabel:
+                                '公式 ${_formulas.indexOf(_activeFormula!) + 1}',
+                            location: _activeFormula
+                                    ?.editorKey.currentState?.location ??
+                                '公式',
+                            onCommand: (kind, value) async {
+                              final editor =
+                                  _activeFormula?.editorKey.currentState;
+                              if (kind == 'clipboard') {
+                                await editor?.clipboard(value);
+                              } else {
+                                await editor?.command(kind, value);
+                              }
+                            },
+                            onDismiss: _dismissKeyboard,
+                            onPlot: _plotAll,
+                          ),
+                        ),
+                    ],
+                  )),
+        ));
   }
 
   Widget _buildTabBar(ColorScheme cs) {
@@ -400,12 +523,11 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   // ==================================================================
 
   Widget _buildFormulaList(ColorScheme cs) {
-    // Dynamic expand: no max height, the list grows as formulas are added,
-    // pushing the canvas down naturally.
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
       shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+      controller: _formulaScroll,
+      physics: const ClampingScrollPhysics(),
       itemCount: _formulas.length,
       itemBuilder: (_, index) => _buildFormulaRow(cs, index),
     );
@@ -417,6 +539,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
         f.controller.text.trim() != f.committedText;
 
     return Padding(
+      key: f.rowKey,
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
@@ -440,53 +563,32 @@ class _MathDrawingPageState extends State<MathDrawingPage>
 
           const SizedBox(width: 12),
 
-          // ---- Formula text field ----
+          // A retained editor per row keeps its structural cursor and undo.
           Expanded(
-            child: TextField(
+            child: MathFormulaField(
+              key: f.editorKey,
               controller: f.controller,
-              decoration: InputDecoration(
-                hintText: '公式 ${index + 1}',
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 6,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                filled: true,
-                fillColor: f.color.withValues(alpha: 0.06),
-                // Undo button: appears only when text has been modified
-                suffixIcon: hasChanged
-                    ? IconButton(
-                        icon: Icon(
-                          Icons.undo,
-                          size: 16,
-                          color: cs.onSurfaceVariant,
-                        ),
-                        tooltip: '撤销修改',
-                        onPressed: () {
-                          f.controller.text = f.committedText;
-                          f.controller.selection = TextSelection.fromPosition(
-                            TextPosition(offset: f.committedText.length),
-                          );
-                          setState(() {});
-                        },
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 24,
-                          minHeight: 24,
-                        ),
-                      )
-                    : null,
-              ),
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 13,
-                color: cs.onSurface,
-              ),
-              onChanged: (_) => setState(() {}),
-              onSubmitted: (_) => _plotAll(),
+              mathematical: _mathMode && _currentView == ViewMode.mode2D,
+              allowModeSwitch: _currentView == ViewMode.mode2D,
+              showWebView: widget.initialShowWebView,
+              label: '公式 ${index + 1}',
+              fillColor: f.color.withValues(alpha: 0.06),
+              onModeChanged: (mode) => _setMode(mode, f),
+              onActivate: () => _activateFormula(f),
+              onChanged: () => setState(() {}),
+              onSubmitted: _plotAll,
+              onReadyChanged: () {
+                if (mounted) setState(() {});
+              },
+              onCaretChanged: () {
+                if (mounted && _activeFormula == f) setState(() {});
+              },
+              onRevert: hasChanged
+                  ? () {
+                      f.controller.text = f.committedText;
+                      setState(() {});
+                    }
+                  : null,
             ),
           ),
 
@@ -520,7 +622,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               iconSize: 16,
               color: cs.error.withValues(alpha: 0.7),
               tooltip: '删除公式',
-              onPressed: () => _confirmRemove(index),
+              onPressed: () => _confirmRemove(f),
             ),
 
           // ---- Plot (✓) button ----
@@ -668,6 +770,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
 /// State for a single formula row.
 class _FormulaState {
   final TextEditingController controller;
+  final GlobalKey rowKey = GlobalKey();
+  final GlobalKey<MathFormulaFieldState> editorKey = GlobalKey();
   Color color;
   bool autoColor;
   String committedText;

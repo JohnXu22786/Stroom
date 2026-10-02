@@ -1,10 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/math_drawing_page.dart';
+import 'package:stroom/widgets/math_formula_field.dart';
 
 Widget _buildTestApp({String? initialExpression}) {
   return MaterialApp(
-    home: MathDrawingPage(initialExpression: initialExpression),
+    home: MathDrawingPage(
+      initialExpression: initialExpression,
+      initialMathematicalMode: false,
+      initialShowWebView: false,
+    ),
     localizationsDelegates: const [
       DefaultMaterialLocalizations.delegate,
       DefaultWidgetsLocalizations.delegate,
@@ -14,6 +22,7 @@ Widget _buildTestApp({String? initialExpression}) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  editorInteractionTests();
 
   group('MathDrawingPage - formula input', () {
     testWidgets('checkmark button plots formulas', (tester) async {
@@ -153,7 +162,10 @@ void main() {
       final buttons = find.descendant(
         of: row,
         matching: find.byWidgetPredicate(
-          (w) => w is IconButton && (w.icon as Icon?)?.icon != Icons.undo,
+          (w) =>
+              w is IconButton &&
+              ![Icons.undo, Icons.calculate_outlined, Icons.keyboard]
+                  .contains((w.icon as Icon?)?.icon),
         ),
       );
       return [
@@ -215,4 +227,185 @@ void main() {
       expect(tf.controller?.text, equals('sin(x)'));
     });
   });
+}
+
+// Editing snapshots are asynchronous on native WebViews. Exercise the page
+// with the bridge boundary rather than constructing a platform view in tests.
+void editorInteractionTests() {
+  testWidgets('pending deletion keeps a later confirmation tied to its formula',
+      (tester) async {
+    final platform = await _delayedEditors(tester, rows: 3);
+    final fields = tester
+        .stateList<MathFormulaFieldState>(find.byType(MathFormulaField))
+        .toList();
+    final gate = Completer<void>();
+    platform.activeEditors.first.controller.snapshotGate = gate.future;
+    await tester.tap(find.byIcon(Icons.remove_circle_outline).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.remove_circle_outline).last);
+    await tester.pumpAndSettle();
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.byType(MathFormulaField), findsNWidgets(2));
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(tester.state<MathFormulaFieldState>(find.byType(MathFormulaField)),
+        same(fields[1]));
+  });
+
+  testWidgets('concurrent pending deletions retain the final formula',
+      (tester) async {
+    final platform = await _delayedEditors(tester, rows: 2);
+    final gate = Completer<void>();
+    platform.activeEditors.first.controller.snapshotGate = gate.future;
+    await tester.tap(find.byIcon(Icons.remove_circle_outline).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.remove_circle_outline).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(MathFormulaField), findsOneWidget);
+  });
+
+  testWidgets('short narrow screens keep the canvas and keyboard scrollable',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(const MaterialApp(
+        home: MathDrawingPage(
+      initialShowWebView: false,
+      initialMathematicalMode: true,
+    )));
+    await tester.tap(find.byType(MathFormulaField));
+    await tester.pump();
+    await tester.tap(find.byTooltip('全部符号分类'));
+    await tester.pumpAndSettle();
+    final matrices = find.text('矩阵').last;
+    await tester.ensureVisible(matrices);
+    await tester.tap(matrices);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byTooltip('收起数学键盘'));
+    await tester.pump();
+    expect(find.text('下一项'), findsNothing);
+  });
+  testWidgets('math keyboard follows row identity across deletion and tabs',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+        home: MathDrawingPage(
+      initialShowWebView: false,
+      initialMathematicalMode: true,
+    )));
+    await tester.tap(find.byType(MathFormulaField).first);
+    await tester.pump();
+    expect(find.text('下一项'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.add_circle));
+    await tester.pump();
+    final fields = tester
+        .stateList<MathFormulaFieldState>(find.byType(MathFormulaField))
+        .toList();
+    fields[1].acceptSnapshot({
+      'revision': fields[1].revision,
+      'latex': r'\frac{x}{2}',
+      'edited': true
+    });
+    await tester.pump();
+    await tester.tap(find.byType(MathFormulaField).last);
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.remove_circle_outline).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+    expect(tester.state<MathFormulaFieldState>(find.byType(MathFormulaField)),
+        same(fields[1]));
+    await tester.tap(find.text('3D'));
+    await tester.pumpAndSettle();
+    expect(find.text('下一项'), findsNothing);
+    await tester.tap(find.text('2D 绘图'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('切换到系统键盘 / LaTeX 源码'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        r'\frac{x}{2}');
+    expect(tester.takeException(), isNull);
+  });
+}
+
+Future<_DelayedEditorPlatform> _delayedEditors(WidgetTester tester,
+    {required int rows}) async {
+  final original = InAppWebViewPlatform.instance;
+  final platform = _DelayedEditorPlatform();
+  InAppWebViewPlatform.instance = platform;
+  addTearDown(() =>
+      InAppWebViewPlatform.instance = original ?? _DelayedEditorPlatform());
+  await tester.pumpWidget(
+      const MaterialApp(home: MathDrawingPage(initialMathematicalMode: true)));
+  for (var i = 1; i < rows; i++) {
+    await tester.tap(find.byIcon(Icons.add_circle));
+    await tester.pump();
+  }
+  platform.activeEditors =
+      platform.editors.sublist(platform.editors.length - rows);
+  for (final native in platform.activeEditors) {
+    final controller = native
+        .controllerFromPlatform<InAppWebViewController>(native.controller);
+    native.params.onWebViewCreated!(controller);
+    native.params.onLoadStop!(controller, null);
+  }
+  await tester.pumpAndSettle();
+  return platform;
+}
+
+class _DelayedEditorPlatform extends InAppWebViewPlatform {
+  final editors = <_DelayedEditor>[];
+  late final List<_DelayedEditor> activeEditors;
+  @override
+  PlatformInAppWebViewWidget createPlatformInAppWebViewWidget(
+      PlatformInAppWebViewWidgetCreationParams params) {
+    final editor = _DelayedEditor(params);
+    editors.add(editor);
+    return editor;
+  }
+}
+
+class _DelayedEditor extends PlatformInAppWebViewWidget {
+  final controller = _DelayedEditorController();
+  _DelayedEditor(super.params) : super.implementation();
+  @override
+  Widget build(BuildContext context) => const SizedBox();
+  @override
+  T controllerFromPlatform<T>(PlatformInAppWebViewController controller) =>
+      params.controllerFromPlatform!(controller) as T;
+  @override
+  void dispose() {}
+}
+
+class _DelayedEditorController extends PlatformInAppWebViewController {
+  Future<void>? snapshotGate;
+  _DelayedEditorController()
+      : super.implementation(
+            const PlatformInAppWebViewControllerCreationParams(id: 0));
+  @override
+  Future<dynamic> evaluateJavascript(
+      {required String source, ContentWorld? contentWorld}) async {
+    if (source.contains('stroomMath.snapshot()')) await snapshotGate;
+    return null;
+  }
+
+  @override
+  void addJavaScriptHandler(
+      {required String handlerName,
+      required JavaScriptHandlerCallback callback}) {}
+  @override
+  void dispose({bool isKeepAlive = false}) {}
 }
