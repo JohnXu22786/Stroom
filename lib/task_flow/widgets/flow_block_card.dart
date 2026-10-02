@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/block_type_definition.dart';
 import '../models/task_flow_definition.dart';
 import '../utils/block_param_display.dart';
@@ -10,8 +11,7 @@ import 'io_type_indicator.dart';
 /// Shows the block's icon, label, input/output types, and a brief
 /// summary of its configured parameters. Tap opens the parameter editor;
 /// [onReplace] swaps the block for another type with compatible I/O
-/// (reordering is constrained by input/output type compatibility, so
-/// blocks are replaced rather than dragged).
+/// and the per-step menu offers insertion, duplication, movement and deletion.
 ///
 /// When [readOnly] is true, the settings, replace and delete buttons are
 /// hidden, and the tap hint changes to "点击查看参数" (read-only view).
@@ -25,6 +25,13 @@ class FlowBlockCard extends ConsumerWidget {
   final VoidCallback? onSettings;
   final VoidCallback? onReplace;
   final VoidCallback? onDelete;
+  final VoidCallback? onDuplicate;
+  final VoidCallback? onMoveUp;
+  final VoidCallback? onMoveDown;
+  final VoidCallback? onInsertBefore;
+  final VoidCallback? onInsertAfter;
+  final String? validationMessage;
+  final bool selected;
 
   const FlowBlockCard({
     super.key,
@@ -37,6 +44,13 @@ class FlowBlockCard extends ConsumerWidget {
     this.onSettings,
     this.onReplace,
     this.onDelete,
+    this.onDuplicate,
+    this.onMoveUp,
+    this.onMoveDown,
+    this.onInsertBefore,
+    this.onInsertAfter,
+    this.validationMessage,
+    this.selected = false,
   });
 
   @override
@@ -61,8 +75,9 @@ class FlowBlockCard extends ConsumerWidget {
       // Compare against the definition's default value
       if (dv != null && dv == e.value) return false;
       if (dv == null &&
-          (e.value.toString().isEmpty || e.value == 0 || e.value == false))
+          (e.value.toString().isEmpty || e.value == 0 || e.value == false)) {
         return false;
+      }
       return true;
     }).toList();
 
@@ -80,7 +95,14 @@ class FlowBlockCard extends ConsumerWidget {
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: def.color.withValues(alpha: 0.4), width: 1),
+            side: BorderSide(
+              color: validationMessage != null
+                  ? cs.error
+                  : selected
+                      ? cs.primary
+                      : def.color.withValues(alpha: 0.4),
+              width: selected ? 2 : 1,
+            ),
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
@@ -157,18 +179,7 @@ class FlowBlockCard extends ConsumerWidget {
                           ),
                           tooltip: '替换功能块',
                         ),
-                      // Delete button (only for last block, hidden in readOnly)
-                      if (onDelete != null && !readOnly)
-                        IconButton(
-                          icon: Icon(Icons.close, size: 16, color: cs.error),
-                          onPressed: onDelete,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 28,
-                            minHeight: 28,
-                          ),
-                          tooltip: '删除',
-                        ),
+                      if (!readOnly) _buildMenu(),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -228,6 +239,14 @@ class FlowBlockCard extends ConsumerWidget {
                     ),
                   ],
 
+                  if (validationMessage != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      validationMessage!,
+                      style: TextStyle(fontSize: 12, color: cs.error),
+                    ),
+                  ],
+
                   // Tap hint
                   const SizedBox(height: 2),
                   Align(
@@ -269,26 +288,29 @@ class FlowBlockCard extends ConsumerWidget {
               children: [
                 Icon(Icons.warning_amber, size: 20, color: cs.error),
                 const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '未知功能块: ${block.typeKey.name}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: cs.error,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '未知功能块: ${block.typeKey.name}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: cs.error,
+                        ),
                       ),
-                    ),
-                    Text(
-                      '该功能块类型未注册',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
+                      Text(
+                        validationMessage ?? '该功能块类型未注册',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+                if (!readOnly) _buildMenu(),
               ],
             ),
           ),
@@ -296,4 +318,43 @@ class FlowBlockCard extends ConsumerWidget {
       ],
     );
   }
+
+  Widget _buildMenu() {
+    final callbacks = <int, VoidCallback?>{
+      0: onSettings ?? onTap,
+      1: onInsertBefore,
+      2: onInsertAfter,
+      3: onDuplicate,
+      4: onMoveUp,
+      5: onMoveDown,
+      6: onReplace,
+      7: onDelete,
+    };
+    return PopupMenuButton<int>(
+      tooltip: '步骤 $index 操作',
+      icon: const Icon(Icons.more_vert),
+      onSelected: (action) => callbacks[action]?.call(),
+      itemBuilder: (_) => [
+        _menuItem(0, '设置参数', callbacks[0]),
+        _menuItem(1, '在前面插入', callbacks[1]),
+        _menuItem(2, '在后面插入', callbacks[2]),
+        _menuItem(3, '复制功能块', callbacks[3]),
+        _menuItem(4, isFirst ? '上移（已在最前）' : '上移', callbacks[4]),
+        _menuItem(5, isLast ? '下移（已在最后）' : '下移', callbacks[5]),
+        _menuItem(6, '替换功能块', callbacks[6]),
+        _menuItem(7, '删除功能块', callbacks[7]),
+      ],
+    );
+  }
+
+  PopupMenuItem<int> _menuItem(
+    int action,
+    String label,
+    VoidCallback? callback,
+  ) =>
+      PopupMenuItem(
+        value: action,
+        enabled: callback != null,
+        child: Text(label),
+      );
 }

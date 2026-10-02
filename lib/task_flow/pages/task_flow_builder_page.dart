@@ -13,6 +13,7 @@ import '../../widgets/app_media_picker_dialog.dart';
 import '../models/block_type_definition.dart';
 import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
+import '../models/task_flow_chain_editor.dart';
 import '../models/task_flow_execution.dart';
 import '../providers/task_flow_provider.dart';
 import '../services/task_flow_execution_service.dart';
@@ -34,6 +35,7 @@ import '../widgets/flow_block_card.dart';
 class TaskFlowBuilderPage extends ConsumerStatefulWidget {
   final String? flowId;
   final bool startInRunMode;
+  final TaskFlowDefinition? initialDraft;
   final TaskFlowValidationException? validationError;
   final FlowRunInput? initialInput;
 
@@ -41,6 +43,7 @@ class TaskFlowBuilderPage extends ConsumerStatefulWidget {
     super.key,
     this.flowId,
     this.startInRunMode = false,
+    this.initialDraft,
     this.validationError,
     this.initialInput,
   });
@@ -86,10 +89,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   /// first blocks.
   final List<String> _mediaInputs = [];
 
-  List<TaskFlowBlock> _blocks = [];
+  final _chain = TaskFlowChainEditor();
+  List<TaskFlowBlock> get _blocks => _chain.blocks;
+  IOType get _inputType => _chain.inputType;
   bool _isEditing = false;
   String? _editingFlowId;
-  IOType _inputType = IOType.text;
   bool _isRunMode = false;
   bool _enteredFromRunMode = false;
   bool _isSaving = false;
@@ -124,8 +128,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           );
       _nameController.text = flow.name;
       _descController.text = flow.description;
-      _inputType = flow.inputType;
-      _blocks = List<TaskFlowBlock>.from(flow.blocks);
+      _chain.reset(blocks: flow.blocks, inputType: flow.inputType);
+    } else if (widget.initialDraft != null) {
+      final draft = widget.initialDraft!;
+      _nameController.text = draft.name;
+      _descController.text = draft.description;
+      _chain.reset(blocks: draft.blocks, inputType: draft.inputType);
     }
 
     final initialInput = widget.initialInput;
@@ -150,7 +158,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     _initialName = _nameController.text.trim();
     _initialDesc = _descController.text.trim();
     _initialInputType = _inputType;
-    _initialBlocks = List<TaskFlowBlock>.from(_blocks);
+    _initialBlocks = TaskFlowChainEditor.copyBlocks(_blocks);
   }
 
   @override
@@ -181,17 +189,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         _blocksDiffer(_blocks, _initialBlocks);
   }
 
-  bool _blocksDiffer(List<TaskFlowBlock> a, List<TaskFlowBlock> b) {
-    if (a.length != b.length) return true;
-    for (int i = 0; i < a.length; i++) {
-      final blockA = a[i];
-      final blockB = b[i];
-      if (blockA.id != blockB.id || blockA.typeKey != blockB.typeKey)
-        return true;
-      if (!mapEquals(blockA.params, blockB.params)) return true;
-    }
-    return false;
-  }
+  bool _blocksDiffer(List<TaskFlowBlock> a, List<TaskFlowBlock> b) =>
+      !TaskFlowChainEditor.sameBlocks(a, b);
 
   Future<bool> _showUnsavedChangesDialog() async {
     final result = await showDialog<bool>(
@@ -226,11 +225,13 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       // Only undo this editor's failed draft, not a newer external update.
       if (identical(notifier.getFlow(failedSave.id), failedSave)) {
         if (_isEditing) {
-          notifier.updateFlow(failedSave.id,
-              name: _initialName,
-              description: _initialDesc,
-              inputType: _initialInputType,
-              blocks: _initialBlocks);
+          notifier.updateFlow(
+            failedSave.id,
+            name: _initialName,
+            description: _initialDesc,
+            inputType: _initialInputType,
+            blocks: _initialBlocks,
+          );
         } else {
           notifier.removeFlow(failedSave.id);
         }
@@ -249,10 +250,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
   /// Restore the local state from the last saved snapshots.
   void _resetToInitial() {
-    _blocks = List<TaskFlowBlock>.from(_initialBlocks);
+    _chain.reset(blocks: _initialBlocks, inputType: _initialInputType);
     _nameController.text = _initialName;
     _descController.text = _initialDesc;
-    _inputType = _initialInputType;
   }
 
   // =========================================================================
@@ -291,6 +291,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           title: Text(_isEditing ? '编辑任务流' : '新建任务流'),
           centerTitle: true,
           actions: [
+            IconButton(
+              tooltip: '撤销',
+              icon: const Icon(Icons.undo),
+              onPressed: _isSaving || !_chain.canUndo ? null : _undoBlockEdit,
+            ),
             TextButton.icon(
               onPressed: _isSaving ? null : _saveFlow,
               icon: const Icon(Icons.save, size: 18),
@@ -309,12 +314,18 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   child: BlockChainEditor(
                     blocks: _blocks,
                     inputType: _inputType,
+                    selectedBlockId: _chain.selectedBlockId,
                     onInputTypeChanged: (type) =>
-                        setState(() => _inputType = type),
+                        setState(() => _chain.changeInputType(type)),
                     onAddBlock: _addBlock,
                     onEditBlock: _editBlock,
                     onDeleteBlock: _removeBlock,
                     onReplaceBlock: _replaceBlock,
+                    onInsertBlock: _insertBlock,
+                    onDuplicateBlock: (index) =>
+                        setState(() => _chain.duplicate(index)),
+                    onMoveBlock: (index, destination) =>
+                        setState(() => _chain.move(index, destination)),
                   ),
                 ),
               ],
@@ -382,40 +393,37 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     );
   }
 
-  void _addBlock(BlockType typeKey) {
-    setState(() {
-      _blocks = [..._blocks, TaskFlowBlock(typeKey: typeKey)];
-    });
+  void _undoBlockEdit() {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    setState(() => _chain.undo());
+  }
+
+  void _addBlock(BlockType typeKey) => _insertBlock(_blocks.length, typeKey);
+
+  void _insertBlock(int index, BlockType typeKey) {
+    setState(() => _chain.insert(index, typeKey));
   }
 
   void _removeBlock(int index) {
-    if (index < 0 || index >= _blocks.length) return;
-    setState(() {
-      _blocks = [..._blocks]..removeAt(index);
-    });
+    setState(() => _chain.remove(index));
   }
 
-  /// Replace the block at [index] with a new block of [typeKey] (default
-  /// parameters). Position and neighbors are kept — the replace sheet only
-  /// offers chain-compatible types, so the chain stays valid.
   void _replaceBlock(int index, BlockType typeKey) {
-    if (index < 0 || index >= _blocks.length) return;
-    setState(() {
-      final newBlocks = [..._blocks];
-      newBlocks[index] = TaskFlowBlock(typeKey: typeKey);
-      _blocks = newBlocks;
-    });
+    setState(() => _chain.replace(index, typeKey));
   }
 
   Future<void> _editBlock(int index) async {
     if (index < 0 || index >= _blocks.length) return;
-    final updated = await showBlockEditorDialog(context, block: _blocks[index]);
+    final block = _blocks[index];
+    setState(() => _chain.select(block.id));
+    // Settings receive their own nested values so cancellation cannot mutate
+    // the draft, the persisted flow, or an undo snapshot.
+    final updated = await showBlockEditorDialog(
+      context,
+      block: TaskFlowChainEditor.copyBlock(block),
+    );
     if (updated != null && mounted) {
-      setState(() {
-        final newBlocks = [..._blocks];
-        newBlocks[index] = updated;
-        _blocks = newBlocks;
-      });
+      setState(() => _chain.updateParams(block.id, updated.params));
     }
   }
 
@@ -423,9 +431,16 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     if (!mounted || _isSaving || _isRunMode) return;
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请输入任务流名称')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('请输入任务流名称')));
+      return;
+    }
+
+    if (_chain.issues.isNotEmpty) {
+      final issue = _chain.issues.first;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('步骤 ${issue.blockIndex + 1}：${issue.message}')),
+      );
       return;
     }
 
@@ -467,29 +482,24 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     if (!saved) {
-      messenger.showSnackBar(SnackBar(
-        content: const Text('保存失败，更改仍保留，请重试'),
-        action: SnackBarAction(label: '重试', onPressed: _saveFlow),
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('保存失败，更改仍保留，请重试'),
+          action: SnackBarAction(label: '重试', onPressed: _saveFlow),
+        ),
+      );
       return;
     }
-    messenger.showSnackBar(SnackBar(
-      content: Text(_isEditing ? '任务流已更新' : '任务流已创建'),
-    ));
+    messenger.showSnackBar(
+      SnackBar(content: Text(_isEditing ? '任务流已更新' : '任务流已创建')),
+    );
     _isEditing = true;
 
     _initialName = flow.name;
     _initialDesc = flow.description;
     _initialInputType = flow.inputType;
-    _initialBlocks = flow.blocks
-        .map(
-          (b) => TaskFlowBlock(
-            id: b.id,
-            typeKey: b.typeKey,
-            params: Map<String, dynamic>.from(b.params),
-          ),
-        )
-        .toList();
+    _initialBlocks = TaskFlowChainEditor.copyBlocks(flow.blocks);
+    _chain.clearHistory();
 
     if (_enteredFromRunMode) {
       // Return to run mode with fresh state snapshots
@@ -776,11 +786,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   width: 36,
                   height: 36,
                   child: IconButton(
-                    icon: Icon(
-                      Icons.close,
-                      size: 18,
-                      color: cs.error,
-                    ),
+                    icon: Icon(Icons.close, size: 18, color: cs.error),
                     onPressed: () {
                       setState(() {
                         entry.dispose();
@@ -813,9 +819,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       ),
                     ),
                     keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     textInputAction: TextInputAction.next,
                     onChanged: (_) => setState(() {}),
                   ),
@@ -838,9 +842,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       ),
                     ),
                     keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     textInputAction: TextInputAction.next,
                     onChanged: (_) => setState(() {}),
                   ),
@@ -863,9 +865,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       ),
                     ),
                     keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     textInputAction: TextInputAction.done,
                     onChanged: (_) => setState(() {}),
                   ),
@@ -876,18 +876,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               padding: const EdgeInsets.only(top: 8, left: 4),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.timer_outlined,
-                    size: 16,
-                    color: cs.primary,
-                  ),
+                  Icon(Icons.timer_outlined, size: 16, color: cs.primary),
                   const SizedBox(width: 4),
                   Text(
                     '预览: ',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: cs.onSurfaceVariant,
-                    ),
+                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
                   ),
                   Text(
                     preview,
@@ -1031,8 +1024,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
   bool _canStartFlow() {
     if (_firstBlockDef?.typeKey == BlockType.catcatch) {
-      return _catcatchInputs
-          .any((e) => _isValidUrl(e.urlController.text.trim()));
+      return _catcatchInputs.any(
+        (e) => _isValidUrl(e.urlController.text.trim()),
+      );
     }
     if (_runInputType == IOType.image ||
         _runInputType == IOType.audio ||
@@ -1317,9 +1311,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       return File(p).existsSync();
     }).toList();
     if (valid.length != paths.length) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('部分文件不存在，已跳过')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('部分文件不存在，已跳过')));
     }
     // Skip paths already selected — re-picking the same file must not
     // fan out a duplicate execution.
@@ -1349,9 +1342,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     if (_runInputType == IOType.image ||
         _runInputType == IOType.audio ||
         _runInputType == IOType.video) {
-      return [
-        for (final path in _mediaInputs) FlowRunInput(text: path),
-      ];
+      return [for (final path in _mediaInputs) FlowRunInput(text: path)];
     }
     final text = _inputController.text.trim();
     return text.isEmpty ? const [] : [FlowRunInput(text: text)];
