@@ -167,9 +167,9 @@ void main() {
       MediaResource? selected;
       when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId')))
           .thenAnswer((invocation) {
-            taskId = invocation.namedArguments[#taskId] as String;
-            return taskId;
-          });
+        taskId = invocation.namedArguments[#taskId] as String;
+        return taskId;
+      });
       when(() => notifier.selectMedia(any(), any())).thenAnswer((invocation) {
         selected = invocation.positionalArguments[1] as MediaResource;
         stage = 1;
@@ -232,9 +232,9 @@ void main() {
     late String taskId;
     when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId')))
         .thenAnswer((invocation) {
-          taskId = invocation.namedArguments[#taskId] as String;
-          return taskId;
-        });
+      taskId = invocation.namedArguments[#taskId] as String;
+      return taskId;
+    });
     when(() => notifier.state).thenAnswer(
       (_) => [
         catcatch.CatCatchTask(
@@ -279,5 +279,56 @@ void main() {
       selectedMedia: audio,
     );
     expect(catCatchOutputType(task), IOType.audio);
+  });
+
+  test('selected video/ogg completes despite ambiguous .ogg filename',
+      () async {
+    final notifier = _Notifier();
+    final executions = TaskFlowExecutionNotifier();
+    final execId = executions.addExecution(flowId: 'flow', flowName: 'Flow');
+    final subTask = FlowSubTask(
+      blockTypeKey: 'catcatch',
+      blockLabel: '下载',
+      subTaskId: 'pending',
+      subTaskType: 'catcatch',
+      status: TaskStatus.waiting,
+    );
+    executions.addSubTask(execId, subTask);
+    late String taskId;
+    when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId')))
+        .thenAnswer((invocation) {
+      taskId = invocation.namedArguments[#taskId] as String;
+      return taskId;
+    });
+    when(() => notifier.state).thenAnswer((_) => [
+          catcatch.CatCatchTask(
+            id: taskId,
+            url: 'https://x',
+            expectedDurationSec: 0,
+            createdAt: DateTime(2026),
+            status: catcatch.TaskStatus.completed,
+            downloadedFilePath: '/downloads/video.ogg',
+            selectedMedia: const MediaResource(
+              url: 'https://x/video.ogg',
+              name: 'video',
+              ext: 'ogg',
+              mimeType: 'video/ogg',
+            ),
+          )
+        ]);
+
+    final path = await executeCatCatchBlock(
+      def: BlockTypeDefinition.catcatch,
+      block: TaskFlowBlock(typeKey: BlockType.catcatch),
+      input: 'https://x',
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      catcatchNotifier: notifier,
+      pollInterval: const Duration(milliseconds: 1),
+    );
+    expect(path, '/downloads/video.ogg');
+    expect(
+        executions.state.single.subTasks.single.status, TaskStatus.completed);
   });
 }

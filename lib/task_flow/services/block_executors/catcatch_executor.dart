@@ -61,9 +61,8 @@ Future<String> executeCatCatchBlock({
 
   while (true) {
     await Future.delayed(pollInterval);
-    final task = catcatchNotifier.state
-        .where((t) => t.id == taskId)
-        .firstOrNull;
+    final task =
+        catcatchNotifier.state.where((t) => t.id == taskId).firstOrNull;
 
     if (task == null) {
       execNotifier.updateSubTaskStatus(
@@ -266,15 +265,16 @@ MediaResource? selectAutomaticCatCatchResource(
   return candidates.firstOrNull;
 }
 
-/// An audio-only source can be converted into an MP4 container. Keep its
-/// track kind; otherwise classify the downloaded file by its MIME/extension.
+/// A selected source's explicit MIME preserves its track kind when the file
+/// extension is ambiguous (for example, video/ogg or audio inside MP4).
+/// Otherwise classify the downloaded file by its MIME/extension.
 IOType catCatchOutputType(catcatch.CatCatchTask task) {
   final selected = task.selectedMedia;
-  if (selected != null &&
-      (selected.mimeType?.toLowerCase().startsWith('audio/') == true ||
-          selected.isAudio)) {
-    return IOType.audio;
-  }
+  final selectedMime =
+      selected?.mimeType?.split(';').first.trim().toLowerCase();
+  if (selectedMime?.startsWith('audio/') == true) return IOType.audio;
+  if (selectedMime?.startsWith('video/') == true) return IOType.video;
+  if (selected?.isAudio == true) return IOType.audio;
   final mime = lookupMimeType(task.downloadedFilePath ?? '') ?? '';
   if (mime.startsWith('audio/')) return IOType.audio;
   if (mime.startsWith('video/')) return IOType.video;
