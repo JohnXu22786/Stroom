@@ -6,13 +6,25 @@ The mathematical-input preference is remembered. Mathematical keys stay disabled
 until the editor finishes loading; the source toggle remains available. 3D continues using source input.
 
 The shared bottom keyboard follows the active formula. Its tabs cover arithmetic,
-functions, structures, relations, Greek letters, Latin letters and typography.
+functions, constants, structures, relations, Greek letters, Latin letters and typography.
 Numbers and backspace keep their positions. Use page buttons for more symbols.
 Templates accept the selected expression; powers can capture the complete item
 to the left of the caret. Empty slots stay visible until filled. Tap within the
-formula to position the caret; drag or long press to select. The left/right arrows
-navigate atoms; Previous/Next moves between empty slots, then outside the parent
-structure. Matrix keys add/remove rows and columns at the current cell.
+formula to position the caret; drag or long press to select. The header identifies
+the current numerator, denominator, exponent, subscript, radical or matrix cell.
+The arrow buttons stay visible while the key grid scrolls on short screens.
+In very short landscape/window layouts, the header and category tabs scroll with
+the keys to leave the navigation row visible and avoid clipping the key area.
+
+| Control | Editing behavior |
+| --- | --- |
+| Left / Right | MathLive's atom traversal enters nested structures, crosses their branches, and exits them in document order. A selection collapses toward the requested side; reaching the document boundary keeps focus in the formula. |
+| Up / Down | Switches between numerator and denominator, existing subscript and exponent, radical index and body, or matrix rows in the same column. It uses the nearest enclosing structure with a valid destination and preserves horizontal position where geometry is available. It never creates a missing branch. Leaving a sole exponent/subscript lands after the complete scripted item. |
+| Previous / Next | Visits filled as well as empty sibling slots. At the first/last slot it exits before/after that structure; from outside it enters the nearby structure. Empty placeholders are selected for replacement. |
+| Exit structure | Leaves the nearest enclosing structure, retaining any outer structure. |
+
+Arrow and slot movements do not edit the document. Undo restores the content and
+caret before an insertion. Matrix keys add/remove rows and columns at the current cell.
 Undo/redo operates on MathLive's document. The menu provides select all, copy,
 cut and paste through Flutter's clipboard, with LaTeX as the transfer format.
 Hide or Back dismisses the custom keyboard without discarding the draft.
@@ -43,15 +55,35 @@ not a full TeX document compiler: arbitrary packages and user-defined macros are
 not promised. New symbols can be added to `math_keyboard.dart` without replacing
 cursor handling or the graph engine.
 
+`navigation.js` derives branch boundaries from MathLive's public offsets,
+element depths and LaTeX metadata. Vertical movement uses rendered bounds when
+available and falls back to the corresponding atom position. The pinned 0.111.0
+integration uses one private compatibility hook, `stopCoalescingUndo()`, because
+public position setters do not create an undo boundary. Integration tests guard
+content and caret restoration when moving between slots before typing; check
+that hook and structural metadata when upgrading MathLive.
+
 ## Plotting and platform boundaries
 
 Editing is broader than graph evaluation. Integrals, sums, matrices, annotations,
 relations and other display-only structures can be edited, but are not numerically
 evaluated by this change. Plot shows an error and retains the draft. Incomplete
-slots are also rejected. Supported plotting conversions include nested fractions,
-square/indexed roots, absolute values, base-specific logs and function prefixes
-with MathLive delimiters; remaining unsupported commands are rejected rather than
-silently interpreted as parameter names.
+slots are also rejected. The keyboard covers the evaluator's complete finite
+vocabulary: 24 unary functions, 3 binary functions and 8 constants, plus arithmetic,
+powers, fractions, indexed roots, implicit multiplication and parameterized
+explicit/implicit equations. Function templates and the parser share a catalog;
+numeric tests compare every template with function_tree's actual function tables.
+Greek letters and simple letter/digit subscripts work as parameters, initially 1,
+and remain adjustable through parameter controls. Lowercase pi and e retain their
+constant meaning.
+
+Floor/ceiling fences, grouped factorials, percentages, remainder and scientific
+notation keep their numeric meaning. The percent key divides its preceding item
+by 100; the mod key inserts binary remainder. Legacy ASCII function calls import
+as editable structures while retaining their source until the first edit.
+Unsupported commands, unknown functions and multivalued signs such as ± are
+rejected rather than silently becoming a different curve. This change does not
+add symbolic calculus, complex plotting or inequality shading.
 
 Native mathematical editing uses flutter_inappwebview on Android, iOS, macOS
 and Windows. Web and Linux currently use the source editor with a disabled,
@@ -64,12 +96,13 @@ not validate browser geometry or platform-view composition.
 ## Validation
 
 ```sh
-flutter test tests/widgets/math_formula_field_test.dart tests/widgets/math_keyboard_test.dart tests/models/math_editor_plot_compatibility_test.dart tests/pages/content/math_drawing_page_test.dart
-flutter test tests/models/math_expression_test.dart --name 'fromInput|withParameters|LaTeX conversion|isValid'
+flutter test tests/widgets/math_formula_field_test.dart tests/widgets/math_keyboard_test.dart tests/models/math_editor_plot_compatibility_test.dart tests/models/math_input_catalog_test.dart tests/pages/content/math_drawing_page_test.dart
+flutter test tests/models/math_expression_test.dart --name 'fromInput|withParameters|LaTeX conversion|isValid|parameters'
 npm ci --prefix tools/math_editor_test
 npm test --prefix tools/math_editor_test
 ```
 
 The Node tests load the bundled MathLive code in jsdom, with browser layout,
 audio and font APIs stubbed. They exercise nested templates, selection replacement,
-undo, source import preservation and editable matrices; CI runs them separately.
+undo including caret restoration, source import preservation, horizontal and
+vertical navigation, filled-slot navigation and editable matrices; CI runs them separately.

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 
+import '../models/math_input_catalog.dart';
+
 /// All editing is structural: templates use MathLive's selection/placeholder
 /// arguments, and navigation operates on the rendered document, not text.
 class MathKeyboard extends StatefulWidget {
@@ -9,13 +11,15 @@ class MathKeyboard extends StatefulWidget {
   final VoidCallback onPlot;
   final String activeLabel;
   final bool enabled;
+  final String location;
   const MathKeyboard(
       {super.key,
       required this.onCommand,
       required this.onDismiss,
       required this.onPlot,
       required this.activeLabel,
-      this.enabled = true});
+      this.enabled = true,
+      this.location = '公式'});
 
   @override
   State<MathKeyboard> createState() => _MathKeyboardState();
@@ -48,46 +52,50 @@ class _MathKeyboardState extends State<MathKeyboard> {
         color: cs.surfaceContainer,
         child: SafeArea(
           top: false,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            SizedBox(
-                height: 44,
-                child: Row(children: [
-                  const SizedBox(width: 12),
-                  Expanded(
-                      child: Text(
-                          widget.enabled
-                              ? '${widget.activeLabel} · 点击公式定位，长按选择'
-                              : '${widget.activeLabel} · 正在准备数学输入…',
-                          style: TextStyle(
-                              fontSize: 12, color: cs.onSurfaceVariant),
-                          maxLines: 1)),
-                  _action(Icons.undo, '撤销', 'undo'),
-                  _action(Icons.redo, '重做', 'redo'),
-                  PopupMenuButton<String>(
-                    tooltip: '选择与剪贴板',
-                    enabled: widget.enabled,
-                    onSelected: (action) => widget.onCommand(
-                        action == 'selectAll' ? 'command' : 'clipboard',
-                        action),
-                    itemBuilder: (_) => [
-                      for (final entry in {
-                        'selectAll': '全选',
-                        'copy': '复制 LaTeX',
-                        'cut': '剪切',
-                        'paste': '粘贴公式'
-                      }.entries)
-                        PopupMenuItem(
-                            value: entry.key, child: Text(entry.value))
-                    ],
-                  ),
-                  IconButton(
-                      onPressed: widget.onDismiss,
-                      tooltip: '收起数学键盘',
-                      icon: const Icon(Icons.keyboard_hide)),
-                ])),
-            SizedBox(
-                height: 38,
-                child: ListView(
+          child: LayoutBuilder(builder: (context, constraints) {
+            final heading = <Widget>[
+              SizedBox(
+                  height: 44,
+                  child: Row(children: [
+                    const SizedBox(width: 12),
+                    Expanded(
+                        child: Tooltip(
+                            message: '点击公式定位，长按选择；左右逐项移动，上下切换结构层',
+                            child: Text(
+                                widget.enabled
+                                    ? '${widget.activeLabel} · ${widget.location}'
+                                    : '${widget.activeLabel} · 正在准备数学输入…',
+                                style: TextStyle(
+                                    fontSize: 12, color: cs.onSurfaceVariant),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis))),
+                    _action(Icons.undo, '撤销', 'undo'),
+                    _action(Icons.redo, '重做', 'redo'),
+                    PopupMenuButton<String>(
+                      tooltip: '选择与剪贴板',
+                      enabled: widget.enabled,
+                      onSelected: (action) => widget.onCommand(
+                          action == 'selectAll' ? 'command' : 'clipboard',
+                          action),
+                      itemBuilder: (_) => [
+                        for (final entry in {
+                          'selectAll': '全选',
+                          'copy': '复制 LaTeX',
+                          'cut': '剪切',
+                          'paste': '粘贴公式'
+                        }.entries)
+                          PopupMenuItem(
+                              value: entry.key, child: Text(entry.value)),
+                      ],
+                    ),
+                    IconButton(
+                        onPressed: widget.onDismiss,
+                        tooltip: '收起数学键盘',
+                        icon: const Icon(Icons.keyboard_hide)),
+                  ])),
+              SizedBox(
+                  height: 38,
+                  child: ListView(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     children: [
@@ -104,60 +112,99 @@ class _MathKeyboardState extends State<MathKeyboard> {
                                 _page = 0;
                               }),
                             )),
+                    ],
+                  )),
+            ];
+            final compact =
+                constraints.hasBoundedHeight && constraints.maxHeight < 180;
+            final input = compact
+                ? Column(mainAxisSize: MainAxisSize.min, children: [
+                    ...heading,
+                    _keyArea(keys, pageCount),
+                  ])
+                : _keyArea(keys, pageCount);
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!compact) ...heading,
+                if (constraints.hasBoundedHeight)
+                  Flexible(child: SingleChildScrollView(child: input))
+                else
+                  input,
+                // Navigation remains reachable even when tall keys scroll.
+                SizedBox(
+                    height: 44,
+                    child: Row(children: [
+                      _navigate(Icons.chevron_left, '光标左移', 'left'),
+                      _navigate(Icons.chevron_right, '光标右移', 'right'),
+                      _navigate(Icons.arrow_upward, '光标上移 / 切换上层', 'up'),
+                      _navigate(Icons.arrow_downward, '光标下移 / 切换下层', 'down'),
+                      _navigate(Icons.north_east, '退出当前结构', 'out'),
+                      const Spacer(),
+                      TextButton(
+                          onPressed: widget.onPlot, child: const Text('绘图')),
                     ])),
-            Padding(
-                padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
-                child: Column(children: [
-                  for (var row = 0; row < 4; row++)
-                    Row(children: [
-                      for (var col = 0; col < 6; col++)
-                        Expanded(
-                            child: Padding(
-                          padding: const EdgeInsets.all(2),
-                          child: _key(col < 3
-                              ? (_page * 12 + row * 3 + col < keys.length
-                                  ? keys[_page * 12 + row * 3 + col]
-                                  : null)
-                              : _MathKey(_numbers[row * 3 + col - 3],
-                                  _numbers[row * 3 + col - 3],
-                                  command: _numbers[row * 3 + col - 3] == '⌫'
-                                      ? 'deleteBackward'
-                                      : null)),
-                        )),
-                    ]),
-                ])),
-            SizedBox(
-                height: 44,
-                child: Row(children: [
-                  Expanded(
-                      child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(children: [
-                            _action(Icons.chevron_left, '光标左移',
-                                'moveToPreviousChar'),
-                            _action(
-                                Icons.chevron_right, '光标右移', 'moveToNextChar'),
-                            TextButton(
-                                onPressed: widget.enabled
-                                    ? () => widget.onCommand('previous', '')
-                                    : null,
-                                child: const Text('上一项')),
-                            TextButton(
-                                onPressed: widget.enabled
-                                    ? () => widget.onCommand('next', '')
-                                    : null,
-                                child: const Text('下一项')),
-                            if (pageCount > 1)
-                              TextButton(
-                                  onPressed: () => setState(
-                                      () => _page = (_page + 1) % pageCount),
-                                  child: Text('${_page + 1}/$pageCount ▸')),
-                          ]))),
-                  TextButton(onPressed: widget.onPlot, child: const Text('绘图')),
-                ])),
-          ]),
+              ],
+            );
+          }),
         ));
   }
+
+  Widget _keyArea(List<_MathKey> keys, int pageCount) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+              padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
+              child: Column(children: [
+                for (var row = 0; row < 4; row++)
+                  Row(children: [
+                    for (var col = 0; col < 6; col++)
+                      Expanded(
+                          child: Padding(
+                        padding: const EdgeInsets.all(2),
+                        child: _key(col < 3
+                            ? (_page * 12 + row * 3 + col < keys.length
+                                ? keys[_page * 12 + row * 3 + col]
+                                : null)
+                            : _MathKey(_numbers[row * 3 + col - 3],
+                                _numbers[row * 3 + col - 3],
+                                command: _numbers[row * 3 + col - 3] == '⌫'
+                                    ? 'deleteBackward'
+                                    : null)),
+                      )),
+                  ]),
+              ])),
+          SizedBox(
+              height: 44,
+              child:
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                TextButton(
+                    onPressed: widget.enabled
+                        ? () => widget.onCommand('previous', '')
+                        : null,
+                    child: const Text('上一项')),
+                TextButton(
+                    onPressed: widget.enabled
+                        ? () => widget.onCommand('next', '')
+                        : null,
+                    child: const Text('下一项')),
+                if (pageCount > 1)
+                  TextButton(
+                      onPressed: () =>
+                          setState(() => _page = (_page + 1) % pageCount),
+                      child: Text('${_page + 1}/$pageCount ▸')),
+              ])),
+        ],
+      );
+
+  Widget _navigate(IconData icon, String label, String direction) => IconButton(
+        icon: Icon(icon, size: 20),
+        tooltip: label,
+        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+        onPressed: widget.enabled
+            ? () => widget.onCommand('navigate', direction)
+            : null,
+      );
 
   Widget _action(IconData icon, String label, String command) => IconButton(
         icon: Icon(icon, size: 20),
@@ -221,37 +268,36 @@ final Map<String, List<_MathKey>> _groups = {
     _MathKey(r'\sqrt[n]{x}', r'\sqrt[#?]{#0}'),
     _MathKey(r'x_n', r'#@_{#?}'),
     _MathKey(r'\pm', r'\pm'),
-    _MathKey(r'\%', r'\%'),
+    _MathKey(r'\%', r'\%', description: '百分比：左侧表达式除以 100'),
+    _MathKey(r'\operatorname{mod}', r'\bmod', description: '余数 / 取模'),
+    _MathKey(r'\times10^n', r'#@\cdot10^{#?}', description: '科学计数法'),
     _MathKey(r'\infty', r'\infty'),
     _MathKey(', ', ','),
   ],
   '函数': [
-    for (final name in [
-      'sin',
-      'cos',
-      'tan',
-      'cot',
-      'sec',
-      'csc',
-      'arcsin',
-      'arccos',
-      'arctan',
-      'sinh',
-      'cosh',
-      'tanh',
-      'ln',
-      'log',
-      'exp'
-    ])
-      _MathKey('\\$name', '\\$name\\left(#0\\right)',
-          description: '$name（角度用弧度）'),
-    const _MathKey(r'\log_a x', r'\log_{#?}\left(#0\right)'),
-    const _MathKey(r'e^x', r'e^{#0}'),
-    const _MathKey(r'\lfloor x\rfloor', r'\left\lfloor#0\right\rfloor'),
-    const _MathKey(r'\lceil x\rceil', r'\left\lceil#0\right\rceil'),
-    const _MathKey('n!', r'#@!'),
+    for (final input in mathUnaryInputs)
+      _MathKey(input.label, input.latex,
+          description: [
+            'sin',
+            'cos',
+            'tan',
+            'cot',
+            'sec',
+            'csc',
+            'asin',
+            'acos',
+            'atan'
+          ].contains(input.name)
+              ? '${input.name}（角度用弧度）'
+              : input.name),
+    for (final input in mathBinaryInputs)
+      _MathKey(input.label, input.latex, description: input.name),
     for (final name in ['min', 'max', 'det', 'gcd', 'arg', 'Re', 'Im'])
       _MathKey('\\$name', '\\$name\\left(#0\\right)'),
+  ],
+  '常量': [
+    for (final input in mathConstantInputs)
+      _MathKey(input.label, input.latex, description: input.name),
   ],
   '结构': const [
     _MathKey(r'\sum', r'\sum_{#?}^{#?}#0'),
@@ -317,46 +363,7 @@ final Map<String, List<_MathKey>> _groups = {
       _MathKey(symbol, symbol)
   ],
   '希腊': [
-    for (final name in [
-      'alpha',
-      'beta',
-      'gamma',
-      'delta',
-      'epsilon',
-      'varepsilon',
-      'zeta',
-      'eta',
-      'theta',
-      'vartheta',
-      'iota',
-      'kappa',
-      'lambda',
-      'mu',
-      'nu',
-      'xi',
-      'pi',
-      'rho',
-      'sigma',
-      'tau',
-      'upsilon',
-      'phi',
-      'varphi',
-      'chi',
-      'psi',
-      'omega',
-      'Gamma',
-      'Delta',
-      'Theta',
-      'Lambda',
-      'Xi',
-      'Pi',
-      'Sigma',
-      'Upsilon',
-      'Phi',
-      'Psi',
-      'Omega'
-    ])
-      _MathKey('\\$name', '\\$name')
+    for (final name in mathGreekNames) _MathKey('\\$name', '\\$name'),
   ],
   '字母': [
     for (final letter

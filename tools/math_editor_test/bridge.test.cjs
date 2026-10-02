@@ -45,6 +45,7 @@ async function editor() {
   const field = w.document.createElement('math-field');
   field.id = 'formula';
   w.document.body.prepend(field);
+  w.eval(fs.readFileSync(path.join(assets,'navigation.js'),'utf8'));
   w.eval(fs.readFileSync(path.join(assets,'editor.js'),'utf8'));
   await new Promise(resolve => w.setTimeout(resolve,20));
   return {w, dom, field:w.document.getElementById('formula'), bridge:w.stroomMath};
@@ -151,5 +152,163 @@ test('post-render growth reports the formula and error-panel height', async () =
     observer.callback([]);
     assert.equal(messages.at(-1).height,152);
     assert.equal(messages.at(-1).latex,'x');
+  } finally { dom.window.close(); }
+});
+
+function offsetOf(field, latex) {
+  for (let i = 0; i <= field.lastOffset; i++) {
+    if (field.getElementInfo(i)?.latex === latex) return i;
+  }
+  throw new Error('Missing rendered atom: ' + latex);
+}
+
+test('horizontal arrows traverse nested slots and collapse selection without editing', async () => {
+  const {dom, field, bridge} = await editor();
+  try {
+    const source = '\\frac{x^{2}+1}{\\sqrt{y}}+z';
+    bridge.setSource(source,0);
+    field.position = 0;
+    const locations = new Set();
+    let sequence = bridge.snapshot().sequence;
+    for (let i = 0; i < 30 && field.position < field.lastOffset; i++) {
+      const previous = field.position;
+      const state = bridge.command('navigate','right');
+      assert.ok(field.position > previous);
+      assert.ok(state.sequence > sequence, 'Caret-only snapshots must also reject late arrivals');
+      sequence = state.sequence;
+      locations.add(state.location);
+      assert.equal(state.edited,false);
+      assert.equal(state.latex,source);
+    }
+    assert.ok(locations.has('分子') && locations.has('指数') && locations.has('根号内'));
+    bridge.command('navigate','right');
+    assert.equal(field.position,field.lastOffset);
+    for (let i = 0; i < 30 && field.position > 0; i++) bridge.command('navigate','left');
+    assert.equal(field.position,0);
+    bridge.command('navigate','left');
+    assert.equal(field.position,0);
+    field.selection = {ranges:[[0,field.lastOffset]],direction:'forward'};
+    bridge.command('navigate','left');
+    assert.equal(field.position,0);
+    assert.equal(field.selectionIsCollapsed,true);
+    field.selection = {ranges:[[0,field.lastOffset]],direction:'forward'};
+    bridge.command('navigate','right');
+    assert.equal(field.position,field.lastOffset);
+    assert.equal(bridge.snapshot().latex,source);
+  } finally { dom.window.close(); }
+});
+
+test('vertical navigation edits fraction, script, radical and matrix target slots', async () => {
+  const {dom, field, bridge} = await editor();
+  try {
+    bridge.setSource('\\frac{12}{34}',1);
+    field.position = offsetOf(field,'1');
+    assert.equal(bridge.command('navigate','down').location,'分母');
+    bridge.command('insert','9');
+    assert.equal(field.getValue(),'\\frac{12}{394}');
+    bridge.setSource('x^{12}',2);
+    field.position = offsetOf(field,'1');
+    assert.equal(bridge.command('navigate','down').location,'公式');
+    bridge.command('insert','+z');
+    assert.match(field.getValue(),/^x\^\{12\}\+z$/);
+    bridge.setSource('x_{a}^{b}',3);
+    field.position = offsetOf(field,'a');
+    assert.equal(bridge.command('navigate','up').location,'指数');
+    bridge.command('insert','1');
+    assert.match(field.getValue(),/\^\{b1\}/);
+    bridge.setSource('\\sqrt[3]{x}',4);
+    field.position = offsetOf(field,'x');
+    assert.equal(bridge.command('navigate','up').location,'根指数');
+    bridge.command('insert','1');
+    assert.equal(field.getValue(),'\\sqrt[31]{x}');
+    bridge.setSource('\\sqrt{x}',5);
+    field.position = offsetOf(field,'x');
+    bridge.command('navigate','up');
+    assert.equal(bridge.snapshot().edited,false, 'Navigation must not create a missing root index');
+    bridge.setSource('\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}',6);
+    field.position = offsetOf(field,'1');
+    assert.equal(bridge.command('navigate','down').location,'第 2 行，第 1 列');
+    bridge.command('insert','9');
+    assert.match(field.getValue(),/39 & 4/);
+    bridge.setSource('x^{a_{1}}',7);
+    field.position = offsetOf(field,'1');
+    assert.equal(bridge.command('navigate','out').location,'指数');
+    bridge.command('navigate','out');
+    assert.equal(bridge.snapshot().location,'公式');
+    assert.equal(bridge.snapshot().edited,false);
+  } finally { dom.window.close(); }
+});
+
+test('slot navigation revisits filled content and exits the correct parent', async () => {
+  const {dom, field, bridge} = await editor();
+  try {
+    bridge.setSource('\\frac{ab}{cd}',0);
+    field.position = offsetOf(field,'b');
+    assert.equal(bridge.command('next','').location,'分母');
+    assert.equal(field.position,offsetOf(field,'d'));
+    assert.equal(bridge.command('previous','').location,'分子');
+    assert.equal(field.position,offsetOf(field,'b'));
+    bridge.command('previous','');
+    assert.equal(field.position,0, 'Previous at the first slot exits before the fraction');
+    bridge.command('next','');
+    assert.equal(field.position,offsetOf(field,'b'));
+    bridge.command('navigate','out');
+    assert.equal(field.position,field.lastOffset);
+    assert.equal(bridge.snapshot().edited,false);
+    field.selection = {ranges:[[0,field.lastOffset]],direction:'forward'};
+    bridge.command('next','');
+    assert.equal(field.selectionIsCollapsed,true);
+    assert.equal(field.position,field.lastOffset);
+    bridge.setSource('\\frac{x^{2}}{y}',1);
+    field.position = offsetOf(field,'2');
+    assert.equal(bridge.command('next','').location,'分子');
+    assert.equal(bridge.command('next','').location,'分母');
+    const position = field.position;
+    const source = field.getValue();
+    bridge.command('insert','+1');
+    assert.match(field.getValue(),/\{y\+1\}$/);
+    bridge.command('command','undo');
+    assert.equal(field.getValue(),source);
+    assert.equal(field.position,position);
+    assert.equal(bridge.snapshot().location,'分母');
+  } finally { dom.window.close(); }
+});
+
+test('legacy functions and constants retain their structures after editing', async () => {
+  const {dom, field, bridge} = await editor();
+  try {
+    for (const [source, pattern] of [
+      ['floor(x+1)', /\\lfloor x\+1\\right\\rfloor/],
+      ['ceil(x)', /\\lceil x\\right\\rceil/],
+      ['fact(x+1)', /x\+1.*!/],
+      ['round(x)', /\\operatorname\{round\}/],
+      ['csch(x)', /\\operatorname\{csch\}/],
+      ['sech(x)', /\\operatorname\{sech\}/],
+      ['coth(x)', /\\coth/],
+      ['nrt(3,x)', /\\sqrt\[3\]\{x\}/],
+      ['pow(x+1,2)', /\^2|\^\{2\}/],
+      ['log(2,x)', /\\log_2|\\log_\{2\}/],
+      ['x%2', /\\bmod/],
+      ['1e-3*x', /10\^\{-3\}/],
+      ['ln2', /\\ln\\left\(2\\right\)/],
+      ['ln10', /\\ln\\left\(10\\right\)/],
+      ['log2e', /\\log_(?:2|\{2\})\\left\(e\\right\)/],
+      ['log10e', /\\log_\{10\}\\left\(e\\right\)/],
+      ['sqrt2', /\\sqrt\{2\}/],
+      ['sqrt1_2', /\\frac\{1\}\{\\sqrt\{2\}\}/],
+      ['SQRT1_2', /\\frac\{1\}\{\\sqrt\{2\}\}/],
+      ['PI', /\\pi/],
+      ['2ln2', /2\\ln\\left\(2\\right\)/],
+      ['2sqrt1_2', /2\\frac\{1\}\{\\sqrt\{2\}\}/],
+      ['a2ln2', /^a2ln2/],
+      ['constructor*x', /^constructor\\cdot x/],
+    ]) {
+      assert.equal(bridge.setSource(source,1).latex,source);
+      assert.equal(field.errors.length,0,source);
+      assert.match(field.getValue(),pattern,source);
+      field.position = field.lastOffset;
+      bridge.command('insert','+1');
+      assert.match(bridge.snapshot().latex,pattern,source);
+    }
   } finally { dom.window.close(); }
 });

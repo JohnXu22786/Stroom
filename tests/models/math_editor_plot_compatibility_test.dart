@@ -2,6 +2,76 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/math_expression.dart';
 
 void main() {
+  test('postfixes, fences and remainder preserve grouping and boundary values',
+      () {
+    for (final entry in <String, double>{
+      r'\left\lfloor x-0.2\right\rfloor': -1,
+      r'\left\lceil x+0.2\right\rceil': 1,
+      r'\operatorname{round}\left(x+0.6\right)': 1,
+      r'\left(x+3\right)!': 6,
+      r'\frac{\left(x+3\right)!}{2}': 3,
+      r'\frac{6}{2}!': 6,
+      r'\frac{5}{2}\%': 0.025,
+      r'\frac{6}{2}^{2}': 9,
+      r'\frac{\frac{12}{2}}{2}!': 6,
+      r'\left(x+2\right)^{2}!': 24,
+      r'2^{3!}': 64,
+      r'\left(x+5\right)\bmod2': 1,
+      r'\left(x+25\right)\%': 0.25,
+      r'100\%\cdot2': 2,
+      r'1e-3+2E-3': 0.003,
+      'log2e': 1.4426950408889634,
+      'log10e': 0.4342944819032518,
+      'PI': 3.141592653589793,
+      r'\pi2': 6.283185307179586,
+      r'2\ln\left(2\right)+1': 2.386294361119891,
+      r'2\frac{1}{\sqrt{2}}+1': 2.414213562373095,
+      'a2ln2+1': 2,
+    }.entries) {
+      final formula = MathExpression.fromInput(entry.key);
+      expect(formula.isValid, isTrue, reason: entry.key);
+      expect(formula.evaluator(0), closeTo(entry.value, 1e-10),
+          reason: entry.key);
+    }
+    expect(MathExpression.fromInput('fact(-1)').samplePoints(), isEmpty);
+  });
+
+  test('Greek and subscript parameters work in explicit and implicit formulas',
+      () {
+    final explicit = MathExpression.fromInput(r'\alpha x+a_{12}',
+        parameterValues: {'alpha': 2, 'a_12': 3});
+    expect(explicit.isValid, isTrue);
+    expect(explicit.parameters, {'alpha', 'a_12'});
+    expect(explicit.evaluator(4), 11);
+    expect(explicit.withParameters({'alpha': 3, 'a_12': 1}).evaluator(4), 13);
+    final implicit = MathExpression.fromInput(r'\alpha x+y=a_{12}');
+    expect(implicit.isValid, isTrue);
+    expect(implicit.parameters, {'alpha', 'a_12'});
+    expect(implicit.implicitEvaluator!(2, 1), 2);
+    expect(
+        implicit.withParameters({'alpha': 2, 'a_12': 3}).implicitEvaluator!(
+            1, 1),
+        0);
+    for (final entry in {
+      r'a_{12}x': 'a_12',
+      r'\alpha_{12}x': 'alpha_12',
+      r'x\alpha_{12}': 'alpha_12',
+      r'xa_{12}': 'a_12',
+    }.entries) {
+      final adjacent = MathExpression.fromInput(entry.key,
+          parameterValues: {entry.value: 2});
+      expect(adjacent.isValid, isTrue);
+      expect(adjacent.parameters, {entry.value});
+      expect(adjacent.evaluator(4), 8, reason: entry.key);
+    }
+  });
+
+  test('multivalued and unknown function syntax does not produce a fake curve',
+      () {
+    for (final latex in [r'x\pm1', r'x\mp1', '3!!', 'unknown(x)']) {
+      expect(MathExpression.fromInput(latex).isValid, isFalse, reason: latex);
+    }
+  });
   test('MathLive delimiters, fractions and roots preserve graph meaning', () {
     for (final entry in <String, double>{
       r'f\left(x\right)=\frac{x^{2}+1}{2}': 5,

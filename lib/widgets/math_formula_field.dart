@@ -16,6 +16,7 @@ class MathFormulaField extends StatefulWidget {
   final bool allowModeSwitch;
   final VoidCallback? onRevert;
   final VoidCallback? onReadyChanged;
+  final VoidCallback? onCaretChanged;
   final Color? fillColor;
   final ValueChanged<bool> onModeChanged;
   final VoidCallback onActivate;
@@ -35,6 +36,7 @@ class MathFormulaField extends StatefulWidget {
     this.allowModeSwitch = true,
     this.onRevert,
     this.onReadyChanged,
+    this.onCaretChanged,
     this.fillColor,
   });
 
@@ -62,6 +64,8 @@ class MathFormulaFieldState extends State<MathFormulaField>
   String? _failure;
   ColorScheme? _colorScheme;
   double _height = 56;
+  String _location = '公式';
+  String get location => _location;
   int get revision => _revision;
   bool get ready => _ready && _failure == null;
 
@@ -147,6 +151,10 @@ class MathFormulaFieldState extends State<MathFormulaField>
     if (sequence is int) {
       if (sequence < _sequence) return;
       _sequence = sequence;
+    }
+    if (snapshot['location'] is String && snapshot['location'] != _location) {
+      _location = snapshot['location'];
+      widget.onCaretChanged?.call();
     }
     final latex = snapshot['latex'];
     if (snapshot['edited'] == true && latex is String && latex != _lastSource) {

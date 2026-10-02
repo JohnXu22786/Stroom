@@ -457,14 +457,16 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                               maxHeight: (constraints.maxHeight - 48)
                                       .clamp(0.0, double.infinity) *
                                   0.56),
-                          child: SingleChildScrollView(
-                              child: MathKeyboard(
+                          child: MathKeyboard(
                             enabled: !widget.initialShowWebView ||
                                 (_activeFormula
                                         ?.editorKey.currentState?.ready ??
                                     false),
                             activeLabel:
                                 '公式 ${_formulas.indexOf(_activeFormula!) + 1}',
+                            location: _activeFormula
+                                    ?.editorKey.currentState?.location ??
+                                '公式',
                             onCommand: (kind, value) async {
                               final editor =
                                   _activeFormula?.editorKey.currentState;
@@ -476,7 +478,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                             },
                             onDismiss: _dismissKeyboard,
                             onPlot: _plotAll,
-                          )),
+                          ),
                         ),
                     ],
                   )),
@@ -575,6 +577,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               onSubmitted: _plotAll,
               onReadyChanged: () {
                 if (mounted) setState(() {});
+              },
+              onCaretChanged: () {
+                if (mounted && _activeFormula == f) setState(() {});
               },
               onRevert: hasChanged
                   ? () {
