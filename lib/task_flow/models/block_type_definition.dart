@@ -206,7 +206,7 @@ class BlockTypeDefinition {
     ],
   );
 
-  /// CatCatch (Web Resource Download): text → video
+  /// CatCatch: text → media (video is the default output).
   static const catcatch = BlockTypeDefinition(
     typeKey: BlockType.catcatch,
     label: '下载网页资源',
@@ -215,6 +215,13 @@ class BlockTypeDefinition {
     icon: Icons.language,
     color: Color(0xFF9C27B0),
     params: [
+      BlockParamDefinition(
+        key: 'audioOutput',
+        label: '输出音频',
+        type: BlockParamType.boolean,
+        defaultValue: false,
+        hintText: '开启时只自动选择完整音频资源，可连接语音识别；关闭时优先完整视频，其次播放列表。实际下载类型不匹配时停止任务流。',
+      ),
       BlockParamDefinition(
         key: 'videoFolder',
         label: '视频保存文件夹',

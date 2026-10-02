@@ -82,6 +82,11 @@ Future<void> validateTaskFlow(
         fail('「${param.label}」为必填项，请在「${def.label}」设置中配置');
       }
     }
+    if (block.typeKey == BlockType.catcatch &&
+        block.params.containsKey('audioOutput') &&
+        block.params['audioOutput'] is! bool) {
+      fail('输出类型无效，请在「${def.label}」设置中重新选择');
+    }
     previousOutput = def.outputType;
   }
   if (inputs.isEmpty) {

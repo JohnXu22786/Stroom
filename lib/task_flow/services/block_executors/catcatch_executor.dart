@@ -1,10 +1,13 @@
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:mime/mime.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../catcatch/models/catcatch_task.dart' as catcatch;
+import '../../../catcatch/models/media_resource.dart';
 import '../../../catcatch/providers/catcatch_provider.dart';
 import '../../../providers/task_provider_shared.dart';
 import '../../models/block_type_definition.dart';
+import '../../models/io_type.dart';
 import '../../models/task_flow_definition.dart';
 import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_exception.dart';
@@ -29,6 +32,7 @@ Future<String> executeCatCatchBlock({
   /// page's URL + 时/分/秒 input box semantics.
   int durationSecOverride = 0,
   Duration stallTimeout = const Duration(minutes: 10),
+  Duration pollInterval = const Duration(milliseconds: 500),
 }) async {
   final taskId = const Uuid().v4();
   execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
@@ -56,9 +60,10 @@ Future<String> executeCatCatchBlock({
   bool autoConfirmed = false;
 
   while (true) {
-    await Future.delayed(const Duration(milliseconds: 500));
-    final task =
-        catcatchNotifier.state.where((t) => t.id == taskId).firstOrNull;
+    await Future.delayed(pollInterval);
+    final task = catcatchNotifier.state
+        .where((t) => t.id == taskId)
+        .firstOrNull;
 
     if (task == null) {
       execNotifier.updateSubTaskStatus(
@@ -77,7 +82,9 @@ Future<String> executeCatCatchBlock({
     if (signature != lastProgressSignature) {
       lastProgressSignature = signature;
       lastProgressAt = DateTime.now();
-    } else if (DateTime.now().difference(lastProgressAt) > stallTimeout) {
+    } else if (task.status != catcatch.TaskStatus.completed &&
+        task.status != catcatch.TaskStatus.failed &&
+        DateTime.now().difference(lastProgressAt) > stallTimeout) {
       // No progress for the stall window — cancel the engine work and
       // fail the block. removeTask cancels the pipeline's CancelToken and
       // cleans up partial files.
@@ -95,28 +102,44 @@ Future<String> executeCatCatchBlock({
     }
 
     if (task.status == catcatch.TaskStatus.completed) {
+      final path = task.downloadedFilePath;
+      if (path == null || path.isEmpty) {
+        execNotifier.updateSubTaskStatus(
+          execId,
+          flowSubTask.id,
+          TaskStatus.failed,
+        );
+        throw BlockExecutionException(
+          '下载完成但无文件路径',
+          blockType: def.typeKey.name,
+          blockTitle: def.label,
+        );
+      }
+      final actualType = catCatchOutputType(task);
+      if (actualType != def.outputType) {
+        execNotifier.updateSubTaskStatus(
+          execId,
+          flowSubTask.id,
+          TaskStatus.failed,
+        );
+        throw BlockExecutionException(
+          '下载结果为${actualType.label}，此步骤声明输出${def.outputType.label}；请修改输出类型或选择匹配的资源',
+          blockType: def.typeKey.name,
+          blockTitle: def.label,
+        );
+      }
+      // Best-effort gallery registration, matching the download engine.
+      try {
+        await registerFlowCatCatchOutput(path, task, outputType: actualType);
+      } catch (e) {
+        debugPrint('[TaskFlow] registerFlowCatCatchOutput failed: $e');
+      }
       execNotifier.updateSubTaskStatus(
         execId,
         flowSubTask.id,
         TaskStatus.completed,
       );
-      if (task.downloadedFilePath != null) {
-        // Best-effort gallery registration, mirroring the engine's own
-        // swallow behavior: on web the dart:io/Isolate-based registrator
-        // cannot run, and a registration hiccup must not fail a
-        // successfully completed download.
-        try {
-          await registerFlowCatCatchOutput(task.downloadedFilePath!, task);
-        } catch (e) {
-          debugPrint('[TaskFlow] registerFlowCatCatchOutput failed: $e');
-        }
-        return task.downloadedFilePath!;
-      }
-      throw BlockExecutionException(
-        '下载完成但无文件路径',
-        blockType: def.typeKey.name,
-        blockTitle: def.label,
-      );
+      return path;
     }
     if (task.status == catcatch.TaskStatus.failed) {
       execNotifier.updateSubTaskStatus(
@@ -150,7 +173,14 @@ Future<String> executeCatCatchBlock({
       if (us.isNotEmpty && !us.first.completed && !us.first.skipped) {
         if (task.detectedMedia.isNotEmpty) {
           try {
-            catcatchNotifier.selectMedia(taskId, task.detectedMedia.first);
+            final selected = selectAutomaticCatCatchResource(
+              task.detectedMedia,
+              desiredType: def.outputType,
+            );
+            if (selected == null) {
+              throw const FormatException('没有可安全自动选择的完整资源，请在 CatCatch 页面单独下载');
+            }
+            catcatchNotifier.selectMedia(taskId, selected);
             autoSelected = true;
             execNotifier.updateSubTaskStatus(
               execId,
@@ -202,6 +232,55 @@ Future<String> executeCatCatchBlock({
   }
 }
 
+/// Discovery order depends on network timing. Choose a complete video before
+/// a playlist, then audio; URL and metadata break ties consistently. Split
+/// tracks need a separate audio/video merge decision and are never guessed.
+MediaResource? selectAutomaticCatCatchResource(
+  List<MediaResource> resources, {
+  IOType? desiredType,
+}) {
+  int rank(MediaResource media) {
+    final mime = media.mimeType?.split(';').first.trim().toLowerCase() ?? '';
+    if (mime.startsWith('audio/') || media.isAudio) return 2;
+    if (media.isPlaylist) return 1;
+    if (mime.startsWith('video/') || media.isVideo) return 0;
+    return 3;
+  }
+
+  final candidates = resources.where((media) {
+    final priority = rank(media);
+    if (media.isLikelySplitTrack || priority == 3) return false;
+    if (desiredType == IOType.audio) return priority == 2;
+    if (desiredType == IOType.video) return priority < 2;
+    return true;
+  }).toList();
+  candidates.sort((a, b) {
+    final priority = rank(a).compareTo(rank(b));
+    if (priority != 0) return priority;
+    final url = a.url.compareTo(b.url);
+    if (url != 0) return url;
+    return '${a.name}|${a.ext}|${a.mimeType}|${a.groupId}'.compareTo(
+      '${b.name}|${b.ext}|${b.mimeType}|${b.groupId}',
+    );
+  });
+  return candidates.firstOrNull;
+}
+
+/// An audio-only source can be converted into an MP4 container. Keep its
+/// track kind; otherwise classify the downloaded file by its MIME/extension.
+IOType catCatchOutputType(catcatch.CatCatchTask task) {
+  final selected = task.selectedMedia;
+  if (selected != null &&
+      (selected.mimeType?.toLowerCase().startsWith('audio/') == true ||
+          selected.isAudio)) {
+    return IOType.audio;
+  }
+  final mime = lookupMimeType(task.downloadedFilePath ?? '') ?? '';
+  if (mime.startsWith('audio/')) return IOType.audio;
+  if (mime.startsWith('video/')) return IOType.video;
+  return IOType.file;
+}
+
 /// Compact signature of everything that constitutes "visible progress" for
 /// a CatCatch task: status, per-step completion flags + progress, received
 /// bytes (byte-granularity — percent progress stays 0 for chunked
@@ -210,8 +289,10 @@ Future<String> executeCatCatchBlock({
 String _progressSignatureOf(catcatch.CatCatchTask? task) {
   if (task == null) return '';
   final steps = task.steps
-      .map((s) =>
-          '${s.type.name}:${s.completed}:${s.skipped}:${s.failed}:${s.progress}')
+      .map(
+        (s) =>
+            '${s.type.name}:${s.completed}:${s.skipped}:${s.failed}:${s.progress}',
+      )
       .join('|');
   return '${task.status.name}|${task.downloadedBytes}|'
       '${task.selectedMedia?.url}|${task.metadata['pendingConfirm']}|$steps';

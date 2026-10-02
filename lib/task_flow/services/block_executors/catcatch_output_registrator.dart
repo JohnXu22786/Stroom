@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import '../../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../../utils/file_manifest.dart';
 import '../../../utils/video_manifest.dart';
+import '../../models/io_type.dart';
 
 const _videoExts = {
   'mp4',
@@ -54,8 +55,9 @@ Future<String> _computeHashInIsolate(String filePath) {
 
 Future<void> registerFlowCatCatchOutput(
   String filePath,
-  catcatch.CatCatchTask task,
-) async {
+  catcatch.CatCatchTask task, {
+  required IOType outputType,
+}) async {
   final ext = p.extension(filePath).toLowerCase().replaceAll('.', '');
   final file = File(filePath);
   if (!await file.exists()) {
@@ -66,7 +68,7 @@ Future<void> registerFlowCatCatchOutput(
   final contentHash = await _computeHashInIsolate(filePath);
   final size = await file.length();
 
-  if (_videoExts.contains(ext)) {
+  if (outputType == IOType.video && _videoExts.contains(ext)) {
     try {
       final videoFolder = task.metadata['videoFolder'] ?? '';
       final records = await VideoManifest.loadRecords();
@@ -108,7 +110,10 @@ Future<void> registerFlowCatCatchOutput(
     }
   }
 
-  if (_audioExts.contains(ext)) {
+  // An audio-only source can be converted into an MP4 container. The
+  // executor has already checked the track kind before registration.
+  if (outputType == IOType.audio &&
+      (_audioExts.contains(ext) || ext == 'mp4')) {
     try {
       final audioFolder = task.metadata['audioFolder'] ?? '';
       final records = await FileManifest.loadRecords();

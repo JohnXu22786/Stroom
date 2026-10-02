@@ -16,6 +16,7 @@ import '../../utils/video_manifest.dart';
 import '../../widgets/folder_picker_dialog.dart';
 import '../models/task_flow_definition.dart';
 import '../models/block_type_definition.dart';
+import '../models/io_type.dart';
 
 /// Which gallery's folders a block's save-folder param lists.
 ///
@@ -161,6 +162,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
       );
     }
 
+    final outputType = def.typeKey == BlockType.catcatch &&
+            _params['audioOutput'] == true
+        ? IOType.audio
+        : def.outputType;
+
     // Floor the min drag size in pixels: minChildSize is a fraction of
     // the (keyboard-reduced) available height, and the fixed chrome
     // (handle + header ≈ 90px — the actions row lives inside the
@@ -218,7 +224,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                         ),
                       ),
                       Text(
-                        '输入: ${def.inputType.label}  →  输出: ${def.outputType.label}',
+                        '输入: ${def.inputType.label}  →  输出: ${outputType.label}',
                         style: TextStyle(
                           fontSize: 11,
                           color: cs.onSurfaceVariant,
