@@ -715,17 +715,17 @@ void main() {
         () async {
       // 回归：隔离数据使用带时间戳的 key 且只保留最近 3 份。
       // 旧固定 key 会被下一次隔离覆盖，丢失前一份损坏证据。
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final oldKeys = List.generate(
+        5,
+        (index) =>
+            'provider_entries_corrupt_${nowMs - (index + 1) * Duration(days: 1).inMilliseconds}',
+      );
       SharedPreferences.setMockInitialValues({
         'data_format_version': 0,
         'provider_entries': '{"not": "an array"}',
-        // 预先存在 5 份旧的隔离数据（13 位 epoch 毫秒时间戳，
-        // 全部早于当前时间 2026-08 ≈ 1.785e12，保证本次新隔离的
-        // 数据（时间戳最大）是「最新」的）
-        'provider_entries_corrupt_1700000000000': '{"old": 1}',
-        'provider_entries_corrupt_1710000000000': '{"old": 2}',
-        'provider_entries_corrupt_1720000000000': '{"old": 3}',
-        'provider_entries_corrupt_1730000000000': '{"old": 4}',
-        'provider_entries_corrupt_1740000000000': '{"old": 5}',
+        for (var index = 0; index < oldKeys.length; index++)
+          oldKeys[index]: '{"old": ${index + 1}}',
       });
 
       final result = await DataMigrationService.checkAndMigrate();
@@ -739,21 +739,14 @@ void main() {
         ..sort();
       // 旧的 5 份 + 本次新隔离的 1 份 = 6 份，裁剪后只保留 3 份。
       expect(corruptKeys, hasLength(3), reason: '只保留最近的 3 份隔离备份');
-      // 保留的是时间戳最大的 3 份（含本次新隔离的）。
-      expect(corruptKeys.contains('provider_entries_corrupt_1700000000000'),
-          isFalse,
-          reason: '最旧的 3 份必须被裁剪');
-      expect(corruptKeys.contains('provider_entries_corrupt_1710000000000'),
-          isFalse);
-      expect(corruptKeys.contains('provider_entries_corrupt_1720000000000'),
-          isFalse);
-      expect(corruptKeys.contains('provider_entries_corrupt_1730000000000'),
-          isTrue);
-      expect(corruptKeys.contains('provider_entries_corrupt_1740000000000'),
-          isTrue);
-      expect(
-          corruptKeys.last.startsWith('provider_entries_corrupt_178'), isTrue,
-          reason: '本次新隔离的备份（当前时间戳）必须被保留');
+      // 保留最近的两份旧数据与本次隔离的新数据，结果不依赖固定日期。
+      expect(corruptKeys, contains(oldKeys[0]));
+      expect(corruptKeys, contains(oldKeys[1]));
+      expect(corruptKeys, isNot(contains(oldKeys[2])));
+      expect(corruptKeys, isNot(contains(oldKeys[3])));
+      expect(corruptKeys, isNot(contains(oldKeys[4])));
+      expect(prefs.getString(corruptKeys.last), '{"not": "an array"}',
+          reason: '本次新隔离的备份必须被保留');
     });
   });
 

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -140,6 +141,52 @@ void main() {
       expect(index.length, 1, reason: '索引损坏时从磁盘扫描重建（快照仍在磁盘上）');
       expect(index.first.file, p.basename(file!.path));
       expect(index.first.sha256, isNotEmpty);
+    });
+
+    test('rebuilt index preserves fractional timestamp precision', () async {
+      await snapDir.create(recursive: true);
+      final snapshotFile = File(
+        p.join(snapDir.path, 'backup_2026-10-01T18-29-18.268046.zip'),
+      );
+      await snapshotFile.writeAsBytes([1, 2, 3]);
+
+      final indexFile =
+          File(p.join(snapDir.path, SnapshotService.manifestName));
+      await indexFile.writeAsString('{corrupted!!!');
+
+      final index = await SnapshotService.readIndex();
+      expect(index, hasLength(1));
+      expect(index.single.file, p.basename(snapshotFile.path));
+      expect(index.single.createdAt, '2026-10-01T18:29:18.268046');
+    });
+
+    test('snapshot ordering repairs legacy index timestamps without fractions',
+        () async {
+      await snapDir.create(recursive: true);
+      const olderFile = 'backup_2026-10-01T18-29-18.191016.zip';
+      const newerFile = 'backup_2026-10-01T18-29-18.268046.zip';
+      const truncatedCreatedAt = '2026-10-01T18:29:18.000';
+      final indexFile =
+          File(p.join(snapDir.path, SnapshotService.manifestName));
+      await indexFile.writeAsString(jsonEncode({
+        'snapshots': [
+          SnapshotEntry(
+            file: olderFile,
+            sha256: 'older',
+            createdAt: truncatedCreatedAt,
+            partVersions: const {},
+          ).toJson(),
+          SnapshotEntry(
+            file: newerFile,
+            sha256: 'newer',
+            createdAt: truncatedCreatedAt,
+            partVersions: const {},
+          ).toJson(),
+        ],
+      }));
+
+      final snapshots = await SnapshotService.listSnapshots();
+      expect(snapshots.map((entry) => entry.file), [newerFile, olderFile]);
     });
 
     test('tmp leftover does not trigger the 1-hour rule and is cleaned',

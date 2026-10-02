@@ -261,13 +261,14 @@ class SnapshotService {
   /// 必须锚定 `.zip` 结尾：写入中的 `backup_*.zip.tmp` 残留不算快照，
   /// 否则 1 小时规则会被崩溃残留的 tmp 文件静默停摆。
   static DateTime? _extractTimestamp(String name) {
-    final match = RegExp(
-            r'^backup_(\d{4}-\d{2}-\d{2})T(\d{2}-\d{2}-\d{2})(?:\.\d+)?\.zip$')
-        .firstMatch(name);
+    final match =
+        RegExp(r'^backup_(\d{4}-\d{2}-\d{2})T(\d{2}-\d{2}-\d{2})(\.\d+)?\.zip$')
+            .firstMatch(name);
     if (match == null) return null;
     try {
+      final fractionalSeconds = match.group(3) ?? '';
       return DateTime.parse(
-          '${match.group(1)}T${match.group(2)!.replaceAll('-', ':')}');
+          '${match.group(1)}T${match.group(2)!.replaceAll('-', ':')}$fractionalSeconds');
     } catch (_) {
       return null;
     }
@@ -374,8 +375,16 @@ class SnapshotService {
   static Future<List<SnapshotEntry>> listSnapshots() async {
     final index = await readIndex();
     final sorted = List<SnapshotEntry>.from(index)
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      ..sort((a, b) => _timestampForSnapshotOrder(b)
+          .compareTo(_timestampForSnapshotOrder(a)));
     return sorted;
+  }
+
+  /// 文件名是快照生成时写入的时间，可修复旧索引缓存丢失的微秒精度。
+  static DateTime _timestampForSnapshotOrder(SnapshotEntry entry) {
+    return _extractTimestamp(entry.file) ??
+        DateTime.tryParse(entry.createdAt) ??
+        DateTime.fromMillisecondsSinceEpoch(0);
   }
 
   static String _pad(int v) => v.toString().padLeft(2, '0');
