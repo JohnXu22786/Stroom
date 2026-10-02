@@ -1,8 +1,7 @@
-import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:mime/mime.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../catcatch/models/catcatch_task.dart' as catcatch;
+import '../../../catcatch/models/media_kind.dart';
 import '../../../catcatch/models/media_resource.dart';
 import '../../../catcatch/providers/catcatch_provider.dart';
 import '../../../providers/task_provider_shared.dart';
@@ -12,7 +11,6 @@ import '../../models/task_flow_definition.dart';
 import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
-import 'catcatch_output_registrator.dart';
 import 'shared_helpers.dart';
 
 Future<String> executeCatCatchBlock({
@@ -126,12 +124,6 @@ Future<String> executeCatCatchBlock({
           blockType: def.typeKey.name,
           blockTitle: def.label,
         );
-      }
-      // Best-effort gallery registration, matching the download engine.
-      try {
-        await registerFlowCatCatchOutput(path, task, outputType: actualType);
-      } catch (e) {
-        debugPrint('[TaskFlow] registerFlowCatCatchOutput failed: $e');
       }
       execNotifier.updateSubTaskStatus(
         execId,
@@ -265,20 +257,13 @@ MediaResource? selectAutomaticCatCatchResource(
   return candidates.firstOrNull;
 }
 
-/// A selected source's explicit MIME preserves its track kind when the file
-/// extension is ambiguous (for example, video/ogg or audio inside MP4).
-/// Otherwise classify the downloaded file by its MIME/extension.
+/// Keep the flow's declared output in sync with the engine's gallery routing.
 IOType catCatchOutputType(catcatch.CatCatchTask task) {
-  final selected = task.selectedMedia;
-  final selectedMime =
-      selected?.mimeType?.split(';').first.trim().toLowerCase();
-  if (selectedMime?.startsWith('audio/') == true) return IOType.audio;
-  if (selectedMime?.startsWith('video/') == true) return IOType.video;
-  if (selected?.isAudio == true) return IOType.audio;
-  final mime = lookupMimeType(task.downloadedFilePath ?? '') ?? '';
-  if (mime.startsWith('audio/')) return IOType.audio;
-  if (mime.startsWith('video/')) return IOType.video;
-  return IOType.file;
+  return switch (catCatchMediaKind(task, task.downloadedFilePath ?? '')) {
+    CatCatchMediaKind.audio => IOType.audio,
+    CatCatchMediaKind.video => IOType.video,
+    CatCatchMediaKind.other => IOType.file,
+  };
 }
 
 /// Compact signature of everything that constitutes "visible progress" for

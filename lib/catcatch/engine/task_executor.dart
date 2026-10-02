@@ -281,7 +281,7 @@ class TaskExecutor {
             break;
           case StepType.saving:
             downloadedFilePath = await executeSave(
-                task: task,
+                task: task.copyWith(selectedMedia: selectedMedia),
                 steps: steps,
                 sourcePath: downloadedFilePath,
                 onUpdate: onUpdate);
@@ -294,6 +294,7 @@ class TaskExecutor {
           status: TaskStatus.completed,
           progress: 100,
           completedAt: DateTime.now(),
+          selectedMedia: selectedMedia,
           downloadedFilePath: downloadedFilePath));
       return downloadedFilePath;
     } catch (e, s) {
