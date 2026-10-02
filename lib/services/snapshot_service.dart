@@ -261,9 +261,9 @@ class SnapshotService {
   /// 必须锚定 `.zip` 结尾：写入中的 `backup_*.zip.tmp` 残留不算快照，
   /// 否则 1 小时规则会被崩溃残留的 tmp 文件静默停摆。
   static DateTime? _extractTimestamp(String name) {
-    final match = RegExp(
-            r'^backup_(\d{4}-\d{2}-\d{2})T(\d{2}-\d{2}-\d{2})(\.\d+)?\.zip$')
-        .firstMatch(name);
+    final match =
+        RegExp(r'^backup_(\d{4}-\d{2}-\d{2})T(\d{2}-\d{2}-\d{2})(\.\d+)?\.zip$')
+            .firstMatch(name);
     if (match == null) return null;
     try {
       final fractionalSeconds = match.group(3) ?? '';
