@@ -58,6 +58,8 @@ class SynthesisTask {
   }) : createdAt = createdAt ?? DateTime.now();
 
   SynthesisTask copyWith({
+    ProviderConfigItem? providerConfig,
+    ModelConfig? modelConfig,
     TaskStatus? status,
     String? error,
     DateTime? completedAt,
@@ -82,8 +84,8 @@ class SynthesisTask {
       completedAt: completedAt ?? this.completedAt,
       statusChangedAt: newStatusChangedAt,
       text: text,
-      providerConfig: providerConfig,
-      modelConfig: modelConfig,
+      providerConfig: providerConfig ?? this.providerConfig,
+      modelConfig: modelConfig ?? this.modelConfig,
       customParams: customParams,
       trimPreset: trimPreset,
       originalRequest: originalRequest ?? this.originalRequest,

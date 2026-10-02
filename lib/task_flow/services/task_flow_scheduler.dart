@@ -64,6 +64,10 @@ class TaskFlowScheduler {
   /// Sum of weights of currently running blocks.
   int get activeWeight => _active.values.fold(0, (sum, w) => sum + w);
 
+  /// Whether this flow currently owns a reservation. A paused child releases
+  /// its reservation, so dispatch must reacquire it before doing more work.
+  bool holds(String execId) => _active.containsKey(execId);
+
   /// Number of flows waiting for resources.
   int get queuedCount => _queue.length;
 
@@ -107,6 +111,9 @@ class TaskFlowScheduler {
       if (entry.cancelled) {
         throw const FlowSchedulerCancelledException();
       }
+      if (entry.paused) {
+        throw const FlowSchedulerPausedException();
+      }
       // FIFO: only the head of the queue may acquire. When nothing is
       // running, the head always proceeds — even a weight-2 block under a
       // contracted budget — so a heavy head can never starve the queue.
@@ -118,6 +125,8 @@ class TaskFlowScheduler {
         return;
       }
     }
+    if (entry.cancelled) throw const FlowSchedulerCancelledException();
+    if (entry.paused) throw const FlowSchedulerPausedException();
   }
 
   /// Releases [execId]'s resources (idempotent).
@@ -135,6 +144,16 @@ class TaskFlowScheduler {
     if (idx == -1) return;
     final entry = _queue.removeAt(idx);
     entry.cancelled = true;
+    entry.done = true;
+  }
+
+  /// Remove a paused flow from FIFO without ending its worker. Its caller
+  /// waits on the flow pause gate and requests resources again on resume.
+  void pause(String execId) {
+    final idx = _queue.indexWhere((e) => e.execId == execId);
+    if (idx == -1) return;
+    final entry = _queue.removeAt(idx);
+    entry.paused = true;
     entry.done = true;
   }
 
@@ -202,6 +221,10 @@ class FlowSchedulerCancelledException implements Exception {
   const FlowSchedulerCancelledException();
 }
 
+class FlowSchedulerPausedException implements Exception {
+  const FlowSchedulerPausedException();
+}
+
 class _WaitEntry {
   _WaitEntry(this.execId, this.weight);
 
@@ -209,4 +232,5 @@ class _WaitEntry {
   final int weight;
   bool done = false;
   bool cancelled = false;
+  bool paused = false;
 }

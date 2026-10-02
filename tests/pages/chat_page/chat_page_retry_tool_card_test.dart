@@ -69,6 +69,7 @@ class _LiveStreamManager extends ChatStreamManager {
     Map<String, String> reasoningParamValues = const {},
     String? streamingMsgId,
     Assistant? assistant,
+    ProviderEntriesState? entriesStateOverride,
   }) async {
     lastStreamingMsgId = streamingMsgId;
     // Mimic the real manager's synchronous start pushes.
@@ -131,6 +132,7 @@ class _ImmediateStreamManager extends ChatStreamManager {
     Map<String, String> reasoningParamValues = const {},
     String? streamingMsgId,
     Assistant? assistant,
+    ProviderEntriesState? entriesStateOverride,
   }) async {
     final assistantMsg = ChatMessage(
       id: streamingMsgId ?? 'a-new',

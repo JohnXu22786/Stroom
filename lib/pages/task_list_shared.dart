@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/task_provider.dart';
+import '../task_flow/pages/task_flow_run_page.dart';
+import '../task_flow/providers/task_flow_execution_provider.dart';
 import 'unified_task_list/task_utils.dart';
 
 class TaskCard extends ConsumerWidget {
@@ -10,6 +12,15 @@ class TaskCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final restoreStatus = ref.watch(taskFlowExecutionRestoreStatusProvider);
+    final ownerExecution = ref
+        .watch(taskFlowExecutionsProvider)
+        .where((execution) =>
+            execution.subTasks.any((subTask) => subTask.subTaskId == task.id))
+        .firstOrNull;
+    final ownershipKnown = restoreStatus == FlowExecutionRestoreStatus.ready;
+    final canControlStandalone = ownershipKnown && ownerExecution == null;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -97,16 +108,17 @@ class TaskCard extends ConsumerWidget {
                               ),
                             ],
                             const SizedBox(width: 4),
-                            GestureDetector(
-                              onTap: () => ref
-                                  .read(taskListProvider.notifier)
-                                  .dismissError(task.id),
-                              child: Icon(
-                                Icons.close,
-                                size: 16,
-                                color: Colors.red[300],
+                            if (canControlStandalone)
+                              GestureDetector(
+                                onTap: () => ref
+                                    .read(taskListProvider.notifier)
+                                    .dismissError(task.id),
+                                child: Icon(
+                                  Icons.close,
+                                  size: 16,
+                                  color: Colors.red[300],
+                                ),
                               ),
-                            ),
                           ],
                         ),
                       ),
@@ -115,7 +127,25 @@ class TaskCard extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: 8),
-            if (task.status == TaskStatus.running)
+            if (!ownershipKnown)
+              Tooltip(
+                message: restoreStatus == FlowExecutionRestoreStatus.restoring
+                    ? '正在确认任务归属'
+                    : '任务流记录读取失败，操作暂不可用',
+                child: const Icon(Icons.lock_outline, size: 20),
+              ),
+            if (ownershipKnown && ownerExecution != null)
+              TextButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        TaskFlowRunPage(executionIds: [ownerExecution.id]),
+                  ),
+                ),
+                icon: const Icon(Icons.account_tree_outlined, size: 18),
+                label: const Text('查看任务流'),
+              ),
+            if (canControlStandalone && task.status == TaskStatus.running)
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, size: 20),
                 onSelected: (value) {
@@ -147,7 +177,7 @@ class TaskCard extends ConsumerWidget {
                   ),
                 ],
               ),
-            if (task.status == TaskStatus.paused)
+            if (canControlStandalone && task.status == TaskStatus.paused)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -187,7 +217,7 @@ class TaskCard extends ConsumerWidget {
                   ),
                 ],
               ),
-            if (task.status == TaskStatus.failed)
+            if (canControlStandalone && task.status == TaskStatus.failed)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -242,7 +272,7 @@ class TaskCard extends ConsumerWidget {
                   ),
                 ],
               ),
-            if (task.status == TaskStatus.completed)
+            if (canControlStandalone && task.status == TaskStatus.completed)
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, size: 20),
                 onSelected: (value) {

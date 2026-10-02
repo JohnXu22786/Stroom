@@ -7,6 +7,7 @@ import '../providers/task_provider.dart';
 import '../providers/background_task_provider.dart';
 import '../task_flow/models/task_flow_execution.dart';
 import '../task_flow/providers/task_flow_execution_provider.dart';
+import '../task_flow/services/task_flow_execution_service.dart';
 import 'unified_task_list/catcatch_task_card.dart';
 import 'unified_task_list/synthesis_task_card.dart';
 import 'unified_task_list/background_task_card.dart';
@@ -33,12 +34,17 @@ export 'unified_task_list/task_session_tracker.dart'
         loadTaskListLastRead;
 
 /// Task tab categories.
-enum TaskTab { all, inProgress, completed, failed }
+enum TaskTab { all, inProgress, completed, failed, stopped }
 
 /// Map a [UnifiedTaskItem] to its [TaskTab] category.
 TaskTab _taskTab(UnifiedTaskItem item) {
   if (item.isTaskFlow) {
-    final status = item.taskFlowExecution!.taskStatus;
+    final execution = item.taskFlowExecution!;
+    if (execution.status == FlowExecutionStatus.cancelled ||
+        execution.status == FlowExecutionStatus.interrupted) {
+      return TaskTab.stopped;
+    }
+    final status = execution.taskStatus;
     switch (status) {
       case TaskStatus.running:
       case TaskStatus.paused:
@@ -87,6 +93,7 @@ const _taskTabData = [
   _TabData('进行中', Icons.play_circle_outline),
   _TabData('已完成', Icons.check_circle_outline),
   _TabData('失败', Icons.error_outline),
+  _TabData('已停止', Icons.stop_circle_outlined),
 ];
 
 class _TabData {
@@ -113,9 +120,9 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 4,
+      length: _taskTabData.length,
       vsync: this,
-      initialIndex: widget.initialTab.clamp(0, 3),
+      initialIndex: widget.initialTab.clamp(0, _taskTabData.length - 1),
     );
     _tabController.addListener(() {
       if (mounted) setState(() {});
@@ -141,6 +148,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
     final synthesisTasks = ref.watch(taskListProvider);
     final backgroundTasks = ref.watch(backgroundTasksProvider);
     final taskFlowExecutions = ref.watch(taskFlowExecutionsProvider);
+    final restoreStatus = ref.watch(taskFlowExecutionRestoreStatusProvider);
 
     final allTasks = <UnifiedTaskItem>[
       for (final t in catcatchTasks)
@@ -207,6 +215,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
         ),
         actions: [
           PopupMenuButton<String>(
+            enabled: restoreStatus == FlowExecutionRestoreStatus.ready,
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
               if (value == 'clear_completed') {
@@ -297,8 +306,30 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                         child: const Text('取消'),
                       ),
                       TextButton(
-                        onPressed: () {
+                        onPressed: () async {
                           Navigator.pop(ctx);
+                          try {
+                            final service =
+                                ref.read(taskFlowExecutionServiceProvider);
+                            final batches = <String>{};
+                            for (final execution in taskFlowExecutions
+                                .where((e) => !e.isTerminal)) {
+                              if (execution.batchId == null) {
+                                await service.cancelExecution(execution.id);
+                              } else if (batches.add(execution.batchId!)) {
+                                await service.cancelBatch(execution.batchId!);
+                              }
+                            }
+                          } catch (error) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('清除未完成：$error')),
+                              );
+                            }
+                            return;
+                          }
+                          if (!mounted) return;
+
                           for (final t in catcatchTasks) {
                             ref
                                 .read(catcatchTasksProvider.notifier)
@@ -367,16 +398,22 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // 任务列表
-          Expanded(
-            child: filteredTasks.isEmpty
-                ? _buildEmptyState(context)
-                : _buildTaskList(filteredTasks),
-          ),
-        ],
-      ),
+      body: restoreStatus != FlowExecutionRestoreStatus.ready
+          ? Center(
+              child: Text(restoreStatus == FlowExecutionRestoreStatus.restoring
+                  ? '正在恢复任务流记录…'
+                  : '任务流记录读取失败，任务操作已暂停'),
+            )
+          : Column(
+              children: [
+                // 任务列表
+                Expanded(
+                  child: filteredTasks.isEmpty
+                      ? _buildEmptyState(context)
+                      : _buildTaskList(filteredTasks),
+                ),
+              ],
+            ),
     );
   }
 
