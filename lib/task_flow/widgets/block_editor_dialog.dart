@@ -162,10 +162,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
       );
     }
 
-    final outputType = def.typeKey == BlockType.catcatch &&
-            _params['audioOutput'] == true
-        ? IOType.audio
-        : def.outputType;
+    final outputType =
+        def.typeKey == BlockType.catcatch && _params['audioOutput'] == true
+            ? IOType.audio
+            : def.outputType;
 
     // Floor the min drag size in pixels: minChildSize is a fraction of
     // the (keyboard-reduced) available height, and the fixed chrome
