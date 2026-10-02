@@ -101,7 +101,7 @@ class MathExpression {
     final isEquation = _isEquation(body);
 
     // Normalize the expression for function_tree
-    final normalized = _normalizeExpression(body);
+    var normalized = '';
 
     // Try to parse and create evaluator
     String? error;
@@ -109,6 +109,7 @@ class MathExpression {
     double Function(double, double)? implicitFn;
 
     try {
+      normalized = _normalizeExpression(body);
       if (isEquation) {
         // For equations like x=1 or x^2+y^2=1, create f(x,y) = left - right
         final eqParts = normalized.split('=');
@@ -399,7 +400,9 @@ class MathExpression {
   /// Strip common prefixes like "y = ", "f(x) = " from the expression.
   static String _stripPrefix(String expr) {
     // Try f(x) = (with optional spaces)
-    final fxMatch = RegExp(r'^f\s*\(\s*x\s*\)\s*=\s*').firstMatch(expr);
+    final fxMatch =
+        RegExp(r'^f\s*(?:\\left\s*)?\(\s*x\s*(?:\\right\s*)?\)\s*=\s*')
+            .firstMatch(expr);
     if (fxMatch != null) {
       return expr.substring(fxMatch.end);
     }
@@ -501,15 +504,89 @@ class MathExpression {
     return result;
   }
 
+  /// Read a balanced LaTeX group, including nested templates.
+  static (String, int)? _latexGroup(
+      String source, int start, String open, String close) {
+    while (start < source.length && source[start] == ' ') {
+      start++;
+    }
+    if (start >= source.length || source[start] != open) return null;
+    final contentStart = ++start;
+    var depth = 1;
+    while (start < source.length) {
+      if (source[start] == open) depth++;
+      if (source[start] == close && --depth == 0) {
+        return (source.substring(contentStart, start), start + 1);
+      }
+      start++;
+    }
+    return null;
+  }
+
+  static String _replaceIndexedLatex(String source) {
+    var result = source;
+    final commands = RegExp(r'\\sqrt\s*\[|\\log\s*_');
+    var from = 0;
+    while (true) {
+      final match = commands.firstMatch(result.substring(from));
+      if (match == null) break;
+      final start = from + match.start;
+      var indexStart = from + match.end;
+      final isRoot = match.group(0)!.contains('sqrt');
+      (String, int)? index;
+      if (isRoot) {
+        index = _latexGroup(result, indexStart - 1, '[', ']');
+      } else {
+        index = _latexGroup(result, indexStart, '{', '}');
+        if (index == null && indexStart < result.length) {
+          index = (result[indexStart], indexStart + 1);
+        }
+      }
+      if (index == null) throw const FormatException('根式或对数的底未完成');
+      var argumentStart = index.$2;
+      while (argumentStart < result.length && result[argumentStart] == ' ') {
+        argumentStart++;
+      }
+      if (result.startsWith(r'\left', argumentStart)) argumentStart += 5;
+      final group = _latexGroup(
+              result, argumentStart, isRoot ? '{' : '(', isRoot ? '}' : ')') ??
+          _latexGroup(result, argumentStart, '{', '}');
+      if (group == null) throw const FormatException('请为根式或对数填写括号内的内容');
+      var argumentSource = group.$1;
+      if (!isRoot && argumentSource.endsWith(r'\right')) {
+        argumentSource = argumentSource.substring(0, argumentSource.length - 6);
+      }
+      final argument = _convertLatex(argumentSource);
+      final base = _convertLatex(index.$1);
+      final replacement =
+          isRoot ? 'nrt(($base),($argument))' : '(ln($argument)/ln($base))';
+      result = result.replaceRange(start, group.$2, replacement);
+      from = start + replacement.length;
+    }
+    return result;
+  }
+
   /// Convert LaTeX command sequences to plain math notation.
   ///
   /// Handles `\frac`, `\times`, `\cdot`, `\div`, `\sin`, `\cos`, `\tan`,
   /// `\ln`, `\log`, `\sqrt`, `\left`/`\right`, `\pi`, Greek letters,
-  /// spacing commands, and any unknown command by stripping the backslash.
+  /// spacing commands. Unknown commands are rejected by the graph evaluator.
   ///
   /// This runs BEFORE `{}` → `()` conversion, so braces are still intact.
   static String _convertLatex(String expr) {
-    var result = expr;
+    var result = _replaceIndexedLatex(expr);
+    result = result.replaceAllMapped(
+        RegExp(r'\\operatorname\{(abs|min|max|exp)\}'), (m) => m[1]!);
+    result = result.replaceAll(RegExp(r'\\(?:dfrac|tfrac)\b'), r'\frac');
+    // Paired bars are an absolute-value structure, rather than variable names.
+    while (result.contains(r'\left|')) {
+      final end = result.indexOf(r'\right|');
+      if (end < 0) throw const FormatException('绝对值未完成');
+      final start = result.lastIndexOf(r'\left|', end);
+      if (start < 0) throw const FormatException('绝对值未完成');
+      final content = result.substring(start + 6, end);
+      result = result.replaceRange(start, end + 7, 'abs($content)');
+    }
 
     // 1) \frac{numerator}{denominator} → (numerator)/(denominator)
     //    Uses a simple brace-matcher: find first {…} and second {…}
@@ -573,12 +650,11 @@ class MathExpression {
     //    brace conversion above. Handle x_n notation: x_n → x_n
     //    (subscript is kept as-is for parameter naming)
 
-    // 9) Catch-all: any remaining \command → just command
-    //    (function_tree will likely reject it, but won't crash)
-    result = result.replaceAllMapped(
-      RegExp(r'\\([a-zA-Z]+)'),
-      (m) => m[1]!,
-    );
+    // Layout-only commands must not silently turn into parameter curves.
+    result = result.replaceAll(RegExp(r'\\[,;:! ]'), '');
+    if (result.contains(r'\') || result.contains('|')) {
+      throw const FormatException('此 LaTeX 结构可编辑，但绘图引擎暂不支持');
+    }
 
     return result;
   }

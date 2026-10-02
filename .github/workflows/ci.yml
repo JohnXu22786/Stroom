@@ -10,6 +10,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  math-editor:
+    name: Math editor bridge
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/math_editor_test/package-lock.json
+      - run: npm ci --prefix tools/math_editor_test
+      - run: npm test --prefix tools/math_editor_test
+
   # ── Format Check ──────────────────────────────────────────────────────────
   format:
     name: Format Check

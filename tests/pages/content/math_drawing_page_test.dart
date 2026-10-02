@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/math_drawing_page.dart';
+import 'package:stroom/widgets/math_formula_field.dart';
 
 Widget _buildTestApp({String? initialExpression}) {
   return MaterialApp(
-    home: MathDrawingPage(initialExpression: initialExpression),
+    home: MathDrawingPage(
+      initialExpression: initialExpression,
+      initialMathematicalMode: false,
+      initialShowWebView: false,
+    ),
     localizationsDelegates: const [
       DefaultMaterialLocalizations.delegate,
       DefaultWidgetsLocalizations.delegate,
@@ -14,6 +19,7 @@ Widget _buildTestApp({String? initialExpression}) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  editorInteractionTests();
 
   group('MathDrawingPage - formula input', () {
     testWidgets('checkmark button plots formulas', (tester) async {
@@ -153,7 +159,10 @@ void main() {
       final buttons = find.descendant(
         of: row,
         matching: find.byWidgetPredicate(
-          (w) => w is IconButton && (w.icon as Icon?)?.icon != Icons.undo,
+          (w) =>
+              w is IconButton &&
+              ![Icons.undo, Icons.calculate_outlined, Icons.keyboard]
+                  .contains((w.icon as Icon?)?.icon),
         ),
       );
       return [
@@ -214,5 +223,70 @@ void main() {
       final tf = tester.widget<TextField>(find.byType(TextField));
       expect(tf.controller?.text, equals('sin(x)'));
     });
+  });
+}
+
+// Editing snapshots are asynchronous on native WebViews. Exercise the page
+// with the bridge boundary rather than constructing a platform view in tests.
+void editorInteractionTests() {
+  testWidgets('short narrow screens keep the canvas and keyboard scrollable',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(const MaterialApp(
+        home: MathDrawingPage(
+      initialShowWebView: false,
+      initialMathematicalMode: true,
+    )));
+    await tester.tap(find.byType(MathFormulaField));
+    await tester.pump();
+    await tester.tap(find.text('结构'));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byTooltip('收起数学键盘'));
+    await tester.pump();
+    expect(find.text('下一项'), findsNothing);
+  });
+  testWidgets('math keyboard follows row identity across deletion and tabs',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+        home: MathDrawingPage(
+      initialShowWebView: false,
+      initialMathematicalMode: true,
+    )));
+    await tester.tap(find.byType(MathFormulaField).first);
+    await tester.pump();
+    expect(find.text('下一项'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.add_circle));
+    await tester.pump();
+    final fields = tester
+        .stateList<MathFormulaFieldState>(find.byType(MathFormulaField))
+        .toList();
+    fields[1].acceptSnapshot({
+      'revision': fields[1].revision,
+      'latex': r'\frac{x}{2}',
+      'edited': true
+    });
+    await tester.pump();
+    await tester.tap(find.byType(MathFormulaField).last);
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.remove_circle_outline).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+    expect(tester.state<MathFormulaFieldState>(find.byType(MathFormulaField)),
+        same(fields[1]));
+    await tester.tap(find.text('3D'));
+    await tester.pumpAndSettle();
+    expect(find.text('下一项'), findsNothing);
+    await tester.tap(find.text('2D 绘图'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('切换到系统键盘 / LaTeX 源码'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        r'\frac{x}{2}');
+    expect(tester.takeException(), isNull);
   });
 }
