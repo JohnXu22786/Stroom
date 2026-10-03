@@ -262,18 +262,8 @@ class _BrowserPageState extends State<BrowserPage> {
   void dispose() {
     _urlController.dispose();
 
-    // When cookie retention is enabled, persist cookies to file so they
-    // survive the browser close. When disabled, clear everything.
-    // clearAllCookies already clears the persisted store internally.
-    // Read the persisted value here (not the possibly-stale widget state)
-    // so a toggle that was still in flight when the page closed wins.
-    BrowserCookieService.getRetentionMode().then((enabled) {
-      if (enabled) {
-        BrowserCookieService.persistCookiesToFile();
-      } else {
-        BrowserCookieService.clearAllCookies();
-      }
-    });
+    // Queue the final preference decision after any in-flight toggle.
+    unawaited(BrowserCookieService.handleBrowserClose());
 
     super.dispose();
   }
