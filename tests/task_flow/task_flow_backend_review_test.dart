@@ -130,7 +130,10 @@ class _ManualDownloads extends CatCatchNotifier {
         task.id == id
             ? task.copyWith(
                 status: catcatch.TaskStatus.completed,
-                downloadedFilePath: File('tests/fixtures/catcatch/video_only.mp4').absolute.path)
+                downloadedFilePath:
+                    File('tests/fixtures/catcatch/video_only.mp4')
+                        .absolute
+                        .path)
             : task,
     ];
   }

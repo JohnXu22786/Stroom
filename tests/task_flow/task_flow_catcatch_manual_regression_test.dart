@@ -49,7 +49,9 @@ void main() {
                       type: catcatch.StepType.converting, running: true)
                 ]
               : [],
-          downloadedFilePath: reads < 4 ? null : p.absolute('tests/fixtures/catcatch/video_only.mp4'),
+          downloadedFilePath: reads < 4
+              ? null
+              : p.absolute('tests/fixtures/catcatch/video_only.mp4'),
         )
       ];
     });
