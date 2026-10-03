@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../providers/provider_config.dart';
 import 'provider_config_detail_page.dart';
 import 'mcp_server_config_page.dart';
@@ -236,9 +237,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     if (name == null || name.isEmpty || !mounted) return;
     final groups = ref.read(providerEntriesProvider).mcpGroups;
     if (groups.any((group) => group.name.toLowerCase() == name.toLowerCase())) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('组别名称已存在')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('组别名称已存在')));
       return;
     }
     await ref
@@ -252,17 +252,17 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final name = await _showGroupNameDialog(initialName: group.name);
     if (name == null || name.isEmpty || !mounted) return;
     final groups = ref.read(providerEntriesProvider).mcpGroups;
-    if (groups.any((item) =>
-        item.id != group.id &&
-        item.name.toLowerCase() == name.toLowerCase())) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('组别名称已存在')),
-      );
+    if (groups.any(
+      (item) =>
+          item.id != group.id && item.name.toLowerCase() == name.toLowerCase(),
+    )) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('组别名称已存在')));
       return;
     }
-    await ref.read(providerEntriesProvider.notifier).updateMcpGroup(
-          group.copyWith(name: name),
-        );
+    await ref
+        .read(providerEntriesProvider.notifier)
+        .updateMcpGroup(group.copyWith(name: name));
     if (mounted) setState(() {});
   }
 
@@ -293,8 +293,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
   Future<void> _moveMcpConfig(ProviderConfigItem config) async {
     final groups = ref.read(providerEntriesProvider).mcpGroups;
-    final currentGroupId = config.groupId ??
-        defaultMcpGroupIdForProvider(config.providerName);
+    final currentGroupId =
+        config.groupId ?? defaultMcpGroupIdForProvider(config.providerName);
     final targetGroupId = await showDialog<String>(
       context: context,
       builder: (ctx) => SimpleDialog(
@@ -341,7 +341,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     for (var i = 0; i < groupIndices.length; i++) {
       configs[groupIndices[i]] = groupConfigs[i];
     }
-    await ref.read(providerEntriesProvider.notifier).update(
+    await ref
+        .read(providerEntriesProvider.notifier)
+        .update(
           entry.id,
           ProviderEntry(
             id: entry.id,
@@ -414,7 +416,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final configsByGroup = <String, List<ProviderConfigItem>>{
       for (final group in groups)
         group.id: entry.configs.where((config) {
-          final groupId = config.groupId ??
+          final groupId =
+              config.groupId ??
               defaultMcpGroupIdForProvider(config.providerName);
           return groupId == group.id;
         }).toList(),
@@ -462,14 +465,16 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: _McpGroupHeaderCard(
                   group: group,
-                  itemCount: (configsByGroup[group.id]?.length ?? 0) +
+                  itemCount:
+                      (configsByGroup[group.id]?.length ?? 0) +
                       (group.id == builtinSearchMcpGroupId ? 1 : 0),
                   onEnabledChanged: (value) =>
                       _setMcpGroupEnabled(group, value),
                   onAdd: () => _addConfig(groupId: group.id),
                   onEdit: group.isBuiltin ? null : () => _editMcpGroup(group),
-                  onDelete:
-                      group.isBuiltin ? null : () => _deleteMcpGroup(group),
+                  onDelete: group.isBuiltin
+                      ? null
+                      : () => _deleteMcpGroup(group),
                 ),
               ),
             ),
@@ -501,11 +506,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   itemCount: configsByGroup[group.id]!.length,
                   onReorderItem: (oldIndex, newIndex) =>
                       _reorderMcpGroupConfigs(
-                    entry,
-                    group.id,
-                    oldIndex,
-                    newIndex,
-                  ),
+                        entry,
+                        group.id,
+                        oldIndex,
+                        newIndex,
+                      ),
                   proxyDecorator: (child, index, animation) => Material(
                     elevation: 2,
                     borderRadius: BorderRadius.circular(12),
@@ -543,10 +548,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(entry.name),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(entry.name), centerTitle: true),
       body: CustomScrollView(
         slivers: [
           SliverPadding(
@@ -591,8 +593,10 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 32),
                 child: Center(
-                  child: Text('暂无供应商配置，请点击"添加"创建',
-                      style: TextStyle(color: Colors.grey)),
+                  child: Text(
+                    '暂无供应商配置，请点击"添加"创建',
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ),
               ),
             )
@@ -616,8 +620,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   // Determine if this is a built-in (vendor) MCP config
                   final mcpTypeConfig =
                       entry.type == 'mcp' && config.models.isNotEmpty
-                          ? config.models[0].typeConfig
-                          : null;
+                      ? config.models[0].typeConfig
+                      : null;
                   final isVendor = mcpTypeConfig?['isVendor'] as bool? ?? false;
 
                   // For MCP entries, show transport details
@@ -654,8 +658,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   } else {
                     leadIcon = Icons.dns;
                     iconColor = Colors.teal;
-                    subtitle =
-                        config.host.isNotEmpty ? config.host : '(未设置 Host)';
+                    subtitle = config.host.isNotEmpty
+                        ? config.host
+                        : '(未设置 Host)';
                   }
 
                   // Show API key hint if available
@@ -678,8 +683,10 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                     dragHandle: !isVendor
                         ? ReorderableDragStartListener(
                             index: i,
-                            child: const Icon(Icons.drag_handle,
-                                color: Colors.grey),
+                            child: const Icon(
+                              Icons.drag_handle,
+                              color: Colors.grey,
+                            ),
                           )
                         : const SizedBox(width: 32),
                     onSettings: () => _openSettingsPanel(i),
@@ -689,9 +696,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 },
               ),
             ),
-          const SliverPadding(
-            padding: EdgeInsets.all(16),
-          ),
+          const SliverPadding(padding: EdgeInsets.all(16)),
         ],
       ),
     );
@@ -743,8 +748,9 @@ class _McpConfigCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // 统一卡片配色（对齐 LLM 供应商页）：中性背景 + 柔和描边。
-    final Color backgroundColor =
-        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
+    final Color backgroundColor = isDark
+        ? cs.surfaceContainerHigh
+        : cs.surfaceContainerLow;
     final Color borderColor = cs.outlineVariant.withValues(alpha: 0.5);
 
     return Container(
@@ -752,10 +758,7 @@ class _McpConfigCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: borderColor,
-          width: 0.5,
-        ),
+        border: Border.all(color: borderColor, width: 0.5),
       ),
       child: Material(
         type: MaterialType.transparency,
@@ -801,7 +804,9 @@ class _McpConfigCard extends StatelessWidget {
                             const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: cs.primary.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(4),
@@ -867,8 +872,11 @@ class _McpConfigCard extends StatelessWidget {
                 if (onMove != null) ...[
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: Icon(Icons.drive_file_move_outline,
-                        size: 20, color: cs.onSurfaceVariant),
+                    icon: Icon(
+                      Icons.drive_file_move_outline,
+                      size: 20,
+                      color: cs.onSurfaceVariant,
+                    ),
                     onPressed: onMove,
                     tooltip: '移动到组别',
                     padding: EdgeInsets.zero,
@@ -963,10 +971,7 @@ class _McpGroupHeaderCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     '$itemCount 项内容',
-                    style: TextStyle(
-                      color: cs.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
                   ),
                 ],
               ),
@@ -983,15 +988,9 @@ class _McpGroupHeaderCard extends StatelessWidget {
                 },
                 itemBuilder: (context) => [
                   if (onEdit != null)
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: Text('编辑组别'),
-                    ),
+                    const PopupMenuItem(value: 'edit', child: Text('编辑组别')),
                   if (onDelete != null)
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Text('删除组别'),
-                    ),
+                    const PopupMenuItem(value: 'delete', child: Text('删除组别')),
                 ],
               ),
             IconButton(
@@ -999,10 +998,7 @@ class _McpGroupHeaderCard extends StatelessWidget {
               tooltip: '添加内容',
               icon: const Icon(Icons.add_circle_outline),
             ),
-            Switch(
-              value: group.enabled,
-              onChanged: onEnabledChanged,
-            ),
+            Switch(value: group.enabled, onChanged: onEnabledChanged),
           ],
         ),
       ),
@@ -1055,17 +1051,15 @@ class _McpMasterSwitchCard extends StatelessWidget {
   final bool enabled;
   final ValueChanged<bool> onChanged;
 
-  const _McpMasterSwitchCard({
-    required this.enabled,
-    required this.onChanged,
-  });
+  const _McpMasterSwitchCard({required this.enabled, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color backgroundColor =
-        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
+    final Color backgroundColor = isDark
+        ? cs.surfaceContainerHigh
+        : cs.surfaceContainerLow;
 
     return Container(
       decoration: BoxDecoration(
@@ -1095,10 +1089,7 @@ class _McpMasterSwitchCard extends StatelessWidget {
             ),
             subtitle: Text(
               enabled ? '已开启：MCP 服务器工具可用。' : '已关闭：MCP 服务器工具不在助手页面与对话页中显示。',
-              style: TextStyle(
-                fontSize: 12,
-                color: cs.onSurfaceVariant,
-              ),
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
           ),
         ),
