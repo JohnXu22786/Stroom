@@ -206,7 +206,7 @@ class BlockTypeDefinition {
     ],
   );
 
-  /// CatCatch (Web Resource Download): text → video
+  /// CatCatch: text → media (video is the chain-building default).
   static const catcatch = BlockTypeDefinition(
     typeKey: BlockType.catcatch,
     label: '下载网页资源',
@@ -215,6 +215,21 @@ class BlockTypeDefinition {
     icon: Icons.language,
     color: Color(0xFF9C27B0),
     params: [
+      BlockParamDefinition(
+        key: 'automaticResourceSelection',
+        label: '自动选择资源并确认转换',
+        type: BlockParamType.boolean,
+        defaultValue: false,
+        hintText:
+            '关闭时多个资源需手动选择，特殊格式需确认转换；开启时只选择声明的输出类型：视频优先完整文件，其次播放列表；音频只选音频资源。同类按链接排序，分离轨道需手动选择。',
+      ),
+      BlockParamDefinition(
+        key: 'audioOutput',
+        label: '输出音频',
+        type: BlockParamType.boolean,
+        defaultValue: false,
+        hintText: '关闭时下载视频并传递视频附件；开启时只选择音频资源，可连接语音识别或助手对话。实际下载类型不匹配时停止任务流。',
+      ),
       BlockParamDefinition(
         key: 'videoFolder',
         label: '视频保存文件夹',
@@ -271,12 +286,9 @@ class BlockTypeDefinition {
     ],
   );
 
-  /// Chat (Assistant Conversation): any → text
-  ///
-  /// Sends the input text (the previous block's output) to the selected
-  /// assistant and returns the response. Accepts any input type —
-  /// whatever can be typed into the chat page (text, URLs, file
-  /// references) can be the input.
+  /// Chat: text, URL or the chat composer's image/audio/video/file → text.
+  /// Media is attached to the user message through the normal chat pipeline.
+  /// An unspecified `any` value is rejected rather than treated as a path.
   static const chat = BlockTypeDefinition(
     typeKey: BlockType.chat,
     label: '助手对话',
@@ -307,6 +319,20 @@ class BlockTypeDefinition {
     chat,
   ];
 
+  /// Concrete kinds supported by the existing chat attachment pipeline.
+  static const chatInputTypes = {
+    IOType.text,
+    IOType.url,
+    IOType.image,
+    IOType.audio,
+    IOType.video,
+    IOType.file,
+  };
+
+  bool acceptsInput(IOType type) => typeKey == BlockType.chat
+      ? chatInputTypes.contains(type)
+      : type.isCompatibleWith(inputType);
+
   /// Find a block type by its key.
   static BlockTypeDefinition? findBlockType(BlockType typeKey) {
     for (final b in all) {
@@ -318,7 +344,7 @@ class BlockTypeDefinition {
   /// Get block types whose input type is compatible with [outputType].
   /// This is used for showing compatible next blocks in the flow builder.
   static List<BlockTypeDefinition> getCompatibleNextBlocks(IOType outputType) {
-    return all.where((b) => outputType.isCompatibleWith(b.inputType)).toList();
+    return all.where((b) => b.acceptsInput(outputType)).toList();
   }
 
   /// Get block types that can REPLACE a block at a chain position without
@@ -339,7 +365,7 @@ class BlockTypeDefinition {
   }) {
     return all.where((b) {
       if (b.typeKey == exclude) return false;
-      if (!prevOutput.isCompatibleWith(b.inputType)) return false;
+      if (!b.acceptsInput(prevOutput)) return false;
       if (nextInput != null && !b.outputType.isCompatibleWith(nextInput)) {
         return false;
       }

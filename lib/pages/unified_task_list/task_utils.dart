@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -199,7 +200,7 @@ Widget stepIcon(catcatch.StepStatus step) {
 /// completed/failed flow's deletion must not touch other flows.
 @visibleForTesting
 bool shouldCancelActiveRequest(TaskFlowExecution execution) =>
-    execution.status == FlowExecutionStatus.running;
+    !execution.isTerminal;
 
 /// Remove the real tasks behind a flow execution's sub-tasks from their
 /// providers, so they don't resurface as orphaned standalone cards when
@@ -210,6 +211,12 @@ bool shouldCancelActiveRequest(TaskFlowExecution execution) =>
 /// cancelled by conversation id; the in-flight ASR/OCR request of the
 /// currently executing block is cancelled via the execution service.
 void removeFlowSubTaskTasks(WidgetRef ref, TaskFlowExecution execution) {
+  unawaited(ref
+      .read(taskFlowExecutionServiceProvider)
+      .cancelExecution(execution.id)
+      .catchError((Object error) {
+    debugPrint('无法保存任务流取消状态: $error');
+  }));
   removeFlowSubTaskTasksCore(
     execution,
     removeCatCatch: (id) =>

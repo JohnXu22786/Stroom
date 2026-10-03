@@ -49,6 +49,7 @@ class _HangingStreamManager extends ChatStreamManager {
     Map<String, String> reasoningParamValues = const {},
     String? streamingMsgId,
     Assistant? assistant,
+    ProviderEntriesState? entriesStateOverride,
   }) {
     return Completer<StreamResult>().future;
   }

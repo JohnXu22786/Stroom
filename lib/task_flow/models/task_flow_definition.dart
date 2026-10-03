@@ -41,8 +41,23 @@ class TaskFlowBlock {
   }
 
   /// Get the [BlockTypeDefinition] for this block's type.
-  BlockTypeDefinition? getDefinition() =>
-      BlockTypeDefinition.findBlockType(typeKey);
+  BlockTypeDefinition? getDefinition() {
+    final definition = BlockTypeDefinition.findBlockType(typeKey);
+    if (definition == null ||
+        typeKey != BlockType.catcatch ||
+        params['audioOutput'] != true) {
+      return definition;
+    }
+    return BlockTypeDefinition(
+      typeKey: definition.typeKey,
+      label: definition.label,
+      inputType: definition.inputType,
+      outputType: IOType.audio,
+      icon: definition.icon,
+      color: definition.color,
+      params: definition.params,
+    );
+  }
 
   /// Create a copy with overridden params. Other params from the definition
   /// are preserved unless explicitly overridden.

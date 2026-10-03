@@ -497,6 +497,34 @@ void main() {
       expect(conv.messages[1].rawResponse, isNull);
     });
 
+    test('keeps messages when scalar metadata has the wrong type', () {
+      final conv = _convFromMessages([
+        {
+          'id': 'bad-role',
+          'role': 7,
+          'content': 'Role metadata should not hide this message',
+          'attachments': [],
+        },
+        {
+          'id': 'bad-reasoning',
+          'role': 'assistant',
+          'content': 'Reasoning metadata should not hide this message',
+          'reasoningContent': 42,
+          'attachments': [],
+        },
+      ]);
+
+      expect(conv.messages, hasLength(2),
+          reason:
+              'A bad scalar field must not make Conversation.fromMap silently drop the whole message');
+      expect(conv.messages[0].content,
+          'Role metadata should not hide this message');
+      expect(conv.messages[0].role, 'user');
+      expect(conv.messages[1].content,
+          'Reasoning metadata should not hide this message');
+      expect(conv.messages[1].reasoningContent, isNull);
+    });
+
     test('handles messages with ALL having corrupt rawRequest/rawResponse', () {
       final conv = _convFromMessages([
         {

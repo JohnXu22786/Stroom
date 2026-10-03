@@ -8,6 +8,7 @@ import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/background_task_provider.dart';
+import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
@@ -42,6 +43,7 @@ class _FakeChatStreamManager extends ChatStreamManager {
     Map<String, String> reasoningParamValues = const {},
     String? streamingMsgId,
     Assistant? assistant,
+    ProviderEntriesState? entriesStateOverride,
   }) {
     captureHistory = history;
     return onStart();
@@ -365,7 +367,9 @@ void main() {
       expect(container.read(conversationsProvider), isEmpty);
       expect(bgNotifier.state[0].status, TaskStatus.failed);
       expect(execNotifier.state[0].subTasks[0].status, TaskStatus.failed);
-      expect(execNotifier.state[0].status, FlowExecutionStatus.failed);
+      // The executor records the failed step; the flow service finalizes the run.
+      expect(execNotifier.state[0].status, FlowExecutionStatus.running);
+      expect(execNotifier.state[0].subTasks[0].outcome, FlowStepOutcome.failed);
     });
 
     test('times out and cancels the stream instead of hanging forever',
@@ -435,7 +439,9 @@ void main() {
       expect(container.read(conversationsProvider), isEmpty);
       expect(bgNotifier.state[0].status, TaskStatus.failed);
       expect(execNotifier.state[0].subTasks[0].status, TaskStatus.failed);
-      expect(execNotifier.state[0].status, FlowExecutionStatus.failed);
+      // The executor records the failed step; the flow service finalizes the run.
+      expect(execNotifier.state[0].status, FlowExecutionStatus.running);
+      expect(execNotifier.state[0].subTasks[0].outcome, FlowStepOutcome.failed);
       // The failed background task carries the message's raw
       // request/response so the task list shows the same
       // "查看错误详情" dialog as the chat page.
@@ -479,7 +485,9 @@ void main() {
       expect(container.read(conversationsProvider), isEmpty);
       expect(bgNotifier.state[0].status, TaskStatus.failed);
       expect(execNotifier.state[0].subTasks[0].status, TaskStatus.failed);
-      expect(execNotifier.state[0].status, FlowExecutionStatus.failed);
+      // The executor records the failed step; the flow service finalizes the run.
+      expect(execNotifier.state[0].status, FlowExecutionStatus.running);
+      expect(execNotifier.state[0].subTasks[0].outcome, FlowStepOutcome.failed);
     });
 
     test(
@@ -543,7 +551,9 @@ void main() {
       expect(container.read(conversationsProvider), isEmpty);
       expect(bgNotifier.state[0].status, TaskStatus.failed);
       expect(execNotifier.state[0].subTasks[0].status, TaskStatus.failed);
-      expect(execNotifier.state[0].status, FlowExecutionStatus.failed);
+      // The executor records the failed step; the flow service finalizes the run.
+      expect(execNotifier.state[0].status, FlowExecutionStatus.running);
+      expect(execNotifier.state[0].subTasks[0].outcome, FlowStepOutcome.failed);
     });
   });
 }

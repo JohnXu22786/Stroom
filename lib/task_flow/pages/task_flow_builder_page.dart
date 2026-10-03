@@ -1,18 +1,27 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
+import '../../services/attachment_storage.dart';
+import '../../services/chat_protocol.dart' show maxAttachmentBytes;
 import '../../utils/duration_parser.dart';
 import '../../utils/file_manifest.dart';
 import '../../utils/image_manifest.dart';
 import '../../utils/video_manifest.dart';
 import '../../widgets/app_media_picker_dialog.dart';
 import '../models/block_type_definition.dart';
+import '../models/flow_payload.dart'
+    show flowFileMimeType, flowMimeType, maxFlowImageInputBytes;
 import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
+import '../models/task_flow_chain_editor.dart';
 import '../models/task_flow_execution.dart';
 import '../providers/task_flow_provider.dart';
 import '../services/task_flow_execution_service.dart';
@@ -21,6 +30,7 @@ import '../utils/block_param_display.dart';
 import '../widgets/block_chain_editor.dart';
 import '../widgets/block_editor_dialog.dart';
 import '../widgets/flow_block_card.dart';
+import 'task_flow_run_page.dart';
 
 /// Unified page for editing AND launching a task flow.
 ///
@@ -34,6 +44,7 @@ import '../widgets/flow_block_card.dart';
 class TaskFlowBuilderPage extends ConsumerStatefulWidget {
   final String? flowId;
   final bool startInRunMode;
+  final TaskFlowDefinition? initialDraft;
   final TaskFlowValidationException? validationError;
   final FlowRunInput? initialInput;
 
@@ -41,6 +52,7 @@ class TaskFlowBuilderPage extends ConsumerStatefulWidget {
     super.key,
     this.flowId,
     this.startInRunMode = false,
+    this.initialDraft,
     this.validationError,
     this.initialInput,
   });
@@ -81,19 +93,22 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   /// - CatCatch-first: one entry per URL (+ optional duration fields).
   final List<_CatCatchInputEntry> _catcatchInputs = [];
 
-  /// Run-mode media inputs (paths) picked via the in-app multi-select
-  /// picker for OCR (images), ASR (audio) and audioSeparation (video)
-  /// first blocks.
+  /// Run-mode file references: app media paths or persisted document paths
+  /// selected through the system picker for a generic file input.
   final List<String> _mediaInputs = [];
+  final Map<String, String> _inputDisplayNames = {};
+  final Set<String> _unsubmittedFileInputs = {};
 
-  List<TaskFlowBlock> _blocks = [];
+  final _chain = TaskFlowChainEditor();
+  List<TaskFlowBlock> get _blocks => _chain.blocks;
+  IOType get _inputType => _chain.inputType;
   bool _isEditing = false;
   String? _editingFlowId;
-  IOType _inputType = IOType.text;
   bool _isRunMode = false;
   bool _enteredFromRunMode = false;
   bool _isSaving = false;
   bool _isStarting = false;
+  bool _isPickingFiles = false;
   TaskFlowDefinition? _failedSave;
 
   String _initialName = '';
@@ -124,13 +139,17 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           );
       _nameController.text = flow.name;
       _descController.text = flow.description;
-      _inputType = flow.inputType;
-      _blocks = List<TaskFlowBlock>.from(flow.blocks);
+      _chain.reset(blocks: flow.blocks, inputType: flow.inputType);
+    } else if (widget.initialDraft != null) {
+      final draft = widget.initialDraft!;
+      _nameController.text = draft.name;
+      _descController.text = draft.description;
+      _chain.reset(blocks: draft.blocks, inputType: draft.inputType);
     }
 
     final initialInput = widget.initialInput;
     if (initialInput != null) {
-      if ([IOType.audio, IOType.image, IOType.video].contains(_runInputType)) {
+      if (_isFileRunInput) {
         _mediaInputs.add(initialInput.text);
       } else if (_firstBlockDef?.typeKey == BlockType.catcatch) {
         final entry = _CatCatchInputEntry();
@@ -150,11 +169,17 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     _initialName = _nameController.text.trim();
     _initialDesc = _descController.text.trim();
     _initialInputType = _inputType;
-    _initialBlocks = List<TaskFlowBlock>.from(_blocks);
+    _initialBlocks = TaskFlowChainEditor.copyBlocks(_blocks);
   }
 
   @override
   void dispose() {
+    // Copies made by the generic picker are only needed after submission.
+    // Keep them if a launch is still settling: it may already have persisted
+    // records that will read these files on a later retry.
+    if (!_isStarting) {
+      _discardAllUnsubmittedInputs();
+    }
     _nameController.dispose();
     _descController.dispose();
     _inputController.dispose();
@@ -162,6 +187,22 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       entry.dispose();
     }
     super.dispose();
+  }
+
+  Future<void> _discardUnsubmittedInput(String reference) async {
+    try {
+      await AttachmentStorage.deleteFile(reference);
+    } catch (error) {
+      debugPrint('Failed to discard unsubmitted flow input: $error');
+    }
+  }
+
+  void _discardAllUnsubmittedInputs() {
+    final references = List<String>.of(_unsubmittedFileInputs);
+    _unsubmittedFileInputs.clear();
+    for (final reference in references) {
+      unawaited(_discardUnsubmittedInput(reference));
+    }
   }
 
   // =========================================================================
@@ -181,17 +222,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         _blocksDiffer(_blocks, _initialBlocks);
   }
 
-  bool _blocksDiffer(List<TaskFlowBlock> a, List<TaskFlowBlock> b) {
-    if (a.length != b.length) return true;
-    for (int i = 0; i < a.length; i++) {
-      final blockA = a[i];
-      final blockB = b[i];
-      if (blockA.id != blockB.id || blockA.typeKey != blockB.typeKey)
-        return true;
-      if (!mapEquals(blockA.params, blockB.params)) return true;
-    }
-    return false;
-  }
+  bool _blocksDiffer(List<TaskFlowBlock> a, List<TaskFlowBlock> b) =>
+      !TaskFlowChainEditor.sameBlocks(a, b);
 
   Future<bool> _showUnsavedChangesDialog() async {
     final result = await showDialog<bool>(
@@ -249,10 +281,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
   /// Restore the local state from the last saved snapshots.
   void _resetToInitial() {
-    _blocks = List<TaskFlowBlock>.from(_initialBlocks);
+    _chain.reset(blocks: _initialBlocks, inputType: _initialInputType);
     _nameController.text = _initialName;
     _descController.text = _initialDesc;
-    _inputType = _initialInputType;
   }
 
   // =========================================================================
@@ -291,6 +322,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           title: Text(_isEditing ? '编辑任务流' : '新建任务流'),
           centerTitle: true,
           actions: [
+            IconButton(
+              tooltip: '撤销',
+              icon: const Icon(Icons.undo),
+              onPressed: _isSaving || !_chain.canUndo ? null : _undoBlockEdit,
+            ),
             TextButton.icon(
               onPressed: _isSaving ? null : _saveFlow,
               icon: const Icon(Icons.save, size: 18),
@@ -309,12 +345,18 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   child: BlockChainEditor(
                     blocks: _blocks,
                     inputType: _inputType,
+                    selectedBlockId: _chain.selectedBlockId,
                     onInputTypeChanged: (type) =>
-                        setState(() => _inputType = type),
+                        setState(() => _chain.changeInputType(type)),
                     onAddBlock: _addBlock,
                     onEditBlock: _editBlock,
                     onDeleteBlock: _removeBlock,
                     onReplaceBlock: _replaceBlock,
+                    onInsertBlock: _insertBlock,
+                    onDuplicateBlock: (index) =>
+                        setState(() => _chain.duplicate(index)),
+                    onMoveBlock: (index, destination) =>
+                        setState(() => _chain.move(index, destination)),
                   ),
                 ),
               ],
@@ -382,40 +424,35 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     );
   }
 
-  void _addBlock(BlockType typeKey) {
-    setState(() {
-      _blocks = [..._blocks, TaskFlowBlock(typeKey: typeKey)];
-    });
+  void _undoBlockEdit() {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    setState(() => _chain.undo());
+  }
+
+  void _addBlock(BlockType typeKey) => _insertBlock(_blocks.length, typeKey);
+
+  void _insertBlock(int index, BlockType typeKey) {
+    setState(() => _chain.insert(index, typeKey));
   }
 
   void _removeBlock(int index) {
-    if (index < 0 || index >= _blocks.length) return;
-    setState(() {
-      _blocks = [..._blocks]..removeAt(index);
-    });
+    setState(() => _chain.remove(index));
   }
 
-  /// Replace the block at [index] with a new block of [typeKey] (default
-  /// parameters). Position and neighbors are kept — the replace sheet only
-  /// offers chain-compatible types, so the chain stays valid.
   void _replaceBlock(int index, BlockType typeKey) {
-    if (index < 0 || index >= _blocks.length) return;
-    setState(() {
-      final newBlocks = [..._blocks];
-      newBlocks[index] = TaskFlowBlock(typeKey: typeKey);
-      _blocks = newBlocks;
-    });
+    setState(() => _chain.replace(index, typeKey));
   }
 
   Future<void> _editBlock(int index) async {
     if (index < 0 || index >= _blocks.length) return;
-    final updated = await showBlockEditorDialog(context, block: _blocks[index]);
+    final block = _blocks[index];
+    setState(() => _chain.select(block.id));
+    // Settings receive their own nested values so cancellation cannot mutate
+    // the draft, the persisted flow, or an undo snapshot.
+    final updated = await showBlockEditorDialog(context,
+        block: TaskFlowChainEditor.copyBlock(block));
     if (updated != null && mounted) {
-      setState(() {
-        final newBlocks = [..._blocks];
-        newBlocks[index] = updated;
-        _blocks = newBlocks;
-      });
+      setState(() => _chain.updateParams(block.id, updated.params));
     }
   }
 
@@ -426,6 +463,13 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('请输入任务流名称')));
+      return;
+    }
+
+    if (_chain.issues.isNotEmpty) {
+      final issue = _chain.issues.first;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('步骤 ${issue.blockIndex + 1}：${issue.message}')));
       return;
     }
 
@@ -481,15 +525,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     _initialName = flow.name;
     _initialDesc = flow.description;
     _initialInputType = flow.inputType;
-    _initialBlocks = flow.blocks
-        .map(
-          (b) => TaskFlowBlock(
-            id: b.id,
-            typeKey: b.typeKey,
-            params: Map<String, dynamic>.from(b.params),
-          ),
-        )
-        .toList();
+    _initialBlocks = TaskFlowChainEditor.copyBlocks(flow.blocks);
+    _chain.clearHistory();
 
     if (_enteredFromRunMode) {
       // Return to run mode with fresh state snapshots
@@ -618,6 +655,13 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       ? _inputType.userFacing
       : _firstBlockDef?.inputType ?? _inputType.userFacing;
 
+  bool get _isFileRunInput => const {
+        IOType.image,
+        IOType.audio,
+        IOType.video,
+        IOType.file,
+      }.contains(_runInputType);
+
   Widget _buildRunInputSection(ColorScheme cs) {
     final firstDef = _firstBlockDef;
     final label = firstDef?.label ?? _inputType.userFacing.label;
@@ -650,9 +694,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             const SizedBox(height: 12),
             if (firstDef?.typeKey == BlockType.catcatch)
               _buildCatCatchRunInput(cs)
-            else if (_runInputType == IOType.image ||
-                _runInputType == IOType.audio ||
-                _runInputType == IOType.video)
+            else if (_isFileRunInput)
               _buildMediaRunInput(cs)
             else
               TextField(
@@ -957,6 +999,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   Widget _buildMediaRunInput(ColorScheme cs) {
     final isImage = _runInputType == IOType.image;
     final isAudio = _runInputType == IOType.audio;
+    final isFile = _runInputType == IOType.file;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -965,13 +1008,15 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           alignment: Alignment.centerLeft,
           child: OutlinedButton.icon(
             key: const Key('taskflow_pick_media_input'),
-            onPressed: _pickMediaInputs,
+            onPressed: _isStarting || _isPickingFiles ? null : _pickMediaInputs,
             icon: Icon(
               isImage
                   ? Icons.image_outlined
                   : isAudio
                       ? Icons.audiotrack
-                      : Icons.videocam_outlined,
+                      : isFile
+                          ? Icons.insert_drive_file_outlined
+                          : Icons.videocam_outlined,
               size: 16,
             ),
             label: Text(
@@ -979,7 +1024,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   ? '选择图片（可多选）'
                   : isAudio
                       ? '选择音频（可多选）'
-                      : '选择视频（可多选）',
+                      : isFile
+                          ? '选择文件（可多选）'
+                          : '选择视频（可多选）',
             ),
             style: OutlinedButton.styleFrom(
               visualDensity: VisualDensity.compact,
@@ -998,14 +1045,17 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                         ? Icons.image
                         : isAudio
                             ? Icons.audiotrack
-                            : Icons.videocam,
+                            : isFile
+                                ? Icons.insert_drive_file
+                                : Icons.videocam,
                     size: 16,
                     color: cs.onSurfaceVariant,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _fileName(_mediaInputs[i]),
+                      _inputDisplayNames[_mediaInputs[i]] ??
+                          _fileName(_mediaInputs[i]),
                       style: const TextStyle(fontSize: 13),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1019,7 +1069,27 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                     ),
                     visualDensity: VisualDensity.compact,
                     tooltip: '移除',
-                    onPressed: () => setState(() => _mediaInputs.removeAt(i)),
+                    onPressed: _isStarting || _isPickingFiles
+                        ? null
+                        : () async {
+                            if (_isStarting || _isPickingFiles) return;
+                            final reference = _mediaInputs[i];
+                            setState(() {
+                              _inputDisplayNames.remove(reference);
+                              _mediaInputs.removeAt(i);
+                            });
+                            if (_unsubmittedFileInputs.remove(reference)) {
+                              try {
+                                await AttachmentStorage.deleteFile(reference);
+                              } catch (error) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('清理已移除文件失败：$error')),
+                                  );
+                                }
+                              }
+                            }
+                          },
                   ),
                 ],
               ),
@@ -1030,13 +1100,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   }
 
   bool _canStartFlow() {
+    if (_isPickingFiles) return false;
     if (_firstBlockDef?.typeKey == BlockType.catcatch) {
       return _catcatchInputs
           .any((e) => _isValidUrl(e.urlController.text.trim()));
     }
-    if (_runInputType == IOType.image ||
-        _runInputType == IOType.audio ||
-        _runInputType == IOType.video) {
+    if (_isFileRunInput) {
       return _mediaInputs.isNotEmpty;
     }
     return _inputController.text.trim().isNotEmpty;
@@ -1214,51 +1283,167 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
   /// Opens the in-app media picker in MULTI-SELECT mode for the first
   /// block's input type (OCR → images, ASR → audio, audioSeparation →
-  /// video) and appends the resolved storage paths to [_mediaInputs].
+  /// video, or a generic file for the assistant) and appends durable file
+  /// references to [_mediaInputs].
   ///
   /// Path-only mode: no file bytes are buffered — the dialog resolves each
   /// record's storage path via [MediaPickerConfig.onRecordsPicked] before
-  /// closing. Media inputs are backed by app storage; text/url/file inputs
-  /// stay manual (there is no arbitrary file storage).
+  /// closing. Generic files are copied into attachment storage so queued and
+  /// retried executions can still read them after the picker cache expires.
   Future<void> _pickMediaInputs() async {
+    if (_isStarting || _isPickingFiles) return;
+    setState(() => _isPickingFiles = true);
     final ioType = _runInputType;
-    switch (ioType) {
-      case IOType.image:
-        await _pickMediaPaths<ImageRecord>(
-          title: '选择应用内图片（可多选）',
-          emptyIcon: Icons.image_outlined,
-          emptyText: '暂无图片',
-          fileIcon: Icons.image,
-          fileIconColor: Colors.blue,
-          loadRecords: ImageManifest.loadRecords,
-          loadFolders: ImageManifest.getAllFolders,
-          resolvePath: (r) => ImageManifest.readFilePath(r.storagePath),
-        );
-      case IOType.audio:
-        await _pickMediaPaths<AudioRecord>(
-          title: '选择应用内音频（可多选）',
-          emptyIcon: Icons.multitrack_audio_outlined,
-          emptyText: '暂无音频',
-          fileIcon: Icons.audiotrack,
-          fileIconColor: Colors.green,
-          loadRecords: FileManifest.loadRecords,
-          loadFolders: FileManifest.getAllFolders,
-          resolvePath: (r) => FileManifest.readFilePath(r.storagePath),
-        );
-      case IOType.video:
-        await _pickMediaPaths<VideoRecord>(
-          title: '选择应用内视频（可多选）',
-          emptyIcon: Icons.videocam_outlined,
-          emptyText: '暂无视频',
-          fileIcon: Icons.videocam,
-          fileIconColor: Colors.orange,
-          loadRecords: VideoManifest.loadRecords,
-          loadFolders: VideoManifest.getAllFolders,
-          resolvePath: (r) => VideoManifest.readFilePath(r.storagePath),
-        );
-      default:
-        break; // text/url/file/any — manual input only
+    try {
+      switch (ioType) {
+        case IOType.image:
+          await _pickMediaPaths<ImageRecord>(
+            title: '选择应用内图片（可多选）',
+            emptyIcon: Icons.image_outlined,
+            emptyText: '暂无图片',
+            fileIcon: Icons.image,
+            fileIconColor: Colors.blue,
+            loadRecords: ImageManifest.loadRecords,
+            loadFolders: ImageManifest.getAllFolders,
+            resolvePath: (r) => ImageManifest.readFilePath(r.storagePath),
+          );
+        case IOType.audio:
+          await _pickMediaPaths<AudioRecord>(
+            title: '选择应用内音频（可多选）',
+            emptyIcon: Icons.multitrack_audio_outlined,
+            emptyText: '暂无音频',
+            fileIcon: Icons.audiotrack,
+            fileIconColor: Colors.green,
+            loadRecords: FileManifest.loadRecords,
+            loadFolders: FileManifest.getAllFolders,
+            resolvePath: (r) => FileManifest.readFilePath(r.storagePath),
+          );
+        case IOType.video:
+          await _pickMediaPaths<VideoRecord>(
+            title: '选择应用内视频（可多选）',
+            emptyIcon: Icons.videocam_outlined,
+            emptyText: '暂无视频',
+            fileIcon: Icons.videocam,
+            fileIconColor: Colors.orange,
+            loadRecords: VideoManifest.loadRecords,
+            loadFolders: VideoManifest.getAllFolders,
+            resolvePath: (r) => VideoManifest.readFilePath(r.storagePath),
+          );
+        case IOType.file:
+          await _pickGenericFileInputs();
+        default:
+          break; // text/url/any use the text input
+      }
+    } finally {
+      if (mounted) setState(() => _isPickingFiles = false);
     }
+  }
+
+  Future<void> _pickGenericFileInputs() async {
+    final savedPaths = <String>[];
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.any,
+        allowMultiple: true,
+        withData: false,
+        withReadStream: true,
+      );
+      if (result == null) return;
+      final selected = <String, String>{};
+      for (final file in result.files) {
+        final bytes = await _readGenericFile(file);
+        final storagePath = await AttachmentStorage.saveFile(file.name, bytes);
+        savedPaths.add(storagePath);
+        // The web reference is an IndexedDB key. Native validation and
+        // execution use File(reference), so they need the absolute path.
+        final reference = kIsWeb
+            ? storagePath
+            : p.join(await AttachmentStorage.getStorageDirPath(),
+                p.basename(storagePath));
+        selected[reference] = file.name;
+      }
+      if (!mounted || _isStarting) {
+        for (final path in savedPaths) {
+          await AttachmentStorage.deleteFile(path);
+        }
+        return;
+      }
+      setState(() {
+        _mediaInputs.addAll(selected.keys
+            .where((reference) => !_mediaInputs.contains(reference)));
+        _inputDisplayNames.addAll(selected);
+        _unsubmittedFileInputs.addAll(selected.keys);
+      });
+    } catch (error) {
+      for (final path in savedPaths) {
+        try {
+          await AttachmentStorage.deleteFile(path);
+        } catch (_) {}
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('选择文件失败：$error')),
+        );
+      }
+    }
+  }
+
+  Future<Uint8List> _readGenericFile(PlatformFile file) async {
+    // Images can be compressed by the chat pipeline; other documents use its
+    // ordinary attachment limit. Check both before accumulating file bytes.
+    Never tooLarge(int limit) => throw FormatException(
+        '「${file.name}」超过 ${limit ~/ (1024 * 1024)} MB，请选择较小文件');
+    bool isImage(List<int> header) =>
+        flowMimeType(flowFileMimeType(file.name, headerBytes: header)) ==
+        IOType.image;
+    int limitFor(List<int> header) =>
+        isImage(header) ? maxFlowImageInputBytes : maxAttachmentBytes;
+
+    Uint8List bytes;
+    if (!kIsWeb && file.path != null) {
+      final handle = await File(file.path!).open();
+      try {
+        final length = await handle.length();
+        final header = await handle.read(32);
+        if (header.isEmpty) throw StateError('「${file.name}」为空或无法读取');
+        final limit = limitFor(header);
+        if (file.size > limit || length > limit) {
+          tooLarge(limit);
+        }
+        await handle.setPosition(0);
+        // A file can grow after length(); the bounded read catches that race.
+        bytes = await handle.read(limit + 1);
+      } finally {
+        await handle.close();
+      }
+    } else if (file.readStream != null) {
+      final builder = BytesBuilder(copy: false);
+      final header = <int>[];
+      await for (final chunk in file.readStream!) {
+        if (header.length < 32) {
+          header.addAll(chunk.take(32 - header.length));
+        }
+        final limit = limitFor(header);
+        if ((header.length == 32 && file.size > limit) ||
+            builder.length + chunk.length > limit) {
+          tooLarge(limit);
+        }
+        builder.add(chunk);
+      }
+      bytes = builder.takeBytes();
+    } else if (file.bytes != null) {
+      // Some picker implementations supply bytes without a stream.
+      bytes = file.bytes!;
+    } else {
+      throw StateError('「${file.name}」为空或无法读取');
+    }
+
+    if (bytes.isEmpty) throw StateError('「${file.name}」为空或无法读取');
+    final limit = limitFor(bytes.take(32).toList());
+    if (file.size > limit || bytes.length > limit) {
+      tooLarge(limit);
+    }
+    return bytes;
   }
 
   Future<void> _pickMediaPaths<T>({
@@ -1309,7 +1494,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       ),
     );
 
-    if (result == null || paths.isEmpty || !mounted) return;
+    if (result == null || paths.isEmpty || !mounted || _isStarting) return;
     // On web readFilePath returns a WebFileStore key, not a filesystem
     // path — skip the existence check there (dart:io File throws).
     final valid = paths.where((p) {
@@ -1346,9 +1531,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             ),
       ];
     }
-    if (_runInputType == IOType.image ||
-        _runInputType == IOType.audio ||
-        _runInputType == IOType.video) {
+    if (_isFileRunInput) {
       return [
         for (final path in _mediaInputs) FlowRunInput(text: path),
       ];
@@ -1369,30 +1552,48 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   }
 
   Future<void> _startFlow() async {
-    if (_isStarting) return;
+    if (_isStarting || _isPickingFiles) return;
     final inputs = _collectRunInputs();
     setState(() => _isStarting = true);
+    late final List<String> executionIds;
     try {
-      await ref
+      executionIds = await ref
           .read(taskFlowExecutionServiceProvider)
           .launchFlowMany(_editingFlowId!, inputs);
+      // The saved executions now own these references for queueing and retry.
+      _unsubmittedFileInputs.clear();
     } on TaskFlowValidationException catch (error) {
-      if (mounted) await _showValidationError(error);
+      if (mounted) {
+        await _showValidationError(error);
+      }
+      return;
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
       return;
     } finally {
-      if (mounted) setState(() => _isStarting = false);
+      if (mounted) {
+        setState(() => _isStarting = false);
+      } else {
+        // A failed launch may settle after the page has already been closed.
+        // Successful launches cleared this set before reaching this point.
+        _discardAllUnsubmittedInputs();
+      }
     }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            inputs.length == 1 ? '任务流已启动' : '已启动 ${inputs.length} 个任务流',
+            inputs.length == 1 ? '任务流已加入队列' : '已将 ${inputs.length} 个任务流加入队列',
           ),
           duration: const Duration(seconds: 2),
         ),
       );
-      Navigator.of(context).pop();
+      Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => TaskFlowRunPage(executionIds: executionIds)));
     }
   }
 }

@@ -13,6 +13,7 @@ import 'data_integrity_checker.dart';
 import 'data_safety_manager.dart';
 import 'manifest_database.dart';
 import 'provider_model_migration.dart';
+import 'flow_execution_migration.dart';
 import 'snapshot_service.dart';
 
 part 'data_migration_old_configs.dart';
@@ -124,6 +125,7 @@ abstract final class DataParts {
   ///   全部改为每种类型独立的文件夹表（旧全局 v1→v2 迁移）
   /// - settings v2: 供应商配置和模型的持久身份。
   /// - tasks v1: 旧任务流模型下标改为需要重新确认的引用。
+  /// - tasks v2: 运行结果和未执行步骤状态。
   /// - anki/browserCookies: 无迁移历史，当前版本 0（机制就位，
   ///   未来各自格式变更时从 1 开始递增）
   static const Map<String, int> currentVersions = {
@@ -133,7 +135,7 @@ abstract final class DataParts {
     audio: 1,
     videos: 1,
     texts: 1,
-    tasks: 1,
+    tasks: 2,
     anki: 0,
     browserCookies: 0,
   };
@@ -455,6 +457,7 @@ class DataMigrationService {
         break;
       case DataParts.tasks:
         if (version == 0) await ProviderModelMigration.migrateFlows();
+        if (version == 1) await FlowExecutionMigration.migrate();
         break;
       case DataParts.chat:
         if (version == 0) {

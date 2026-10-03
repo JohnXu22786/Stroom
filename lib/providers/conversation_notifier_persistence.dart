@@ -284,6 +284,14 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     await _persistCore();
   }
 
+  /// Flow-owned attachment cleanup needs confirmation that the conversation
+  /// removal reached storage before it can safely delete its files.
+  Future<bool> _persistNowChecked() async {
+    _persistTimer?.cancel();
+    _persistTimer = null;
+    return _persistCoreResult();
+  }
+
   /// Persist the current state to SharedPreferences with fallback.
   ///
   /// Tries these strategies in order, stopping at the first success:
@@ -306,21 +314,35 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   /// We therefore do NOT bail out on `!mounted` at the top; the snapshot
   /// pattern is what protects us.
   Future<void> _persistCore() async {
+    await _persistCoreResult();
+  }
+
+  Future<bool> _persistCoreResult() async {
     final List<Conversation> snapshot;
     try {
       snapshot = List<Conversation>.from(state);
     } catch (_) {
       // Notifier was already disposed before we could snapshot. Nothing we
       // can do — the previous good save is still on disk.
-      return;
+      return false;
     }
-    if (!_loadHasRun) return;
+    if (!_loadHasRun) return false;
+    final write = _persistQueue.then((_) => _persistSnapshot(snapshot));
+    // Keep the queue usable after an unexpected write error. Callers still
+    // await their own write and receive its error.
+    _persistQueue = write.then((_) {}, onError: (Object error, StackTrace st) {
+      debugPrint('Failed to queue conversation persistence: $error');
+    });
+    return write;
+  }
+
+  Future<bool> _persistSnapshot(List<Conversation> snapshot) async {
     SharedPreferences? prefs;
     try {
       prefs = await SharedPreferences.getInstance();
     } catch (e) {
       debugPrint('Failed to get SharedPreferences: $e');
-      return;
+      return false;
     }
 
     // Tier 1: full save
@@ -330,12 +352,14 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         ..._unparsedConversationRecords,
       ];
       final json = jsonEncode(records);
-      await prefs.setString('conversations', json);
+      if (!await prefs.setString('conversations', json)) {
+        throw StateError('conversation save returned false');
+      }
       await AppLogService.debug(
         'ConversationsNotifier',
         '对话已持久化, 共 ${snapshot.length} 个',
       );
-      return;
+      return true;
     } catch (e) {
       debugPrint('Failed to persist conversations (full): $e');
       await AppLogService.error('ConversationsNotifier', '持久化对话失败 (完整)', e);
@@ -402,16 +426,20 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         ..._unparsedConversationRecords,
       ];
       final json = jsonEncode(records);
-      await prefs.setString('conversations', json);
+      if (!await prefs.setString('conversations', json)) {
+        throw StateError('stripped conversation save returned false');
+      }
       await AppLogService.warning(
         'ConversationsNotifier',
         '持久化对话成功 (剥离 rawRequest/rawResponse 后)',
       );
+      return true;
     } catch (e) {
       debugPrint('Failed to persist conversations (stripped): $e');
       await AppLogService.error('ConversationsNotifier', '持久化对话失败 (剥离后)', e);
       // Both tiers failed. The previous good save on disk is preserved
       // (we never overwrote it). Log loudly so the user can find the cause.
     }
+    return false;
   }
 }

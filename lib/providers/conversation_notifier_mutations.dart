@@ -96,6 +96,44 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     await _persistActiveId();
   }
 
+  /// Replaces a flow-owned conversation from a prior attempt. Unlike the
+  /// ordinary history delete, this also removes copied attachments and writes
+  /// the removal immediately before a new conversation with the same ID starts.
+  Future<bool> deleteFlowConversationWithFiles(String id) async {
+    final old = state.where((c) => c.id == id).toList();
+    if (old.isEmpty) return true;
+    state = state.where((c) => c.id != id).toList();
+    _syncTemporaryTimer();
+    bool saved;
+    try {
+      saved = await _persistNowChecked();
+    } catch (error) {
+      debugPrint('Failed to remove flow conversation: $error');
+      saved = false;
+    }
+    if (!saved) {
+      // SharedPreferences updates its in-memory cache before calling the
+      // platform store, which can still reject the write. Restore the visible
+      // conversation and keep its attachment copies when disk removal fails.
+      if (mounted) {
+        state = pinnedFirstStable([
+          ...old,
+          ...state.where((conversation) => conversation.id != id),
+        ]);
+        _syncTemporaryTimer();
+      }
+      return false;
+    }
+    if (mounted && _ref.read(activeConversationIdProvider) == id) {
+      _ref.read(activeConversationIdProvider.notifier).state = null;
+      await _persistActiveId();
+    }
+    for (final conversation in old) {
+      await _cleanupConversationFiles(conversation);
+    }
+    return true;
+  }
+
   /// Selects a conversation by [id], setting it as the active one.
   void selectConversation(String id) {
     _ref.read(activeConversationIdProvider.notifier).state = id;

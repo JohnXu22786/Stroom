@@ -77,8 +77,7 @@ void main() {
             home: Scaffold(
                 body: TaskFlowCard(execution: executions.state.single)))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Flow'));
-    await tester.pumpAndSettle();
+    expect(find.text('Previous failure'), findsOneWidget);
     await tester.tap(find.text('重试'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '重试'));

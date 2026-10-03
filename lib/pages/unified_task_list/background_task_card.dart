@@ -20,11 +20,13 @@ import '../../widgets/running_elapsed_label.dart';
 class BackgroundTaskCard extends ConsumerStatefulWidget {
   final BackgroundTask task;
   final bool isUnread;
+  final bool isFlowManaged;
 
   const BackgroundTaskCard({
     super.key,
     required this.task,
     this.isUnread = false,
+    this.isFlowManaged = false,
   });
 
   @override
@@ -425,7 +427,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       BackgroundTask task, ColorScheme cs, WidgetRef ref) {
     // Chat tasks have no standalone page (they run inside a flow) — the
     // 立即开始/重试 buttons would be dead taps, so hide them.
-    final hasRetryPage = task.type != BackgroundTaskType.chat;
+    final hasRetryPage =
+        !widget.isFlowManaged && task.type != BackgroundTaskType.chat;
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
@@ -455,19 +458,20 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             onPressed: () => _navigateToTaskPage(context, task),
           ),
         // Delete button
-        TextButton.icon(
-          onPressed: () {
-            ref.read(backgroundTasksProvider.notifier).removeTask(task.id);
-          },
-          icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-          label: const Text('删除',
-              style: TextStyle(fontSize: 13, color: Colors.red)),
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            minimumSize: const Size(48, 48),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        if (!widget.isFlowManaged)
+          TextButton.icon(
+            onPressed: () {
+              ref.read(backgroundTasksProvider.notifier).removeTask(task.id);
+            },
+            icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+            label: const Text('删除',
+                style: TextStyle(fontSize: 13, color: Colors.red)),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(48, 48),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
           ),
-        ),
       ],
     );
   }

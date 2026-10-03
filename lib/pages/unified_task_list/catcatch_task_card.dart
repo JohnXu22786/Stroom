@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../catcatch/models/media_resource.dart';
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
+import '../../task_flow/services/task_flow_execution_service.dart';
 import '../../utils/audio_utils.dart';
 import '../catcatch_page.dart';
 import 'task_utils.dart';
@@ -18,11 +19,13 @@ import '../../widgets/running_elapsed_label.dart';
 class CatCatchTaskCard extends ConsumerStatefulWidget {
   final catcatch.CatCatchTask task;
   final bool isUnread;
+  final bool isFlowManaged;
 
   const CatCatchTaskCard({
     super.key,
     required this.task,
     this.isUnread = false,
+    this.isFlowManaged = false,
   });
 
   @override
@@ -34,6 +37,34 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   final Set<int> _expandedSteps = {};
   final Map<String, Set<String>> _selectedMediaUrls = {};
   final Map<String, String?> _mergeAudioUrls = {};
+  final Set<String> _pendingFlowActions = {};
+
+  bool _isFlowActionPending(String taskId) =>
+      widget.isFlowManaged && _pendingFlowActions.contains(taskId);
+
+  Future<void> _performFlowAction(String taskId, bool selecting,
+      void Function(CatCatchNotifier) action) async {
+    if (!_pendingFlowActions.add(taskId)) return;
+    setState(() {});
+    try {
+      final started = await ref
+          .read(taskFlowExecutionServiceProvider)
+          .performManualCatCatchAction(taskId, selecting, action);
+      if (!started && mounted) {
+        _showFlowActionError('任务流操作未执行，请检查流程状态后重试');
+      }
+    } catch (error) {
+      if (mounted) _showFlowActionError('任务流操作失败：$error');
+    } finally {
+      _pendingFlowActions.remove(taskId);
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _showFlowActionError(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
 
   Set<String> _getSelectedUrls(String taskId) =>
       _selectedMediaUrls.putIfAbsent(taskId, () => {});
@@ -42,13 +73,16 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       _getSelectedUrls(taskId).contains(url);
 
   void _toggleSelection(String taskId, String url) {
+    if (_isFlowActionPending(taskId)) return;
     setState(() {
       final urls = _getSelectedUrls(taskId);
       if (urls.contains(url)) {
         urls.remove(url);
       } else {
+        if (widget.isFlowManaged) urls.clear();
         urls.add(url);
       }
+      if (widget.isFlowManaged) _mergeAudioUrls[taskId] = null;
     });
   }
 
@@ -405,27 +439,28 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 4),
-                          TextButton.icon(
-                            onPressed: () {
-                              ref
-                                  .read(catcatchTasksProvider.notifier)
-                                  .retryStep(task.id, step.type);
-                            },
-                            icon: const Icon(Icons.refresh, size: 16),
-                            label: const Text(
-                              '重试此步骤',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
+                          if (!widget.isFlowManaged)
+                            TextButton.icon(
+                              onPressed: () {
+                                ref
+                                    .read(catcatchTasksProvider.notifier)
+                                    .retryStep(task.id, step.type);
+                              },
+                              icon: const Icon(Icons.refresh, size: 16),
+                              label: const Text(
+                                '重试此步骤',
+                                style: TextStyle(fontSize: 12),
                               ),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              foregroundColor: Colors.red.shade400,
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                foregroundColor: Colors.red.shade400,
+                              ),
                             ),
-                          ),
                         ],
                       ],
                     ),
@@ -463,7 +498,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           Text(
             selectedUrls.isNotEmpty
                 ? '已选 ${selectedUrls.length}/${mediaList.length} 个资源'
-                : '检测到 ${mediaList.length} 个媒体资源（点击选择，可多选）',
+                : '检测到 ${mediaList.length} 个媒体资源'
+                    '${widget.isFlowManaged ? '（选择一个资源或合并一组音视频）' : '（点击选择，可多选）'}',
             style: Theme.of(
               context,
             ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
@@ -479,25 +515,42 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: selectedUrls.isNotEmpty
-                  ? () {
+              onPressed: selectedUrls.isNotEmpty &&
+                      !_isFlowActionPending(task.id) &&
+                      (!widget.isFlowManaged ||
+                          task.status == catcatch.TaskStatus.running)
+                  ? () async {
                       final selectedMediaList = mediaList
                           .where((m) => selectedUrls.contains(m.url))
                           .toList();
+                      if (selectedMediaList.isEmpty) return;
                       final notifier = ref.read(catcatchTasksProvider.notifier);
                       final mergeAudio = _mergeAudioUrls[task.id];
-                      notifier.batchSelectMedia(
-                        task.id,
-                        selectedMediaList,
-                        mergeAudioUrl: mergeAudio,
-                      );
+                      if (widget.isFlowManaged) {
+                        await _performFlowAction(
+                            task.id,
+                            true,
+                            (notifier) => notifier.selectMedia(
+                                task.id, selectedMediaList.first,
+                                mergeAudioUrl: mergeAudio));
+                      } else {
+                        notifier.batchSelectMedia(
+                          task.id,
+                          selectedMediaList,
+                          mergeAudioUrl: mergeAudio,
+                        );
+                      }
                     }
                   : null,
-              icon: const Icon(Icons.download),
+              icon: Icon(_isFlowActionPending(task.id)
+                  ? Icons.hourglass_top
+                  : Icons.download),
               label: Text(
-                selectedUrls.isNotEmpty
-                    ? '下载选中的 ${selectedUrls.length} 个资源'
-                    : '请选择要下载的资源',
+                _isFlowActionPending(task.id)
+                    ? '正在等待任务流资源'
+                    : selectedUrls.isNotEmpty
+                        ? '下载选中的 ${selectedUrls.length} 个资源'
+                        : '请选择要下载的资源',
               ),
               style: FilledButton.styleFrom(
                 shape: RoundedRectangleBorder(
@@ -605,15 +658,20 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
             runSpacing: 8,
             children: [
               FilledButton.tonalIcon(
-                onPressed: () {
-                  final primaryVideo = videoResources.first;
-                  setState(() {
-                    final urls = _getSelectedUrls(task.id);
-                    urls.add(primaryVideo.url);
-                    urls.add(audioResources.first.url);
-                    _mergeAudioUrls[task.id] = audioResources.first.url;
-                  });
-                },
+                onPressed: _isFlowActionPending(task.id)
+                    ? null
+                    : () {
+                        final primaryVideo = videoResources.first;
+                        setState(() {
+                          final urls = _getSelectedUrls(task.id);
+                          if (widget.isFlowManaged) urls.clear();
+                          urls.add(primaryVideo.url);
+                          if (!widget.isFlowManaged) {
+                            urls.add(audioResources.first.url);
+                          }
+                          _mergeAudioUrls[task.id] = audioResources.first.url;
+                        });
+                      },
                 icon: const Icon(Icons.merge, size: 18),
                 label: const Text('合并音视频', style: TextStyle(fontSize: 12)),
                 style: FilledButton.styleFrom(
@@ -626,15 +684,23 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 ),
               ),
               OutlinedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    final urls = _getSelectedUrls(task.id);
-                    for (final v in videoResources) {
-                      urls.add(v.url);
-                    }
-                    _mergeAudioUrls[task.id] = null;
-                  });
-                },
+                onPressed: _isFlowActionPending(task.id)
+                    ? null
+                    : () {
+                        setState(() {
+                          final urls = _getSelectedUrls(task.id);
+                          if (widget.isFlowManaged) {
+                            urls
+                              ..clear()
+                              ..add(videoResources.first.url);
+                          } else {
+                            for (final v in videoResources) {
+                              urls.add(v.url);
+                            }
+                          }
+                          _mergeAudioUrls[task.id] = null;
+                        });
+                      },
                 icon: const Icon(Icons.videocam, size: 18),
                 label: const Text('仅视频', style: TextStyle(fontSize: 12)),
                 style: OutlinedButton.styleFrom(
@@ -647,15 +713,23 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 ),
               ),
               OutlinedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    final urls = _getSelectedUrls(task.id);
-                    for (final a in audioResources) {
-                      urls.add(a.url);
-                    }
-                    _mergeAudioUrls[task.id] = null;
-                  });
-                },
+                onPressed: _isFlowActionPending(task.id)
+                    ? null
+                    : () {
+                        setState(() {
+                          final urls = _getSelectedUrls(task.id);
+                          if (widget.isFlowManaged) {
+                            urls
+                              ..clear()
+                              ..add(audioResources.first.url);
+                          } else {
+                            for (final a in audioResources) {
+                              urls.add(a.url);
+                            }
+                          }
+                          _mergeAudioUrls[task.id] = null;
+                        });
+                      },
                 icon: const Icon(Icons.audiotrack, size: 18),
                 label: const Text('仅音频', style: TextStyle(fontSize: 12)),
                 style: OutlinedButton.styleFrom(
@@ -698,7 +772,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: () => _toggleSelection(task.id, media.url),
+        onTap: _isFlowActionPending(task.id)
+            ? null
+            : () => _toggleSelection(task.id, media.url),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Row(
@@ -877,7 +953,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: () => _toggleSelection(task.id, media.url),
+        onTap: _isFlowActionPending(task.id)
+            ? null
+            : () => _toggleSelection(task.id, media.url),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
@@ -977,6 +1055,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   ) {
     final format = task.metadata['pendingConfirmFormat'] ?? '未知格式';
     final isPlaylist = task.selectedMedia?.isPlaylist ?? false;
+    final pending = _isFlowActionPending(task.id);
+    final flowPaused =
+        widget.isFlowManaged && task.status != catcatch.TaskStatus.running;
+    final allowWork = !flowPaused && !pending;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -1021,15 +1103,27 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
               ),
             ),
             const SizedBox(height: 12),
+            if (flowPaused) const Text('请先继续流程，再确认格式处理'),
+            if (pending) const Text('正在等待任务流资源'),
             Row(
               children: [
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: () {
-                      ref
-                          .read(catcatchTasksProvider.notifier)
-                          .confirmAndContinue(task.id);
-                    },
+                    onPressed: allowWork
+                        ? () async {
+                            if (widget.isFlowManaged) {
+                              await _performFlowAction(
+                                  task.id,
+                                  false,
+                                  (notifier) =>
+                                      notifier.confirmAndContinue(task.id));
+                            } else {
+                              ref
+                                  .read(catcatchTasksProvider.notifier)
+                                  .confirmAndContinue(task.id);
+                            }
+                          }
+                        : null,
                     icon: const Icon(Icons.auto_fix_high, size: 18),
                     label: const Text('自动处理', style: TextStyle(fontSize: 13)),
                   ),
@@ -1037,11 +1131,21 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () {
-                      ref
-                          .read(catcatchTasksProvider.notifier)
-                          .skipConversion(task.id);
-                    },
+                    onPressed: allowWork
+                        ? () async {
+                            if (widget.isFlowManaged) {
+                              await _performFlowAction(
+                                  task.id,
+                                  false,
+                                  (notifier) =>
+                                      notifier.skipConversion(task.id));
+                            } else {
+                              ref
+                                  .read(catcatchTasksProvider.notifier)
+                                  .skipConversion(task.id);
+                            }
+                          }
+                        : null,
                     icon: const Icon(Icons.save_alt, size: 18),
                     label: const Text('保留原始格式', style: TextStyle(fontSize: 13)),
                   ),
@@ -1096,7 +1200,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              if (task.status == catcatch.TaskStatus.running) ...[
+              if (!widget.isFlowManaged &&
+                  task.status == catcatch.TaskStatus.running) ...[
                 _actionButton(
                   icon: Icons.pause,
                   label: '暂停下载',
@@ -1114,7 +1219,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                       .removeTask(task.id),
                 ),
               ],
-              if (task.status == catcatch.TaskStatus.paused) ...[
+              if (!widget.isFlowManaged &&
+                  task.status == catcatch.TaskStatus.paused) ...[
                 _actionButton(
                   icon: Icons.play_arrow,
                   label: resumeSupported ? '继续下载' : '重新下载',
@@ -1141,16 +1247,18 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     onPressed: () =>
                         openFile(task.downloadedFilePath!, context),
                   ),
-                _actionButton(
-                  icon: Icons.delete_outline,
-                  label: '删除',
-                  color: Colors.red,
-                  onPressed: () => ref
-                      .read(catcatchTasksProvider.notifier)
-                      .removeTask(task.id),
-                ),
+                if (!widget.isFlowManaged)
+                  _actionButton(
+                    icon: Icons.delete_outline,
+                    label: '删除',
+                    color: Colors.red,
+                    onPressed: () => ref
+                        .read(catcatchTasksProvider.notifier)
+                        .removeTask(task.id),
+                  ),
               ],
-              if (task.status == catcatch.TaskStatus.failed) ...[
+              if (!widget.isFlowManaged &&
+                  task.status == catcatch.TaskStatus.failed) ...[
                 _actionButton(
                   icon: Icons.refresh,
                   label: '重试',
