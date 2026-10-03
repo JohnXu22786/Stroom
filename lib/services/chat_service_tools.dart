@@ -11,6 +11,10 @@ extension _ChatServiceToolsExt on ChatService {
   /// - 调用名已在某服务器的工具缓存中（模型从上一条错误信息得知的真实
   ///   工具名）：确保连接后直接调用。
   Future<String> _executeTool(String name, Map<String, dynamic> args) async {
+    if (ChatService._disabledToolNames.contains(name)) {
+      return 'Error: Tool "$name" is disabled.';
+    }
+
     // First check locally registered tools
     final entry = ChatService._toolRegistries[name];
     if (entry != null) {
