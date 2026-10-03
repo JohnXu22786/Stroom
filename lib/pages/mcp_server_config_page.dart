@@ -9,11 +9,13 @@ import 'mcp_server_config_shared.dart';
 class McpServerConfigPage extends ConsumerStatefulWidget {
   final String entryId;
   final int configIndex; // -1 for new config
+  final String? groupId;
 
   const McpServerConfigPage({
     super.key,
     required this.entryId,
     required this.configIndex,
+    this.groupId,
   });
 
   @override
@@ -342,6 +344,11 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
     var configs = entry.configs.map((c) => c.copy()).toList();
     final newConfig = ProviderConfigItem(
       providerName: name,
+      groupId: _isExistingConfig &&
+              widget.configIndex >= 0 &&
+              widget.configIndex < configs.length
+          ? configs[widget.configIndex].groupId
+          : widget.groupId,
       host: _transportType == McpTransportType.sse
           ? _urlController.text.trim()
           : '',

@@ -401,6 +401,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
 
     return ProviderConfigItem(
       providerName: name,
+      groupId: defaultMcpGroupIdForProvider(name),
       host: url ?? '',
       key: '',
       models: [
@@ -457,6 +458,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
           if (idx >= 0) {
             // Preserve user's API key if they had one
             final updatedConfig = builtinConfig.copy();
+            updatedConfig.groupId = existing.groupId ?? updatedConfig.groupId;
             final oldApiKey = _extractApiKeyFromConfig(existing);
             if (oldApiKey.isNotEmpty) {
               updatedConfig.models[0].typeConfig['apiKey'] = oldApiKey;
@@ -566,6 +568,10 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       final prefs = await SharedPreferences.getInstance();
       final json = jsonEncode(state.entries.map((e) => e.toMap()).toList());
       await prefs.setString('provider_entries', json);
+      await prefs.setString(
+        'mcp_provider_groups',
+        jsonEncode(state.mcpGroups.map((group) => group.toMap()).toList()),
+      );
     } catch (e) {
       debugPrint('Failed to persist provider entries: $e');
     }

@@ -107,10 +107,11 @@ class ChatAdapter {
   /// 上一份已处理的 MCP 供应商条目实例。
   ///
   /// 用于跳过重复初始化：页面重复进入、或其它供应商（TTS/OCR 等）配置
-  /// 变更时，entries state 会重建但 MCP 条目实例不变（ProviderEntriesNotifier
-  /// 的 update 只替换被更新的条目），此时占位符与客户端都无需重建。
-  /// MCP 条目本身被编辑时实例变化，触发重建。
+  /// 变更时，MCP 条目与组别可用状态都不变，跳过占位符/客户端重建。
+  /// MCP 条目或组别列表变化时触发重建。
   ProviderEntry? _lastMcpEntry;
+  List<McpProviderGroup>? _lastMcpGroups;
+  Set<String> _disabledMcpToolNames = {};
 
   /// 当前选中的配置索引（指向 llmEntry.configs）
   int currentConfigIndex = -1;
@@ -672,7 +673,9 @@ class ChatAdapter {
     // Built-in tools are registered statically via ChatService.registerTool()
     // MCP tools are discovered dynamically
     return [
-      ...ChatService.getRegisteredToolDefinitions(),
+      ...ChatService.getRegisteredToolDefinitions().where(
+        (tool) => !_disabledMcpToolNames.contains(tool.name),
+      ),
       ..._mcpToolDefinitions,
     ];
   }
