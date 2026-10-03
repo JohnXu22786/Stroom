@@ -74,7 +74,8 @@ void main() {
     }
   });
 
-  test('escaped consecutive underscores retain imported parameter identity', () {
+  test('escaped consecutive underscores retain imported parameter identity',
+      () {
     for (final name in ['foo__bar', 'foo___', 'foo__bar_']) {
       final escaped = name.replaceAll('_', r'\_');
       final formula = MathExpression.fromInput('\\mathrm{$escaped}\\cdot x',

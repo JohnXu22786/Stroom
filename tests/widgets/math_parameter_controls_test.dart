@@ -64,12 +64,12 @@ void main() {
   testWidgets(
       'parameter accessibility announces exact typed values between ticks',
       (tester) async => withSemantics(tester, () async {
-    await tester.pumpWidget(controls(
-      {'A': MathParameter(value: 0.42, min: -1, max: 1, step: 0.3)},
-      (_, __) {},
-    ));
-    expect(sliderSemantics().getSemanticsData().value, 'A = 0.42');
-  }));
+            await tester.pumpWidget(controls(
+              {'A': MathParameter(value: 0.42, min: -1, max: 1, step: 0.3)},
+              (_, __) {},
+            ));
+            expect(sliderSemantics().getSemanticsData().value, 'A = 0.42');
+          }));
 
   testWidgets('parameter keyboard steps advance and stop at the final tick',
       (tester) async {
@@ -88,7 +88,8 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
     expect(changes, hasLength(count));
-    expect(tester.widget<Slider>(find.byType(Slider)).value, closeTo(0.9, 1e-12));
+    expect(
+        tester.widget<Slider>(find.byType(Slider)).value, closeTo(0.9, 1e-12));
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pumpAndSettle();
     expect(changes.last, closeTo(0.6, 1e-12));
@@ -97,50 +98,53 @@ void main() {
     expect(changes.last, closeTo(0.3, 1e-12));
   });
 
-  testWidgets('parameter screen reader steps announce and use the grid',
+  testWidgets(
+      'parameter screen reader steps announce and use the grid',
       (tester) async => withSemantics(tester, () async {
-    final changes = <double>[];
-    await tester.pumpWidget(liveControls(
-      MathParameter(value: -0.7, min: -0.7, max: 1.2, step: 0.25),
-      changes,
-    ));
-    for (final expected in [-0.45, -0.2, 0.05, 0.3, 0.55, 0.8, 1.05]) {
-      final node = sliderSemantics();
-      final announcedNext = node.getSemanticsData().increasedValue;
-      expect(announcedNext, startsWith('A = '));
-      expect(double.parse(announcedNext.replaceFirst('A = ', '')),
-          closeTo(expected, 1e-12));
-      node.owner!.performAction(node.id, SemanticsAction.increase);
-      await tester.pumpAndSettle();
-      expect(changes.last, closeTo(expected, 1e-12));
-      expect(sliderSemantics().getSemanticsData().value, announcedNext);
-    }
-    final last = sliderSemantics();
-    expect(last.getSemanticsData().hasAction(SemanticsAction.increase), isFalse);
-    expect(last.getSemanticsData().decreasedValue, 'A = 0.8');
-    last.owner!.performAction(last.id, SemanticsAction.decrease);
-    await tester.pumpAndSettle();
-    expect(changes.last, closeTo(0.8, 1e-12));
-  }));
+            final changes = <double>[];
+            await tester.pumpWidget(liveControls(
+              MathParameter(value: -0.7, min: -0.7, max: 1.2, step: 0.25),
+              changes,
+            ));
+            for (final expected in [-0.45, -0.2, 0.05, 0.3, 0.55, 0.8, 1.05]) {
+              final node = sliderSemantics();
+              final announcedNext = node.getSemanticsData().increasedValue;
+              expect(announcedNext, startsWith('A = '));
+              expect(double.parse(announcedNext.replaceFirst('A = ', '')),
+                  closeTo(expected, 1e-12));
+              node.owner!.performAction(node.id, SemanticsAction.increase);
+              await tester.pumpAndSettle();
+              expect(changes.last, closeTo(expected, 1e-12));
+              expect(sliderSemantics().getSemanticsData().value, announcedNext);
+            }
+            final last = sliderSemantics();
+            expect(last.getSemanticsData().hasAction(SemanticsAction.increase),
+                isFalse);
+            expect(last.getSemanticsData().decreasedValue, 'A = 0.8');
+            last.owner!.performAction(last.id, SemanticsAction.decrease);
+            await tester.pumpAndSettle();
+            expect(changes.last, closeTo(0.8, 1e-12));
+          }));
 
-  testWidgets('parameter keyboard preserves typed values until adjustment',
+  testWidgets(
+      'parameter keyboard preserves typed values until adjustment',
       (tester) async => withSemantics(tester, () async {
-    final changes = <double>[];
-    await tester.pumpWidget(liveControls(
-      MathParameter(value: 0.42, min: 0, max: 1, step: 0.3),
-      changes,
-    ));
-    await focusSlider(tester);
-    expect(changes, isEmpty);
-    expect(tester.widget<Slider>(find.byType(Slider)).value, 0.42);
-    expect(sliderSemantics().getSemanticsData().value, 'A = 0.42');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pumpAndSettle();
-    expect(changes.last, closeTo(0.6, 1e-12));
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.pumpAndSettle();
-    expect(changes.last, closeTo(0.3, 1e-12));
-  }));
+            final changes = <double>[];
+            await tester.pumpWidget(liveControls(
+              MathParameter(value: 0.42, min: 0, max: 1, step: 0.3),
+              changes,
+            ));
+            await focusSlider(tester);
+            expect(changes, isEmpty);
+            expect(tester.widget<Slider>(find.byType(Slider)).value, 0.42);
+            expect(sliderSemantics().getSemanticsData().value, 'A = 0.42');
+            await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+            await tester.pumpAndSettle();
+            expect(changes.last, closeTo(0.6, 1e-12));
+            await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+            await tester.pumpAndSettle();
+            expect(changes.last, closeTo(0.3, 1e-12));
+          }));
 
   testWidgets('parameter large grid keyboard visits every representable tick',
       (tester) async {
@@ -170,48 +174,55 @@ void main() {
   testWidgets(
       'parameter large grid screen reader visits every representable tick',
       (tester) async => withSemantics(tester, () async {
-    const min = 10000000000000000.0;
-    final changes = <double>[];
-    await tester.pumpWidget(liveControls(
-      MathParameter(value: min, min: min, max: min + 10, step: 3),
-      changes,
-    ));
-    for (final offset in [4, 6, 8]) {
-      final node = sliderSemantics();
-      node.owner!.performAction(node.id, SemanticsAction.increase);
-      await tester.pumpAndSettle();
-      expect(changes.last - min, offset);
-    }
-    expect(sliderSemantics().getSemanticsData().hasAction(SemanticsAction.increase),
-        isFalse);
-    for (final offset in [6, 4, 0]) {
-      final node = sliderSemantics();
-      node.owner!.performAction(node.id, SemanticsAction.decrease);
-      await tester.pumpAndSettle();
-      expect(changes.last - min, offset);
-    }
-    expect(sliderSemantics().getSemanticsData().hasAction(SemanticsAction.decrease),
-        isFalse);
-  }));
+            const min = 10000000000000000.0;
+            final changes = <double>[];
+            await tester.pumpWidget(liveControls(
+              MathParameter(value: min, min: min, max: min + 10, step: 3),
+              changes,
+            ));
+            for (final offset in [4, 6, 8]) {
+              final node = sliderSemantics();
+              node.owner!.performAction(node.id, SemanticsAction.increase);
+              await tester.pumpAndSettle();
+              expect(changes.last - min, offset);
+            }
+            expect(
+                sliderSemantics()
+                    .getSemanticsData()
+                    .hasAction(SemanticsAction.increase),
+                isFalse);
+            for (final offset in [6, 4, 0]) {
+              final node = sliderSemantics();
+              node.owner!.performAction(node.id, SemanticsAction.decrease);
+              await tester.pumpAndSettle();
+              expect(changes.last - min, offset);
+            }
+            expect(
+                sliderSemantics()
+                    .getSemanticsData()
+                    .hasAction(SemanticsAction.decrease),
+                isFalse);
+          }));
 
-  testWidgets('parameter large grid announcements distinguish actual tick values',
+  testWidgets(
+      'parameter large grid announcements distinguish actual tick values',
       (tester) async => withSemantics(tester, () async {
-    const min = 10000000000000000.0;
-    final changes = <double>[];
-    await tester.pumpWidget(liveControls(
-      MathParameter(value: min, min: min, max: min + 10, step: 3),
-      changes,
-    ));
-    for (final offset in [4, 6, 8]) {
-      final node = sliderSemantics();
-      expect(node.getSemanticsData().increasedValue,
-          'A = ${(min + offset).toStringAsFixed(0)}');
-      node.owner!.performAction(node.id, SemanticsAction.increase);
-      await tester.pumpAndSettle();
-      expect(sliderSemantics().getSemanticsData().value,
-          'A = ${(min + offset).toStringAsFixed(0)}');
-    }
-  }));
+            const min = 10000000000000000.0;
+            final changes = <double>[];
+            await tester.pumpWidget(liveControls(
+              MathParameter(value: min, min: min, max: min + 10, step: 3),
+              changes,
+            ));
+            for (final offset in [4, 6, 8]) {
+              final node = sliderSemantics();
+              expect(node.getSemanticsData().increasedValue,
+                  'A = ${(min + offset).toStringAsFixed(0)}');
+              node.owner!.performAction(node.id, SemanticsAction.increase);
+              await tester.pumpAndSettle();
+              expect(sliderSemantics().getSemanticsData().value,
+                  'A = ${(min + offset).toStringAsFixed(0)}');
+            }
+          }));
 
   testWidgets('parameter duplicate ticks do not stall keyboard decrease',
       (tester) async {
@@ -236,40 +247,53 @@ void main() {
     expect(changes.last - min, 2);
   });
 
-  testWidgets('parameter duplicate ticks retain semantic decrease action',
+  testWidgets(
+      'parameter duplicate ticks retain semantic decrease action',
       (tester) async => withSemantics(tester, () async {
-    const min = 10000000000000000.0;
-    final changes = <double>[];
-    await tester.pumpWidget(liveControls(
-      MathParameter(value: min + 4, min: min, max: min + 10, step: 1.1),
-      changes,
-    ));
-    for (final offset in [2, 0]) {
-      final node = sliderSemantics();
-      expect(node.getSemanticsData().hasAction(SemanticsAction.decrease), isTrue);
-      expect(node.getSemanticsData().decreasedValue,
-          'A = ${(min + offset).toStringAsFixed(0)}');
-      node.owner!.performAction(node.id, SemanticsAction.decrease);
-      await tester.pumpAndSettle();
-      expect(changes.last - min, offset);
-    }
-    expect(sliderSemantics().getSemanticsData().hasAction(SemanticsAction.decrease),
-        isFalse);
-  }));
+            const min = 10000000000000000.0;
+            final changes = <double>[];
+            await tester.pumpWidget(liveControls(
+              MathParameter(value: min + 4, min: min, max: min + 10, step: 1.1),
+              changes,
+            ));
+            for (final offset in [2, 0]) {
+              final node = sliderSemantics();
+              expect(
+                  node.getSemanticsData().hasAction(SemanticsAction.decrease),
+                  isTrue);
+              expect(node.getSemanticsData().decreasedValue,
+                  'A = ${(min + offset).toStringAsFixed(0)}');
+              node.owner!.performAction(node.id, SemanticsAction.decrease);
+              await tester.pumpAndSettle();
+              expect(changes.last - min, offset);
+            }
+            expect(
+                sliderSemantics()
+                    .getSemanticsData()
+                    .hasAction(SemanticsAction.decrease),
+                isFalse);
+          }));
 
-  testWidgets('parameter fractional and typed announcements preserve actual values',
+  testWidgets(
+      'parameter fractional and typed announcements preserve actual values',
       (tester) async => withSemantics(tester, () async {
-    for (final parameter in [
-      MathParameter(value: 1e13 + 0.0625, min: 1e13, max: 1e13 + 1, step: 0.0625),
-      MathParameter(value: -1e13 - 0.0625, min: -1e13 - 1, max: -1e13, step: 0.0625),
-      MathParameter(value: 1.2345678901234567),
-      MathParameter(value: -1.2345678901234567),
-    ]) {
-      await tester.pumpWidget(controls({'A': parameter}, (_, __) {}));
-      final announced = sliderSemantics().getSemanticsData().value;
-      expect(double.parse(announced.replaceFirst('A = ', '')), parameter.value);
-    }
-  }));
+            for (final parameter in [
+              MathParameter(
+                  value: 1e13 + 0.0625, min: 1e13, max: 1e13 + 1, step: 0.0625),
+              MathParameter(
+                  value: -1e13 - 0.0625,
+                  min: -1e13 - 1,
+                  max: -1e13,
+                  step: 0.0625),
+              MathParameter(value: 1.2345678901234567),
+              MathParameter(value: -1.2345678901234567),
+            ]) {
+              await tester.pumpWidget(controls({'A': parameter}, (_, __) {}));
+              final announced = sliderSemantics().getSemanticsData().value;
+              expect(double.parse(announced.replaceFirst('A = ', '')),
+                  parameter.value);
+            }
+          }));
 
   testWidgets('parameter slider gestures quantize on the original step grid',
       (tester) async {

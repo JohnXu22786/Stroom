@@ -142,7 +142,8 @@ void main() {
     expect(aligned.adjacentValue(false), closeTo(0.2, 1e-12));
   });
 
-  test('parameter duplicate ticks advance in both directions within bounds', () {
+  test('parameter duplicate ticks advance in both directions within bounds',
+      () {
     for (final min in [1e16, -1e16]) {
       var parameter = MathParameter(
         value: min + 4,
@@ -165,10 +166,14 @@ void main() {
     }
   });
 
-  test('parameter large grid formatting preserves distinct accepted values', () {
+  test('parameter large grid formatting preserves distinct accepted values',
+      () {
     const min = 10000000000000000.0;
     expect(
-      [for (final offset in [0, 4, 6, 8]) formatMathParameterNumber(min + offset)],
+      [
+        for (final offset in [0, 4, 6, 8])
+          formatMathParameterNumber(min + offset)
+      ],
       [
         '10000000000000000',
         '10000000000000004',

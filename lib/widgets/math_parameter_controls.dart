@@ -145,12 +145,10 @@ class _ParameterSliderState extends State<_ParameterSlider> {
       value: _announce(parameter.value),
       increasedValue: increased > parameter.value ? _announce(increased) : null,
       decreasedValue: decreased < parameter.value ? _announce(decreased) : null,
-      onIncrease: increased > parameter.value
-          ? () => _changeValue(increased)
-          : null,
-      onDecrease: decreased < parameter.value
-          ? () => _changeValue(decreased)
-          : null,
+      onIncrease:
+          increased > parameter.value ? () => _changeValue(increased) : null,
+      onDecrease:
+          decreased < parameter.value ? () => _changeValue(decreased) : null,
       onFocus: _focusNode.requestFocus,
       child: Slider(
         focusNode: _focusNode,
