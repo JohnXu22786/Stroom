@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/widgets/temporary_countdown_capsule.dart';
 
 /// Pumps a ChatPage with a single seeded conversation, mirroring
 /// createChatTestApp (tests/pages/chat_page/chat_page_test.dart) but with a resolvable
@@ -43,7 +44,7 @@ void main() {
     // 关闭态：空心气泡图标、无打勾、无倒计时胶囊。
     expect(find.byIcon(Icons.chat_bubble_outline), findsOneWidget);
     expect(find.byIcon(Icons.mark_chat_read_outlined), findsNothing);
-    expect(find.text('24:00'), findsNothing);
+    expect(find.byType(TemporaryCountdownCapsule), findsNothing);
 
     // 点击按钮开启。
     await tester.tap(find.byIcon(Icons.chat_bubble_outline));
@@ -53,7 +54,8 @@ void main() {
     // 开启态：气泡 + 打勾图标、标题前出现倒计时胶囊。
     expect(find.byIcon(Icons.mark_chat_read_outlined), findsOneWidget);
     expect(find.byIcon(Icons.chat_bubble_outline), findsNothing);
-    expect(find.text('24:00'), findsOneWidget);
+    expect(find.byType(TemporaryCountdownCapsule), findsOneWidget);
+    expect(find.text('60:00'), findsOneWidget);
 
     // 再点一次关闭。
     await tester.tap(find.byIcon(Icons.mark_chat_read_outlined));
@@ -62,7 +64,7 @@ void main() {
 
     expect(find.byIcon(Icons.chat_bubble_outline), findsOneWidget);
     expect(find.byIcon(Icons.mark_chat_read_outlined), findsNothing);
-    expect(find.text('24:00'), findsNothing);
+    expect(find.byType(TemporaryCountdownCapsule), findsNothing);
 
     // 卸载页面释放 notifier 的周期性临时对话计时器。
     await tester.pumpWidget(const SizedBox());
@@ -83,6 +85,6 @@ void main() {
     );
     expect(button.onPressed, isNull);
     expect(find.byIcon(Icons.mark_chat_read_outlined), findsNothing);
-    expect(find.text('24:00'), findsNothing);
+    expect(find.byType(TemporaryCountdownCapsule), findsNothing);
   });
 }

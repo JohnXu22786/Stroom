@@ -8,6 +8,7 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/topic_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
+import 'package:stroom/widgets/temporary_countdown_capsule.dart';
 
 /// Creates a test app simulating the topic selection page.
 Widget createTestApp({
@@ -104,6 +105,40 @@ Widget createMergedTopicTestApp({
 }
 
 void main() {
+  testWidgets('temporary conversation shows countdown before its title',
+      (tester) async {
+    final temporaryTopic = Conversation(
+      id: 'temp-topic',
+      title: '临时标题',
+      assistantId: 'test-asst',
+      isTemporary: true,
+      temporaryExpiresAt: DateTime.now().add(kTemporaryConversationDuration),
+    );
+
+    await tester.pumpWidget(createTestApp(
+      assistants: [
+        Assistant(
+          id: 'test-asst',
+          name: '助手',
+          prompt: 'P',
+          emoji: '🤖',
+          description: '助手',
+        ),
+      ],
+      selectedAssistantId: 'test-asst',
+      conversations: [temporaryTopic],
+    ));
+    await tester.pump();
+
+    final countdown = find.byType(TemporaryCountdownCapsule);
+    expect(countdown, findsOneWidget);
+    expect(find.text('60:00'), findsOneWidget);
+    expect(
+      tester.getTopLeft(countdown).dx,
+      lessThan(tester.getTopLeft(find.text('临时标题')).dx),
+    );
+  });
+
   group('TopicSelectionPage - Long-press drag sort', () {
     testWidgets(
         'items are NOT wrapped in ReorderableDelayedDragStartListener when in selection mode',

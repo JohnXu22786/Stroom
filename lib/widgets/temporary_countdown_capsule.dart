@@ -4,7 +4,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/conversation_provider.dart'
     show temporaryCountdownTickProvider;
 
-/// 临时对话的黄色倒计时胶囊：显示剩余时间的 HH:MM（如 24:00、12:31）。
+String formatTemporaryCountdown(Duration remaining) {
+  final totalSeconds = remaining <= Duration.zero
+      ? 0
+      : (remaining.inMicroseconds / const Duration(seconds: 1).inMicroseconds)
+          .ceil();
+  final minutes = totalSeconds ~/ 60;
+  final seconds = totalSeconds % 60;
+  final minuteText = minutes.toString().padLeft(2, '0');
+  final secondText = seconds.toString().padLeft(2, '0');
+  return '$minuteText:$secondText';
+}
+
+/// 临时对话的黄色倒计时胶囊：显示剩余时间的 MM:SS（如 60:00、12:31）。
 ///
 /// 只有本胶囊监听 [temporaryCountdownTickProvider]（每秒递增），因此
 /// 倒计时刷新不会整秒重建对话列表/聊天页。颜色用低透明度的琥珀色，
@@ -20,15 +32,10 @@ class TemporaryCountdownCapsule extends ConsumerWidget {
     ref.watch(temporaryCountdownTickProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // 向上取整到分钟：刚开启时显示完整的 24:00 而不是 23:59，
-    // 归零（<60s）时显示 00:00，随后由过期清理删除。
-    final remainingSeconds = expiresAt.difference(DateTime.now()).inSeconds;
-    final totalMinutes =
-        remainingSeconds <= 0 ? 0 : (remainingSeconds / 60).ceil();
-    final hh = totalMinutes ~/ 60;
-    final mm = totalMinutes % 60;
-    final text =
-        '${hh.toString().padLeft(2, '0')}:${mm.toString().padLeft(2, '0')}';
+    // 向上取整到秒：刚开启时显示完整的 60:00，归零后显示 00:00，
+    // 随后由过期清理删除。
+    final remaining = expiresAt.difference(DateTime.now());
+    final text = formatTemporaryCountdown(remaining);
 
     return Container(
       margin: const EdgeInsets.only(right: 6),

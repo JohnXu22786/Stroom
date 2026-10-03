@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -15,9 +16,10 @@ import 'assistant_provider.dart';
 part 'conversation_notifier_persistence.dart';
 part 'conversation_notifier_mutations.dart';
 
-/// 临时对话的倒计时长度：最近一次消息（或开启时）起 24 小时，
+/// 临时对话的倒计时长度：最近一次消息（或开启时）起 1 小时，
 /// 到期后对话自动删除。
-const Duration kTemporaryConversationDuration = Duration(hours: 24);
+const Duration kTemporaryConversationDuration = Duration(hours: 1);
+const int kTemporaryConversationDurationVersion = 1;
 
 // ============================================================================
 // Helper: auto-fix conversations with null assistantId
@@ -32,7 +34,10 @@ const Duration kTemporaryConversationDuration = Duration(hours: 24);
 ///
 /// Returns true if any conversations were modified.
 Future<bool> assignNullAssistantConversations(
-    SharedPreferences prefs, List<Conversation> conversations) async {
+  SharedPreferences prefs,
+  List<Conversation> conversations, {
+  List<dynamic> preservedRecords = const [],
+}) async {
   try {
     // Check if any conversation has null assistantId
     final hasNull = conversations.any((c) => c.assistantId == null);
@@ -53,10 +58,14 @@ Future<bool> assignNullAssistantConversations(
 
     // Persist the fix
     if (changed) {
-      await prefs.setString('conversations',
-          jsonEncode(conversations.map((e) => e.toMap()).toList()));
+      final records = <dynamic>[
+        ...conversations.map((conversation) => conversation.toMap()),
+        ...preservedRecords,
+      ];
+      await prefs.setString('conversations', jsonEncode(records));
       debugPrint(
-          'Auto-assigned null-assistantId conversations to default assistant ($defaultId)');
+        'Auto-assigned null-assistantId conversations to default assistant ($defaultId)',
+      );
     }
 
     return changed;
@@ -91,7 +100,8 @@ Future<String?> _resolveDefaultAssistantId(SharedPreferences prefs) async {
   );
   await prefs.setString('assistants', jsonEncode([defaultAssistant.toMap()]));
   debugPrint(
-      'Created default assistant during migration (${defaultAssistant.id})');
+    'Created default assistant during migration (${defaultAssistant.id})',
+  );
   return defaultAssistant.id;
 }
 
@@ -178,13 +188,23 @@ class Conversation {
   /// 累计花费（美元）。每次请求完成后按模型价格累加。
   double totalCost = 0;
 
-  /// 是否为临时对话：开启后显示 24 小时倒计时，到期自动删除；
+  /// 是否为临时对话：开启后显示 1 小时倒计时，到期自动删除；
   /// 每次产生对话都会重置倒计时（见 [temporaryExpiresAt]）。
   bool isTemporary = false;
 
-  /// 临时对话的过期时间点（开启或最近一次产生对话时 +24 小时）。
+  /// 临时对话的过期时间点（开启或最近一次产生对话时 +1 小时）。
   /// [isTemporary] 为 true 时非空；关闭临时模式后置空。
   DateTime? temporaryExpiresAt;
+
+  /// Stored expiry-duration version; older records omit this field.
+  int temporaryExpiryVersion = kTemporaryConversationDurationVersion;
+
+  /// Restarts the one-hour window from [startedAt] for a temporary conversation.
+  void resetTemporaryExpiry(DateTime startedAt) {
+    if (!isTemporary) return;
+    temporaryExpiresAt = startedAt.add(kTemporaryConversationDuration);
+    temporaryExpiryVersion = kTemporaryConversationDurationVersion;
+  }
 
   Conversation({
     String? id,
@@ -210,6 +230,7 @@ class Conversation {
     this.totalCost = 0,
     this.isTemporary = false,
     this.temporaryExpiresAt,
+    this.temporaryExpiryVersion = kTemporaryConversationDurationVersion,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
@@ -257,6 +278,7 @@ class Conversation {
         if (isTemporary) 'isTemporary': true,
         if (temporaryExpiresAt != null)
           'temporaryExpiresAt': temporaryExpiresAt!.toIso8601String(),
+        if (isTemporary) 'temporaryExpiryVersion': temporaryExpiryVersion,
       };
 
   factory Conversation.fromMap(Map<String, dynamic> map) {
@@ -386,6 +408,9 @@ class Conversation {
     }
     final isTemporary = (isTemporaryRaw is bool && isTemporaryRaw) &&
         temporaryExpiresAt != null;
+    final temporaryExpiryVersionRaw = map['temporaryExpiryVersion'];
+    final temporaryExpiryVersion =
+        temporaryExpiryVersionRaw is int ? temporaryExpiryVersionRaw : 0;
 
     return Conversation(
       id: idRaw is String ? idRaw : null,
@@ -413,6 +438,7 @@ class Conversation {
           (map['totalCost'] is num) ? (map['totalCost'] as num).toDouble() : 0,
       isTemporary: isTemporary,
       temporaryExpiresAt: temporaryExpiresAt,
+      temporaryExpiryVersion: temporaryExpiryVersion,
     );
   }
 
@@ -470,6 +496,7 @@ final conversationsProvider =
 
 class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   final Ref _ref;
+  List<dynamic> _unparsedConversationRecords = [];
 
   ConversationsNotifier(this._ref) : super([]);
 
@@ -518,7 +545,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     }
   }
 
-  /// Deletes every temporary conversation whose 24h countdown has elapsed.
+  /// Deletes every temporary conversation whose 1h countdown has elapsed.
   /// Exposed for tests; the 1s timer calls it periodically at runtime.
   @visibleForTesting
   Future<void> checkTemporaryExpiryNow() => _checkTemporaryExpiry();
@@ -526,10 +553,12 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   Future<void> _checkTemporaryExpiry() async {
     final now = DateTime.now();
     final expired = state
-        .where((c) =>
-            c.isTemporary &&
-            c.temporaryExpiresAt != null &&
-            !c.temporaryExpiresAt!.isAfter(now))
+        .where(
+          (c) =>
+              c.isTemporary &&
+              c.temporaryExpiresAt != null &&
+              !c.temporaryExpiresAt!.isAfter(now),
+        )
         .toList();
     if (expired.isEmpty) {
       _syncTemporaryTimer();
@@ -589,7 +618,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
 ///
 /// Returns the migrated conversation list, or `null` if already done.
 Future<List<Conversation>?> migrateConversationsFromPrefs(
-    SharedPreferences prefs) async {
+  SharedPreferences prefs,
+) async {
   try {
     if (prefs.getBool('migrated_old_conversations') == true) return null;
 
@@ -601,7 +631,9 @@ Future<List<Conversation>?> migrateConversationsFromPrefs(
         emoji: '🤖',
       );
       await prefs.setString(
-          'assistants', jsonEncode([defaultAssistant.toMap()]));
+        'assistants',
+        jsonEncode([defaultAssistant.toMap()]),
+      );
     }
 
     final refreshedJson = prefs.getString('assistants');

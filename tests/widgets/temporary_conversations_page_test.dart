@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/conversations_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
+import 'package:stroom/widgets/temporary_countdown_capsule.dart';
 
 Conversation _conv(String id, {bool isTemporary = false}) {
   return Conversation(
@@ -42,8 +43,8 @@ void main() {
     ]));
     await tester.pump();
 
-    // 倒计时胶囊（HH:MM）出现在临时对话条目前。
-    expect(find.text('24:00'), findsOneWidget);
+    // 倒计时胶囊（MM:SS）出现在临时对话条目前。
+    expect(find.text('60:00'), findsOneWidget);
     // 临时对话左侧图标变为"气泡 + 打勾"（非 drag handle）。
     expect(find.byIcon(Icons.mark_chat_read_outlined), findsOneWidget);
     // 普通对话仍保留拖拽把手。
@@ -73,11 +74,19 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     // 胶囊与气泡+打勾图标出现。
-    expect(find.text('24:00'), findsOneWidget);
+    expect(find.text('60:00'), findsOneWidget);
     expect(find.byIcon(Icons.mark_chat_read_outlined), findsOneWidget);
     expect(find.byIcon(Icons.drag_handle), findsOneWidget);
 
     // 卸载页面以释放 notifier 的周期性临时对话计时器。
     await tester.pumpWidget(const SizedBox());
+  });
+
+  test('countdown formatting displays rounded minutes and seconds', () {
+    expect(formatTemporaryCountdown(const Duration(hours: 1)), '60:00');
+    expect(formatTemporaryCountdown(const Duration(seconds: 59)), '00:59');
+    expect(formatTemporaryCountdown(const Duration(seconds: 58)), '00:58');
+    expect(formatTemporaryCountdown(const Duration(microseconds: 1)), '00:01');
+    expect(formatTemporaryCountdown(const Duration(microseconds: -1)), '00:00');
   });
 }
