@@ -131,25 +131,30 @@ extension ChatAdapterMcpExt on ChatAdapter {
     // 同步发布占位工具定义（不做任何网络等待）：每个配置的 MCP 服务器
     // 都先以一个占位工具出现在工具列表中。占位工具不是真实工具——模型
     // 调用占位符时 _executeTool 会按需连接该服务器、列出真实工具并把
-    // 可用工具名告知模型。同名服务器只保留第一份占位符，避免重复工具名
-    // 被 API 拒绝。
-    final seenNames = <String>{};
+    // 可用工具名告知模型。同名服务器优先使用成功注册的客户端配置；若所有
+    // 同名配置都无效，则保留第一份配置的占位符。存在客户端时，描述与其一致。
+    final placeholderEntriesByName = <String, _McpConfigEntry>{};
+    for (final entry in mcpConfigs) {
+      final selectedSource = selectedConfigSourcesByName[entry.config.name];
+      if (selectedSource != null &&
+          !identical(selectedSource, entry.sourceConfig)) {
+        continue;
+      }
+      placeholderEntriesByName.putIfAbsent(entry.config.name, () => entry);
+    }
     _mcpToolDefinitions = [
-      for (final entry in mcpConfigs)
-        if (seenNames.add(
-          McpServerConfig.placeholderToolName(entry.config.name),
-        ))
-          ToolDefinition(
-            name: McpServerConfig.placeholderToolName(entry.config.name),
-            description: entry.description.isNotEmpty
-                ? entry.description
-                : 'MCP 服务器工具：${entry.config.name}',
-            parameters: const {
-              'type': 'object',
-              'properties': {},
-              'required': <String>[],
-            },
-          ),
+      for (final entry in placeholderEntriesByName.values)
+        ToolDefinition(
+          name: McpServerConfig.placeholderToolName(entry.config.name),
+          description: entry.description.isNotEmpty
+              ? entry.description
+              : 'MCP 服务器工具：${entry.config.name}',
+          parameters: const {
+            'type': 'object',
+            'properties': {},
+            'required': <String>[],
+          },
+        ),
     ];
   }
 
