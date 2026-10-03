@@ -29,7 +29,7 @@ class WebSearchService {
       headers: {
         'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-            '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept':
             'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
@@ -44,8 +44,7 @@ class WebSearchService {
   static final List<ToolDefinition> toolDefinitions = [
     ToolDefinition(
       name: 'web_search',
-      description:
-          '通过网络搜索获取实时信息。支持 Google、Bing、百度三个搜索引擎，'
+      description: '通过网络搜索获取实时信息。支持 Google、Bing、百度三个搜索引擎，'
           '通过 source 参数选择首选引擎（默认 google）；'
           '首选引擎不可用或未返回可解析结果时会自动尝试其他引擎。'
           '无需 API Key，免费使用。'
@@ -56,8 +55,7 @@ class WebSearchService {
           'query': {'type': 'string', 'description': '搜索关键词'},
           'source': {
             'type': 'string',
-            'description':
-                '首选搜索引擎：google（谷歌）、bing（必应）、baidu（百度）；'
+            'description': '首选搜索引擎：google（谷歌）、bing（必应）、baidu（百度）；'
                 '不可用时会自动切换',
             'enum': ['google', 'bing', 'baidu'],
           },
@@ -161,9 +159,8 @@ class WebSearchService {
 
         final formattedResults = formatResults(results, sourceToTry);
         if (sourceToTry != effectiveSource) {
-          final preferredReason = noResultSources.contains(effectiveSource)
-              ? '未找到相关结果'
-              : '暂不可用';
+          final preferredReason =
+              noResultSources.contains(effectiveSource) ? '未找到相关结果' : '暂不可用';
           return '首选引擎 ${_sourceName(effectiveSource)} $preferredReason，已切换到 ${_sourceName(sourceToTry)}。\n\n'
               '$formattedResults';
         }
@@ -195,11 +192,11 @@ class WebSearchService {
   }
 
   static String _sourceName(String source) => switch (source) {
-    'google' => 'Google',
-    'bing' => 'Bing',
-    'baidu' => '百度',
-    _ => source,
-  };
+        'google' => 'Google',
+        'bing' => 'Bing',
+        'baidu' => '百度',
+        _ => source,
+      };
 
   static bool _hasExplicitNoResults(String html, String source) {
     final text = _stripHtmlTags(html).toLowerCase();
@@ -466,9 +463,8 @@ class WebSearchService {
     if (afterTextIdx < html.length) {
       final afterText = html.substring(afterTextIdx);
       // 在接下来 500 个字符内找非空文本
-      final nearText = afterText.length > 500
-          ? afterText.substring(0, 500)
-          : afterText;
+      final nearText =
+          afterText.length > 500 ? afterText.substring(0, 500) : afterText;
       final spanRegex = RegExp(
         r'<span[^>]*>(.*?)</span>',
         dotAll: true,
