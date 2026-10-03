@@ -126,6 +126,9 @@ extension ChatAdapterMcpExt on ChatAdapter {
         _mcpClientManager.removeClient(name);
       }
     }
+    // Group toggles can append a newly enabled earlier config after retained
+    // clients. Preserve instances while restoring configured dispatch order.
+    _mcpClientManager.reorderClients(selectedConfigSourcesByName.keys);
     _lastMcpConfigSourcesByName = selectedConfigSourcesByName;
 
     // 同步发布占位工具定义（不做任何网络等待）：每个配置的 MCP 服务器
