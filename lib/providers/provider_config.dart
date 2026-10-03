@@ -47,7 +47,88 @@ String defaultMcpGroupIdForConfig(ProviderConfigItem config) {
   );
 }
 
-String? mcpProviderConfigToolName(ProviderConfigItem config) {
+/// Assigns stable placeholder names across all MCP configs, including disabled
+/// groups, so toggling a group never changes another server's tool name.
+Map<String, String> mcpPlaceholderToolNamesByConfigId(
+  Iterable<ProviderConfigItem> configs,
+) {
+  final serverNamesByConfigId = <String, String>{};
+  final configIdsByBaseName = <String, List<String>>{};
+  for (final config in configs) {
+    final typeConfig =
+        config.models.isNotEmpty ? config.models[0].typeConfig : null;
+    if (typeConfig?['isHttpTool'] == true) continue;
+    final serverConfig = McpServerConfig.fromProviderConfig(
+      providerName: config.providerName,
+      typeConfig: typeConfig,
+    );
+    if (serverConfig == null) continue;
+    final baseName = McpServerConfig.placeholderToolName(serverConfig.name);
+    serverNamesByConfigId[config.id] = serverConfig.name;
+    configIdsByBaseName.putIfAbsent(baseName, () => []).add(config.id);
+  }
+
+  final namesByConfigId = <String, String>{};
+  final usedNames = configIdsByBaseName.keys.toSet();
+  for (final entry in configIdsByBaseName.entries) {
+    final aliasesByServerName = <String, String>{};
+    for (final configId in entry.value) {
+      final serverName = serverNamesByConfigId[configId]!;
+      aliasesByServerName.putIfAbsent(serverName, () {
+        if (aliasesByServerName.isEmpty) return entry.key;
+        return _uniqueMcpPlaceholderToolName(
+          entry.key,
+          configId,
+          usedNames,
+        );
+      });
+    }
+    for (final configId in entry.value) {
+      namesByConfigId[configId] =
+          aliasesByServerName[serverNamesByConfigId[configId]!]!;
+    }
+  }
+  return namesByConfigId;
+}
+
+String _uniqueMcpPlaceholderToolName(
+  String baseName,
+  String configId,
+  Set<String> usedNames,
+) {
+  final idPart = configId.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  final stableId = idPart.isEmpty ? 'config' : idPart;
+  final baseStem = baseName.endsWith('_mcp')
+      ? baseName.substring(0, baseName.length - 4)
+      : baseName;
+  var suffixLength = stableId.length < 8 ? stableId.length : 8;
+
+  while (true) {
+    final suffix = stableId.substring(stableId.length - suffixLength);
+    final maxStemLength = 64 - suffix.length - 5;
+    final stem = maxStemLength <= 0
+        ? ''
+        : baseStem.length <= maxStemLength
+            ? baseStem
+            : baseStem.substring(0, maxStemLength);
+    final name = '${stem}_${suffix}_mcp';
+    if (usedNames.add(name)) return name;
+    if (suffixLength < stableId.length) {
+      suffixLength += 4;
+      if (suffixLength > stableId.length) suffixLength = stableId.length;
+      continue;
+    }
+    for (var index = 2;; index++) {
+      final duplicateName = '${stem}_${stableId}_${index}_mcp';
+      if (usedNames.add(duplicateName)) return duplicateName;
+    }
+  }
+}
+
+String? mcpProviderConfigToolName(
+  ProviderConfigItem config, {
+  Map<String, String>? placeholderNamesByConfigId,
+}) {
   final typeConfig =
       config.models.isNotEmpty ? config.models[0].typeConfig : null;
   if (typeConfig?['isHttpTool'] == true) {
@@ -67,16 +148,23 @@ String? mcpProviderConfigToolName(ProviderConfigItem config) {
   );
   return serverConfig == null
       ? null
-      : McpServerConfig.placeholderToolName(serverConfig.name);
+      : placeholderNamesByConfigId?[config.id] ??
+          McpServerConfig.placeholderToolName(serverConfig.name);
 }
 
 Set<String> disabledMcpToolNames(ProviderEntriesState state) {
   final mcpEntry =
       state.entries.where((entry) => entry.type == 'mcp').firstOrNull;
+  final mcpConfigs = mcpEntry?.configs ?? const <ProviderConfigItem>[];
+  final placeholderNamesByConfigId =
+      mcpPlaceholderToolNamesByConfigId(mcpConfigs);
   final disabled = <String>{};
   final active = <String>{};
-  for (final config in mcpEntry?.configs ?? const <ProviderConfigItem>[]) {
-    final name = mcpProviderConfigToolName(config);
+  for (final config in mcpConfigs) {
+    final name = mcpProviderConfigToolName(
+      config,
+      placeholderNamesByConfigId: placeholderNamesByConfigId,
+    );
     if (name == null) continue;
     (isMcpProviderConfigEnabled(config, state.mcpGroups) ? active : disabled)
         .add(name);
