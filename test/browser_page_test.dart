@@ -1,7 +1,51 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/browser_page.dart';
 
 void main() {
+  group('BrowserCookieStorePreparation', () {
+    test('shares preparation between initial load and address submission',
+        () async {
+      final preparationCompleter = Completer<bool>();
+      var preparationCalls = 0;
+      final cookiePreparation = BrowserCookieStorePreparation(() {
+        preparationCalls++;
+        return preparationCompleter.future;
+      });
+      final loadedUrls = <String>[];
+
+      final initialLoad = navigateBrowserPageAfterCookiePreparation(
+        prepareCookies: cookiePreparation.ensurePrepared,
+        loadUrl: () async => loadedUrls.add('initial'),
+      );
+      var address = 'https://previous.example/';
+      final addressSubmit = navigateBrowserPageFromAddress(
+        requestedUrl: 'https://requested.example/page',
+        previousAddress: address,
+        currentUrl: address,
+        updateAddress: (value) => address = value,
+        prepareCookies: cookiePreparation.ensurePrepared,
+        loadUrl: (url) async => loadedUrls.add(url),
+        onPreparationFailure: () {},
+      );
+
+      expect(loadedUrls, isEmpty);
+      final preparationCallsWhileWaiting = preparationCalls;
+
+      preparationCompleter.complete(true);
+
+      expect(await initialLoad, isTrue);
+      expect(await addressSubmit, isTrue);
+      expect(preparationCallsWhileWaiting, 1);
+      expect(preparationCalls, 1);
+      expect(
+          loadedUrls,
+          unorderedEquals(['initial', 'https://requested.example/page']));
+      expect(address, 'https://requested.example/page');
+    });
+  });
+
   group('navigateBrowserPageFromAddress', () {
     test('restores the loaded URL and reports cookie preparation failure',
         () async {

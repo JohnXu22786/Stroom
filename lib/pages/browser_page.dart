@@ -81,6 +81,34 @@ Future<bool> navigateBrowserPageFromAddress({
   return navigated;
 }
 
+/// Shares cookie-store preparation between overlapping browser navigations.
+@visibleForTesting
+class BrowserCookieStorePreparation {
+  final Future<bool> Function() _prepareCookies;
+  bool _prepared = false;
+  Future<bool>? _inFlightPreparation;
+
+  BrowserCookieStorePreparation(this._prepareCookies);
+
+  Future<bool> ensurePrepared() {
+    if (_prepared) return Future<bool>.value(true);
+    final inFlightPreparation = _inFlightPreparation;
+    if (inFlightPreparation != null) return inFlightPreparation;
+
+    late final Future<bool> preparation;
+    preparation = Future<bool>.sync(_prepareCookies).then((prepared) {
+      if (prepared) _prepared = true;
+      return prepared;
+    }).whenComplete(() {
+      if (identical(_inFlightPreparation, preparation)) {
+        _inFlightPreparation = null;
+      }
+    });
+    _inFlightPreparation = preparation;
+    return preparation;
+  }
+}
+
 /// Builds the [InAppWebViewSettings] appropriate for the given mode.
 ///
 /// Key difference from the previous always-wide-viewport approach:
@@ -274,8 +302,9 @@ class _BrowserPageState extends State<BrowserPage> {
   /// When enabled, cookies are not deleted on browser close.
   bool _cookieRetentionEnabled = false;
 
-  /// Whether cookie preparation succeeded for this page instance.
-  bool _cookieStorePrepared = false;
+  final _cookieStorePreparation = BrowserCookieStorePreparation(
+    BrowserCookieService.prepareForBrowserPageLoad,
+  );
 
   /// Current position offset of the floating panel, managed by the parent
   /// (BrowserPage) instead of internally by DraggableFloatingPanel.
@@ -314,12 +343,8 @@ class _BrowserPageState extends State<BrowserPage> {
     await BrowserCookieService.persistCookiesToFile();
   }
 
-  Future<bool> _ensureCookieStorePrepared() async {
-    if (_cookieStorePrepared) return true;
-    final prepared = await BrowserCookieService.prepareForBrowserPageLoad();
-    if (prepared) _cookieStorePrepared = true;
-    return prepared;
-  }
+  Future<bool> _ensureCookieStorePrepared() =>
+      _cookieStorePreparation.ensurePrepared();
 
   @override
   void dispose() {
