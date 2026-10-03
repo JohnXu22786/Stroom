@@ -12,6 +12,7 @@ class _FakeCookiePlatform implements CookiePlatform {
   List<Cookie> allCookies = [];
   final Map<String, List<Cookie>> perUrlCookies = {};
   int getCookiesCalls = 0;
+  final List<String> getCookiesUrls = [];
   final List<Map<String, dynamic>> setCookieCalls = [];
   final List<Map<String, dynamic>> deleteCookieCalls = [];
   final List<Map<String, dynamic>> deleteCookiesCalls = [];
@@ -31,7 +32,9 @@ class _FakeCookiePlatform implements CookiePlatform {
   @override
   Future<List<Cookie>> getCookies({required WebUri url}) async {
     getCookiesCalls++;
-    return perUrlCookies[url.toString()] ?? [];
+    final requestUrl = url.toString();
+    getCookiesUrls.add(requestUrl);
+    return perUrlCookies[requestUrl] ?? [];
   }
 
   @override
@@ -656,6 +659,72 @@ void main() {
   // ====================================================================
 
   group('persistCookiesToFile fallback merge', () {
+    test(
+        'persists cookies scoped to visited paths and deduplicates path results',
+        () async {
+      final fake = _FakeCookiePlatform()..throwOnGetAll = true;
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.setRetentionMode(true);
+
+      BrowserCookieService.noteVisitedUrl(
+          'https://shop.example.com/account/profile?tab=orders');
+      // Queries and fragments do not create extra platform lookups for the
+      // same visited cookie path.
+      BrowserCookieService.noteVisitedUrl(
+          'https://shop.example.com/account/profile?tab=settings#details');
+      BrowserCookieService.noteVisitedUrl('https://shop.example.com/settings');
+
+      fake.perUrlCookies['https://shop.example.com'] = [
+        Cookie(name: 'root', value: 'root-value', path: '/'),
+      ];
+      fake.perUrlCookies['https://shop.example.com/account/profile'] = [
+        Cookie(name: 'root', value: 'root-value', path: '/'),
+        Cookie(
+            name: 'profile', value: 'profile-value', path: '/account/profile'),
+        // Null domains are host-only and must be stamped with the queried
+        // host; a genuine domain cookie keeps its leading dot.
+        Cookie(name: 'host-only', value: 'host-value', path: '/account'),
+        Cookie(
+            name: 'domain-cookie',
+            value: 'domain-value',
+            domain: '.example.com',
+            path: '/account'),
+      ];
+      fake.perUrlCookies['https://shop.example.com/settings'] = [
+        Cookie(name: 'root', value: 'root-value', path: '/'),
+        Cookie(name: 'settings', value: 'settings-value', path: '/settings'),
+      ];
+
+      await BrowserCookieService.persistCookiesToFile();
+
+      expect(fake.getCookiesUrls.toSet(), {
+        'https://shop.example.com',
+        'https://shop.example.com/account/profile',
+        'https://shop.example.com/settings',
+      });
+      expect(fake.getCookiesUrls.length, 3,
+          reason: 'the same path visited with different query strings is '
+              'queried only once');
+
+      final stored = await BrowserCookieService.getCookiesFromFile();
+      final allCookies = stored.values.expand((cookies) => cookies).toList();
+      expect(
+          allCookies
+              .map((cookie) =>
+                  '${cookie['domain']}|${cookie['name']}|${cookie['path']}')
+              .toSet(),
+          hasLength(allCookies.length),
+          reason: 'cookies repeated across URL path queries are stored once');
+      expect(stored['shop.example.com']!.map((cookie) => cookie['name']),
+          containsAll(['root', 'profile', 'host-only', 'settings']));
+      expect(
+          stored['shop.example.com']!
+              .singleWhere((cookie) => cookie['name'] == 'host-only')['domain'],
+          'shop.example.com');
+      expect(stored['.example.com']!.single['name'], 'domain-cookie');
+      expect(stored['.example.com']!.single['path'], '/account');
+    });
+
     test('merges with the existing file so unvisited domains survive',
         () async {
       final fake = _FakeCookiePlatform()..throwOnGetAll = true;
