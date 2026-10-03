@@ -142,8 +142,12 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
   ///
   /// MCP 工具始终列出（MCP 总开关由 adapter 层控制：总开关关闭时
   /// adapter 已清空 mcpToolDefinitions，这里自然不显示）。
-  List<ToolDefinition> _availableTools(WidgetRef ref) {
+  List<ToolDefinition> _availableTools(
+    WidgetRef ref,
+    ProviderEntriesState entriesState,
+  ) {
     final adapter = ref.read(chatStreamManagerProvider).adapter;
+    final disabledNames = disabledMcpToolNames(entriesState);
     final registered = ChatService.getRegisteredToolDefinitions();
     final builtins = registered.isNotEmpty
         ? registered
@@ -155,7 +159,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
     final seen = <String>{};
     final tools = <ToolDefinition>[];
     for (final t in [...builtins, ...adapter.mcpToolDefinitions]) {
-      if (seen.add(t.name)) tools.add(t);
+      if (!disabledNames.contains(t.name) && seen.add(t.name)) tools.add(t);
     }
     return tools;
   }
@@ -184,7 +188,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
       for (final name in displayNames)
         models.firstWhere((m) => m.displayName == name),
     ];
-    final tools = _availableTools(ref);
+    final tools = _availableTools(ref, entriesState);
     final allToolNames = tools.map((t) => t.name).toSet();
     // 清理用的"有效工具名"：除当前显示的工具外，还包含被 MCP 总开关
     // 隐藏的 MCP 工具。它们只是被隐藏、并未失效——单次开关/全部启用
@@ -207,7 +211,11 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
         );
       }
     }
-    final validToolNames = <String>{...allToolNames, ...validMcpToolNames};
+    final validToolNames = <String>{
+      ...allToolNames,
+      ...validMcpToolNames,
+      ...disabledMcpToolNames(entriesState),
+    };
 
     // 生效中的工具集合：null（从未配置）→ 全部工具自动启用，因此显示为
     // 全部开启；配置过（含空集合）则严格按集合显示。
