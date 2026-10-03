@@ -142,25 +142,25 @@ class JsHookScript {
       });
     }
 
-    // Also intercept on loadend to catch redirected URLs
+    // Listen independently so page handlers assigned before or after send
+    // remain intact.
     try {
-      var originalOnReadyStateChange = xhr.onreadystatechange;
-      xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4) {
+      if (!xhr._catCatchRedirectListener) {
+        xhr._catCatchRedirectListener = function() {
+          if (xhr.readyState !== 4) return;
+
           var responseUrl = xhr.responseURL;
-          if (responseUrl && responseUrl !== url) {
+          if (responseUrl && responseUrl !== xhr._catCatchUrl) {
             sendMediaUrl(responseUrl, {
               method: xhr._catCatchMethod || 'GET',
               initiator: PAGE_URL
             });
           }
-        }
-        if (originalOnReadyStateChange) {
-          originalOnReadyStateChange.apply(xhr, arguments);
-        }
-      };
+        };
+        xhr.addEventListener('readystatechange', xhr._catCatchRedirectListener);
+      }
     } catch(e) {
-      // Some environments restrict onreadystatechange access
+      // Some environments restrict event listener access
     }
 
     return ORIGINAL_XHR_SEND.apply(this, arguments);
