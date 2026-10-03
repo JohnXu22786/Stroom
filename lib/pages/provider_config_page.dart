@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
 import '../services/http_tool_service.dart';
@@ -56,10 +57,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => McpServerConfigPage(
-            entryId: widget.entryId,
-            configIndex: -1,
-          ),
+          builder: (_) =>
+              McpServerConfigPage(entryId: widget.entryId, configIndex: -1),
         ),
       );
     } else {
@@ -87,8 +86,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
     if (entry.type == 'mcp') {
       final config = entry.configs[configIndex];
-      final typeConfig =
-          config.models.isNotEmpty ? config.models[0].typeConfig : null;
+      final typeConfig = config.models.isNotEmpty
+          ? config.models[0].typeConfig
+          : null;
       if (typeConfig?['isHttpTool'] == true) {
         await _editHttpToolConfig(configIndex);
         return;
@@ -130,10 +130,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final definition = _httpToolDefinition(config.providerName);
     final updatedConfig = await showDialog<ProviderConfigItem>(
       context: context,
-      builder: (_) => HttpToolConfigDialog(
-        config: config,
-        definition: definition,
-      ),
+      builder: (_) =>
+          HttpToolConfigDialog(config: config, definition: definition),
     );
     if (updatedConfig == null || !mounted) return;
 
@@ -284,10 +282,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(entry.name),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(entry.name), centerTitle: true),
       body: CustomScrollView(
         slivers: [
           SliverPadding(
@@ -361,8 +356,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   // Determine if this is a built-in (vendor) MCP config
                   final mcpTypeConfig =
                       entry.type == 'mcp' && config.models.isNotEmpty
-                          ? config.models[0].typeConfig
-                          : null;
+                      ? config.models[0].typeConfig
+                      : null;
                   final isVendor = mcpTypeConfig?['isVendor'] as bool? ?? false;
 
                   // For MCP entries, show transport details
@@ -376,8 +371,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                       mcpTypeConfig?['transport'] as String? ?? 'sse';
                   final integrationType = entry.type == 'mcp'
                       ? isHttpTool
-                          ? 'HTTP 搜索'
-                          : 'MCP · ${transport == 'stdio' ? 'stdio' : 'SSE'}'
+                            ? 'HTTP 搜索'
+                            : 'MCP · ${transport == 'stdio' ? 'stdio' : 'SSE'}'
                       : '';
 
                   if (entry.type == 'mcp') {
@@ -403,8 +398,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   } else {
                     leadIcon = Icons.dns;
                     iconColor = Colors.teal;
-                    subtitle =
-                        config.host.isNotEmpty ? config.host : '(未设置 Host)';
+                    subtitle = config.host.isNotEmpty
+                        ? config.host
+                        : '(未设置 Host)';
                   }
 
                   // Show API key hint if available
@@ -428,8 +424,10 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                     dragHandle: !isVendor
                         ? ReorderableDragStartListener(
                             index: i,
-                            child: const Icon(Icons.drag_handle,
-                                color: Colors.grey),
+                            child: const Icon(
+                              Icons.drag_handle,
+                              color: Colors.grey,
+                            ),
                           )
                         : const SizedBox(width: 32),
                     onSettings: () => entry.type == 'mcp'
@@ -476,9 +474,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 ]),
               ),
             ),
-          const SliverPadding(
-            padding: EdgeInsets.all(16),
-          ),
+          const SliverPadding(padding: EdgeInsets.all(16)),
         ],
       ),
     );
@@ -534,8 +530,9 @@ class _McpConfigCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // 统一卡片配色（对齐 LLM 供应商页）：中性背景 + 柔和描边。
-    final Color backgroundColor =
-        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
+    final Color backgroundColor = isDark
+        ? cs.surfaceContainerHigh
+        : cs.surfaceContainerLow;
     final Color borderColor = cs.outlineVariant.withValues(alpha: 0.5);
 
     return Container(
@@ -543,10 +540,7 @@ class _McpConfigCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: borderColor,
-          width: 0.5,
-        ),
+        border: Border.all(color: borderColor, width: 0.5),
       ),
       child: Material(
         type: MaterialType.transparency,
@@ -592,7 +586,9 @@ class _McpConfigCard extends StatelessWidget {
                             const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: cs.primary.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(4),
@@ -611,10 +607,13 @@ class _McpConfigCard extends StatelessWidget {
                             const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
-                                color: cs.tertiaryContainer
-                                    .withValues(alpha: 0.55),
+                                color: cs.tertiaryContainer.withValues(
+                                  alpha: 0.55,
+                                ),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -669,8 +668,11 @@ class _McpConfigCard extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  icon: Icon(settingsIcon,
-                      size: 20, color: cs.onSurfaceVariant),
+                  icon: Icon(
+                    settingsIcon,
+                    size: 20,
+                    color: cs.onSurfaceVariant,
+                  ),
                   onPressed: onSettings,
                   tooltip: settingsTooltip,
                   padding: EdgeInsets.zero,
@@ -709,17 +711,15 @@ class _McpMasterSwitchCard extends StatelessWidget {
   final bool enabled;
   final ValueChanged<bool> onChanged;
 
-  const _McpMasterSwitchCard({
-    required this.enabled,
-    required this.onChanged,
-  });
+  const _McpMasterSwitchCard({required this.enabled, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color backgroundColor =
-        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
+    final Color backgroundColor = isDark
+        ? cs.surfaceContainerHigh
+        : cs.surfaceContainerLow;
 
     return Container(
       decoration: BoxDecoration(
@@ -749,10 +749,7 @@ class _McpMasterSwitchCard extends StatelessWidget {
             ),
             subtitle: Text(
               enabled ? '已开启：MCP 服务器工具可用。' : '已关闭：MCP 服务器工具不在助手页面与对话页中显示。',
-              style: TextStyle(
-                fontSize: 12,
-                color: cs.onSurfaceVariant,
-              ),
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
           ),
         ),

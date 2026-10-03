@@ -10,10 +10,7 @@ class HttpToolConfigDialog extends StatefulWidget {
   final ProviderConfigItem config;
   final ToolDefinition? definition;
 
-  const HttpToolConfigDialog({
-    required this.config,
-    required this.definition,
-  });
+  const HttpToolConfigDialog({required this.config, required this.definition});
 
   @override
   State<HttpToolConfigDialog> createState() => _HttpToolConfigDialogState();
@@ -54,8 +51,7 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
     if (updated.models.isEmpty) return updated;
 
     final typeConfig = Map<String, dynamic>.from(updated.models[0].typeConfig);
-    final oldApiKey =
-        McpServerConfig.extractApiKeyFromTypeConfig(typeConfig);
+    final oldApiKey = McpServerConfig.extractApiKeyFromTypeConfig(typeConfig);
     final apiKey = _apiKeyController.text.trim();
     if (apiKey.isEmpty) {
       typeConfig.remove('apiKey');
@@ -86,7 +82,8 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
       final headerApiKey = trimmed.startsWith('Bearer ')
           ? trimmed.substring('Bearer '.length).trim()
           : trimmed;
-      final isKeyHeader = trimmed.isEmpty ||
+      final isKeyHeader =
+          trimmed.isEmpty ||
           trimmed == 'Bearer' ||
           (oldApiKey.isNotEmpty && headerApiKey == oldApiKey);
       if (!isKeyHeader) continue;
@@ -138,9 +135,8 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
                 SelectableText(
                   const JsonEncoder.withIndent('  ')
                       .convert(definition.parameters),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontFamily: 'monospace',
-                      ),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(fontFamily: 'monospace'),
                 ),
               ],
               const SizedBox(height: 16),
@@ -165,9 +161,9 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     tooltip: _obscureApiKey ? '显示密钥' : '隐藏密钥',
-                    icon: Icon(_obscureApiKey
-                        ? Icons.visibility_off
-                        : Icons.visibility),
+                    icon: Icon(
+                      _obscureApiKey ? Icons.visibility_off : Icons.visibility,
+                    ),
                     onPressed: () =>
                         setState(() => _obscureApiKey = !_obscureApiKey),
                   ),
@@ -208,17 +204,13 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
               const SizedBox(height: 8),
               Text(definition.description),
               const SizedBox(height: 12),
-              const Text(
-                '参数定义',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+              const Text('参数定义', style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 4),
               SelectableText(
                 const JsonEncoder.withIndent('  ')
                     .convert(definition.parameters),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontFamily: 'monospace',
-                    ),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(fontFamily: 'monospace'),
               ),
               const SizedBox(height: 12),
               Text(
