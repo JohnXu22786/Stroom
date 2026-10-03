@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -28,6 +29,29 @@ String normalizeBrowserUrl(String url) {
     return 'https://$trimmedUrl';
   }
   return trimmedUrl;
+}
+
+/// Runs cookie preparation before a browser navigation.
+///
+/// Exposed for tests so they can verify the ordering without creating a
+/// native WebView.
+@visibleForTesting
+Future<bool> navigateBrowserPageAfterCookiePreparation({
+  required Future<bool> Function() prepareCookies,
+  required Future<void> Function() loadUrl,
+}) async {
+  try {
+    if (!await prepareCookies()) {
+      debugPrint(
+          '[BrowserPage] native cookie cleanup failed; skipping navigation');
+      return false;
+    }
+  } catch (e) {
+    debugPrint('[BrowserPage] cookie preparation failed: $e');
+    return false;
+  }
+  await loadUrl();
+  return true;
 }
 
 /// Builds the [InAppWebViewSettings] appropriate for the given mode.
@@ -214,6 +238,9 @@ class _BrowserPageState extends State<BrowserPage> {
   /// When enabled, cookies are not deleted on browser close.
   bool _cookieRetentionEnabled = false;
 
+  /// Whether cookie preparation succeeded for this page instance.
+  bool _cookieStorePrepared = false;
+
   /// Current position offset of the floating panel, managed by the parent
   /// (BrowserPage) instead of internally by DraggableFloatingPanel.
   /// This avoids the need for a full-screen compositing layer inside the
@@ -245,17 +272,17 @@ class _BrowserPageState extends State<BrowserPage> {
     setState(() => _cookieRetentionEnabled = enabled);
   }
 
-  /// Restores persisted cookies to the WebView (if retention is enabled).
-  /// Should be called after the WebView is created, BEFORE the initial page
-  /// is loaded, so the first request carries the restored cookies.
-  Future<void> _restoreCookies() async {
-    await BrowserCookieService.restoreCookiesFromFile();
-  }
-
   /// Persists current cookies to file (if retention is enabled).
   /// Should be called after page loads and on browser close.
   Future<void> _persistCookies() async {
     await BrowserCookieService.persistCookiesToFile();
+  }
+
+  Future<bool> _ensureCookieStorePrepared() async {
+    if (_cookieStorePrepared) return true;
+    final prepared = await BrowserCookieService.prepareForBrowserPageLoad();
+    if (prepared) _cookieStorePrepared = true;
+    return prepared;
   }
 
   @override
@@ -403,11 +430,19 @@ class _BrowserPageState extends State<BrowserPage> {
     });
   }
 
-  void _goToUrl(String url) {
+  Future<void> _goToUrl(String url) async {
     final uri = normalizeBrowserUrl(url);
     if (uri.isEmpty) return;
+    final controller = _webViewController;
+    if (controller == null) return;
     _urlController.text = uri;
-    _webViewController?.loadUrl(urlRequest: URLRequest(url: WebUri(uri)));
+    await navigateBrowserPageAfterCookiePreparation(
+      prepareCookies: _ensureCookieStorePrepared,
+      loadUrl: () async {
+        if (!mounted || controller != _webViewController) return;
+        await controller.loadUrl(urlRequest: URLRequest(url: WebUri(uri)));
+      },
+    );
   }
 
   /// Clamps the floating panel offset so the panel's header stays within the
@@ -476,8 +511,8 @@ class _BrowserPageState extends State<BrowserPage> {
                   Expanded(
                     child: InAppWebView(
                       // The initial page is loaded explicitly in onWebViewCreated
-                      // AFTER persisted cookies are restored, so the first request
-                      // carries them (restore no-ops when retention is disabled).
+                      // after the native cookie store is prepared for the selected
+                      // retention mode.
                       initialUrlRequest: null,
                       initialSettings:
                           _buildSettings(isDesktopMode: _isDesktopMode),
@@ -503,20 +538,20 @@ class _BrowserPageState extends State<BrowserPage> {
                               '[BrowserPage] JS handler bridge unavailable: $e');
                         }
 
-                        // Restore persisted cookies before the first page load.
-                        // A restore failure must not block the initial
-                        // navigation (restore itself already no-ops when
-                        // retention is disabled).
+                        // Clear stale native cookies when retention is disabled,
+                        // or restore persisted cookies when it is enabled, before
+                        // the first page load. If native cleanup fails, skip the
+                        // first navigation rather than sending stale cookies.
                         try {
-                          await _restoreCookies();
-                        } catch (e) {
-                          debugPrint('[BrowserPage] cookie restore failed: $e');
-                        }
-                        if (!mounted) return;
-                        try {
-                          await controller.loadUrl(
-                            urlRequest:
-                                URLRequest(url: WebUri(widget.initialUrl)),
+                          await navigateBrowserPageAfterCookiePreparation(
+                            prepareCookies: _ensureCookieStorePrepared,
+                            loadUrl: () async {
+                              if (!mounted) return;
+                              await controller.loadUrl(
+                                urlRequest:
+                                    URLRequest(url: WebUri(widget.initialUrl)),
+                              );
+                            },
                           );
                         } catch (e) {
                           debugPrint('[BrowserPage] initial load failed: $e');

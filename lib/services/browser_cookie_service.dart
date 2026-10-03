@@ -162,6 +162,27 @@ class BrowserCookieService {
     });
   }
 
+  /// Prepares the native cookie store before a newly created browser page
+  /// makes its first request. Retained cookies are restored when enabled;
+  /// otherwise both the native and persisted stores are cleared. Running this
+  /// on page creation also handles launches where the previous process did not
+  /// reach [handleBrowserClose]. On Web, where native cookie deletion is not
+  /// implemented, the persisted store is cleared and navigation remains usable.
+  static Future<bool> prepareForBrowserPageLoad() {
+    return _serializeRetentionOperation(() async {
+      if (await getRetentionMode()) {
+        await restoreCookiesFromFile();
+        return true;
+      } else {
+        if (kIsWeb) {
+          await clearPersistedCookies();
+          return true;
+        }
+        return clearAllCookies();
+      }
+    });
+  }
+
   /// Applies the final retention preference when the browser closes.
   ///
   /// Queuing this with preference writes ensures the final selected mode is
