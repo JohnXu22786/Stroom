@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, setEquals;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, setEquals, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';

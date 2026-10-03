@@ -108,9 +108,12 @@ void main() {
         addTearDown(container.dispose);
         final notifier = container.read(conversationsProvider.notifier);
 
-        await notifier.updateMessages('c1', [
-          ChatMessage(id: 'm1', role: 'user', content: 'hi'),
-        ], resetTemporaryCountdown: true);
+        await notifier.updateMessages(
+            'c1',
+            [
+              ChatMessage(id: 'm1', role: 'user', content: 'hi'),
+            ],
+            resetTemporaryCountdown: true);
 
         final conv = container.read(conversationsProvider).single;
         expect(conv.isTemporary, isTrue);
@@ -150,9 +153,12 @@ void main() {
       addTearDown(container.dispose);
       final notifier = container.read(conversationsProvider.notifier);
 
-      await notifier.updateMessages('c1', [
-        ChatMessage(id: 'm1', role: 'user', content: 'hi'),
-      ], resetTemporaryCountdown: true);
+      await notifier.updateMessages(
+          'c1',
+          [
+            ChatMessage(id: 'm1', role: 'user', content: 'hi'),
+          ],
+          resetTemporaryCountdown: true);
 
       final conv = container.read(conversationsProvider).single;
       expect(conv.isTemporary, isFalse);
@@ -283,7 +289,8 @@ void main() {
       },
     );
 
-    test('an expired temporary conversation is removed right after async '
+    test(
+        'an expired temporary conversation is removed right after async '
         'load', () async {
       // 生产路径：provider 真实的 _load 从 SharedPreferences 读入后，
       // 立即清理已到期临时对话（不等首轮 tick）。
@@ -321,7 +328,8 @@ void main() {
       sub.close();
     });
 
-    test('the per-second ticker bumps the UI tick while temp conversations '
+    test(
+        'the per-second ticker bumps the UI tick while temp conversations '
         'exist and stops after they are all disabled', () {
       fakeAsync((async) {
         final container = _createContainer(initialState: [_conv('c1')]);
@@ -340,7 +348,8 @@ void main() {
       });
     });
 
-    test('the ticker stops when the last temporary conversation is deleted '
+    test(
+        'the ticker stops when the last temporary conversation is deleted '
         'via deleteConversation', () {
       fakeAsync((async) {
         final container = _createContainer(
@@ -379,7 +388,8 @@ void main() {
         'legacy-temp',
         isTemporary: true,
         expiresAt: originalExpiry,
-      ).toMap()..remove('temporaryExpiryVersion');
+      ).toMap()
+        ..remove('temporaryExpiryVersion');
       SharedPreferences.setMockInitialValues({
         'conversations': jsonEncode([
           legacyTemporaryConversation,
@@ -388,7 +398,7 @@ void main() {
       });
 
       Future<(ProviderContainer, ProviderSubscription<List<Conversation>?>)>
-      loadContainer() async {
+          loadContainer() async {
         final container = ProviderContainer();
         final subscription = container.listen<List<Conversation>?>(
           conversationsProvider,
@@ -402,10 +412,8 @@ void main() {
       }
 
       final (firstContainer, firstSubscription) = await loadContainer();
-      final migratedExpiry = firstContainer
-          .read(conversationsProvider)
-          .single
-          .temporaryExpiresAt!;
+      final migratedExpiry =
+          firstContainer.read(conversationsProvider).single.temporaryExpiresAt!;
       final remaining = migratedExpiry.difference(DateTime.now());
       expect(remaining.inMinutes, greaterThanOrEqualTo(59));
       expect(remaining.inMinutes, lessThanOrEqualTo(60));
@@ -439,7 +447,8 @@ void main() {
           'expired-legacy-temp',
           isTemporary: true,
           expiresAt: DateTime.now().add(const Duration(hours: 22)),
-        ).toMap()..remove('temporaryExpiryVersion');
+        ).toMap()
+          ..remove('temporaryExpiryVersion');
         SharedPreferences.setMockInitialValues({
           'conversations': jsonEncode([
             legacyTemporaryConversation,

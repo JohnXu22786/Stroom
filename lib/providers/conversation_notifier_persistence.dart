@@ -49,9 +49,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                         .subtract(const Duration(hours: 23));
                     conversation.temporaryExpiryVersion =
                         kTemporaryConversationDurationVersion;
-                    item['temporaryExpiresAt'] = conversation
-                        .temporaryExpiresAt!
-                        .toIso8601String();
+                    item['temporaryExpiresAt'] =
+                        conversation.temporaryExpiresAt!.toIso8601String();
                     item['temporaryExpiryVersion'] =
                         kTemporaryConversationDurationVersion;
                     migratedTemporaryExpiries = true;
@@ -103,9 +102,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               final inMemory = state;
               if (inMemory.isNotEmpty) {
                 final diskIds = conversations.map((c) => c.id).toSet();
-                final extra = inMemory
-                    .where((c) => !diskIds.contains(c.id))
-                    .toList();
+                final extra =
+                    inMemory.where((c) => !diskIds.contains(c.id)).toList();
                 state = pinnedFirstStable([...extra, ...conversations]);
                 hadInMemoryMerge = true;
               } else {
@@ -240,12 +238,11 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       );
 
       // Enforce the cap: keep only the N most recent backups.
-      final backupKeys =
-          prefs
-              .getKeys()
-              .where((k) => k.startsWith('conversations.corrupt.'))
-              .toList()
-            ..sort();
+      final backupKeys = prefs
+          .getKeys()
+          .where((k) => k.startsWith('conversations.corrupt.'))
+          .toList()
+        ..sort();
       while (backupKeys.length > _maxCorruptBackups) {
         final oldest = backupKeys.removeAt(0);
         await prefs.remove(oldest);

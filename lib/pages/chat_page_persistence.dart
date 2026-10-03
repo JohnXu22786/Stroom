@@ -10,6 +10,39 @@ void _resetTemporaryExpiryOnMap(
   conversationMap.addAll(conversation.toMap());
 }
 
+@visibleForTesting
+bool? applyTemporaryCountdownFallback(
+  Map<String, dynamic> conversationMap, {
+  required bool? wasTemporary,
+  required bool persistedStateIsAuthoritative,
+  required DateTime startedAt,
+}) {
+  if (wasTemporary == false) {
+    conversationMap
+      ..remove('isTemporary')
+      ..remove('temporaryExpiresAt')
+      ..remove('temporaryExpiryVersion');
+    return false;
+  }
+
+  if (wasTemporary == true) {
+    if (!persistedStateIsAuthoritative ||
+        conversationMap['isTemporary'] == true) {
+      _resetTemporaryExpiryOnMap(conversationMap, startedAt);
+      return true;
+    }
+
+    return false;
+  }
+
+  if (conversationMap['isTemporary'] == true) {
+    _resetTemporaryExpiryOnMap(conversationMap, startedAt);
+    return true;
+  }
+
+  return null;
+}
+
 extension _ChatPagePersistenceExt on _ChatPageState {
   /// Saves the currently enabled tool names to the active conversation.
   /// This ensures per-conversation tool preferences persist across sessions.
@@ -56,21 +89,23 @@ extension _ChatPagePersistenceExt on _ChatPageState {
     bool? capturedIsTemporary,
   }) async {
     final historySnapshot = List<ChatMessage>.from(_history);
-    var conversationWasTemporary = capturedIsTemporary ?? false;
+    bool? conversationWasTemporary = capturedIsTemporary;
     try {
       final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
       if (convId == null) return;
       if (resetTemporaryCountdown && capturedIsTemporary == null) {
-        conversationWasTemporary = ref
+        final conversation = ref
             .read(conversationsProvider)
-            .any(
-              (conversation) =>
-                  conversation.id == convId && conversation.isTemporary,
-            );
+            .where((conversation) => conversation.id == convId)
+            .firstOrNull;
+        conversationWasTemporary = conversation?.isTemporary;
       }
-      await ref.read(conversationsProvider.notifier).updateMessages(convId, [
-        ...historySnapshot,
-      ], resetTemporaryCountdown: resetTemporaryCountdown);
+      await ref.read(conversationsProvider.notifier).updateMessages(
+          convId,
+          [
+            ...historySnapshot,
+          ],
+          resetTemporaryCountdown: resetTemporaryCountdown);
     } catch (e, s) {
       // Fallback: save directly to SharedPreferences if the notifier is
       // unavailable (e.g. during background streaming after page disposal).
@@ -80,6 +115,20 @@ extension _ChatPagePersistenceExt on _ChatPageState {
         final prefs = await SharedPreferences.getInstance();
         final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
         if (convId == null) return;
+        var fallbackTemporaryState = conversationWasTemporary;
+        var fallbackTemporaryStateWasRead = false;
+        try {
+          final currentConversation = ref
+              .read(conversationsProvider)
+              .where((conversation) => conversation.id == convId)
+              .firstOrNull;
+          if (currentConversation != null) {
+            fallbackTemporaryState = currentConversation.isTemporary;
+            fallbackTemporaryStateWasRead = true;
+          }
+        } catch (_) {
+          // The provider may already be disposed; retain the send-time state.
+        }
         final savedAt = DateTime.now();
 
         // Tier A: read existing, modify the target conversation, write back.
@@ -136,17 +185,20 @@ extension _ChatPagePersistenceExt on _ChatPageState {
                   ..addAll(Map<String, dynamic>.from(existing))
                   ..['id'] = convId
                   ..['updatedAt'] = savedAt.toIso8601String()
-                  ..['messages'] = historySnapshot
-                      .map((m) => m.toMap())
-                      .toList();
+                  ..['messages'] =
+                      historySnapshot.map((m) => m.toMap()).toList();
                 list[existingIdx] = targetMap;
               } else {
                 list.insert(0, targetMap);
               }
-              if (resetTemporaryCountdown &&
-                  (conversationWasTemporary ||
-                      targetMap['isTemporary'] == true)) {
-                _resetTemporaryExpiryOnMap(targetMap, savedAt);
+              if (resetTemporaryCountdown) {
+                fallbackTemporaryState = applyTemporaryCountdownFallback(
+                  targetMap,
+                  wasTemporary: fallbackTemporaryState,
+                  persistedStateIsAuthoritative:
+                      existingIdx >= 0 && !fallbackTemporaryStateWasRead,
+                  startedAt: savedAt,
+                );
               }
               final json = jsonEncode(list);
               await prefs.setString('conversations', json);
@@ -182,7 +234,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
             'sortOrder': 0,
             'draftText': '',
           };
-          if (resetTemporaryCountdown && conversationWasTemporary) {
+          if (resetTemporaryCountdown && fallbackTemporaryState == true) {
             _resetTemporaryExpiryOnMap(convMap, savedAt);
           }
           final json = jsonEncode([convMap]);
@@ -256,9 +308,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       // This ensures the tool preferences are persisted even if the user
       // switches conversations or navigates away during streaming.
       _saveEnabledToolsToConversation();
-      final conversationWasTemporary = ref
-          .read(conversationsProvider)
-          .any(
+      final conversationWasTemporary = ref.read(conversationsProvider).any(
             (conversation) =>
                 conversation.id == convId && conversation.isTemporary,
           );
