@@ -25,7 +25,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
   Future<void> _addConfig() async {
     final entry = _entry;
-    if (entry == null) return;
+    if (entry == null || entry.id == kBuiltinWebSearchEntryId) return;
 
     if (entry.type == 'mcp') {
       await Navigator.push(
@@ -54,7 +54,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
   Future<void> _editConfig(int configIndex) async {
     final entry = _entry;
-    if (entry == null) return;
+    if (entry == null || entry.id == kBuiltinWebSearchEntryId) return;
 
     if (entry.type == 'mcp') {
       await Navigator.push(
@@ -180,7 +180,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
   /// 都不再显示这些工具。
   Future<void> _toggleMcpEnabled(bool value) async {
     final entry = _entry;
-    if (entry == null || entry.type != 'mcp') return;
+    if (entry == null ||
+        entry.type != 'mcp' ||
+        entry.id == kBuiltinWebSearchEntryId) {
+      return;
+    }
 
     final updated = ProviderEntry(
       id: entry.id,
@@ -203,6 +207,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         body: const Center(child: Text('供应商未找到')),
       );
     }
+    final isBuiltinWebSearch = entry.id == kBuiltinWebSearchEntryId;
 
     return Scaffold(
       appBar: AppBar(
@@ -219,7 +224,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 Row(
                   children: [
                     Text(
-                      '供应商配置',
+                      isBuiltinWebSearch ? '内置工具' : '供应商配置',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -227,17 +232,18 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                       ),
                     ),
                     const Spacer(),
-                    TextButton.icon(
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('添加'),
-                      onPressed: _addConfig,
-                    ),
+                    if (!isBuiltinWebSearch)
+                      TextButton.icon(
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('添加'),
+                        onPressed: _addConfig,
+                      ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 // MCP 总开关：仅 MCP 条目显示。关闭后 MCP 服务器工具
                 // 不在助手页面显示，也无法在对话页使用。
-                if (entry.type == 'mcp') ...[
+                if (entry.type == 'mcp' && !isBuiltinWebSearch) ...[
                   _McpMasterSwitchCard(
                     enabled: entry.enabled,
                     onChanged: _toggleMcpEnabled,
@@ -248,13 +254,18 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
             ),
           ),
           if (entry.configs.isEmpty)
-            const SliverFillRemaining(
+            SliverFillRemaining(
               hasScrollBody: false,
               child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 32),
+                padding: const EdgeInsets.symmetric(vertical: 32),
                 child: Center(
-                  child: Text('暂无供应商配置，请点击"添加"创建',
-                      style: TextStyle(color: Colors.grey)),
+                  child: Text(
+                    isBuiltinWebSearch
+                        ? '内置网络搜索支持 Google、Bing 和百度，模型调用名为 web_search。'
+                        : '暂无供应商配置，请点击"添加"创建',
+                    style: const TextStyle(color: Colors.grey),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
             )

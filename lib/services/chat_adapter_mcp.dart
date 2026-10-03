@@ -31,8 +31,9 @@ extension ChatAdapterMcpExt on ChatAdapter {
   /// MCP 条目的 [ProviderEntry.enabled]（MCP总开关）关闭时，不发布任何
   /// 占位工具并释放旧客户端——MCP 工具从助手页面与对话页一起消失。
   Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
-    final mcpEntry =
-        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
+    final mcpEntry = entriesState.entries
+        .where((e) => e.type == 'mcp' && e.id != kBuiltinWebSearchEntryId)
+        .firstOrNull;
     // MCP 配置未变（同一实例）：占位符与客户端都无需重建。页面重复进入、
     // 或其它供应商（TTS/OCR 等）配置变更时，MCP 条目实例不变，跳过。
     if (identical(_lastMcpEntry, mcpEntry)) return;

@@ -11,6 +11,11 @@ export '../models/tts_models.dart';
 export 'provider_config_types.dart';
 part 'provider_config_persistence.dart';
 
+/// Stable identity and label for the local Google/Bing/Baidu web search group.
+/// The callable tool name remains `web_search` for API and saved-tool compatibility.
+const kBuiltinWebSearchEntryId = 'builtin';
+const kBuiltinWebSearchEntryName = 'Built-in Web Search';
+
 // ============================================================================
 // 供应商条目列表状态
 // ============================================================================
@@ -112,7 +117,9 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         }
 
         // 第6步：确保 MCP 条目存在（已有用户升级时自动迁移）
-        final hasMcp = entries.any((e) => e.type == 'mcp');
+        final hasMcp = entries.any(
+          (e) => e.type == 'mcp' && e.id != kBuiltinWebSearchEntryId,
+        );
         if (!hasMcp) {
           entries.add(
             ProviderEntry(
@@ -129,6 +136,32 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         } else {
           // 第7步：确保已有的 MCP 条目包含内置 MCP 配置
           await _migrateBuiltinMcpConfigs(prefs, entries);
+        }
+
+        // Google/Bing/百度由本地 web_search 工具实现，不是 MCP 服务器；
+        // 单独保留一个供应商分类供设置页展示。
+        final builtinWebSearchIndex =
+            entries.indexWhere((e) => e.id == kBuiltinWebSearchEntryId);
+        if (builtinWebSearchIndex < 0) {
+          entries.add(_createBuiltinWebSearchEntry());
+          await prefs.setString(
+            'provider_entries',
+            jsonEncode(entries.map((e) => e.toMap()).toList()),
+          );
+        } else if (entries[builtinWebSearchIndex].name !=
+            kBuiltinWebSearchEntryName) {
+          final existing = entries[builtinWebSearchIndex];
+          entries[builtinWebSearchIndex] = ProviderEntry(
+            id: existing.id,
+            type: existing.type,
+            name: kBuiltinWebSearchEntryName,
+            configs: existing.configs,
+            enabled: existing.enabled,
+          );
+          await prefs.setString(
+            'provider_entries',
+            jsonEncode(entries.map((e) => e.toMap()).toList()),
+          );
         }
 
         // 第8步：确保 TTS 与 LLM 条目存在。v0 旧用户（有旧
@@ -182,6 +215,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           name: 'MCP供应商',
           configs: _createBuiltinMcpConfigs(),
         ),
+        _createBuiltinWebSearchEntry(),
       ],
     );
   }

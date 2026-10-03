@@ -8,8 +8,9 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
   /// 始终被注册，不受 MCP 服务器连接状态影响。
   /// 即使 MCP 条目不存在或为空，也会尝试注册已缓存的工具。
   void initializeBuiltinTools(ProviderEntriesState entriesState) {
-    final mcpEntry =
-        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
+    final mcpEntry = entriesState.entries
+        .where((e) => e.type == 'mcp' && e.id != kBuiltinWebSearchEntryId)
+        .firstOrNull;
 
     String? braveApiKey, bochaApiKey, queritApiKey, searxngUrl, searxngApiKey;
 
