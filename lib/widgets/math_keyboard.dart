@@ -269,6 +269,10 @@ class _MathKeyboardState extends State<MathKeyboard> {
       );
 
   Widget _latinKeys() => Column(children: [
+        Row(children: [
+          for (final number in '1234567890.'.split(''))
+            _latinCell(_key(_MathKey(number, number))),
+        ]),
         for (var row = 0; row < _latinRows.length; row++)
           Row(children: [
             if (row == 1) const Spacer(),
@@ -284,10 +288,6 @@ class _MathKeyboardState extends State<MathKeyboard> {
                   _key(const _MathKey('⌫', '', command: 'deleteBackward')),
                   flex: 3),
           ]),
-        Row(children: [
-          for (final number in '1234567890.'.split(''))
-            _latinCell(_key(_MathKey(number, number))),
-        ]),
       ]);
 
   Widget _latinCell(Widget child, {int flex = 1}) => Expanded(

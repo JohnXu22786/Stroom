@@ -11,8 +11,8 @@ calculus, matrices, sets/logic, relations, arrows, fences/intervals,
 typography and Latin letters. Scroll the tabs or open the category directory to
 jump directly to a category; this resets its page and scroll position.
 Numbers and backspace keep their positions in symbol categories. The Latin
-letter tab uses the full width for all 26 letters in QWERTY rows, with Shift,
-backspace and a numeric row. Shift toggles Latin and ordinary Greek case and
+letter tab has a numeric row above all 26 letters in full-width QWERTY rows,
+with Shift and backspace. Shift toggles Latin and ordinary Greek case and
 keeps the current Greek page; all 24 Greek letters are present in both cases.
 The separate variants tab contains eight additional forms. Use page buttons
 for more symbols.
