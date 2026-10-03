@@ -386,7 +386,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       subtitle = '远程(SSE): ${url.isNotEmpty ? url : '(未设置 URL)'}';
     }
     return _McpConfigCard(
-      key: ValueKey('config_${widget.entryId}_${config.id}'),
+      // The full entry index stays unique across groups and preserves the
+      // stable key used by existing card finders.
+      key: ValueKey('config_${widget.entryId}_$fullIndex'),
       isVendor: isVendor,
       providerName: providerName,
       leadIcon: leadIcon,
