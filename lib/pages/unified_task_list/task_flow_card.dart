@@ -277,6 +277,12 @@ class _ExpandedContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    final restoreReady = ref.watch(taskFlowExecutionRestoreStatusProvider) ==
+        FlowExecutionRestoreStatus.ready;
+    final executions = ref.watch(taskFlowExecutionsProvider);
+    final execution = executions.where((e) => e.id == executionId).firstOrNull;
+    final hasBatchWork = execution != null &&
+        hasUnfinishedFlowBatchMember(execution, executions);
 
     final catcatchTasks = ref.watch(catcatchTasksProvider);
     final backgroundTasks = ref.watch(backgroundTasksProvider);
@@ -294,8 +300,9 @@ class _ExpandedContent extends ConsumerWidget {
             child: Wrap(
               alignment: WrapAlignment.end,
               children: [
-                if (executionStatus == FlowExecutionStatus.running ||
-                    executionStatus == FlowExecutionStatus.waiting)
+                if (restoreReady &&
+                    (executionStatus == FlowExecutionStatus.running ||
+                        executionStatus == FlowExecutionStatus.waiting))
                   TextButton.icon(
                       onPressed: () => _control(
                           context,
@@ -304,12 +311,7 @@ class _ExpandedContent extends ConsumerWidget {
                               .pauseExecution(executionId)),
                       icon: const Icon(Icons.pause, size: 18),
                       label: const Text('暂停流程')),
-                if (ref
-                        .watch(taskFlowExecutionsProvider)
-                        .where((e) => e.id == executionId)
-                        .firstOrNull
-                        ?.canResume ??
-                    false)
+                if (restoreReady && (execution?.canResume ?? false))
                   TextButton.icon(
                       onPressed: () => _control(
                           context,
@@ -320,11 +322,12 @@ class _ExpandedContent extends ConsumerWidget {
                       label: Text(executionStatus == FlowExecutionStatus.paused
                           ? '继续流程'
                           : '从中断步骤继续')),
-                if ([
-                  FlowExecutionStatus.running,
-                  FlowExecutionStatus.waiting,
-                  FlowExecutionStatus.paused
-                ].contains(executionStatus))
+                if (restoreReady &&
+                    [
+                      FlowExecutionStatus.running,
+                      FlowExecutionStatus.waiting,
+                      FlowExecutionStatus.paused
+                    ].contains(executionStatus))
                   TextButton.icon(
                       onPressed: () => _control(
                           context,
@@ -333,11 +336,12 @@ class _ExpandedContent extends ConsumerWidget {
                               .cancelExecution(executionId)),
                       icon: const Icon(Icons.stop, size: 18),
                       label: const Text('取消流程')),
-                if ([
-                  FlowExecutionStatus.failed,
-                  FlowExecutionStatus.interrupted,
-                  FlowExecutionStatus.cancelled
-                ].contains(executionStatus))
+                if (restoreReady &&
+                    [
+                      FlowExecutionStatus.failed,
+                      FlowExecutionStatus.interrupted,
+                      FlowExecutionStatus.cancelled
+                    ].contains(executionStatus))
                   TextButton.icon(
                     onPressed: () => _confirmRetry(context, ref),
                     icon: Icon(Icons.refresh, size: 18, color: cs.primary),
@@ -348,8 +352,20 @@ class _ExpandedContent extends ConsumerWidget {
                       minimumSize: const Size(48, 48),
                     ),
                   ),
+                if (restoreReady && hasBatchWork)
+                  TextButton.icon(
+                    onPressed: () => _control(
+                        context,
+                        () => ref
+                            .read(taskFlowExecutionServiceProvider)
+                            .cancelBatch(execution.batchId!)),
+                    icon: const Icon(Icons.stop, size: 18),
+                    label: const Text('取消整个批次'),
+                  ),
                 TextButton.icon(
-                  onPressed: () => _confirmDelete(context, ref, executionId),
+                  onPressed: restoreReady
+                      ? () => _confirmDelete(context, ref, executionId)
+                      : null,
                   icon: const Icon(Icons.delete_outline,
                       size: 18, color: Colors.red),
                   label: const Text('删除',
@@ -454,21 +470,24 @@ class _ExpandedContent extends ConsumerWidget {
         .where((e) => e.id == execId)
         .firstOrNull;
     final isRunning = execution != null && !execution.isTerminal;
-    // Deleting a running flow cancels its sub-task tasks first — since the
-    // executors' removeTask paths genuinely cancel the engine/HTTP work,
-    // no orphaned background work is left behind.
+    final cancelsBatch = execution != null &&
+        hasUnfinishedFlowBatchMember(
+            execution, ref.read(taskFlowExecutionsProvider));
+    // Clearing a card with unfinished batch members cancels their work;
+    // deleting the selected card also removes its own child tasks.
+    // Save the cancellation and child removals before removing the record.
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除任务流记录'),
         content: Text(
-          isRunning
-              ? execution.batchId != null
-                  ? '删除将取消整个批次中尚未完成的运行，并清除本条记录。确定删除？'
-                  : '删除将取消此任务流。确定删除？'
-              : execution != null && execution.subTasks.isNotEmpty
-                  ? '确定删除此任务流记录？其子任务记录也会一并删除。'
-                  : '确定删除此任务流记录？',
+          cancelsBatch
+              ? '删除此运行记录将取消整个批次尚未完成的任务，并清除其子任务记录。确定删除？'
+              : isRunning
+                  ? '任务流正在运行，删除将取消其中正在运行的任务。确定删除？'
+                  : execution != null && execution.subTasks.isNotEmpty
+                      ? '确定删除此任务流记录？其子任务记录也会一并删除。'
+                      : '确定删除此任务流记录？',
         ),
         actions: [
           TextButton(
@@ -477,50 +496,76 @@ class _ExpandedContent extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () async {
-              // Re-read the execution at confirm time: the dialog may have
-              // been open while later blocks started, so the snapshot from
-              // dialog-open misses their sub-tasks.
-              final current = ref
-                  .read(taskFlowExecutionsProvider)
-                  .where((e) => e.id == execId)
-                  .firstOrNull;
-              if (current != null && !current.isTerminal) {
-                try {
-                  final service = ref.read(taskFlowExecutionServiceProvider);
-                  if (current.batchId != null) {
-                    await service.cancelBatch(current.batchId!);
-                  } else {
-                    await service.cancelExecution(execId);
+              try {
+                // Re-read after awaits: the dialog may have been open while
+                // later blocks started or a terminal cancellation failed to
+                // persist on an earlier delete attempt.
+                while (ctx.mounted) {
+                  final current = ref
+                      .read(taskFlowExecutionsProvider)
+                      .where((e) => e.id == execId)
+                      .firstOrNull;
+                  if (current == null) {
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    return;
                   }
-                } catch (error) {
+                  final service = ref.read(taskFlowExecutionServiceProvider);
+                  if (hasUnfinishedFlowBatchMember(
+                    current,
+                    ref.read(taskFlowExecutionsProvider),
+                  )) {
+                    await service.cancelBatch(current.batchId!);
+                    if (!ctx.mounted) return;
+                  } else if (!current.isTerminal) {
+                    await service.cancelExecution(execId);
+                    if (!ctx.mounted) return;
+                  }
+                  final snapshot = ref.read(taskFlowExecutionsProvider);
+                  if (!await ref
+                      .read(taskFlowExecutionsProvider.notifier)
+                      .persist()) {
+                    throw const TaskFlowPersistenceException(
+                      '任务流取消状态无法保存，请重试删除',
+                    );
+                  }
+                  if (!ctx.mounted) return;
+                  if (!identical(
+                    snapshot,
+                    ref.read(taskFlowExecutionsProvider),
+                  )) {
+                    continue;
+                  }
+                  final latest =
+                      snapshot.where((e) => e.id == execId).firstOrNull;
+                  if (latest != null && !latest.isTerminal) {
+                    throw StateError('任务流取消后仍在运行');
+                  }
+                  final executionsNotifier =
+                      ref.read(taskFlowExecutionsProvider.notifier);
+                  if (latest != null) {
+                    await removeFlowChildTasksPersisted(ref, [latest]);
+                  }
+                  if (!await executionsNotifier
+                      .removeExecutionsPersisted([execId])) {
+                    throw const TaskFlowPersistenceException(
+                        '任务流记录删除状态无法保存，请重试删除');
+                  }
                   if (ctx.mounted) Navigator.pop(ctx);
-                  if (context.mounted)
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(error.toString())));
                   return;
                 }
+              } catch (error) {
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(SnackBar(content: Text(error.toString())));
+                }
               }
-              if (!ctx.mounted) return;
-              _removeSubTaskTasks(ref, current);
-              ref
-                  .read(taskFlowExecutionsProvider.notifier)
-                  .removeExecution(execId);
-              Navigator.pop(ctx);
             },
             child: const Text('确定', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
-  }
-
-  /// Remove the execution's real sub-task tasks from their providers so
-  /// they don't resurface as orphaned standalone cards after the flow
-  /// record is deleted (matches the AppBar 清除 actions, which remove
-  /// execution and sub-tasks together).
-  void _removeSubTaskTasks(WidgetRef ref, TaskFlowExecution? execution) {
-    if (execution == null) return;
-    removeFlowSubTaskTasks(ref, execution);
   }
 
   Widget _buildSubTaskCard(

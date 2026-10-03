@@ -13,6 +13,7 @@ class TaskFlowRunPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final restoreStatus = ref.watch(taskFlowExecutionRestoreStatusProvider);
     final executions = ref
         .watch(taskFlowExecutionsProvider)
         .where((execution) => executionIds.contains(execution.id))
@@ -25,7 +26,9 @@ class TaskFlowRunPage extends ConsumerWidget {
         .firstOrNull;
     return Scaffold(
       appBar: AppBar(title: const Text('本次运行'), actions: [
-        if (batchId != null && finished < executions.length)
+        if (restoreStatus == FlowExecutionRestoreStatus.ready &&
+            batchId != null &&
+            finished < executions.length)
           TextButton(
               onPressed: () async {
                 try {
@@ -40,16 +43,21 @@ class TaskFlowRunPage extends ConsumerWidget {
               },
               child: const Text('取消整个批次')),
       ]),
-      body: executions.isEmpty
-          ? const Center(child: Text('本次运行记录已清除'))
-          : ListView(children: [
-              Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text('$finished/${executionIds.length} 个运行已结束'
-                      '${executions.length < executionIds.length ? ' · ${executionIds.length - executions.length} 个记录已清除' : ''}')),
-              for (final execution in executions)
-                TaskFlowCard(key: ValueKey(execution.id), execution: execution),
-            ]),
+      body: restoreStatus != FlowExecutionRestoreStatus.ready
+          ? Center(
+              child: Text(restoreStatus == FlowExecutionRestoreStatus.restoring
+                  ? '正在恢复任务流记录…'
+                  : '任务流记录读取失败，任务操作已暂停'))
+          : executions.isEmpty
+              ? const Center(child: Text('本次运行记录已清除'))
+              : ListView(children: [
+                  Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text('$finished/${executionIds.length} 个运行已结束'
+                          '${executions.length < executionIds.length ? ' · ${executionIds.length - executions.length} 个记录已清除' : ''}')),
+                  for (final execution in executions)
+                    TaskFlowCard(key: ValueKey(execution.id), execution: execution),
+                ]),
     );
   }
 }

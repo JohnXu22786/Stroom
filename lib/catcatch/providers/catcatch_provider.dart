@@ -46,7 +46,18 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   /// 当前运行中的取消令牌映射（taskId → CancelToken）
   final Map<String, CancelToken> _cancelTokens = {};
 
+  Future<void>? _pendingWrite;
+  Completer<void>? _removalBarrier;
+  List<CatCatchTask>? _disposedSnapshot;
+  Future<void>? _disposedPersistence;
+
   CatCatchNotifier(this.ref) : super([]);
+
+  @override
+  void dispose() {
+    _disposedSnapshot = List.of(state);
+    super.dispose();
+  }
 
   // ===========================================================================
   // 公开方法
@@ -227,6 +238,46 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
     state = state.where((t) => t.id != id).toList();
     _persistTasks();
+  }
+
+  /// Save removals before publishing them; absent IDs also retry disk cleanup.
+  Future<bool> removeTasksPersisted(Iterable<String> ids) async {
+    while (_removalBarrier != null) {
+      await _removalBarrier!.future;
+    }
+    if (!mounted) return false;
+    final removedIds = ids.toSet();
+    if (removedIds.isEmpty) return true;
+
+    final gate = Completer<void>();
+    _removalBarrier = gate;
+    try {
+      final proposed = state.where((t) => !removedIds.contains(t.id)).toList();
+      if (!await _writeSnapshot(proposed)) return false;
+      if (mounted) {
+        final removed = state.where((t) => removedIds.contains(t.id)).toList();
+        state = state.where((t) => !removedIds.contains(t.id)).toList();
+        for (final id in removedIds) {
+          final token = _cancelTokens.remove(id);
+          if (token != null && !token.isCancelled) token.cancel();
+        }
+        for (final task in removed) {
+          unawaited(_cleanupTaskFiles(task));
+        }
+        if (!_hasRunningTasks()) await stopBackgroundService();
+      }
+      if (!mounted) {
+        // Deferred ordinary writes own this snapshot after disposal. Only a
+        // successful removal may remove these IDs from its final flush.
+        _disposedSnapshot = _disposedSnapshot
+            ?.where((task) => !removedIds.contains(task.id))
+            .toList();
+      }
+      return true;
+    } finally {
+      _removalBarrier = null;
+      gate.complete();
+    }
   }
 
   /// 清理任务关联的临时文件
@@ -751,18 +802,35 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   // ===========================================================================
 
   /// 保存任务列表到本地文件
-  Future<void> _persistTasks() async {
-    try {
-      final file = await _tasksFile();
-      final data = state.map((t) => t.toMap()).toList();
-      // 原子写入：防止中途崩溃留下半截 JSON 导致任务列表丢失。
-      await AtomicFile.writeString(file, jsonEncode(data));
-    } catch (e) {
-      debugPrint('[CatCatchNotifier] Failed to persist tasks: $e');
+  Future<void> _persistTasks() {
+    final barrier = _removalBarrier;
+    if (barrier != null) return barrier.future.then((_) => _persistTasks());
+    if (!mounted) {
+      final snapshot = _disposedSnapshot;
+      if (snapshot == null) return Future<void>.value();
+      return _disposedPersistence ??= _writeSnapshot(snapshot).then((_) {});
     }
-    if (!_hasRunningTasks()) {
-      await stopBackgroundService();
-    }
+    return _writeSnapshot(state).then((_) async {
+      if (mounted && !_hasRunningTasks()) await stopBackgroundService();
+    });
+  }
+
+  Future<bool> _writeSnapshot(List<CatCatchTask> snapshot) {
+    final previous = _pendingWrite ?? Future<void>.value();
+    final write = previous.then((_) async {
+      try {
+        final file = await _tasksFile();
+        final data = snapshot.map((t) => t.toMap()).toList();
+        // 原子写入：防止中途崩溃留下半截 JSON 导致任务列表丢失。
+        await AtomicFile.writeString(file, jsonEncode(data));
+        return true;
+      } catch (e) {
+        debugPrint('[CatCatchNotifier] Failed to persist tasks: $e');
+        return false;
+      }
+    });
+    _pendingWrite = write.then<void>((_) {});
+    return write;
   }
 
   /// 从本地文件加载任务列表
