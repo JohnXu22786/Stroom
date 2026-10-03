@@ -1,4 +1,5 @@
 part of 'conversation_provider.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -35,16 +36,17 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             for (final item in decoded) {
               if (item is Map) {
                 try {
-                  final conversation =
-                      Conversation.fromMap(Map<String, dynamic>.from(item));
+                  final conversation = Conversation.fromMap(
+                    Map<String, dynamic>.from(item),
+                  );
                   if (conversation.isTemporary &&
                       conversation.temporaryExpiryVersion <
                           kTemporaryConversationDurationVersion) {
                     // Version 0 records used a 24-hour window. Store the
                     // adjusted expiry and version in the same JSON write.
-                    conversation.temporaryExpiresAt =
-                        conversation.temporaryExpiresAt!
-                            .subtract(const Duration(hours: 23));
+                    conversation.temporaryExpiresAt = conversation
+                        .temporaryExpiresAt!
+                        .subtract(const Duration(hours: 23));
                     conversation.temporaryExpiryVersion =
                         kTemporaryConversationDurationVersion;
                     item['temporaryExpiresAt'] = conversation
@@ -59,7 +61,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                   _unparsedConversationRecords.add(item);
                   debugPrint('ConversationsNotifier: 跳过损坏的对话条目: $e');
                   await AppLogService.warning(
-                      'ConversationsNotifier', '跳过损坏的对话条目: $e');
+                    'ConversationsNotifier',
+                    '跳过损坏的对话条目: $e',
+                  );
                 }
               } else {
                 _unparsedConversationRecords.add(item);
@@ -70,17 +74,23 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 // Encode the original list so skipped malformed entries and
                 // unknown fields remain available for recovery.
                 final migratedJson = jsonEncode(decoded);
-                final saved =
-                    await prefs.setString('conversations', migratedJson);
+                final saved = await prefs.setString(
+                  'conversations',
+                  migratedJson,
+                );
                 if (!saved) {
                   debugPrint(
-                      'ConversationsNotifier: failed to save migrated temporary expiries');
+                    'ConversationsNotifier: failed to save migrated temporary expiries',
+                  );
                 }
               } catch (e) {
                 debugPrint(
-                    'ConversationsNotifier: failed to migrate temporary expiries: $e');
-                await AppLogService.warning('ConversationsNotifier',
-                    '迁移临时对话倒计时失败，已保留内存中的倒计时');
+                  'ConversationsNotifier: failed to migrate temporary expiries: $e',
+                );
+                await AppLogService.warning(
+                  'ConversationsNotifier',
+                  '迁移临时对话倒计时失败，已保留内存中的倒计时',
+                );
               }
             }
             if (mounted) {
@@ -93,8 +103,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               final inMemory = state;
               if (inMemory.isNotEmpty) {
                 final diskIds = conversations.map((c) => c.id).toSet();
-                final extra =
-                    inMemory.where((c) => !diskIds.contains(c.id)).toList();
+                final extra = inMemory
+                    .where((c) => !diskIds.contains(c.id))
+                    .toList();
                 state = pinnedFirstStable([...extra, ...conversations]);
                 hadInMemoryMerge = true;
               } else {
@@ -102,7 +113,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               }
             }
             await AppLogService.info(
-                'ConversationsNotifier', '加载了 ${conversations.length} 个对话');
+              'ConversationsNotifier',
+              '加载了 ${conversations.length} 个对话',
+            );
           } else {
             // 磁盘数据无效：内存已有对话（用户刚创建）时保留内存
             if (mounted && state.isEmpty) state = [];
@@ -148,7 +161,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       } catch (e) {
         debugPrint('Failed to auto-fix null assistant conversations: $e');
         await AppLogService.error(
-            'ConversationsNotifier', '修复空 assistantId 失败', e);
+          'ConversationsNotifier',
+          '修复空 assistantId 失败',
+          e,
+        );
       }
 
       // Restore last active conversation
@@ -158,10 +174,14 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           if (activeId != null && state.any((c) => c.id == activeId)) {
             _ref.read(activeConversationIdProvider.notifier).state = activeId;
             await AppLogService.info(
-                'ConversationsNotifier', '恢复上次活跃对话: $activeId');
+              'ConversationsNotifier',
+              '恢复上次活跃对话: $activeId',
+            );
           } else {
-            await AppLogService.warning('ConversationsNotifier',
-                '未找到上次活跃对话或 activeId 为 null: activeId=$activeId');
+            await AppLogService.warning(
+              'ConversationsNotifier',
+              '未找到上次活跃对话或 activeId 为 null: activeId=$activeId',
+            );
           }
         }
       } catch (e) {
@@ -201,7 +221,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   /// undecodable payload in case the user wants to recover it manually.
 
   Future<void> _backupCorruptConversationsFile(
-      SharedPreferences prefs, String corruptJson) async {
+    SharedPreferences prefs,
+    String corruptJson,
+  ) async {
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final backupKey = 'conversations.corrupt.$timestamp';
@@ -210,21 +232,26 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       // repeatedly trying to decode the same corrupt blob.
       await prefs.remove('conversations');
       debugPrint(
-          'ConversationsNotifier: backed up corrupt conversations to $backupKey');
+        'ConversationsNotifier: backed up corrupt conversations to $backupKey',
+      );
       await AppLogService.warning(
-          'ConversationsNotifier', '检测到损坏的对话数据，已备份到 $backupKey，原始数据已清空');
+        'ConversationsNotifier',
+        '检测到损坏的对话数据，已备份到 $backupKey，原始数据已清空',
+      );
 
       // Enforce the cap: keep only the N most recent backups.
-      final backupKeys = prefs
-          .getKeys()
-          .where((k) => k.startsWith('conversations.corrupt.'))
-          .toList()
-        ..sort();
+      final backupKeys =
+          prefs
+              .getKeys()
+              .where((k) => k.startsWith('conversations.corrupt.'))
+              .toList()
+            ..sort();
       while (backupKeys.length > _maxCorruptBackups) {
         final oldest = backupKeys.removeAt(0);
         await prefs.remove(oldest);
         debugPrint(
-            'ConversationsNotifier: removed old corrupt backup $oldest (cap=$_maxCorruptBackups)');
+          'ConversationsNotifier: removed old corrupt backup $oldest (cap=$_maxCorruptBackups)',
+        );
       }
     } catch (e) {
       debugPrint('Failed to back up corrupt conversations: $e');
@@ -308,7 +335,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       final json = jsonEncode(records);
       await prefs.setString('conversations', json);
       await AppLogService.debug(
-          'ConversationsNotifier', '对话已持久化, 共 ${snapshot.length} 个');
+        'ConversationsNotifier',
+        '对话已持久化, 共 ${snapshot.length} 个',
+      );
       return;
     } catch (e) {
       debugPrint('Failed to persist conversations (full): $e');
@@ -318,54 +347,58 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     // Tier 2: drop rawRequest/rawResponse from every message.
     try {
       final stripped = snapshot
-          .map((c) => Conversation(
-                id: c.id,
-                title: c.title,
-                createdAt: c.createdAt,
-                updatedAt: c.updatedAt,
-                messages: c.messages
-                    .map((m) => ChatMessage(
-                          id: m.id,
-                          role: m.role,
-                          content: m.content,
-                          createdAt: m.createdAt,
-                          attachments: m.attachments,
-                          isStreaming: m.isStreaming,
-                          isError: m.isError,
-                          reasoningContent: m.reasoningContent,
-                          toolCalls: m.toolCalls,
-                          reasoningSections: m.reasoningSections,
-                          textSections: m.textSections,
-                          toolCallRoundStarts: m.toolCallRoundStarts,
-                          blocks: m.blocks,
-                          // Tier 2 的目的就是剥离 rawRequest/rawResponse
-                          // （通常含大体积 base64，Tier 1 全量保存失败的
-                          // 原因）：这里必须传 null，否则与 Tier 1 相同
-                          // 的内容会再次失败，兜底层形同虚设。
-                          rawRequest: null,
-                          rawResponse: null,
-                        ))
-                    .toList(),
-                isPinned: c.isPinned,
-                sortOrder: c.sortOrder,
-                assistantId: c.assistantId,
-                draftText: c.draftText,
-                draftAttachments: c.draftAttachments,
-                enabledMcpToolNames: c.enabledMcpToolNames,
-                hasExplicitEnabledMcpTools: c.hasExplicitEnabledMcpTools,
-                contextSummary: c.contextSummary,
-                compactionTailStartId: c.compactionTailStartId,
-                titleAutoGenerated: c.titleAutoGenerated,
-                lastUsedModelName: c.lastUsedModelName,
-                lastUsedModelId: c.lastUsedModelId,
-                lastUsedProviderName: c.lastUsedProviderName,
-                lastInputTokens: c.lastInputTokens,
-                lastOutputTokens: c.lastOutputTokens,
-                totalCost: c.totalCost,
-                isTemporary: c.isTemporary,
-                temporaryExpiresAt: c.temporaryExpiresAt,
-                temporaryExpiryVersion: c.temporaryExpiryVersion,
-              ))
+          .map(
+            (c) => Conversation(
+              id: c.id,
+              title: c.title,
+              createdAt: c.createdAt,
+              updatedAt: c.updatedAt,
+              messages: c.messages
+                  .map(
+                    (m) => ChatMessage(
+                      id: m.id,
+                      role: m.role,
+                      content: m.content,
+                      createdAt: m.createdAt,
+                      attachments: m.attachments,
+                      isStreaming: m.isStreaming,
+                      isError: m.isError,
+                      reasoningContent: m.reasoningContent,
+                      toolCalls: m.toolCalls,
+                      reasoningSections: m.reasoningSections,
+                      textSections: m.textSections,
+                      toolCallRoundStarts: m.toolCallRoundStarts,
+                      blocks: m.blocks,
+                      // Tier 2 的目的就是剥离 rawRequest/rawResponse
+                      // （通常含大体积 base64，Tier 1 全量保存失败的
+                      // 原因）：这里必须传 null，否则与 Tier 1 相同
+                      // 的内容会再次失败，兜底层形同虚设。
+                      rawRequest: null,
+                      rawResponse: null,
+                    ),
+                  )
+                  .toList(),
+              isPinned: c.isPinned,
+              sortOrder: c.sortOrder,
+              assistantId: c.assistantId,
+              draftText: c.draftText,
+              draftAttachments: c.draftAttachments,
+              enabledMcpToolNames: c.enabledMcpToolNames,
+              hasExplicitEnabledMcpTools: c.hasExplicitEnabledMcpTools,
+              contextSummary: c.contextSummary,
+              compactionTailStartId: c.compactionTailStartId,
+              titleAutoGenerated: c.titleAutoGenerated,
+              lastUsedModelName: c.lastUsedModelName,
+              lastUsedModelId: c.lastUsedModelId,
+              lastUsedProviderName: c.lastUsedProviderName,
+              lastInputTokens: c.lastInputTokens,
+              lastOutputTokens: c.lastOutputTokens,
+              totalCost: c.totalCost,
+              isTemporary: c.isTemporary,
+              temporaryExpiresAt: c.temporaryExpiresAt,
+              temporaryExpiryVersion: c.temporaryExpiryVersion,
+            ),
+          )
           .toList();
       final records = <dynamic>[
         ...stripped.map((conversation) => conversation.toMap()),
@@ -374,7 +407,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       final json = jsonEncode(records);
       await prefs.setString('conversations', json);
       await AppLogService.warning(
-          'ConversationsNotifier', '持久化对话成功 (剥离 rawRequest/rawResponse 后)');
+        'ConversationsNotifier',
+        '持久化对话成功 (剥离 rawRequest/rawResponse 后)',
+      );
     } catch (e) {
       debugPrint('Failed to persist conversations (stripped): $e');
       await AppLogService.error('ConversationsNotifier', '持久化对话失败 (剥离后)', e);

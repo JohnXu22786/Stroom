@@ -96,67 +96,63 @@ void main() {
   });
 
   group('countdown reset on new messages', () {
-    test('updateMessages with the reset flag re-arms a temporary conversation',
-        () async {
-      // Start with a window almost fully elapsed.
-      final container = _createContainer(
-        initialState: [
-          _conv('c1', isTemporary: true, expiresAt: DateTime.now()),
-        ],
-      );
-      addTearDown(container.dispose);
-      final notifier = container.read(conversationsProvider.notifier);
-
-      await notifier.updateMessages(
-          'c1',
-          [
-            ChatMessage(id: 'm1', role: 'user', content: 'hi'),
+    test(
+      'updateMessages with the reset flag re-arms a temporary conversation',
+      () async {
+        // Start with a window almost fully elapsed.
+        final container = _createContainer(
+          initialState: [
+            _conv('c1', isTemporary: true, expiresAt: DateTime.now()),
           ],
-          resetTemporaryCountdown: true);
+        );
+        addTearDown(container.dispose);
+        final notifier = container.read(conversationsProvider.notifier);
 
-      final conv = container.read(conversationsProvider).single;
-      expect(conv.isTemporary, isTrue);
-      final remaining = conv.temporaryExpiresAt!.difference(DateTime.now());
-      expect(
-        remaining.inMinutes,
-        greaterThanOrEqualTo(kTemporaryConversationDuration.inMinutes - 1),
-      );
-      expect(remaining.inHours, lessThanOrEqualTo(1));
-    });
+        await notifier.updateMessages('c1', [
+          ChatMessage(id: 'm1', role: 'user', content: 'hi'),
+        ], resetTemporaryCountdown: true);
 
-    test('updateMessages without the flag does NOT reset the countdown',
-        () async {
-      // 非产生事件（切换对话前的存档保存、编辑截断、删除消息等）
-      // 不得重置倒计时。
-      final expiresAt = DateTime.now().add(const Duration(hours: 3));
-      final container = _createContainer(
-        initialState: [
-          _conv('c1', isTemporary: true, expiresAt: expiresAt),
-        ],
-      );
-      addTearDown(container.dispose);
-      final notifier = container.read(conversationsProvider.notifier);
+        final conv = container.read(conversationsProvider).single;
+        expect(conv.isTemporary, isTrue);
+        final remaining = conv.temporaryExpiresAt!.difference(DateTime.now());
+        expect(
+          remaining.inMinutes,
+          greaterThanOrEqualTo(kTemporaryConversationDuration.inMinutes - 1),
+        );
+        expect(remaining.inHours, lessThanOrEqualTo(1));
+      },
+    );
 
-      await notifier.updateMessages('c1', [
-        ChatMessage(id: 'm1', role: 'user', content: 'hi'),
-      ]);
+    test(
+      'updateMessages without the flag does NOT reset the countdown',
+      () async {
+        // 非产生事件（切换对话前的存档保存、编辑截断、删除消息等）
+        // 不得重置倒计时。
+        final expiresAt = DateTime.now().add(const Duration(hours: 3));
+        final container = _createContainer(
+          initialState: [_conv('c1', isTemporary: true, expiresAt: expiresAt)],
+        );
+        addTearDown(container.dispose);
+        final notifier = container.read(conversationsProvider.notifier);
 
-      final conv = container.read(conversationsProvider).single;
-      expect(conv.isTemporary, isTrue);
-      expect(conv.temporaryExpiresAt, expiresAt);
-    });
+        await notifier.updateMessages('c1', [
+          ChatMessage(id: 'm1', role: 'user', content: 'hi'),
+        ]);
+
+        final conv = container.read(conversationsProvider).single;
+        expect(conv.isTemporary, isTrue);
+        expect(conv.temporaryExpiresAt, expiresAt);
+      },
+    );
 
     test('updateMessages does not touch non-temporary conversations', () async {
       final container = _createContainer(initialState: [_conv('c1')]);
       addTearDown(container.dispose);
       final notifier = container.read(conversationsProvider.notifier);
 
-      await notifier.updateMessages(
-          'c1',
-          [
-            ChatMessage(id: 'm1', role: 'user', content: 'hi'),
-          ],
-          resetTemporaryCountdown: true);
+      await notifier.updateMessages('c1', [
+        ChatMessage(id: 'm1', role: 'user', content: 'hi'),
+      ], resetTemporaryCountdown: true);
 
       final conv = container.read(conversationsProvider).single;
       expect(conv.isTemporary, isFalse);
@@ -266,27 +262,28 @@ void main() {
       expect(container.read(conversationsProvider), isEmpty);
     });
 
-    test('unexpired temporary conversations survive the expiry check',
-        () async {
-      final container = _createContainer(
-        initialState: [
-          _conv(
-            'soon',
-            isTemporary: true,
-            expiresAt: DateTime.now().add(const Duration(minutes: 5)),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-      final notifier = container.read(conversationsProvider.notifier);
-
-      await notifier.checkTemporaryExpiryNow();
-
-      expect(container.read(conversationsProvider), hasLength(1));
-    });
-
     test(
-        'an expired temporary conversation is removed right after async '
+      'unexpired temporary conversations survive the expiry check',
+      () async {
+        final container = _createContainer(
+          initialState: [
+            _conv(
+              'soon',
+              isTemporary: true,
+              expiresAt: DateTime.now().add(const Duration(minutes: 5)),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        final notifier = container.read(conversationsProvider.notifier);
+
+        await notifier.checkTemporaryExpiryNow();
+
+        expect(container.read(conversationsProvider), hasLength(1));
+      },
+    );
+
+    test('an expired temporary conversation is removed right after async '
         'load', () async {
       // 生产路径：provider 真实的 _load 从 SharedPreferences 读入后，
       // 立即清理已到期临时对话（不等首轮 tick）。
@@ -305,7 +302,9 @@ void main() {
       // 必须持有一个强引用的 ProviderSubscription（Riverpod 3 的
       // unlinked container 会回收订阅被丢弃的 provider）。
       final sub = container.listen<List<Conversation>?>(
-          conversationsProvider, (_, __) {});
+        conversationsProvider,
+        (_, __) {},
+      );
       // 触发真实 factory（notifier._load()）。
       container.read(conversationsProvider.notifier);
 
@@ -322,8 +321,7 @@ void main() {
       sub.close();
     });
 
-    test(
-        'the per-second ticker bumps the UI tick while temp conversations '
+    test('the per-second ticker bumps the UI tick while temp conversations '
         'exist and stops after they are all disabled', () {
       fakeAsync((async) {
         final container = _createContainer(initialState: [_conv('c1')]);
@@ -342,8 +340,7 @@ void main() {
       });
     });
 
-    test(
-        'the ticker stops when the last temporary conversation is deleted '
+    test('the ticker stops when the last temporary conversation is deleted '
         'via deleteConversation', () {
       fakeAsync((async) {
         final container = _createContainer(
@@ -378,21 +375,25 @@ void main() {
   group('one-hour migration', () {
     test('persisted 24h expiries are shortened once when loaded', () async {
       final originalExpiry = DateTime.now().add(const Duration(hours: 24));
-      final legacyTemporaryConversation =
-          _conv('legacy-temp', isTemporary: true, expiresAt: originalExpiry)
-              .toMap()
-            ..remove('temporaryExpiryVersion');
+      final legacyTemporaryConversation = _conv(
+        'legacy-temp',
+        isTemporary: true,
+        expiresAt: originalExpiry,
+      ).toMap()..remove('temporaryExpiryVersion');
       SharedPreferences.setMockInitialValues({
-        'conversations':
-            jsonEncode([legacyTemporaryConversation, 'malformed-entry']),
+        'conversations': jsonEncode([
+          legacyTemporaryConversation,
+          'malformed-entry',
+        ]),
       });
 
       Future<(ProviderContainer, ProviderSubscription<List<Conversation>?>)>
-          loadContainer() async {
+      loadContainer() async {
         final container = ProviderContainer();
-        final subscription =
-            container.listen<List<Conversation>?>(
-                conversationsProvider, (_, __) {});
+        final subscription = container.listen<List<Conversation>?>(
+          conversationsProvider,
+          (_, __) {},
+        );
         container.read(conversationsProvider.notifier);
         for (var i = 0; i < 30; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -401,8 +402,10 @@ void main() {
       }
 
       final (firstContainer, firstSubscription) = await loadContainer();
-      final migratedExpiry =
-          firstContainer.read(conversationsProvider).single.temporaryExpiresAt!;
+      final migratedExpiry = firstContainer
+          .read(conversationsProvider)
+          .single
+          .temporaryExpiresAt!;
       final remaining = migratedExpiry.difference(DateTime.now());
       expect(remaining.inMinutes, greaterThanOrEqualTo(59));
       expect(remaining.inMinutes, lessThanOrEqualTo(60));
@@ -413,50 +416,55 @@ void main() {
             .temporaryExpiryVersion,
         kTemporaryConversationDurationVersion,
       );
-      final migratedJson = (await SharedPreferences.getInstance())
-          .getString('conversations')!;
+      final migratedJson = (await SharedPreferences.getInstance()).getString(
+        'conversations',
+      )!;
       expect(jsonDecode(migratedJson), contains('malformed-entry'));
       firstSubscription.close();
       firstContainer.dispose();
 
       final (secondContainer, secondSubscription) = await loadContainer();
       expect(
-          secondContainer
-              .read(conversationsProvider)
-              .single
-              .temporaryExpiresAt,
-          migratedExpiry);
+        secondContainer.read(conversationsProvider).single.temporaryExpiresAt,
+        migratedExpiry,
+      );
       secondSubscription.close();
       secondContainer.dispose();
     });
 
-    test('expiry cleanup preserves malformed entries after migration',
-        () async {
-      final legacyTemporaryConversation = _conv(
-        'expired-legacy-temp',
-        isTemporary: true,
-        expiresAt: DateTime.now().add(const Duration(hours: 22)),
-      ).toMap()
-        ..remove('temporaryExpiryVersion');
-      SharedPreferences.setMockInitialValues({
-        'conversations':
-            jsonEncode([legacyTemporaryConversation, 'malformed-entry']),
-      });
+    test(
+      'expiry cleanup preserves malformed entries after migration',
+      () async {
+        final legacyTemporaryConversation = _conv(
+          'expired-legacy-temp',
+          isTemporary: true,
+          expiresAt: DateTime.now().add(const Duration(hours: 22)),
+        ).toMap()..remove('temporaryExpiryVersion');
+        SharedPreferences.setMockInitialValues({
+          'conversations': jsonEncode([
+            legacyTemporaryConversation,
+            'malformed-entry',
+          ]),
+        });
 
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-      final subscription = container.listen<List<Conversation>?>(
-          conversationsProvider, (_, __) {});
-      addTearDown(subscription.close);
-      container.read(conversationsProvider.notifier);
-      for (var i = 0; i < 30; i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      }
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+        final subscription = container.listen<List<Conversation>?>(
+          conversationsProvider,
+          (_, __) {},
+        );
+        addTearDown(subscription.close);
+        container.read(conversationsProvider.notifier);
+        for (var i = 0; i < 30; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
 
-      expect(container.read(conversationsProvider), isEmpty);
-      final storedJson =
-          (await SharedPreferences.getInstance()).getString('conversations')!;
-      expect(jsonDecode(storedJson), ['malformed-entry']);
-    });
+        expect(container.read(conversationsProvider), isEmpty);
+        final storedJson = (await SharedPreferences.getInstance()).getString(
+          'conversations',
+        )!;
+        expect(jsonDecode(storedJson), ['malformed-entry']);
+      },
+    );
   });
 }
