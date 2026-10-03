@@ -51,8 +51,10 @@ const builtinMcpProviderGroups = <McpProviderGroup>[
   ),
 ];
 
-String defaultMcpGroupIdForProvider(String providerName) {
-  final name = providerName.trim().toLowerCase();
+String defaultMcpGroupIdForProvider(
+  String providerName, {
+  String? stableHttpToolName,
+}) {
   const searchProviders = {
     'exa',
     'tavily',
@@ -62,9 +64,15 @@ String defaultMcpGroupIdForProvider(String providerName) {
     'querit',
     'searxng',
   };
-  return searchProviders.contains(name) ||
-          name.contains('search') ||
-          name.contains('搜索')
+  bool isSearchProvider(String name) {
+    final normalized = name.trim().toLowerCase();
+    return searchProviders.contains(normalized) ||
+        normalized.contains('search') ||
+        normalized.contains('搜索');
+  }
+
+  return isSearchProvider(stableHttpToolName ?? '') ||
+          isSearchProvider(providerName)
       ? builtinSearchMcpGroupId
       : builtinMcpServicesGroupId;
 }
