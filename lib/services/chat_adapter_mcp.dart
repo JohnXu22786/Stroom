@@ -28,15 +28,20 @@ extension ChatAdapterMcpExt on ChatAdapter {
   /// 实际调用时按需进行（见 chat_service_tools.dart 的 _executeTool），
   /// 避免页面进入时对每个服务器发起连接尝试（真实端点可能数十秒超时）。
   ///
-  /// MCP 条目的 [ProviderEntry.enabled]（MCP总开关）关闭时，不发布任何
-  /// 占位工具并释放旧客户端——MCP 工具从助手页面与对话页一起消失。
+  /// MCP 条目的 [ProviderEntry.enabled]（MCP总开关）或某个配置所属的组别
+  /// 关闭时，不发布对应占位工具并释放旧客户端。
   Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
     final mcpEntry =
         entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
     // MCP 配置未变（同一实例）：占位符与客户端都无需重建。页面重复进入、
     // 或其它供应商（TTS/OCR 等）配置变更时，MCP 条目实例不变，跳过。
-    if (identical(_lastMcpEntry, mcpEntry)) return;
+    if (identical(_lastMcpEntry, mcpEntry) &&
+        identical(_lastMcpGroups, entriesState.mcpGroups)) {
+      return;
+    }
+    final keepExistingClients = identical(_lastMcpEntry, mcpEntry);
     _lastMcpEntry = mcpEntry;
+    _lastMcpGroups = entriesState.mcpGroups;
 
     if (mcpEntry == null || mcpEntry.configs.isEmpty || !mcpEntry.enabled) {
       // 没有配置任何 MCP 服务器，或 MCP总开关已关闭：发布空列表并释放
@@ -51,6 +56,7 @@ extension ChatAdapterMcpExt on ChatAdapter {
     final mcpConfigs = <_McpConfigEntry>[];
 
     for (final config in mcpEntry.configs) {
+      if (!isMcpProviderConfigEnabled(config, entriesState.mcpGroups)) continue;
       final typeConfig =
           config.models.isNotEmpty ? config.models[0].typeConfig : null;
 
@@ -72,20 +78,32 @@ extension ChatAdapterMcpExt on ChatAdapter {
     }
 
     if (mcpConfigs.isEmpty) {
-      // 只剩 HTTP 工具等非 MCP 配置：清空并释放旧客户端。
+      // 只剩 HTTP 工具等非 MCP 配置，或所有 MCP 配置都属于关闭组别。
+      // 清空占位工具并释放旧客户端。
       _mcpToolDefinitions = [];
       _mcpClientManager.disposeAll();
       return;
     }
 
-    // 配置变化：旧客户端（旧 URL/命令）作废。按需执行时这些客户端
-    // 尚未连接，dispose 只是释放句柄，不影响任何进行中的工具调用。
-    _mcpClientManager.disposeAll();
+    // MCP 条目没变时只有组别列表发生了变化：仅释放已关闭组别的客户端，
+    // 保留其它组别的客户端，避免切换一个组时打断其它组正在进行的工具调用。
+    if (keepExistingClients) {
+      final activeNames = mcpConfigs.map((entry) => entry.config.name).toSet();
+      for (final name in _mcpClientManager.clients.keys.toList()) {
+        if (!activeNames.contains(name)) {
+          _mcpClientManager.removeClient(name);
+        }
+      }
+    } else {
+      // MCP 条目变化时配置可能包含新 URL/命令，旧客户端作废。
+      _mcpClientManager.disposeAll();
+    }
 
     // 为每个 MCP 服务器创建客户端但**不连接**：连接延迟到工具被调用时。
     // 无效配置（缺 URL/命令，McpClient 构造会抛 ArgumentError）跳过其
     // 客户端但仍保留占位符，避免单条损坏配置让整个工具列表消失。
     for (final entry in mcpConfigs) {
+      if (_mcpClientManager.getClient(entry.config.name) != null) continue;
       try {
         _mcpClientManager.addClient(
           entry.config.name,
@@ -126,5 +144,6 @@ extension ChatAdapterMcpExt on ChatAdapter {
     _mcpClientManager.disposeAll();
     _mcpToolDefinitions = [];
     _lastMcpEntry = null;
+    _lastMcpGroups = null;
   }
 }
