@@ -401,28 +401,50 @@ class BrowserCookieService {
     return _groupAndSort(_mergeCookies(fileCookies, platformCookies));
   }
 
-  /// Enumerates cookies for every visited host (in parallel) and appends
-  /// them to [out]. Host-only cookies (whose platform `domain` is null) are
-  /// stamped with the visited host so they group, match and restore correctly.
-  /// Returns the hosts whose queries completed, including those with no cookies.
+  /// Enumerates cookies for every visited host and visited URL path (in
+  /// parallel) and appends them to [out]. HTTPS queries expose both secure
+  /// and non-secure cookies. Host-only cookies (whose platform `domain` is
+  /// null) are stamped with the visited host so they group, match and restore
+  /// correctly. Duplicate cookies returned for multiple paths are collapsed.
+  /// Returns hosts with at least one successful query, including hosts whose
+  /// successful queries returned no cookies.
   static Future<Set<String>> _collectPerDomainCookies(
       List<Map<String, dynamic>> out) async {
     final successfulHosts = <String>{};
     await Future.wait(_visitedDomains.map((host) async {
-      try {
-        final cookies =
-            await cookiePlatform.getCookies(url: WebUri('https://$host'));
-        final hostCookies = <Map<String, dynamic>>[];
-        for (final cookie in cookies) {
-          final map = _cookieToMap(cookie);
-          if (map['domain'] == null) map['domain'] = host;
-          hostCookies.add(map);
+      final queryUrls = <String>{'https://$host'};
+      for (final visitedUrl in _visitedUrls) {
+        final uri = Uri.tryParse(visitedUrl);
+        if (uri == null || uri.host != host) continue;
+
+        // The cookie API filters by URL path. Keep the visited path while
+        // using HTTPS so both secure and non-secure cookies are returned.
+        final httpsUri = uri.replace(scheme: 'https');
+        queryUrls.add(httpsUri.path == '/'
+            ? httpsUri.replace(path: '').toString()
+            : httpsUri.toString());
+      }
+
+      var querySucceeded = false;
+      final hostCookies = <Map<String, dynamic>>[];
+      await Future.wait(queryUrls.map((url) async {
+        try {
+          final cookies = await cookiePlatform.getCookies(url: WebUri(url));
+          querySucceeded = true;
+          for (final cookie in cookies) {
+            final map = _cookieToMap(cookie);
+            if (map['domain'] == null) map['domain'] = host;
+            hostCookies.add(map);
+          }
+        } catch (e) {
+          debugPrint(
+              'BrowserCookieService._collectPerDomainCookies: $url error: $e');
         }
-        out.addAll(hostCookies);
+      }));
+
+      if (querySucceeded) {
+        out.addAll(_mergeCookies(<Map<String, dynamic>>[], hostCookies));
         successfulHosts.add(host);
-      } catch (e) {
-        debugPrint(
-            'BrowserCookieService._collectPerDomainCookies: domain $host error: $e');
       }
     }));
     return successfulHosts;
