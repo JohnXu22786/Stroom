@@ -342,7 +342,13 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
     );
 
     var configs = entry.configs.map((c) => c.copy()).toList();
+    final existingConfigId = _isExistingConfig &&
+            widget.configIndex >= 0 &&
+            widget.configIndex < configs.length
+        ? configs[widget.configIndex].id
+        : null;
     final newConfig = ProviderConfigItem(
+      id: existingConfigId,
       providerName: name,
       groupId: _isExistingConfig &&
               widget.configIndex >= 0 &&
