@@ -31,8 +31,8 @@ class BrowserCookieService {
   static const String _retentionKey = 'browser_cookie_retention';
   // Keep pending callbacks rather than a completed Future tail, which can
   // retain the caller's async zone across independent operations.
-  static final Queue<_QueuedRetentionOperation<dynamic>>
-      _retentionOperations = Queue();
+  static final Queue<_QueuedRetentionOperation<dynamic>> _retentionOperations =
+      Queue();
   static bool _isRunningRetentionOperation = false;
 
   /// The platform cookie facade used for all platform cookie operations.
