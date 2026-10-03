@@ -223,6 +223,7 @@ Future<String> executeAsrBlock({
     if (detected != 'pcm') {
       audioFormat = detected;
     }
+    audioFormat = normalizeAsrUploadFormat(audioFormat);
     if (audioBytes.isEmpty) {
       failSubTask(
         bgNotifier,

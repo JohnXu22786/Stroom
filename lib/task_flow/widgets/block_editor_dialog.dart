@@ -134,7 +134,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final def = _definition;
+    final def = widget.block.copyWithParams(_params).getDefinition();
     final screenHeight = MediaQuery.of(context).size.height;
 
     // Subscribe the panel to provider changes: the provider may still be

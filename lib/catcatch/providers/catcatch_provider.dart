@@ -59,13 +59,19 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   /// [videoFolder] 视频文件保存到该文件夹（空字符串表示根目录）
   /// [audioFolder] 音频文件保存到该文件夹（空字符串表示根目录）
   ///
+  /// [deferSingleResourceSelection] lets flows inspect a sole resource before download.
+  ///
   /// 返回新任务 ID。
   String addTask(String url, int expectedDurationSec,
-      {String videoFolder = '', String audioFolder = '', String? taskId}) {
+      {String videoFolder = '',
+      String audioFolder = '',
+      String? taskId,
+      bool deferSingleResourceSelection = false}) {
     final id = taskId ?? const Uuid().v4();
     final metadata = <String, String>{
       if (videoFolder.isNotEmpty) 'videoFolder': videoFolder,
       if (audioFolder.isNotEmpty) 'audioFolder': audioFolder,
+      if (deferSingleResourceSelection) 'deferSingleResourceSelection': 'true',
     };
     final task = CatCatchTask(
       id: id,
