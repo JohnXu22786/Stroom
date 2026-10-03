@@ -193,7 +193,16 @@ class UserScript {
 
 class BrowserPage extends StatefulWidget {
   final String initialUrl;
-  const BrowserPage({super.key, this.initialUrl = 'https://www.google.com'});
+
+  /// Builds a test body with the real capture callback, without a native WebView.
+  @visibleForTesting
+  final Widget Function(BuildContext, ValueChanged<String>)? testBodyBuilder;
+
+  const BrowserPage({
+    super.key,
+    this.initialUrl = 'https://www.google.com',
+    this.testBodyBuilder,
+  });
 
   @override
   State<BrowserPage> createState() => _BrowserPageState();
@@ -393,29 +402,10 @@ class _BrowserPageState extends State<BrowserPage> {
   /// expected to await the push result and pre-fill the download form.
   void _onConfirmCapture(String selectedUrl) {
     debugPrint('[BrowserPage] User confirmed capture: $selectedUrl');
-
-    // Short display name; falls back to the URL for trailing-slash URLs.
-    final shortName = selectedUrl.split('/').last;
-    final displayName = shortName.isEmpty ? selectedUrl : shortName;
-
-    // Show a snackbar with options
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('已捕获: $displayName'),
-        duration: const Duration(seconds: 3),
-        action: SnackBarAction(
-          label: '下载',
-          onPressed: () {
-            // Navigate back to the cat-catch page with the URL pre-filled.
-            // Guard against being the root route (pop is a no-op then).
-            final navigator = Navigator.of(context);
-            if (navigator.canPop()) {
-              navigator.pop(selectedUrl);
-            }
-          },
-        ),
-      ),
-    );
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop<String>(selectedUrl);
+    }
   }
 
   /// Reset detected URLs for a new page load.
@@ -461,6 +451,11 @@ class _BrowserPageState extends State<BrowserPage> {
 
   @override
   Widget build(BuildContext context) {
+    final testBodyBuilder = widget.testBodyBuilder;
+    if (testBodyBuilder != null) {
+      return testBodyBuilder(context, _onConfirmCapture);
+    }
+
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
