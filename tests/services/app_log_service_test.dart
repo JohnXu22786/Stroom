@@ -567,7 +567,7 @@ void main() {
   // ==================================================================
 
   group('AppLogService — log retention', () {
-    test('cleanup removes logs older than 3 days', () async {
+    test('cleanup removes logs older than 15 days', () async {
       await AppLogService.info('TestSource', 'Today log');
       await AppLogService.flush();
 
@@ -577,17 +577,16 @@ void main() {
         await logDir.create(recursive: true);
       }
 
-      // Create a log file from 5 days ago
-      final oldDate = DateTime.now().subtract(const Duration(days: 5));
+      // Create a log file from 17 days ago
+      final oldDate = DateTime.now().subtract(const Duration(days: 17));
       final oldDateStr =
           '${oldDate.year}-${_pad(oldDate.month)}-${_pad(oldDate.day)}-${_pad(oldDate.hour)}';
       final oldFile = File('${logDir.path}/app_$oldDateStr.log');
       await oldFile.writeAsString('old log content');
       expect(await oldFile.exists(), isTrue);
 
-      // Create a log file from 2 days ago (should be kept)
-      const twoDaysAgo = Duration(days: 2);
-      final recentDate = DateTime.now().subtract(twoDaysAgo);
+      // Create a log file from 14 days ago (should be kept)
+      final recentDate = DateTime.now().subtract(const Duration(days: 14));
       final recentDateStr =
           '${recentDate.year}-${_pad(recentDate.month)}-${_pad(recentDate.day)}-${_pad(recentDate.hour)}';
       final recentFile = File('${logDir.path}/app_$recentDateStr.log');
@@ -597,13 +596,13 @@ void main() {
       // Run cleanup
       await AppLogService.cleanupOldLogs();
 
-      // Old file (5 days) should be deleted
+      // Old file (17 days) should be deleted
       expect(await oldFile.exists(), isFalse,
-          reason: 'Logs older than 3 days should be deleted');
+          reason: 'Logs older than 15 days should be deleted');
 
-      // Recent file (2 days) should be kept
+      // Recent file (14 days) should be kept
       expect(await recentFile.exists(), isTrue,
-          reason: 'Logs within 3 days should be kept');
+          reason: 'Logs within 15 days should be kept');
 
       // Today's file should be kept
       final today = DateTime.now();

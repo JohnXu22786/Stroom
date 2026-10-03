@@ -241,17 +241,35 @@ class _LogViewerPageState extends State<LogViewerPage>
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _logFiles.isEmpty
-              ? _buildEmptyState(theme)
-              : RefreshIndicator(
-                  onRefresh: () async {
-                    _retryCount = 0;
-                    await _loadLogFiles();
-                  },
-                  child: _buildLogFileList(theme),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '日志保留期限：只保留最近 ${AppLogService.retentionDays} 天的日志，超过 ${AppLogService.retentionDays} 天会自动清理。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _logFiles.isEmpty
+                    ? _buildEmptyState(theme)
+                    : RefreshIndicator(
+                        onRefresh: () async {
+                          _retryCount = 0;
+                          await _loadLogFiles();
+                        },
+                        child: _buildLogFileList(theme),
+                      ),
+          ),
+        ],
+      ),
     );
   }
 
