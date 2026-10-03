@@ -464,6 +464,11 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
               _applyApiKeyToTypeConfig(
                   updatedConfig.models[0].typeConfig, oldApiKey);
             }
+            final connectivityTest = oldTypeConfig['connectivityTest'];
+            if (connectivityTest is Map) {
+              updatedConfig.models[0].typeConfig['connectivityTest'] =
+                  Map<String, dynamic>.from(connectivityTest);
+            }
             mcpEntry.configs[idx] = updatedConfig;
             changed = true;
           }
