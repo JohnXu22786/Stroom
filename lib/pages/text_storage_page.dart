@@ -703,6 +703,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       folders: folders,
       sortConfig: sortConfig,
       config: config,
+      invalidateRenameCache: TextManifest.invalidateCache,
       onRefresh: () async {
         await ref.read(textRecordsProvider.notifier).loadRecords();
         await ref.read(textFolderListProvider.notifier).loadFolders();

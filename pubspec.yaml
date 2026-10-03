@@ -65,6 +65,7 @@ dependencies:
   photo_view: ^0.15.0
 
   # UI and Utilities
+  characters: ^1.4.1
   cupertino_icons: ^1.0.9
   material_color_utilities: ^0.13.0
   idb_shim: ^2.9.6+1
@@ -110,5 +111,7 @@ flutter:
   assets:
     - assets/images/
     - assets/vendor/
+    - assets/vendor/mathlive/
+    - assets/vendor/mathlive/fonts/
 
   generate: true

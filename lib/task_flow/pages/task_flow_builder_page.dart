@@ -16,6 +16,7 @@ import '../models/task_flow_definition.dart';
 import '../models/task_flow_execution.dart';
 import '../providers/task_flow_provider.dart';
 import '../services/task_flow_execution_service.dart';
+import '../services/task_flow_validator.dart';
 import '../utils/block_param_display.dart';
 import '../widgets/block_chain_editor.dart';
 import '../widgets/block_editor_dialog.dart';
@@ -33,11 +34,15 @@ import '../widgets/flow_block_card.dart';
 class TaskFlowBuilderPage extends ConsumerStatefulWidget {
   final String? flowId;
   final bool startInRunMode;
+  final TaskFlowValidationException? validationError;
+  final FlowRunInput? initialInput;
 
   const TaskFlowBuilderPage({
     super.key,
     this.flowId,
     this.startInRunMode = false,
+    this.validationError,
+    this.initialInput,
   });
 
   @override
@@ -87,6 +92,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   IOType _inputType = IOType.text;
   bool _isRunMode = false;
   bool _enteredFromRunMode = false;
+  bool _isSaving = false;
+  bool _isStarting = false;
+  TaskFlowDefinition? _failedSave;
 
   String _initialName = '';
   String _initialDesc = '';
@@ -118,6 +126,25 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       _descController.text = flow.description;
       _inputType = flow.inputType;
       _blocks = List<TaskFlowBlock>.from(flow.blocks);
+    }
+
+    final initialInput = widget.initialInput;
+    if (initialInput != null) {
+      if ([IOType.audio, IOType.image, IOType.video].contains(_runInputType)) {
+        _mediaInputs.add(initialInput.text);
+      } else if (_firstBlockDef?.typeKey == BlockType.catcatch) {
+        final entry = _CatCatchInputEntry();
+        entry.urlController.text = initialInput.text;
+        entry.secondController.text = '${initialInput.durationSec}';
+        _catcatchInputs.add(entry);
+      } else {
+        _inputController.text = initialInput.text;
+      }
+    }
+    if (widget.validationError != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showValidationError(widget.validationError!);
+      });
     }
 
     _initialName = _nameController.text.trim();
@@ -192,6 +219,24 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   /// On discard the local edits must be dropped — otherwise run mode would
   /// render the edited chain while [_startFlow] executes the persisted flow.
   void _goBackFromEdit() {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    final failedSave = _failedSave;
+    if (failedSave != null) {
+      final notifier = ref.read(taskFlowListProvider.notifier);
+      // Only undo this editor's failed draft, not a newer external update.
+      if (identical(notifier.getFlow(failedSave.id), failedSave)) {
+        if (_isEditing) {
+          notifier.updateFlow(failedSave.id,
+              name: _initialName,
+              description: _initialDesc,
+              inputType: _initialInputType,
+              blocks: _initialBlocks);
+        } else {
+          notifier.removeFlow(failedSave.id);
+        }
+      }
+      _failedSave = null;
+    }
     if (_enteredFromRunMode) {
       setState(() {
         _isRunMode = true;
@@ -231,7 +276,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        if (!mounted) return;
+        if (!mounted || _isSaving) return;
         if (!_isDirty) {
           _goBackFromEdit();
           return;
@@ -247,30 +292,33 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           centerTitle: true,
           actions: [
             TextButton.icon(
-              onPressed: _saveFlow,
+              onPressed: _isSaving ? null : _saveFlow,
               icon: const Icon(Icons.save, size: 18),
               label: const Text('保存'),
             ),
           ],
         ),
-        body: GestureDetector(
-          onTap: () => FocusScope.of(context).unfocus(),
-          child: Column(
-            children: [
-              _buildEditHeader(cs),
-              Expanded(
-                child: BlockChainEditor(
-                  blocks: _blocks,
-                  inputType: _inputType,
-                  onInputTypeChanged: (type) =>
-                      setState(() => _inputType = type),
-                  onAddBlock: _addBlock,
-                  onEditBlock: _editBlock,
-                  onDeleteBlock: _removeBlock,
-                  onReplaceBlock: _replaceBlock,
+        body: AbsorbPointer(
+          absorbing: _isSaving,
+          child: GestureDetector(
+            onTap: () => FocusScope.of(context).unfocus(),
+            child: Column(
+              children: [
+                _buildEditHeader(cs),
+                Expanded(
+                  child: BlockChainEditor(
+                    blocks: _blocks,
+                    inputType: _inputType,
+                    onInputTypeChanged: (type) =>
+                        setState(() => _inputType = type),
+                    onAddBlock: _addBlock,
+                    onEditBlock: _editBlock,
+                    onDeleteBlock: _removeBlock,
+                    onReplaceBlock: _replaceBlock,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -290,6 +338,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         children: [
           TextField(
             controller: _nameController,
+            enabled: !_isSaving,
             decoration: InputDecoration(
               hintText: '输入任务流名称',
               border: OutlineInputBorder(
@@ -311,6 +360,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           const SizedBox(height: 8),
           TextField(
             controller: _descController,
+            enabled: !_isSaving,
             decoration: InputDecoration(
               hintText: '添加描述（可选）',
               border: OutlineInputBorder(
@@ -369,7 +419,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     }
   }
 
-  void _saveFlow() {
+  Future<void> _saveFlow() async {
+    if (!mounted || _isSaving || _isRunMode) return;
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(
@@ -396,35 +447,41 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     }
 
     final notifier = ref.read(taskFlowListProvider.notifier);
-
-    if (_editingFlowId != null) {
-      notifier.updateFlow(
-        _editingFlowId!,
-        name: name,
-        description: _descController.text.trim(),
-        inputType: _inputType,
-        blocks: _blocks,
-      );
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('任务流已更新')));
-    } else {
-      _editingFlowId = notifier.addFlow(
-        name: name,
-        description: _descController.text.trim(),
-        inputType: _inputType,
-        blocks: _blocks,
-      );
-      _isEditing = true;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('任务流已创建')));
+    final current =
+        _editingFlowId == null ? null : notifier.getFlow(_editingFlowId!);
+    final flow = TaskFlowDefinition(
+      id: _editingFlowId,
+      name: name,
+      description: _descController.text.trim(),
+      inputType: _inputType,
+      blocks: _blocks,
+      createdAt: current?.createdAt,
+    );
+    // Keep the id on failure so retry replaces the same in-memory draft.
+    _editingFlowId = flow.id;
+    setState(() => _isSaving = true);
+    final saved = await notifier.saveFlow(flow);
+    if (!mounted) return;
+    _failedSave = saved ? null : flow;
+    setState(() => _isSaving = false);
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    if (!saved) {
+      messenger.showSnackBar(SnackBar(
+        content: const Text('保存失败，更改仍保留，请重试'),
+        action: SnackBarAction(label: '重试', onPressed: _saveFlow),
+      ));
+      return;
     }
+    messenger.showSnackBar(SnackBar(
+      content: Text(_isEditing ? '任务流已更新' : '任务流已创建'),
+    ));
+    _isEditing = true;
 
-    _initialName = _nameController.text.trim();
-    _initialDesc = _descController.text.trim();
-    _initialInputType = _inputType;
-    _initialBlocks = _blocks
+    _initialName = flow.name;
+    _initialDesc = flow.description;
+    _initialInputType = flow.inputType;
+    _initialBlocks = flow.blocks
         .map(
           (b) => TaskFlowBlock(
             id: b.id,
@@ -557,8 +614,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
   /// The effective input type for the run input section: the first block's
   /// declared input, falling back to the flow's initial input type.
-  IOType get _runInputType =>
-      _firstBlockDef?.inputType ?? _inputType.userFacing;
+  IOType get _runInputType => _firstBlockDef?.inputType == IOType.any
+      ? _inputType.userFacing
+      : _firstBlockDef?.inputType ?? _inputType.userFacing;
 
   Widget _buildRunInputSection(ColorScheme cs) {
     final firstDef = _firstBlockDef;
@@ -617,7 +675,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 width: double.infinity,
                 height: 44,
                 child: FilledButton.icon(
-                  onPressed: _canStartFlow() ? _startFlow : null,
+                  onPressed:
+                      !_isStarting && _canStartFlow() ? _startFlow : null,
                   icon: const Icon(Icons.play_arrow, size: 18),
                   label: const Text('开始任务流'),
                 ),
@@ -1280,7 +1339,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     if (_firstBlockDef?.typeKey == BlockType.catcatch) {
       return [
         for (final entry in _catcatchInputs)
-          if (_isValidUrl(entry.urlController.text.trim()))
+          if (entry.urlController.text.trim().isNotEmpty)
             FlowRunInput(
               text: entry.urlController.text.trim(),
               durationSec: _catcatchEntrySeconds(entry),
@@ -1298,65 +1357,30 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     return text.isEmpty ? const [] : [FlowRunInput(text: text)];
   }
 
+  Future<void> _showValidationError(TaskFlowValidationException error) async {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(error.toString())));
+    if (error.isInputError) return;
+    setState(() => _isRunMode = false);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || error.blockId == null) return;
+    final index = _blocks.indexWhere((b) => b.id == error.blockId);
+    if (index >= 0) await _editBlock(index);
+  }
+
   Future<void> _startFlow() async {
+    if (_isStarting) return;
     final inputs = _collectRunInputs();
-    if (inputs.isEmpty) return;
-
-    final flow = ref
-        .read(taskFlowListProvider)
-        .where((f) => f.id == _editingFlowId)
-        .firstOrNull;
-
-    if (flow == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('任务流不存在')));
-      }
+    setState(() => _isStarting = true);
+    try {
+      await ref
+          .read(taskFlowExecutionServiceProvider)
+          .launchFlowMany(_editingFlowId!, inputs);
+    } on TaskFlowValidationException catch (error) {
+      if (mounted) await _showValidationError(error);
       return;
-    }
-
-    if (flow.blocks.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('任务流未包含任何功能块')));
-      }
-      return;
-    }
-
-    // Required-param guard (same rule as _saveFlow) — protects flows
-    // saved before the rule existed.
-    for (final block in flow.blocks) {
-      final def = block.getDefinition();
-      if (def == null) continue;
-      for (final p in def.params) {
-        if (!p.required) continue;
-        final raw = block.params[p.key]?.toString() ?? '';
-        if (raw.trim().isEmpty) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('「${def.label}」的「${p.label}」为必填项，请先在设置中配置'),
-              ),
-            );
-          }
-          return;
-        }
-      }
-    }
-
-    final service = ref.read(taskFlowExecutionServiceProvider);
-
-    // Fire-and-forget: startFlowMany can take minutes (polling loops).
-    // Each input runs the whole chain as its own execution — the resource
-    // scheduler queues blocks when the device is busy. The unified task
-    // list shows live progress per execution.
-    if (inputs.length == 1) {
-      service.startFlow(_editingFlowId!, inputs.first.text,
-          durationSec: inputs.first.durationSec);
-    } else {
-      service.startFlowMany(_editingFlowId!, inputs);
+    } finally {
+      if (mounted) setState(() => _isStarting = false);
     }
 
     if (mounted) {

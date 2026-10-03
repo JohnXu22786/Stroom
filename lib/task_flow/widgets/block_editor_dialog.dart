@@ -16,7 +16,6 @@ import '../../utils/video_manifest.dart';
 import '../../widgets/folder_picker_dialog.dart';
 import '../models/task_flow_definition.dart';
 import '../models/block_type_definition.dart';
-import '../services/block_executors/shared_helpers.dart' show asIntParam;
 
 /// Which gallery's folders a block's save-folder param lists.
 ///
@@ -92,22 +91,6 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     _params = Map<String, dynamic>.from(widget.block.params);
     _definition = widget.block.getDefinition();
 
-    // Clamp persisted modelSelector values into the CURRENT model range
-    // (configs/models may have been deleted since the block was saved) — a
-    // stale out-of-range index would otherwise survive untouched through a
-    // confirm and fail at execution time.
-    if (_definition != null) {
-      final def = _definition!;
-      for (final p in def.params) {
-        if (p.type != BlockParamType.modelSelector) continue;
-        final models = _modelsOf(p.configType);
-        if (models.isEmpty) continue;
-        final raw = _params[p.key];
-        final idx = raw is num ? raw.toInt() : (int.tryParse('$raw') ?? 0);
-        _params[p.key] = idx.clamp(0, models.length - 1).toInt();
-      }
-    }
-
     // Initialize TextEditingControllers for string-type params
     if (_definition != null) {
       for (final p in _definition!.params) {
@@ -130,61 +113,21 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
     super.dispose();
   }
 
-  /// Models of a provider type, flattened with their config — the same
-  /// shared list the executors and standalone pages use (configs without
-  /// host/key excluded), so a selected index resolves identically
-  /// everywhere.
-  List<({dynamic config, dynamic model})> _modelsOf(String configType) {
-    return [
-      for (final e in flattenProviderModels(
+  List<ProviderModel> _modelsOf(String configType) => flattenProviderModels(
         ref.read(providerEntriesProvider),
         configType,
-      ))
-        (config: e.config, model: e.model),
-    ];
-  }
+      );
 
-  /// The TTS model selected by the block's modelIndex param (shared list).
-  dynamic _selectedTtsModel() {
-    final models = _modelsOf('tts');
-    final idx = asIntParam(_params, 'modelIndex', 0);
-    if (models.isEmpty || idx >= models.length) return null;
-    return models[idx].model;
-  }
+  ModelConfig? _selectedTtsModel() => resolveProviderModel(
+        ref.read(providerEntriesProvider),
+        'tts',
+        _params['modelRef'],
+      )?.model;
 
-  /// Voice ids available across ALL configured TTS models. Used at
-  /// confirm time to detect a stale voice (exists on no model).
-  Set<String> _allTtsVoiceIds() {
-    final ids = <String>{};
-    for (final entry in _modelsOf('tts')) {
-      final model = entry.model;
-      final mVoices = model.voices as List<dynamic>? ?? const [];
-      for (final v in mVoices) {
-        final ve = v is VoiceEntry
-            ? v
-            : VoiceEntry.fromMap(Map<String, dynamic>.from(v as Map));
-        if (ve.id.isNotEmpty) ids.add(ve.id);
-      }
-    }
-    return ids;
-  }
-
-  /// The model index that provides [voiceId], or null if no configured
-  /// TTS model has it. Used at confirm time to keep (model, voice)
-  /// consistent.
-  int? _voiceOwnerModelIndex(String voiceId) {
-    final models = _modelsOf('tts');
-    for (var mi = 0; mi < models.length; mi++) {
-      final model = models[mi].model;
-      final mVoices = model.voices as List<dynamic>? ?? const [];
-      for (final v in mVoices) {
-        final ve = v is VoiceEntry
-            ? v
-            : VoiceEntry.fromMap(Map<String, dynamic>.from(v as Map));
-        if (ve.id == voiceId) return mi;
-      }
-    }
-    return null;
+  void _selectModel(ProviderModel model) {
+    _params['modelRef'] = providerModelReference(model);
+    _params.remove('modelIndex');
+    _params.remove('modelSelectionRequired');
   }
 
   @override
@@ -354,50 +297,21 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     const SizedBox(width: 8),
                     FilledButton(
                       onPressed: () {
-                        // Re-clamp persisted model indices into the
-                        // CURRENT model range at confirm time: the
-                        // initState clamp is skipped when the provider is
-                        // still loading, and models may have been removed
-                        // while the sheet was open. Without this an
-                        // out-of-range index would survive confirm and
-                        // fail at execution.
-                        if (_definition != null) {
-                          for (final p in _definition!.params) {
-                            if (p.type != BlockParamType.modelSelector) {
-                              continue;
-                            }
-                            final models = _modelsOf(p.configType);
-                            if (models.isEmpty) continue;
-                            final raw = _params[p.key];
-                            final idx = raw is num
-                                ? raw.toInt()
-                                : (int.tryParse('$raw') ?? 0);
-                            final clamped =
-                                idx.clamp(0, models.length - 1).toInt();
-                            if (clamped != idx) {
-                              _params[p.key] = clamped;
-                            }
-                          }
+                        // Confirming unrelated settings must never repair a
+                        // missing reference by choosing another model.
+                        _params.remove('modelIndex');
+                        final model = _selectedTtsModel();
+                        if (model != null &&
+                            model.voices.isNotEmpty &&
+                            !model.voices
+                                .any((v) => v.id == _params['voice'])) {
+                          _params['voice'] = '';
                         }
-                        // Confirm-time voice/model reconciliation:
-                        // - a voice that exists on ANOTHER model moves
-                        //   modelIndex to its owning model (same pair the
-                        //   dropdown's onChanged produces);
-                        // - a voice that exists on NO model is reset to ''
-                        //   so execution doesn't fail on an unresolvable
-                        //   id — but only when SOME voices exist: with no
-                        //   voices configured anywhere, a manually typed
-                        //   id is the user's only option and is kept.
-                        final voice = _params['voice']?.toString() ?? '';
-                        if (voice.isNotEmpty) {
-                          final owner = _voiceOwnerModelIndex(voice);
-                          if (owner != null) {
-                            _params['modelIndex'] = owner;
-                          } else if (_allTtsVoiceIds().isNotEmpty) {
-                            _params['voice'] = '';
-                          }
-                        }
-                        final updated = widget.block.copyWithParams(_params);
+                        final updated = TaskFlowBlock(
+                          id: widget.block.id,
+                          typeKey: widget.block.typeKey,
+                          params: _params,
+                        );
                         Navigator.pop(context, updated);
                       },
                       child: const Text('确认'),
@@ -476,41 +390,22 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         );
 
       case BlockParamType.modelSelector:
-        // Persisted JSON round-trips numbers as `num` — `int.tryParse('2.0')`
-        // would fail and silently reset the selection to 0.
-        final currentIndex =
-            value is num ? value.toInt() : (int.tryParse('$value') ?? 0);
-        // Model-level selection, same granularity as the standalone page:
-        // each entry is a model of a configured provider, displayed as
-        // 'modelName | providerName'.
         final models = _modelsOf(param.configType);
-        if (models.isEmpty) {
-          return const ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-              '未配置模型',
-              style: TextStyle(fontSize: 13),
-            ),
-          );
-        }
-        final clampedIndex =
-            currentIndex.clamp(0, math.max(0, models.length - 1)).toInt();
-        // The initState clamp may have been skipped when the panel opened
-        // before the provider finished loading — persist the clamped value
-        // so a confirm doesn't save an out-of-range index that would fail
-        // at execution.
-        if (clampedIndex != currentIndex) {
-          _params[param.key] = clampedIndex;
-        }
-        final selectedModel = models[clampedIndex].model;
+        final selected = resolveProviderModel(
+          ref.read(providerEntriesProvider),
+          param.configType,
+          value,
+        );
+        final selectedIndex =
+            selected == null ? null : models.indexOf(selected);
         final customParams =
-            (selectedModel.customParams as List<dynamic>? ?? const []);
+            selected?.model.customParams ?? const <CustomParam>[];
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             DropdownButtonFormField<int>(
-              value: clampedIndex,
+              value: selectedIndex,
+              hint: Text(models.isEmpty ? '请先配置模型' : '模型未选择或已失效，请重新选择'),
               isDense: true,
               decoration: InputDecoration(
                 isDense: true,
@@ -543,7 +438,17 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               }),
               onChanged: (v) {
                 if (v != null) {
-                  setState(() => _params[param.key] = v);
+                  setState(() {
+                    _selectModel(models[v]);
+                    final voice = _params['voice'];
+                    if (voice != null &&
+                        !models[v]
+                            .model
+                            .voices
+                            .any((entry) => entry.id == voice)) {
+                      _params['voice'] = '';
+                    }
+                  });
                 }
               },
             ),
@@ -595,7 +500,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         // model's): a voice configured on another model must still be
         // selectable — previously an empty current-model voice list fell
         // back to a raw manual-input field and the configured voice was
-        // never offered. Selecting a voice ALSO switches modelIndex to
+        // never offered. Selecting a voice ALSO explicitly selects
         // the model that provides it, so the executor resolves the same
         // (model, voice) pair the user picked.
         final ttsModels = _modelsOf('tts');
@@ -644,8 +549,17 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             style: const TextStyle(fontSize: 13),
           );
         }
-        final currentOption =
-            voiceOptions.where((o) => o.id == current).firstOrNull;
+        final selected = resolveProviderModel(
+          ref.read(providerEntriesProvider),
+          'tts',
+          _params['modelRef'],
+        );
+        final currentOption = voiceOptions
+            .where((o) =>
+                o.id == current &&
+                selected != null &&
+                ttsModels[o.modelIndex] == selected)
+            .firstOrNull;
         return DropdownButtonFormField<String>(
           value: currentOption != null
               ? '${currentOption.modelIndex}:${currentOption.id}'
@@ -686,7 +600,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               _params['voice'] = id;
               // The voice lives on another model → switch the model too,
               // so execution resolves this voice.
-              _params['modelIndex'] = mi;
+              _selectModel(ttsModels[mi]);
               _controllers[param.key]?.text = id;
             });
           },

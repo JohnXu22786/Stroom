@@ -9,6 +9,9 @@ import '../../providers/task_provider_shared.dart';
 import '../../task_flow/models/task_flow_execution.dart';
 import '../../task_flow/providers/task_flow_execution_provider.dart';
 import '../../task_flow/services/task_flow_execution_service.dart';
+import '../../task_flow/services/task_flow_validator.dart';
+import '../../task_flow/pages/task_flow_builder_page.dart';
+import '../../task_flow/providers/task_flow_provider.dart';
 import 'background_task_card.dart';
 import 'catcatch_task_card.dart';
 import 'synthesis_task_card.dart';
@@ -341,16 +344,31 @@ class _ExpandedContent extends ConsumerWidget {
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              // Fire-and-forget: startFlow can take minutes (polling
-              // loops). A new execution record is created on top of the
-              // list; the old failed record stays for comparison.
-              ref.read(taskFlowExecutionServiceProvider).startFlow(
-                    execution.flowId,
-                    execution.inputText,
-                    durationSec: execution.inputDurationSec,
-                  );
+              final input = FlowRunInput(
+                  text: execution.inputText,
+                  durationSec: execution.inputDurationSec);
+              try {
+                await ref
+                    .read(taskFlowExecutionServiceProvider)
+                    .launchFlowMany(execution.flowId, [input]);
+              } on TaskFlowValidationException catch (error) {
+                if (!context.mounted) return;
+                if (!ref
+                    .read(taskFlowListProvider)
+                    .any((f) => f.id == execution.flowId)) {
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(SnackBar(content: Text(error.toString())));
+                  return;
+                }
+                await Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => TaskFlowBuilderPage(
+                        flowId: execution.flowId,
+                        startInRunMode: true,
+                        initialInput: input,
+                        validationError: error)));
+              }
             },
             child: const Text('重试'),
           ),

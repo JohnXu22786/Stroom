@@ -105,7 +105,7 @@ class TaskFlowBlock {
 /// - An ordered list of [blocks] (positions 1..N).
 ///
 /// The initial input at position 0 feeds into the first block.
-/// Block I/O compatibility is advisory — the flow will run regardless.
+/// Block I/O compatibility is checked before any execution starts.
 ///
 /// Flows are persisted as JSON and can be duplicated, renamed, etc.
 @immutable

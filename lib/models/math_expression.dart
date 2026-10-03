@@ -1,5 +1,7 @@
 import 'package:function_tree/function_tree.dart';
 
+import 'math_input_catalog.dart';
+
 /// The type of a math expression.
 enum MathExpressionType {
   /// Explicit y = f(x) — a single-valued function of x.
@@ -101,7 +103,7 @@ class MathExpression {
     final isEquation = _isEquation(body);
 
     // Normalize the expression for function_tree
-    final normalized = _normalizeExpression(body);
+    var normalized = '';
 
     // Try to parse and create evaluator
     String? error;
@@ -109,6 +111,7 @@ class MathExpression {
     double Function(double, double)? implicitFn;
 
     try {
+      normalized = _normalizeExpression(body);
       if (isEquation) {
         // For equations like x=1 or x^2+y^2=1, create f(x,y) = left - right
         final eqParts = normalized.split('=');
@@ -131,8 +134,8 @@ class MathExpression {
       error = e.toString();
     }
 
-    // Extract parameters from the original body
-    final params = _extractParameters(body);
+    // Extract parameters from the normalized formula.
+    final params = _extractParameters(normalized, implicit: isEquation);
 
     return MathExpression._(
       rawExpression: trimmed,
@@ -376,16 +379,16 @@ class MathExpression {
     String normalized,
     Map<String, double> parameterValues,
   ) {
-    final variableNames = ['x', 'y'];
-    // Add any additional parameters from parameterValues
-    for (final key in parameterValues.keys) {
-      if (!variableNames.contains(key)) {
-        variableNames.add(key);
-      }
-    }
+    final params = _extractParameters(normalized, implicit: true);
+    final values = {for (final name in params) name: 1.0, ...parameterValues};
+    final variableNames = [
+      'x',
+      'y',
+      ...values.keys.where((k) => k != 'x' && k != 'y')
+    ];
     final multiFunc = normalized.toMultiVariableFunction(variableNames);
     return (double x, double y) {
-      final args = Map<String, num>.from(parameterValues);
+      final args = Map<String, num>.from(values);
       args['x'] = x;
       args['y'] = y;
       return multiFunc(args).toDouble();
@@ -399,7 +402,9 @@ class MathExpression {
   /// Strip common prefixes like "y = ", "f(x) = " from the expression.
   static String _stripPrefix(String expr) {
     // Try f(x) = (with optional spaces)
-    final fxMatch = RegExp(r'^f\s*\(\s*x\s*\)\s*=\s*').firstMatch(expr);
+    final fxMatch =
+        RegExp(r'^f\s*(?:\\left\s*)?\(\s*x\s*(?:\\right\s*)?\)\s*=\s*')
+            .firstMatch(expr);
     if (fxMatch != null) {
       return expr.substring(fxMatch.end);
     }
@@ -427,17 +432,18 @@ class MathExpression {
     // Step 2: Remaining braces → parentheses (for ^{...} superscript, etc.)
     result = result.replaceAll('{', '(').replaceAll('}', ')');
 
-    // Step 3: Remove whitespace
-    result = result.replaceAll(RegExp(r'\s+'), '');
-    if (result.isEmpty) return '';
-
-    // Step 4: Handle implicit multiplication
+    // Preserve token boundaries: "\\alpha x" is alpha*x, not alphax.
     result = _addImplicitMultiplication(result);
+    // function_tree sanitizes unknown punctuation by deleting it. Reject it
+    // here so unsupported relations cannot silently change into a curve.
+    if (RegExp(r'[^a-zA-Z0-9_+\-*/%^(),.=]').hasMatch(result)) {
+      throw const FormatException('此结构可编辑，但绘图引擎暂不支持');
+    }
 
     return result;
   }
 
-  /// Replace `\frac{numerator}{denominator}` with `(num)/(denom)`.
+  /// Replace `\frac{numerator}{denominator}` with `((num)/(denom))`.
   /// Supports nested braces via brace-level counting.
   static String _replaceFrac(String expr) {
     final fracRegex = RegExp(r'\\frac\b');
@@ -492,12 +498,74 @@ class MathExpression {
       final content2 = result.substring(contentStart2, idx);
       final braceEnd2 = idx;
 
-      // Replace \frac{content1}{content2} with (content1)/(content2)
+      // Keep the whole fraction as one atom for following powers/postfixes.
       final before = result.substring(0, pos);
       final after = result.substring(braceEnd2 + 1);
-      result = '$before($content1)/($content2)$after';
+      result = '$before(($content1)/($content2))$after';
     }
 
+    return result;
+  }
+
+  /// Read a balanced LaTeX group, including nested templates.
+  static (String, int)? _latexGroup(
+      String source, int start, String open, String close) {
+    while (start < source.length && source[start] == ' ') {
+      start++;
+    }
+    if (start >= source.length || source[start] != open) return null;
+    final contentStart = ++start;
+    var depth = 1;
+    while (start < source.length) {
+      if (source[start] == open) depth++;
+      if (source[start] == close && --depth == 0) {
+        return (source.substring(contentStart, start), start + 1);
+      }
+      start++;
+    }
+    return null;
+  }
+
+  static String _replaceIndexedLatex(String source) {
+    var result = source;
+    final commands = RegExp(r'\\sqrt\s*\[|\\log\s*_');
+    var from = 0;
+    while (true) {
+      final match = commands.firstMatch(result.substring(from));
+      if (match == null) break;
+      final start = from + match.start;
+      var indexStart = from + match.end;
+      final isRoot = match.group(0)!.contains('sqrt');
+      (String, int)? index;
+      if (isRoot) {
+        index = _latexGroup(result, indexStart - 1, '[', ']');
+      } else {
+        index = _latexGroup(result, indexStart, '{', '}');
+        if (index == null && indexStart < result.length) {
+          index = (result[indexStart], indexStart + 1);
+        }
+      }
+      if (index == null) throw const FormatException('根式或对数的底未完成');
+      var argumentStart = index.$2;
+      while (argumentStart < result.length && result[argumentStart] == ' ') {
+        argumentStart++;
+      }
+      if (result.startsWith(r'\left', argumentStart)) argumentStart += 5;
+      final group = _latexGroup(
+              result, argumentStart, isRoot ? '{' : '(', isRoot ? '}' : ')') ??
+          _latexGroup(result, argumentStart, '{', '}');
+      if (group == null) throw const FormatException('请为根式或对数填写括号内的内容');
+      var argumentSource = group.$1;
+      if (!isRoot && argumentSource.endsWith(r'\right')) {
+        argumentSource = argumentSource.substring(0, argumentSource.length - 6);
+      }
+      final argument = _convertLatex(argumentSource);
+      final base = _convertLatex(index.$1);
+      final replacement =
+          isRoot ? 'nrt(($base),($argument))' : '(ln($argument)/ln($base))';
+      result = result.replaceRange(start, group.$2, replacement);
+      from = start + replacement.length;
+    }
     return result;
   }
 
@@ -505,11 +573,64 @@ class MathExpression {
   ///
   /// Handles `\frac`, `\times`, `\cdot`, `\div`, `\sin`, `\cos`, `\tan`,
   /// `\ln`, `\log`, `\sqrt`, `\left`/`\right`, `\pi`, Greek letters,
-  /// spacing commands, and any unknown command by stripping the backslash.
+  /// spacing commands. Unknown commands are rejected by the graph evaluator.
   ///
   /// This runs BEFORE `{}` → `()` conversion, so braces are still intact.
   static String _convertLatex(String expr) {
-    var result = expr;
+    if (RegExp(r'\\(?:pm|mp)\b|!!|!=').hasMatch(expr)) {
+      throw const FormatException('此符号未定义单条曲线，请分别输入完整表达式');
+    }
+    var result = expr.replaceAllMapped(
+      RegExp(r'\\mathrm\{([a-zA-Z]\w*)\}_\{(\w+)\}'),
+      (match) => ' ${match[1]}_${match[2]} ',
+    );
+    result = result.replaceAllMapped(
+      RegExp(r'(\\[a-zA-Z]+|[a-zA-Z])_\{(\w+)\}'),
+      (match) {
+        final name = match[1]!;
+        if (name.startsWith(r'\') &&
+            !mathGreekNames.contains(name.substring(1))) {
+          return match[0]!;
+        }
+        return ' ${name.replaceAll(r'\', '')}_${match[2]} ';
+      },
+    );
+    result = _replaceIndexedLatex(result);
+    // Named identifier subscripts and logarithm bases have been consumed.
+    // Flattening a remaining structural index into ordinary tokens would turn an
+    // unsupported indexed expression into multiplication by a fake parameter.
+    if (RegExp(r'_\s*(?:\{|\\)').hasMatch(result)) {
+      throw const FormatException('此下标结构可编辑，但绘图仅支持参数名称下标');
+    }
+    result = result.replaceAllMapped(RegExp(r'\\operatorname\{([a-zA-Z]+)\}'),
+        (m) => _knownFunctions.contains(m[1]) ? m[1]! : m[0]!);
+    result = result.replaceAll(RegExp(r'\\(?:dfrac|tfrac)\b'), r'\frac');
+    // Paired bars are an absolute-value structure, rather than variable names.
+    while (result.contains(r'\left|')) {
+      final end = result.indexOf(r'\right|');
+      if (end < 0) throw const FormatException('绝对值未完成');
+      final start = result.lastIndexOf(r'\left|', end);
+      if (start < 0) throw const FormatException('绝对值未完成');
+      final content = result.substring(start + 6, end);
+      result = result.replaceRange(start, end + 7, 'abs($content)');
+    }
+    result = result.replaceAll(
+        RegExp(r'\\(?:left|right)\s*(?=\\(?:[lr]floor|[lr]ceil)(?![a-zA-Z]))'),
+        '');
+    for (final fence in {
+      r'\lfloor': (r'\rfloor', 'floor'),
+      r'\lceil': (r'\rceil', 'ceil'),
+    }.entries) {
+      while (result.contains(fence.key)) {
+        final end = result.indexOf(fence.value.$1);
+        if (end < 0) throw const FormatException('取整括号未完成');
+        final start = result.lastIndexOf(fence.key, end);
+        if (start < 0) throw const FormatException('取整括号未完成');
+        final content = result.substring(start + fence.key.length, end);
+        result = result.replaceRange(
+            start, end + fence.value.$1.length, '${fence.value.$2}($content)');
+      }
+    }
 
     // 1) \frac{numerator}{denominator} → (numerator)/(denominator)
     //    Uses a simple brace-matcher: find first {…} and second {…}
@@ -521,11 +642,10 @@ class MathExpression {
     result = result.replaceAll(RegExp(r'\\right\b'), '');
 
     // 3) Operators
-    result = result.replaceAll(RegExp(r'\\times\b'), '*');
-    result = result.replaceAll(RegExp(r'\\cdot\b'), '*');
-    result = result.replaceAll(RegExp(r'\\div\b'), '/');
-    result = result.replaceAll(RegExp(r'\\pm\b'), '+-'); // ± → +-
-    result = result.replaceAll(RegExp(r'\\mp\b'), '-+'); // ∓ → -+
+    result = result.replaceAll(RegExp(r'\\times(?![a-zA-Z])'), '*');
+    result = result.replaceAll(RegExp(r'\\cdot(?![a-zA-Z])'), '*');
+    result = result.replaceAll(RegExp(r'\\div(?![a-zA-Z])'), '/');
+    result = result.replaceAll(RegExp(r'\\(?:bmod|mod)(?![a-zA-Z])'), '%');
 
     // 4) Functions (known to function_tree)
     result = result.replaceAll(RegExp(r'\\sin\b'), 'sin');
@@ -545,19 +665,18 @@ class MathExpression {
     result = result.replaceAll(RegExp(r'\\arccos\b'), 'acos');
     result = result.replaceAll(RegExp(r'\\arctan\b'), 'atan');
     result = result.replaceAll(RegExp(r'\\abs\b'), 'abs');
+    result = result.replaceAll(RegExp(r'\\coth\b'), 'coth');
+    result = result.replaceAll(RegExp(r'\\sech\b'), 'sech');
+    result = result.replaceAll(RegExp(r'\\csch\b'), 'csch');
 
     // 5) Constants
-    result = result.replaceAll(RegExp(r'\\pi\b'), 'pi');
+    result = result.replaceAll(RegExp(r'\\pi(?![a-zA-Z])'), ' pi ');
     result = result.replaceAll(RegExp(r'\\infty\b'), 'Infinity');
 
-    // 6) Greek letters → single ASCII letters (for parameter usage)
-    result = result.replaceAll(RegExp(r'\\alpha\b'), 'alpha');
-    result = result.replaceAll(RegExp(r'\\beta\b'), 'beta');
-    result = result.replaceAll(RegExp(r'\\gamma\b'), 'gamma');
-    result = result.replaceAll(RegExp(r'\\delta\b'), 'delta');
-    result = result.replaceAll(RegExp(r'\\epsilon\b'), 'epsilon');
-    result = result.replaceAll(RegExp(r'\\theta\b'), 'theta');
-    result = result.replaceAll(RegExp(r'\\phi\b'), 'phi');
+    // 6) Greek commands → named parameters.
+    for (final name in mathGreekNames) {
+      result = result.replaceAll(RegExp('\\\\$name(?![a-zA-Z])'), ' $name ');
+    }
 
     // 7) Spacing commands → space (will be stripped later, but
     //    keeps token separation for the implicit multiplication pass)
@@ -573,14 +692,63 @@ class MathExpression {
     //    brace conversion above. Handle x_n notation: x_n → x_n
     //    (subscript is kept as-is for parameter naming)
 
-    // 9) Catch-all: any remaining \command → just command
-    //    (function_tree will likely reject it, but won't crash)
-    result = result.replaceAllMapped(
-      RegExp(r'\\([a-zA-Z]+)'),
-      (m) => m[1]!,
-    );
+    // Layout-only commands must not silently turn into parameter curves.
+    result = result.replaceAll(RegExp(r'\\[,;:! ]'), '');
+    // Percent is postfix division by 100; bare % remains binary remainder.
+    result = _replacePostfix(result);
+    if (result.contains(r'\') || result.contains('|')) {
+      throw const FormatException('此 LaTeX 结构可编辑，但绘图引擎暂不支持');
+    }
 
     return result;
+  }
+
+  /// Convert postfix operations on a whole atom, including grouped powers.
+  static String _replacePostfix(String source) {
+    var result = source;
+    final postfix = RegExp(r'!|\\%');
+    while (true) {
+      final match = postfix.firstMatch(result);
+      if (match == null) return result;
+      final end = match.start;
+      final start = _operandStart(result, end);
+      if (start == null) throw const FormatException('后缀运算缺少完整的表达式');
+      final operand = result.substring(start, end);
+      result = result.replaceRange(start, match.end,
+          match[0] == '!' ? 'fact($operand)' : '(($operand)/100)');
+    }
+  }
+
+  static int? _operandStart(String source, int end) {
+    while (end > 0 && source[end - 1] == ' ') end--;
+    if (end == 0) return null;
+    var start = end;
+    final last = source[end - 1];
+    if (last == ')' || last == '}') {
+      final open = last == ')' ? '(' : '{';
+      var depth = 1;
+      start = end - 1;
+      while (start > 0 && depth > 0) {
+        start--;
+        if (source[start] == last) depth++;
+        if (source[start] == open) depth--;
+      }
+      if (depth != 0) return null;
+      final function =
+          RegExp(r'[a-zA-Z]+$').firstMatch(source.substring(0, start));
+      if (function != null && _knownFunctions.contains(function[0]))
+        start = function.start;
+    } else {
+      final atom =
+          RegExp(r'(?:[a-zA-Z]\w*|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)$')
+              .firstMatch(source.substring(0, end));
+      if (atom == null) return null;
+      start = atom.start;
+    }
+    if (start > 0 && source[start - 1] == '^') {
+      return _operandStart(source, start - 1);
+    }
+    return start;
   }
 
   /// Insert explicit `*` operators for implicit multiplication.
@@ -594,56 +762,55 @@ class MathExpression {
   ///
   /// Known function names (sin, cos, sqrt, etc.) are NOT modified.
   static String _addImplicitMultiplication(String expr) {
-    var result = expr;
-
-    // number → letter or '('
-    result = result.replaceAllMapped(
-      RegExp(r'(\d)([a-zA-Z(])'),
-      (m) => '${m[1]!}*${m[2]!}',
-    );
-
-    // ')' → letter or '(' or number
-    result = result.replaceAllMapped(
-      RegExp(r'(\))\s*([a-zA-Z(])'),
-      (m) => '${m[1]!}*${m[2]!}',
-    );
-
-    // Single letter → '(' (implicit multiplication like x(2) → x*(2))
-    // Only match standalone single letters (not part of a longer identifier
-    // like sin, cos, sqrt). Uses negative lookbehind (not preceded by letter)
-    // and negative lookahead (not followed by letter).
-    result = result.replaceAllMapped(
-      RegExp(r'(?<![a-zA-Z])([a-zA-Z])(?![a-zA-Z])\('),
-      (match) {
-        return '${match[1]}*(';
-      },
-    );
-
-    return result;
+    final tokens =
+        RegExp(r'(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|[a-zA-Z]\w*|[^\s]')
+            .allMatches(expr)
+            .map((m) => m[0]!)
+            .toList();
+    final result = StringBuffer();
+    bool identifier(String token) => RegExp(r'^[a-zA-Z]\w*$').hasMatch(token);
+    bool number(String token) => double.tryParse(token) != null;
+    for (var i = 0; i < tokens.length; i++) {
+      final token = tokens[i];
+      if (i > 0) {
+        final previous = tokens[i - 1];
+        if (_knownFunctions.contains(previous) && token != '(') {
+          throw const FormatException('函数参数请放在括号内');
+        }
+        final variableBeforeParen = identifier(previous) &&
+            !_knownFunctions.contains(previous) &&
+            (previous.length == 1 ||
+                previous.contains('_') ||
+                mathGreekNames.contains(previous) ||
+                _builtinConstants.contains(previous));
+        if ((number(previous) && (identifier(token) || token == '(')) ||
+            (previous == ')' &&
+                (identifier(token) || number(token) || token == '(')) ||
+            (identifier(previous) && identifier(token)) ||
+            (identifier(previous) && number(token)) ||
+            (variableBeforeParen && token == '(')) result.write('*');
+      }
+      result.write(token);
+    }
+    return result.toString();
   }
 
   /// Known function names that should not trigger implicit multiplication
   /// insertion when followed by '('.
-  static const Set<String> _knownFunctions = {
-    'sin',
-    'cos',
-    'tan',
-    'sqrt',
-    'abs',
-    'ln',
-    'log',
-    'exp',
-    'asin',
-    'acos',
-    'atan',
-    'sinh',
-    'cosh',
-    'tanh',
-    'sec',
-    'csc',
-    'cot',
-    'pow',
-    'nrt',
+  static final Set<String> _knownFunctions = {
+    ...mathUnaryInputs.map((input) => input.name),
+    ...mathBinaryInputs.map((input) => input.name),
+  };
+  static final Set<String> _builtinConstants = {
+    ...mathConstantInputs.map((input) => input.name),
+    'E',
+    'PI',
+    'LN2',
+    'LN10',
+    'LOG2E',
+    'LOG10E',
+    'SQRT1_2',
+    'SQRT2',
   };
 
   /// Create an evaluator [double Function(double)] from a normalized expression.
@@ -660,23 +827,13 @@ class MathExpression {
     // This ensures we handle parameters like a, b, c even if no values provided.
     final variableNames = <String>['x'];
     // Built-in constants in function_tree that should not be treated as variables
-    const builtinConstants = {
-      'e',
-      'pi',
-      'ln2',
-      'ln10',
-      'log2e',
-      'log10e',
-      'sqrt1_2',
-      'sqrt2'
-    };
     // Use a simple regex to find potential variable names
     final varMatches = RegExp(r'\b([a-zA-Z]\w*)\b').allMatches(normalized);
     for (final m in varMatches) {
       final name = m[1]!;
       if (name != 'x' &&
           !_knownFunctions.contains(name.toLowerCase()) &&
-          !builtinConstants.contains(name)) {
+          !_builtinConstants.contains(name)) {
         if (!variableNames.contains(name)) {
           variableNames.add(name);
         }
@@ -743,20 +900,19 @@ class MathExpression {
   /// Extract parameter names from a user expression body.
   ///
   /// [expr] should already have the `y = ` or `f(x) = ` prefix stripped.
-  /// Returns single-letter variable names that are not `x` or `e`
-  /// and not known function names.
-  static Set<String> _extractParameters(String expr) {
+  /// Returns identifiers other than coordinate variables, constants and functions.
+  static Set<String> _extractParameters(String expr, {bool implicit = false}) {
     if (expr.isEmpty) return {};
 
     final params = <String>{};
-    // Match single-letter variables (a-z, A-Z) that are whole words
-    final matches = RegExp(r'\b([a-zA-Z])\b').allMatches(expr);
+    final matches = RegExp(r'\b([a-zA-Z]\w*)\b').allMatches(expr);
     for (final m in matches) {
       final name = m[1]!;
       // Exclude x (the variable), e (Euler's number),
       // and known function names
-      if (name == 'x' || name == 'e') continue;
-      if (_knownFunctions.contains(name.toLowerCase())) continue;
+      if (name == 'x' || (implicit && name == 'y')) continue;
+      if (_knownFunctions.contains(name) || _builtinConstants.contains(name))
+        continue;
       params.add(name);
     }
     return params;

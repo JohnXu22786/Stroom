@@ -745,6 +745,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       folders: folders,
       sortConfig: sortConfig,
       config: config,
+      invalidateRenameCache: FileManifest.invalidateCache,
       onRefresh: _refreshFileList,
       onRenameFile: (id, newName) async {
         await ref.read(audioRecordsProvider.notifier).renameRecord(id, newName);

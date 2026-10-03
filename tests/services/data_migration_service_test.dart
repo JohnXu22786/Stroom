@@ -66,12 +66,14 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'data_format_versions': jsonEncode({
           DataMigrationService.partChat: 'v1', // 类型错误
-          DataMigrationService.partSettings: 1,
+          DataMigrationService.partSettings:
+              DataParts.currentVersions[DataParts.settings],
           DataMigrationService.partPictures: 1,
           DataMigrationService.partAudio: 1,
           DataMigrationService.partVideos: 1,
           DataMigrationService.partTexts: 1,
-          DataMigrationService.partTasks: 0,
+          DataMigrationService.partTasks:
+              DataParts.currentVersions[DataParts.tasks],
           DataMigrationService.partAnki: 0,
           DataMigrationService.partBrowserCookies: 0,
         }),
@@ -102,7 +104,8 @@ void main() {
       expect(stored[DataMigrationService.partChat], equals(1),
           reason: '值类型损坏的部分按 0 处理并重新迁移');
       // 值正常的 settings 部分保持原记录，不被降级或重迁。
-      expect(stored[DataMigrationService.partSettings], equals(1));
+      expect(stored[DataMigrationService.partSettings],
+          DataParts.currentVersions[DataParts.settings]);
       // 记录整体未损坏：不应产生隔离 key。
       final prefs = await SharedPreferences.getInstance();
       expect(
@@ -135,10 +138,10 @@ void main() {
       await _expectAllPartsCurrent();
     });
 
-    test('legacy v3 expands to all parts current, no migration, key removed',
+    test('legacy v3 migrates stable identities and retires the global key',
         () async {
       // 回归：现有最新用户（旧全局 v3）升级到 per-part 机制时
-      // 必须无感 —— 不迁移、不重启，只把版本记录转为 per-part。
+      // 仍需执行后来新增的 settings v2 / tasks v1 迁移。
       SharedPreferences.setMockInitialValues({
         'data_format_version': 3,
         'conversations': jsonEncode([
@@ -152,8 +155,8 @@ void main() {
       });
 
       final result = await DataMigrationService.checkAndMigrate();
-      expect(result.needsMigration, isFalse);
-      expect(result.restartRequired, isFalse);
+      expect(result.needsMigration, isTrue);
+      expect(result.restartRequired, isTrue);
 
       // 展开的 per-part 版本已落盘，旧 key 退役。
       final prefs = await SharedPreferences.getInstance();
@@ -162,9 +165,9 @@ void main() {
       await _expectAllPartsCurrent();
     });
 
-    test('legacy v2 migrates ONLY the chat part (blocks)', () async {
+    test('legacy v2 migrates chat blocks and stable identities', () async {
       // 回归：旧全局 v2 只说明 chat 部分（v3 引入的 blocks）未迁移；
-      // settings（v1）与 media（v2）已是最新，绝不能重复执行它们的迁移。
+      // 不重复旧的 settings v0 / media 迁移，新增身份迁移仍执行。
       SharedPreferences.setMockInitialValues({
         'data_format_version': 2,
         'conversations': jsonEncode([
@@ -413,12 +416,14 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'data_format_versions': jsonEncode({
           DataMigrationService.partChat: 0,
-          DataMigrationService.partSettings: 1,
+          DataMigrationService.partSettings:
+              DataParts.currentVersions[DataParts.settings],
           DataMigrationService.partPictures: 1,
           DataMigrationService.partAudio: 1,
           DataMigrationService.partVideos: 1,
           DataMigrationService.partTexts: 1,
-          DataMigrationService.partTasks: 0,
+          DataMigrationService.partTasks:
+              DataParts.currentVersions[DataParts.tasks],
           DataMigrationService.partAnki: 0,
           DataMigrationService.partBrowserCookies: 0,
         }),
@@ -513,18 +518,25 @@ void main() {
   });
 
   group('DataMigrationService - checkAndMigrate', () {
-    test('no migration needed when legacy version is newer than current',
+    test('no migration needed when every part version is newer than current',
         () async {
-      // 999 是展开输入：全部部分展开为当前版本 → 无迁移、无重启，
-      // 且展开结果必须落盘、旧 key 必须退役（不依赖下次启动）。
+      // 超前部分保持不变，不重复迁移或降低版本。
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 999);
+      await prefs.setString(
+          'data_format_versions',
+          jsonEncode({
+            for (final part in DataParts.all)
+              part: DataParts.currentVersions[part]! + 1
+          }));
 
       final result = await DataMigrationService.checkAndMigrate();
       expect(result.needsMigration, isFalse);
       expect(result.restartRequired, isFalse);
 
-      await _expectAllPartsCurrent();
+      final stored = await DataMigrationService.getStoredPartVersions();
+      for (final part in DataParts.all) {
+        expect(stored[part], DataParts.currentVersions[part]! + 1);
+      }
     });
 
     test('migration needed when no version stored', () async {
@@ -549,7 +561,8 @@ void main() {
     test('does NOT run conversation recovery on every startup', () async {
       // Set up: version matches, no migration needed
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 3);
+      await prefs.setString(
+          'data_format_versions', jsonEncode(DataParts.currentVersions));
 
       // Even if conversations_bak exists from old sessions,
       // checkAndMigrate should NOT touch it (no recovery on startup)
@@ -598,7 +611,8 @@ void main() {
   group('DataMigrationService - migrateDataFormatIfNeeded', () {
     test('returns needsMigration=false when version matches current', () async {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 3);
+      await prefs.setString(
+          'data_format_versions', jsonEncode(DataParts.currentVersions));
 
       final result = await DataMigrationService.migrateDataFormatIfNeeded();
       expect(result.needsMigration, isFalse);
@@ -606,7 +620,12 @@ void main() {
 
     test('returns needsMigration=false when version is newer', () async {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('data_format_version', 999);
+      await prefs.setString(
+          'data_format_versions',
+          jsonEncode({
+            for (final part in DataParts.all)
+              part: DataParts.currentVersions[part]! + 1
+          }));
 
       final result = await DataMigrationService.migrateDataFormatIfNeeded();
       expect(result.needsMigration, isFalse);
@@ -696,17 +715,17 @@ void main() {
         () async {
       // 回归：隔离数据使用带时间戳的 key 且只保留最近 3 份。
       // 旧固定 key 会被下一次隔离覆盖，丢失前一份损坏证据。
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final oldKeys = List.generate(
+        5,
+        (index) =>
+            'provider_entries_corrupt_${nowMs - (index + 1) * Duration(days: 1).inMilliseconds}',
+      );
       SharedPreferences.setMockInitialValues({
         'data_format_version': 0,
         'provider_entries': '{"not": "an array"}',
-        // 预先存在 5 份旧的隔离数据（13 位 epoch 毫秒时间戳，
-        // 全部早于当前时间 2026-08 ≈ 1.785e12，保证本次新隔离的
-        // 数据（时间戳最大）是「最新」的）
-        'provider_entries_corrupt_1700000000000': '{"old": 1}',
-        'provider_entries_corrupt_1710000000000': '{"old": 2}',
-        'provider_entries_corrupt_1720000000000': '{"old": 3}',
-        'provider_entries_corrupt_1730000000000': '{"old": 4}',
-        'provider_entries_corrupt_1740000000000': '{"old": 5}',
+        for (var index = 0; index < oldKeys.length; index++)
+          oldKeys[index]: '{"old": ${index + 1}}',
       });
 
       final result = await DataMigrationService.checkAndMigrate();
@@ -720,21 +739,14 @@ void main() {
         ..sort();
       // 旧的 5 份 + 本次新隔离的 1 份 = 6 份，裁剪后只保留 3 份。
       expect(corruptKeys, hasLength(3), reason: '只保留最近的 3 份隔离备份');
-      // 保留的是时间戳最大的 3 份（含本次新隔离的）。
-      expect(corruptKeys.contains('provider_entries_corrupt_1700000000000'),
-          isFalse,
-          reason: '最旧的 3 份必须被裁剪');
-      expect(corruptKeys.contains('provider_entries_corrupt_1710000000000'),
-          isFalse);
-      expect(corruptKeys.contains('provider_entries_corrupt_1720000000000'),
-          isFalse);
-      expect(corruptKeys.contains('provider_entries_corrupt_1730000000000'),
-          isTrue);
-      expect(corruptKeys.contains('provider_entries_corrupt_1740000000000'),
-          isTrue);
-      expect(
-          corruptKeys.last.startsWith('provider_entries_corrupt_178'), isTrue,
-          reason: '本次新隔离的备份（当前时间戳）必须被保留');
+      // 保留最近的两份旧数据与本次隔离的新数据，结果不依赖固定日期。
+      expect(corruptKeys, contains(oldKeys[0]));
+      expect(corruptKeys, contains(oldKeys[1]));
+      expect(corruptKeys, isNot(contains(oldKeys[2])));
+      expect(corruptKeys, isNot(contains(oldKeys[3])));
+      expect(corruptKeys, isNot(contains(oldKeys[4])));
+      expect(prefs.getString(corruptKeys.last), '{"not": "an array"}',
+          reason: '本次新隔离的备份必须被保留');
     });
   });
 

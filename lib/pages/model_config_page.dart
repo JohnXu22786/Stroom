@@ -48,6 +48,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   List<CustomParam> _initialCustomParams = [];
   String _initialName = '';
   String _initialModelId = '';
+  String? _stableModelId;
   String _initialVolumeMin = '';
   String _initialVolumeMax = '';
   String _initialSpeedMin = '';
@@ -121,6 +122,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     if (widget.configIndex < 0 || widget.configIndex >= entry.configs.length) {
       if (widget.initialModel != null) {
         final model = widget.initialModel!;
+        _stableModelId = model.id;
         _nameController.text = model.name;
         _modelIdController.text = model.modelId;
         _voices = model.voices.map((v) => v.copy()).toList();
@@ -165,6 +167,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         widget.modelIndex >= 0 &&
         widget.modelIndex < configModels.length) {
       final model = configModels[widget.modelIndex];
+      _stableModelId = model.id;
       _nameController.text = model.name;
       _modelIdController.text = model.modelId;
       _voices = model.voices.map((v) => v.copy()).toList();
@@ -742,6 +745,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         _speedMaxController.text.trim().isNotEmpty;
 
     final modelConfig = ModelConfig(
+      id: _stableModelId,
       name: name,
       modelId: modelId,
       voices: _voices.map((v) => v.copy()).toList(),
@@ -782,6 +786,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     // _insertModelResult / _updateModelInConfig 保持一致）。
     final base = configs[widget.configIndex];
     configs[widget.configIndex] = ProviderConfigItem(
+      id: base.id,
       providerName: base.providerName,
       host: base.host,
       key: base.key,

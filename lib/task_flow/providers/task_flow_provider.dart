@@ -69,8 +69,7 @@ class TaskFlowNotifier extends StateNotifier<List<TaskFlowDefinition>>
       inputType: inputType ?? IOType.text,
       blocks: blocks ?? [],
     );
-    state = [flow, ...state];
-    persist();
+    saveFlow(flow);
     return flow.id;
   }
 
@@ -95,12 +94,15 @@ class TaskFlowNotifier extends StateNotifier<List<TaskFlowDefinition>>
       updatedAt: DateTime.now(),
     );
 
-    final newState = [...state];
-    newState[index] = updated;
-    // Re-sort: move updated item to front
-    newState.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    state = newState;
-    persist();
+    saveFlow(updated);
+  }
+
+  /// Add or replace a draft with a stable id and wait for durable storage.
+  /// On failure the draft remains in memory, ready to be retried.
+  Future<bool> saveFlow(TaskFlowDefinition flow) {
+    state = [flow, ...state.where((f) => f.id != flow.id)]
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return persist();
   }
 
   /// Remove a flow by id. Does nothing if not found.
