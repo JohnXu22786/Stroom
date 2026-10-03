@@ -20,6 +20,16 @@ const _desktopUserAgent =
 const _mobileUserAgent =
     'Mozilla/5.0 (Linux; Android 13; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
 
+/// Adds `https://` to an address unless it already has an HTTP(S) scheme.
+String normalizeBrowserUrl(String url) {
+  final trimmedUrl = url.trim();
+  if (trimmedUrl.isEmpty) return trimmedUrl;
+  if (!RegExp(r'^https?://', caseSensitive: false).hasMatch(trimmedUrl)) {
+    return 'https://$trimmedUrl';
+  }
+  return trimmedUrl;
+}
+
 /// Builds the [InAppWebViewSettings] appropriate for the given mode.
 ///
 /// Key difference from the previous always-wide-viewport approach:
@@ -404,11 +414,8 @@ class _BrowserPageState extends State<BrowserPage> {
   }
 
   void _goToUrl(String url) {
-    var uri = url.trim();
+    final uri = normalizeBrowserUrl(url);
     if (uri.isEmpty) return;
-    if (!uri.startsWith('http://') && !uri.startsWith('https://')) {
-      uri = 'https://$uri';
-    }
     _urlController.text = uri;
     _webViewController?.loadUrl(urlRequest: URLRequest(url: WebUri(uri)));
   }
