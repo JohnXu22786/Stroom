@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -14,9 +15,14 @@ import '../../../services/app_log_service.dart';
 import '../../../services/chat_stream_manager.dart';
 import '../../../services/attachment_storage.dart';
 import '../../../services/chat_protocol.dart'
-    show maxAttachmentBytes, effectiveEndpointType;
+    show
+        maxAttachmentBytes,
+        imageCompressThresholdBytes,
+        effectiveEndpointType,
+        textAttachmentExtensions;
 import '../../../services/chat_adapter.dart'
     show availableLlmModels, resolveModelRef;
+import '../../../utils/image_send_compressor.dart';
 import '../../../utils/web_file_store.dart';
 import '../../../utils/provider_models.dart' show resolveProviderModel;
 import '../../models/block_type_definition.dart';
@@ -40,7 +46,10 @@ import 'shared_helpers.dart';
 /// throw UnsupportedError there) and any file-system error falls back to
 /// the plain-text branch, so the caller can await this safely.
 @visibleForTesting
-Future<String> chatOutputTitle(String input) async {
+Future<String> chatOutputTitle(String input, {String? fileName}) async {
+  if (fileName != null && fileName.trim().isNotEmpty) {
+    return '助手回复_${p.basenameWithoutExtension(p.basename(fileName))}';
+  }
   if (!kIsWeb) {
     try {
       final file = File(input);
@@ -60,8 +69,11 @@ Future<String> chatOutputTitle(String input) async {
 /// the endpoint; otherwise unbound chat uses its configured endpoint fallback.
 /// No provider/model selection is changed.
 String flowChatEndpointType(
-    Assistant? assistant, ProviderEntriesState providers,
-    {String fallback = 'openai', Map<String, String>? modelReference}) {
+  Assistant? assistant,
+  ProviderEntriesState providers, {
+  String fallback = 'openai',
+  Map<String, String>? modelReference,
+}) {
   if (modelReference != null) {
     final selected = resolveProviderModel(providers, 'llm', modelReference);
     if (selected == null) {
@@ -91,8 +103,46 @@ String flowChatEndpointType(
   return effectiveEndpointType(model.endpointType, config.endpointType);
 }
 
-String? flowChatInputError(IOType type, String endpointType,
-    {String? mimeType, List<int>? headerBytes}) {
+String? flowChatInputError(
+  IOType type,
+  String endpointType, {
+  String? mimeType,
+  List<int>? headerBytes,
+}) {
+  final mime = mimeType?.split(';').first.trim().toLowerCase();
+  if (mime == 'image/svg+xml') {
+    return '助手对话不支持 SVG 图片附件，请转换为 PNG 或 JPEG';
+  }
+  // OpenAI's image helper defaults unknown formats to JPEG, while Anthropic
+  // accepts only these four image media types. Do not label different bytes
+  // as JPEG or send an unsupported image block.
+  if (type == IOType.image &&
+      mime != null &&
+      !const {'image/png', 'image/jpeg', 'image/gif', 'image/webp'}
+          .contains(mime)) {
+    return '助手对话不支持 $mime 图片附件，请转换为 PNG、JPEG、GIF 或 WebP';
+  }
+  // The OpenAI encoder falls back to `mp3` for unrecognised audio MIME.
+  // Keep the formats it explicitly maps and reject bytes it would mislabel.
+  if (type == IOType.audio &&
+      endpointType != 'anthropic' &&
+      mime != null &&
+      !const {
+        'audio/mpeg',
+        'audio/mp3',
+        'audio/wav',
+        'audio/x-wav',
+        'audio/wave',
+        'audio/ogg',
+        'audio/aac',
+        'audio/flac',
+        'audio/x-flac',
+        'audio/webm',
+        'audio/mp4',
+        'audio/x-m4a',
+      }.contains(mime)) {
+    return '助手对话不支持 $mime 音频附件，请转换为 MP3、WAV 或 M4A';
+  }
   if (endpointType != 'anthropic') return null;
   if (type == IOType.audio || type == IOType.video) {
     return '此助手的 Anthropic 对话格式不支持${type.label}附件，请选择支持此媒体的助手';
@@ -114,13 +164,45 @@ String? flowChatInputError(IOType type, String endpointType,
   return null;
 }
 
+/// Chat's protocol replaces uncompressible images over 10 MB with skipped
+/// text. Reject them before a flow can report a successful response.
+Future<String?> flowChatImageSizeError(Uint8List bytes) async {
+  if (bytes.length <= maxAttachmentBytes) return null;
+  final compressed = await compressImageForSend(
+    bytes,
+    maxBytes: imageCompressThresholdBytes,
+  );
+  if (compressed.compressed != null &&
+      compressed.compressed!.bytes.length <= maxAttachmentBytes) {
+    return null;
+  }
+  return '助手对话图片无法压缩到 10 MB 以下，请选择较小图片';
+}
+
+/// Text attachments are decoded as strict UTF-8 by the shared protocol. It
+/// substitutes an unreadable placeholder on decoding failure, which a flow
+/// must surface as an input error before starting the assistant exchange.
+bool flowChatIsTextFileName(String name) => textAttachmentExtensions
+    .contains(p.basename(name).split('.').last.toLowerCase());
+
+String? flowChatTextFileError(String name, List<int> bytes) {
+  if (!flowChatIsTextFileName(name)) return null;
+  try {
+    utf8.decode(bytes);
+    return null;
+  } on FormatException {
+    return '文本附件不是有效的 UTF-8 编码，请转换后重试';
+  }
+}
+
 /// Persist media with the same AttachmentStorage and Attachment metadata as
 /// the chat composer. The shared protocol handles compression and API encoding.
 /// Path-shaped textual content stays text; no filesystem guessing is involved.
-@visibleForTesting
 Future<ChatMessage> prepareFlowChatMessage(
-    FlowPayload payload, String conversationId,
-    {String endpointType = 'openai'}) async {
+  FlowPayload payload,
+  String conversationId, {
+  String endpointType = 'openai',
+}) async {
   if (!BlockTypeDefinition.chat.acceptsInput(payload.type)) {
     throw const FormatException('助手对话不支持此输入类型，请指定文本或媒体类型');
   }
@@ -144,11 +226,17 @@ Future<ChatMessage> prepareFlowChatMessage(
     final length = await file.length();
     if (length > maxAttachmentBytes) {
       final header = await file.openRead(0, 32).first;
-      final detectedType = flowMimeType(flowFileMimeType(reference,
-          headerBytes: header, mimeType: payload.mimeType));
+      final detectedType = flowMimeType(
+        flowFileMimeType(
+          reference,
+          headerBytes: header,
+          mimeType: payload.mimeType,
+        ),
+      );
       if (payload.type != IOType.file && detectedType != payload.type) {
         throw FormatException(
-            '文件实际类型为${detectedType.label}，需要${payload.type.label}，请重新选择文件');
+          '文件实际类型为${detectedType.label}，需要${payload.type.label}，请重新选择文件',
+        );
       }
       if (detectedType != IOType.image) {
         throw const FormatException('助手对话附件超过 10 MB，请选择较小文件');
@@ -162,8 +250,11 @@ Future<ChatMessage> prepareFlowChatMessage(
   if (bytes.isEmpty) {
     throw const FormatException('媒体文件为空或无法读取，请重新选择文件');
   }
-  final mimeType = flowFileMimeType(reference,
-      headerBytes: bytes, mimeType: payload.mimeType);
+  final mimeType = flowFileMimeType(
+    reference,
+    headerBytes: bytes,
+    mimeType: payload.mimeType,
+  );
   final actualType = flowMimeType(mimeType);
   if (actualType == IOType.image && bytes.length > maxFlowImageInputBytes) {
     throw const FormatException('助手对话图片超过 20 MB，请选择较小图片');
@@ -173,12 +264,25 @@ Future<ChatMessage> prepareFlowChatMessage(
   }
   if (payload.type != IOType.file && actualType != payload.type) {
     throw FormatException(
-        '文件实际类型为${actualType.label}，需要${payload.type.label}，请重新选择文件');
+      '文件实际类型为${actualType.label}，需要${payload.type.label}，请重新选择文件',
+    );
   }
-  final unsupportedFile = flowChatInputError(actualType, endpointType,
-      mimeType: mimeType, headerBytes: bytes);
+  final unsupportedFile = flowChatInputError(
+    actualType,
+    endpointType,
+    mimeType: mimeType,
+    headerBytes: bytes,
+  );
   if (unsupportedFile != null) throw FormatException(unsupportedFile);
-  final name = p.basename(reference);
+  if (actualType == IOType.image) {
+    final imageSizeError = await flowChatImageSizeError(bytes);
+    if (imageSizeError != null) throw FormatException(imageSizeError);
+  }
+  final name = p.basename(payload.fileName ?? reference);
+  if (actualType == IOType.file && endpointType != 'anthropic') {
+    final textError = flowChatTextFileError(name, bytes);
+    if (textError != null) throw FormatException(textError);
+  }
   final storagePath = await AttachmentStorage.saveFile(name, bytes);
   final attachment = Attachment(
     fileName: name,
@@ -190,7 +294,10 @@ Future<ChatMessage> prepareFlowChatMessage(
     conversationId: conversationId,
   );
   return ChatMessage(
-      role: 'user', content: payload.text, attachments: [attachment]);
+    role: 'user',
+    content: payload.text,
+    attachments: [attachment],
+  );
 }
 
 /// Executes a chat (assistant conversation) block.
@@ -276,7 +383,7 @@ Future<String> executeChatBlock({
     execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
     execNotifier.updateSubTaskStatus(
         execId, flowSubTask.id, TaskStatus.running);
-    final title = await chatOutputTitle(input);
+    final title = await chatOutputTitle(input, fileName: payload?.fileName);
     if (!isLive()) await stopInactiveExecution();
     bgNotifier.addTask(
         type: BackgroundTaskType.chat, title: title, taskId: taskId);
@@ -318,7 +425,10 @@ Future<String> executeChatBlock({
     flowAttachments = userMessage.attachments;
     if (!isLive()) await stopInactiveExecution();
     // Persist attachments before streaming so failure cleanup can find them.
-    await conversationsNotifier.updateMessages(convId, [userMessage]);
+    if (!await conversationsNotifier
+        .updateFlowMessagesChecked(convId, [userMessage])) {
+      throw StateError('用户消息未能保存，对话未发送');
+    }
     // Cancellation before a stream exists cannot be handled by manager.cancel.
     // Check synchronously after preparation/persistence, before starting it.
     if (!isLive()) await stopInactiveExecution();
@@ -437,7 +547,10 @@ Future<String> executeChatBlock({
     // updateMessages keyed on convId), but a silent save failure there
     // must not leave a stub conversation behind. updateMessages is a full
     // replace, so re-persisting the same history is idempotent.
-    await conversationsNotifier.updateMessages(convId, result.history);
+    if (!await conversationsNotifier.updateFlowMessagesChecked(
+        convId, result.history)) {
+      throw StateError('助手回复未能保存，对话未完成');
+    }
     if (!isLive()) await stopInactiveExecution();
 
     // The full [user, assistant] exchange now lives in a real conversation

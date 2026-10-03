@@ -1,8 +1,11 @@
+// ignore_for_file: invalid_use_of_visible_for_testing_member
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as image;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
@@ -17,6 +20,7 @@ import 'package:stroom/providers/task_provider_shared.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
 import 'package:stroom/services/chat_protocol.dart' show maxAttachmentBytes;
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/openai_protocol.dart';
 import 'package:stroom/services/anthropic_protocol.dart';
@@ -85,7 +89,24 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory directory;
   late PathProviderPlatform previous;
+  final trackedExecutions = <TaskFlowExecutionNotifier>[];
+  final trackedBackgrounds = <BackgroundTaskNotifier>[];
+  TaskFlowExecutionNotifier trackedExecution() {
+    final notifier = TaskFlowExecutionNotifier();
+    trackedExecutions.add(notifier);
+    return notifier;
+  }
+
+  BackgroundTaskNotifier trackedBackground() {
+    final notifier = BackgroundTaskNotifier();
+    trackedBackgrounds.add(notifier);
+    return notifier;
+  }
+
   setUp(() async {
+    trackedExecutions.clear();
+    trackedBackgrounds.clear();
+    AppStorage.resetCache();
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     directory = await Directory.systemTemp.createTemp('flow_media_');
@@ -93,6 +114,14 @@ void main() {
     PathProviderPlatform.instance = _Documents(directory.path);
   });
   tearDown(() async {
+    for (final execution in trackedExecutions) {
+      if (execution.mounted) expect(await execution.persist(), isTrue);
+      await execution.persistenceResult;
+    }
+    for (final background in trackedBackgrounds) {
+      await background.pendingPersistence;
+    }
+    AppStorage.resetCache();
     PathProviderPlatform.instance = previous;
     await directory.delete(recursive: true);
   });
@@ -199,28 +228,73 @@ void main() {
             .having((e) => e.message, 'actual image kind', contains('图片'))));
   });
 
-  test('generic file input accepts an image over the document size limit',
-      () async {
-    final image = File('${directory.path}/large.png');
-    final handle = image.openSync(mode: FileMode.write);
-    handle.writeFromSync([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-    handle.setPositionSync(maxAttachmentBytes);
-    handle.writeByteSync(0);
-    handle.closeSync();
+  test(
+    'generic file input rejects an uncompressible image over 10 MB',
+    () async {
+      final image = File('${directory.path}/large.png');
+      final handle = image.openSync(mode: FileMode.write);
+      handle.writeFromSync([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      handle.setPositionSync(maxAttachmentBytes);
+      handle.writeByteSync(0);
+      handle.closeSync();
+      final assistant = Assistant(
+        id: 'assistant',
+        name: 'Assistant',
+        prompt: 'Help',
+      );
+      final flow = TaskFlowDefinition(
+        name: 'Image',
+        inputType: IOType.file,
+        blocks: [
+          TaskFlowBlock(
+            typeKey: BlockType.chat,
+            params: {'assistantId': assistant.id},
+          ),
+        ],
+      );
+      await expectLater(
+        validateTaskFlow(
+          flow,
+          [FlowRunInput(text: image.path)],
+          providers: const ProviderEntriesState(),
+          assistants: [assistant],
+        ),
+        throwsA(isA<TaskFlowValidationException>().having(
+            (e) => e.message, 'uncompressible image', contains('10 MB'))),
+      );
+      await expectLater(
+        prepareFlowChatMessage(
+          FlowPayload.file(fileReference: image.path, type: IOType.file),
+          'conversation',
+        ),
+        throwsA(isA<FormatException>().having(
+            (e) => e.message, 'uncompressible image', contains('10 MB'))),
+      );
+    },
+  );
+
+  test('a compressible PNG over 10 MB still reaches the assistant', () async {
+    final encoded = image.encodePng(image.Image(width: 1, height: 1));
+    final bytes = Uint8List(maxAttachmentBytes + 1)
+      ..setRange(0, encoded.length, encoded);
+    final source =
+        await File('${directory.path}/compressible.png').writeAsBytes(bytes);
     final assistant =
         Assistant(id: 'assistant', name: 'Assistant', prompt: 'Help');
     final flow =
-        TaskFlowDefinition(name: 'Image', inputType: IOType.file, blocks: [
+        TaskFlowDefinition(name: 'Image', inputType: IOType.image, blocks: [
       TaskFlowBlock(
           typeKey: BlockType.chat, params: {'assistantId': assistant.id})
     ]);
-    await validateTaskFlow(flow, [FlowRunInput(text: image.path)],
+    await validateTaskFlow(flow, [FlowRunInput(text: source.path)],
         providers: const ProviderEntriesState(), assistants: [assistant]);
     final message = await prepareFlowChatMessage(
-        FlowPayload.file(fileReference: image.path, type: IOType.file),
-        'conversation');
-    expect(message.attachments.single.fileType, 'image');
-    expect(message.attachments.single.fileSize, maxAttachmentBytes + 1);
+        FlowPayload.file(fileReference: source.path, type: IOType.image),
+        'compressible');
+    final request =
+        await const OpenAIProtocol().buildRequest(history: [message]);
+    expect((request.messages.single['content'] as List).single['type'],
+        'image_url');
   });
 
   test('oversized image is rejected before chat attachment allocation',
@@ -260,7 +334,7 @@ void main() {
           await File('${directory.path}/speech.wav').writeAsBytes(bytes);
       final container = ProviderContainer();
       addTearDown(container.dispose);
-      final executions = TaskFlowExecutionNotifier();
+      final executions = trackedExecution();
       final execId = executions.addExecution(flowId: 'flow', flowName: 'Flow');
       final subTask = FlowSubTask(
           blockTypeKey: 'chat',
@@ -280,7 +354,7 @@ void main() {
           execId: execId,
           execNotifier: executions,
           flowSubTask: subTask,
-          bgNotifier: BackgroundTaskNotifier(),
+          bgNotifier: trackedBackground(),
           chatManager: manager,
           providerEntries: originalProviders,
           conversationsNotifier:
@@ -326,7 +400,7 @@ void main() {
         await File('${directory.path}/speech.wav').writeAsBytes(bytes);
     final container = ProviderContainer();
     addTearDown(container.dispose);
-    final executions = TaskFlowExecutionNotifier();
+    final executions = trackedExecution();
     addTearDown(executions.dispose);
     final execId = executions.addExecution(flowId: 'flow', flowName: 'Flow');
     final subTask = FlowSubTask(
@@ -347,7 +421,7 @@ void main() {
             execId: execId,
             execNotifier: executions,
             flowSubTask: subTask,
-            bgNotifier: BackgroundTaskNotifier(),
+            bgNotifier: trackedBackground(),
             chatManager: manager,
             conversationsNotifier:
                 container.read(conversationsProvider.notifier)),
