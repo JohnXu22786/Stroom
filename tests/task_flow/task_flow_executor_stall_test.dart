@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:mocktail/mocktail.dart';
 
 import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
@@ -130,7 +131,7 @@ void main() {
             catcatch.TaskStatus.completed,
             id: capturedTaskId,
             progress: 100,
-            downloadedPath: 'C:\\out\\video.mp4',
+            downloadedPath: p.absolute('tests/fixtures/catcatch/video_only.mp4'),
           ),
         ];
       });
@@ -147,7 +148,7 @@ void main() {
         stallTimeout: const Duration(milliseconds: 100),
       );
 
-      expect(result, 'C:\\out\\video.mp4');
+      expect(result, p.absolute('tests/fixtures/catcatch/video_only.mp4'));
       expect(execNotifier.state[0].subTasks[0].status, TaskStatus.completed);
       verifyNever(() => notifier.removeTask(any()));
     });

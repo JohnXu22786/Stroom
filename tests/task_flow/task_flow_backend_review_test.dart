@@ -62,7 +62,10 @@ class _ManualDownloads extends CatCatchNotifier {
 
   @override
   String addTask(String url, int expectedDurationSec,
-      {String videoFolder = '', String audioFolder = '', String? taskId}) {
+      {String videoFolder = '',
+      String audioFolder = '',
+      String? taskId,
+      bool deferSingleResourceSelection = false}) {
     final id = taskId!;
     idsByUrl[url] = id;
     final confirming = url.endsWith('/confirm');
@@ -127,7 +130,7 @@ class _ManualDownloads extends CatCatchNotifier {
         task.id == id
             ? task.copyWith(
                 status: catcatch.TaskStatus.completed,
-                downloadedFilePath: '/downloads/video.mp4')
+                downloadedFilePath: File('tests/fixtures/catcatch/video_only.mp4').absolute.path)
             : task,
     ];
   }

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:mocktail/mocktail.dart';
 import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
@@ -48,7 +49,7 @@ void main() {
                       type: catcatch.StepType.converting, running: true)
                 ]
               : [],
-          downloadedFilePath: reads < 4 ? null : '/downloads/video.mp4',
+          downloadedFilePath: reads < 4 ? null : p.absolute('tests/fixtures/catcatch/video_only.mp4'),
         )
       ];
     });
@@ -64,7 +65,7 @@ void main() {
       catcatchNotifier: notifier,
       stallTimeout: const Duration(milliseconds: 100),
     );
-    expect(result, '/downloads/video.mp4');
+    expect(result, p.absolute('tests/fixtures/catcatch/video_only.mp4'));
     verifyNever(() => notifier.confirmAndContinue(any()));
     verifyNever(() => notifier.removeTask(any()));
   });

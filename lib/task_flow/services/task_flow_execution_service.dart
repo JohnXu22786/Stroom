@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:uuid/uuid.dart';
+import 'package:path/path.dart' as p;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../catcatch/models/media_kind.dart';
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../models/assistant.dart';
@@ -89,6 +91,41 @@ typedef FlowBlockRunner = Future<FlowPayload> Function(TaskFlowBlock block,
     FlowPayload input, String executionId, FlowSubTask step);
 @visibleForTesting
 final taskFlowBlockRunnerProvider = Provider<FlowBlockRunner?>((ref) => null);
+
+Future<FlowPayload> catCatchOutputPayload(String path) async {
+  // CatCatch has already checked the downloaded file. Probe its saved path
+  // again here so the payload cannot lose the verified kind when a container
+  // extension or MIME magic describes only the container, not its tracks.
+  final kind = await catCatchMediaKindFromPath(path);
+  final type = switch (kind) {
+    CatCatchMediaKind.audio => IOType.audio,
+    CatCatchMediaKind.video => IOType.video,
+    CatCatchMediaKind.other => IOType.file,
+  };
+  if (type == IOType.file) {
+    throw const FormatException('无法验证下载文件的音视频类型，请检查媒体文件');
+  }
+  final extension = p.extension(path).toLowerCase();
+  final mimeType = switch (extension) {
+    '.mp4' || '.m4a' => type == IOType.audio ? 'audio/mp4' : 'video/mp4',
+    '.mov' => type == IOType.audio ? 'audio/quicktime' : 'video/quicktime',
+    '.webm' || '.weba' => type == IOType.audio ? 'audio/webm' : 'video/webm',
+    '.mkv' ||
+    '.mka' =>
+      type == IOType.audio ? 'audio/x-matroska' : 'video/x-matroska',
+    '.ogg' ||
+    '.ogv' ||
+    '.opus' =>
+      type == IOType.audio ? 'audio/ogg' : 'video/ogg',
+    '.avi' => type == IOType.audio ? 'audio/x-msvideo' : 'video/x-msvideo',
+    '.flv' => type == IOType.audio ? 'audio/x-flv' : 'video/x-flv',
+    '.mpeg' ||
+    '.mpg' =>
+      type == IOType.audio ? 'audio/x-mpeg-program-stream' : 'video/mpeg',
+    _ => null,
+  };
+  return FlowPayload.fromValue(path, type, mimeType: mimeType);
+}
 
 class TaskFlowPersistenceException implements Exception {
   final String message;

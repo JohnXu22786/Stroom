@@ -309,6 +309,29 @@ void main() {
         );
       });
 
+      test('WebA audio uploads with WebM filename and MIME', () async {
+        final adapter = _CapturingAdapter();
+        final mockDio = Dio()..httpClientAdapter = adapter;
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          ),
+          dio: mockDio,
+        );
+
+        await service.transcribe(
+          audioBytes: Uint8List.fromList([0x1a, 0x45, 0xdf, 0xa3]),
+          audioFormat: 'weba',
+        );
+
+        final body = adapter.capturedBodyBytes;
+        expect(body, isNotNull);
+        expect(_multipartFileHasMimeType(body!, 'audio/webm'), isTrue);
+        expect(utf8.decode(body, allowMalformed: true),
+            contains('filename="audio.webm"'));
+      });
+
       test('request includes language in multipart when set', () async {
         final adapter = _CapturingAdapter();
         final mockDio = Dio()..httpClientAdapter = adapter;

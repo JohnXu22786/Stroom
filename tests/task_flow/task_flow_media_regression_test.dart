@@ -23,6 +23,7 @@ import 'package:stroom/services/chat_stream_manager.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/openai_protocol.dart';
 import 'package:stroom/services/storage_service.dart';
+import 'package:stroom/utils/web_file_store.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/flow_payload.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
@@ -316,9 +317,10 @@ void main() {
   test(
       'CatCatch converted audio emits an audio MP4 payload for the chat pipeline',
       () async {
-    // The mocked task reports its final path before the fixture is materialized.
-    // This keeps best-effort gallery registration outside this transport test.
-    final file = File('${directory.path}/recording.mp4');
+    await ManifestDatabase.getAllAudioRecords();
+    WebFileStore.disableTestMode();
+    final file = await File('tests/fixtures/catcatch/audio_only.mp4')
+        .copy('${directory.path}/recording.mp4');
     final notifier = _CatCatch();
     late String taskId;
     when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId')))
@@ -359,7 +361,6 @@ void main() {
     expect(output!.type, IOType.audio);
     expect(output!.mimeType, 'audio/mp4',
         reason: 'the final container differs from the source MP3');
-    await file.writeAsBytes(_mp4Header);
     final restored = FlowPayload.fromMap(output!.toMap());
     final message = await prepareFlowChatMessage(restored, 'conversation');
     expect(message.attachments.single.fileType, 'audio');

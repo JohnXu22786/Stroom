@@ -91,7 +91,10 @@ String getMimeType(String format) {
     case 'mp4':
       return 'audio/mp4';
     case 'webm':
+    case 'weba':
       return 'audio/webm';
+    case 'mka':
+      return 'audio/x-matroska';
     case 'wma':
       return 'audio/x-ms-wma';
     case 'pcm':
@@ -128,6 +131,13 @@ String normalizeAudioFormat(String format) {
   final lower = format.toLowerCase();
   if (lower == 'aac') return 'm4a';
   return lower;
+}
+
+/// Use the WebM upload name for audio-only WebM files saved as `.weba`.
+/// ASR endpoints generally accept `webm` but do not list `weba` separately.
+String normalizeAsrUploadFormat(String format) {
+  final lower = format.toLowerCase();
+  return lower == 'weba' ? 'webm' : lower;
 }
 
 // ===========================================================================
