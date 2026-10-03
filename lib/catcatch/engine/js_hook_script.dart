@@ -169,6 +169,19 @@ class JsHookScript {
   // =========================================================================
   // MutationObserver: Scan for <video>/<audio> elements
   // =========================================================================
+  function markSourceForRescan(source) {
+    source._catCatchScanned = false;
+
+    var parent = source.parentElement;
+    while (parent && parent.nodeName !== 'VIDEO' &&
+        parent.nodeName !== 'AUDIO') {
+      parent = parent.parentElement;
+    }
+    if (parent) {
+      parent._catCatchScanned = false;
+    }
+  }
+
   function scanMediaElements() {
     try {
       document.querySelectorAll('video, audio').forEach(function(el) {
@@ -220,7 +233,12 @@ class JsHookScript {
           if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO' ||
               node.querySelectorAll) {
             needsScan = true;
-            break;
+          }
+          if (node.nodeName === 'SOURCE') {
+            markSourceForRescan(node);
+          }
+          if (node.querySelectorAll) {
+            node.querySelectorAll('source').forEach(markSourceForRescan);
           }
         }
       } else if (mutation.type === 'attributes' &&
@@ -230,7 +248,11 @@ class JsHookScript {
         var target = mutation.target;
         if (target && (target.nodeName === 'VIDEO' || target.nodeName === 'AUDIO' ||
             target.nodeName === 'SOURCE')) {
-          target._catCatchScanned = false;
+          if (target.nodeName === 'SOURCE') {
+            markSourceForRescan(target);
+          } else {
+            target._catCatchScanned = false;
+          }
           needsScan = true;
         }
       }
