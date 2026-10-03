@@ -205,7 +205,10 @@ void main() {
       );
       final result = await executeCatCatchBlock(
         def: BlockTypeDefinition.catcatch,
-        block: TaskFlowBlock(typeKey: BlockType.catcatch),
+        block: TaskFlowBlock(
+          typeKey: BlockType.catcatch,
+          params: {'automaticResourceSelection': true},
+        ),
         input: 'https://x',
         execId: execId,
         execNotifier: executions,
