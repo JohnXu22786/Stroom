@@ -534,9 +534,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
                   prefixIcon: const Icon(Icons.vpn_key, color: Colors.amber),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscureApiKey
-                          ? Icons.visibility_off
-                          : Icons.visibility,
+                      _obscureApiKey ? Icons.visibility_off : Icons.visibility,
                       size: 20,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
