@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import '../../providers/task_provider_shared.dart';
 import '../../services/attachment_storage.dart';
 import '../models/task_flow_execution.dart';
+import '../models/io_type.dart';
 import 'persistable_notifier.dart';
 
 /// Provider for tracking task flow executions (for the unified task list).
@@ -19,10 +20,36 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   TaskFlowExecutionNotifier() : super([]);
 
   final Map<String, TaskFlowExecution> _pendingRemovals = {};
+  final Set<String> _stoppedExecutions = {};
   Future<void> _removalQueue = Future<void>.value();
+  final Map<String, Future<void>> _inputPathLocks = {};
+  final Set<String> _deletingInputPaths = {};
+
+  /// Keep validation and durable registration of a picker copy together with
+  /// the last-reference check and deletion of that same copy.
+  Future<T> withInputStoragePathLock<T>(
+    String? path,
+    Future<T> Function() action,
+  ) async {
+    if (path == null || path.isEmpty) return action();
+    final previous = _inputPathLocks[path];
+    final released = Completer<void>();
+    _inputPathLocks[path] = released.future;
+    if (previous != null) await previous;
+    try {
+      return await action();
+    } finally {
+      if (identical(_inputPathLocks[path], released.future)) {
+        _inputPathLocks.remove(path);
+      }
+      released.complete();
+    }
+  }
 
   TaskFlowExecution? execution(String id) =>
       mounted ? state.where((entry) => entry.id == id).firstOrNull : null;
+
+  bool isExecutionStopped(String id) => _stoppedExecutions.contains(id);
 
   bool referencesInputStoragePath(String path) =>
       mounted && state.any((entry) => entry.inputStoragePath == path);
@@ -64,22 +91,37 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     required String flowName,
     List<FlowSubTask> subTasks = const [],
     String inputText = '',
+    IOType? inputType,
     int inputDurationSec = 0,
+    String? inputMimeType,
     String? inputFileName,
     String? inputStoragePath,
+    bool persistImmediately = true,
   }) {
+    if (inputStoragePath != null &&
+        _deletingInputPaths.contains(inputStoragePath)) {
+      throw StateError('输入文件正在删除，请重新选择文件');
+    }
     final execution = TaskFlowExecution(
       flowId: flowId,
       flowName: flowName,
       subTasks: subTasks,
       inputText: inputText,
+      inputType: inputType,
       inputDurationSec: inputDurationSec,
+      inputMimeType: inputMimeType,
       inputFileName: inputFileName,
       inputStoragePath: inputStoragePath,
     );
     state = [execution, ...state];
-    _persistExecutions();
+    if (persistImmediately) _persistExecutions();
     return execution.id;
+  }
+
+  /// Undo a launch whose first durable write failed. The builder still owns
+  /// its picker copy, so this must not use [removeExecution]'s file cleanup.
+  void rollbackUnpersistedExecution(String executionId) {
+    state = state.where((entry) => entry.id != executionId).toList();
   }
 
   /// Add a sub-task to an existing execution.
@@ -121,6 +163,7 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     String subTaskId,
     TaskStatus status,
   ) {
+    if (_stoppedExecutions.contains(executionId)) return;
     state = state.map((e) {
       if (e.id != executionId) return e;
       final updated = e.subTasks.map((st) {
@@ -176,6 +219,7 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   /// - Any running → stays running (wait for auto-complete)
   /// - Any failed → failed
   void completeExecution(String executionId) {
+    if (_stoppedExecutions.contains(executionId)) return;
     state = state.map((e) {
       if (e.id != executionId) return e;
       if (e.subTasks.isEmpty) {
@@ -236,6 +280,7 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   Future<void> removeExecution(String executionId) {
     final removed = execution(executionId);
     if (removed == null) return Future<void>.value();
+    _stoppedExecutions.add(executionId);
     state = state.where((e) => e.id != executionId).toList();
     _pendingRemovals[executionId] = removed;
     // Capture the deletion now, before a widget or notifier can be disposed.
@@ -265,21 +310,27 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
         }
         return;
       }
+      _stoppedExecutions.remove(executionId);
       final path = removed.inputStoragePath;
       if (path == null || path.isEmpty) return;
-      // Once disposed, we cannot inspect newer registrations; retain the
-      // copy rather than risk breaking a persisted retry that shares it.
-      if (!mounted) return;
-      final stillReferenced =
-          state.any((entry) => entry.inputStoragePath == path) ||
-              _pendingRemovals.values
-                  .any((entry) => entry.inputStoragePath == path);
-      if (stillReferenced) return;
-      try {
-        await AttachmentStorage.deleteFile(path);
-      } catch (error) {
-        debugPrint('Failed to clean up flow input $path: $error');
-      }
+      await withInputStoragePathLock(path, () async {
+        // Once disposed, retain the copy rather than risk breaking a
+        // persisted retry that shares it.
+        if (!mounted) return;
+        final stillReferenced =
+            state.any((entry) => entry.inputStoragePath == path) ||
+                _pendingRemovals.values
+                    .any((entry) => entry.inputStoragePath == path);
+        if (stillReferenced) return;
+        _deletingInputPaths.add(path);
+        try {
+          await AttachmentStorage.deleteFile(path);
+        } catch (error) {
+          debugPrint('Failed to clean up flow input $path: $error');
+        } finally {
+          _deletingInputPaths.remove(path);
+        }
+      });
     });
     _removalQueue = operation.catchError((Object error, StackTrace st) {
       debugPrint('Failed to remove flow execution $executionId: $error');

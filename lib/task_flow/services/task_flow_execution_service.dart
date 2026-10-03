@@ -15,6 +15,7 @@ import '../../providers/provider_config.dart';
 import '../../providers/task_provider.dart';
 import '../../services/app_log_service.dart';
 import '../../services/attachment_storage.dart';
+import '../../services/chat_adapter.dart';
 import '../models/block_type_definition.dart';
 import '../models/flow_payload.dart';
 import '../models/task_flow_definition.dart';
@@ -72,6 +73,56 @@ Assistant? resolveChatAssistant(
   return assistants.where((a) => a.id == assistantId).firstOrNull;
 }
 
+/// Bind an assistant without a selected model to the chat model used at
+/// preflight. The copied assistant travels with the provider snapshot to the
+/// stream manager, so a later chat-page model switch cannot change protocol.
+@visibleForTesting
+Assistant? bindFlowFallbackAssistant(
+  Assistant assistant,
+  ProviderEntriesState providers,
+  ChatAdapter adapter,
+) {
+  final reference = assistant.modelId ??
+      assistant.defaultModelId ??
+      assistant.defaultModelName;
+  if (reference?.isNotEmpty == true) return assistant;
+  final entry = providers.entries.where((e) => e.type == 'llm').firstOrNull;
+  final configIndex = adapter.currentConfigIndex;
+  final modelIndex = adapter.currentModelIndex;
+  if (!adapter.isConfigured ||
+      entry == null ||
+      configIndex < 0 ||
+      configIndex >= entry.configs.length) {
+    return null;
+  }
+  final config = entry.configs[configIndex];
+  if (modelIndex < 0 || modelIndex >= config.models.length) return null;
+  final model = config.models[modelIndex];
+  if (model.modelId.isEmpty || model.modelId != adapter.modelConfig?.modelId) {
+    return null;
+  }
+  // A legacy empty modelId must not mask the copied defaultModelId when the
+  // adapter resolves the assistant with its null-coalescing model reference.
+  final bound = Assistant.fromMap({
+    ...assistant.toMap(),
+    'modelId': null,
+    'defaultModelId': model.modelId,
+    'defaultProviderName': config.providerName,
+  });
+  return flowChatEndpointType(bound, providers) == adapter.endpointType
+      ? bound
+      : null;
+}
+
+@visibleForTesting
+FlowPayload catCatchOutputPayload(String path) =>
+    FlowPayload.fromValue(path, flowFileType(path));
+
+@visibleForTesting
+bool canContinueFlowExecution(TaskFlowExecutionNotifier notifier, String id) =>
+    !notifier.isExecutionStopped(id) &&
+    notifier.execution(id)?.status == FlowExecutionStatus.running;
+
 class _PreparedFlow {
   final TaskFlowDefinition flow;
   final ProviderEntriesState providers;
@@ -126,24 +177,71 @@ class TaskFlowExecutionService {
 
   /// Validate all inputs before starting any work; await the entire batch.
   Future<void> startFlowMany(String flowId, List<FlowRunInput> inputs) async {
-    final prepared = await _prepareFlow(flowId, inputs);
-    await _runMany(prepared, inputs);
+    _rejectPickerOwnedBatch(flowId, inputs);
+    final path = inputs.firstOrNull?.ownedStoragePath;
+    if (path == null || path.isEmpty) {
+      final prepared = await _prepareFlow(flowId, inputs);
+      await _runMany(prepared, inputs);
+      return;
+    }
+    // The awaited API also validates before registering its first execution.
+    // Reserve the picker copy across both steps so a concurrent removal cannot
+    // delete it after validation and before the durable retry record exists.
+    final execNotifier = _ref.read(taskFlowExecutionsProvider.notifier);
+    late _PreparedFlow prepared;
+    late _StartedFlow first;
+    await execNotifier.withInputStoragePathLock(path, () async {
+      prepared = await _prepareFlow(flowId, inputs);
+      first = _registerExecution(
+        prepared.flow,
+        inputs.first,
+        persistImmediately: false,
+      );
+      if (!await execNotifier.persist()) {
+        execNotifier.rollbackUnpersistedExecution(first.executionId);
+        throw StateError('任务流执行记录未能保存，请稍后重试');
+      }
+    });
+    await _runMany(prepared, inputs, firstStarted: first);
+  }
+
+  void _rejectPickerOwnedBatch(String flowId, List<FlowRunInput> inputs) {
+    // Until the durable batch handoff registers every input before returning,
+    // only one picker-owned copy may leave the builder. App media paths and
+    // URL batches do not transfer ownership and remain multi-select.
+    if (inputs.length > 1 &&
+        inputs.any((input) => input.ownedStoragePath != null)) {
+      throw TaskFlowValidationException(
+        '一次只能运行一个本地文件，请分别启动',
+        flowId: flowId,
+        isInputError: true,
+      );
+    }
   }
 
   /// UI entry point: report validation failures before returning, then run in
   /// the background. History retry uses the same validation as normal launch.
   Future<void> launchFlowMany(String flowId, List<FlowRunInput> inputs) async {
-    final prepared = await _prepareFlow(flowId, inputs);
-    // The first picker copy needs a durable execution owner before the
-    // builder releases it. Remaining inputs stay owned by _runMany in memory
-    // until their sequential run begins.
-    final first = _registerExecution(prepared.flow, inputs.first);
+    _rejectPickerOwnedBatch(flowId, inputs);
     final execNotifier = _ref.read(taskFlowExecutionsProvider.notifier);
-    if (!await execNotifier.persist()) {
-      await execNotifier.removeExecution(first.executionId);
-      throw StateError('任务流执行记录未能保存，请稍后重试');
-    }
-    unawaited(_runMany(prepared, inputs, firstStarted: first));
+    await execNotifier.withInputStoragePathLock(
+      inputs.firstOrNull?.ownedStoragePath,
+      () async {
+        final prepared = await _prepareFlow(flowId, inputs);
+        // The first picker copy needs a durable execution owner before the
+        // builder releases it. Other inputs here do not own picker copies.
+        final first = _registerExecution(
+          prepared.flow,
+          inputs.first,
+          persistImmediately: false,
+        );
+        if (!await execNotifier.persist()) {
+          execNotifier.rollbackUnpersistedExecution(first.executionId);
+          throw StateError('任务流执行记录未能保存，请稍后重试');
+        }
+        unawaited(_runMany(prepared, inputs, firstStarted: first));
+      },
+    );
   }
 
   Future<_PreparedFlow> _prepareFlow(
@@ -165,12 +263,29 @@ class TaskFlowExecutionService {
           ProviderEntry.fromMap(entry.toMap()),
       ],
     );
-    final assistants = [
-      for (final assistant in _ref.read(assistantProvider))
-        Assistant.fromMap(assistant.toMap()),
-    ];
-    final fallbackEndpoint =
-        _ref.read(chatStreamManagerProvider).adapter.endpointType;
+    final adapter = _ref.read(chatStreamManagerProvider).adapter;
+    final selectedChatIds = {
+      for (final block in flow.blocks)
+        if (block.typeKey == BlockType.chat)
+          block.params['assistantId']?.toString(),
+    };
+    final assistants = <Assistant>[];
+    var missingFallbackModel = false;
+    for (final assistant in _ref.read(assistantProvider)) {
+      final copy = Assistant.fromMap(assistant.toMap());
+      if (!selectedChatIds.contains(copy.id)) {
+        assistants.add(copy);
+        continue;
+      }
+      final bound = bindFlowFallbackAssistant(copy, providers, adapter);
+      if (bound == null) {
+        missingFallbackModel = true;
+        assistants.add(copy);
+      } else {
+        assistants.add(bound);
+      }
+    }
+    final fallbackEndpoint = adapter.endpointType;
     await validateTaskFlow(
       flow,
       inputs,
@@ -178,6 +293,12 @@ class TaskFlowExecutionService {
       assistants: assistants,
       fallbackChatEndpointType: fallbackEndpoint,
     );
+    if (missingFallbackModel) {
+      throw TaskFlowValidationException(
+        '当前对话模型未配置或已变化，请重新选择模型后运行',
+        flowId: flowId,
+      );
+    }
     return _PreparedFlow(flow, providers, assistants, fallbackEndpoint);
   }
 
@@ -217,15 +338,22 @@ class TaskFlowExecutionService {
     }
   }
 
-  _StartedFlow _registerExecution(TaskFlowDefinition flow, FlowRunInput input) {
+  _StartedFlow _registerExecution(
+    TaskFlowDefinition flow,
+    FlowRunInput input, {
+    bool persistImmediately = true,
+  }) {
     final execNotifier = _ref.read(taskFlowExecutionsProvider.notifier);
     final execId = execNotifier.addExecution(
       flowId: flow.id,
       flowName: flow.name,
       inputText: input.text,
+      inputType: flow.inputType,
       inputDurationSec: input.durationSec,
+      inputMimeType: input.mimeType,
       inputFileName: input.fileName,
       inputStoragePath: input.ownedStoragePath,
+      persistImmediately: persistImmediately,
     );
     final placeholders = <int, FlowSubTask>{};
     for (int i = 0; i < flow.blocks.length; i++) {
@@ -276,8 +404,8 @@ class TaskFlowExecutionService {
       // The execution may have been deleted while the previous block ran
       // (flow card delete / 清除所有) — abort promptly so no further tasks
       // are created.
-      if (execNotifier.execution(execId) == null) {
-        AppLogService.info('TaskFlow', '任务流已删除，中止执行 ($execId)');
+      if (!canContinueFlowExecution(execNotifier, execId)) {
+        AppLogService.info('TaskFlow', '任务流已停止，中止执行 ($execId)');
         return;
       }
       final block = flow.blocks[i];
@@ -299,6 +427,13 @@ class TaskFlowExecutionService {
         return;
       } finally {
         execNotifier.setExecutionQueued(execId, false);
+      }
+
+      // Deletion can fail to persist and restore a stopped (failed) record
+      // while the run waits for its scheduler slot.
+      if (!canContinueFlowExecution(execNotifier, execId)) {
+        scheduler.release(execId);
+        return;
       }
 
       try {
@@ -334,6 +469,13 @@ class TaskFlowExecutionService {
       }
     }
 
+    final finalStatus = execNotifier.execution(execId)?.status;
+    if (execNotifier.isExecutionStopped(execId) ||
+        finalStatus == null ||
+        finalStatus == FlowExecutionStatus.failed) {
+      AppLogService.info('TaskFlow', '任务流已停止，中止完成 ($execId)');
+      return;
+    }
     execNotifier.completeExecution(execId);
     AppLogService.info('TaskFlow', '完成: ${flow.name} ($execId)');
   }
@@ -423,7 +565,7 @@ class TaskFlowExecutionService {
           // block's configured duration (0 = use the configured value).
           durationSecOverride: inputDurationSec,
         );
-        return FlowPayload.fromValue(result, def.outputType);
+        return catCatchOutputPayload(result);
       case BlockType.audioSeparation:
         return FlowPayload.fromValue(
           await executeAudioSeparationBlock(

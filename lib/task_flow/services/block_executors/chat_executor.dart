@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -14,9 +15,14 @@ import '../../../services/app_log_service.dart';
 import '../../../services/chat_stream_manager.dart';
 import '../../../services/attachment_storage.dart';
 import '../../../services/chat_protocol.dart'
-    show maxAttachmentBytes, effectiveEndpointType;
+    show
+        maxAttachmentBytes,
+        imageCompressThresholdBytes,
+        effectiveEndpointType,
+        textAttachmentExtensions;
 import '../../../services/chat_adapter.dart'
     show availableLlmModels, resolveModelRef;
+import '../../../utils/image_send_compressor.dart';
 import '../../../utils/web_file_store.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/flow_payload.dart';
@@ -39,7 +45,10 @@ import 'shared_helpers.dart';
 /// throw UnsupportedError there) and any file-system error falls back to
 /// the plain-text branch, so the caller can await this safely.
 @visibleForTesting
-Future<String> chatOutputTitle(String input) async {
+Future<String> chatOutputTitle(String input, {String? fileName}) async {
+  if (fileName != null && fileName.trim().isNotEmpty) {
+    return '助手回复_${p.basenameWithoutExtension(p.basename(fileName))}';
+  }
   if (!kIsWeb) {
     try {
       final file = File(input);
@@ -89,6 +98,40 @@ String? flowChatInputError(
   String? mimeType,
   List<int>? headerBytes,
 }) {
+  final mime = mimeType?.split(';').first.trim().toLowerCase();
+  if (mime == 'image/svg+xml') {
+    return '助手对话不支持 SVG 图片附件，请转换为 PNG 或 JPEG';
+  }
+  // OpenAI's image helper defaults unknown formats to JPEG, while Anthropic
+  // accepts only these four image media types. Do not label different bytes
+  // as JPEG or send an unsupported image block.
+  if (type == IOType.image &&
+      mime != null &&
+      !const {'image/png', 'image/jpeg', 'image/gif', 'image/webp'}
+          .contains(mime)) {
+    return '助手对话不支持 $mime 图片附件，请转换为 PNG、JPEG、GIF 或 WebP';
+  }
+  // The OpenAI encoder falls back to `mp3` for unrecognised audio MIME.
+  // Keep the formats it explicitly maps and reject bytes it would mislabel.
+  if (type == IOType.audio &&
+      endpointType != 'anthropic' &&
+      mime != null &&
+      !const {
+        'audio/mpeg',
+        'audio/mp3',
+        'audio/wav',
+        'audio/x-wav',
+        'audio/wave',
+        'audio/ogg',
+        'audio/aac',
+        'audio/flac',
+        'audio/x-flac',
+        'audio/webm',
+        'audio/mp4',
+        'audio/x-m4a',
+      }.contains(mime)) {
+    return '助手对话不支持 $mime 音频附件，请转换为 MP3、WAV 或 M4A';
+  }
   if (endpointType != 'anthropic') return null;
   if (type == IOType.audio || type == IOType.video) {
     return '此助手的 Anthropic 对话格式不支持${type.label}附件，请选择支持此媒体的助手';
@@ -108,6 +151,37 @@ String? flowChatInputError(
     return '此助手的 Anthropic 对话格式只支持图片和 PDF 附件，请选择支持此文件的助手';
   }
   return null;
+}
+
+/// Chat's protocol replaces uncompressible images over 10 MB with skipped
+/// text. Reject them before a flow can report a successful response.
+Future<String?> flowChatImageSizeError(Uint8List bytes) async {
+  if (bytes.length <= maxAttachmentBytes) return null;
+  final compressed = await compressImageForSend(
+    bytes,
+    maxBytes: imageCompressThresholdBytes,
+  );
+  if (compressed.compressed != null &&
+      compressed.compressed!.bytes.length <= maxAttachmentBytes) {
+    return null;
+  }
+  return '助手对话图片无法压缩到 10 MB 以下，请选择较小图片';
+}
+
+/// Text attachments are decoded as strict UTF-8 by the shared protocol. It
+/// substitutes an unreadable placeholder on decoding failure, which a flow
+/// must surface as an input error before starting the assistant exchange.
+bool flowChatIsTextFileName(String name) => textAttachmentExtensions
+    .contains(p.basename(name).split('.').last.toLowerCase());
+
+String? flowChatTextFileError(String name, List<int> bytes) {
+  if (!flowChatIsTextFileName(name)) return null;
+  try {
+    utf8.decode(bytes);
+    return null;
+  } on FormatException {
+    return '文本附件不是有效的 UTF-8 编码，请转换后重试';
+  }
 }
 
 /// Persist media with the same AttachmentStorage and Attachment metadata as
@@ -189,7 +263,15 @@ Future<ChatMessage> prepareFlowChatMessage(
     headerBytes: bytes,
   );
   if (unsupportedFile != null) throw FormatException(unsupportedFile);
+  if (actualType == IOType.image) {
+    final imageSizeError = await flowChatImageSizeError(bytes);
+    if (imageSizeError != null) throw FormatException(imageSizeError);
+  }
   final name = p.basename(payload.fileName ?? reference);
+  if (actualType == IOType.file && endpointType != 'anthropic') {
+    final textError = flowChatTextFileError(name, bytes);
+    if (textError != null) throw FormatException(textError);
+  }
   final storagePath = await AttachmentStorage.saveFile(name, bytes);
   final attachment = Attachment(
     fileName: name,
@@ -290,7 +372,7 @@ Future<String> executeChatBlock({
       flowSubTask.id,
       TaskStatus.running,
     );
-    final title = await chatOutputTitle(input);
+    final title = await chatOutputTitle(input, fileName: payload?.fileName);
     if (!isLive()) await stopInactiveExecution();
     bgNotifier.addTask(
       type: BackgroundTaskType.chat,

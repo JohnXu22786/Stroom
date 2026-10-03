@@ -1,16 +1,21 @@
+// ignore_for_file: invalid_use_of_visible_for_testing_member
+
 import 'dart:io';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_protocol.dart' show maxAttachmentBytes;
+import 'package:stroom/services/openai_protocol.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/flow_payload.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/services/task_flow_validator.dart';
+import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -213,6 +218,61 @@ void main() {
     );
   });
 
+  test('flow keeps its preflight model after the chat model changes', () async {
+    registerBuiltinProviderTypes();
+    final providers = ProviderEntriesState(entries: [
+      ProviderEntry(name: 'LLM', type: 'llm', configs: [
+        ProviderConfigItem(
+          providerName: 'OpenAI',
+          host: 'https://openai.example.com',
+          key: 'test',
+          models: [
+            ModelConfig(name: 'GPT', modelId: 'gpt', endpointType: 'openai'),
+          ],
+        ),
+        ProviderConfigItem(
+          providerName: 'Anthropic',
+          host: 'https://anthropic.example.com',
+          key: 'test',
+          models: [
+            ModelConfig(
+              name: 'Claude',
+              modelId: 'claude',
+              endpointType: 'anthropic',
+            ),
+          ],
+        ),
+      ])
+    ]);
+    final adapter = ChatAdapter()..selectModel(providers, 0, 0);
+    addTearDown(adapter.dispose);
+    final bound = bindFlowFallbackAssistant(
+      unboundAssistant,
+      providers,
+      adapter,
+    );
+    expect(bound, isNotNull);
+    expect(bound!.defaultModelId, 'gpt');
+    final audio = await File('${directory.path}/speech.mp3')
+        .writeAsBytes([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0]);
+    await validateTaskFlow(
+      chatFlow(IOType.audio),
+      [FlowRunInput(text: audio.path)],
+      providers: providers,
+      assistants: [bound],
+      fallbackChatEndpointType: adapter.endpointType,
+    );
+
+    adapter.selectModel(providers, 1, 0);
+    final service = adapter.getOrCreateService(
+      'flow-conversation',
+      assistant: bound,
+      entriesState: providers,
+    );
+    expect(service!.modelConfig!.modelId, 'gpt');
+    expect(service.protocol, isA<OpenAIProtocol>());
+  });
+
   test('first chat block rejects a non-image attachment over 10 MB', () async {
     final audio = File('${directory.path}/long.wav');
     final handle = await audio.open(mode: FileMode.write);
@@ -236,33 +296,129 @@ void main() {
   });
 
   test(
-    'image inputs keep the chat pipeline image compression allowance',
+    'uncompressible images over 10 MB fail preflight',
     () async {
       final image = File('${directory.path}/photo.png');
       final handle = await image.open(mode: FileMode.write);
       await handle.writeFrom([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
       await handle.truncate(maxAttachmentBytes + 1);
       await handle.close();
-      await validateTaskFlow(
-        chatFlow(IOType.image),
-        [FlowRunInput(text: image.path)],
-        providers: const ProviderEntriesState(),
-        assistants: [unboundAssistant],
+      await expectLater(
+        validateTaskFlow(
+          chatFlow(IOType.image),
+          [FlowRunInput(text: image.path)],
+          providers: const ProviderEntriesState(),
+          assistants: [unboundAssistant],
+        ),
+        throwsA(isA<TaskFlowValidationException>().having(
+            (e) => e.message, 'uncompressible image', contains('10 MB'))),
       );
     },
   );
 
-  test('generic file input also allows a large detected image', () async {
+  test('generic file input also rejects a large uncompressible image',
+      () async {
     final image = File('${directory.path}/generic-image.png');
     final handle = await image.open(mode: FileMode.write);
     await handle.writeFrom([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     await handle.truncate(maxAttachmentBytes + 1);
     await handle.close();
+    await expectLater(
+      validateTaskFlow(
+        chatFlow(IOType.file),
+        [FlowRunInput(text: image.path)],
+        providers: const ProviderEntriesState(),
+        assistants: [unboundAssistant],
+      ),
+      throwsA(isA<TaskFlowValidationException>()
+          .having((e) => e.message, 'uncompressible image', contains('10 MB'))),
+    );
+  });
+
+  test('SVG fails initial chat preflight for both endpoint types', () async {
+    final image = await File('${directory.path}/vector.svg')
+        .writeAsString('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    for (final (providers, assistant) in [
+      (const ProviderEntriesState(), unboundAssistant),
+      (anthropic, boundAssistant),
+    ]) {
+      await expectLater(
+        validateTaskFlow(
+          chatFlow(IOType.image),
+          [FlowRunInput(text: image.path)],
+          providers: providers,
+          assistants: [assistant],
+        ),
+        throwsA(isA<TaskFlowValidationException>()
+            .having((e) => e.message, 'unsupported SVG', contains('SVG'))),
+      );
+    }
+  });
+
+  test('unsupported BMP and WMA fail before initial chat submission', () async {
+    final bmp = await File('${directory.path}/photo.bmp')
+        .writeAsBytes([0x42, 0x4d, 0, 0, 0, 0]);
+    final wma = await File('${directory.path}/recording.wma').writeAsBytes([
+      0x30,
+      0x26,
+      0xb2,
+      0x75,
+      0x8e,
+      0x66,
+      0xcf,
+      0x11,
+    ]);
+    for (final (source, providers, assistant) in [
+      (bmp, const ProviderEntriesState(), unboundAssistant),
+      (bmp, anthropic, boundAssistant),
+      (wma, const ProviderEntriesState(), unboundAssistant),
+    ]) {
+      await expectLater(
+        validateTaskFlow(
+          chatFlow(IOType.file),
+          [FlowRunInput(text: source.path)],
+          providers: providers,
+          assistants: [assistant],
+        ),
+        throwsA(isA<TaskFlowValidationException>().having(
+          (e) => e.message,
+          'unsupported media subtype',
+          contains('不支持'),
+        )),
+      );
+    }
+  });
+
+  test('picked text must be UTF-8 before initial chat submission', () async {
+    final file =
+        await File('${directory.path}/copy.bin').writeAsBytes([0xc3, 0x28]);
+    await expectLater(
+      validateTaskFlow(
+        chatFlow(IOType.file),
+        [FlowRunInput(text: file.path, fileName: 'report.txt')],
+        providers: const ProviderEntriesState(),
+        assistants: [unboundAssistant],
+      ),
+      throwsA(isA<TaskFlowValidationException>()
+          .having((e) => e.inputIndex, 'input index', 0)
+          .having((e) => e.message, 'text encoding', contains('UTF-8'))),
+    );
+    await file.writeAsString('Valid UTF-8 text');
     await validateTaskFlow(
       chatFlow(IOType.file),
-      [FlowRunInput(text: image.path)],
+      [FlowRunInput(text: file.path, fileName: 'report.txt')],
       providers: const ProviderEntriesState(),
       assistants: [unboundAssistant],
+    );
+    // Anthropic sends a signed PDF as binary even when its picked name ends
+    // in .txt; its PDF bytes do not need to decode as text.
+    await file.writeAsBytes([...utf8.encode('%PDF-1.7\n'), 0xff]);
+    await validateTaskFlow(
+      chatFlow(IOType.file),
+      [FlowRunInput(text: file.path, fileName: 'report.txt')],
+      providers: const ProviderEntriesState(),
+      assistants: [unboundAssistant],
+      fallbackChatEndpointType: 'anthropic',
     );
   });
 }

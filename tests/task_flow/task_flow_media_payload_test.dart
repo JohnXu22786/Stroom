@@ -1,5 +1,6 @@
 // ignore_for_file: invalid_use_of_visible_for_testing_member
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -13,7 +14,9 @@ import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
+import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/background_task_provider.dart';
+import 'package:stroom/providers/chat_manager_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
@@ -28,15 +31,45 @@ import 'package:stroom/task_flow/models/flow_payload.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_execution.dart';
+import 'package:stroom/task_flow/pages/task_flow_builder_page.dart';
 import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
+import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 import 'package:stroom/task_flow/services/block_executors/chat_executor.dart';
+import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
 import 'package:stroom/task_flow/services/task_flow_validator.dart';
 
 class _Documents extends PathProviderPlatform {
   _Documents(this.path);
   final String path;
+  Completer<void>? gate;
+  Completer<void>? entered;
   @override
-  Future<String> getApplicationDocumentsPath() async => path;
+  Future<String> getApplicationDocumentsPath() async {
+    final pending = gate;
+    if (pending != null) {
+      gate = null;
+      entered?.complete();
+      await pending.future;
+    }
+    return path;
+  }
+}
+
+class _Flows extends TaskFlowNotifier {
+  @override
+  Future<bool> persist() async => true;
+}
+
+class _Entries extends ProviderEntriesNotifier {
+  _Entries(ProviderEntriesState entries) {
+    state = entries;
+  }
+}
+
+class _Assistants extends AssistantsNotifier {
+  _Assistants(List<Assistant> assistants) {
+    state = assistants;
+  }
 }
 
 class _Manager extends ChatStreamManager {
@@ -165,6 +198,54 @@ void main() {
     expect(message.attachments, isEmpty);
   });
 
+  test('non-UTF-8 picked text is rejected before attachment storage', () async {
+    final file =
+        await File('${directory.path}/copy.bin').writeAsBytes([0xc3, 0x28]);
+    await expectLater(
+      prepareFlowChatMessage(
+        FlowPayload.file(
+          fileReference: file.path,
+          type: IOType.file,
+          fileName: 'report.txt',
+        ),
+        'invalid-text',
+      ),
+      throwsA(isA<FormatException>()
+          .having((e) => e.message, 'text encoding', contains('UTF-8'))),
+    );
+    expect(await Directory('${directory.path}/attachments').exists(), isFalse);
+
+    await file.writeAsBytes(utf8.encode('Valid UTF-8 text'));
+    final message = await prepareFlowChatMessage(
+      FlowPayload.file(
+        fileReference: file.path,
+        type: IOType.file,
+        fileName: 'report.txt',
+      ),
+      'valid-text',
+    );
+    final request = await const OpenAIProtocol().buildRequest(
+      history: [message],
+    );
+    expect(jsonEncode(request.messages.single), contains('Valid UTF-8 text'));
+
+    await file.writeAsBytes([...utf8.encode('%PDF-1.7\n'), 0xff]);
+    final pdf = await prepareFlowChatMessage(
+      FlowPayload.file(
+        fileReference: file.path,
+        type: IOType.file,
+        fileName: 'report.txt',
+      ),
+      'binary-pdf',
+      endpointType: 'anthropic',
+    );
+    final anthropic = await const AnthropicProtocol().buildRequest(
+      history: [pdf],
+    );
+    final part = (anthropic.messages.single['content'] as List).single;
+    expect(part['type'], 'document');
+  });
+
   test('chat attachment keeps the selected name instead of the copy name',
       () async {
     final storagePath = await AttachmentStorage.saveFile(
@@ -183,6 +264,165 @@ void main() {
         message.attachments.single.fileName, isNot(copy.uri.pathSegments.last));
   });
 
+  test('app media names retain formats for chat attachment previews', () async {
+    for (final (name, format, type, bytes) in [
+      ('recording', 'mp3', IOType.audio, [0x49, 0x44, 0x33, 4, 0, 0]),
+      ('clip', 'mp4', IOType.video, [0, 0, 0, 24, 102, 116, 121, 112]),
+    ]) {
+      final source =
+          await File('${directory.path}/$name.$format').writeAsBytes(bytes);
+      final selectedName = flowMediaRecordFileName(name, format);
+      final message = await prepareFlowChatMessage(
+        FlowPayload.file(
+          fileReference: source.path,
+          type: type,
+          fileName: selectedName,
+        ),
+        'preview-$name',
+      );
+      expect(message.attachments.single.fileName, '$name.$format');
+      expect(message.attachments.single.fileType, type.name);
+    }
+    expect(flowMediaRecordFileName('photo.svg', '.SVG'), 'photo.svg');
+  });
+
+  test('SVG is rejected before either chat protocol receives an attachment',
+      () async {
+    final source = await File('${directory.path}/vector.svg')
+        .writeAsString('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    for (final endpoint in ['openai', 'anthropic']) {
+      await expectLater(
+        prepareFlowChatMessage(
+          FlowPayload.file(fileReference: source.path, type: IOType.image),
+          'svg-$endpoint',
+          endpointType: endpoint,
+        ),
+        throwsA(isA<FormatException>()
+            .having((e) => e.message, 'unsupported SVG', contains('SVG'))),
+      );
+    }
+  });
+
+  test('unsupported image and audio subtypes never allocate an attachment',
+      () async {
+    final bmp = await File('${directory.path}/photo.bmp')
+        .writeAsBytes([0x42, 0x4d, 0, 0, 0, 0]);
+    final wma = await File('${directory.path}/recording.wma').writeAsBytes([
+      0x30,
+      0x26,
+      0xb2,
+      0x75,
+      0x8e,
+      0x66,
+      0xcf,
+      0x11,
+    ]);
+    for (final (source, endpoint) in [
+      (bmp, 'openai'),
+      (bmp, 'anthropic'),
+      (wma, 'openai'),
+    ]) {
+      await expectLater(
+        prepareFlowChatMessage(
+          FlowPayload.file(fileReference: source.path, type: IOType.file),
+          'unsupported-$endpoint',
+          endpointType: endpoint,
+        ),
+        throwsA(isA<FormatException>().having(
+          (e) => e.message,
+          'unsupported media subtype',
+          contains('不支持'),
+        )),
+      );
+    }
+    final attachments = Directory('${directory.path}/attachments');
+    expect(await attachments.exists(), isFalse);
+
+    // Closely related formats otherwise fall through the shared encoder's
+    // JPEG or MP3 fallback just like BMP and WMA.
+    for (final mime in ['image/tiff', 'image/avif', 'image/heic']) {
+      expect(flowChatInputError(IOType.image, 'openai', mimeType: mime),
+          contains('不支持'));
+    }
+    for (final mime in ['audio/x-aiff', 'audio/opus', 'audio/x-ms-wma']) {
+      expect(flowChatInputError(IOType.audio, 'openai', mimeType: mime),
+          contains('不支持'));
+    }
+  });
+
+  test('supported image and audio subtypes keep their protocol formats',
+      () async {
+    for (final (name, bytes, mime) in [
+      (
+        'photo.png',
+        [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+        'image/png'
+      ),
+      ('photo.jpg', [0xff, 0xd8, 0xff, 0xe0], 'image/jpeg'),
+      ('photo.gif', utf8.encode('GIF89a'), 'image/gif'),
+      ('photo.webp', utf8.encode('RIFF0000WEBP'), 'image/webp'),
+    ]) {
+      final source = await File('${directory.path}/$name').writeAsBytes(bytes);
+      for (final endpoint in ['openai', 'anthropic']) {
+        final message = await prepareFlowChatMessage(
+          FlowPayload.file(fileReference: source.path, type: IOType.image),
+          '$endpoint-$name',
+          endpointType: endpoint,
+        );
+        expect(message.attachments.single.mimeType, mime);
+        if (endpoint == 'openai') {
+          final request =
+              await const OpenAIProtocol().buildRequest(history: [message]);
+          final part = (request.messages.single['content'] as List).single;
+          expect(part['image_url']['url'], startsWith('data:$mime;base64,'));
+        } else {
+          final request =
+              await const AnthropicProtocol().buildRequest(history: [message]);
+          final part = (request.messages.single['content'] as List).single;
+          expect(part['source']['media_type'], mime);
+        }
+      }
+    }
+    for (final (name, bytes, format) in [
+      ('speech.mp3', [0x49, 0x44, 0x33, 4, 0, 0], 'mp3'),
+      ('speech.wav', utf8.encode('RIFF0000WAVE'), 'wav'),
+      ('speech.m4a', utf8.encode('0000ftypM4A '), 'm4a'),
+    ]) {
+      final source = await File('${directory.path}/$name').writeAsBytes(bytes);
+      final message = await prepareFlowChatMessage(
+        FlowPayload.file(fileReference: source.path, type: IOType.audio),
+        'audio-$name',
+      );
+      final request =
+          await const OpenAIProtocol().buildRequest(history: [message]);
+      final part = (request.messages.single['content'] as List).single;
+      expect(part['input_audio']['format'], format);
+    }
+  });
+
+  test('chat title uses the selected filename, not the storage hash', () async {
+    final storagePath = await AttachmentStorage.saveFile(
+      'meeting.mp3',
+      Uint8List.fromList([0x49, 0x44, 0x33, 4, 0, 0]),
+    );
+    final copy = File('${directory.path}/$storagePath');
+    expect(await chatOutputTitle(copy.path, fileName: 'meeting.mp3'),
+        '助手回复_meeting');
+  });
+
+  test('CatCatch audio downloads reach Chat as audio attachments', () async {
+    for (final (name, bytes) in [
+      ('speech.mp3', [0x49, 0x44, 0x33, 4, 0, 0]),
+      ('speech.m4a', [0, 0, 0, 24, 102, 116, 121, 112, 77, 52, 65, 32]),
+    ]) {
+      final source = await File('${directory.path}/$name').writeAsBytes(bytes);
+      final payload = catCatchOutputPayload(source.path);
+      expect(payload.type, IOType.audio);
+      final message = await prepareFlowChatMessage(payload, 'catcatch-$name');
+      expect(message.attachments.single.fileType, 'audio');
+    }
+  });
+
   test('execution history keeps picker name and copy until its last removal',
       () async {
     final bytes = Uint8List.fromList(utf8.encode('%PDF-1.7\nreport'));
@@ -194,6 +434,8 @@ void main() {
       flowId: 'flow',
       flowName: 'Flow',
       inputText: copy.path,
+      inputType: IOType.file,
+      inputMimeType: 'application/pdf',
       inputFileName: 'notes.pdf',
       inputStoragePath: storagePath,
     );
@@ -209,9 +451,17 @@ void main() {
       executions.execution(first)!.toMap(),
     );
     expect(restored.inputFileName, 'notes.pdf');
+    expect(restored.inputMimeType, 'application/pdf');
     expect(restored.inputStoragePath, storagePath);
+    expect(restored.inputType, IOType.file);
+    expect(
+      TaskFlowExecution.fromMap({...restored.toMap(), 'inputType': 'unknown'})
+          .inputType,
+      isNull,
+    );
     final retry = FlowRunInput(
       text: restored.inputText,
+      mimeType: restored.inputMimeType,
       fileName: restored.inputFileName,
       ownedStoragePath: restored.inputStoragePath,
     );
@@ -230,6 +480,43 @@ void main() {
     await AttachmentStorage.deleteFile(
       retryMessage.attachments.single.storagePath,
     );
+  });
+
+  test('audio MP4 MIME survives execution history and a cold retry', () async {
+    final bytes = Uint8List.fromList(
+        [0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109]);
+    final storagePath =
+        await AttachmentStorage.saveFile('recording.mp4', bytes);
+    final copy = File('${directory.path}/$storagePath');
+    final executions = TaskFlowExecutionNotifier();
+    addTearDown(executions.dispose);
+    final id = executions.addExecution(
+      flowId: 'flow',
+      flowName: 'Flow',
+      inputText: copy.path,
+      inputMimeType: 'audio/mp4',
+      inputType: IOType.audio,
+      inputFileName: 'recording.mp4',
+      inputStoragePath: storagePath,
+    );
+    expect(await executions.persist(), isTrue);
+    final restored =
+        TaskFlowExecution.fromMap(executions.execution(id)!.toMap());
+    expect(restored.inputType, IOType.audio);
+    final retry = FlowRunInput(
+      text: restored.inputText,
+      mimeType: restored.inputMimeType,
+      fileName: restored.inputFileName,
+      ownedStoragePath: restored.inputStoragePath,
+    );
+    final message = await prepareFlowChatMessage(
+      FlowPayload.fromValue(retry.text, IOType.audio,
+          mimeType: retry.mimeType, fileName: retry.fileName),
+      'audio-retry',
+    );
+    expect(message.attachments.single.fileType, 'audio');
+    expect(message.attachments.single.mimeType, 'audio/mp4');
+    expect(message.attachments.single.fileName, 'recording.mp4');
   });
 
   test('bulk execution removal waits for every shared copy reference',
@@ -253,6 +540,135 @@ void main() {
     expect(await executions.persist(), isTrue);
     await Future.wait(ids.map(executions.removeExecution));
     expect(await copy.exists(), isFalse);
+  });
+
+  test('retry registration cannot race the final picker-copy deletion',
+      () async {
+    final path = await AttachmentStorage.saveFile(
+      'input.pdf',
+      Uint8List.fromList(utf8.encode('%PDF-1.7\nreport')),
+    );
+    final copy = File('${directory.path}/$path');
+    final executions = TaskFlowExecutionNotifier();
+    final assistant = Assistant(
+      id: 'assistant',
+      name: 'Assistant',
+      prompt: 'Help',
+      defaultModelId: 'gpt',
+      defaultProviderName: 'OpenAI',
+    );
+    final flows = _Flows();
+    final flowId = flows.addFlow(
+      name: 'Retry flow',
+      inputType: IOType.file,
+      blocks: [
+        TaskFlowBlock(
+          typeKey: BlockType.chat,
+          params: {'assistantId': assistant.id},
+        ),
+      ],
+    );
+    final manager = _Manager();
+    final container = ProviderContainer(overrides: [
+      taskFlowListProvider.overrideWith((ref) => flows),
+      taskFlowExecutionsProvider.overrideWith((ref) => executions),
+      providerEntriesProvider.overrideWith(
+        (ref) => _Entries(ProviderEntriesState(entries: [
+          ProviderEntry(name: 'LLM', type: 'llm', configs: [
+            ProviderConfigItem(
+              providerName: 'OpenAI',
+              host: 'https://example.com',
+              key: 'test',
+              models: [ModelConfig(name: 'GPT', modelId: 'gpt')],
+            ),
+          ]),
+        ])),
+      ),
+      assistantProvider.overrideWith((ref) => _Assistants([assistant])),
+      chatStreamManagerProvider.overrideWithValue(manager),
+    ]);
+    addTearDown(container.dispose);
+    addTearDown(manager.dispose);
+    final old = executions.addExecution(
+      flowId: 'flow',
+      flowName: 'Flow',
+      inputText: copy.path,
+      inputStoragePath: path,
+    );
+    expect(await executions.persist(), isTrue);
+
+    final documents = PathProviderPlatform.instance as _Documents;
+    final deleteGate = documents.gate = Completer<void>();
+    documents.entered = Completer<void>();
+    final removal = executions.removeExecution(old);
+    await documents.entered!.future.timeout(const Duration(seconds: 5));
+    expect(
+      () => executions.addExecution(
+        flowId: 'flow',
+        flowName: 'Unsafe retry',
+        inputText: copy.path,
+        inputStoragePath: path,
+      ),
+      throwsStateError,
+    );
+    final retry =
+        container.read(taskFlowExecutionServiceProvider).launchFlowMany(
+      flowId,
+      [
+        FlowRunInput(
+          text: copy.path,
+          fileName: 'input.pdf',
+          ownedStoragePath: path,
+        ),
+      ],
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(container.read(taskFlowExecutionsProvider), isEmpty,
+        reason: 'the retry waits until the copy deletion completes');
+    deleteGate.complete();
+    await removal;
+    await expectLater(
+      retry,
+      throwsA(isA<TaskFlowValidationException>()),
+    );
+    expect(await copy.exists(), isFalse);
+    expect(executions.execution(old), isNull);
+
+    // If the retry owns the path first, removal waits and keeps its copy.
+    final secondPath = await AttachmentStorage.saveFile(
+      'second.pdf',
+      Uint8List.fromList(utf8.encode('%PDF-1.7\nsecond')),
+    );
+    final secondCopy = File('${directory.path}/$secondPath');
+    final secondOld = executions.addExecution(
+      flowId: 'flow',
+      flowName: 'Second flow',
+      inputText: secondCopy.path,
+      inputStoragePath: secondPath,
+    );
+    expect(await executions.persist(), isTrue);
+    final registerGate = Completer<void>();
+    final registerEntered = Completer<void>();
+    final registered =
+        executions.withInputStoragePathLock(secondPath, () async {
+      registerEntered.complete();
+      await registerGate.future;
+      final id = executions.addExecution(
+        flowId: 'flow',
+        flowName: 'Second retry',
+        inputText: secondCopy.path,
+        inputStoragePath: secondPath,
+      );
+      expect(await executions.persist(), isTrue);
+      return id;
+    });
+    await registerEntered.future.timeout(const Duration(seconds: 5));
+    final secondRemoval = executions.removeExecution(secondOld);
+    registerGate.complete();
+    final retryId = await registered;
+    await secondRemoval;
+    expect(executions.execution(retryId), isNotNull);
+    expect(await secondCopy.exists(), isTrue);
   });
 
   test('failed execution deletion keeps its retry input and stops its work',
@@ -283,6 +699,14 @@ void main() {
     await executions.removeExecution(id);
     expect(executions.execution(id)!.status, FlowExecutionStatus.failed);
     expect(executions.execution(id)!.subTasks.single.status, TaskStatus.failed);
+    expect(canContinueFlowExecution(executions, id), isFalse);
+    executions.updateSubTaskStatus(
+      id,
+      executions.execution(id)!.subTasks.single.id,
+      TaskStatus.completed,
+    );
+    expect(executions.execution(id)!.status, FlowExecutionStatus.failed,
+        reason: 'a late task callback cannot revive a cancelled execution');
     expect(await copy.readAsBytes(), bytes);
     executions.rejectWrites = false;
     await executions.removeExecution(id);
@@ -421,7 +845,7 @@ void main() {
   });
 
   test(
-    'generic file input accepts an image over the document size limit',
+    'generic file input rejects an uncompressible image over 10 MB',
     () async {
       final image = File('${directory.path}/large.png');
       final handle = image.openSync(mode: FileMode.write);
@@ -444,18 +868,24 @@ void main() {
           ),
         ],
       );
-      await validateTaskFlow(
-        flow,
-        [FlowRunInput(text: image.path)],
-        providers: const ProviderEntriesState(),
-        assistants: [assistant],
+      await expectLater(
+        validateTaskFlow(
+          flow,
+          [FlowRunInput(text: image.path)],
+          providers: const ProviderEntriesState(),
+          assistants: [assistant],
+        ),
+        throwsA(isA<TaskFlowValidationException>().having(
+            (e) => e.message, 'uncompressible image', contains('10 MB'))),
       );
-      final message = await prepareFlowChatMessage(
-        FlowPayload.file(fileReference: image.path, type: IOType.file),
-        'conversation',
+      await expectLater(
+        prepareFlowChatMessage(
+          FlowPayload.file(fileReference: image.path, type: IOType.file),
+          'conversation',
+        ),
+        throwsA(isA<FormatException>().having(
+            (e) => e.message, 'uncompressible image', contains('10 MB'))),
       );
-      expect(message.attachments.single.fileType, 'image');
-      expect(message.attachments.single.fileSize, maxAttachmentBytes + 1);
     },
   );
 
@@ -537,6 +967,8 @@ void main() {
         );
         executions.addSubTask(execId, subTask);
         final manager = _Manager(fail: fail);
+        final background = BackgroundTaskNotifier();
+        addTearDown(background.dispose);
         const originalProviders = ProviderEntriesState();
         final result = executeChatBlock(
           block: TaskFlowBlock(typeKey: BlockType.chat),
@@ -546,11 +978,12 @@ void main() {
             fileReference: file.path,
             type: IOType.audio,
             text: 'Summarize',
+            fileName: 'Picked recording.wav',
           ),
           execId: execId,
           execNotifier: executions,
           flowSubTask: subTask,
-          bgNotifier: BackgroundTaskNotifier(),
+          bgNotifier: background,
           chatManager: manager,
           providerEntries: originalProviders,
           conversationsNotifier: container.read(conversationsProvider.notifier),
@@ -589,12 +1022,58 @@ void main() {
           );
         }
         expect(manager.sentEntries, same(originalProviders));
+        // ignore: invalid_use_of_protected_member
+        expect(background.state.single.title, '助手回复_Picked recording');
         expect(manager.sentText, 'Summarize');
         expect(manager.sentHistory!.single.content, 'Summarize');
         expect(manager.sentHistory!.single.attachments, hasLength(1));
       },
     );
   }
+
+  test('media-only chat keeps an attachment title without prompt text',
+      () async {
+    final source =
+        await File('${directory.path}/speech.wav').writeAsBytes([1, 2, 3]);
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final executions = TaskFlowExecutionNotifier();
+    addTearDown(executions.dispose);
+    final execId = executions.addExecution(flowId: 'flow', flowName: 'Flow');
+    final subTask = FlowSubTask(
+      blockTypeKey: 'chat',
+      blockLabel: '助手',
+      subTaskId: 'pending',
+      subTaskType: 'background',
+      status: TaskStatus.waiting,
+    );
+    executions.addSubTask(execId, subTask);
+    final manager = _Manager();
+    expect(
+      await executeChatBlock(
+        block: TaskFlowBlock(typeKey: BlockType.chat),
+        def: BlockTypeDefinition.chat,
+        input: source.path,
+        payload: FlowPayload.file(
+          fileReference: source.path,
+          type: IOType.audio,
+          fileName: 'Picked recording.wav',
+        ),
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: BackgroundTaskNotifier(),
+        chatManager: manager,
+        conversationsNotifier: container.read(conversationsProvider.notifier),
+      ),
+      'Summary',
+    );
+    final conversation = container.read(conversationsProvider).single;
+    expect(conversation.title, 'Picked recording.wav');
+    expect(conversation.titleAutoGenerated, isTrue);
+    expect(manager.sentText, isEmpty);
+    expect(manager.sentHistory!.single.content, isEmpty);
+  });
 
   for (final rejectedCount in [1, 2]) {
     test(

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,14 +11,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
 import 'package:stroom/services/storage_service.dart';
+import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
+import 'package:stroom/task_flow/services/task_flow_validator.dart';
 
 class _MockCatCatchNotifier extends Mock implements CatCatchNotifier {}
+
+class _RejectLaunchNotifier extends TaskFlowExecutionNotifier {
+  bool rejectWrites = false;
+
+  @override
+  Future<bool> persist() =>
+      rejectWrites ? Future<bool>.value(false) : super.persist();
+}
 
 class _Documents extends PathProviderPlatform {
   _Documents(this.path);
@@ -73,6 +84,7 @@ void main() {
     late ProviderContainer container;
     late TaskFlowExecutionService service;
     late _MockCatCatchNotifier catcatchNotifier;
+    late _RejectLaunchNotifier executionsNotifier;
 
     /// Captured (url, durationSec) pairs from catcatchNotifier.addTask.
     late List<(String, int)> addTaskCalls;
@@ -90,6 +102,7 @@ void main() {
       );
 
       addTaskCalls = [];
+      executionsNotifier = _RejectLaunchNotifier();
       catcatchNotifier = _MockCatCatchNotifier();
       String? capturedTaskId;
       when(
@@ -117,7 +130,7 @@ void main() {
         overrides: [
           taskFlowListProvider.overrideWith((ref) => flowNotifier),
           taskFlowExecutionsProvider.overrideWith(
-            (ref) => TaskFlowExecutionNotifier(),
+            (ref) => executionsNotifier,
           ),
           catcatchTasksProvider.overrideWith((ref) => catcatchNotifier),
         ],
@@ -164,6 +177,7 @@ void main() {
       final saved = jsonDecode(await file.readAsString()) as List;
       expect(saved, hasLength(1));
       expect(saved.single['inputText'], 'https://a.com/v');
+      expect(saved.single['inputType'], 'text');
       expect(saved.single['inputDurationSec'], 90);
       for (var attempt = 0; attempt < 100; attempt++) {
         if (container.read(taskFlowExecutionsProvider).single.status !=
@@ -174,6 +188,70 @@ void main() {
       }
       expect(container.read(taskFlowExecutionsProvider).single.status,
           FlowExecutionStatus.failed);
+    });
+
+    test('failed first save leaves the builder-owned input copy for retry',
+        () async {
+      final directory =
+          await Directory.systemTemp.createTemp('flow_failed_launch_');
+      final previous = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _Documents(directory.path);
+      AppStorage.resetCache();
+      addTearDown(() async {
+        PathProviderPlatform.instance = previous;
+        AppStorage.resetCache();
+        await directory.delete(recursive: true);
+      });
+      final storagePath = await AttachmentStorage.saveFile(
+        'input.mp3',
+        Uint8List.fromList([0x49, 0x44, 0x33, 4, 0, 0]),
+      );
+      final copy = File('${directory.path}/$storagePath');
+      executionsNotifier.rejectWrites = true;
+      await expectLater(
+        service.launchFlowMany(flowId, [
+          FlowRunInput(
+            text: 'https://a.com/v',
+            ownedStoragePath: storagePath,
+          ),
+        ]),
+        throwsStateError,
+      );
+      expect(container.read(taskFlowExecutionsProvider), isEmpty);
+      expect(await copy.exists(), isTrue);
+      expect(addTaskCalls, isEmpty);
+    });
+
+    test('launch rejects multiple picker-owned files before releasing them',
+        () async {
+      const inputs = [
+        FlowRunInput(
+          text: 'https://a.com/v',
+          ownedStoragePath: 'attachments/a.mp3',
+        ),
+        FlowRunInput(
+          text: 'https://b.com/v',
+          ownedStoragePath: 'attachments/b.mp3',
+        ),
+      ];
+      await expectLater(
+        service.launchFlowMany(flowId, inputs),
+        throwsA(isA<TaskFlowValidationException>().having(
+          (error) => error.isInputError,
+          'input error',
+          isTrue,
+        )),
+      );
+      await expectLater(
+        service.startFlowMany(flowId, inputs),
+        throwsA(isA<TaskFlowValidationException>().having(
+          (error) => error.isInputError,
+          'input error',
+          isTrue,
+        )),
+      );
+      expect(container.read(taskFlowExecutionsProvider), isEmpty);
+      expect(addTaskCalls, isEmpty);
     });
 
     test(

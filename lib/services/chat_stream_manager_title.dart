@@ -28,10 +28,16 @@ extension _ChatStreamManagerTitleExt on ChatStreamManager {
       // 用最近一条用户消息生成/更新标题（标题随对话演进；
       // 若用首条消息，标题永远不更新）
       final lastUser = history.lastWhere(
-        (m) => m.role == 'user' && m.content.trim().isNotEmpty,
+        (m) =>
+            m.role == 'user' &&
+            (m.content.trim().isNotEmpty ||
+                m.attachments.any((a) => a.fileName.trim().isNotEmpty)),
         orElse: () => firstUser ?? history.first,
       );
-      if (lastUser.content.trim().isEmpty) return;
+      final titleInput = lastUser.content.trim().isNotEmpty
+          ? lastUser.content
+          : lastUser.attachments.firstOrNull?.fileName ?? '';
+      if (titleInput.trim().isEmpty) return;
 
       // 解析标题任务：提示词（自定义优先，默认内置）+ 模型
       // （配置了独立模型就用它，否则跟随对话页当前模型）
@@ -61,7 +67,7 @@ extension _ChatStreamManagerTitleExt on ChatStreamManager {
         title = await svc.sendPrompt(
           systemPrompt: titlePrompt,
           // 标题任务只需最近一条用户消息文本，剥离附件避免重新读取大文件
-          history: [lastUser.copyWith(attachments: [])],
+          history: [lastUser.copyWith(content: titleInput, attachments: [])],
           maxTokens: 200,
           // 事件驱动下并发读取共享 usage 槽的风险已不存在（per-request
           // 隔离）；标题请求计费随 usage 事件立即累加（recordInputTokens:

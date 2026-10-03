@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../providers/task_provider_shared.dart';
+import 'io_type.dart';
 
 // ============================================================================
 // FlowRunInput — a single initial input for a flow run
@@ -133,11 +134,16 @@ class TaskFlowExecution {
   /// run can be RETRIED with the same input from the task list card.
   final String inputText;
 
+  /// Input kind at launch time. A later edit to the flow must not reinterpret
+  /// a saved picker-copy path as text (or a different media kind) on retry.
+  final IOType? inputType;
+
   /// Optional per-run duration filter (seconds) for a CatCatch-first flow
   /// — mirrors the per-task duration field of the CatCatch page's input
   /// box. 0 = use the block's configured `durationSec`. Persisted so a
   /// retry re-runs with the same duration.
   final int inputDurationSec;
+  final String? inputMimeType;
   final String? inputFileName;
   final String? inputStoragePath;
 
@@ -156,7 +162,9 @@ class TaskFlowExecution {
     this.subTasks = const [],
     this.error,
     this.inputText = '',
+    this.inputType,
     this.inputDurationSec = 0,
+    this.inputMimeType,
     this.inputFileName,
     this.inputStoragePath,
     this.queued = false,
@@ -171,7 +179,9 @@ class TaskFlowExecution {
     String? error,
     bool clearError = false,
     String? inputText,
+    IOType? inputType,
     int? inputDurationSec,
+    String? inputMimeType,
     String? inputFileName,
     String? inputStoragePath,
     bool? queued,
@@ -187,7 +197,9 @@ class TaskFlowExecution {
         subTasks: subTasks ?? this.subTasks,
         error: clearError ? null : (error ?? this.error),
         inputText: inputText ?? this.inputText,
+        inputType: inputType ?? this.inputType,
         inputDurationSec: inputDurationSec ?? this.inputDurationSec,
+        inputMimeType: inputMimeType ?? this.inputMimeType,
         inputFileName: inputFileName ?? this.inputFileName,
         inputStoragePath: inputStoragePath ?? this.inputStoragePath,
         queued: queued ?? this.queued,
@@ -216,7 +228,9 @@ class TaskFlowExecution {
         'subTasks': subTasks.map((s) => s.toMap()).toList(),
         if (error != null) 'error': error,
         if (inputText.isNotEmpty) 'inputText': inputText,
+        if (inputType != null) 'inputType': inputType!.toJson(),
         if (inputDurationSec > 0) 'inputDurationSec': inputDurationSec,
+        if (inputMimeType != null) 'inputMimeType': inputMimeType,
         if (inputFileName != null) 'inputFileName': inputFileName,
         if (inputStoragePath != null) 'inputStoragePath': inputStoragePath,
       };
@@ -242,7 +256,11 @@ class TaskFlowExecution {
             [],
         error: map['error'] as String?,
         inputText: map['inputText'] as String? ?? '',
+        inputType: IOType.values
+            .where((type) => type.name == map['inputType'])
+            .firstOrNull,
         inputDurationSec: map['inputDurationSec'] as int? ?? 0,
+        inputMimeType: map['inputMimeType'] as String?,
         inputFileName: map['inputFileName'] as String?,
         inputStoragePath: map['inputStoragePath'] as String?,
       );

@@ -6,6 +6,7 @@ import '../../catcatch/providers/catcatch_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/task_provider.dart';
 import '../../task_flow/models/task_flow_execution.dart';
+import '../../task_flow/models/io_type.dart';
 import '../../task_flow/providers/task_flow_execution_provider.dart';
 import '../../task_flow/services/task_flow_execution_service.dart';
 import '../../task_flow/services/task_flow_validator.dart';
@@ -286,7 +287,7 @@ class _ExpandedContent extends ConsumerWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Retry: re-run the whole flow with the SAME input text
+                // Retry: re-run the whole flow with the SAME input
                 // (intermediate outputs aren't persisted, so a run can
                 // only be redone from the start).
                 if (executionStatus == FlowExecutionStatus.failed)
@@ -325,6 +326,10 @@ class _ExpandedContent extends ConsumerWidget {
         .where((e) => e.id == executionId)
         .firstOrNull;
     if (execution == null) return;
+    final savedFile = execution.inputFileName != null ||
+        execution.inputStoragePath != null ||
+        const [IOType.audio, IOType.image, IOType.video, IOType.file]
+            .contains(execution.inputType);
     final inputPreview = execution.inputText.length > 30
         ? '${execution.inputText.substring(0, 30)}…'
         : execution.inputText;
@@ -333,9 +338,11 @@ class _ExpandedContent extends ConsumerWidget {
       builder: (ctx) => AlertDialog(
         title: const Text('重试任务流'),
         content: Text(
-          execution.inputText.isEmpty
-              ? '将重新执行整个任务流（无输入文本）。确定重试？'
-              : '将使用原输入文本重新执行整个任务流：\n"$inputPreview"\n\n确定重试？',
+          savedFile
+              ? '将使用原文件“${execution.inputFileName ?? '文件'}”重新执行整个任务流。确定重试？'
+              : execution.inputText.isEmpty
+                  ? '将重新执行整个任务流（无输入文本）。确定重试？'
+                  : '将使用原输入文本重新执行整个任务流：\n"$inputPreview"\n\n确定重试？',
         ),
         actions: [
           TextButton(
@@ -345,9 +352,28 @@ class _ExpandedContent extends ConsumerWidget {
           FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
+              final currentFlow = ref
+                  .read(taskFlowListProvider)
+                  .where((flow) => flow.id == execution.flowId)
+                  .firstOrNull;
+              final originalType = execution.inputType;
+              if (currentFlow != null &&
+                  ((originalType != null &&
+                          originalType.userFacing !=
+                              currentFlow.inputType.userFacing) ||
+                      (originalType == null &&
+                          (savedFile ||
+                              currentFlow.inputType.userFacing !=
+                                  IOType.text)))) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('任务流输入类型已变化或无法确认，请重新选择输入后重试')));
+                return;
+              }
               final input = FlowRunInput(
                   text: execution.inputText,
                   durationSec: execution.inputDurationSec,
+                  mimeType: execution.inputMimeType,
                   fileName: execution.inputFileName,
                   ownedStoragePath: execution.inputStoragePath);
               try {
@@ -369,6 +395,10 @@ class _ExpandedContent extends ConsumerWidget {
                         startInRunMode: true,
                         initialInput: input,
                         validationError: error)));
+              } catch (error) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text('重试失败：$error')));
               }
             },
             child: const Text('重试'),

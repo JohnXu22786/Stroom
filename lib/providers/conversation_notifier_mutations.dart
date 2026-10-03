@@ -242,7 +242,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     final firstAssistant =
         conv.messages.where((m) => m.role == 'assistant').firstOrNull;
 
-    String combined = firstUser.content;
+    String combined = firstUser.content.trim().isNotEmpty
+        ? firstUser.content
+        : firstUser.attachments.firstOrNull?.fileName ?? '';
     if (firstAssistant != null) {
       combined += ' - ${firstAssistant.content}';
     }
@@ -302,7 +304,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         final firstAssistant =
             messages.where((m) => m.role == 'assistant').firstOrNull;
 
-        String combined = firstUser.content;
+        String combined = firstUser.content.trim().isNotEmpty
+            ? firstUser.content
+            : firstUser.attachments.firstOrNull?.fileName ?? '';
         if (firstAssistant != null) {
           combined += ' - ${firstAssistant.content}';
         }

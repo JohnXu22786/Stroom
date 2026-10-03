@@ -81,6 +81,15 @@ class _CatCatchInputEntry {
   }
 }
 
+/// Media manifests store the display name and format separately. Keep the
+/// format in the attachment name so chat previews can recognize the file.
+@visibleForTesting
+String flowMediaRecordFileName(String name, String format) {
+  final suffix = format.trim().replaceFirst(RegExp(r'^\.'), '').toLowerCase();
+  if (suffix.isEmpty || name.toLowerCase().endsWith('.$suffix')) return name;
+  return '$name.$suffix';
+}
+
 class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _descController;
@@ -93,6 +102,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   /// Run-mode paths from app media or copies of selected generic files.
   final List<String> _mediaInputs = [];
   final Map<String, String> _inputDisplayNames = {};
+  final Map<String, String> _inputMimeTypes = {};
   final Map<String, String> _ownedStoragePaths = {};
   final Set<String> _unsubmittedFileInputs = {};
 
@@ -146,6 +156,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         if (initialInput.fileName != null) {
           _inputDisplayNames[initialInput.text] = initialInput.fileName!;
         }
+        if (initialInput.mimeType != null) {
+          _inputMimeTypes[initialInput.text] = initialInput.mimeType!;
+        }
         if (initialInput.ownedStoragePath != null) {
           _ownedStoragePaths[initialInput.text] =
               initialInput.ownedStoragePath!;
@@ -196,6 +209,33 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     _unsubmittedFileInputs.clear();
     for (final reference in references) {
       unawaited(_discardUnsubmittedInput(reference));
+    }
+  }
+
+  /// A successful launch releases copies only after an execution record owns
+  /// them. Editing a file-input flow into a text-input flow can leave a
+  /// previously picked copy in this builder without handing it to the run.
+  Future<void> _releaseInputsAfterLaunch(
+    TaskFlowExecutionNotifier execNotifier,
+  ) async {
+    for (final reference in List<String>.of(_unsubmittedFileInputs)) {
+      final storagePath = _ownedStoragePaths[reference];
+      if (storagePath != null &&
+          execNotifier.referencesInputStoragePath(storagePath)) {
+        _unsubmittedFileInputs.remove(reference);
+        continue;
+      }
+      try {
+        await AttachmentStorage.deleteFile(storagePath ?? reference);
+        _unsubmittedFileInputs.remove(reference);
+        _mediaInputs.remove(reference);
+        _inputDisplayNames.remove(reference);
+        _inputMimeTypes.remove(reference);
+        _ownedStoragePaths.remove(reference);
+      } catch (error) {
+        debugPrint('Failed to discard unused flow input: $error');
+        // Keep ownership so dispose can retry the cleanup.
+      }
     }
   }
 
@@ -994,7 +1034,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           alignment: Alignment.centerLeft,
           child: OutlinedButton.icon(
             key: const Key('taskflow_pick_media_input'),
-            onPressed: _isStarting || _isPickingFiles ? null : _pickMediaInputs,
+            onPressed: _isStarting ||
+                    _isPickingFiles ||
+                    (isFile && _mediaInputs.isNotEmpty)
+                ? null
+                : _pickMediaInputs,
             icon: Icon(
               isImage
                   ? Icons.image_outlined
@@ -1011,7 +1055,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   : isAudio
                       ? '选择音频（可多选）'
                       : isFile
-                          ? '选择文件（可多选）'
+                          ? '选择文件'
                           : '选择视频（可多选）',
             ),
             style: OutlinedButton.styleFrom(
@@ -1062,6 +1106,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                             setState(() {
                               _mediaInputs.removeAt(i);
                               _inputDisplayNames.remove(reference);
+                              _inputMimeTypes.remove(reference);
                               _ownedStoragePaths.remove(reference);
                             });
                             if (_unsubmittedFileInputs.remove(reference)) {
@@ -1315,15 +1360,19 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   }
 
   Future<void> _pickGenericFileInputs() async {
+    if (_mediaInputs.isNotEmpty) return;
     final savedPaths = <String>[];
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.any,
-        allowMultiple: true,
+        allowMultiple: false,
         withData: false,
         withReadStream: true,
       );
       if (result == null) return;
+      if (result.files.length != 1) {
+        throw const FormatException('一次只能选择一个本地文件');
+      }
       final selected = <String, String>{};
       final owned = <String, String>{};
       for (final file in result.files) {
@@ -1463,7 +1512,10 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               paths.add(path);
               final dynamic named = record;
               final name = named.name as String?;
-              if (name != null && name.isNotEmpty) names[path] = name;
+              final format = named.format as String?;
+              if (name != null && name.isNotEmpty) {
+                names[path] = flowMediaRecordFileName(name, format ?? '');
+              }
             }
           }
         },
@@ -1517,6 +1569,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         for (final path in _mediaInputs)
           FlowRunInput(
             text: path,
+            mimeType: _inputMimeTypes[path],
             fileName: _inputDisplayNames[path],
             ownedStoragePath: _ownedStoragePaths[path],
           ),
@@ -1546,7 +1599,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       await ref
           .read(taskFlowExecutionServiceProvider)
           .launchFlowMany(_editingFlowId!, inputs);
-      _unsubmittedFileInputs.clear();
+      await _releaseInputsAfterLaunch(execNotifier);
     } on TaskFlowValidationException catch (error) {
       if (mounted) await _showValidationError(error);
       return;
