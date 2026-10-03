@@ -11,7 +11,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  test('stream setup resolves its assistant model from the supplied snapshot', () async {
+  test('stream setup resolves its assistant model from the supplied snapshot',
+      () async {
     final original = ModelConfig(name: 'Original', modelId: 'original-model');
     final config = ProviderConfigItem(
       providerName: 'Provider',
