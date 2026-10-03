@@ -30,30 +30,34 @@ extension _ChatServiceToolsExt on ChatService {
 
     // Then check MCP clients (lazy: connect + list tools on demand)
     if (ChatService._mcpClientManager != null) {
-      for (final entry in ChatService._mcpClientManager!.clients.entries) {
+      final manager = ChatService._mcpClientManager!;
+      final placeholderClientName = manager.getPlaceholderClientName(name);
+      if (placeholderClientName != null) {
+        final client = manager.getClient(placeholderClientName);
+        if (client == null || client.isDisposed) {
+          return 'Error: MCP 服务器 "$placeholderClientName" 当前不可用。';
+        }
+        var tools = client.cachedTools;
+        if (tools.isEmpty) {
+          // listTools 内部会按需 connect()（未连接时），失败返回 []。
+          tools = await client.listTools();
+        }
+        if (tools.isEmpty) {
+          return 'Error: MCP 服务器 "${client.config.name}" 连接失败或未返回任何工具，请检查服务器配置。';
+        }
+        // 极少数服务器真实提供了与占位符同名的工具：直接执行，
+        // 避免模型陷入"调用占位符 → 报错列出同名工具 → 再调用"的死循环。
+        if (tools.any((t) => t.name == name)) {
+          return client.callTool(name, args);
+        }
+        final available = tools.map((t) => t.name).join(', ');
+        return 'Error: MCP 服务器 "${client.config.name}" 没有名为 "$name" 的工具。'
+            '该服务器可用的工具: $available。请改用这些工具名调用。';
+      }
+
+      for (final entry in manager.clients.entries) {
         final client = entry.value;
         if (client.isDisposed) continue;
-
-        // 占位符调用：该服务器尚未被按需连接/发现 → 现在连接并列出真实
-        // 工具，把可用的真实工具名告诉模型。占位符名不是真实工具。
-        if (name == McpServerConfig.placeholderToolName(client.config.name)) {
-          var tools = client.cachedTools;
-          if (tools.isEmpty) {
-            // listTools 内部会按需 connect()（未连接时），失败返回 []。
-            tools = await client.listTools();
-          }
-          if (tools.isEmpty) {
-            return 'Error: MCP 服务器 "${client.config.name}" 连接失败或未返回任何工具，请检查服务器配置。';
-          }
-          // 极少数服务器真实提供了与占位符同名的工具：直接执行，
-          // 避免模型陷入"调用占位符 → 报错列出同名工具 → 再调用"的死循环。
-          if (tools.any((t) => t.name == name)) {
-            return client.callTool(name, args);
-          }
-          final available = tools.map((t) => t.name).join(', ');
-          return 'Error: MCP 服务器 "${client.config.name}" 没有名为 "$name" 的工具。'
-              '该服务器可用的工具: $available。请改用这些工具名调用。';
-        }
 
         // 真实工具名：工具已在缓存中（上一次占位符调用发现过，或会话中
         // 曾发现过）→ 确保连接后调用。会话中掉线时 connect() 会重连。

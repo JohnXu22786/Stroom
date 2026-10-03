@@ -976,12 +976,24 @@ class McpClient {
 /// 管理多个 MCP 客户端实例
 class McpClientManager {
   final Map<String, McpClient> _clients = {};
+  final Map<String, String> _placeholderClientNames = {};
 
   /// 所有客户端
   Map<String, McpClient> get clients => Map.unmodifiable(_clients);
 
   /// 获取指定 ID 的客户端
   McpClient? getClient(String id) => _clients[id];
+
+  /// Sets the server that owns each published placeholder tool name.
+  void setPlaceholderClientNames(Map<String, String> clientNames) {
+    _placeholderClientNames
+      ..clear()
+      ..addAll(clientNames);
+  }
+
+  /// Returns the configured server name for a placeholder tool, if any.
+  String? getPlaceholderClientName(String toolName) =>
+      _placeholderClientNames[toolName];
 
   /// 添加一个客户端
   void addClient(String id, McpClient client) {
@@ -1005,5 +1017,6 @@ class McpClientManager {
       client.dispose();
     }
     _clients.clear();
+    _placeholderClientNames.clear();
   }
 }
