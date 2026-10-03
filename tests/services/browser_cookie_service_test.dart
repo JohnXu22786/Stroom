@@ -663,6 +663,81 @@ void main() {
           reason: 'domains not visited this session must not be dropped');
     });
 
+    test('successful empty per-domain snapshots remove stale visited cookies',
+        () async {
+      final fake = _FakeCookiePlatform()..throwOnGetAll = true;
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.setRetentionMode(true);
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'gone.com', 'name': 'old', 'value': 'x', 'path': '/'},
+        {'domain': 'gone.com', 'name': 'default-path', 'value': 'd'},
+        {
+          'domain': 'gone.com',
+          'name': 'path-specific',
+          'value': 'y',
+          'path': '/app'
+        },
+        {'domain': 'also-gone.org', 'name': 'old', 'value': 'x', 'path': '/'},
+        {'domain': 'unvisited.net', 'name': 'keep', 'value': 'y', 'path': '/'},
+        {
+          'domain': 'example.com',
+          'name': 'parent-host-only',
+          'value': 'z',
+          'path': '/'
+        },
+        {
+          'domain': '.example.com',
+          'name': 'parent-domain',
+          'value': 'w',
+          'path': '/'
+        },
+      ]);
+
+      BrowserCookieService.noteVisitedUrl('https://gone.com/');
+      BrowserCookieService.noteVisitedUrl('https://also-gone.org/');
+      BrowserCookieService.noteVisitedUrl('https://sub.example.com/');
+
+      await BrowserCookieService.persistCookiesToFile();
+
+      final stored = await BrowserCookieService.getCookiesFromFile();
+      expect(stored['gone.com']!.map((cookie) => cookie['name']),
+          ['path-specific'],
+          reason: 'a root URL query does not cover path-scoped cookies');
+      expect(stored.containsKey('also-gone.org'), isFalse);
+      expect(stored.containsKey('unvisited.net'), isTrue,
+          reason: 'previously persisted cookies for unvisited domains survive');
+      expect(stored['example.com']!.single['name'], 'parent-host-only',
+          reason: 'a host-only cookie does not apply to a subdomain query');
+      expect(stored.containsKey('.example.com'), isFalse,
+          reason: 'a leading-dot domain cookie does apply to its subdomain');
+
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'gone.com', 'name': 'old', 'value': 'x', 'path': '/'},
+        {
+          'domain': 'gone.com',
+          'name': 'path-specific',
+          'value': 'y',
+          'path': '/app'
+        },
+        {'domain': 'also-gone.org', 'name': 'old', 'value': 'x', 'path': '/'},
+        {'domain': 'unvisited.net', 'name': 'keep', 'value': 'y', 'path': '/'},
+      ]);
+      fake.perUrlCookies['https://also-gone.org'] = [
+        Cookie(name: 'fresh', value: 'z', domain: 'also-gone.org', path: '/'),
+      ];
+
+      await BrowserCookieService.persistCookiesToFile();
+
+      final mixedSnapshot = await BrowserCookieService.getCookiesFromFile();
+      expect(mixedSnapshot['gone.com']!.map((cookie) => cookie['name']),
+          ['path-specific']);
+      expect(mixedSnapshot['also-gone.org']!.map((cookie) => cookie['name']),
+          ['fresh'],
+          reason: 'non-empty results for one host must not hide another host’s '
+              'successful empty result');
+      expect(mixedSnapshot.containsKey('unvisited.net'), isTrue);
+    });
+
     test(
         'authoritative snapshot replaces the file (deleted cookies stay deleted)',
         () async {

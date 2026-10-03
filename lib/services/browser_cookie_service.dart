@@ -167,9 +167,9 @@ class BrowserCookieService {
   ///
   /// On platforms with an authoritative [CookieManager.getAllCookies]
   /// (iOS/macOS) the file mirrors the exact snapshot — cookies deleted by
-  /// sites stay deleted. On platforms without it (Android/Windows) the
-  /// partial per-domain snapshot is merged with the file so domains visited
-  /// in earlier sessions are not dropped.
+  /// sites stay deleted. The per-domain fallback replaces known root-path
+  /// cookies for successfully queried hosts while preserving path-scoped
+  /// cookies and cookies for failed or unvisited hosts.
   static Future<void> persistCookiesToFile() async {
     if (!await getRetentionMode()) return;
     try {
@@ -182,6 +182,8 @@ class BrowserCookieService {
         await _writeCookiesFile(collected);
       } else {
         final fileCookies = await _readCookiesFile();
+        fileCookies.removeWhere((cookie) =>
+            _rootPathCookieAppliesToAnyHost(cookie, result.queriedHosts));
         await _writeCookiesFile(_mergeCookies(fileCookies, collected));
       }
     } catch (e) {
@@ -301,22 +303,28 @@ class BrowserCookieService {
   /// Enumerates cookies for every visited host (in parallel) and appends
   /// them to [out]. Host-only cookies (whose platform `domain` is null) are
   /// stamped with the visited host so they group, match and restore correctly.
-  static Future<void> _collectPerDomainCookies(
+  /// Returns the hosts whose queries completed, including those with no cookies.
+  static Future<Set<String>> _collectPerDomainCookies(
       List<Map<String, dynamic>> out) async {
+    final successfulHosts = <String>{};
     await Future.wait(_visitedDomains.map((host) async {
       try {
         final cookies =
             await cookiePlatform.getCookies(url: WebUri('https://$host'));
+        final hostCookies = <Map<String, dynamic>>[];
         for (final cookie in cookies) {
           final map = _cookieToMap(cookie);
           if (map['domain'] == null) map['domain'] = host;
-          out.add(map);
+          hostCookies.add(map);
         }
+        out.addAll(hostCookies);
+        successfulHosts.add(host);
       } catch (e) {
         debugPrint(
             'BrowserCookieService._collectPerDomainCookies: domain $host error: $e');
       }
     }));
+    return successfulHosts;
   }
 
   /// Clears all persisted cookies from the local JSON file.
@@ -428,27 +436,33 @@ class BrowserCookieService {
   /// fallback on platforms without [CookieManager.getAllCookies].
   ///
   /// Returns `(cookies: null, complete: false)` when enumeration was
-  /// impossible (nothing known to query, or every query failed/returned
-  /// nothing), so callers can avoid clobbering the persisted store.
+  /// impossible (nothing known to query or every query failed), so callers can
+  /// avoid clobbering the persisted store. Successful queries are recorded in
+  /// `queriedHosts`, including hosts that returned no cookies.
   ///
   /// `complete` is true when [CookiePlatform.getAllCookies] succeeded — the
   /// snapshot then covers the whole platform store and must be used WITHOUT
   /// merging with the file (a cookie the site deleted would resurrect).
   /// When `complete` is false the snapshot is partial and callers merge it
-  /// with the persisted file.
-  static Future<({List<Cookie>? cookies, bool complete})>
+  /// with the persisted file. Successful per-domain queries are listed so
+  /// root-path entries can be replaced only for those hosts.
+  static Future<
+          ({List<Cookie>? cookies, bool complete, Set<String> queriedHosts})>
       _collectPlatformCookies() async {
     try {
       final all = await cookiePlatform.getAllCookies();
-      return (cookies: all, complete: true);
+      return (cookies: all, complete: true, queriedHosts: <String>{});
     } on UnimplementedError {
       final collected = <Map<String, dynamic>>[];
-      await _collectPerDomainCookies(collected);
-      if (collected.isEmpty) {
-        // No visited domains, or every per-domain query failed (or returned
-        // nothing) — do not clobber the persisted store with an empty
-        // snapshot.
-        return (cookies: null, complete: false);
+      final queriedHosts = await _collectPerDomainCookies(collected);
+      if (queriedHosts.isEmpty) {
+        // No visited domains or every per-domain query failed — do not
+        // clobber the persisted store with an unavailable snapshot.
+        return (
+          cookies: null,
+          complete: false,
+          queriedHosts: queriedHosts,
+        );
       }
       final cookies = collected
           .map((m) => Cookie(
@@ -463,8 +477,32 @@ class BrowserCookieService {
                     HTTPCookieSameSitePolicy.fromNativeValue(m['sameSite']),
               ))
           .toList();
-      return (cookies: cookies, complete: false);
+      return (
+        cookies: cookies,
+        complete: false,
+        queriedHosts: queriedHosts,
+      );
     }
+  }
+
+  /// Whether a persisted root-path cookie applies to any successfully queried
+  /// host. Per-domain enumeration queries each host at `/`, so path-scoped
+  /// cookies cannot be proven stale by an empty result.
+  static bool _rootPathCookieAppliesToAnyHost(
+      Map<String, dynamic> cookie, Set<String> hosts) {
+    final path = cookie['path'];
+    if (path != null && path != '/') return false;
+    final cookieDomain = cookie['domain'];
+    if (cookieDomain is! String || cookieDomain.isEmpty) return false;
+    final isDomainCookie = cookieDomain.startsWith('.');
+    final domain = (isDomainCookie ? cookieDomain.substring(1) : cookieDomain)
+        .toLowerCase();
+    if (domain.isEmpty) return false;
+    return hosts.any((host) {
+      final normalizedHost = host.toLowerCase();
+      return normalizedHost == domain ||
+          (isDomainCookie && normalizedHost.endsWith('.$domain'));
+    });
   }
 
   /// Converts a [Cookie] object to a serializable map.
