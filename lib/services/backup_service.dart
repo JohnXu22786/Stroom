@@ -46,11 +46,11 @@ class BackupValidationException implements Exception {
   String toString() => message;
 }
 
-/// Exception thrown when restoring a valid backup cannot safely begin before
-/// any existing data is touched.
-class BackupRestorePreflightException implements Exception {
+/// Exception thrown when a data operation cannot safely begin before any
+/// existing data is touched.
+class DataManagementPreflightException implements Exception {
   final String message;
-  const BackupRestorePreflightException(this.message);
+  const DataManagementPreflightException(this.message);
 
   @override
   String toString() => message;
@@ -1106,6 +1106,8 @@ class BackupService {
       skipMissingCategories: skipMissingCategories,
     );
     final restoreSelection = metadata.restoreSelection;
+    final taskFlowAttachmentKeys =
+        await _taskFlowAttachmentsToPreserve(restoreSelection);
     final previousCookies = await _captureCookiesForRestoreRollback(
       restoreSelection,
       metadata.browserCookiesData,
@@ -1117,7 +1119,10 @@ class BackupService {
     // 从 restoreSelection 排除，避免空备份内容清掉当前数据。
     // 删除失败（如 Windows 上文件被占用）时中止恢复并提示重启重试，
     // 与清除功能的行为一致。
-    await _prepareSelectedFilesForRestore(restoreSelection);
+    await _prepareSelectedFilesForRestore(
+      restoreSelection,
+      taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+    );
 
     // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
     debugPrint('[BackupService] _restoreFromBytes: restoring database');
@@ -1231,6 +1236,8 @@ class BackupService {
         trustEmptyLegacyTaskPayloads: trustEmptyLegacyTaskPayloads,
       );
       final restoreSelection = metadata.restoreSelection;
+      final taskFlowAttachmentKeys =
+          await _taskFlowAttachmentsToPreserve(restoreSelection);
       final previousCookies = await _captureCookiesForRestoreRollback(
         restoreSelection,
         metadata.browserCookiesData,
@@ -1239,7 +1246,10 @@ class BackupService {
       await _yieldToEventLoop();
 
       // 勾选即清空：先清除选中类别的现有文件（语义与内存版一致）。
-      await _prepareSelectedFilesForRestore(restoreSelection);
+      await _prepareSelectedFilesForRestore(
+        restoreSelection,
+        taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+      );
 
       // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
       debugPrint('[BackupService] _restoreFromZipFile: restoring database');
@@ -1945,7 +1955,7 @@ class BackupService {
     final snapshot =
         await BrowserCookieService.snapshotCookiesForRestoreRollback();
     if (snapshot == null) {
-      throw const BackupRestorePreflightException(
+      throw const DataManagementPreflightException(
         '当前平台无法完整读取现有内置浏览器Cookies，已中止恢复以保护现有数据。',
       );
     }
@@ -1969,13 +1979,33 @@ class BackupService {
     }
   }
 
+  static Future<Set<String>> _taskFlowAttachmentsToPreserve(
+    BackupSelection selection,
+  ) async {
+    if (!selection.chatRecordsAndAttachments ||
+        !selection.includeMediaFiles ||
+        selection.tasks) {
+      return <String>{};
+    }
+
+    final preservedTaskFiles = await _collectTaskFlowAttachmentKeys();
+    if (preservedTaskFiles == null) {
+      throw const DataManagementPreflightException(
+        '无法读取未勾选任务中的附件引用，已取消操作以避免误删数据。',
+      );
+    }
+    return preservedTaskFiles;
+  }
+
   /// Keep the existing cookie snapshot until all other selected data has been
   /// restored, so an earlier failure leaves the destination's cookies intact.
   static Future<void> _prepareSelectedFilesForRestore(
-    BackupSelection selection,
-  ) async {
+    BackupSelection selection, {
+    required Set<String> taskFlowAttachmentKeys,
+  }) async {
     if (await _deleteSelectedFiles(
       selection,
+      taskFlowAttachmentKeys: taskFlowAttachmentKeys,
       preserveBrowserCookieSnapshot: selection.browserCookies,
     )) {
       throw Exception('部分数据文件删除失败，请重启应用后重试');
@@ -2667,6 +2697,8 @@ class BackupService {
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
+    final taskFlowAttachmentKeys =
+        await _taskFlowAttachmentsToPreserve(selection);
 
     // Remove the live WebView session as well as the persisted cookie snapshot.
     await _clearLiveCookiesForRestore(selection);
@@ -2686,7 +2718,10 @@ class BackupService {
     }
 
     // 2. 选中类别的文件（附件目录整清，孤儿文件一并删除）
-    final deleteFailed = await _deleteSelectedFiles(selection);
+    final deleteFailed = await _deleteSelectedFiles(
+      selection,
+      taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+    );
 
     // 3. 媒体数据库记录 + 文件夹表（文件已由 _deleteSelectedFiles 删除）
     if (selection.pictures) {
@@ -2840,6 +2875,7 @@ class BackupService {
   /// - 浏览器Cookies：默认删除 browser_cookies.json；恢复时可暂时保留
   static Future<bool> _deleteSelectedFiles(
     BackupSelection selection, {
+    required Set<String> taskFlowAttachmentKeys,
     bool preserveBrowserCookieSnapshot = false,
   }) async {
     var deleteFailed = false;
@@ -2848,12 +2884,7 @@ class BackupService {
     // flows.json / executions.json 引用的文件，只清除其余聊天附件。
     // （includeMediaFiles=false 的结构化快照恢复不动附件文件）
     if (selection.chatRecordsAndAttachments && selection.includeMediaFiles) {
-      final preservedTaskFiles = selection.tasks
-          ? <String>{}
-          : await _collectTaskFlowAttachmentKeys();
-      if (preservedTaskFiles == null) {
-        deleteFailed = true;
-      } else if (preservedTaskFiles.isEmpty) {
+      if (taskFlowAttachmentKeys.isEmpty) {
         if (kIsWeb || WebFileStore.isTestMode) {
           try {
             await WebFileStore.deleteByPrefix('attachments/');
@@ -2866,7 +2897,7 @@ class BackupService {
           deleteFailed = true;
         }
       } else if (!await _deleteAttachmentsExceptTaskFiles(
-          preservedTaskFiles)) {
+          taskFlowAttachmentKeys)) {
         deleteFailed = true;
       }
     }

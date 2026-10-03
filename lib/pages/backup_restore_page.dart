@@ -293,7 +293,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       if (!mounted) return;
       setState(() => _isImporting = false);
       if (e is BackupValidationException ||
-          e is BackupRestorePreflightException) {
+          e is DataManagementPreflightException) {
         // 恢复开始前就失败：未删除任何数据，
         // 错误提示已由 importBackup 弹出，无需重启。
         return;
@@ -394,6 +394,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           SnackBar(content: Text('清除失败: $e'), backgroundColor: Colors.red),
         );
       }
+      if (e is DataManagementPreflightException) return;
       // 清除可能已部分完成（磁盘数据与内存状态不一致，且 Anki 数据库连接
       // 可能已被关闭），失败后同样提示重启，保证应用以干净状态重新加载。
       if (mounted) {
