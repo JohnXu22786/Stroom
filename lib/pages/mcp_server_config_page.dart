@@ -525,43 +525,61 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
             // API Key (for built-in and regular configs)
             const SectionHeader(title: 'API 密钥'),
             const SizedBox(height: 8),
-            TextField(
-              controller: _apiKeyController,
-              decoration: InputDecoration(
-                hintText: '输入 API Key（可选）',
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.vpn_key, color: Colors.amber),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscureApiKey ? Icons.visibility_off : Icons.visibility,
-                    size: 20,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+            if (_isEditMode)
+              TextField(
+                controller: _apiKeyController,
+                decoration: InputDecoration(
+                  hintText: '输入 API Key（可选）',
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.vpn_key, color: Colors.amber),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscureApiKey
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    tooltip: _obscureApiKey ? '显示密钥' : '隐藏密钥',
+                    onPressed: () =>
+                        setState(() => _obscureApiKey = !_obscureApiKey),
                   ),
-                  tooltip: _obscureApiKey ? '显示密钥' : '隐藏密钥',
-                  onPressed: () =>
-                      setState(() => _obscureApiKey = !_obscureApiKey),
                 ),
+                obscureText: _obscureApiKey,
+                onChanged: (_) => _checkUnsavedChanges(),
+              )
+            else
+              ReadOnlyField(
+                icon: Icons.vpn_key,
+                iconColor: Colors.amber,
+                label: 'API 密钥',
+                value: _apiKeyController.text.isNotEmpty ? '••••••••' : '',
               ),
-              obscureText: _obscureApiKey,
-              onChanged: (_) => _checkUnsavedChanges(),
-            ),
 
             const SizedBox(height: 16),
 
             // Description
             const SectionHeader(title: '描述'),
             const SizedBox(height: 8),
-            TextField(
-              controller: _descriptionController,
-              decoration: const InputDecoration(
-                hintText: '输入此 MCP 服务器的描述信息（可选）',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.description, color: Colors.teal),
+            if (_isEditMode && !_isVendor)
+              TextField(
+                controller: _descriptionController,
+                decoration: const InputDecoration(
+                  hintText: '输入此 MCP 服务器的描述信息（可选）',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.description, color: Colors.teal),
+                ),
+                maxLines: 2,
+                minLines: 1,
+                onChanged: (_) => _checkUnsavedChanges(),
+              )
+            else
+              ReadOnlyField(
+                icon: Icons.description,
+                iconColor: Colors.teal,
+                label: '描述',
+                value: _descriptionController.text,
               ),
-              maxLines: 2,
-              minLines: 1,
-              onChanged: (_) => _checkUnsavedChanges(),
-            ),
 
             const SizedBox(height: 16),
 
