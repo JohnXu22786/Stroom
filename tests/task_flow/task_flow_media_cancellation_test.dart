@@ -125,6 +125,10 @@ void main() {
   });
 
   tearDown(() async {
+    // The notifier queues disk writes without awaiting them. Drain the queue
+    // before removing the path provider's temporary directory.
+    expect(await executions.persist(), isTrue);
+    await background.pendingPersistence;
     if (executions.mounted) executions.dispose();
     background.dispose();
     manager.dispose();

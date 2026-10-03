@@ -153,7 +153,24 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory directory;
   late PathProviderPlatform previous;
+  final trackedExecutions = <TaskFlowExecutionNotifier>[];
+  final trackedBackgrounds = <BackgroundTaskNotifier>[];
+
+  TaskFlowExecutionNotifier trackedExecution() {
+    final notifier = TaskFlowExecutionNotifier();
+    trackedExecutions.add(notifier);
+    return notifier;
+  }
+
+  BackgroundTaskNotifier trackedBackground() {
+    final notifier = BackgroundTaskNotifier();
+    trackedBackgrounds.add(notifier);
+    return notifier;
+  }
+
   setUp(() async {
+    trackedExecutions.clear();
+    trackedBackgrounds.clear();
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     directory = await Directory.systemTemp.createTemp('flow_media_');
@@ -162,6 +179,15 @@ void main() {
     AppStorage.resetCache();
   });
   tearDown(() async {
+    // Flow and background notifiers enqueue writes. Finish them while their
+    // path provider still points at this test's temporary directory.
+    for (final execution in trackedExecutions) {
+      if (execution.mounted) expect(await execution.persist(), isTrue);
+      await execution.persistenceResult;
+    }
+    for (final background in trackedBackgrounds) {
+      await background.pendingPersistence;
+    }
     PathProviderPlatform.instance = previous;
     AppStorage.resetCache();
     await directory.delete(recursive: true);
@@ -428,7 +454,7 @@ void main() {
     final bytes = Uint8List.fromList(utf8.encode('%PDF-1.7\nreport'));
     final storagePath = await AttachmentStorage.saveFile('notes.pdf', bytes);
     final copy = File('${directory.path}/$storagePath');
-    final executions = TaskFlowExecutionNotifier();
+    final executions = trackedExecution();
     addTearDown(executions.dispose);
     final first = executions.addExecution(
       flowId: 'flow',
@@ -488,7 +514,7 @@ void main() {
     final storagePath =
         await AttachmentStorage.saveFile('recording.mp4', bytes);
     final copy = File('${directory.path}/$storagePath');
-    final executions = TaskFlowExecutionNotifier();
+    final executions = trackedExecution();
     addTearDown(executions.dispose);
     final id = executions.addExecution(
       flowId: 'flow',
@@ -526,7 +552,7 @@ void main() {
       Uint8List.fromList(utf8.encode('%PDF-1.7\nreport')),
     );
     final copy = File('${directory.path}/$storagePath');
-    final executions = TaskFlowExecutionNotifier();
+    final executions = trackedExecution();
     addTearDown(executions.dispose);
     final ids = [
       for (var i = 0; i < 3; i++)
@@ -549,7 +575,7 @@ void main() {
       Uint8List.fromList(utf8.encode('%PDF-1.7\nreport')),
     );
     final copy = File('${directory.path}/$path');
-    final executions = TaskFlowExecutionNotifier();
+    final executions = trackedExecution();
     final assistant = Assistant(
       id: 'assistant',
       name: 'Assistant',
@@ -677,6 +703,7 @@ void main() {
     final storagePath = await AttachmentStorage.saveFile('notes.pdf', bytes);
     final copy = File('${directory.path}/$storagePath');
     final executions = _RejectExecutionRemovalNotifier();
+    trackedExecutions.add(executions);
     addTearDown(executions.dispose);
     final id = executions.addExecution(
       flowId: 'flow',
@@ -953,7 +980,7 @@ void main() {
             await File('${directory.path}/speech.wav').writeAsBytes(bytes);
         final container = ProviderContainer();
         addTearDown(container.dispose);
-        final executions = TaskFlowExecutionNotifier();
+        final executions = trackedExecution();
         final execId = executions.addExecution(
           flowId: 'flow',
           flowName: 'Flow',
@@ -967,7 +994,7 @@ void main() {
         );
         executions.addSubTask(execId, subTask);
         final manager = _Manager(fail: fail);
-        final background = BackgroundTaskNotifier();
+        final background = trackedBackground();
         addTearDown(background.dispose);
         const originalProviders = ProviderEntriesState();
         final result = executeChatBlock(
@@ -1037,7 +1064,7 @@ void main() {
         await File('${directory.path}/speech.wav').writeAsBytes([1, 2, 3]);
     final container = ProviderContainer();
     addTearDown(container.dispose);
-    final executions = TaskFlowExecutionNotifier();
+    final executions = trackedExecution();
     addTearDown(executions.dispose);
     final execId = executions.addExecution(flowId: 'flow', flowName: 'Flow');
     final subTask = FlowSubTask(
@@ -1062,7 +1089,7 @@ void main() {
         execId: execId,
         execNotifier: executions,
         flowSubTask: subTask,
-        bgNotifier: BackgroundTaskNotifier(),
+        bgNotifier: trackedBackground(),
         chatManager: manager,
         conversationsNotifier: container.read(conversationsProvider.notifier),
       ),
@@ -1091,7 +1118,7 @@ void main() {
             await File('${directory.path}/speech.wav').writeAsBytes(bytes);
         final container = ProviderContainer();
         addTearDown(container.dispose);
-        final executions = TaskFlowExecutionNotifier();
+        final executions = trackedExecution();
         addTearDown(executions.dispose);
         final execId = executions.addExecution(
           flowId: 'flow',
@@ -1118,7 +1145,7 @@ void main() {
             execId: execId,
             execNotifier: executions,
             flowSubTask: subTask,
-            bgNotifier: BackgroundTaskNotifier(),
+            bgNotifier: trackedBackground(),
             chatManager: manager,
             conversationsNotifier:
                 container.read(conversationsProvider.notifier),
@@ -1154,7 +1181,7 @@ void main() {
           await File('${directory.path}/speech.wav').writeAsBytes(bytes);
       final container = ProviderContainer();
       addTearDown(container.dispose);
-      final executions = TaskFlowExecutionNotifier();
+      final executions = trackedExecution();
       addTearDown(executions.dispose);
       final execId = executions.addExecution(flowId: 'flow', flowName: 'Flow');
       final subTask = FlowSubTask(
@@ -1178,7 +1205,7 @@ void main() {
           execId: execId,
           execNotifier: executions,
           flowSubTask: subTask,
-          bgNotifier: BackgroundTaskNotifier(),
+          bgNotifier: trackedBackground(),
           chatManager: manager,
           conversationsNotifier: container.read(conversationsProvider.notifier),
         ),
@@ -1204,7 +1231,7 @@ void main() {
       () async {
     final source =
         await File('${directory.path}/speech.wav').writeAsBytes([1, 2, 3]);
-    final executions = TaskFlowExecutionNotifier();
+    final executions = trackedExecution();
     addTearDown(executions.dispose);
     final execId = executions.addExecution(flowId: 'flow', flowName: 'Flow');
     final subTask = FlowSubTask(
@@ -1244,7 +1271,7 @@ void main() {
             execId: execId,
             execNotifier: executions,
             flowSubTask: subTask,
-            bgNotifier: BackgroundTaskNotifier(),
+            bgNotifier: trackedBackground(),
             chatManager: _Manager(),
             conversationsNotifier:
                 container.read(conversationsProvider.notifier)),
