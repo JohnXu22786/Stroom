@@ -28,6 +28,7 @@ class MathKeyboard extends StatefulWidget {
 class _MathKeyboardState extends State<MathKeyboard> {
   String _category = '常用';
   int _page = 0;
+  bool _shifted = false;
   final _categoryScrollController = ScrollController();
   final _keyScrollController = ScrollController();
   final _categoryKeys = {
@@ -75,10 +76,18 @@ class _MathKeyboardState extends State<MathKeyboard> {
     '⌫'
   ];
 
+  static const _latinRows = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+
+  static final _greekUpperKeys = [
+    for (final name in mathGreekUpperNames)
+      _MathKey('\\$name', '\\$name', description: name),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final keys = _groups[_category]!;
+    final keys =
+        _category == '希腊字母' && _shifted ? _greekUpperKeys : _groups[_category]!;
     final pageCount = (keys.length / 12).ceil();
     return Material(
         color: cs.surfaceContainer,
@@ -212,25 +221,28 @@ class _MathKeyboardState extends State<MathKeyboard> {
         children: [
           Padding(
               padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
-              child: Column(children: [
-                for (var row = 0; row < 4; row++)
-                  Row(children: [
-                    for (var col = 0; col < 6; col++)
-                      Expanded(
-                          child: Padding(
-                        padding: const EdgeInsets.all(2),
-                        child: _key(col < 3
-                            ? (_page * 12 + row * 3 + col < keys.length
-                                ? keys[_page * 12 + row * 3 + col]
-                                : null)
-                            : _MathKey(_numbers[row * 3 + col - 3],
-                                _numbers[row * 3 + col - 3],
-                                command: _numbers[row * 3 + col - 3] == '⌫'
-                                    ? 'deleteBackward'
-                                    : null)),
-                      )),
-                  ]),
-              ])),
+              child: _category == '字母'
+                  ? _latinKeys()
+                  : Column(children: [
+                      for (var row = 0; row < 4; row++)
+                        Row(children: [
+                          for (var col = 0; col < 6; col++)
+                            Expanded(
+                                child: Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: _key(col < 3
+                                  ? (_page * 12 + row * 3 + col < keys.length
+                                      ? keys[_page * 12 + row * 3 + col]
+                                      : null)
+                                  : _MathKey(_numbers[row * 3 + col - 3],
+                                      _numbers[row * 3 + col - 3],
+                                      command:
+                                          _numbers[row * 3 + col - 3] == '⌫'
+                                              ? 'deleteBackward'
+                                              : null)),
+                            )),
+                        ]),
+                    ])),
           SizedBox(
               height: 44,
               child:
@@ -245,7 +257,9 @@ class _MathKeyboardState extends State<MathKeyboard> {
                         ? () => widget.onCommand('next', '')
                         : null,
                     child: const Text('下一项')),
-                if (pageCount > 1)
+                if (_category == '希腊字母')
+                  SizedBox(width: 48, child: _shiftKey()),
+                if (pageCount > 1 && _category != '字母')
                   TextButton(
                       onPressed: () =>
                           setState(() => _page = (_page + 1) % pageCount),
@@ -253,6 +267,63 @@ class _MathKeyboardState extends State<MathKeyboard> {
               ])),
         ],
       );
+
+  Widget _latinKeys() => Column(children: [
+        for (var row = 0; row < _latinRows.length; row++)
+          Row(children: [
+            if (row == 1) const Spacer(),
+            if (row == 2) _latinCell(_shiftKey(), flex: 3),
+            for (final letter in _latinRows[row].split(''))
+              _latinCell(
+                  _key(_MathKey(_shifted ? letter.toUpperCase() : letter,
+                      _shifted ? letter.toUpperCase() : letter)),
+                  flex: row == 0 ? 1 : 2),
+            if (row == 1) const Spacer(),
+            if (row == 2)
+              _latinCell(
+                  _key(const _MathKey('⌫', '', command: 'deleteBackward')),
+                  flex: 3),
+          ]),
+        Row(children: [
+          for (final number in '1234567890.'.split(''))
+            _latinCell(_key(_MathKey(number, number))),
+        ]),
+      ]);
+
+  Widget _latinCell(Widget child, {int flex = 1}) => Expanded(
+      flex: flex,
+      child: Padding(padding: const EdgeInsets.all(2), child: child));
+
+  void _toggleShift() => setState(() => _shifted = !_shifted);
+
+  Widget _shiftKey() => Semantics(
+      key: const ValueKey('math-keyboard-shift'),
+      label: 'Shift',
+      button: true,
+      enabled: widget.enabled,
+      toggled: _shifted,
+      excludeSemantics: true,
+      onTap: widget.enabled ? _toggleShift : null,
+      child: Tooltip(
+          excludeFromSemantics: true,
+          message: _shifted ? 'Shift：大写已开启，切换小写' : 'Shift：小写，切换大写',
+          child: SizedBox(
+              height: 44,
+              child: FilledButton.tonal(
+                  style: FilledButton.styleFrom(
+                      backgroundColor: _shifted
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                      foregroundColor: _shifted
+                          ? Theme.of(context).colorScheme.onPrimary
+                          : null,
+                      padding: const EdgeInsets.all(2),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6))),
+                  onPressed: widget.enabled ? _toggleShift : null,
+                  child: Icon(_shifted
+                      ? Icons.keyboard_capslock
+                      : Icons.arrow_upward)))));
 
   Widget _navigate(IconData icon, String label, String direction) => IconButton(
         icon: Icon(icon, size: 20),
@@ -310,8 +381,7 @@ const _categoryDescriptions = {
   '指数/对数': '指数、对数、倒数与科学计数法',
   '函数': '三角、双曲与其他常用函数',
   '常量': '圆周率、自然常数与常用数值',
-  '希腊字母': '全部小写希腊字母',
-  '希腊大写': '全部大写希腊字母',
+  '希腊字母': '全部 24 个希腊字母，Shift 切换大小写',
   '希腊变体': '常用希腊字母变体',
   '微积分': '求和、积分、极限与导数',
   '矩阵': '矩阵、行列式、分段式与行列编辑',
@@ -320,7 +390,7 @@ const _categoryDescriptions = {
   '箭头': '方向、映射与带注释的箭头',
   '括号/区间': '成对括号、绝对值与区间',
   '样式': '重音、上下标注与数学字体',
-  '字母': '拉丁字母大小写',
+  '字母': 'QWERTY 全部 26 个拉丁字母，Shift 切换大小写',
 };
 
 const _exponentialDescriptions = {
@@ -416,10 +486,6 @@ final Map<String, List<_MathKey>> _groups = {
   ],
   '希腊字母': [
     for (final name in mathGreekLowerNames)
-      _MathKey('\\$name', '\\$name', description: name),
-  ],
-  '希腊大写': [
-    for (final name in mathGreekUpperNames)
       _MathKey('\\$name', '\\$name', description: name),
   ],
   '希腊变体': [
@@ -587,8 +653,7 @@ final Map<String, List<_MathKey>> _groups = {
       _MathKey('\\$name{A}', '\\$name{#0}'),
   ],
   '字母': [
-    for (final letter
-        in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''))
+    for (final letter in 'abcdefghijklmnopqrstuvwxyz'.split(''))
       _MathKey(letter, letter),
   ],
 };

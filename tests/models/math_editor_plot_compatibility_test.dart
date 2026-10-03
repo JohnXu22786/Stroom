@@ -2,6 +2,102 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/math_expression.dart';
 
 void main() {
+  test('rendered letter boundaries discover the coefficient and retain x', () {
+    for (final entry in <String, (String, double)>{
+      'A x': ('A', 6),
+      'a x': ('a', 6),
+      'A 2': ('A', 4),
+      'a 23': ('a', 46),
+      '2 A': ('A', 4),
+    }.entries) {
+      final formula = MathExpression.fromInput(entry.key,
+          parameterValues: {entry.value.$1: 2});
+      expect(formula.isValid, isTrue, reason: entry.key);
+      expect(formula.parameters, {entry.value.$1}, reason: entry.key);
+      expect(formula.evaluator(3), entry.value.$2, reason: entry.key);
+    }
+    for (final entry in <String, double>{
+      '1 e 3': 8.154845485377136,
+      'e E': 7.38905609893065,
+      r'\sin\left(x a_{12}\right)+1': 0.7205845018010741,
+    }.entries) {
+      final formula =
+          MathExpression.fromInput(entry.key, parameterValues: {'a_12': 2});
+      expect(formula.isValid, isTrue, reason: entry.key);
+      expect(formula.evaluator(3), closeTo(entry.value, 1e-10),
+          reason: entry.key);
+    }
+  });
+
+  test('exact roman identifier namespaces preserve legacy parameter names', () {
+    for (final name in [
+      'foo',
+      'Ax',
+      'A2',
+      'a2ln2',
+      'constructor',
+      'foo_bar_baz',
+      'foo_pi_ln2',
+      'foo_',
+    ]) {
+      final raw =
+          MathExpression.fromInput('$name*x', parameterValues: {name: 2});
+      final romanName = name.replaceAll('_', r'\_');
+      final rendered = MathExpression.fromInput(
+          '\\mathrm{$romanName}\\cdot x+1',
+          parameterValues: {name: 2});
+      expect(raw.isValid, isTrue, reason: name);
+      expect(raw.parameters, {name}, reason: name);
+      expect(raw.evaluator(3), 6, reason: name);
+      expect(rendered.isValid, isTrue, reason: name);
+      expect(rendered.parameters, {name}, reason: name);
+      expect(rendered.evaluator(3), 7, reason: name);
+    }
+    final adjacent =
+        MathExpression.fromInput(r'\mathrm{Ax}x', parameterValues: {'Ax': 2});
+    expect(adjacent.isValid, isTrue);
+    expect(adjacent.parameters, {'Ax'});
+    expect(adjacent.evaluator(3), 6);
+    final scripted = MathExpression.fromInput(r'\mathrm{foo\_bar}_{12}x',
+        parameterValues: {'foo_bar_12': 2});
+    expect(scripted.isValid, isTrue);
+    expect(scripted.parameters, {'foo_bar_12'});
+    expect(scripted.evaluator(3), 6);
+    for (final source in [
+      r'\mathrm{x+1}',
+      r'\mathrm{d x}',
+      r'\mathrm{\int}',
+      r'\mathrm{unknown}(x)',
+      r'\text{Ax}',
+    ]) {
+      expect(MathExpression.fromInput(source).isValid, isFalse, reason: source);
+    }
+  });
+
+  test('escaped consecutive underscores retain imported parameter identity', () {
+    for (final name in ['foo__bar', 'foo___', 'foo__bar_']) {
+      final escaped = name.replaceAll('_', r'\_');
+      final formula = MathExpression.fromInput('\\mathrm{$escaped}\\cdot x',
+          parameterValues: {name: 2});
+      expect(formula.isValid, isTrue, reason: name);
+      expect(formula.parameters, {name}, reason: name);
+      expect(formula.evaluator(3), 6, reason: name);
+    }
+    final scripted = MathExpression.fromInput(r'\mathrm{foo\_\_bar}_{1}x',
+        parameterValues: {'foo__bar_1': 2});
+    expect(scripted.isValid, isTrue);
+    expect(scripted.parameters, {'foo__bar_1'});
+    expect(scripted.evaluator(3), 6);
+    for (final source in [
+      r'foo\_\_bar x',
+      r'\mathrm{foo\_\_bar}_{x+1}',
+      r'\mathrm{foo\_\_bar}_{\pi}',
+      r'a_\pi x',
+    ]) {
+      expect(MathExpression.fromInput(source).isValid, isFalse, reason: source);
+    }
+  });
+
   test(
       'missing Greek forms stay distinct adjustable parameters after rendering',
       () {
@@ -94,6 +190,8 @@ void main() {
         0);
     for (final entry in {
       r'a_{12}x': 'a_12',
+      r'a_{b}x': 'a_b',
+      r'\alpha_{b}x': 'alpha_b',
       r'\alpha_{12}x': 'alpha_12',
       r'x\alpha_{12}': 'alpha_12',
       r'xa_{12}': 'a_12',
@@ -102,6 +200,7 @@ void main() {
       r'a_{asin}x': 'a_asin',
       r'a_{1e3}x': 'a_1e3',
       r'\mathrm{foo}_{12}x': 'foo_12',
+      r'\mathrm{foo}_{bar_baz}x': 'foo_bar_baz',
       r'\mathrm{alpha}_{12}x': 'alpha_12',
       r'\mathrm{pi}_{1}x': 'pi_1',
     }.entries) {

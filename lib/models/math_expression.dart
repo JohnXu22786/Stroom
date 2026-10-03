@@ -581,8 +581,8 @@ class MathExpression {
       throw const FormatException('此符号未定义单条曲线，请分别输入完整表达式');
     }
     var result = expr.replaceAllMapped(
-      RegExp(r'\\mathrm\{([a-zA-Z]\w*)\}_\{(\w+)\}'),
-      (match) => ' ${match[1]}_${match[2]} ',
+      RegExp(r'\\mathrm\{([a-zA-Z](?:\w|\\_)*)\}_\{(\w+)\}'),
+      (match) => ' ${match[1]!.replaceAll(r'\_', '_')}_${match[2]} ',
     );
     result = result.replaceAllMapped(
       RegExp(r'(\\[a-zA-Z]+|[a-zA-Z])_\{(\w+)\}'),
@@ -599,9 +599,16 @@ class MathExpression {
     // Named identifier subscripts and logarithm bases have been consumed.
     // Flattening a remaining structural index into ordinary tokens would turn an
     // unsupported indexed expression into multiplication by a fake parameter.
-    if (RegExp(r'_\s*(?:\{|\\)').hasMatch(result)) {
+    if (RegExp(r'(?<!\\)_\s*(?:\{|\\)').hasMatch(result)) {
       throw const FormatException('此下标结构可编辑，但绘图仅支持参数名称下标');
     }
+    // Rendered imports reserve legacy names in an exact roman namespace. Only
+    // an identifier is accepted: arbitrary roman text and calculus stay invalid.
+    // Check structural scripts first, before unwrapping names ending with '_'.
+    result = result.replaceAllMapped(
+      RegExp(r'\\mathrm\{([a-zA-Z](?:\w|\\_)*)\}'),
+      (match) => ' ${match[1]!.replaceAll(r'\_', '_')} ',
+    );
     result = result.replaceAllMapped(RegExp(r'\\operatorname\{([a-zA-Z]+)\}'),
         (m) => _knownFunctions.contains(m[1]) ? m[1]! : m[0]!);
     result = result.replaceAll(RegExp(r'\\(?:dfrac|tfrac)\b'), r'\frac');
