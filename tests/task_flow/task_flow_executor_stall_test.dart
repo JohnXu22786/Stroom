@@ -131,7 +131,8 @@ void main() {
             catcatch.TaskStatus.completed,
             id: capturedTaskId,
             progress: 100,
-            downloadedPath: p.absolute('tests/fixtures/catcatch/video_only.mp4'),
+            downloadedPath:
+                p.absolute('tests/fixtures/catcatch/video_only.mp4'),
           ),
         ];
       });
