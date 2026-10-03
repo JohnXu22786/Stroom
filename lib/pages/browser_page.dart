@@ -54,6 +54,33 @@ Future<bool> navigateBrowserPageAfterCookiePreparation({
   return true;
 }
 
+/// Navigates from the browser address bar and restores its prior page address
+/// when cookie preparation prevents the requested navigation.
+@visibleForTesting
+Future<bool> navigateBrowserPageFromAddress({
+  required String requestedUrl,
+  required String previousAddress,
+  required String currentUrl,
+  required ValueChanged<String> updateAddress,
+  required Future<bool> Function() prepareCookies,
+  required Future<void> Function(String url) loadUrl,
+  required VoidCallback onPreparationFailure,
+}) async {
+  final uri = normalizeBrowserUrl(requestedUrl);
+  if (uri.isEmpty) return false;
+
+  updateAddress(uri);
+  final navigated = await navigateBrowserPageAfterCookiePreparation(
+    prepareCookies: prepareCookies,
+    loadUrl: () => loadUrl(uri),
+  );
+  if (!navigated) {
+    updateAddress(currentUrl.isNotEmpty ? currentUrl : previousAddress);
+    onPreparationFailure();
+  }
+  return navigated;
+}
+
 /// Builds the [InAppWebViewSettings] appropriate for the given mode.
 ///
 /// Key difference from the previous always-wide-viewport approach:
@@ -421,16 +448,29 @@ class _BrowserPageState extends State<BrowserPage> {
   }
 
   Future<void> _goToUrl(String url) async {
-    final uri = normalizeBrowserUrl(url);
-    if (uri.isEmpty) return;
     final controller = _webViewController;
     if (controller == null) return;
-    _urlController.text = uri;
-    await navigateBrowserPageAfterCookiePreparation(
+    final previousAddress = _urlController.text;
+    await navigateBrowserPageFromAddress(
+      requestedUrl: url,
+      previousAddress: previousAddress,
+      currentUrl: _currentUrl,
+      updateAddress: (address) {
+        if (mounted) _urlController.text = address;
+      },
       prepareCookies: _ensureCookieStorePrepared,
-      loadUrl: () async {
+      loadUrl: (address) async {
         if (!mounted || controller != _webViewController) return;
-        await controller.loadUrl(urlRequest: URLRequest(url: WebUri(uri)));
+        await controller.loadUrl(urlRequest: URLRequest(url: WebUri(address)));
+      },
+      onPreparationFailure: () {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cookie 准备失败，未加载页面'),
+            backgroundColor: Colors.red,
+          ),
+        );
       },
     );
   }
