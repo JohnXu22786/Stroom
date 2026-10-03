@@ -41,7 +41,9 @@ String? mcpProviderConfigToolName(ProviderConfigItem config) {
   final typeConfig =
       config.models.isNotEmpty ? config.models[0].typeConfig : null;
   if (typeConfig?['isHttpTool'] == true) {
-    return switch (config.providerName) {
+    // The provider name is editable in the settings panel. Keep matching the
+    // registered HTTP handler through the model's stable built-in name.
+    return switch (config.models[0].name) {
       'Brave Search' => 'brave_web_search',
       'Bocha' => 'bocha_web_search',
       'Querit' => 'querit_search',
