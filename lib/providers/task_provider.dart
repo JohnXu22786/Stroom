@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -35,6 +36,18 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
 
   // 每个正在运行的任务对应的 CancelToken
   final Map<String, CancelToken> _cancelTokens = {};
+  final Map<String, Future<void>> _saveLocks = {};
+
+  /// Allows tests to pause after file writes and before the gallery commit.
+  @visibleForTesting
+  Future<void> Function()? debugBeforeSaveCommit;
+
+  @visibleForTesting
+  Future<void> Function()? debugAfterSaveCommit;
+
+  @visibleForTesting
+  Future<Uint8List> Function(String, Map<String, dynamic>, CancelToken)?
+      debugSynthesize;
 
   TaskListNotifier(this.ref) : super([]);
 
@@ -75,6 +88,12 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
 
+    bool isCurrent() =>
+        !cancelToken.isCancelled &&
+        mounted &&
+        identical(_cancelTokens[task.id], cancelToken) &&
+        state.any((t) => t.id == task.id && t.status == TaskStatus.running);
+
     try {
       final synthConfig = ref.read(synthesisConfigProvider);
 
@@ -105,8 +124,9 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         params['speed'] = double.tryParse(speedParam) ?? synthConfig.speed;
       }
       final volumeParam = task.customParams?['volume'];
-      if (volumeParam != null)
+      if (volumeParam != null) {
         params['volume'] = double.tryParse(volumeParam) ?? synthConfig.volume;
+      }
       final requestedFormat = task.customParams?['response_format'] ??
           task.customParams?['format'] ??
           synthConfig.format;
@@ -115,11 +135,14 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       parseJsonCustomParams(params, task.modelConfig);
 
       // 执行合成
-      var audioData = await provider.synthesize(
-        task.text,
-        params: params,
-        cancelToken: cancelToken,
-      );
+      final synthesize = debugSynthesize;
+      var audioData = synthesize != null
+          ? await synthesize(task.text, params, cancelToken)
+          : await provider.synthesize(
+              task.text,
+              params: params,
+              cancelToken: cancelToken,
+            );
 
       // 如果已被暂停，不再继续处理
       if (cancelToken.isCancelled) return;
@@ -149,23 +172,37 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       if (cancelToken.isCancelled) return;
 
       // 保存音频文件
-      final saveFolder = task.customParams?['saveFolder'] as String? ?? '';
-      final filePath = await _saveAudioFile(
+      final saveFolder = task.customParams?['saveFolder'] ?? '';
+      final saved = await _saveAudioFile(
         audioData,
         actualFormat,
         task.text,
+        isCurrent: isCurrent,
         name: task.title,
         // 显式 folder 参数（TTS 页面）优先；任务流块通过 customParams
         // 传 saveFolder，两者都指向保存目录。
         folder: task.folder.isNotEmpty ? task.folder : saveFolder,
       );
 
-      if (cancelToken.isCancelled ||
-          !mounted ||
-          !identical(_cancelTokens[task.id], cancelToken)) return;
+      if (saved == null) return;
+      try {
+        if (!isCurrent()) {
+          await saved.rollback();
+          return;
+        }
 
-      // 更新任务为完成
-      _updateTask(task.id, TaskStatus.completed, downloadedFilePath: filePath);
+        // Status and gallery commit finish while this hash is locked, so a
+        // resumed task cannot race the old save's final cancellation check.
+        try {
+          _updateTask(task.id, TaskStatus.completed,
+              downloadedFilePath: saved.filePath);
+        } catch (_) {
+          await saved.rollback();
+          rethrow;
+        }
+      } finally {
+        saved.release();
+      }
 
       // 刷新文件列表
       ref.read(audioRecordsProvider.notifier).loadRecords();
@@ -222,7 +259,9 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     } catch (e) {
       if (cancelToken.isCancelled ||
           !mounted ||
-          !identical(_cancelTokens[task.id], cancelToken)) return;
+          !identical(_cancelTokens[task.id], cancelToken)) {
+        return;
+      }
       String? origReq;
       String? origResp;
       if (e is tts_provider_base.SynthesisException) {
@@ -238,8 +277,9 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         originalResponse: origResp,
       );
     } finally {
-      if (identical(_cancelTokens[task.id], cancelToken))
+      if (identical(_cancelTokens[task.id], cancelToken)) {
         _cancelTokens.remove(task.id);
+      }
     }
   }
 
@@ -387,44 +427,123 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
   }
 
   /// 保存音频文件（与 TTSStateNotifier 逻辑一致）
-  /// Returns the file path of the saved audio file, or null if unavailable.
-  Future<String?> _saveAudioFile(
+  /// Returns the saved file and rollback/release actions for the caller to
+  /// finish the task status under the same hash lock. A canceled save removes
+  /// its own gallery record and unreferenced files.
+  Future<
+      ({
+        String? filePath,
+        Future<void> Function() rollback,
+        void Function() release,
+      })?> _saveAudioFile(
     Uint8List audioData,
     String format,
     String text, {
+    required bool Function() isCurrent,
     String name = '',
     String folder = '',
   }) async {
     final hash = computeAudioHash(audioData);
+    final audioName = '$hash.$format';
+    final textName = '$hash.txt';
     // 如果未提供标题，使用文本的前几个字
     final displayName = name.isNotEmpty
         ? name
         : (text.length > 20 ? text.substring(0, 20) : text);
 
-    // 写入音频实体文件
-    await FileManifest.writeFile('$hash.$format', audioData);
+    // Two attempts can produce the same hash. Keep the old save and its
+    // rollback together so a resumed attempt never loses its new files.
+    final precedingSave = _saveLocks[hash];
+    final unlocked = Completer<void>();
+    final lock = unlocked.future;
+    _saveLocks[hash] = lock;
+    var handedOff = false;
 
-    // 写入源文本文件
-    if (text.isNotEmpty) {
-      final textBytes = Uint8List.fromList(utf8.encode(text));
-      await FileManifest.writeFile('$hash.txt', textBytes);
+    void release() {
+      if (identical(_saveLocks[hash], lock)) _saveLocks.remove(hash);
+      if (!unlocked.isCompleted) unlocked.complete();
     }
 
-    final record = AudioRecord(
-      name: displayName,
-      hash: hash,
-      format: format,
-      createdAt: DateTime.now(),
-      size: audioData.length,
-      sourceText: text,
-      folder: folder,
-    );
+    try {
+      if (precedingSave != null) await precedingSave;
+      if (!isCurrent()) return null;
 
-    await FileManifest.addRecord(record);
+      // Hash-addressed files may already belong to another gallery record.
+      // Keep the old source so a canceled duplicate save cannot replace it.
+      final audioExisted = await FileManifest.readFilePath(audioName) != null;
+      final previousText = await FileManifest.readFile(textName);
+      if (!isCurrent()) return null;
 
-    // Get the file path for "open file" button
-    final filePath = await FileManifest.readFilePath('$hash.$format');
-    return filePath;
+      final record = AudioRecord(
+        name: displayName,
+        hash: hash,
+        format: format,
+        createdAt: DateTime.now(),
+        size: audioData.length,
+        sourceText: text,
+        folder: folder,
+      );
+
+      var wroteAudio = false;
+      var wroteText = false;
+      var committed = false;
+
+      Future<void> rollback() async {
+        await FileManifest.deleteRecord(record.id);
+        final records = await FileManifest.loadRecords();
+        if (wroteAudio &&
+            !records.any((other) => other.storageFileName == audioName)) {
+          if (audioExisted) {
+            // deleteRecord removes the entity when this was its sole record.
+            if (await FileManifest.readFilePath(audioName) == null) {
+              await FileManifest.writeFile(audioName, audioData);
+            }
+          } else {
+            await FileManifest.deleteFile(audioName);
+          }
+        }
+        if (previousText != null) {
+          // deleteRecord can remove the shared sidecar even for an empty-text
+          // attempt, so restore any source that existed before this save.
+          if (wroteText || await FileManifest.readFile(textName) == null) {
+            await FileManifest.writeFile(textName, previousText);
+          }
+        } else if (wroteText && !records.any((other) => other.hash == hash)) {
+          await FileManifest.deleteFile(textName);
+        }
+      }
+
+      try {
+        // Write the entity and source before publishing a gallery record.
+        await FileManifest.writeFile(audioName, audioData);
+        wroteAudio = true;
+        if (!isCurrent()) return null;
+
+        if (text.isNotEmpty) {
+          await FileManifest.writeFile(
+              textName, Uint8List.fromList(utf8.encode(text)));
+          wroteText = true;
+        }
+        if (!isCurrent()) return null;
+
+        await debugBeforeSaveCommit?.call();
+        if (!isCurrent()) return null;
+        await FileManifest.addRecord(record);
+        await debugAfterSaveCommit?.call();
+        if (!isCurrent()) return null;
+
+        // Get the file path for the "open file" button.
+        final filePath = await FileManifest.readFilePath(audioName);
+        if (!isCurrent()) return null;
+        committed = true;
+        handedOff = true;
+        return (filePath: filePath, rollback: rollback, release: release);
+      } finally {
+        if (!committed) await rollback();
+      }
+    } finally {
+      if (!handedOff) release();
+    }
   }
 
   // ============================================================================

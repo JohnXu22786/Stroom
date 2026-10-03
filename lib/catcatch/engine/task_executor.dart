@@ -286,10 +286,18 @@ class TaskExecutor {
                 task: task.copyWith(selectedMedia: selectedMedia),
                 steps: steps,
                 sourcePath: downloadedFilePath,
-                onUpdate: onUpdate);
+                onUpdate: onUpdate,
+                cancelToken: cancelToken);
+            if (!kIsWeb) {
+              task = task.copyWith(metadata: {
+                ...task.metadata,
+                CatCatchTask.nativeRegisteredPathKey: downloadedFilePath,
+              });
+            }
             break;
         }
       }
+      if (cancelToken?.isCancelled ?? false) return null;
       markAllExecutorStepsDone(steps);
       onUpdate(task.copyWith(
           steps: steps,

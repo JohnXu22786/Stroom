@@ -178,7 +178,8 @@ class FileManifest {
 
   static Future<List<AudioRecord>> loadRecords() => _ops.loadRecords();
   static Future<void> addRecord(AudioRecord record) => _ops.addRecord(record);
-  static Future<void> deleteRecord(String id) => _ops.deleteRecord(id);
+  static Future<void> deleteRecord(String id, {bool preserveFiles = false}) =>
+      _ops.deleteRecord(id, preserveFiles: preserveFiles);
   static Future<void> deleteRecords(List<String> ids) =>
       _ops.deleteRecords(ids);
   static Future<void> updateRecord(AudioRecord updated) =>

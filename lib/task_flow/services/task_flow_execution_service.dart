@@ -142,6 +142,8 @@ class TaskFlowExecutionService {
   final Map<String, void Function(TaskFlowExecution)> _stopActions = {};
   final Map<String, CancelToken> _activeRequestCancelTokens = {};
   final Map<String, Future<void>> _workers = {};
+  final Map<String, Future<void>> _restoredBatchPredecessors = {};
+  final Map<String, Completer<void>> _restoredBatchBarriers = {};
   final Map<String, Completer<void>> _pauseGates = {};
   final Map<String, int> _resumePending = {};
   final Map<String, int> _controlRevisions = {};
@@ -374,17 +376,37 @@ class TaskFlowExecutionService {
 
   /// Serialize inputs within a batch; scheduler still shares its weighted
   /// budget with independently submitted batches.
-  void _startBatch(List<String> ids) {
-    var previous = Future<void>.value();
+  void _startBatch(List<String> ids, {Future<void>? after}) {
+    var previous = after ?? Future<void>.value();
     for (final id in ids) {
-      if (_workers.containsKey(id)) {
+      final existing = _workers[id];
+      if (existing != null) {
+        previous = existing;
+        continue;
+      }
+      // A restored paused input keeps its batch position without reserving
+      // scheduler resources until it resumes or is cancelled.
+      if (_execution(id)?.status == FlowExecutionStatus.paused) {
+        _restoredBatchPredecessors.putIfAbsent(id, () => previous);
+        final barrier =
+            _restoredBatchBarriers.putIfAbsent(id, () => Completer<void>());
+        previous = previous.then((_) => barrier.future);
         continue;
       }
       final work = previous.then((_) => _runSaved(id));
       _workers[id] = work;
       previous = work;
-      unawaited(work.whenComplete(() => _workers.remove(id)));
+      unawaited(work.whenComplete(() {
+        _workers.remove(id);
+        _releaseRestoredBatchBarrier(id);
+      }));
     }
+  }
+
+  void _releaseRestoredBatchBarrier(String id) {
+    _restoredBatchPredecessors.remove(id);
+    final barrier = _restoredBatchBarriers.remove(id);
+    if (barrier != null && !barrier.isCompleted) barrier.complete();
   }
 
   Future<void> restorePendingExecutions() async {
@@ -398,13 +420,17 @@ class TaskFlowExecutionService {
       return;
     }
     final waiting = _notifier.executions
-        .where((e) => e.status == FlowExecutionStatus.waiting)
+        .where((e) =>
+            e.status == FlowExecutionStatus.waiting ||
+            e.status == FlowExecutionStatus.paused)
         .toList()
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final batches = <String, List<TaskFlowExecution>>{};
     for (final e in waiting) {
       if (e.snapshot == null) {
-        _notifier.interruptExecution(e.id, error: '旧记录没有运行快照，请选择使用最新配置重试');
+        if (e.status == FlowExecutionStatus.waiting) {
+          _notifier.interruptExecution(e.id, error: '旧记录没有运行快照，请选择使用最新配置重试');
+        }
         continue;
       }
       batches.putIfAbsent(e.batchId ?? e.id, () => []).add(e);
@@ -662,7 +688,7 @@ class TaskFlowExecutionService {
       _notifier.interruptExecution(id, error: '无法保存恢复状态');
       throw const TaskFlowPersistenceException('无法保存恢复状态');
     }
-    _startBatch([id]);
+    _startBatch([id], after: _restoredBatchPredecessors.remove(id));
   }
 
   Future<void> pauseExecution(String id) async {
@@ -787,6 +813,9 @@ class TaskFlowExecutionService {
     _manualCatCatchWaits.removeWhere((_, executionId) => executionId == e.id);
     _resumePending.remove(e.id);
     _pauseGates.remove(e.id)?.complete();
+    if (invalidateControl && !_workers.containsKey(e.id)) {
+      _releaseRestoredBatchBarrier(e.id);
+    }
     _stopActions.remove(e.id)?.call(e);
   }
 
@@ -944,6 +973,11 @@ class TaskFlowExecutionService {
         : <TaskFlowExecution>[];
     _disposed = true;
     _resumePending.clear();
+    _restoredBatchPredecessors.clear();
+    for (final barrier in _restoredBatchBarriers.values) {
+      if (!barrier.isCompleted) barrier.complete();
+    }
+    _restoredBatchBarriers.clear();
     _manualCatCatchWaits.clear();
     for (final token in _activeRequestCancelTokens.values) {
       if (!token.isCancelled) token.cancel();

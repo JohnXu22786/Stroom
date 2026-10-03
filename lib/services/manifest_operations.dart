@@ -250,13 +250,16 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<void> deleteRecord(String id) async {
+  Future<void> deleteRecord(String id, {bool preserveFiles = false}) async {
     try {
       await loadRecords();
       final index = _cache!.indexWhere((r) => r.id == id);
       if (index == -1) return;
       final record = _cache![index];
-      await _deleteEntityFiles(record);
+      // A caller undoing a just-added record cannot know whether another
+      // writer has begun using the same content-addressed file. In that
+      // case, remove only its metadata and retain the shared bytes.
+      if (!preserveFiles) await _deleteEntityFiles(record);
       _cache!.removeAt(index);
       await _dbDeleteRecord(id);
     } catch (e, st) {
