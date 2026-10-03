@@ -184,6 +184,18 @@ class DataMigrationService {
   /// 各部分当前支持的数据格式版本。
   static const Map<String, int> currentPartVersions = DataParts.currentVersions;
 
+  /// 格式版本元数据由备份清单单独承载，不作为用户设置跨设备覆盖。
+  static bool isFormatMetadataKey(String key) =>
+      key == _kLegacyDataFormatVersionKey ||
+      key == _kDataFormatVersionsKey ||
+      key == 'data_format_version_migrated';
+
+  /// Expands the legacy global format version carried by older backup files.
+  static Map<String, int>? partVersionsFromLegacyGlobal(Object? value) {
+    if (value is! int) return null;
+    return _expandFromLegacyGlobal(value);
+  }
+
   // ================================================================
   // 版本检查
   // ================================================================
@@ -416,13 +428,19 @@ class DataMigrationService {
   /// pictures/audio/videos/texts 四个媒体部分共享同一个物理迁移
   ///（共享 folders 表 → per-type 文件夹表），任一媒体部分落后时执行
   /// 一次即可完成全部四部分的物理迁移，避免重复执行 4 次。
-  static Future<void> _performPartMigrations(Map<String, int> stored) async {
+  static Future<void> _performPartMigrations(
+    Map<String, int> stored, {
+    Set<String>? onlyParts,
+  }) async {
+    final selectedParts = onlyParts ?? DataParts.all.toSet();
     final mediaNeedsMigration = _mediaParts
+        .where(selectedParts.contains)
         .any((p) => (stored[p] ?? 0) < DataParts.currentVersions[p]!);
     if (mediaNeedsMigration) {
       await _migrateMediaV0ToV1();
     }
     for (final part in DataParts.all) {
+      if (!selectedParts.contains(part)) continue;
       if (_mediaParts.contains(part)) continue; // 已统一迁移
       final from = stored[part] ?? 0;
       final to = DataParts.currentVersions[part]!;
@@ -482,20 +500,25 @@ class DataMigrationService {
   /// This is suitable for situations where data has been freshly restored
   /// from a backup and needs to be brought up to date, or when running
   /// migration in contexts where file system backup is not needed.
-  static Future<MigrationResult> migrateDataFormatIfNeeded() async {
+  static Future<MigrationResult> migrateDataFormatIfNeeded({
+    Set<String>? onlyParts,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
 
     final stored = await _resolvePartVersions(prefs);
+    final selectedParts = onlyParts ?? DataParts.all.toSet();
 
     final outdatedParts = DataParts.all
-        .where((p) => (stored[p] ?? 0) < DataParts.currentVersions[p]!)
+        .where((p) =>
+            selectedParts.contains(p) &&
+            (stored[p] ?? 0) < DataParts.currentVersions[p]!)
         .toList();
     if (outdatedParts.isEmpty) {
       return const MigrationResult(needsMigration: false);
     }
 
     try {
-      await _performPartMigrations(stored);
+      await _performPartMigrations(stored, onlyParts: selectedParts);
       await _recordMigratedParts(prefs, stored, outdatedParts);
       debugPrint(
         '[DataMigrationService] Per-part data format migration from '
@@ -510,6 +533,27 @@ class DataMigrationService {
       needsMigration: true,
       restartRequired: true,
     );
+  }
+
+  /// 将备份中的格式版本只应用到本次实际恢复的数据部分。
+  ///
+  /// 未恢复部分继续使用当前设备的版本标记。缺少版本信息的旧备份按
+  /// 初始格式 v0 处理，由后续迁移升级恢复的数据部分。
+  static Future<void> mergeRestoredPartVersions({
+    required Map<String, int>? backupVersions,
+    required Set<String> restoredParts,
+  }) async {
+    if (restoredParts.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final stored = await _resolvePartVersions(prefs);
+
+    for (final part in restoredParts) {
+      if (DataParts.all.contains(part)) {
+        stored[part] = backupVersions?[part] ?? 0;
+      }
+    }
+    await _savePartVersions(stored);
   }
 
   /// 迁移成功后更新版本记录：只提升实际迁移过的部分。

@@ -32,6 +32,7 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val RESTART_REQUEST_CODE = 1001
         private const val SAF_REQUEST_CODE = 1002
+        private val backupSafWriteLock = Any()
 
         // 保存 pickDirectory 的结果回调
         private var pendingSafResult: MethodChannel.Result? = null
@@ -784,6 +785,7 @@ class MainActivity : FlutterActivity() {
         result: MethodChannel.Result
     ) {
         Thread {
+            var createdBackupFile: DocumentFile? = null
             try {
                 val uri = Uri.parse(uriStr)
                 val treeDocument = DocumentFile.fromTreeUri(this, uri)
@@ -811,32 +813,54 @@ class MainActivity : FlutterActivity() {
                     return@Thread
                 }
 
-                // 删除已存在的同名文件，然后创建新文件
-                val existingFile = backupDir.findFile(fileName)
-                if (existingFile != null) {
-                    existingFile.delete()
+                // 检查与创建必须在同一把锁内，防止并发导出覆盖已有备份。
+                var destinationAlreadyExists = false
+                val newFile = synchronized(backupSafWriteLock) {
+                    if (backupDir.findFile(fileName) != null) {
+                        destinationAlreadyExists = true
+                        null
+                    } else {
+                        backupDir.createFile("application/zip", fileName)
+                    }
+                }
+                if (destinationAlreadyExists) {
+                    runOnUiThread {
+                        result.error("FILE_EXISTS", "同名备份文件已存在", null)
+                    }
+                    return@Thread
                 }
 
-                val newFile = backupDir.createFile("application/zip", fileName)
                 if (newFile == null) {
                     runOnUiThread {
                         result.error("CREATE_FILE_FAILED", "无法创建备份文件", null)
                     }
                     return@Thread
                 }
+                createdBackupFile = newFile
 
                 val outputStream = contentResolver.openOutputStream(newFile.uri)
                 if (outputStream == null) {
-                    newFile.delete()
+                    val deleted = try {
+                        newFile.delete()
+                    } catch (cleanupException: Exception) {
+                        Log.w(TAG, "SAF: 无法打开输出流后清理空备份文件失败", cleanupException)
+                        false
+                    }
+                    if (deleted) createdBackupFile = null
                     runOnUiThread {
-                        result.error("WRITE_FAILED", "无法打开输出流", null)
+                        val cleanupHint = if (deleted) {
+                            ""
+                        } else {
+                            "，且无法删除残留备份文件 $fileName，请通过系统文件管理器手动删除"
+                        }
+                        result.error("WRITE_FAILED", "无法打开输出流$cleanupHint", null)
                     }
                     return@Thread
                 }
 
                 val buf = ByteArray(65536)
-                FileInputStream(srcFile).use { input ->
-                    outputStream.use { out ->
+                outputStream.use { out ->
+                    FileInputStream(srcFile).use { input ->
                         while (true) {
                             val n = input.read(buf)
                             if (n == -1) break
@@ -848,8 +872,28 @@ class MainActivity : FlutterActivity() {
                 runOnUiThread { result.success(null) }
             } catch (e: Exception) {
                 Log.e(TAG, "SAF: 流式写入文件失败", e)
+                var cleanupFailed = false
+                val failedBackupFile = createdBackupFile
+                if (failedBackupFile != null) {
+                    try {
+                        if (failedBackupFile.delete()) {
+                            createdBackupFile = null
+                        } else {
+                            cleanupFailed = true
+                            Log.w(TAG, "SAF: 无法删除写入失败的备份文件")
+                        }
+                    } catch (cleanupException: Exception) {
+                        cleanupFailed = true
+                        Log.w(TAG, "SAF: 清理写入失败的备份文件时出错", cleanupException)
+                    }
+                }
+                val cleanupHint = if (cleanupFailed) {
+                    "；且无法删除残留备份文件 $fileName，请通过系统文件管理器手动删除"
+                } else {
+                    ""
+                }
                 runOnUiThread {
-                    result.error("WRITE_FAILED", "写入备份文件失败: ${e.message}", null)
+                    result.error("WRITE_FAILED", "写入备份文件失败: ${e.message}$cleanupHint", null)
                 }
             }
         }.start()
