@@ -58,6 +58,33 @@ class FakeMedia {
   }
 }
 
+class FakeXMLHttpRequest {
+  constructor() {
+    this.readyState = 0;
+    this.responseURL = '';
+    this.listeners = {};
+  }
+
+  open() {}
+
+  send() {}
+
+  addEventListener(type, listener) {
+    this.listeners[type] ??= [];
+    this.listeners[type].push(listener);
+  }
+
+  complete(responseURL) {
+    this.responseURL = responseURL;
+    this.readyState = 4;
+    const event = {type: 'readystatechange'};
+    for (const listener of this.listeners.readystatechange || []) {
+      listener.call(this, event);
+    }
+    this.onreadystatechange?.call(this, event);
+  }
+}
+
 function installHook(mediaElements) {
   const messages = [];
   const observers = [];
@@ -84,10 +111,6 @@ function installHook(mediaElements) {
 
     observe() {}
   }
-  class FakeXMLHttpRequest {}
-  FakeXMLHttpRequest.prototype.open = function() {};
-  FakeXMLHttpRequest.prototype.send = function() {};
-
   vm.runInNewContext(hookScript, {
     window,
     document,
@@ -98,7 +121,7 @@ function installHook(mediaElements) {
     setTimeout,
   });
 
-  return {messages, observer: observers[0]};
+  return {messages, observer: observers[0], XMLHttpRequest: FakeXMLHttpRequest};
 }
 
 test('reports a source URL changed after its media element was scanned', () => {
@@ -156,5 +179,26 @@ test('reports a source added after its media element was scanned and keeps URL d
       'https://cdn.example/initial.mp4',
       'https://cdn.example/added.mp4',
     ],
+  );
+});
+
+test('keeps redirect capture when the page assigns onreadystatechange after send', () => {
+  const {messages, XMLHttpRequest} = installHook([]);
+  const xhr = new XMLHttpRequest();
+  let pageHandlerCalls = 0;
+
+  xhr.open('GET', 'https://api.example/redirect');
+  xhr.send();
+  xhr.onreadystatechange = function(event) {
+    pageHandlerCalls++;
+    assert.equal(this, xhr);
+    assert.equal(event.type, 'readystatechange');
+  };
+  xhr.complete('https://cdn.example/video.m3u8');
+
+  assert.equal(pageHandlerCalls, 1);
+  assert.deepEqual(
+    messages.map(({url}) => url),
+    ['https://cdn.example/video.m3u8'],
   );
 });
