@@ -168,10 +168,11 @@ Future<String> executeCatCatchBlock({
           .first
           .trim()
           .toLowerCase();
-      var mimeType = selectedMimeType != null &&
-              flowMimeType(selectedMimeType) == actualType
-          ? selectedMimeType
-          : flowFileMimeType(path);
+      var mimeType = flowFileMimeType(path);
+      if (selectedMimeType != null &&
+          flowMimeType(selectedMimeType) == actualType) {
+        mimeType = selectedMimeType;
+      }
       if (actualType == IOType.audio && mimeType == 'video/mp4') {
         // Conversion changed the container, not the audio-only track kind.
         mimeType = 'audio/mp4';
