@@ -320,7 +320,8 @@ class ChatMessage {
       };
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
-    var roleStr = (map['role'] as String?) ?? '';
+    final roleRaw = map['role'];
+    var roleStr = roleRaw is String ? roleRaw : '';
     if (roleStr != 'user' && roleStr != 'assistant') {
       roleStr = 'user';
     }
@@ -418,7 +419,11 @@ class ChatMessage {
       attachments: attachments,
       isStreaming: map['isStreaming'] is bool ? map['isStreaming'] : false,
       isError: map['isError'] is bool ? map['isError'] : false,
-      reasoningContent: map['reasoningContent'] as String?,
+      // A wrong-typed optional field should not make Conversation.fromMap
+      // discard the entire message while recovering the rest of the history.
+      reasoningContent: map['reasoningContent'] is String
+          ? map['reasoningContent'] as String
+          : null,
       // Use safe casting so non-Map rawRequest/rawResponse values don't throw
       // a TypeError, which would skip the ENTIRE message in Conversation.fromMap.
       rawRequest: safeCastToMap(map['rawRequest']),
