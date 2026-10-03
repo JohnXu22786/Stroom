@@ -248,11 +248,9 @@ class BrowserCookieService {
   /// Marks an explicit backup restore so cookies can be loaded once even
   /// when the destination normally clears cookies when the browser closes.
   static Future<void> markBackupRestorePending() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_backupRestorePendingKey, true);
-    } catch (e) {
-      debugPrint('BrowserCookieService.markBackupRestorePending error: $e');
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setBool(_backupRestorePendingKey, true)) {
+      throw StateError('无法保存内置浏览器Cookies恢复状态');
     }
   }
 

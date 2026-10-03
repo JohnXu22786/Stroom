@@ -292,8 +292,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isImporting = false);
-      if (e is BackupValidationException) {
-        // 恢复开始前就失败（备份文件无效）：未删除任何数据，
+      if (e is BackupValidationException ||
+          e is BackupRestorePreflightException) {
+        // 恢复开始前就失败：未删除任何数据，
         // 错误提示已由 importBackup 弹出，无需重启。
         return;
       }
@@ -579,7 +580,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                     child: Text(
                       '手动导出可按数据类别选择内容。导入时，只恢复已勾选且备份包中包含的类别；未勾选或备份中缺少的类别保持原样。缺少的类别会自动跳过并提示。也可直接清除所选类别的数据。\n\n'
                       '文件名格式为 backup_YYYY-MM-DDTHH-MM-SS.zip。Android 文件保存在已授权的系统文件夹中，即使卸载应用或清除应用数据，仍可通过系统文件管理器访问。其他平台的保存位置及文件保留方式因平台而异。'
-                      '${kIsWeb ? '\n\nWeb 版暂不支持导出任务、Anki 闪卡数据和浏览器 Cookies。' : '\n\nAndroid/Windows 的 Cookies 按已访问域名采集，导出可能不完整；这两个平台无法完整读取设备现有 Cookies，因此勾选 Cookies 导入时会在恢复开始前中止。若要继续导入其他类别，请取消勾选 Cookies。在 Android/Windows 上，关闭 Cookies 保留或无法取得可用快照时会省略该类别；其他平台也可能因无法取得快照而省略。原生版 Anki 备份仅含数据库，不含卡片媒体文件。\n\n任务备份仅包含任务和流程记录，不会单独打包流程执行引用的本地文件；CatCatch 完成目录中的成品不会随任务类别导出，已登记到音频或视频资料库的文件会随相应类别导出。跨设备后，记录中的本机路径可能失效；任务列表的已读标记和按应用启动记录划分的近期任务会话统计不随备份迁移，导入后按目标设备的本地记录显示。'}'
+                      '${kIsWeb ? '\n\nWeb 版暂不支持导出任务、Anki 闪卡数据和浏览器 Cookies。' : '\n\nAndroid/Windows 的 Cookies 按已访问域名采集，导出可能不完整；这两个平台无法完整读取设备现有 Cookies，因此勾选 Cookies 导入时会在恢复开始前中止。若要继续导入其他类别，请取消勾选 Cookies。在 Android/Windows 上，关闭 Cookies 保留或无法取得可用快照时会省略该类别；其他平台也可能因无法取得快照而省略。在可成功导入 Cookies 的平台上，若未开启 Cookies 保留，导入的 Cookies 仅在当前内置浏览器会话中有效；关闭后下次打开会清除，需跨会话保留请开启 Cookies 保留。原生版 Anki 备份仅含数据库，不含卡片媒体文件。\n\n任务备份仅包含任务和流程记录，不会单独打包流程执行引用的本地文件；CatCatch 完成目录中的成品不会随任务类别导出，已登记到音频或视频资料库的文件会随相应类别导出。跨设备后，记录中的本机路径可能失效；任务列表的已读标记和按应用启动记录划分的近期任务会话统计不随备份迁移，导入后按目标设备的本地记录显示。'}'
                       '\n\n内置浏览器网站的本地数据（如 localStorage、IndexedDB）不会随备份导出。',
                     ),
                   ),

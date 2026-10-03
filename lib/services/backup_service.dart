@@ -46,6 +46,16 @@ class BackupValidationException implements Exception {
   String toString() => message;
 }
 
+/// Exception thrown when restoring a valid backup cannot safely begin before
+/// any existing data is touched.
+class BackupRestorePreflightException implements Exception {
+  final String message;
+  const BackupRestorePreflightException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 /// 恢复中途（已删除选中类别的现有数据之后）发现归档条目损坏时抛出。
 ///
 /// 与 [BackupValidationException] 区分：校验期失败意味着"什么都没动"，
@@ -129,8 +139,11 @@ class BackupSelection {
   /// 全量选择（所有类别）。
   static const all = BackupSelection();
 
-  /// 结构化数据快照选择：记录/配置/任务全包含，媒体与附件文件排除。
-  static const structuredOnly = BackupSelection(includeMediaFiles: false);
+  /// 结构化数据快照选择：保留结构化数据，排除媒体/附件文件和浏览器Cookies。
+  static const structuredOnly = BackupSelection(
+    includeMediaFiles: false,
+    browserCookies: false,
+  );
 
   /// 根据选择结果返回包含的类别名称列表（用于 UI 显示）。
   List<String> get selectedLabels {
@@ -1929,7 +1942,7 @@ class BackupService {
     final snapshot =
         await BrowserCookieService.snapshotCookiesForRestoreRollback();
     if (snapshot == null) {
-      throw Exception(
+      throw const BackupRestorePreflightException(
         '当前平台无法完整读取现有内置浏览器Cookies，已中止恢复以保护现有数据。',
       );
     }
@@ -1970,11 +1983,9 @@ class BackupService {
   /// On failure, restore the old live state and snapshot file.
   static Future<void> _restoreBrowserCookiesAfterDataRestore(
     BackupSelection selection,
-    Uint8List? cookieData,
-    {
+    Uint8List? cookieData, {
     required List<Map<String, dynamic>>? previousCookies,
-  },
-  ) async {
+  }) async {
     if (!selection.browserCookies || cookieData == null) return;
 
     final previousFileData = await readBackupFile('', 'browser_cookies.json');
