@@ -43,6 +43,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
 
   // 3D construction state
   ConstructionTool _current3DTool = ConstructionTool.move;
+  int _polygonSides = 6;
   String _toolInstruction = '';
 
   /// All formula rows (each is equal).
@@ -718,6 +719,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
         // Construction toolbar
         Math3DToolbar(
           activeTool: _current3DTool,
+          polygonSides: _polygonSides,
+          onPolygonSidesChanged: (sides) =>
+              setState(() => _polygonSides = sides),
           instruction: _current3DTool != ConstructionTool.move
               ? (_canvas3DKey.currentState?.constructionInstruction ??
                   _toolInstruction)
@@ -727,7 +731,6 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               _current3DTool = tool;
               _toolInstruction = '';
             });
-            _canvas3DKey.currentState?.setTool(tool);
           },
         ),
         // 3D canvas
@@ -744,6 +747,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                 child: MathCanvas3D(
                   key: _canvas3DKey,
                   currentTool: _current3DTool,
+                  polygonSides: _polygonSides,
                   onReady: () {},
                   onViewportChange: () {},
                   onObjectCreated: (obj) {

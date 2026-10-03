@@ -32,7 +32,13 @@ class ConstructionState {
   String? _validationMessage;
   Vector3D _workingPlaneNormal = Vector3D.unitZ;
 
-  ConstructionState({required this.tool});
+  final int polygonSides;
+
+  ConstructionState({required this.tool, this.polygonSides = 6}) {
+    if (polygonSides < 3 || polygonSides > 12) {
+      throw ArgumentError.value(polygonSides, 'polygonSides', 'Use 3–12 sides');
+    }
+  }
 
   /// The current step the user is on.
   int get stepIndex => _stepIndex;
@@ -78,7 +84,16 @@ class ConstructionState {
     // Reject degenerate inputs before they become part of the construction.
     // A zero-length edge or a collinear plane is not a useful object and would
     // otherwise produce invalid normals or invisible geometry.
-    if (tool == ConstructionTool.line &&
+    if (const {
+          ConstructionTool.line,
+          ConstructionTool.segment,
+          ConstructionTool.ray,
+          ConstructionTool.vector,
+          ConstructionTool.midpoint,
+          ConstructionTool.regularPolygon,
+          ConstructionTool.tetrahedron,
+          ConstructionTool.circleThreePoints,
+        }.contains(tool) &&
         _points.isNotEmpty &&
         _points.last.distanceTo(point) < 1e-9) {
       return _reject('两点不能重合，请重新选择第二个点');
@@ -88,7 +103,8 @@ class ConstructionState {
         _points.last.distanceTo(point) < 1e-9) {
       return _reject('半径必须大于 0，请重新选择半径点');
     }
-    if (tool == ConstructionTool.plane &&
+    if ((tool == ConstructionTool.plane ||
+            tool == ConstructionTool.circleThreePoints) &&
         _points.length == 2 &&
         (_points[1] - _points[0]).cross(point - _points[0]).magnitude < 1e-9) {
       return _reject('三个点不能共线，请重新选择第三个点');
@@ -159,13 +175,50 @@ class ConstructionState {
         _updatePreview();
         return ConstructionAction.complete;
 
+      case ConstructionTool.midpoint:
+      case ConstructionTool.vector:
+      case ConstructionTool.regularPolygon:
+      case ConstructionTool.tetrahedron:
+        if (_points.length >= 2) {
+          final a = _points[0];
+          final b = _points[1];
+          _result = switch (tool) {
+            ConstructionTool.midpoint =>
+              Object3D.point(a.midpoint(b), color: 0xFF2196F3),
+            ConstructionTool.vector =>
+              Object3D.vectorObj(origin: a, vector: b - a, color: 0xFF00897B),
+            ConstructionTool.regularPolygon => _createRegularPolygon(a, b),
+            _ => _createTetrahedron(a, b),
+          };
+          _updatePreview();
+          return ConstructionAction.complete;
+        }
+        _updatePreview();
+        return ConstructionAction.advanceStep;
+
+      case ConstructionTool.circleThreePoints:
+        if (_points.length >= 3) {
+          _result = _createThreePointCircle(_points[0], _points[1], _points[2]);
+          _updatePreview();
+          return ConstructionAction.complete;
+        }
+        _updatePreview();
+        return ConstructionAction.advanceStep;
+
       case ConstructionTool.line:
+      case ConstructionTool.segment:
+      case ConstructionTool.ray:
         if (_points.length >= 2) {
           _result = Object3D.line(
             _points[0],
             _points[1],
             color: 0xFF4CAF50,
-            label: 'Line${_points.length}',
+            label: ToolInfo.all[tool]!.name,
+            lineKind: switch (tool) {
+              ConstructionTool.line => Line3DKind.line,
+              ConstructionTool.ray => Line3DKind.ray,
+              _ => Line3DKind.segment,
+            },
           );
           _updatePreview();
           return ConstructionAction.complete;
@@ -319,6 +372,25 @@ class ConstructionState {
       return;
     }
 
+    if (const {
+      ConstructionTool.midpoint,
+      ConstructionTool.segment,
+      ConstructionTool.ray,
+      ConstructionTool.vector,
+      ConstructionTool.circleThreePoints,
+      ConstructionTool.regularPolygon,
+      ConstructionTool.tetrahedron,
+    }.contains(tool)) {
+      final preview = ConstructionState(tool: tool, polygonSides: polygonSides);
+      for (final existing in _points) {
+        preview.addPoint(existing, workingPlaneNormal: _workingPlaneNormal);
+      }
+      preview.addPoint(point, workingPlaneNormal: _workingPlaneNormal);
+      _previewObject = preview.result ??
+          Object3D.curve(points: [..._points, point], color: 0x60808080);
+      return;
+    }
+
     final start = _points.last;
     switch (tool) {
       case ConstructionTool.sphere:
@@ -450,6 +522,57 @@ class ConstructionState {
     } else {
       _previewObject = null;
     }
+  }
+
+  // Choose a stable plane even when the input edge is parallel to its normal.
+  Vector3D _edgePerpendicular(Vector3D edge) {
+    var perpendicular = _workingPlaneNormal.cross(edge).normalized();
+    if (perpendicular.magnitude < 1e-9) {
+      final fallback =
+          edge.normalized().x.abs() < 0.9 ? Vector3D.unitX : Vector3D.unitY;
+      perpendicular = fallback.cross(edge).normalized();
+    }
+    return perpendicular;
+  }
+
+  Object3D _createRegularPolygon(Point3D a, Point3D b) {
+    final edge = b - a;
+    final inward = _edgePerpendicular(edge);
+    final center = a.midpoint(b) +
+        inward *
+            (edge.magnitude / (2 * dart_math.tan(dart_math.pi / polygonSides)));
+    final normal = edge.cross(inward).normalized();
+    final radial = a - center;
+    final tangent = normal.cross(radial);
+    return _createPolygon(List.generate(polygonSides, (i) {
+      final angle = 2 * dart_math.pi * i / polygonSides;
+      return center +
+          radial * dart_math.cos(angle) +
+          tangent * dart_math.sin(angle);
+    }));
+  }
+
+  Object3D _createTetrahedron(Point3D a, Point3D b) {
+    final edge = b - a;
+    final inward = _edgePerpendicular(edge);
+    final normal = edge.cross(inward).normalized();
+    final c = a.midpoint(b) + inward * (edge.magnitude * dart_math.sqrt(3) / 2);
+    final baseCenter = a + ((b - a) + (c - a)) * (1 / 3);
+    final apex = baseCenter + normal * (edge.magnitude * dart_math.sqrt(2 / 3));
+    return Object3D.polyhedron(
+      vertices: [a, b, c, apex],
+      indices: [0, 2, 1, 0, 1, 3, 1, 2, 3, 2, 0, 3],
+      color: 0x80FF9800,
+    );
+  }
+
+  static Object3D _createThreePointCircle(Point3D a, Point3D b, Point3D c) {
+    final u = b - a;
+    final v = c - a;
+    final normal = u.cross(v);
+    final offset = (v.cross(normal) * u.dot(u) + normal.cross(u) * v.dot(v)) *
+        (1 / (2 * normal.dot(normal)));
+    return _createCircle(a + offset, a, planeNormal: normal.normalized());
   }
 
   /// Create a polygon from a list of vertices.

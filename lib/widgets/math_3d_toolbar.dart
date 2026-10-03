@@ -2,141 +2,147 @@ import 'package:flutter/material.dart';
 
 import '../models/math_3d_tool.dart';
 
-/// A toolbar for 3D construction tools, organized by toolbox groups.
-///
-/// Mimics the GeoGebra toolbar pattern: tools are grouped into toolboxes,
-/// the active tool is highlighted, and a tooltip shows the current instruction.
-class Math3DToolbar extends StatelessWidget {
+/// A compact, named toolbox: groups stay visible while tools scroll on phones.
+class Math3DToolbar extends StatefulWidget {
   final ConstructionTool activeTool;
   final String? instruction;
   final ValueChanged<ConstructionTool> onToolSelected;
+  final int polygonSides;
+  final ValueChanged<int>? onPolygonSidesChanged;
 
   const Math3DToolbar({
     super.key,
     required this.activeTool,
     this.instruction,
     required this.onToolSelected,
+    this.polygonSides = 6,
+    this.onPolygonSidesChanged,
   });
+
+  @override
+  State<Math3DToolbar> createState() => _Math3DToolbarState();
+}
+
+class _Math3DToolbarState extends State<Math3DToolbar> {
+  late ToolGroup _group = ToolInfo.all[widget.activeTool]!.group;
+
+  @override
+  void didUpdateWidget(Math3DToolbar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activeTool != widget.activeTool) {
+      _group = ToolInfo.all[widget.activeTool]!.group;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
-    return Container(
+    final active = ToolInfo.all[widget.activeTool]!;
+    return Material(
       color: cs.surfaceContainerLow,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Tool buttons
-          SizedBox(
-            height: 40,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              children: _buildToolGroups(cs),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              children: [
+                for (final group in ToolGroup.values)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(group.label),
+                      selected: _group == group,
+                      onSelected: (_) => setState(() => _group = group),
+                    ),
+                  ),
+              ],
             ),
           ),
-          // Instruction bar (when a tool is active)
-          if (instruction != null && activeTool != ConstructionTool.move)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              color: cs.primaryContainer.withValues(alpha: 0.3),
-              child: Row(
-                children: [
-                  Icon(Icons.touch_app, size: 16, color: cs.primary),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      instruction!,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+            child: Row(
+              children: [
+                for (final info in ToolInfo.all.values
+                    .where((info) => info.group == _group))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Tooltip(
+                      message: info.tooltip,
+                      child: Semantics(
+                        selected: info.tool == widget.activeTool,
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(80, 64),
+                            foregroundColor: info.tool == widget.activeTool
+                                ? cs.onPrimaryContainer
+                                : cs.onSurface,
+                            backgroundColor: info.tool == widget.activeTool
+                                ? cs.primaryContainer
+                                : cs.surface,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onPressed: () => widget.onToolSelected(info.tool),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(info.iconData, size: 24),
+                              const SizedBox(height: 4),
+                              Text(info.name),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                  // Cancel button
-                  GestureDetector(
-                    onTap: () => onToolSelected(ConstructionTool.move),
-                    child: Icon(Icons.close, size: 16, color: cs.error),
-                  ),
-                ],
-              ),
+              ],
             ),
+          ),
+          if (widget.activeTool == ConstructionTool.regularPolygon)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('边数：'),
+                DropdownButton<int>(
+                  value: widget.polygonSides,
+                  items: [
+                    for (var n = 3; n <= 12; n++)
+                      DropdownMenuItem(value: n, child: Text('$n'))
+                  ],
+                  onChanged: (value) {
+                    if (value != null)
+                      widget.onPolygonSidesChanged?.call(value);
+                  },
+                ),
+              ],
+            ),
+          Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${active.name} · ${widget.instruction?.isNotEmpty == true ? widget.instruction : active.tooltip}',
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                ),
+                if (widget.activeTool != ConstructionTool.move)
+                  IconButton(
+                    tooltip: '结束构造，返回选择',
+                    onPressed: () =>
+                        widget.onToolSelected(ConstructionTool.move),
+                    icon: const Icon(Icons.close, size: 20),
+                  )
+                else
+                  const SizedBox(width: 12, height: 40),
+              ],
+            ),
+          ),
         ],
       ),
     );
-  }
-
-  List<Widget> _buildToolGroups(ColorScheme cs) {
-    // Define the tool groups and the order they appear
-    const groups = [
-      [ConstructionTool.move],
-      [ConstructionTool.point],
-      [ConstructionTool.line],
-      [ConstructionTool.polygon],
-      [ConstructionTool.plane],
-      [ConstructionTool.circle, ConstructionTool.sphere],
-      [
-        ConstructionTool.cube,
-        ConstructionTool.extrudePrism,
-        ConstructionTool.pyramid,
-        ConstructionTool.cone,
-        ConstructionTool.cylinder,
-      ],
-    ];
-
-    final widgets = <Widget>[];
-
-    for (int g = 0; g < groups.length; g++) {
-      if (g > 0) {
-        // Separator between groups
-        widgets.add(Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: Container(
-            width: 1,
-            height: 24,
-            color: cs.outlineVariant.withValues(alpha: 0.5),
-          ),
-        ));
-      }
-
-      for (final tool in groups[g]) {
-        final info = ToolInfo.all[tool]!;
-        final isActive = tool == activeTool;
-        final iconColor = isActive ? cs.primary : cs.onSurface;
-
-        widgets.add(
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 1),
-            child: Tooltip(
-              message: '${info.name}: ${info.tooltip}',
-              child: Material(
-                color: isActive
-                    ? cs.primaryContainer.withValues(alpha: 0.4)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(6),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(6),
-                  onTap: () => onToolSelected(tool),
-                  child: Container(
-                    width: 34,
-                    height: 34,
-                    alignment: Alignment.center,
-                    child: Icon(
-                      info.iconData,
-                      size: 20,
-                      color: iconColor,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      }
-    }
-
-    return widgets;
   }
 }

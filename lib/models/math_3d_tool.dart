@@ -11,6 +11,13 @@ enum ConstructionTool {
 
   /// Place a free 3D point.
   point,
+  midpoint,
+  segment,
+  ray,
+  vector,
+  circleThreePoints,
+  regularPolygon,
+  tetrahedron,
 
   /// Create a line through two points.
   line,
@@ -43,13 +50,23 @@ enum ConstructionTool {
   pyramid,
 }
 
-/// 构造工具的元数据（中文）
+/// Named groups shared by the toolbar and tool metadata.
+enum ToolGroup {
+  points('点与选择'),
+  lines('线与向量'),
+  planes('平面与圆'),
+  solids('立体图形');
+
+  const ToolGroup(this.label);
+  final String label;
+}
+
 class ToolInfo {
   final ConstructionTool tool;
   final String name;
   final IconData iconData;
   final String tooltip;
-  final int group; // 所属工具组 (0-9)
+  final ToolGroup group;
 
   const ToolInfo({
     required this.tool,
@@ -62,87 +79,136 @@ class ToolInfo {
   static const Map<ConstructionTool, ToolInfo> all = {
     ConstructionTool.move: ToolInfo(
       tool: ConstructionTool.move,
-      name: '移动',
+      name: '选择与移动',
       iconData: Icons.near_me_outlined,
-      tooltip: '拖拽旋转；Shift/Ctrl+拖拽平移；右键拖拽始终旋转',
-      group: 0,
+      tooltip: '拖动点调整位置；再次点击选中的点切换平面 / 高度；空白处拖动旋转视角',
+      group: ToolGroup.points,
     ),
     ConstructionTool.point: ToolInfo(
       tool: ConstructionTool.point,
-      name: '点',
-      iconData: Icons.fiber_manual_record,
-      tooltip: '点击放置点；拖拽可调整空间高度，靠近对象时自动吸附',
-      group: 1,
+      name: '自由点',
+      iconData: Icons.add_location_alt_outlined,
+      tooltip: '点击在 z=0 新建点，向上拖动调高；再次点击选中点切换移动方式',
+      group: ToolGroup.points,
+    ),
+    ConstructionTool.midpoint: ToolInfo(
+      tool: ConstructionTool.midpoint,
+      name: '中点',
+      iconData: Icons.linear_scale,
+      tooltip: '选择两个不同的点，创建它们的中点',
+      group: ToolGroup.points,
+    ),
+    ConstructionTool.segment: ToolInfo(
+      tool: ConstructionTool.segment,
+      name: '线段',
+      iconData: Icons.horizontal_rule,
+      tooltip: '选择两个端点，创建有限线段',
+      group: ToolGroup.lines,
     ),
     ConstructionTool.line: ToolInfo(
       tool: ConstructionTool.line,
       name: '直线',
       iconData: Icons.timeline,
-      tooltip: '点击两个点创建直线',
-      group: 2,
+      tooltip: '选择两个点，创建向两端延伸的直线',
+      group: ToolGroup.lines,
+    ),
+    ConstructionTool.ray: ToolInfo(
+      tool: ConstructionTool.ray,
+      name: '射线',
+      iconData: Icons.trending_flat,
+      tooltip: '选择起点，再选择方向点',
+      group: ToolGroup.lines,
+    ),
+    ConstructionTool.vector: ToolInfo(
+      tool: ConstructionTool.vector,
+      name: '向量',
+      iconData: Icons.north_east,
+      tooltip: '选择起点和终点，创建有方向的向量',
+      group: ToolGroup.lines,
     ),
     ConstructionTool.polygon: ToolInfo(
       tool: ConstructionTool.polygon,
       name: '多边形',
-      iconData: Icons.star,
-      tooltip: '依次点击顶点，再点第一个顶点闭合',
-      group: 3,
+      iconData: Icons.polyline_outlined,
+      tooltip: '依次选择顶点，再点击首个顶点闭合',
+      group: ToolGroup.planes,
+    ),
+    ConstructionTool.regularPolygon: ToolInfo(
+      tool: ConstructionTool.regularPolygon,
+      name: '正多边形',
+      iconData: Icons.hexagon_outlined,
+      tooltip: '设置边数，再选择一条边的两个端点',
+      group: ToolGroup.planes,
     ),
     ConstructionTool.plane: ToolInfo(
       tool: ConstructionTool.plane,
-      name: '平面',
-      iconData: Icons.crop_square,
-      tooltip: '点击三个不共线点创建平面',
-      group: 4,
+      name: '三点平面',
+      iconData: Icons.layers_outlined,
+      tooltip: '选择三个不共线的点',
+      group: ToolGroup.planes,
+    ),
+    ConstructionTool.circle: ToolInfo(
+      tool: ConstructionTool.circle,
+      name: '圆（圆心与点）',
+      iconData: Icons.circle_outlined,
+      tooltip: '选择圆心，再选择圆周上的点',
+      group: ToolGroup.planes,
+    ),
+    ConstructionTool.circleThreePoints: ToolInfo(
+      tool: ConstructionTool.circleThreePoints,
+      name: '三点圆',
+      iconData: Icons.motion_photos_on_outlined,
+      tooltip: '选择三个不共线的点，创建经过它们的圆',
+      group: ToolGroup.planes,
+    ),
+    ConstructionTool.cube: ToolInfo(
+      tool: ConstructionTool.cube,
+      name: '正六面体',
+      iconData: Icons.view_in_ar_outlined,
+      tooltip: '选择一条棱的两个端点',
+      group: ToolGroup.solids,
+    ),
+    ConstructionTool.tetrahedron: ToolInfo(
+      tool: ConstructionTool.tetrahedron,
+      name: '正四面体',
+      iconData: Icons.change_history_outlined,
+      tooltip: '选择一条棱的两个端点，创建六条等长棱',
+      group: ToolGroup.solids,
     ),
     ConstructionTool.sphere: ToolInfo(
       tool: ConstructionTool.sphere,
       name: '球体',
-      iconData: Icons.language,
-      tooltip: '点击球心，再在空间工作平面拖拽半径点',
-      group: 5,
-    ),
-    ConstructionTool.circle: ToolInfo(
-      tool: ConstructionTool.circle,
-      name: '圆',
-      iconData: Icons.radio_button_unchecked,
-      tooltip: '点击圆心，再点击圆周上一点',
-      group: 5,
-    ),
-    ConstructionTool.cube: ToolInfo(
-      tool: ConstructionTool.cube,
-      name: '立方体',
-      iconData: Icons.view_in_ar,
-      tooltip: '点击两个点作为底面棱边',
-      group: 6,
+      iconData: Icons.public,
+      tooltip: '选择球心，再选择球面上的点',
+      group: ToolGroup.solids,
     ),
     ConstructionTool.extrudePrism: ToolInfo(
       tool: ConstructionTool.extrudePrism,
-      name: '拉伸棱柱',
-      iconData: Icons.layers,
-      tooltip: '依次点击三角形底面三个顶点，再拖拽设置垂直高度',
-      group: 6,
+      name: '三棱柱',
+      iconData: Icons.account_tree_outlined,
+      tooltip: '选择底面三个顶点，再设置垂直高度',
+      group: ToolGroup.solids,
+    ),
+    ConstructionTool.pyramid: ToolInfo(
+      tool: ConstructionTool.pyramid,
+      name: '三棱锥',
+      iconData: Icons.details_outlined,
+      tooltip: '选择底面三个顶点，再选择顶点',
+      group: ToolGroup.solids,
     ),
     ConstructionTool.cone: ToolInfo(
       tool: ConstructionTool.cone,
       name: '圆锥',
-      iconData: Icons.expand_less,
-      tooltip: '点击底面圆心、半径点，再点击顶点',
-      group: 6,
+      iconData: Icons.signal_cellular_4_bar,
+      tooltip: '选择底面圆心、半径点，再选择顶点',
+      group: ToolGroup.solids,
     ),
     ConstructionTool.cylinder: ToolInfo(
       tool: ConstructionTool.cylinder,
       name: '圆柱',
-      iconData: Icons.wifi_tethering,
-      tooltip: '点击底面圆心、半径点，再点击顶面圆心',
-      group: 6,
-    ),
-    ConstructionTool.pyramid: ToolInfo(
-      tool: ConstructionTool.pyramid,
-      name: '棱锥',
-      iconData: Icons.change_history,
-      tooltip: '依次点击三角形底面三个顶点，再点击棱锥顶点',
-      group: 6,
+      iconData: Icons.storage_outlined,
+      tooltip: '选择底面圆心、半径点，再选择顶面圆心',
+      group: ToolGroup.solids,
     ),
   };
 }
@@ -169,13 +235,78 @@ class ConstructionWorkflow {
   const ConstructionWorkflow({required this.tool, required this.steps});
 
   static const Map<ConstructionTool, ConstructionWorkflow> workflows = {
+    ConstructionTool.midpoint: ConstructionWorkflow(
+      tool: ConstructionTool.midpoint,
+      steps: [
+        ConstructionStep(
+            instruction: '选择或创建第一个点', instructionEn: 'Select point 1'),
+        ConstructionStep(
+            instruction: '选择或创建第二个点', instructionEn: 'Select point 2'),
+      ],
+    ),
+    ConstructionTool.segment: ConstructionWorkflow(
+      tool: ConstructionTool.segment,
+      steps: [
+        ConstructionStep(
+            instruction: '选择线段的第一个端点', instructionEn: 'Select point 1'),
+        ConstructionStep(
+            instruction: '选择线段的第二个端点', instructionEn: 'Select point 2'),
+      ],
+    ),
+    ConstructionTool.ray: ConstructionWorkflow(
+      tool: ConstructionTool.ray,
+      steps: [
+        ConstructionStep(
+            instruction: '选择射线起点', instructionEn: 'Select point 1'),
+        ConstructionStep(
+            instruction: '选择射线方向点', instructionEn: 'Select point 2'),
+      ],
+    ),
+    ConstructionTool.vector: ConstructionWorkflow(
+      tool: ConstructionTool.vector,
+      steps: [
+        ConstructionStep(
+            instruction: '选择向量起点', instructionEn: 'Select point 1'),
+        ConstructionStep(
+            instruction: '选择向量终点', instructionEn: 'Select point 2'),
+      ],
+    ),
+    ConstructionTool.circleThreePoints: ConstructionWorkflow(
+      tool: ConstructionTool.circleThreePoints,
+      steps: [
+        ConstructionStep(
+            instruction: '选择圆上的第一个点', instructionEn: 'Select point 1'),
+        ConstructionStep(
+            instruction: '选择圆上的第二个点', instructionEn: 'Select point 2'),
+        ConstructionStep(
+            instruction: '选择圆上的第三个点（不能共线）', instructionEn: 'Select point 3'),
+      ],
+    ),
+    ConstructionTool.regularPolygon: ConstructionWorkflow(
+      tool: ConstructionTool.regularPolygon,
+      steps: [
+        ConstructionStep(
+            instruction: '选择一条边的第一个端点', instructionEn: 'Select point 1'),
+        ConstructionStep(
+            instruction: '选择一条边的第二个端点', instructionEn: 'Select point 2'),
+      ],
+    ),
+    ConstructionTool.tetrahedron: ConstructionWorkflow(
+      tool: ConstructionTool.tetrahedron,
+      steps: [
+        ConstructionStep(
+            instruction: '选择一条棱的第一个端点', instructionEn: 'Select point 1'),
+        ConstructionStep(
+            instruction: '选择一条棱的第二个端点', instructionEn: 'Select point 2'),
+      ],
+    ),
     ConstructionTool.point: ConstructionWorkflow(
       tool: ConstructionTool.point,
       steps: [
         ConstructionStep(
-          instruction: '点击或拖拽放置空间点（靠近对象会自动吸附）',
+          instruction: '点击在 z=0 放置点；向上拖动调高；点击选中点切换平面 / 高度',
           instructionEn:
-              'Click or drag to place a spatial point (snaps near objects)',
+              'Place on z=0; drag up for height; tap a selected point to switch mode',
           clickCount: 1,
         ),
       ],
