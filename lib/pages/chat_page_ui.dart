@@ -579,6 +579,24 @@ extension _ChatPageUiExt on _ChatPageState {
     final isTemporary = conversation?.isTemporary ?? false;
     final temporaryExpiresAt =
         isTemporary ? conversation!.temporaryExpiresAt : null;
+    final titleText = Text(
+      title,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        color: cs.onSurface,
+      ),
+    );
+    final titleWidget = conversation == null
+        ? titleText
+        : Tooltip(
+            message: '编辑对话标题',
+            child: GestureDetector(
+              onTap: () => _showRenameConversationDialog(conversation),
+              child: titleText,
+            ),
+          );
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -614,19 +632,7 @@ extension _ChatPageUiExt on _ChatPageState {
                   // 临时对话倒计时胶囊（标题前）
                   if (temporaryExpiresAt != null)
                     TemporaryCountdownCapsule(expiresAt: temporaryExpiresAt),
-                  Flexible(
-                    child: Text(
-                      title,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface,
-                      ),
-                    ),
-                  ),
+                  Flexible(child: titleWidget),
                   if (_developerMode)
                     Container(
                       margin: const EdgeInsets.only(left: 6),
@@ -686,6 +692,58 @@ extension _ChatPageUiExt on _ChatPageState {
         ],
       ),
     );
+  }
+
+  void _showRenameConversationDialog(Conversation conversation) {
+    final controller = TextEditingController(text: conversation.title);
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('重命名对话'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '输入新名称',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (_) => _saveConversationTitle(
+            dialogContext,
+            conversation,
+            controller,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => _saveConversationTitle(
+              dialogContext,
+              conversation,
+              controller,
+            ),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    ).whenComplete(controller.dispose);
+  }
+
+  void _saveConversationTitle(
+    BuildContext dialogContext,
+    Conversation conversation,
+    TextEditingController controller,
+  ) {
+    final title = controller.text.trim();
+    if (title.isNotEmpty) {
+      ref.read(conversationsProvider.notifier).renameConversation(
+            conversation.id,
+            title,
+          );
+    }
+    Navigator.of(dialogContext).pop();
   }
 
   /// Banner shown when no chat API is configured.
