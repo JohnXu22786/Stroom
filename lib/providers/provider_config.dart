@@ -31,10 +31,20 @@ bool isMcpProviderConfigEnabled(
   ProviderConfigItem config,
   List<McpProviderGroup> groups,
 ) {
-  final groupId =
-      config.groupId ?? defaultMcpGroupIdForProvider(config.providerName);
+  final groupId = config.groupId ?? defaultMcpGroupIdForConfig(config);
   return groups.where((group) => group.id == groupId).firstOrNull?.enabled ??
       true;
+}
+
+String defaultMcpGroupIdForConfig(ProviderConfigItem config) {
+  final stableHttpToolName = config.models.isNotEmpty &&
+          config.models[0].typeConfig['isHttpTool'] == true
+      ? config.models[0].name
+      : null;
+  return defaultMcpGroupIdForProvider(
+    config.providerName,
+    stableHttpToolName: stableHttpToolName,
+  );
 }
 
 String? mcpProviderConfigToolName(ProviderConfigItem config) {
@@ -226,8 +236,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           for (final config in entry.configs) {
             if (config.groupId == null ||
                 !validGroupIds.contains(config.groupId)) {
-              config.groupId =
-                  defaultMcpGroupIdForProvider(config.providerName);
+              config.groupId = defaultMcpGroupIdForConfig(config);
               groupAssignmentsChanged = true;
             }
           }
