@@ -25,7 +25,7 @@ import 'backup_location_manager.dart';
 //            SAF 未配置时回退到应用 Documents 目录的 Stroom/Logs/。
 // - iOS:     <app_documents>/Stroom/Logs/
 //
-// 日志保留策略：保留最近 3 天（按文件日期计）。超过 3 天的日志文件
+// 日志保留策略：保留最近 15 天（按文件日期计）。超过 15 天的日志文件
 // 会自动清理。每个小时内产生的所有日志写入同一个文件，方便集中查看。
 // ====================================================================
 //
@@ -108,7 +108,7 @@ class AppLogService {
   }
 
   /// 日志文件保留天数。
-  static const int _retentionDays = 3;
+  static const int retentionDays = 15;
 
   /// 缓存日志目录。
   static Directory? _cachedLogDir;
@@ -501,7 +501,7 @@ class AppLogService {
 
   /// 清理超过保留天数的旧日志文件。
   ///
-  /// 保留最近 _retentionDays 天的日志文件。
+  /// 保留最近 [retentionDays] 天的日志文件。
   /// 此方法应在启动时或每日首次写入日志时调用。
   /// 文件名格式为 app_YYYY-MM-DD-HH.log，所以日期前缀是 YYYY-MM-DD。
   /// 同时也清理升级前留下的旧版日分割文件 (app_YYYY-MM-DD.log)。
@@ -514,7 +514,7 @@ class AppLogService {
       if (useSaf) {
         // SAF 模式：通过 BackupLocationManager 列出和删除
         final files = await BackupLocationManager.listLogFiles();
-        final cutoff = DateTime.now().subtract(Duration(days: _retentionDays));
+        final cutoff = DateTime.now().subtract(Duration(days: retentionDays));
         final dateOnlyMatch = RegExp(r'app_(\d{4}-\d{2}-\d{2})');
 
         for (final fileName in files) {
@@ -538,7 +538,7 @@ class AppLogService {
       if (!await logDir.exists()) return;
 
       final entries = await logDir.list().toList();
-      final cutoff = DateTime.now().subtract(Duration(days: _retentionDays));
+      final cutoff = DateTime.now().subtract(Duration(days: retentionDays));
 
       // 同时匹配新格式 (app_YYYY-MM-DD-HH.log) 和旧格式 (app_YYYY-MM-DD.log)
       // 的日期前缀。旧文件在升级后没有 -HH 后缀，必须用宽松的正则匹配。
