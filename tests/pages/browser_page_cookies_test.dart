@@ -46,14 +46,16 @@ class _RecordingCookiePlatform implements CookiePlatform {
     required String name,
     String path = '/',
     String? domain,
-  }) async => true;
+  }) async =>
+      true;
 
   @override
   Future<bool> deleteCookies({
     required WebUri url,
     String path = '/',
     String? domain,
-  }) async => true;
+  }) async =>
+      true;
 
   @override
   Future<bool> deleteAllCookies() async {

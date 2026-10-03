@@ -548,8 +548,8 @@ class _BrowserPageState extends State<BrowserPage> {
                             loadUrl: () async {
                               if (!mounted) return;
                               await controller.loadUrl(
-                                urlRequest: URLRequest(
-                                    url: WebUri(widget.initialUrl)),
+                                urlRequest:
+                                    URLRequest(url: WebUri(widget.initialUrl)),
                               );
                             },
                           );
