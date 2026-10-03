@@ -54,6 +54,7 @@ class BrowserCookieService {
     _testMode = true;
     _testCookies = null;
     _visitedDomains.clear();
+    _visitedUrls.clear();
     cookiePlatform = _AndroidLikeCookiePlatform();
   }
 
@@ -62,6 +63,7 @@ class BrowserCookieService {
     _testMode = false;
     _testCookies = null;
     _visitedDomains.clear();
+    _visitedUrls.clear();
     cookiePlatform = _RealCookiePlatform();
   }
 
@@ -80,10 +82,16 @@ class BrowserCookieService {
   /// Maximum number of hosts kept for per-domain cookie enumeration.
   static const int maxVisitedDomains = 64;
 
-  /// Records the host of a visited page URL so its cookies can be persisted
-  /// and displayed even on platforms without [CookieManager.getAllCookies].
+  /// Page URLs kept for the current browser session to discover path-scoped
+  /// cookies on platforms that cannot enumerate the complete cookie store.
+  static final Set<String> _visitedUrls = <String>{};
+
+  /// Records the host and path of a visited page URL so its cookies can be
+  /// persisted, displayed, and cleared on platforms without
+  /// [CookieManager.getAllCookies].
   static void noteVisitedUrl(String url) {
-    final host = Uri.tryParse(url)?.host;
+    final uri = Uri.tryParse(url);
+    final host = uri?.host;
     if (host == null || host.isEmpty) return;
     if (_visitedDomains.contains(host)) {
       // Re-visit: refresh recency (LinkedHashSet.add of an existing element
@@ -94,6 +102,13 @@ class BrowserCookieService {
       _visitedDomains.remove(_visitedDomains.first);
     }
     _visitedDomains.add(host);
+
+    if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+      // Cookie paths do not include URL queries or fragments. Keep the origin
+      // and path only; the set collapses repeated visits to the same path.
+      final visitedUrl = '${uri.origin}${uri.path.isEmpty ? '/' : uri.path}';
+      _visitedUrls.add(visitedUrl);
+    }
   }
 
   /// The currently tracked visited hosts (test helper).
@@ -357,31 +372,67 @@ class BrowserCookieService {
   ///
   /// [domain] should be a domain name like "example.com".
   /// Leading dots (e.g. ".example.com") are automatically stripped.
-  /// Cookies stored at non-root paths may survive on the platform side
-  /// (the native API can only expire cookies at the given path).
+  /// Cookies at known paths are expired separately because the native API
+  /// only expires cookies at the given path.
+  /// Returns false when the platform cannot provide a complete cookie
+  /// snapshot, since URL-filtered queries cannot prove every path was cleared.
   static Future<bool> clearCookiesForDomain(String domain) async {
     try {
-      // Also remove from persisted store
-      await _removeDomainFromFile(domain);
-
       final cleanDomain = domain.startsWith('.') ? domain.substring(1) : domain;
       if (cleanDomain.isEmpty) return false;
 
-      final httpsUrl = WebUri('https://$cleanDomain');
-      final httpUrl = WebUri('http://$cleanDomain');
+      // The native delete API operates on one path at a time. Preserve the
+      // paths from the saved snapshot before removing that domain, and add
+      // paths from a complete platform snapshot where the platform supports
+      // getAllCookies (iOS/macOS).
+      final paths = <String>{'/'};
+      var completePlatformSnapshot = false;
+
+      try {
+        _addCookiePathsForDomain(await _readCookiesFile(), cleanDomain, paths);
+      } catch (e) {
+        debugPrint(
+            'BrowserCookieService.clearCookiesForDomain path read error: $e');
+      }
+      try {
+        final allCookies = await cookiePlatform.getAllCookies();
+        completePlatformSnapshot = true;
+        _addCookiePathsForDomain(
+            allCookies.map(_cookieToMap), cleanDomain, paths);
+      } on UnimplementedError {
+        // Android/Windows do not expose a complete cookie snapshot.
+        await _addPathsFromVisitedUrls(cleanDomain, paths);
+      } catch (e) {
+        debugPrint(
+            'BrowserCookieService.clearCookiesForDomain platform read error: $e');
+        await _addPathsFromVisitedUrls(cleanDomain, paths);
+      }
+
+      // Also remove from persisted store after collecting the paths it knows.
+      await _removeDomainFromFile(domain);
 
       // Expire both host-only and domain cookies (leading-dot domain) at
-      // the root path, over both schemes.
-      final results = await Future.wait([
-        cookiePlatform.deleteCookies(url: httpsUrl, path: '/'),
-        cookiePlatform.deleteCookies(
-            url: httpsUrl, path: '/', domain: '.$cleanDomain'),
-        cookiePlatform.deleteCookies(url: httpUrl, path: '/'),
-        cookiePlatform.deleteCookies(
-            url: httpUrl, path: '/', domain: '.$cleanDomain'),
-      ]);
+      // every known path, over both schemes.
+      final deleteCalls = <Future<bool>>[];
+      for (final path in paths) {
+        // The native implementation enumerates cookies applicable to the URL
+        // before expiring them, so the URL itself must match the cookie path.
+        final urlPath =
+            path == '/' ? '' : (path.startsWith('/') ? path : '/$path');
+        final httpsUrl = WebUri('https://$cleanDomain$urlPath');
+        final httpUrl = WebUri('http://$cleanDomain$urlPath');
+        deleteCalls.addAll([
+          cookiePlatform.deleteCookies(url: httpsUrl, path: path),
+          cookiePlatform.deleteCookies(
+              url: httpsUrl, path: path, domain: '.$cleanDomain'),
+          cookiePlatform.deleteCookies(url: httpUrl, path: path),
+          cookiePlatform.deleteCookies(
+              url: httpUrl, path: path, domain: '.$cleanDomain'),
+        ]);
+      }
+      final results = await Future.wait(deleteCalls);
 
-      return results.every((r) => r);
+      return completePlatformSnapshot && results.every((r) => r);
     } catch (e) {
       debugPrint('BrowserCookieService.clearCookiesForDomain error: $e');
       return false;
@@ -503,6 +554,55 @@ class BrowserCookieService {
       return normalizedHost == domain ||
           (isDomainCookie && normalizedHost.endsWith('.$domain'));
     });
+  }
+
+  /// Adds the paths belonging to [domain] from a set of cookie records.
+  /// [hostForNullDomain] is used for host-only cookies returned by a URL query.
+  static void _addCookiePathsForDomain(
+      Iterable<Map<String, dynamic>> cookies, String domain, Set<String> paths,
+      {String? hostForNullDomain}) {
+    for (final cookie in cookies) {
+      final cookieDomain = cookie['domain'] ?? hostForNullDomain;
+      if (cookieDomain is! String) continue;
+      final cleanCookieDomain = cookieDomain.startsWith('.')
+          ? cookieDomain.substring(1)
+          : cookieDomain;
+      if (cleanCookieDomain.toLowerCase() != domain.toLowerCase()) continue;
+      final path = cookie['path'];
+      if (path is String && path.isNotEmpty) paths.add(path);
+    }
+  }
+
+  /// Queries each recent visited URL in [domain]'s host tree and adds the
+  /// paths of matching live cookies. This provides path discovery on
+  /// Android/Windows, where [CookiePlatform.getAllCookies] is unavailable and
+  /// retention may be disabled so the file has no path records.
+  static Future<void> _addPathsFromVisitedUrls(
+      String domain, Set<String> paths) async {
+    final normalizedDomain = domain.toLowerCase();
+    final urls = _visitedUrls.where((url) {
+      final host = Uri.tryParse(url)?.host.toLowerCase();
+      return host != null &&
+          (host == normalizedDomain || host.endsWith('.$normalizedDomain'));
+    });
+
+    await Future.wait(urls.map((url) async {
+      final uri = Uri.parse(url);
+      try {
+        // HTTPS exposes both secure and non-secure cookies for this URL path.
+        final cookies = await cookiePlatform.getCookies(
+            url: WebUri(uri.replace(scheme: 'https').toString()));
+        _addCookiePathsForDomain(
+          cookies.map(_cookieToMap),
+          domain,
+          paths,
+          hostForNullDomain: uri.host,
+        );
+      } catch (e) {
+        debugPrint(
+            'BrowserCookieService._addPathsFromVisitedUrls: $url error: $e');
+      }
+    }));
   }
 
   /// Converts a [Cookie] object to a serializable map.
