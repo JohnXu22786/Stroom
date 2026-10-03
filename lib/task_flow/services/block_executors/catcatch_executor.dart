@@ -163,11 +163,8 @@ Future<String> executeCatCatchBlock({
         );
       }
       onOutputType?.call(actualType);
-      final selectedMimeType = task.selectedMedia?.mimeType
-          ?.split(';')
-          .first
-          .trim()
-          .toLowerCase();
+      final selectedMimeType =
+          task.selectedMedia?.mimeType?.split(';').first.trim().toLowerCase();
       var mimeType = flowFileMimeType(path);
       if (selectedMimeType != null &&
           flowMimeType(selectedMimeType) == actualType) {
