@@ -704,7 +704,7 @@ class ProviderEntry {
   List<ProviderConfigItem> configs;
 
   /// 条目启用总开关。目前仅 MCP 条目使用（MCP 列表页的"MCP总开关"）：
-  /// 关闭后 MCP 服务器工具不再发布，助手页面与对话页都不再显示。
+  /// 关闭后 MCP 服务器工具和内置搜索工具不再提供给助手与对话。
   /// 其它类型条目不使用该字段，缺省为 true 保持原有行为。
   final bool enabled;
 
