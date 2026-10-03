@@ -97,6 +97,9 @@ class MathParameter {
   /// Exact entries between ticks retain the strict numeric presentation.
   String formatValue([double? number]) {
     final displayed = number ?? value;
+    if (number == null && displayed != snap(displayed)) {
+      return displayed.toString();
+    }
     if (displayed.abs() >= 1e14 || displayed != snap(displayed)) {
       return formatMathParameterNumber(displayed);
     }

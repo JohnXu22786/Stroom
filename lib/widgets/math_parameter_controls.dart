@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models/math_expression.dart';
 import '../models/math_parameter.dart';
+import 'math_keyboard.dart';
 
 /// Compact controls intended to share the formula list's scrolling viewport.
 class MathParameterControls extends StatelessWidget {
@@ -179,6 +181,12 @@ class _ParameterDialogState extends State<_ParameterDialog> {
     'max': TextEditingController(text: widget.parameter.max.toString()),
     'step': TextEditingController(text: widget.parameter.step.toString()),
   };
+  static const _labels = {
+    'value': '数值',
+    'min': '最小值',
+    'max': '最大值',
+    'step': '步长',
+  };
   Map<String, String> _errors = {};
 
   @override
@@ -193,7 +201,7 @@ class _ParameterDialogState extends State<_ParameterDialog> {
     final errors = <String, String>{};
     final numbers = <String, double>{};
     for (final entry in _controllers.entries) {
-      final number = double.tryParse(entry.value.text.trim());
+      final number = _parseNumericExpression(entry.value.text);
       if (number == null || !number.isFinite) {
         errors[entry.key] = '请输入有限数值';
       } else {
@@ -237,6 +245,112 @@ class _ParameterDialogState extends State<_ParameterDialog> {
     }
   }
 
+  double? _parseNumericExpression(String source) {
+    final direct = double.tryParse(source.trim());
+    if (direct != null) return direct.isFinite ? direct : null;
+
+    final numericSyntax = source.replaceAll(RegExp(r'\s+'), '');
+    final token = RegExp(
+        r'(?:sqrt|abs|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|[+\-*/%^()])');
+    var offset = 0;
+    for (final match in token.allMatches(numericSyntax)) {
+      if (match.start != offset) return null;
+      offset = match.end;
+    }
+    if (offset != numericSyntax.length) return null;
+
+    final expression = MathExpression.fromInput(source);
+    if (!expression.isValid ||
+        expression.type != MathExpressionType.explicit ||
+        expression.parameters.isNotEmpty) {
+      return null;
+    }
+
+    try {
+      final value = expression.evaluator(0);
+      return value.isFinite ? value : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _openMathKeyboard(String key) async {
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => MathNumericKeyboard(
+        activeLabel: _labels[key]!,
+        onDismiss: () => Navigator.of(sheetContext).pop(),
+        onInsert: (text, {cursorFromEnd}) =>
+            _insertText(key, text, cursorFromEnd: cursorFromEnd),
+        onBackspace: () => _deleteText(key),
+        onMoveCaret: (direction) => _moveCaret(key, direction),
+      ),
+    );
+  }
+
+  TextSelection _selection(TextEditingValue value) {
+    if (!value.selection.isValid) {
+      return TextSelection.collapsed(offset: value.text.length);
+    }
+    return TextSelection(
+      baseOffset:
+          value.selection.baseOffset.clamp(0, value.text.length).toInt(),
+      extentOffset:
+          value.selection.extentOffset.clamp(0, value.text.length).toInt(),
+    );
+  }
+
+  void _insertText(String key, String text, {int? cursorFromEnd}) {
+    final controller = _controllers[key]!;
+    final value = controller.value;
+    final selection = _selection(value);
+    final nextText = value.text.replaceRange(
+      selection.start,
+      selection.end,
+      text,
+    );
+    final caret = (selection.start + text.length - (cursorFromEnd ?? 0))
+        .clamp(0, nextText.length)
+        .toInt();
+    controller.value = TextEditingValue(
+      text: nextText,
+      selection: TextSelection.collapsed(offset: caret),
+    );
+    setState(() => _errors.remove(key));
+  }
+
+  void _deleteText(String key) {
+    final controller = _controllers[key]!;
+    final value = controller.value;
+    final selection = _selection(value);
+    if (selection.isCollapsed && selection.start == 0) return;
+    final start = selection.isCollapsed ? selection.start - 1 : selection.start;
+    final nextText = value.text.replaceRange(start, selection.end, '');
+    controller.value = TextEditingValue(
+      text: nextText,
+      selection: TextSelection.collapsed(offset: start),
+    );
+    setState(() => _errors.remove(key));
+  }
+
+  void _moveCaret(String key, int direction) {
+    final controller = _controllers[key]!;
+    final value = controller.value;
+    final selection = _selection(value);
+    final offset = selection.isCollapsed
+        ? selection.extentOffset + direction
+        : direction < 0
+            ? selection.start
+            : selection.end;
+    controller.selection = TextSelection.collapsed(
+      offset: offset.clamp(0, value.text.length).toInt(),
+    );
+  }
+
   Widget _field(String key, String label, {bool last = false}) => Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: TextFormField(
@@ -250,6 +364,11 @@ class _ParameterDialogState extends State<_ParameterDialog> {
             errorText: _errors[key],
             errorMaxLines: 2,
             border: const OutlineInputBorder(),
+            suffixIcon: IconButton(
+              tooltip: '使用数学键盘',
+              icon: const Icon(Icons.calculate_outlined),
+              onPressed: () => _openMathKeyboard(key),
+            ),
           ),
         ),
       );

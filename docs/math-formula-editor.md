@@ -90,9 +90,12 @@ sliders, with an initial value of 1 and range -5 to 5. The same case-sensitive
 name uses the same value across visible formulas. Dragging a slider redraws the
 committed curves without submitting formula drafts. Click a value or its settings
 button to edit the value, minimum, maximum and step (initially 0.1).
-The dialog rejects nonfinite values, reversed ranges and invalid steps; changing
-the range clamps the value to its bounds. Slider steps start at the minimum;
-if the range does not divide evenly, its final tick stays below the maximum.
+Each field accepts the system keyboard or a numeric-only math keyboard with
+arithmetic, absolute-value and square-root keys; variables and named constants
+are rejected. The dialog rejects nonfinite values, reversed ranges and invalid
+steps; changing the range clamps the value to its bounds. Slider steps start at
+the minimum; if the range does not divide evenly, its final tick stays below the
+maximum.
 Typing a numeric value preserves it exactly rather than rounding to a slider tick.
 Keyboard arrows and screen-reader adjustments visit the same configured ticks;
 from a typed value between ticks, they move to the next tick in that direction.

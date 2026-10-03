@@ -270,7 +270,7 @@ class _MathKeyboardState extends State<MathKeyboard> {
 
   Widget _latinKeys() => Column(children: [
         Row(children: [
-          for (final number in '1234567890.'.split(''))
+          for (final number in '1234567890'.split(''))
             _latinCell(_key(_MathKey(number, number))),
         ]),
         for (var row = 0; row < _latinRows.length; row++)
@@ -283,6 +283,9 @@ class _MathKeyboardState extends State<MathKeyboard> {
                       _shifted ? letter.toUpperCase() : letter)),
                   flex: row == 0 ? 1 : 2),
             if (row == 1) const Spacer(),
+            if (row == 2)
+              _latinCell(_key(const _MathKey('.', '.', description: '小数点')),
+                  flex: 2),
             if (row == 2)
               _latinCell(
                   _key(const _MathKey('⌫', '', command: 'deleteBackward')),
@@ -374,6 +377,190 @@ class _MathKey {
   final String label, value;
   final String? command, description;
   const _MathKey(this.label, this.value, {this.command, this.description});
+}
+
+typedef NumericMathInsert =
+    void Function(String text, {int? cursorFromEnd});
+
+/// Numeric-only text input for parameter expressions. The keys expose no
+/// variables or named constants; function names are inserted only by the
+/// square-root and absolute-value templates.
+class MathNumericKeyboard extends StatelessWidget {
+  final String activeLabel;
+  final NumericMathInsert onInsert;
+  final VoidCallback onBackspace;
+  final ValueChanged<int> onMoveCaret;
+  final VoidCallback onDismiss;
+
+  const MathNumericKeyboard({
+    super.key,
+    required this.activeLabel,
+    required this.onInsert,
+    required this.onBackspace,
+    required this.onMoveCaret,
+    required this.onDismiss,
+  });
+
+  static const _rows = <List<_NumericMathKey>>[
+    [
+      _NumericMathKey('7', '7'),
+      _NumericMathKey('8', '8'),
+      _NumericMathKey('9', '9'),
+      _NumericMathKey('+', '+'),
+      _NumericMathKey('−', '-'),
+      _NumericMathKey('×', '*'),
+    ],
+    [
+      _NumericMathKey('4', '4'),
+      _NumericMathKey('5', '5'),
+      _NumericMathKey('6', '6'),
+      _NumericMathKey('÷', '/'),
+      _NumericMathKey('(', '('),
+      _NumericMathKey(')', ')'),
+    ],
+    [
+      _NumericMathKey('1', '1'),
+      _NumericMathKey('2', '2'),
+      _NumericMathKey('3', '3'),
+      _NumericMathKey(
+        '√',
+        'sqrt()',
+        cursorFromEnd: 1,
+        description: '平方根',
+      ),
+      _NumericMathKey(
+        '|□|',
+        'abs()',
+        cursorFromEnd: 1,
+        description: '绝对值',
+      ),
+      _NumericMathKey(
+        '^',
+        '^()',
+        cursorFromEnd: 1,
+        description: '乘方',
+      ),
+    ],
+    [
+      _NumericMathKey('0', '0'),
+      _NumericMathKey('.', '.'),
+      _NumericMathKey.action('⌫', _NumericMathAction.backspace),
+      _NumericMathKey(
+        '□/□',
+        '()/()',
+        cursorFromEnd: 4,
+        description: '分数',
+      ),
+      _NumericMathKey.action('←', _NumericMathAction.moveLeft),
+      _NumericMathKey.action('→', _NumericMathAction.moveRight),
+    ],
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surfaceContainer,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 44,
+                child: Row(children: [
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '$activeLabel · 数学键盘（仅数值）',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 12, color: colors.onSurfaceVariant),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: onDismiss,
+                    tooltip: '收起数学键盘',
+                    icon: const Icon(Icons.keyboard_hide),
+                  ),
+                ]),
+              ),
+              for (final row in _rows)
+                Row(
+                  children: [
+                    for (final key in row)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: SizedBox(
+                            height: 44,
+                            child: Tooltip(
+                              message: key.description ?? key.label,
+                              child: FilledButton.tonal(
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.all(2),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
+                                onPressed: () => _press(key),
+                                child: key.action ==
+                                        _NumericMathAction.backspace
+                                    ? const Icon(Icons.backspace_outlined,
+                                        size: 20)
+                                    : Text(key.label,
+                                        maxLines: 1,
+                                        style: const TextStyle(fontSize: 18)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _press(_NumericMathKey key) {
+    switch (key.action) {
+      case _NumericMathAction.backspace:
+        onBackspace();
+        return;
+      case _NumericMathAction.moveLeft:
+        onMoveCaret(-1);
+        return;
+      case _NumericMathAction.moveRight:
+        onMoveCaret(1);
+        return;
+      case null:
+        onInsert(key.value!, cursorFromEnd: key.cursorFromEnd);
+        return;
+    }
+  }
+}
+
+enum _NumericMathAction { backspace, moveLeft, moveRight }
+
+class _NumericMathKey {
+  final String label;
+  final String? value;
+  final int? cursorFromEnd;
+  final _NumericMathAction? action;
+  final String? description;
+
+  const _NumericMathKey(this.label, this.value,
+      {this.cursorFromEnd, this.action, this.description});
+
+  const _NumericMathKey.action(this.label, this.action, {this.description})
+      : value = null,
+        cursorFromEnd = null;
 }
 
 const _categoryDescriptions = {
