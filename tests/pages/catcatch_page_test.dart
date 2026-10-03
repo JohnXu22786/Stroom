@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/catcatch/widgets/draggable_floating_panel.dart';
+import 'package:stroom/pages/browser_page.dart';
 import 'package:stroom/pages/catcatch_page.dart';
+import 'package:stroom/services/browser_cookie_service.dart';
 
 void main() {
   group('CatCatchPage - Multi-card & Bottom Bar', () {
@@ -331,6 +335,8 @@ void main() {
   // ====================================================================
 
   group('CatCatchPage - browser capture hand-off', () {
+    const capturedUrl = 'https://cdn.example.com/video.mp4';
+
     // A stand-in for BrowserPage (which needs a platform WebView and cannot
     // run in widget tests): pops with [popResult] like the real page.
     Widget fakeBrowser({required String? popResult}) {
@@ -344,31 +350,46 @@ void main() {
       );
     }
 
-    testWidgets('captured URL pre-fills a new task card', (tester) async {
+    testWidgets('confirm capture returns the selected URL and pre-fills a task',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      BrowserCookieService.enableTestMode();
+      addTearDown(BrowserCookieService.disableTestMode);
+
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
             home: CatCatchPage(
-              browserPageBuilder: (_) =>
-                  fakeBrowser(popResult: 'https://cdn.example.com/video.mp4'),
+              browserPageBuilder: (_) => BrowserPage(
+                testBodyBuilder: (_, onConfirmCapture) => Scaffold(
+                  body: DraggableFloatingPanel(
+                    detectedUrls: const [capturedUrl],
+                    onConfirmCapture: onConfirmCapture,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
       );
       await tester.pump();
 
-      // Open the built-in browser (fake stand-in).
+      // Open BrowserPage with its real capture callback and no native WebView.
       await tester.tap(find.byIcon(Icons.language));
       await tester.pumpAndSettle();
-      expect(find.text('fake browser'), findsOneWidget);
+      expect(find.text(capturedUrl), findsOneWidget);
 
-      // Confirm a capture in the browser — it pops with the selected URL.
-      await tester.tap(find.text('fake browser'));
+      // Select the detected URL and confirm it. The route result should return
+      // immediately, without requiring the snackbar's separate Download action.
+      await tester.tap(find.text(capturedUrl));
+      await tester.pump();
+      await tester.tap(find.text('确认捕获'));
       await tester.pumpAndSettle();
 
       // Back on the page: a new task card is pre-filled with the URL and a
       // confirmation snackbar is shown.
-      expect(find.text('https://cdn.example.com/video.mp4'), findsOneWidget);
+      expect(find.text(capturedUrl), findsOneWidget);
+      expect(find.byType(TextFormField), findsNWidgets(4));
       expect(find.textContaining('已从浏览器捕获'), findsOneWidget);
     });
 
