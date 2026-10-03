@@ -558,8 +558,10 @@ class BrowserCookieService {
       {String? path}) async {
     if (name.isEmpty) return false;
     try {
-      // Also remove from persisted store
-      await _removeCookieFromFile(domain, name, path: path);
+      // Serialize the retained-file read/modify/write with other retention
+      // operations, while keeping native deletion calls outside the queue.
+      await _serializeRetentionOperation(
+          () => _removeCookieFromFile(domain, name, path: path));
 
       final cleanDomain = domain.startsWith('.') ? domain.substring(1) : domain;
       if (cleanDomain.isEmpty) return false;
