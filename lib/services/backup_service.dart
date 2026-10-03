@@ -2665,12 +2665,119 @@ class BackupService {
     onProgress?.call(1.0);
   }
 
+  /// Returns attachment-store keys referenced by task-flow configuration or
+  /// execution data, so clearing chat attachments does not break unselected
+  /// task flows. A null result means the references could not be read safely.
+  static Future<Set<String>?> _collectTaskFlowAttachmentKeys() async {
+    final preservedKeys = <String>{};
+    try {
+      final isWebStore = kIsWeb || WebFileStore.isTestMode;
+      final appDir = isWebStore ? null : await AppStorage.directory;
+      final attachmentDir = appDir == null
+          ? null
+          : p.normalize(p.join(appDir, 'attachments'));
+
+      void preserveReference(String reference) {
+        final slashPath = reference.replaceAll('\\', '/');
+        final webPath = p.posix.normalize(slashPath);
+        if (p.posix.isWithin('attachments', webPath)) {
+          preservedKeys.add(webPath);
+          return;
+        }
+        if (p.posix.isWithin('temp_edited', webPath)) {
+          preservedKeys.add(webPath);
+          preservedKeys.add(
+              p.posix.join('attachments', p.posix.basename(webPath)));
+          return;
+        }
+        if (isWebStore) return;
+
+        final normalized = p.normalize(reference);
+        String? relativePath;
+        if (p.isAbsolute(normalized) &&
+            p.isWithin(attachmentDir!, normalized)) {
+          relativePath = p.relative(normalized, from: attachmentDir);
+        } else if (!p.isAbsolute(normalized) &&
+            normalized.split(p.separator).first == 'attachments') {
+          relativePath = normalized.split(p.separator).skip(1).join('/');
+        }
+        if (relativePath == null || relativePath.isEmpty) return;
+        final normalizedRelative = p.posix.normalize(
+            relativePath.split(p.separator).join('/'));
+        if (normalizedRelative == '..' ||
+            normalizedRelative.startsWith('../')) {
+          return;
+        }
+        preservedKeys.add(p.posix.join('attachments', normalizedRelative));
+      }
+
+      void collectReferences(Object? value) {
+        if (value is String) {
+          preserveReference(value);
+        } else if (value is Map) {
+          for (final child in value.values) {
+            collectReferences(child);
+          }
+        } else if (value is Iterable) {
+          for (final child in value) {
+            collectReferences(child);
+          }
+        }
+      }
+
+      for (final fileName in const ['flows.json', 'executions.json']) {
+        Uint8List? data;
+        if (isWebStore) {
+          final key = 'task_flows/$fileName';
+          if (!await WebFileStore.exists(key)) continue;
+          data = await WebFileStore.read(key);
+        } else {
+          final file = File(p.join(appDir!, 'task_flows', fileName));
+          if (!await file.exists()) continue;
+          data = await file.readAsBytes();
+        }
+        if (data == null) return null;
+        collectReferences(jsonDecode(utf8.decode(data)));
+      }
+      return preservedKeys;
+    } catch (e) {
+      debugPrint('读取任务流附件引用失败，保留附件以避免误删: $e');
+      return null;
+    }
+  }
+
+  static Future<bool> _deleteAttachmentsExceptTaskFiles(
+      Set<String> preservedKeys) async {
+    try {
+      if (kIsWeb || WebFileStore.isTestMode) {
+        await WebFileStore.deleteByPrefixExcept('attachments/', preservedKeys);
+        await WebFileStore.deleteByPrefixExcept('temp_edited/', preservedKeys);
+        return true;
+      }
+
+      final appDir = await AppStorage.directory;
+      final attachmentDir = Directory(p.join(appDir, 'attachments'));
+      if (!await attachmentDir.exists()) return true;
+      await for (final entity
+          in attachmentDir.list(recursive: true, followLinks: false)) {
+        if (entity is! File) continue;
+        final relativePath = p.relative(entity.path, from: attachmentDir.path);
+        final key = p.posix.join(
+            'attachments', relativePath.split(p.separator).join('/'));
+        if (!preservedKeys.contains(key)) await entity.delete();
+      }
+      return true;
+    } catch (e) {
+      debugPrint('删除未被任务流引用的附件失败: $e');
+      return false;
+    }
+  }
+
   /// 删除 [selection] 中选中类别的现有文件。
   ///
   /// 恢复"勾选即清空"与清除功能共用此方法。
   /// 返回是否有删除失败（调用方决定如何处理）：
-  /// - 聊天附件：整个 attachments/ 目录/前缀删除 —— 附件全部存储在该目录，
-  ///   引用文件与无引用的孤儿文件一并清除
+  /// - 聊天附件：清理附件目录中未被未选中任务流引用的文件
   /// - 图片/音频/视频/文本：按当前数据库记录逐文件删除（Web/测试模式），
   ///   原生模式再整目录删除（清理无记录的孤儿文件）
   /// - 任务：删除 synthesis/tasks.json 和 catcatch/tasks.json
@@ -2683,19 +2790,29 @@ class BackupService {
   }) async {
     var deleteFailed = false;
 
-    // 聊天附件：附件全部存储在 attachments/ 目录，整目录/前缀删除
-    // 即可同时清掉引用文件与无引用的孤儿文件。
+    // 聊天附件与任务流输入共用 attachments/。若任务类别未选中，保留
+    // flows.json / executions.json 引用的文件，只清除其余聊天附件。
     // （includeMediaFiles=false 的结构化快照恢复不动附件文件）
     if (selection.chatRecordsAndAttachments && selection.includeMediaFiles) {
-      if (kIsWeb || WebFileStore.isTestMode) {
-        try {
-          await WebFileStore.deleteByPrefix('attachments/');
-          await WebFileStore.deleteByPrefix('temp_edited/');
-        } catch (e) {
-          debugPrint('删除附件文件失败: $e');
+      final preservedTaskFiles = selection.tasks
+          ? <String>{}
+          : await _collectTaskFlowAttachmentKeys();
+      if (preservedTaskFiles == null) {
+        deleteFailed = true;
+      } else if (preservedTaskFiles.isEmpty) {
+        if (kIsWeb || WebFileStore.isTestMode) {
+          try {
+            await WebFileStore.deleteByPrefix('attachments/');
+            await WebFileStore.deleteByPrefix('temp_edited/');
+          } catch (e) {
+            debugPrint('删除附件文件失败: $e');
+            deleteFailed = true;
+          }
+        } else if (!await _deleteDirectory('attachments')) {
           deleteFailed = true;
         }
-      } else if (!await _deleteDirectory('attachments')) {
+      } else if (!await _deleteAttachmentsExceptTaskFiles(
+          preservedTaskFiles)) {
         deleteFailed = true;
       }
     }
