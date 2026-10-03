@@ -193,4 +193,43 @@ void main() {
     }
     expect(formatMathParameterNumber(0.1 + 0.2), '0.3');
   });
+
+  test(
+      'parameter presentation cleans grid cancellation and preserves exact entry',
+      () {
+    final defaults = MathParameter(value: 0);
+    final defaultTick = defaults.snap(0.1);
+    expect(defaults.withValue(defaultTick).formatValue(), '0.1');
+    expect(defaults.formatValue(defaultTick), '0.1');
+    final fractional =
+        MathParameter(value: -0.2, min: -0.7, max: 1.2, step: 0.25);
+    expect(fractional.formatValue(fractional.snap(0.05)), '0.05');
+    for (final typed in [
+      1.2345678901234567,
+      -1.2345678901234567,
+      0.10000000000000057,
+    ]) {
+      expect(defaults.snap(typed), isNot(typed));
+      expect(defaults.withValue(typed).formatValue(), typed.toString());
+    }
+  });
+
+  test('parameter presentation preserves neighboring large grid values', () {
+    final integral =
+        MathParameter(value: 1e16, min: 1e16, max: 1e16 + 10, step: 1.1);
+    expect(integral.formatValue(), '10000000000000000');
+    for (final parameter in [
+      MathParameter(value: 1e16 + 2, min: 1e16, max: 1e16 + 10, step: 1.1),
+      MathParameter(
+          value: 1e13 + 0.0625, min: 1e13, max: 1e13 + 1, step: 0.0625),
+      MathParameter(
+          value: -1e13 - 0.0625, min: -1e13 - 1, max: -1e13, step: 0.0625),
+    ]) {
+      expect(parameter.value, parameter.snap(parameter.value));
+      expect(double.parse(parameter.formatValue()), parameter.value);
+      final next = parameter.adjacentValue(true);
+      expect(double.parse(parameter.formatValue(next)), next);
+      expect(parameter.formatValue(next), isNot(parameter.formatValue()));
+    }
+  });
 }

@@ -93,6 +93,24 @@ class MathParameter {
     return value;
   }
 
+  /// Format computed ticks within their bounded cancellation error.
+  /// Exact entries between ticks retain the strict numeric presentation.
+  String formatValue([double? number]) {
+    final displayed = number ?? value;
+    if (displayed.abs() >= 1e14 || displayed != snap(displayed)) {
+      return formatMathParameterNumber(displayed);
+    }
+    final scale = math.max(math.max(min.abs(), max.abs()), displayed.abs());
+    final tolerance = math.min(scale * 2.220446049250313e-16, step * 1e-6);
+    for (var precision = 1; precision <= 15; precision++) {
+      final encoded = displayed.toStringAsPrecision(precision);
+      if ((double.parse(encoded) - displayed).abs() <= tolerance) {
+        return _trimMathParameterNumber(encoded);
+      }
+    }
+    return _trimMathParameterNumber(displayed.toString());
+  }
+
   MathParameter reconfigure({
     required double min,
     required double max,
@@ -118,6 +136,10 @@ String formatMathParameterNumber(double value) {
   final encoded = value.abs() < 1e14 && cleanupError <= representationUnit
       ? cleaned
       : value.toString();
+  return _trimMathParameterNumber(encoded);
+}
+
+String _trimMathParameterNumber(String encoded) {
   final parts = encoded.split('e');
   var mantissa = parts.first;
   if (mantissa.contains('.')) {

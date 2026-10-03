@@ -45,7 +45,7 @@ class MathParameterControls extends StatelessWidget {
                       onPressed: () =>
                           _configure(context, entry.key, entry.value),
                       child: Text(
-                        '${entry.key} = ${formatMathParameterNumber(entry.value.value)}',
+                        '${entry.key} = ${entry.value.formatValue()}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -127,7 +127,7 @@ class _ParameterSliderState extends State<_ParameterSlider> {
   }
 
   String _announce(double value) =>
-      '${widget.name} = ${formatMathParameterNumber(value)}';
+      '${widget.name} = ${widget.parameter.formatValue(value)}';
 
   @override
   Widget build(BuildContext context) {
@@ -155,7 +155,7 @@ class _ParameterSliderState extends State<_ParameterSlider> {
         value: parameter.value,
         min: parameter.min,
         max: parameter.max,
-        label: formatMathParameterNumber(parameter.value),
+        label: parameter.formatValue(),
         onChanged: (value) => _changeValue(parameter.snap(value)),
       ),
     );
@@ -174,7 +174,7 @@ class _ParameterDialog extends StatefulWidget {
 
 class _ParameterDialogState extends State<_ParameterDialog> {
   late final Map<String, TextEditingController> _controllers = {
-    'value': TextEditingController(text: widget.parameter.value.toString()),
+    'value': TextEditingController(text: widget.parameter.formatValue()),
     'min': TextEditingController(text: widget.parameter.min.toString()),
     'max': TextEditingController(text: widget.parameter.max.toString()),
     'step': TextEditingController(text: widget.parameter.step.toString()),

@@ -99,6 +99,49 @@ void main() {
   });
 
   testWidgets(
+      'parameter ordinary labels stay readable after a default slider gesture',
+      (tester) async => withSemantics(tester, () async {
+            final changes = <double>[];
+            await tester
+                .pumpWidget(liveControls(MathParameter(value: 0), changes));
+            final bounds = tester.getRect(find.byType(Slider));
+            await tester.tapAt(Offset(
+              bounds.left + 24 + (bounds.width - 48) * 0.51,
+              bounds.center.dy,
+            ));
+            await tester.pumpAndSettle();
+            expect(changes.last, closeTo(0.1, 1e-12));
+            expect(sliderSemantics().getSemanticsData().value, 'A = 0.1');
+            expect(find.text('A = 0.1'), findsOneWidget);
+            expect(tester.widget<Slider>(find.byType(Slider)).label, '0.1');
+            expect(
+                sliderSemantics().getSemanticsData().increasedValue, 'A = 0.2');
+            await tester.tap(find.byTooltip('设置参数 A'));
+            await tester.pumpAndSettle();
+            expect(tester.widget<TextFormField>(field('数值')).controller!.text,
+                '0.1');
+          }));
+
+  testWidgets(
+      'parameter ordinary labels stay readable after a fractional semantic step',
+      (tester) async => withSemantics(tester, () async {
+            final changes = <double>[];
+            await tester.pumpWidget(liveControls(
+              MathParameter(value: -0.2, min: -0.7, max: 1.2, step: 0.25),
+              changes,
+            ));
+            final node = sliderSemantics();
+            node.owner!.performAction(node.id, SemanticsAction.increase);
+            await tester.pumpAndSettle();
+            expect(changes.last, closeTo(0.05, 1e-12));
+            expect(sliderSemantics().getSemanticsData().value, 'A = 0.05');
+            expect(find.text('A = 0.05'), findsOneWidget);
+            expect(tester.widget<Slider>(find.byType(Slider)).label, '0.05');
+            expect(
+                sliderSemantics().getSemanticsData().increasedValue, 'A = 0.3');
+          }));
+
+  testWidgets(
       'parameter screen reader steps announce and use the grid',
       (tester) async => withSemantics(tester, () async {
             final changes = <double>[];
@@ -292,6 +335,15 @@ void main() {
               final announced = sliderSemantics().getSemanticsData().value;
               expect(double.parse(announced.replaceFirst('A = ', '')),
                   parameter.value);
+              expect(find.text('A = ${parameter.value}'), findsOneWidget);
+              expect(tester.widget<Slider>(find.byType(Slider)).label,
+                  parameter.value.toString());
+              await tester.tap(find.byTooltip('设置参数 A'));
+              await tester.pumpAndSettle();
+              expect(tester.widget<TextFormField>(field('数值')).controller!.text,
+                  parameter.value.toString());
+              await tester.tap(find.text('取消'));
+              await tester.pumpAndSettle();
             }
           }));
 
