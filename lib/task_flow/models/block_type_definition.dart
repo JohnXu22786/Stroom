@@ -228,7 +228,7 @@ class BlockTypeDefinition {
         label: '输出音频',
         type: BlockParamType.boolean,
         defaultValue: false,
-        hintText: '关闭时下载视频并传递视频附件；开启时下载音频，可连接语音识别或助手对话。实际下载类型不匹配时停止任务流。',
+        hintText: '关闭时下载视频并传递视频附件；开启时只选择音频资源，可连接语音识别或助手对话。实际下载类型不匹配时停止任务流。',
       ),
       BlockParamDefinition(
         key: 'videoFolder',

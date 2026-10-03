@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:uuid/uuid.dart';
 
-import '../../../catcatch/models/media_resource.dart';
-
 import '../../../catcatch/models/catcatch_task.dart' as catcatch;
+import '../../../catcatch/models/media_kind.dart';
+import '../../../catcatch/models/media_resource.dart';
 import '../../../catcatch/providers/catcatch_provider.dart';
 import '../../../providers/task_provider_shared.dart';
 import '../../models/block_type_definition.dart';
@@ -163,10 +163,16 @@ Future<String> executeCatCatchBlock({
         );
       }
       onOutputType?.call(actualType);
+      final selectedMimeType =
+          task.selectedMedia?.mimeType?.split(';').first.trim().toLowerCase();
       var mimeType = flowFileMimeType(path);
       if (actualType == IOType.audio && mimeType == 'video/mp4') {
         // Conversion changed the container, not the audio-only track kind.
         mimeType = 'audio/mp4';
+      } else if (selectedMimeType != null &&
+          flowMimeType(mimeType) != actualType &&
+          flowMimeType(selectedMimeType) == actualType) {
+        mimeType = selectedMimeType;
       }
       onOutputPayload?.call(FlowPayload.file(
           fileReference: path, type: actualType, mimeType: mimeType));
@@ -319,10 +325,9 @@ MediaResource? selectAutomaticCatCatchResource(List<MediaResource> resources,
 /// MP4 container. Otherwise use the completed file's MIME/extension, without
 /// assuming CatCatch's chain-building video default describes every download.
 IOType catCatchOutputType(catcatch.CatCatchTask task) {
-  final selected = task.selectedMedia;
-  if (selected != null &&
-      (flowMimeType(selected.mimeType) == IOType.audio || selected.isAudio)) {
-    return IOType.audio;
-  }
-  return flowFileType(task.downloadedFilePath ?? '');
+  return switch (catCatchMediaKind(task, task.downloadedFilePath ?? '')) {
+    CatCatchMediaKind.audio => IOType.audio,
+    CatCatchMediaKind.video => IOType.video,
+    CatCatchMediaKind.other => IOType.file,
+  };
 }

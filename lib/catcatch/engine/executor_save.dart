@@ -10,6 +10,7 @@ import '../../services/storage_service.dart';
 import '../../utils/video_manifest.dart';
 import '../../utils/file_manifest.dart';
 import '../models/catcatch_task.dart';
+import '../models/media_kind.dart';
 import '../models/media_resource.dart';
 import 'executor_utils.dart';
 
@@ -57,15 +58,15 @@ Future<String> executeSave({
   await File(sourcePath).copy(finalPath);
 
   if (!kIsWeb) {
+    final kind = catCatchMediaKind(task, finalPath);
     try {
-      await registerCompletedVideo(finalPath, task);
+      if (kind == CatCatchMediaKind.video) {
+        await registerCompletedVideo(finalPath, task);
+      } else if (kind == CatCatchMediaKind.audio) {
+        await registerCompletedAudio(finalPath, task);
+      }
     } catch (e) {
-      debugPrint('[TaskExecutor] Register video to gallery failed: $e');
-    }
-    try {
-      await registerCompletedAudio(finalPath, task);
-    } catch (e) {
-      debugPrint('[TaskExecutor] Register audio to gallery failed: $e');
+      debugPrint('[TaskExecutor] Register ${kind.name} to gallery failed: $e');
     }
   }
 
@@ -75,6 +76,7 @@ Future<String> executeSave({
 }
 
 Future<void> registerCompletedVideo(String filePath, CatCatchTask task) async {
+  if (catCatchMediaKind(task, filePath) != CatCatchMediaKind.video) return;
   final ext = p.extension(filePath).toLowerCase().replaceAll('.', '');
   const videoExts = {
     'mp4',
@@ -138,8 +140,21 @@ Future<void> registerCompletedVideo(String filePath, CatCatchTask task) async {
 }
 
 Future<void> registerCompletedAudio(String filePath, CatCatchTask task) async {
+  if (catCatchMediaKind(task, filePath) != CatCatchMediaKind.audio) return;
   final ext = p.extension(filePath).toLowerCase().replaceAll('.', '');
-  const audioExts = {'mp3', 'wav', 'm4a', 'aac', 'wma', 'opus', 'flac', 'ogg'};
+  const audioExts = {
+    'mp3',
+    'wav',
+    'm4a',
+    'aac',
+    'wma',
+    'opus',
+    'flac',
+    'ogg',
+    'mp4',
+    'webm',
+    'weba',
+  };
   if (!audioExts.contains(ext)) return;
 
   final file = File(filePath);

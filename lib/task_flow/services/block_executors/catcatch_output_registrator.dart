@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path/path.dart' as p;
 
 import '../../../catcatch/models/catcatch_task.dart' as catcatch;
+import '../../../catcatch/models/media_kind.dart';
 import '../../../utils/file_manifest.dart';
 import '../../../utils/video_manifest.dart';
 
@@ -22,7 +23,19 @@ const _videoExts = {
   'wmv'
 };
 
-const _audioExts = {'mp3', 'wav', 'm4a', 'aac', 'wma', 'opus', 'flac', 'ogg'};
+const _audioExts = {
+  'mp3',
+  'wav',
+  'm4a',
+  'aac',
+  'wma',
+  'opus',
+  'flac',
+  'ogg',
+  'mp4',
+  'webm',
+  'weba',
+};
 
 /// Computes the file's MD5 off the UI isolate — hashing a multi-GB video
 /// on the main isolate would freeze the GUI. Streams in chunks so neither
@@ -63,10 +76,16 @@ Future<void> registerFlowCatCatchOutput(
     return;
   }
 
+  final kind = catCatchMediaKind(task, filePath);
+  if ((kind == CatCatchMediaKind.video && !_videoExts.contains(ext)) ||
+      (kind == CatCatchMediaKind.audio && !_audioExts.contains(ext)) ||
+      kind == CatCatchMediaKind.other) {
+    return;
+  }
   final contentHash = await _computeHashInIsolate(filePath);
   final size = await file.length();
 
-  if (_videoExts.contains(ext)) {
+  if (kind == CatCatchMediaKind.video && _videoExts.contains(ext)) {
     try {
       final videoFolder = task.metadata['videoFolder'] ?? '';
       final records = await VideoManifest.loadRecords();
@@ -106,9 +125,7 @@ Future<void> registerFlowCatCatchOutput(
     } catch (e) {
       debugPrint('[TaskFlow] Register video failed: $e');
     }
-  }
-
-  if (_audioExts.contains(ext)) {
+  } else if (kind == CatCatchMediaKind.audio && _audioExts.contains(ext)) {
     try {
       final audioFolder = task.metadata['audioFolder'] ?? '';
       final records = await FileManifest.loadRecords();
