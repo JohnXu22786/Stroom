@@ -9,11 +9,13 @@ part of 'chat_adapter.dart';
 class _McpConfigEntry {
   final McpServerConfig config;
   final String description;
+  final String placeholderToolName;
   final Object sourceConfig;
 
   const _McpConfigEntry({
     required this.config,
     required this.description,
+    required this.placeholderToolName,
     required this.sourceConfig,
   });
 }
@@ -57,6 +59,8 @@ extension ChatAdapterMcpExt on ChatAdapter {
     // Build MCP server configs (skip HTTP tools — handled by initializeBuiltinTools)
     // and capture descriptions for placeholder tool creation.
     final mcpConfigs = <_McpConfigEntry>[];
+    final placeholderNamesByConfigId =
+        mcpPlaceholderToolNamesByConfigId(mcpEntry.configs);
 
     for (final config in mcpEntry.configs) {
       if (!isMcpProviderConfigEnabled(config, entriesState.mcpGroups)) continue;
@@ -76,6 +80,8 @@ extension ChatAdapterMcpExt on ChatAdapter {
         mcpConfigs.add(_McpConfigEntry(
           config: serverConfig,
           description: description,
+          placeholderToolName: placeholderNamesByConfigId[config.id] ??
+              McpServerConfig.placeholderToolName(serverConfig.name),
           sourceConfig: config,
         ));
       }
@@ -134,28 +140,24 @@ extension ChatAdapterMcpExt on ChatAdapter {
     // 同步发布占位工具定义（不做任何网络等待）：每个配置的 MCP 服务器
     // 都先以一个占位工具出现在工具列表中。占位工具不是真实工具——模型
     // 调用占位符时 _executeTool 会按需连接该服务器、列出真实工具并把
-    // 可用工具名告知模型。按生成的工具名去重，避免不同服务器名规范化后
-    // 重复；同一工具名优先使用成功注册的客户端配置。
+    // 可用工具名告知模型。规范化名称冲突时使用配置 ID 后缀区分服务器；
+    // 同一原始名称则继续共用成功注册的客户端。
     final placeholderEntriesByToolName = <String, _McpConfigEntry>{};
     final placeholderClientNamesByToolName = <String, String>{};
-    final selectedPlaceholderToolNames = <String>{};
+    final failedServerNames = <String>{};
     for (final entry in mcpConfigs) {
       final selectedSource = selectedConfigSourcesByName[entry.config.name];
       if (selectedSource != null &&
           !identical(selectedSource, entry.sourceConfig)) {
         continue;
       }
-      final toolName = McpServerConfig.placeholderToolName(entry.config.name);
+      final toolName = entry.placeholderToolName;
       if (selectedSource != null) {
-        if (selectedPlaceholderToolNames.add(toolName)) {
-          placeholderEntriesByToolName[toolName] = entry;
-          placeholderClientNamesByToolName[toolName] = entry.config.name;
-        }
-      } else {
-        if (!placeholderEntriesByToolName.containsKey(toolName)) {
-          placeholderEntriesByToolName[toolName] = entry;
-          placeholderClientNamesByToolName[toolName] = entry.config.name;
-        }
+        placeholderEntriesByToolName[toolName] = entry;
+        placeholderClientNamesByToolName[toolName] = entry.config.name;
+      } else if (failedServerNames.add(entry.config.name)) {
+        placeholderEntriesByToolName[toolName] = entry;
+        placeholderClientNamesByToolName[toolName] = entry.config.name;
       }
     }
     _mcpClientManager.setPlaceholderClientNames(

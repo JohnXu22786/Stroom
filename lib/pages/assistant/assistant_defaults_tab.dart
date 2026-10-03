@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../models/mcp.dart' show McpServerConfig;
 import '../../models/tool_call.dart';
 import '../../providers/chat_manager_provider.dart';
 import '../../providers/provider_config.dart';
@@ -198,19 +197,11 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
     final validMcpToolNames = <String>{};
     final mcpEntry =
         entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
-    for (final c in mcpEntry?.configs ?? const <ProviderConfigItem>[]) {
-      final typeConfig = c.models.isNotEmpty ? c.models[0].typeConfig : null;
-      if (typeConfig?['isHttpTool'] == true) continue;
-      final serverConfig = McpServerConfig.fromProviderConfig(
-        providerName: c.providerName,
-        typeConfig: typeConfig,
-      );
-      if (serverConfig != null) {
-        validMcpToolNames.add(
-          McpServerConfig.placeholderToolName(serverConfig.name),
-        );
-      }
-    }
+    validMcpToolNames.addAll(
+      mcpPlaceholderToolNamesByConfigId(
+        mcpEntry?.configs ?? const <ProviderConfigItem>[],
+      ).values,
+    );
     final validToolNames = <String>{
       ...allToolNames,
       ...validMcpToolNames,
