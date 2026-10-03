@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io' hide Cookie;
 
@@ -27,7 +29,11 @@ class BrowserCookieService {
   BrowserCookieService._();
 
   static const String _retentionKey = 'browser_cookie_retention';
-  static Future<void> _retentionOperationQueue = Future<void>.value();
+  // Keep pending callbacks rather than a completed Future tail, which can
+  // retain the caller's async zone across independent operations.
+  static final Queue<_QueuedRetentionOperation<dynamic>>
+      _retentionOperations = Queue();
+  static bool _isRunningRetentionOperation = false;
 
   /// The platform cookie facade used for all platform cookie operations.
   ///
@@ -172,12 +178,40 @@ class BrowserCookieService {
 
   static Future<T> _serializeRetentionOperation<T>(
       Future<T> Function() operation) {
-    final result = _retentionOperationQueue.then((_) => operation());
-    _retentionOperationQueue = result.then<void>(
-      (_) {},
-      onError: (Object error, StackTrace stackTrace) {},
+    final completer = Completer<T>();
+    _retentionOperations.add(_QueuedRetentionOperation(operation, completer));
+    if (!_isRunningRetentionOperation) {
+      _isRunningRetentionOperation = true;
+      _runNextRetentionOperation();
+    }
+    return completer.future;
+  }
+
+  static void _runNextRetentionOperation() {
+    if (_retentionOperations.isEmpty) {
+      _isRunningRetentionOperation = false;
+      return;
+    }
+
+    final queuedOperation = _retentionOperations.removeFirst();
+    Future<dynamic>.sync(queuedOperation.run).then<void>(
+      (value) {
+        if (_retentionOperations.isEmpty) {
+          _isRunningRetentionOperation = false;
+        } else {
+          _runNextRetentionOperation();
+        }
+        queuedOperation.completer.complete(value);
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (_retentionOperations.isEmpty) {
+          _isRunningRetentionOperation = false;
+        } else {
+          _runNextRetentionOperation();
+        }
+        queuedOperation.completer.completeError(error, stackTrace);
+      },
     );
-    return result;
   }
 
   // ===========================================================================
@@ -764,6 +798,13 @@ class BrowserCookieService {
         'persistCookiesRawForTest should only be called in test mode');
     _testCookies = List.from(cookies);
   }
+}
+
+class _QueuedRetentionOperation<T> {
+  const _QueuedRetentionOperation(this.run, this.completer);
+
+  final Future<T> Function() run;
+  final Completer<T> completer;
 }
 
 // ===========================================================================
