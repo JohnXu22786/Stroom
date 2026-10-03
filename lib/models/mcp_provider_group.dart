@@ -20,18 +20,18 @@ class McpProviderGroup {
       McpProviderGroup(id: 'mcp_group_${const Uuid().v4()}', name: name);
 
   McpProviderGroup copyWith({String? name, bool? enabled}) => McpProviderGroup(
-    id: id,
-    name: name ?? this.name,
-    isBuiltin: isBuiltin,
-    enabled: enabled ?? this.enabled,
-  );
+        id: id,
+        name: name ?? this.name,
+        isBuiltin: isBuiltin,
+        enabled: enabled ?? this.enabled,
+      );
 
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'name': name,
-    'isBuiltin': isBuiltin,
-    'enabled': enabled,
-  };
+        'id': id,
+        'name': name,
+        'isBuiltin': isBuiltin,
+        'enabled': enabled,
+      };
 
   factory McpProviderGroup.fromMap(Map<String, dynamic> map) =>
       McpProviderGroup(

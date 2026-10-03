@@ -341,9 +341,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     for (var i = 0; i < groupIndices.length; i++) {
       configs[groupIndices[i]] = groupConfigs[i];
     }
-    await ref
-        .read(providerEntriesProvider.notifier)
-        .update(
+    await ref.read(providerEntriesProvider.notifier).update(
           entry.id,
           ProviderEntry(
             id: entry.id,
@@ -362,12 +360,10 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     int groupIndex,
   ) {
     final fullIndex = entry.configs.indexOf(config);
-    final providerName = config.providerName.isNotEmpty
-        ? config.providerName
-        : '（未命名）';
-    final typeConfig = config.models.isNotEmpty
-        ? config.models[0].typeConfig
-        : null;
+    final providerName =
+        config.providerName.isNotEmpty ? config.providerName : '（未命名）';
+    final typeConfig =
+        config.models.isNotEmpty ? config.models[0].typeConfig : null;
     final isVendor = typeConfig?['isVendor'] as bool? ?? false;
     final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;
     final transport = typeConfig?['transport'] as String? ?? 'sse';
@@ -416,8 +412,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final configsByGroup = <String, List<ProviderConfigItem>>{
       for (final group in groups)
         group.id: entry.configs.where((config) {
-          final groupId =
-              config.groupId ??
+          final groupId = config.groupId ??
               defaultMcpGroupIdForProvider(config.providerName);
           return groupId == group.id;
         }).toList(),
@@ -465,16 +460,14 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: _McpGroupHeaderCard(
                   group: group,
-                  itemCount:
-                      (configsByGroup[group.id]?.length ?? 0) +
+                  itemCount: (configsByGroup[group.id]?.length ?? 0) +
                       (group.id == builtinSearchMcpGroupId ? 1 : 0),
                   onEnabledChanged: (value) =>
                       _setMcpGroupEnabled(group, value),
                   onAdd: () => _addConfig(groupId: group.id),
                   onEdit: group.isBuiltin ? null : () => _editMcpGroup(group),
-                  onDelete: group.isBuiltin
-                      ? null
-                      : () => _deleteMcpGroup(group),
+                  onDelete:
+                      group.isBuiltin ? null : () => _deleteMcpGroup(group),
                 ),
               ),
             ),
@@ -506,11 +499,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   itemCount: configsByGroup[group.id]!.length,
                   onReorderItem: (oldIndex, newIndex) =>
                       _reorderMcpGroupConfigs(
-                        entry,
-                        group.id,
-                        oldIndex,
-                        newIndex,
-                      ),
+                    entry,
+                    group.id,
+                    oldIndex,
+                    newIndex,
+                  ),
                   proxyDecorator: (child, index, animation) => Material(
                     elevation: 2,
                     borderRadius: BorderRadius.circular(12),
@@ -533,9 +526,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
   @override
   Widget build(BuildContext context) {
     final entriesState = ref.watch(providerEntriesProvider);
-    final entry = entriesState.entries
-        .where((e) => e.id == widget.entryId)
-        .firstOrNull;
+    final entry =
+        entriesState.entries.where((e) => e.id == widget.entryId).firstOrNull;
     if (entry == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('配置')),
@@ -620,8 +612,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   // Determine if this is a built-in (vendor) MCP config
                   final mcpTypeConfig =
                       entry.type == 'mcp' && config.models.isNotEmpty
-                      ? config.models[0].typeConfig
-                      : null;
+                          ? config.models[0].typeConfig
+                          : null;
                   final isVendor = mcpTypeConfig?['isVendor'] as bool? ?? false;
 
                   // For MCP entries, show transport details
@@ -658,9 +650,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   } else {
                     leadIcon = Icons.dns;
                     iconColor = Colors.teal;
-                    subtitle = config.host.isNotEmpty
-                        ? config.host
-                        : '(未设置 Host)';
+                    subtitle =
+                        config.host.isNotEmpty ? config.host : '(未设置 Host)';
                   }
 
                   // Show API key hint if available
@@ -748,9 +739,8 @@ class _McpConfigCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // 统一卡片配色（对齐 LLM 供应商页）：中性背景 + 柔和描边。
-    final Color backgroundColor = isDark
-        ? cs.surfaceContainerHigh
-        : cs.surfaceContainerLow;
+    final Color backgroundColor =
+        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
     final Color borderColor = cs.outlineVariant.withValues(alpha: 0.5);
 
     return Container(
@@ -1057,9 +1047,8 @@ class _McpMasterSwitchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color backgroundColor = isDark
-        ? cs.surfaceContainerHigh
-        : cs.surfaceContainerLow;
+    final Color backgroundColor =
+        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
 
     return Container(
       decoration: BoxDecoration(
