@@ -356,7 +356,8 @@ class TaskFlowExecutionService {
             inputType: flow.inputType,
             inputFileName: entry.value.fileName,
             inputStoragePath: FlowPayload.isFileType(flow.inputType)
-                ? entry.value.ownedStoragePath : null))
+                ? entry.value.ownedStoragePath
+                : null))
         .toList();
     if (!await _notifier.addExecutions(records)) {
       for (final record in records) {
@@ -422,8 +423,10 @@ class TaskFlowExecutionService {
   Future<List<String>> retryExecution(String id,
       {bool useLatestConfiguration = false}) async {
     final path = _execution(id)?.inputStoragePath;
-    return _notifier.withInputStoragePathLock(path,
-        () => _retryExecution(id, useLatestConfiguration: useLatestConfiguration));
+    return _notifier.withInputStoragePathLock(
+        path,
+        () => _retryExecution(id,
+            useLatestConfiguration: useLatestConfiguration));
   }
 
   Future<List<String>> _retryExecution(String id,
@@ -444,9 +447,14 @@ class TaskFlowExecutionService {
           ownedStoragePath: e.inputStoragePath)
     ];
     if (useLatestConfiguration) {
-      final latest = _ref.read(taskFlowListProvider).where((f) => f.id == e.flowId).firstOrNull;
+      final latest = _ref
+          .read(taskFlowListProvider)
+          .where((f) => f.id == e.flowId)
+          .firstOrNull;
       final originalType = e.inputType ?? e.snapshot?.flow.inputType;
-      if (latest != null && originalType != null && latest.inputType != originalType) {
+      if (latest != null &&
+          originalType != null &&
+          latest.inputType != originalType) {
         throw TaskFlowValidationException('初始输入类型已修改，请重新选择运行输入',
             flowId: e.flowId, isInputError: true);
       }
@@ -633,7 +641,8 @@ class TaskFlowExecutionService {
             FlowRunInput(
                 text: data.value,
                 durationSec: current.inputDurationSec,
-                mimeType: data.mimeType, fileName: data.fileName)
+                mimeType: data.mimeType,
+                fileName: data.fileName)
           ],
           providers: snapshot.resolveProviders(
               _ref.read(providerEntriesProvider),

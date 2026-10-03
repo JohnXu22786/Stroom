@@ -13,8 +13,12 @@ import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_execution.dart';
 import 'block_executors/chat_executor.dart'
-    show flowChatEndpointType, flowChatInputError,
-        flowChatImageSizeError, flowChatIsTextFileName, flowChatTextFileError;
+    show
+        flowChatEndpointType,
+        flowChatInputError,
+        flowChatImageSizeError,
+        flowChatIsTextFileName,
+        flowChatTextFileError;
 
 /// User-actionable failure, shared by launch, batch launch and history retry.
 class TaskFlowValidationException implements Exception {
