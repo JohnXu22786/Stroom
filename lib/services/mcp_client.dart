@@ -995,6 +995,18 @@ class McpClientManager {
   String? getPlaceholderClientName(String toolName) =>
       _placeholderClientNames[toolName];
 
+  /// Keeps dispatch order aligned with the active provider config order.
+  void reorderClients(Iterable<String> clientNames) {
+    final orderedClients = <String, McpClient>{};
+    for (final name in clientNames) {
+      final client = _clients[name];
+      if (client != null) orderedClients[name] = client;
+    }
+    _clients
+      ..clear()
+      ..addAll(orderedClients);
+  }
+
   /// 添加一个客户端
   void addClient(String id, McpClient client) {
     // 如果已存在相同 ID 的客户端，先释放旧的
