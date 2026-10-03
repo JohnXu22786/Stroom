@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../../models/assistant.dart';
 import '../../providers/provider_config.dart';
+import '../../services/chat_adapter.dart'
+    show availableLlmModels, resolveModelRef;
 import '../../services/chat_protocol.dart' show maxAttachmentBytes;
 import '../../utils/provider_models.dart';
 import '../../utils/web_file_store.dart';
@@ -55,11 +57,11 @@ Future<void> validateTaskFlow(
     final block = flow.blocks[i];
     final def = block.getDefinition();
     Never fail(String message) => throw TaskFlowValidationException(
-      message,
-      flowId: flow.id,
-      blockId: block.id,
-      blockIndex: i,
-    );
+          message,
+          flowId: flow.id,
+          blockId: block.id,
+          blockIndex: i,
+        );
     if (def == null) fail('功能块已不受支持，请替换此步骤');
     if (!def.acceptsInput(previousOutput)) {
       fail(
@@ -93,29 +95,21 @@ Future<void> validateTaskFlow(
         final assistant = assistants.firstWhere(
           (assistant) => assistant.id == id,
         );
-        final available = flattenProviderModels(providers, 'llm');
-        final modelId = assistant.modelId?.trim();
-        final defaultId = assistant.defaultModelId?.trim();
-        final providerName = assistant.defaultProviderName?.trim();
-        final displayName = assistant.defaultModelName?.trim();
-        final modelAvailable = modelId != null && modelId.isNotEmpty
-            ? available.any((item) => item.model.modelId == modelId)
-            : defaultId != null && defaultId.isNotEmpty
-            ? available.any(
-                (item) =>
-                    item.model.modelId == defaultId &&
-                    (providerName == null ||
-                        providerName.isEmpty ||
-                        item.config.providerName == providerName),
-              )
-            : displayName != null && displayName.isNotEmpty
-            ? available.any(
-                (item) =>
-                    '${item.model.name.isEmpty ? item.model.modelId : item.model.name} | ${item.config.providerName}' ==
-                    displayName,
-              )
-            : true; // An unbound assistant uses the current chat model.
-        if (!modelAvailable) {
+        final reference = assistant.modelId ??
+            assistant.defaultModelId ??
+            assistant.defaultModelName;
+        final selected = reference == null || reference.isEmpty
+            ? null
+            : resolveModelRef(
+                models: availableLlmModels(providers),
+                modelId: reference,
+                providerName:
+                    assistant.modelId == null || assistant.modelId!.isEmpty
+                        ? assistant.defaultProviderName
+                        : null,
+                displayName: reference,
+              );
+        if (reference != null && reference.isNotEmpty && selected == null) {
           fail('助手绑定的模型已删除或供应商配置不可用，请在助手设置中重新选择模型');
         }
         final endpointType = flowChatEndpointType(

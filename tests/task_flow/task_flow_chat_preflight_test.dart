@@ -57,16 +57,16 @@ void main() {
   );
 
   TaskFlowDefinition chatFlow(IOType inputType) => TaskFlowDefinition(
-    name: 'Chat',
-    inputType: inputType,
-    blocks: [
-      TaskFlowBlock(
-        id: 'chat-block',
-        typeKey: BlockType.chat,
-        params: {'assistantId': 'assistant'},
-      ),
-    ],
-  );
+        name: 'Chat',
+        inputType: inputType,
+        blocks: [
+          TaskFlowBlock(
+            id: 'chat-block',
+            typeKey: BlockType.chat,
+            params: {'assistantId': 'assistant'},
+          ),
+        ],
+      );
 
   test(
     'Anthropic rejects a later DOCX batch input before submission',
@@ -90,6 +90,33 @@ void main() {
       );
     },
   );
+
+  test('renamed provider still resolves the assistant by stable model ID',
+      () async {
+    final renamed = ProviderEntriesState(entries: [
+      ProviderEntry(name: 'LLM', type: 'llm', configs: [
+        ProviderConfigItem(
+            providerName: 'Renamed Claude',
+            host: 'https://example.com',
+            key: 'test',
+            models: [
+              ModelConfig(
+                  name: 'Claude', modelId: 'claude', endpointType: 'anthropic')
+            ])
+      ])
+    ]);
+    await validateTaskFlow(
+        chatFlow(IOType.text), [const FlowRunInput(text: 'Hello')],
+        providers: renamed, assistants: [boundAssistant]);
+    final audio = await File('${directory.path}/speech.mp3')
+        .writeAsBytes([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0]);
+    await expectLater(
+        validateTaskFlow(
+            chatFlow(IOType.audio), [FlowRunInput(text: audio.path)],
+            providers: renamed, assistants: [boundAssistant]),
+        throwsA(isA<TaskFlowValidationException>().having(
+            (e) => e.message, 'bound endpoint', contains('Anthropic'))));
+  });
 
   test('initial file preflight accepts PDF content with other names', () async {
     for (final name in ['report', 'report.docx']) {

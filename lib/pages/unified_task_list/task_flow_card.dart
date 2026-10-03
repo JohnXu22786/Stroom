@@ -5,7 +5,6 @@ import '../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/task_provider.dart';
-import '../../providers/task_provider_shared.dart';
 import '../../task_flow/models/task_flow_execution.dart';
 import '../../task_flow/providers/task_flow_execution_provider.dart';
 import '../../task_flow/services/task_flow_execution_service.dart';
@@ -348,7 +347,9 @@ class _ExpandedContent extends ConsumerWidget {
               Navigator.pop(ctx);
               final input = FlowRunInput(
                   text: execution.inputText,
-                  durationSec: execution.inputDurationSec);
+                  durationSec: execution.inputDurationSec,
+                  fileName: execution.inputFileName,
+                  ownedStoragePath: execution.inputStoragePath);
               try {
                 await ref
                     .read(taskFlowExecutionServiceProvider)

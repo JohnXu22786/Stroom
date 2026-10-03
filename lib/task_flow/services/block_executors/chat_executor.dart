@@ -189,7 +189,7 @@ Future<ChatMessage> prepareFlowChatMessage(
     headerBytes: bytes,
   );
   if (unsupportedFile != null) throw FormatException(unsupportedFile);
-  final name = p.basename(reference);
+  final name = p.basename(payload.fileName ?? reference);
   final storagePath = await AttachmentStorage.saveFile(name, bytes);
   final attachment = Attachment(
     fileName: name,
@@ -337,7 +337,10 @@ Future<String> executeChatBlock({
     flowAttachments = userMessage.attachments;
     if (!isLive()) await stopInactiveExecution();
     // Persist attachments before streaming so failure cleanup can find them.
-    await conversationsNotifier.updateMessages(convId, [userMessage]);
+    if (!await conversationsNotifier
+        .updateFlowMessagesChecked(convId, [userMessage])) {
+      throw StateError('用户消息未能保存，对话未发送');
+    }
     // Cancellation before a stream exists cannot be handled by manager.cancel.
     // Check synchronously after preparation/persistence, before starting it.
     if (!isLive()) await stopInactiveExecution();
@@ -443,7 +446,10 @@ Future<String> executeChatBlock({
     // updateMessages keyed on convId), but a silent save failure there
     // must not leave a stub conversation behind. updateMessages is a full
     // replace, so re-persisting the same history is idempotent.
-    await conversationsNotifier.updateMessages(convId, result.history);
+    if (!await conversationsNotifier.updateFlowMessagesChecked(
+        convId, result.history)) {
+      throw StateError('助手回复未能保存，对话未完成');
+    }
     if (!isLive()) await stopInactiveExecution();
 
     // The full [user, assistant] exchange now lives in a real conversation

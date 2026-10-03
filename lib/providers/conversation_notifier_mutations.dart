@@ -268,6 +268,22 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// 延长临时对话的生命周期）。
   Future<void> updateMessages(String conversationId, List<ChatMessage> messages,
       {bool resetTemporaryCountdown = false}) async {
+    _replaceMessages(conversationId, messages,
+        resetTemporaryCountdown: resetTemporaryCountdown);
+    await _persistNow();
+  }
+
+  /// Flow chat must confirm each exchange reached disk before sending or
+  /// reporting completion. Ordinary chat retains its existing save behavior.
+  Future<bool> updateFlowMessagesChecked(
+      String conversationId, List<ChatMessage> messages) async {
+    if (!mounted || !state.any((c) => c.id == conversationId)) return false;
+    _replaceMessages(conversationId, messages);
+    return _persistNowChecked();
+  }
+
+  void _replaceMessages(String conversationId, List<ChatMessage> messages,
+      {bool resetTemporaryCountdown = false}) {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.messages = messages;
@@ -297,7 +313,6 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       }
       return c;
     }).toList();
-    await _persistNow();
   }
 
   /// Saves the draft (text + unsent attachment snapshots) for a specific

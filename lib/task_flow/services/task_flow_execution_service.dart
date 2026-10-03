@@ -14,6 +14,7 @@ import '../../providers/conversation_provider.dart';
 import '../../providers/provider_config.dart';
 import '../../providers/task_provider.dart';
 import '../../services/app_log_service.dart';
+import '../../services/attachment_storage.dart';
 import '../models/block_type_definition.dart';
 import '../models/flow_payload.dart';
 import '../models/task_flow_definition.dart';
@@ -85,6 +86,13 @@ class _PreparedFlow {
   );
 }
 
+class _StartedFlow {
+  final String executionId;
+  final Map<int, FlowSubTask> placeholders;
+
+  const _StartedFlow(this.executionId, this.placeholders);
+}
+
 class TaskFlowExecutionService {
   final Ref _ref;
 
@@ -126,7 +134,16 @@ class TaskFlowExecutionService {
   /// the background. History retry uses the same validation as normal launch.
   Future<void> launchFlowMany(String flowId, List<FlowRunInput> inputs) async {
     final prepared = await _prepareFlow(flowId, inputs);
-    unawaited(_runMany(prepared, inputs));
+    // The first picker copy needs a durable execution owner before the
+    // builder releases it. Remaining inputs stay owned by _runMany in memory
+    // until their sequential run begins.
+    final first = _registerExecution(prepared.flow, inputs.first);
+    final execNotifier = _ref.read(taskFlowExecutionsProvider.notifier);
+    if (!await execNotifier.persist()) {
+      await execNotifier.removeExecution(first.executionId);
+      throw StateError('任务流执行记录未能保存，请稍后重试');
+    }
+    unawaited(_runMany(prepared, inputs, firstStarted: first));
   }
 
   Future<_PreparedFlow> _prepareFlow(
@@ -166,30 +183,50 @@ class TaskFlowExecutionService {
 
   Future<void> _runMany(
     _PreparedFlow prepared,
-    List<FlowRunInput> inputs,
-  ) async {
-    for (final input in inputs) {
-      await _runFlow(prepared, input);
+    List<FlowRunInput> inputs, {
+    _StartedFlow? firstStarted,
+  }) async {
+    // The builder hands picker copies to this launch after validation. Later
+    // inputs do not have execution records until their sequential turn, so
+    // release those copies if the loop aborts before registering them.
+    final execNotifier = _ref.read(taskFlowExecutionsProvider.notifier);
+    var nextInput = 0;
+    try {
+      for (; nextInput < inputs.length; nextInput++) {
+        await _runFlow(
+          prepared,
+          inputs[nextInput],
+          started: nextInput == 0 ? firstStarted : null,
+        );
+      }
+    } finally {
+      if (execNotifier.mounted) {
+        for (final input in inputs.skip(nextInput)) {
+          final path = input.ownedStoragePath;
+          if (path == null || path.isEmpty) continue;
+          if (execNotifier.referencesInputStoragePath(path)) {
+            continue;
+          }
+          try {
+            await AttachmentStorage.deleteFile(path);
+          } catch (error) {
+            AppLogService.warning('TaskFlow', '清理未开始的任务流输入失败: $error');
+          }
+        }
+      }
     }
   }
 
-  Future<void> _runFlow(_PreparedFlow prepared, FlowRunInput input) async {
-    final flow = prepared.flow;
+  _StartedFlow _registerExecution(TaskFlowDefinition flow, FlowRunInput input) {
     final execNotifier = _ref.read(taskFlowExecutionsProvider.notifier);
-    final catcatchNotifier = _ref.read(catcatchTasksProvider.notifier);
-    final bgNotifier = _ref.read(backgroundTasksProvider.notifier);
-    final taskListNotifier = _ref.read(taskListProvider.notifier);
-    final scheduler = _ref.read(taskFlowSchedulerProvider);
-
     final execId = execNotifier.addExecution(
       flowId: flow.id,
       flowName: flow.name,
       inputText: input.text,
       inputDurationSec: input.durationSec,
+      inputFileName: input.fileName,
+      inputStoragePath: input.ownedStoragePath,
     );
-
-    AppLogService.info('TaskFlow', '开始执行: ${flow.name} ($execId)');
-
     final placeholders = <int, FlowSubTask>{};
     for (int i = 0; i < flow.blocks.length; i++) {
       final block = flow.blocks[i];
@@ -204,11 +241,33 @@ class TaskFlowExecutionService {
       execNotifier.addSubTask(execId, subTask);
       placeholders[i] = subTask;
     }
+    return _StartedFlow(execId, placeholders);
+  }
+
+  Future<void> _runFlow(
+    _PreparedFlow prepared,
+    FlowRunInput input, {
+    _StartedFlow? started,
+  }) async {
+    final flow = prepared.flow;
+    final execNotifier = _ref.read(taskFlowExecutionsProvider.notifier);
+    final catcatchNotifier = _ref.read(catcatchTasksProvider.notifier);
+    final bgNotifier = _ref.read(backgroundTasksProvider.notifier);
+    final taskListNotifier = _ref.read(taskListProvider.notifier);
+    final scheduler = _ref.read(taskFlowSchedulerProvider);
+
+    final run = started ?? _registerExecution(flow, input);
+    final execId = run.executionId;
+
+    AppLogService.info('TaskFlow', '开始执行: ${flow.name} ($execId)');
+
+    final placeholders = run.placeholders;
 
     var currentData = FlowPayload.fromValue(
       input.text,
       flow.inputType,
       mimeType: input.mimeType,
+      fileName: input.fileName,
     );
 
     for (int i = 0; i < flow.blocks.length; i++) {

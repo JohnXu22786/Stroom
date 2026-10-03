@@ -15,19 +15,22 @@ class FlowPayload {
   final IOType type;
   final String text;
   final String? fileReference;
+  final String? fileName;
 
   /// Media metadata from an upstream block. For shared containers such as MP4,
   /// this preserves the track kind that filename/header MIME cannot establish.
   final String? mimeType;
 
   const FlowPayload.text(this.text, {this.type = IOType.text})
-    : fileReference = null,
-      mimeType = null;
+      : fileReference = null,
+        fileName = null,
+        mimeType = null;
 
   const FlowPayload.file({
     required this.fileReference,
     required this.type,
     this.text = '',
+    this.fileName,
     this.mimeType,
   });
 
@@ -35,26 +38,33 @@ class FlowPayload {
     String value,
     IOType type, {
     String? mimeType,
-  }) => isFileType(type)
-      ? FlowPayload.file(fileReference: value, type: type, mimeType: mimeType)
-      : FlowPayload.text(value, type: type);
+    String? fileName,
+  }) =>
+      isFileType(type)
+          ? FlowPayload.file(
+              fileReference: value,
+              type: type,
+              mimeType: mimeType,
+              fileName: fileName)
+          : FlowPayload.text(value, type: type);
 
   bool get isFile => fileReference != null;
   String get value => fileReference ?? text;
 
   static bool isFileType(IOType type) => const [
-    IOType.audio,
-    IOType.image,
-    IOType.video,
-    IOType.file,
-  ].contains(type);
+        IOType.audio,
+        IOType.image,
+        IOType.video,
+        IOType.file,
+      ].contains(type);
 
   Map<String, dynamic> toMap() => {
-    'type': type.name,
-    'text': text,
-    if (fileReference != null) 'fileReference': fileReference,
-    if (mimeType != null) 'mimeType': mimeType,
-  };
+        'type': type.name,
+        'text': text,
+        if (fileReference != null) 'fileReference': fileReference,
+        if (fileName != null) 'fileName': fileName,
+        if (mimeType != null) 'mimeType': mimeType,
+      };
 
   factory FlowPayload.fromMap(Map<String, dynamic> map) {
     final type = IOType.fromJson(map['type'] as String? ?? 'text');
@@ -66,6 +76,7 @@ class FlowPayload {
             fileReference: reference,
             type: type,
             text: text,
+            fileName: map['fileName'] as String?,
             mimeType: map['mimeType'] as String?,
           );
   }
@@ -80,14 +91,13 @@ String flowFileMimeType(
   List<int>? headerBytes,
   String? mimeType,
 }) {
-  final detected =
-      lookupMimeType(reference, headerBytes: headerBytes) ??
+  final detected = lookupMimeType(reference, headerBytes: headerBytes) ??
       'application/octet-stream';
   bool isMp4(String? mime) => const {
-    'audio/mp4',
-    'audio/x-m4a',
-    'video/mp4',
-  }.contains(mime?.split(';').first.trim().toLowerCase());
+        'audio/mp4',
+        'audio/x-m4a',
+        'video/mp4',
+      }.contains(mime?.split(';').first.trim().toLowerCase());
   if (isMp4(detected)) {
     if (isMp4(mimeType)) {
       return flowMimeType(mimeType) == IOType.audio ? 'audio/mp4' : 'video/mp4';

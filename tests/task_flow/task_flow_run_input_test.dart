@@ -1,10 +1,15 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
+import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_execution.dart';
@@ -13,6 +18,13 @@ import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
 
 class _MockCatCatchNotifier extends Mock implements CatCatchNotifier {}
+
+class _Documents extends PathProviderPlatform {
+  _Documents(this.path);
+  final String path;
+  @override
+  Future<String> getApplicationDocumentsPath() async => path;
+}
 
 catcatch.CatCatchTask _failedTask(String id) => catcatch.CatCatchTask(
       id: id,
@@ -68,6 +80,7 @@ void main() {
     String flowId = '';
 
     setUp(() async {
+      // ignore: invalid_use_of_visible_for_testing_member
       SharedPreferences.setMockInitialValues({});
 
       final flowNotifier = TaskFlowNotifier();
@@ -95,6 +108,7 @@ void main() {
       });
       // The executor polls for the task with the id it created — always
       // answer with a failed task so the block terminates fast.
+      // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
       when(() => catcatchNotifier.state).thenAnswer(
         (_) => [_failedTask(capturedTaskId ?? 'stub')],
       );
@@ -129,6 +143,37 @@ void main() {
       final byText = {for (final e in executions) e.inputText: e};
       expect(byText['https://a.com/v']!.inputDurationSec, 90);
       expect(byText['https://b.com/v']!.inputDurationSec, 0);
+    });
+
+    test('launch returns after its first retry record is saved', () async {
+      final directory =
+          await Directory.systemTemp.createTemp('flow_launch_record_');
+      final previous = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _Documents(directory.path);
+      AppStorage.resetCache();
+      addTearDown(() async {
+        PathProviderPlatform.instance = previous;
+        AppStorage.resetCache();
+        await directory.delete(recursive: true);
+      });
+      await service.launchFlowMany(
+        flowId,
+        const [FlowRunInput(text: 'https://a.com/v', durationSec: 90)],
+      );
+      final file = File('${directory.path}/task_flows/executions.json');
+      final saved = jsonDecode(await file.readAsString()) as List;
+      expect(saved, hasLength(1));
+      expect(saved.single['inputText'], 'https://a.com/v');
+      expect(saved.single['inputDurationSec'], 90);
+      for (var attempt = 0; attempt < 100; attempt++) {
+        if (container.read(taskFlowExecutionsProvider).single.status !=
+            FlowExecutionStatus.running) {
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(container.read(taskFlowExecutionsProvider).single.status,
+          FlowExecutionStatus.failed);
     });
 
     test(

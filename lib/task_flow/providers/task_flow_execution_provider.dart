@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../providers/task_provider_shared.dart';
+import '../../services/attachment_storage.dart';
 import '../models/task_flow_execution.dart';
 import 'persistable_notifier.dart';
 
@@ -17,8 +18,14 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     with PersistableNotifier<List<TaskFlowExecution>> {
   TaskFlowExecutionNotifier() : super([]);
 
+  final Map<String, TaskFlowExecution> _pendingRemovals = {};
+  Future<void> _removalQueue = Future<void>.value();
+
   TaskFlowExecution? execution(String id) =>
       mounted ? state.where((entry) => entry.id == id).firstOrNull : null;
+
+  bool referencesInputStoragePath(String path) =>
+      mounted && state.any((entry) => entry.inputStoragePath == path);
 
   // ===========================================================================
   // PersistableNotifier contract
@@ -58,6 +65,8 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     List<FlowSubTask> subTasks = const [],
     String inputText = '',
     int inputDurationSec = 0,
+    String? inputFileName,
+    String? inputStoragePath,
   }) {
     final execution = TaskFlowExecution(
       flowId: flowId,
@@ -65,6 +74,8 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
       subTasks: subTasks,
       inputText: inputText,
       inputDurationSec: inputDurationSec,
+      inputFileName: inputFileName,
+      inputStoragePath: inputStoragePath,
     );
     state = [execution, ...state];
     _persistExecutions();
@@ -220,10 +231,60 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     _debouncedPersist();
   }
 
-  /// Remove an execution.
-  void removeExecution(String executionId) {
+  /// Remove an execution and release its picker copy after the deletion is
+  /// durable and no other execution (including a retry) references it.
+  Future<void> removeExecution(String executionId) {
+    final removed = execution(executionId);
+    if (removed == null) return Future<void>.value();
     state = state.where((e) => e.id != executionId).toList();
-    _debouncedPersist();
+    _pendingRemovals[executionId] = removed;
+    // Capture the deletion now, before a widget or notifier can be disposed.
+    final write = persist();
+    final operation = _removalQueue.then((_) async {
+      final saved = await write;
+      _pendingRemovals.remove(executionId);
+      if (!saved) {
+        // A failed disk write still contains the execution and its input.
+        if (mounted) {
+          // Callers have already cancelled its work before removing it.
+          final stopped = removed.copyWith(
+            status: FlowExecutionStatus.failed,
+            completedAt: DateTime.now(),
+            error: '删除记录未能保存，请重试',
+            subTasks: [
+              for (final task in removed.subTasks)
+                if (task.status == TaskStatus.completed ||
+                    task.status == TaskStatus.failed)
+                  task
+                else
+                  task.copyWithStatus(TaskStatus.failed),
+            ],
+          );
+          state = [stopped, ...state];
+          await persist();
+        }
+        return;
+      }
+      final path = removed.inputStoragePath;
+      if (path == null || path.isEmpty) return;
+      // Once disposed, we cannot inspect newer registrations; retain the
+      // copy rather than risk breaking a persisted retry that shares it.
+      if (!mounted) return;
+      final stillReferenced =
+          state.any((entry) => entry.inputStoragePath == path) ||
+              _pendingRemovals.values
+                  .any((entry) => entry.inputStoragePath == path);
+      if (stillReferenced) return;
+      try {
+        await AttachmentStorage.deleteFile(path);
+      } catch (error) {
+        debugPrint('Failed to clean up flow input $path: $error');
+      }
+    });
+    _removalQueue = operation.catchError((Object error, StackTrace st) {
+      debugPrint('Failed to remove flow execution $executionId: $error');
+    });
+    return operation;
   }
 
   /// Set the transient queued flag (flow waiting for scheduler resources).

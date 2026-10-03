@@ -22,6 +22,7 @@ import '../models/flow_payload.dart'
 import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_execution.dart';
+import '../providers/task_flow_execution_provider.dart';
 import '../providers/task_flow_provider.dart';
 import '../services/task_flow_execution_service.dart';
 import '../services/task_flow_validator.dart';
@@ -92,6 +93,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   /// Run-mode paths from app media or copies of selected generic files.
   final List<String> _mediaInputs = [];
   final Map<String, String> _inputDisplayNames = {};
+  final Map<String, String> _ownedStoragePaths = {};
   final Set<String> _unsubmittedFileInputs = {};
 
   List<TaskFlowBlock> _blocks = [];
@@ -141,6 +143,13 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     if (initialInput != null) {
       if (_isFileRunInput) {
         _mediaInputs.add(initialInput.text);
+        if (initialInput.fileName != null) {
+          _inputDisplayNames[initialInput.text] = initialInput.fileName!;
+        }
+        if (initialInput.ownedStoragePath != null) {
+          _ownedStoragePaths[initialInput.text] =
+              initialInput.ownedStoragePath!;
+        }
       } else if (_firstBlockDef?.typeKey == BlockType.catcatch) {
         final entry = _CatCatchInputEntry();
         entry.urlController.text = initialInput.text;
@@ -1053,6 +1062,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                             setState(() {
                               _mediaInputs.removeAt(i);
                               _inputDisplayNames.remove(reference);
+                              _ownedStoragePaths.remove(reference);
                             });
                             if (_unsubmittedFileInputs.remove(reference)) {
                               unawaited(_discardUnsubmittedInput(reference));
@@ -1315,6 +1325,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       );
       if (result == null) return;
       final selected = <String, String>{};
+      final owned = <String, String>{};
       for (final file in result.files) {
         final bytes = await _readGenericFile(file);
         final storagePath = await AttachmentStorage.saveFile(file.name, bytes);
@@ -1326,6 +1337,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 p.basename(storagePath),
               );
         selected[reference] = file.name;
+        owned[reference] = storagePath;
       }
       if (!mounted || _isStarting) {
         for (final path in savedPaths) {
@@ -1338,6 +1350,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           selected.keys.where((reference) => !_mediaInputs.contains(reference)),
         );
         _inputDisplayNames.addAll(selected);
+        _ownedStoragePaths.addAll(owned);
         _unsubmittedFileInputs.addAll(selected.keys);
       });
     } catch (error) {
@@ -1414,6 +1427,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     required Future<String?> Function(T record) resolvePath,
   }) async {
     final paths = <String>[];
+    final names = <String, String>{};
     // Multi-select path-only mode: no readFile — the dialog resolves each
     // record's path via onRecordsPicked without buffering the files.
     final result = await showMediaPickerDialog<T>(
@@ -1445,7 +1459,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           // for the caller below.
           for (final record in records) {
             final path = await resolvePath(record);
-            if (path != null && path.isNotEmpty) paths.add(path);
+            if (path != null && path.isNotEmpty) {
+              paths.add(path);
+              final dynamic named = record;
+              final name = named.name as String?;
+              if (name != null && name.isNotEmpty) names[path] = name;
+            }
           }
         },
       ),
@@ -1465,7 +1484,13 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     // Skip paths already selected — re-picking the same file must not
     // fan out a duplicate execution.
     final fresh = valid.where((p) => !_mediaInputs.contains(p)).toList();
-    setState(() => _mediaInputs.addAll(fresh));
+    setState(() {
+      _mediaInputs.addAll(fresh);
+      for (final path in fresh) {
+        final name = names[path];
+        if (name != null) _inputDisplayNames[path] = name;
+      }
+    });
   }
 
   String _formatBytes(int bytes) {
@@ -1488,7 +1513,14 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       ];
     }
     if (_isFileRunInput) {
-      return [for (final path in _mediaInputs) FlowRunInput(text: path)];
+      return [
+        for (final path in _mediaInputs)
+          FlowRunInput(
+            text: path,
+            fileName: _inputDisplayNames[path],
+            ownedStoragePath: _ownedStoragePaths[path],
+          ),
+      ];
     }
     final text = _inputController.text.trim();
     return text.isEmpty ? const [] : [FlowRunInput(text: text)];
@@ -1508,6 +1540,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   Future<void> _startFlow() async {
     if (_isStarting || _isPickingFiles) return;
     final inputs = _collectRunInputs();
+    final execNotifier = ref.read(taskFlowExecutionsProvider.notifier);
     setState(() => _isStarting = true);
     try {
       await ref
@@ -1518,6 +1551,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       if (mounted) await _showValidationError(error);
       return;
     } catch (error) {
+      // A launch may have registered an execution before its final save
+      // failed. That record still owns its picker copy for history retry.
+      _unsubmittedFileInputs.removeWhere((reference) {
+        final path = _ownedStoragePaths[reference];
+        return path != null && execNotifier.referencesInputStoragePath(path);
+      });
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.toString())));

@@ -53,10 +53,13 @@ class _InputPicker extends FilePickerPlatform {
 }
 
 class _CaptureControl implements TaskFlowExecutionService {
+  _CaptureControl({this.failLaunch = false});
+  final bool failLaunch;
   List<FlowRunInput>? submitted;
   @override
   Future<void> launchFlowMany(String flowId, List<FlowRunInput> inputs) async {
     submitted = inputs;
+    if (failLaunch) throw StateError('launch failed');
   }
 
   @override
@@ -252,7 +255,54 @@ void main() {
       expect(submitted, hasLength(1));
       expect(submitted!.single.text, isNot(source.path));
       expect(File(submitted.single.text).readAsStringSync(), 'report');
+      expect(submitted.single.fileName, 'notes.pdf');
+      expect(submitted.single.ownedStoragePath, startsWith('attachments/'));
       await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('failed launch keeps a picked file until leaving the builder',
+        (tester) async {
+      final directory = Directory.systemTemp.createTempSync('flow_file_fail_');
+      final source = File('${directory.path}/notes.pdf')
+        ..writeAsStringSync('report');
+      final originalPicker = FilePickerPlatform.instance;
+      final originalDocuments = PathProviderPlatform.instance;
+      FilePickerPlatform.instance = _InputPicker(source.path);
+      PathProviderPlatform.instance = _Documents(directory.path);
+      addTearDown(() {
+        FilePickerPlatform.instance = originalPicker;
+        PathProviderPlatform.instance = originalDocuments;
+        directory.deleteSync(recursive: true);
+      });
+      final control = _CaptureControl(failLaunch: true);
+      await _pumpRunMode(tester, TaskFlowBlock(typeKey: BlockType.chat),
+          inputType: IOType.file, control: control);
+      final storage = Directory('${directory.path}/attachments');
+      await tester.runAsync(() async {
+        await tester.tap(find.text('选择文件（可多选）'));
+        for (var attempt = 0; attempt < 100; attempt++) {
+          if (storage.existsSync() &&
+              storage.listSync().whereType<File>().isNotEmpty) {
+            return;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        fail('The selected document was not copied into app storage');
+      });
+      await tester.pumpAndSettle();
+      final copy = storage.listSync().whereType<File>().single;
+      await tester.tap(find.widgetWithText(FilledButton, '开始任务流'));
+      await tester.pumpAndSettle();
+      expect(control.submitted, hasLength(1));
+      expect(copy.existsSync(), isTrue,
+          reason: 'a failed launch can still be retried in the builder');
+      await tester.runAsync(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        for (var attempt = 0; attempt < 100 && copy.existsSync(); attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
+      expect(copy.existsSync(), isFalse);
     });
 
     testWidgets('generic file picker checks metadata before copying',

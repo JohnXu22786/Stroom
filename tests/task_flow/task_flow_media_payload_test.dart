@@ -19,6 +19,7 @@ import 'package:stroom/providers/task_provider_shared.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
 import 'package:stroom/services/chat_protocol.dart' show maxAttachmentBytes;
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/openai_protocol.dart';
 import 'package:stroom/services/anthropic_protocol.dart';
@@ -44,6 +45,7 @@ class _Manager extends ChatStreamManager {
   List<ChatMessage>? sentHistory;
   String? sentText;
   ProviderEntriesState? sentEntries;
+  int starts = 0;
   @override
   Future<StreamResult> startStreaming({
     required String text,
@@ -57,6 +59,7 @@ class _Manager extends ChatStreamManager {
     Assistant? assistant,
     ProviderEntriesState? entriesStateOverride,
   }) async {
+    starts++;
     sentHistory = history;
     sentText = text;
     sentEntries = entriesStateOverride;
@@ -70,6 +73,24 @@ class _Manager extends ChatStreamManager {
       assistantMessage: reply,
       fullReply: reply.content,
     );
+  }
+}
+
+class _RejectConversationMessageStore extends InMemorySharedPreferencesStore {
+  _RejectConversationMessageStore(this.rejectedMessageCount) : super.empty();
+
+  final int rejectedMessageCount;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (key == 'flutter.conversations' && value is String) {
+      final conversations = jsonDecode(value) as List;
+      if (conversations.any((conversation) =>
+          (conversation['messages'] as List).length == rejectedMessageCount)) {
+        return Future<bool>.value(false);
+      }
+    }
+    return super.setValue(valueType, key, value);
   }
 }
 
@@ -87,6 +108,14 @@ class _RejectConversationRemovalStore extends InMemorySharedPreferencesStore {
   }
 }
 
+class _RejectExecutionRemovalNotifier extends TaskFlowExecutionNotifier {
+  bool rejectWrites = false;
+
+  @override
+  Future<bool> persist() =>
+      rejectWrites ? Future<bool>.value(false) : super.persist();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory directory;
@@ -97,9 +126,11 @@ void main() {
     directory = await Directory.systemTemp.createTemp('flow_media_');
     previous = PathProviderPlatform.instance;
     PathProviderPlatform.instance = _Documents(directory.path);
+    AppStorage.resetCache();
   });
   tearDown(() async {
     PathProviderPlatform.instance = previous;
+    AppStorage.resetCache();
     await directory.delete(recursive: true);
   });
 
@@ -113,11 +144,13 @@ void main() {
         fileReference: '/tmp/meeting.wav',
         type: IOType.audio,
         text: '总结',
+        fileName: 'original recording.wav',
       );
       final restored = FlowPayload.fromMap(audio.toMap());
       expect(restored.type, IOType.audio);
       expect(restored.fileReference, '/tmp/meeting.wav');
       expect(restored.text, '总结');
+      expect(restored.fileName, 'original recording.wav');
     },
   );
 
@@ -130,6 +163,130 @@ void main() {
     );
     expect(message.content, file.path);
     expect(message.attachments, isEmpty);
+  });
+
+  test('chat attachment keeps the selected name instead of the copy name',
+      () async {
+    final storagePath = await AttachmentStorage.saveFile(
+      'notes.pdf',
+      Uint8List.fromList(utf8.encode('%PDF-1.7\nreport')),
+    );
+    final copy = File('${directory.path}/$storagePath');
+    final restored = FlowPayload.fromMap(FlowPayload.fromValue(
+      copy.path,
+      IOType.file,
+      fileName: 'notes.pdf',
+    ).toMap());
+    final message = await prepareFlowChatMessage(restored, 'conversation');
+    expect(message.attachments.single.fileName, 'notes.pdf');
+    expect(
+        message.attachments.single.fileName, isNot(copy.uri.pathSegments.last));
+  });
+
+  test('execution history keeps picker name and copy until its last removal',
+      () async {
+    final bytes = Uint8List.fromList(utf8.encode('%PDF-1.7\nreport'));
+    final storagePath = await AttachmentStorage.saveFile('notes.pdf', bytes);
+    final copy = File('${directory.path}/$storagePath');
+    final executions = TaskFlowExecutionNotifier();
+    addTearDown(executions.dispose);
+    final first = executions.addExecution(
+      flowId: 'flow',
+      flowName: 'Flow',
+      inputText: copy.path,
+      inputFileName: 'notes.pdf',
+      inputStoragePath: storagePath,
+    );
+    final second = executions.addExecution(
+      flowId: 'flow',
+      flowName: 'Flow retry',
+      inputText: copy.path,
+      inputFileName: 'notes.pdf',
+      inputStoragePath: storagePath,
+    );
+    expect(await executions.persist(), isTrue);
+    final restored = TaskFlowExecution.fromMap(
+      executions.execution(first)!.toMap(),
+    );
+    expect(restored.inputFileName, 'notes.pdf');
+    expect(restored.inputStoragePath, storagePath);
+    final retry = FlowRunInput(
+      text: restored.inputText,
+      fileName: restored.inputFileName,
+      ownedStoragePath: restored.inputStoragePath,
+    );
+    final retryMessage = await prepareFlowChatMessage(
+      FlowPayload.fromValue(retry.text, IOType.file, fileName: retry.fileName),
+      'retry',
+    );
+    expect(retryMessage.attachments.single.fileName, 'notes.pdf');
+    expect(await copy.readAsBytes(), bytes);
+
+    await executions.removeExecution(first);
+    expect(await copy.readAsBytes(), bytes,
+        reason: 'another execution can still retry this copy');
+    await executions.removeExecution(second);
+    expect(await copy.exists(), isFalse);
+    await AttachmentStorage.deleteFile(
+      retryMessage.attachments.single.storagePath,
+    );
+  });
+
+  test('bulk execution removal waits for every shared copy reference',
+      () async {
+    final storagePath = await AttachmentStorage.saveFile(
+      'notes.pdf',
+      Uint8List.fromList(utf8.encode('%PDF-1.7\nreport')),
+    );
+    final copy = File('${directory.path}/$storagePath');
+    final executions = TaskFlowExecutionNotifier();
+    addTearDown(executions.dispose);
+    final ids = [
+      for (var i = 0; i < 3; i++)
+        executions.addExecution(
+          flowId: 'flow',
+          flowName: 'Flow $i',
+          inputText: copy.path,
+          inputStoragePath: storagePath,
+        ),
+    ];
+    expect(await executions.persist(), isTrue);
+    await Future.wait(ids.map(executions.removeExecution));
+    expect(await copy.exists(), isFalse);
+  });
+
+  test('failed execution deletion keeps its retry input and stops its work',
+      () async {
+    final bytes = Uint8List.fromList(utf8.encode('%PDF-1.7\nreport'));
+    final storagePath = await AttachmentStorage.saveFile('notes.pdf', bytes);
+    final copy = File('${directory.path}/$storagePath');
+    final executions = _RejectExecutionRemovalNotifier();
+    addTearDown(executions.dispose);
+    final id = executions.addExecution(
+      flowId: 'flow',
+      flowName: 'Flow',
+      inputText: copy.path,
+      inputStoragePath: storagePath,
+    );
+    executions.addSubTask(
+      id,
+      FlowSubTask(
+        blockTypeKey: 'chat',
+        blockLabel: 'Assistant',
+        subTaskId: 'chat',
+        subTaskType: 'background',
+        status: TaskStatus.running,
+      ),
+    );
+    expect(await executions.persist(), isTrue);
+    executions.rejectWrites = true;
+    await executions.removeExecution(id);
+    expect(executions.execution(id)!.status, FlowExecutionStatus.failed);
+    expect(executions.execution(id)!.subTasks.single.status, TaskStatus.failed);
+    expect(await copy.readAsBytes(), bytes);
+    executions.rejectWrites = false;
+    await executions.removeExecution(id);
+    expect(await copy.exists(), isFalse);
   });
 
   for (final entry in {
@@ -435,6 +592,71 @@ void main() {
         expect(manager.sentText, 'Summarize');
         expect(manager.sentHistory!.single.content, 'Summarize');
         expect(manager.sentHistory!.single.attachments, hasLength(1));
+      },
+    );
+  }
+
+  for (final rejectedCount in [1, 2]) {
+    test(
+      'chat does not ${rejectedCount == 1 ? 'send' : 'complete'} when its '
+      '$rejectedCount-message save fails',
+      () async {
+        final previousStore = SharedPreferencesStorePlatform.instance;
+        final store = _RejectConversationMessageStore(rejectedCount);
+        SharedPreferencesStorePlatform.instance = store;
+        addTearDown(
+          () => SharedPreferencesStorePlatform.instance = previousStore,
+        );
+        final bytes = Uint8List.fromList([1, 2, 3]);
+        final source =
+            await File('${directory.path}/speech.wav').writeAsBytes(bytes);
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+        final executions = TaskFlowExecutionNotifier();
+        addTearDown(executions.dispose);
+        final execId = executions.addExecution(
+          flowId: 'flow',
+          flowName: 'Flow',
+        );
+        final subTask = FlowSubTask(
+          blockTypeKey: 'chat',
+          blockLabel: '助手',
+          subTaskId: 'pending',
+          subTaskType: 'background',
+          status: TaskStatus.waiting,
+        );
+        executions.addSubTask(execId, subTask);
+        final manager = _Manager();
+        await expectLater(
+          executeChatBlock(
+            block: TaskFlowBlock(typeKey: BlockType.chat),
+            def: BlockTypeDefinition.chat,
+            input: source.path,
+            payload: FlowPayload.file(
+              fileReference: source.path,
+              type: IOType.audio,
+            ),
+            execId: execId,
+            execNotifier: executions,
+            flowSubTask: subTask,
+            bgNotifier: BackgroundTaskNotifier(),
+            chatManager: manager,
+            conversationsNotifier:
+                container.read(conversationsProvider.notifier),
+          ),
+          throwsA(isA<Exception>()),
+        );
+        expect(manager.starts, rejectedCount == 1 ? 0 : 1);
+        expect(container.read(conversationsProvider), isEmpty);
+        final disk = await store.getAll();
+        expect(jsonDecode(disk['flutter.conversations'] as String), isEmpty);
+        expect(await source.readAsBytes(), bytes);
+        expect(
+          (await Directory('${directory.path}/attachments').list().toList())
+              .whereType<File>(),
+          isEmpty,
+          reason: 'a rejected exchange must not orphan an attachment',
+        );
       },
     );
   }

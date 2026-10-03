@@ -27,8 +27,17 @@ class FlowRunInput {
   /// block is CatCatch. 0 = fall back to the block's configured duration.
   final int durationSec;
   final String? mimeType;
+  final String? fileName;
 
-  const FlowRunInput({required this.text, this.durationSec = 0, this.mimeType});
+  /// Picker copy retained while any execution record can retry this input.
+  final String? ownedStoragePath;
+
+  const FlowRunInput(
+      {required this.text,
+      this.durationSec = 0,
+      this.mimeType,
+      this.fileName,
+      this.ownedStoragePath});
 }
 
 /// Status of a task flow execution.
@@ -129,6 +138,8 @@ class TaskFlowExecution {
   /// box. 0 = use the block's configured `durationSec`. Persisted so a
   /// retry re-runs with the same duration.
   final int inputDurationSec;
+  final String? inputFileName;
+  final String? inputStoragePath;
 
   /// Transient flag: the flow is alive but its current block is waiting
   /// for scheduler resources (concurrent flows). Never persisted — a
@@ -146,6 +157,8 @@ class TaskFlowExecution {
     this.error,
     this.inputText = '',
     this.inputDurationSec = 0,
+    this.inputFileName,
+    this.inputStoragePath,
     this.queued = false,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
@@ -159,6 +172,8 @@ class TaskFlowExecution {
     bool clearError = false,
     String? inputText,
     int? inputDurationSec,
+    String? inputFileName,
+    String? inputStoragePath,
     bool? queued,
   }) =>
       TaskFlowExecution(
@@ -173,6 +188,8 @@ class TaskFlowExecution {
         error: clearError ? null : (error ?? this.error),
         inputText: inputText ?? this.inputText,
         inputDurationSec: inputDurationSec ?? this.inputDurationSec,
+        inputFileName: inputFileName ?? this.inputFileName,
+        inputStoragePath: inputStoragePath ?? this.inputStoragePath,
         queued: queued ?? this.queued,
       );
 
@@ -200,6 +217,8 @@ class TaskFlowExecution {
         if (error != null) 'error': error,
         if (inputText.isNotEmpty) 'inputText': inputText,
         if (inputDurationSec > 0) 'inputDurationSec': inputDurationSec,
+        if (inputFileName != null) 'inputFileName': inputFileName,
+        if (inputStoragePath != null) 'inputStoragePath': inputStoragePath,
       };
 
   factory TaskFlowExecution.fromMap(Map<String, dynamic> map) =>
@@ -224,6 +243,8 @@ class TaskFlowExecution {
         error: map['error'] as String?,
         inputText: map['inputText'] as String? ?? '',
         inputDurationSec: map['inputDurationSec'] as int? ?? 0,
+        inputFileName: map['inputFileName'] as String?,
+        inputStoragePath: map['inputStoragePath'] as String?,
       );
 
   static FlowExecutionStatus _parseExecStatus(String? name) {
