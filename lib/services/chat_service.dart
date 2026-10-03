@@ -309,6 +309,7 @@ class ChatService {
   // ── Tool execution ────────────────────────────────────────────────
 
   static final Map<String, Map<String, dynamic>> _toolRegistries = {};
+  static Set<String> _disabledToolNames = {};
 
   /// Returns the list of all registered built-in tool definitions.
   static List<ToolDefinition> getRegisteredToolDefinitions() {
@@ -336,6 +337,11 @@ class ChatService {
     dynamic Function(Map<String, dynamic>) handler,
   ) {
     _toolRegistries[def.name] = {'definition': def, 'handler': handler};
+  }
+
+  /// Prevents registered tools from executing while their provider group is off.
+  static void setDisabledToolNames(Set<String> names) {
+    _disabledToolNames = Set<String>.from(names);
   }
 
   // ── Extra params helpers ─────────────────────────────────────────
