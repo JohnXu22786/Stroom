@@ -248,7 +248,7 @@ class _LogViewerPageState extends State<LogViewerPage>
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                '仅保留最近 ${AppLogService.retentionDays} 天的日志内容，超期日志会自动清理',
+                '日志保留期限：只保留最近 ${AppLogService.retentionDays} 天的日志，超过 ${AppLogService.retentionDays} 天会自动清理。',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
