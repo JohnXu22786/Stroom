@@ -10,10 +10,15 @@ class FlowRunInput {
   final int durationSec;
   final String? mimeType;
   final String? fileName;
+
   /// Picker copy retained while an execution can retry this input.
   final String? ownedStoragePath;
-  const FlowRunInput({required this.text, this.durationSec = 0, this.mimeType,
-    this.fileName, this.ownedStoragePath});
+  const FlowRunInput(
+      {required this.text,
+      this.durationSec = 0,
+      this.mimeType,
+      this.fileName,
+      this.ownedStoragePath});
 }
 
 enum FlowExecutionStatus {
@@ -247,9 +252,11 @@ class TaskFlowExecution {
           inputText: map['inputText'] as String? ?? '',
           inputDurationSec: map['inputDurationSec'] as int? ?? 0,
           inputMimeType: map['inputMimeType'] as String?,
-      inputType: IOType.values.where((t) => t.name == map['inputType']).firstOrNull,
-      inputFileName: map['inputFileName'] as String?,
-      inputStoragePath: map['inputStoragePath'] as String?,
+          inputType: IOType.values
+              .where((t) => t.name == map['inputType'])
+              .firstOrNull,
+          inputFileName: map['inputFileName'] as String?,
+          inputStoragePath: map['inputStoragePath'] as String?,
           batchId: map['batchId'] as String?,
           batchIndex: map['batchIndex'] as int? ?? 0,
           snapshot: map['snapshot'] is Map

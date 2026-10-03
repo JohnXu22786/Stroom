@@ -102,15 +102,20 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   /// Batches reserve shared picker copies in sorted order to avoid deadlocks.
   Future<T> withInputStoragePathsLock<T>(
       Iterable<String?> paths, Future<T> Function() action) {
-    final ordered = paths.whereType<String>()
-        .where((path) => path.isNotEmpty).toSet().toList()..sort();
+    final ordered = paths
+        .whereType<String>()
+        .where((path) => path.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
     Future<T> acquire(int index) => index == ordered.length
         ? action()
         : withInputStoragePathLock(ordered[index], () => acquire(index + 1));
     return acquire(0);
   }
 
-  bool referencesInputStoragePath(String path) => mounted &&
+  bool referencesInputStoragePath(String path) =>
+      mounted &&
       (state.any((entry) => entry.inputStoragePath == path) ||
           (_pendingInputRegistrations[path] ?? 0) > 0 ||
           _pendingInputRemovals.values
@@ -119,8 +124,8 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   /// Release copies only after their owning records were durably removed.
   /// Bulk history cleanup uses the same locks and last-reference checks.
   Future<void> cleanupInputStoragePaths(Iterable<String?> paths) async {
-    final uniquePaths = paths.whereType<String>()
-        .where((path) => path.isNotEmpty).toSet();
+    final uniquePaths =
+        paths.whereType<String>().where((path) => path.isNotEmpty).toSet();
     for (final path in uniquePaths) {
       if (!mounted || referencesInputStoragePath(path)) continue;
       await withInputStoragePathLock(path, () async {
@@ -158,15 +163,18 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
 
   /// One atomic submission snapshot contains every input and placeholder.
   Future<bool> addExecutions(List<TaskFlowExecution> executions) {
-    if (executions.any((entry) =>
-        _deletingInputPaths.contains(entry.inputStoragePath))) {
+    if (executions
+        .any((entry) => _deletingInputPaths.contains(entry.inputStoragePath))) {
       throw StateError('输入文件正在删除，请重新选择文件');
     }
     final submitted = List<TaskFlowExecution>.of(executions);
     // Queue publication can wait behind another durable registration. Reserve
     // picker copies now so removal cleanup sees these future owners as well.
-    final reservedPaths = submitted.map((entry) => entry.inputStoragePath)
-        .whereType<String>().where((path) => path.isNotEmpty).toSet();
+    final reservedPaths = submitted
+        .map((entry) => entry.inputStoragePath)
+        .whereType<String>()
+        .where((path) => path.isNotEmpty)
+        .toSet();
     for (final path in reservedPaths) {
       _pendingInputRegistrations.update(path, (count) => count + 1,
           ifAbsent: () => 1);
@@ -467,15 +475,22 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
       final saved = await write;
       if (!saved) {
         if (mounted) {
-          state = [removed.copyWith(
-              status: FlowExecutionStatus.interrupted,
-              queued: false,
-              completedAt: DateTime.now(),
-              error: '删除记录未能保存，请重试',
-              subTasks: removed.subTasks.map((step) =>
-                  step.outcome == FlowStepOutcome.succeeded || step.outcome == FlowStepOutcome.failed
-                    ? step
-                    : step.copyWith(status: TaskStatus.paused, outcome: FlowStepOutcome.interrupted)).toList()), ...state];
+          state = [
+            removed.copyWith(
+                status: FlowExecutionStatus.interrupted,
+                queued: false,
+                completedAt: DateTime.now(),
+                error: '删除记录未能保存，请重试',
+                subTasks: removed.subTasks
+                    .map((step) => step.outcome == FlowStepOutcome.succeeded ||
+                            step.outcome == FlowStepOutcome.failed
+                        ? step
+                        : step.copyWith(
+                            status: TaskStatus.paused,
+                            outcome: FlowStepOutcome.interrupted))
+                    .toList()),
+            ...state
+          ];
           await persist();
         }
         _pendingInputRemovals.remove(id);
@@ -508,7 +523,8 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
       _persistTimer?.cancel();
       _persistTimer = null;
       try {
-        final proposed = state.where((e) => !removedIds.contains(e.id)).toList();
+        final proposed =
+            state.where((e) => !removedIds.contains(e.id)).toList();
         if (!await persistSnapshot(proposed)) return false;
         if (mounted) {
           // Preserve records added while the disk write was in progress.

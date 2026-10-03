@@ -163,9 +163,13 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     if (initialInput != null) {
       if (_isFileRunInput) {
         _mediaInputs.add(initialInput.text);
-        if (initialInput.fileName != null) _inputDisplayNames[initialInput.text] = initialInput.fileName!;
-        if (initialInput.mimeType != null) _inputMimeTypes[initialInput.text] = initialInput.mimeType!;
-        if (initialInput.ownedStoragePath != null) _ownedStoragePaths[initialInput.text] = initialInput.ownedStoragePath!;
+        if (initialInput.fileName != null)
+          _inputDisplayNames[initialInput.text] = initialInput.fileName!;
+        if (initialInput.mimeType != null)
+          _inputMimeTypes[initialInput.text] = initialInput.mimeType!;
+        if (initialInput.ownedStoragePath != null)
+          _ownedStoragePaths[initialInput.text] =
+              initialInput.ownedStoragePath!;
       } else if (_firstBlockDef?.typeKey == BlockType.catcatch) {
         final entry = _CatCatchInputEntry();
         entry.urlController.text = initialInput.text;
@@ -1598,9 +1602,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     }
     if (_isFileRunInput) {
       return [
-        for (final path in _mediaInputs) FlowRunInput(text: path,
-          mimeType: _inputMimeTypes[path], fileName: _inputDisplayNames[path],
-          ownedStoragePath: _ownedStoragePaths[path]),
+        for (final path in _mediaInputs)
+          FlowRunInput(
+              text: path,
+              mimeType: _inputMimeTypes[path],
+              fileName: _inputDisplayNames[path],
+              ownedStoragePath: _ownedStoragePaths[path]),
       ];
     }
     final text = _inputController.text.trim();

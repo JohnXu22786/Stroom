@@ -177,21 +177,22 @@ void main() {
 
   test('assistant fragment callbacks hydrate string and JSON values', () {
     Assistant callbacks(String url, String tuning) => Assistant(
-      id: 'assistant',
-      name: 'Assistant',
-      prompt: 'Help',
-      settings: AssistantSettings(
-        customParameters: [
-          CustomParameter(name: 'callback', type: 'string', value: url),
-          CustomParameter(
-            name: 'request',
-            type: 'json',
-            value: jsonEncode({'callback': url, 'tuning': tuning}),
+          id: 'assistant',
+          name: 'Assistant',
+          prompt: 'Help',
+          settings: AssistantSettings(
+            customParameters: [
+              CustomParameter(name: 'callback', type: 'string', value: url),
+              CustomParameter(
+                name: 'request',
+                type: 'json',
+                value: jsonEncode({'callback': url, 'tuning': tuning}),
+              ),
+              CustomParameter(
+                  name: 'note', type: 'string', value: fragmentNote),
+            ],
           ),
-          CustomParameter(name: 'note', type: 'string', value: fragmentNote),
-        ],
-      ),
-    );
+        );
     final chatFlow = TaskFlowDefinition(
       blocks: [
         TaskFlowBlock(
@@ -213,11 +214,8 @@ void main() {
     final restored = FlowLaunchSnapshot.fromMap(snapshot.toMap());
 
     void verify(Assistant live, String expectedCallback) {
-      final params = restored
-          .resolveAssistants([live])
-          .single
-          .settings
-          .customParameters;
+      final params =
+          restored.resolveAssistants([live]).single.settings.customParameters;
       expect(
         params.singleWhere((param) => param.name == 'callback').value,
         expectedCallback,
@@ -249,7 +247,8 @@ void main() {
   });
 
   for (final encoded in [false, true]) {
-    test('removed ${encoded ? 'encoded' : 'direct'} invalid JSON setting cannot run',
+    test(
+        'removed ${encoded ? 'encoded' : 'direct'} invalid JSON setting cannot run',
         () {
       const malformed = '{"Authorization":"old-malformed-secret"';
       final old = modelProviders('old-json-secret', '0.5');
@@ -288,7 +287,8 @@ void main() {
       final resolved = restored.resolveProviders(live);
       final config = resolved.entries.single.configs.single;
       final headers = encoded
-          ? (jsonDecode(config.typeConfig['routing'] as String) as Map)['headers']
+          ? (jsonDecode(config.typeConfig['routing'] as String)
+              as Map)['headers']
           : config.typeConfig['headers'];
       expect(jsonDecode(headers as String),
           {'Authorization': 'fresh-header-secret'});

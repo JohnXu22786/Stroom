@@ -56,7 +56,8 @@ class TaskFlowRunPage extends ConsumerWidget {
                       child: Text('$finished/${executionIds.length} 个运行已结束'
                           '${executions.length < executionIds.length ? ' · ${executionIds.length - executions.length} 个记录已清除' : ''}')),
                   for (final execution in executions)
-                    TaskFlowCard(key: ValueKey(execution.id), execution: execution),
+                    TaskFlowCard(
+                        key: ValueKey(execution.id), execution: execution),
                 ]),
     );
   }
