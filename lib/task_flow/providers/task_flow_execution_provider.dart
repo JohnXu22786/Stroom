@@ -26,6 +26,12 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     with PersistableNotifier<List<TaskFlowExecution>> {
   TaskFlowExecutionNotifier() : super([]);
 
+  Future<void> _registrationQueue = Future<void>.value();
+  final Object _registrationWriteZone = Object();
+  Completer<void>? _registrationBarrier;
+  List<TaskFlowExecution>? _disposedSnapshot;
+  Future<bool>? _disposedPersistence;
+
   // ===========================================================================
   // PersistableNotifier contract
   // ===========================================================================
@@ -73,8 +79,41 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
 
   /// One atomic submission snapshot contains every input and placeholder.
   Future<bool> addExecutions(List<TaskFlowExecution> executions) {
-    state = [...executions.reversed, ...state];
-    return persist();
+    final submitted = List<TaskFlowExecution>.of(executions);
+    final operation = _registrationQueue.then((_) async {
+      if (!mounted) return false;
+      final barrier = Completer<void>();
+      _registrationBarrier = barrier;
+      var saved = false;
+      try {
+        state = [...submitted.reversed, ...state];
+        saved = await runZoned<Future<bool>>(
+          persist,
+          zoneValues: {_registrationWriteZone: true},
+        );
+        return saved;
+      } finally {
+        if (!saved) {
+          final ids = submitted.map((entry) => entry.id).toSet();
+          if (mounted) {
+            state = state.where((entry) => !ids.contains(entry.id)).toList();
+          } else {
+            // Disposal owns the latest snapshot while this write settles.
+            // An unsuccessful submission must not enter its final flush.
+            _disposedSnapshot = _disposedSnapshot
+                ?.where((entry) => !ids.contains(entry.id))
+                .toList();
+          }
+        }
+        _registrationBarrier = null;
+        barrier.complete();
+      }
+    });
+    _registrationQueue = operation.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {},
+    );
+    return operation;
   }
 
   String addExecution(
@@ -295,7 +334,6 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     final removed = execution(id);
     state = state.where((e) => e.id != id).map((e) {
       if (removed == null ||
-          removed.isTerminal ||
           removed.batchId == null ||
           e.batchId != removed.batchId ||
           e.isTerminal) {
@@ -334,6 +372,18 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   Future<bool> persist() {
     _persistTimer?.cancel();
     _persistTimer = null;
+    final barrier = _registrationBarrier;
+    if (barrier != null && Zone.current[_registrationWriteZone] != true) {
+      return barrier.future.then((_) => persist());
+    }
+    if (!mounted) {
+      final snapshot = _disposedSnapshot;
+      if (snapshot == null) return Future.value(false);
+      // A registration override may reach this point in its own write zone.
+      // Deduplicate only the final flush after that registration settles.
+      if (barrier != null) return super.persistSnapshot(snapshot);
+      return _disposedPersistence ??= super.persistSnapshot(snapshot);
+    }
     return super.persist();
   }
 
@@ -348,12 +398,17 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
           completedAt: DateTime.now(),
           error: '应用退出时执行中断，可从已保存的步骤继续',
           subTasks: e.subTasks
-              .map((st) => [FlowStepOutcome.running, FlowStepOutcome.paused]
-                      .contains(st.outcome)
-                  ? st.copyWith(
-                      status: TaskStatus.paused,
-                      outcome: FlowStepOutcome.interrupted)
-                  : st)
+              .map((st) => switch (st.outcome) {
+                    FlowStepOutcome.running ||
+                    FlowStepOutcome.paused =>
+                      st.copyWith(
+                          status: TaskStatus.paused,
+                          outcome: FlowStepOutcome.interrupted),
+                    FlowStepOutcome.pending => st.copyWith(
+                        status: TaskStatus.paused,
+                        outcome: FlowStepOutcome.skipped),
+                    _ => st,
+                  })
               .toList());
     }).toList();
     await persist();
@@ -362,7 +417,10 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
 
   @override
   void dispose() {
-    if (_persistTimer != null) unawaited(persist());
+    _disposedSnapshot = List<TaskFlowExecution>.of(state);
+    if (_persistTimer != null || _registrationBarrier != null) {
+      unawaited(persist());
+    }
     super.dispose();
   }
 }

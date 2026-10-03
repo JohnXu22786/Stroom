@@ -18,6 +18,7 @@ import '../../../services/chat_protocol.dart'
 import '../../../services/chat_adapter.dart'
     show availableLlmModels, resolveModelRef;
 import '../../../utils/web_file_store.dart';
+import '../../../utils/provider_models.dart' show resolveProviderModel;
 import '../../models/block_type_definition.dart';
 import '../../models/flow_payload.dart';
 import '../../models/io_type.dart';
@@ -55,11 +56,20 @@ Future<String> chatOutputTitle(String input) async {
   return '助手回复_$short';
 }
 
-/// Reuse chat's model-reference resolution; unbound assistants use the
-/// currently configured chat endpoint. No provider/model selection is changed.
+/// Reuse chat's model-reference resolution. A captured local identity supplies
+/// the endpoint; otherwise unbound chat uses its configured endpoint fallback.
+/// No provider/model selection is changed.
 String flowChatEndpointType(
     Assistant? assistant, ProviderEntriesState providers,
-    {String fallback = 'openai'}) {
+    {String fallback = 'openai', Map<String, String>? modelReference}) {
+  if (modelReference != null) {
+    final selected = resolveProviderModel(providers, 'llm', modelReference);
+    if (selected == null) {
+      throw StateError('运行快照引用的对话模型已删除或不可用，请使用最新配置重试');
+    }
+    return effectiveEndpointType(
+        selected.model.endpointType, selected.config.endpointType);
+  }
   if (assistant == null) return fallback;
   final reference = assistant.modelId ??
       assistant.defaultModelId ??
@@ -188,6 +198,7 @@ Future<ChatMessage> prepareFlowChatMessage(
 /// Sends [input] (the previous block's output) to the selected assistant
 /// (or the currently selected one when [assistant] is null) via
 /// [ChatStreamManager] and returns the assistant's text response.
+/// [modelReference] keeps an unbound flow on its captured local model identity.
 ///
 /// The exchange persists as a REAL conversation (id `flow_<execId>_<sub>`,
 /// created up-front before streaming): the manager's periodic + final
@@ -202,6 +213,7 @@ Future<String> executeChatBlock({
   FlowPayload? payload,
   String endpointType = 'openai',
   ProviderEntriesState? providerEntries,
+  Map<String, String>? modelReference,
   required String execId,
   required TaskFlowExecutionNotifier execNotifier,
   required FlowSubTask flowSubTask,
@@ -223,6 +235,7 @@ Future<String> executeChatBlock({
   }
 
   var conversationCreated = false;
+  var modelServicePrepared = false;
   var flowAttachments = <Attachment>[];
   Future<void> discardConversation() async {
     var removed = !conversationCreated;
@@ -309,6 +322,22 @@ Future<String> executeChatBlock({
     // Cancellation before a stream exists cannot be handled by manager.cancel.
     // Check synchronously after preparation/persistence, before starting it.
     if (!isLive()) await stopInactiveExecution();
+
+    // Prepare the exact captured service only after attachments and messages
+    // are ready. The stream manager reuses this per-conversation service even
+    // when the interactive model cache is empty or has moved to another model.
+    if (modelReference != null) {
+      final service = chatManager.adapter.getOrCreateService(
+        convId,
+        assistant: assistant,
+        entriesState: providerEntries,
+        modelReference: modelReference,
+      );
+      if (service == null) {
+        throw StateError('运行快照引用的对话模型已删除或不可用，请使用最新配置重试');
+      }
+      modelServicePrepared = true;
+    }
 
     // The previous block's text is sent VERBATIM as a role:user message
     // (no prefix editing). The assistant's own prompt is injected by the
@@ -443,5 +472,7 @@ Future<String> executeChatBlock({
       blockType: def.typeKey.name,
       blockTitle: def.label,
     );
+  } finally {
+    if (modelServicePrepared) chatManager.adapter.cancelService(convId);
   }
 }
