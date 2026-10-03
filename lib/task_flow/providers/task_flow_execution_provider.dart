@@ -143,11 +143,23 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   }
 
   Timer? _persistTimer;
+  Completer<void>? _removalBarrier;
 
   List<TaskFlowExecution> get executions => state;
 
   TaskFlowExecution? execution(String id) =>
       state.where((e) => e.id == id).firstOrNull;
+
+  /// Serialize changes whose disk snapshots must exclude rejected or removed
+  /// executions. Durable removal uses this same queue as registration.
+  Future<T> serializeExecutionMutation<T>(Future<T> Function() action) {
+    final operation = _registrationQueue.then((_) => action());
+    _registrationQueue = operation.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {},
+    );
+    return operation;
+  }
 
   /// One atomic submission snapshot contains every input and placeholder.
   Future<bool> addExecutions(List<TaskFlowExecution> executions) {
@@ -167,7 +179,7 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
       _pendingInputRegistrations.update(path, (count) => count + 1,
           ifAbsent: () => 1);
     }
-    final operation = _registrationQueue.then((_) async {
+    return serializeExecutionMutation(() async {
       try {
         if (!mounted) return false;
         final barrier = Completer<void>();
@@ -207,11 +219,6 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
         }
       }
     });
-    _registrationQueue = operation.then<void>(
-      (_) {},
-      onError: (Object error, StackTrace stackTrace) {},
-    );
-    return operation;
   }
 
   String addExecution(
@@ -498,6 +505,50 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     return operation;
   }
 
+  /// Save removals before publishing them to listeners. Failed writes leave
+  /// the records visible and keep the last durable cancellation state intact.
+  Future<bool> removeExecutionsPersisted(Iterable<String> ids) async {
+    final removedIds = ids.toSet();
+    final inputPaths = <String?>[];
+    final saved = await serializeExecutionMutation(() async {
+      if (!mounted) return false;
+      final removed = state.where((e) => removedIds.contains(e.id)).toList();
+      if (removed.isEmpty) return true;
+      if (removed.any((e) => !e.isTerminal)) {
+        throw StateError('任务流取消后仍在运行');
+      }
+
+      final gate = Completer<void>();
+      _removalBarrier = gate;
+      _persistTimer?.cancel();
+      _persistTimer = null;
+      try {
+        final proposed =
+            state.where((e) => !removedIds.contains(e.id)).toList();
+        if (!await persistSnapshot(proposed)) return false;
+        if (mounted) {
+          // Preserve records added while the disk write was in progress.
+          state = state.where((e) => !removedIds.contains(e.id)).toList();
+        } else {
+          // A final flush waiting behind this removal owns the disposal
+          // snapshot. Successful removals must stay absent from that flush.
+          _disposedSnapshot = _disposedSnapshot
+              ?.where((e) => !removedIds.contains(e.id))
+              .toList();
+        }
+        inputPaths.addAll(removed.map((entry) => entry.inputStoragePath));
+        return true;
+      } finally {
+        _removalBarrier = null;
+        gate.complete();
+      }
+    });
+    // A retry can hold a picker-file lock while awaiting registration. Release
+    // the mutation queue before taking those same locks for input cleanup.
+    if (saved) await cleanupInputStoragePaths(inputPaths);
+    return saved;
+  }
+
   void setExecutionQueued(String id, bool queued) => _update(
       id,
       (e) => e.isTerminal ||
@@ -513,6 +564,10 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
 
   @override
   Future<bool> persist() {
+    final removalBarrier = _removalBarrier;
+    if (removalBarrier != null) {
+      return removalBarrier.future.then((_) => persist());
+    }
     _persistTimer?.cancel();
     _persistTimer = null;
     final barrier = _registrationBarrier;
@@ -561,7 +616,9 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   @override
   void dispose() {
     _disposedSnapshot = List<TaskFlowExecution>.of(state);
-    if (_persistTimer != null || _registrationBarrier != null) {
+    if (_persistTimer != null ||
+        _registrationBarrier != null ||
+        _removalBarrier != null) {
       unawaited(persist());
     }
     super.dispose();

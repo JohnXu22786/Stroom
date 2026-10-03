@@ -49,6 +49,11 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
   Future<Uint8List> Function(String, Map<String, dynamic>, CancelToken)?
       debugSynthesize;
 
+  Future<void>? _pendingWrite;
+  Completer<void>? _removalBarrier;
+  List<SynthesisTask>? _disposedSnapshot;
+  Future<void>? _disposedPersistence;
+
   TaskListNotifier(this.ref) : super([]);
 
   /// 添加一个合成任务并立刻开始后台执行
@@ -404,6 +409,40 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     _persistTasks();
   }
 
+  /// Save removals before publishing them; absent IDs also retry disk cleanup.
+  Future<bool> removeTasksPersisted(Iterable<String> ids) async {
+    while (_removalBarrier != null) {
+      await _removalBarrier!.future;
+    }
+    if (!mounted) return false;
+    final removedIds = ids.toSet();
+    if (removedIds.isEmpty) return true;
+
+    final gate = Completer<void>();
+    _removalBarrier = gate;
+    try {
+      final proposed = state.where((t) => !removedIds.contains(t.id)).toList();
+      if (!await _writeSnapshot(proposed)) return false;
+      if (mounted) {
+        state = state.where((t) => !removedIds.contains(t.id)).toList();
+        for (final id in removedIds) {
+          _cancelTokens.remove(id)?.cancel();
+        }
+      }
+      if (!mounted) {
+        // Deferred ordinary writes own this snapshot after disposal. Only a
+        // successful removal may remove these IDs from its final flush.
+        _disposedSnapshot = _disposedSnapshot
+            ?.where((task) => !removedIds.contains(task.id))
+            .toList();
+      }
+      return true;
+    } finally {
+      _removalBarrier = null;
+      gate.complete();
+    }
+  }
+
   void _updateTask(String taskId, TaskStatus status,
       {String? error,
       String? originalRequest,
@@ -550,16 +589,34 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
   // 持久化
   // ============================================================================
 
-  Future<void> _persistTasks() async {
-    try {
-      final file = await _tasksFile();
-      final data = state.map((t) => t.toMap()).toList();
-      // 原子写入：直接 writeAsString 中途崩溃会留下半截 JSON，
-      // 下次启动整个任务列表解析失败。
-      await AtomicFile.writeString(file, jsonEncode(data));
-    } catch (e) {
-      debugPrint('[TaskListNotifier] Failed to persist tasks: $e');
+  Future<void> _persistTasks() {
+    final barrier = _removalBarrier;
+    if (barrier != null) return barrier.future.then((_) => _persistTasks());
+    if (!mounted) {
+      final snapshot = _disposedSnapshot;
+      if (snapshot == null) return Future<void>.value();
+      return _disposedPersistence ??= _writeSnapshot(snapshot).then((_) {});
     }
+    return _writeSnapshot(state).then((_) {});
+  }
+
+  Future<bool> _writeSnapshot(List<SynthesisTask> snapshot) {
+    final previous = _pendingWrite ?? Future<void>.value();
+    final write = previous.then((_) async {
+      try {
+        final file = await _tasksFile();
+        final data = snapshot.map((t) => t.toMap()).toList();
+        // 原子写入：直接 writeAsString 中途崩溃会留下半截 JSON，
+        // 下次启动整个任务列表解析失败。
+        await AtomicFile.writeString(file, jsonEncode(data));
+        return true;
+      } catch (e) {
+        debugPrint('[TaskListNotifier] Failed to persist tasks: $e');
+        return false;
+      }
+    });
+    _pendingWrite = write.then<void>((_) {});
+    return write;
   }
 
   Future<List<SynthesisTask>> _loadPersistedTasks() async {
@@ -607,6 +664,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
 
   @override
   void dispose() {
+    _disposedSnapshot = List.of(state);
     for (final token in _cancelTokens.values) {
       if (!token.isCancelled) token.cancel();
     }
