@@ -45,6 +45,10 @@ extension _ChatServiceToolsExt on ChatService {
         if (tools.isEmpty) {
           return 'Error: MCP 服务器 "${client.config.name}" 连接失败或未返回任何工具，请检查服务器配置。';
         }
+        manager.routeToolsToClient(
+          placeholderClientName,
+          tools.map((tool) => tool.name),
+        );
         // 极少数服务器真实提供了与占位符同名的工具：直接执行，
         // 避免模型陷入"调用占位符 → 报错列出同名工具 → 再调用"的死循环。
         if (tools.any((t) => t.name == name)) {
@@ -53,6 +57,19 @@ extension _ChatServiceToolsExt on ChatService {
         final available = tools.map((t) => t.name).join(', ');
         return 'Error: MCP 服务器 "${client.config.name}" 没有名为 "$name" 的工具。'
             '该服务器可用的工具: $available。请改用这些工具名调用。';
+      }
+
+      final routedClientName = manager.getToolClientName(name);
+      if (routedClientName != null) {
+        final client = manager.getClient(routedClientName);
+        if (client != null &&
+            !client.isDisposed &&
+            client.cachedTools.any((tool) => tool.name == name)) {
+          if (!client.isConnected && !await client.connect()) {
+            return 'Error: MCP 服务器 "${client.config.name}" 重新连接失败。';
+          }
+          if (client.isConnected) return client.callTool(name, args);
+        }
       }
 
       for (final entry in manager.clients.entries) {

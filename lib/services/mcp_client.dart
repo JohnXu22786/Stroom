@@ -977,6 +977,7 @@ class McpClient {
 class McpClientManager {
   final Map<String, McpClient> _clients = {};
   final Map<String, String> _placeholderClientNames = {};
+  final Map<String, String> _toolClientNames = {};
 
   /// 所有客户端
   Map<String, McpClient> get clients => Map.unmodifiable(_clients);
@@ -1005,6 +1006,32 @@ class McpClientManager {
     _clients
       ..clear()
       ..addAll(orderedClients);
+    rebuildToolClientNames();
+  }
+
+  /// Restores first-config dispatch for cached tools after clients are reordered.
+  void rebuildToolClientNames() {
+    _toolClientNames.clear();
+    for (final entry in _clients.entries) {
+      for (final tool in entry.value.cachedTools) {
+        _toolClientNames.putIfAbsent(tool.name, () => entry.key);
+      }
+    }
+  }
+
+  /// Routes discovered tools to the server whose placeholder was just called.
+  void routeToolsToClient(String clientName, Iterable<String> toolNames) {
+    if (!_clients.containsKey(clientName)) return;
+    for (final toolName in toolNames) {
+      _toolClientNames[toolName] = clientName;
+    }
+  }
+
+  /// Returns the selected server for a discovered tool name, if one exists.
+  String? getToolClientName(String toolName) => _toolClientNames[toolName];
+
+  void _removeToolRoutesForClient(String clientName) {
+    _toolClientNames.removeWhere((_, name) => name == clientName);
   }
 
   /// 添加一个客户端
@@ -1013,6 +1040,7 @@ class McpClientManager {
     final existing = _clients[id];
     if (existing != null) {
       existing.dispose();
+      _removeToolRoutesForClient(id);
     }
     _clients[id] = client;
   }
@@ -1021,6 +1049,7 @@ class McpClientManager {
   void removeClient(String id) {
     final client = _clients.remove(id);
     client?.dispose();
+    _removeToolRoutesForClient(id);
   }
 
   /// 释放所有客户端
@@ -1030,5 +1059,6 @@ class McpClientManager {
     }
     _clients.clear();
     _placeholderClientNames.clear();
+    _toolClientNames.clear();
   }
 }
