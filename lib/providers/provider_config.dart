@@ -11,6 +11,20 @@ export '../models/tts_models.dart';
 export 'provider_config_types.dart';
 part 'provider_config_persistence.dart';
 
+/// Stable identity and label for the local Google/Bing/Baidu web search group.
+/// The callable tool name remains `web_search` for API and saved-tool compatibility.
+const kBuiltinWebSearchEntryId = 'builtin';
+const kBuiltinWebSearchEntryType = 'builtin_tool';
+const kBuiltinWebSearchEntryName = 'Built-in Web Search';
+
+/// Static read-only catalog row for local web search; it is never persisted
+/// with the configurable provider entries.
+ProviderEntry createBuiltinWebSearchEntry() => ProviderEntry(
+      id: kBuiltinWebSearchEntryId,
+      type: kBuiltinWebSearchEntryType,
+      name: kBuiltinWebSearchEntryName,
+    );
+
 // ============================================================================
 // 供应商条目列表状态
 // ============================================================================
