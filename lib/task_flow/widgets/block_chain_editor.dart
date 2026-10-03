@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/block_type_definition.dart';
 import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
+import '../models/task_flow_chain_editor.dart';
 import 'flow_block_card.dart';
 import 'io_type_indicator.dart';
 
@@ -14,6 +15,10 @@ class BlockChainEditor extends StatelessWidget {
   final void Function(int index) onEditBlock;
   final void Function(int index) onDeleteBlock;
   final void Function(int index, BlockType typeKey) onReplaceBlock;
+  final void Function(int index, BlockType typeKey)? onInsertBlock;
+  final void Function(int index)? onDuplicateBlock;
+  final void Function(int index, int destination)? onMoveBlock;
+  final String? selectedBlockId;
 
   const BlockChainEditor({
     super.key,
@@ -24,6 +29,10 @@ class BlockChainEditor extends StatelessWidget {
     required this.onEditBlock,
     required this.onDeleteBlock,
     required this.onReplaceBlock,
+    this.onInsertBlock,
+    this.onDuplicateBlock,
+    this.onMoveBlock,
+    this.selectedBlockId,
   });
 
   /// The types users can pick for the initial input — text/audio/image/
@@ -33,6 +42,7 @@ class BlockChainEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final issues = TaskFlowChainEditor.validateConnections(blocks, inputType);
     return Column(
       children: [
         Expanded(
@@ -44,14 +54,44 @@ class BlockChainEditor extends StatelessWidget {
                 final block = blocks[index];
                 final displayIndex = index + 1;
                 final isLast = index == blocks.length - 1;
-                return FlowBlockCard(
-                  block: block,
-                  index: displayIndex,
-                  isFirst: index == 0,
-                  onTap: () => onEditBlock(index),
-                  onSettings: () => onEditBlock(index),
-                  onReplace: () => _showReplaceBlockSheet(context, index),
-                  onDelete: isLast ? () => onDeleteBlock(index) : null,
+                return Column(
+                  key: ValueKey(block.id),
+                  children: [
+                    if (onInsertBlock != null)
+                      _buildInsertControl(context, index),
+                    FlowBlockCard(
+                      block: block,
+                      index: displayIndex,
+                      isFirst: index == 0,
+                      isLast: isLast,
+                      selected: selectedBlockId == block.id,
+                      validationMessage: issues
+                          .where((issue) => issue.blockId == block.id)
+                          .firstOrNull
+                          ?.message,
+                      onTap: () => onEditBlock(index),
+                      onSettings: () => onEditBlock(index),
+                      onReplace: () => _showReplaceBlockSheet(context, index),
+                      onDelete: () => onDeleteBlock(index),
+                      onDuplicate: onDuplicateBlock == null
+                          ? null
+                          : () => onDuplicateBlock!(index),
+                      onMoveUp: index == 0 || onMoveBlock == null
+                          ? null
+                          : () => onMoveBlock!(index, index - 1),
+                      onMoveDown: isLast || onMoveBlock == null
+                          ? null
+                          : () => onMoveBlock!(index, index + 1),
+                      onInsertBefore: onInsertBlock == null
+                          ? null
+                          : () =>
+                              _showAddBlockSheet(context, insertIndex: index),
+                      onInsertAfter: onInsertBlock == null
+                          ? null
+                          : () => _showAddBlockSheet(context,
+                              insertIndex: index + 1),
+                    ),
+                  ],
                 );
               }),
             ],
@@ -120,9 +160,8 @@ class BlockChainEditor extends StatelessWidget {
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<IOType>(
-                          // Stored url/file/any values display as their
-                          // user-facing type (url→text) — the value must be
-                          // in items to avoid the debug assert.
+                          // Stored url/any display as text; file remains
+                          // selectable. The value must exist in items.
                           value: inputType.userFacing,
                           isDense: true,
                           icon: Icon(
@@ -216,16 +255,46 @@ class BlockChainEditor extends StatelessWidget {
     );
   }
 
-  void _showAddBlockSheet(BuildContext context) {
+  Widget _buildInsertControl(BuildContext context, int index) {
+    final compatible = _insertionCandidates(index).isNotEmpty;
+    return Tooltip(
+      message:
+          compatible ? '在步骤 ${index + 1} 前插入功能块' : '没有同时兼容相邻步骤的功能块，请先调整相邻步骤',
+      child: TextButton.icon(
+        key: ValueKey('insert-block-$index'),
+        onPressed: compatible
+            ? () => _showAddBlockSheet(context, insertIndex: index)
+            : null,
+        icon: const Icon(Icons.add, size: 16),
+        label: Text('在步骤 ${index + 1} 前插入'),
+      ),
+    );
+  }
+
+  List<BlockTypeDefinition> _insertionCandidates(int index) {
+    final previous =
+        index == 0 ? inputType : blocks[index - 1].getDefinition()?.outputType;
+    final next = index == blocks.length
+        ? null
+        : blocks[index].getDefinition()?.inputType;
+    if (previous == null || (index < blocks.length && next == null)) {
+      return const [];
+    }
+    return BlockTypeDefinition.getReplacementCandidates(
+        prevOutput: previous, nextInput: next);
+  }
+
+  void _showAddBlockSheet(BuildContext context, {int? insertIndex}) {
     final cs = Theme.of(context).colorScheme;
 
-    List<BlockTypeDefinition> availableTypes;
-    if (blocks.isEmpty) {
-      availableTypes = BlockTypeDefinition.getCompatibleNextBlocks(inputType);
-    } else {
-      final lastOutput = blocks.last.getDefinition()?.outputType ?? IOType.any;
-      availableTypes = BlockTypeDefinition.getCompatibleNextBlocks(lastOutput);
-    }
+    final insertionIndex = insertIndex ?? blocks.length;
+    final availableTypes = _insertionCandidates(insertionIndex);
+    final previous = insertionIndex == 0
+        ? inputType
+        : blocks[insertionIndex - 1].getDefinition()?.outputType;
+    final next = insertionIndex == blocks.length
+        ? null
+        : blocks[insertionIndex].getDefinition()?.inputType;
 
     showModalBottomSheet(
       context: context,
@@ -256,16 +325,15 @@ class BlockChainEditor extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               Text(
-                '选择功能块',
+                insertIndex == null ? '选择功能块' : '插入功能块',
                 style: Theme.of(
                   scrollCtx,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               Text(
-                blocks.isEmpty
-                    ? '当前初始输入类型: ${inputType.userFacing.label}'
-                    : '上一个功能块输出: ${blocks.last.getDefinition()?.outputType.label ?? inputType.userFacing.label}',
+                '${insertionIndex == 0 ? '初始输入' : '上一步输出'}: ${previous?.label ?? '未知'}'
+                '${next == null ? '' : '，下一步需要: ${next.label}'}',
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
               const SizedBox(height: 12),
@@ -289,7 +357,8 @@ class BlockChainEditor extends StatelessWidget {
                         .map(
                           (type) => Padding(
                             padding: const EdgeInsets.only(bottom: 8),
-                            child: _buildBlockTypeOption(type, cs, ctx, null),
+                            child: _buildBlockTypeOption(type, cs, ctx, null,
+                                insertIndex: insertIndex),
                           ),
                         )
                         .toList(),
@@ -398,8 +467,9 @@ class BlockChainEditor extends StatelessWidget {
     BlockTypeDefinition type,
     ColorScheme cs,
     BuildContext ctx,
-    int? replaceIndex,
-  ) {
+    int? replaceIndex, {
+    int? insertIndex,
+  }) {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -412,6 +482,8 @@ class BlockChainEditor extends StatelessWidget {
           Navigator.pop(ctx);
           if (replaceIndex != null) {
             onReplaceBlock(replaceIndex, type.typeKey);
+          } else if (insertIndex != null && onInsertBlock != null) {
+            onInsertBlock!(insertIndex, type.typeKey);
           } else {
             onAddBlock(type.typeKey);
           }

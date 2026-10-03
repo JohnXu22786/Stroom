@@ -145,7 +145,7 @@ void main() {
     expect(prefs.getString('provider_entries'), identities);
     expect(
         (await DataMigrationService.getStoredPartVersions())[DataParts.tasks],
-        1);
+        DataParts.currentVersions[DataParts.tasks]);
   });
 
   test(

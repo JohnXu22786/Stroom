@@ -16,17 +16,50 @@ import 'providers/notification_provider.dart';
 import 'pages/unified_task_list/task_session_tracker.dart';
 import 'task_flow/providers/task_flow_provider.dart';
 import 'task_flow/providers/task_flow_execution_provider.dart';
+import 'task_flow/services/task_flow_execution_service.dart';
 import 'services/background_service.dart';
 import 'services/desktop_app_service.dart';
 import 'services/notification_service.dart';
 
+/// Restore flow ownership independently so startup can leave child controls
+/// locked if the execution file cannot be trusted.
+final taskFlowExecutionRestorationProvider = FutureProvider<bool>((ref) async {
+  var flowExecutionsRestored = false;
+  try {
+    flowExecutionsRestored = await ref
+        .read(taskFlowExecutionsProvider.notifier)
+        .restoreFromPersistence();
+  } catch (error, stackTrace) {
+    debugPrint('Failed to restore task flow executions: $error\n$stackTrace');
+  }
+  ref.read(taskFlowExecutionRestoreStatusProvider.notifier).state =
+      flowExecutionsRestored
+          ? FlowExecutionRestoreStatus.ready
+          : FlowExecutionRestoreStatus.failed;
+  return flowExecutionsRestored;
+});
+
 /// 初始化 ProviderScope 的 overrides
 final catcatchStartupProvider = FutureProvider<void>((ref) async {
+  // Task providers can publish restored children before flow executions load.
+  // Yield once so Riverpod permits updating another provider, then lock child
+  // controls before starting any task restoration.
+  await Future<void>.value();
+  ref.read(taskFlowExecutionRestoreStatusProvider.notifier).state =
+      FlowExecutionRestoreStatus.restoring;
   await ref.read(catcatchTasksProvider.notifier).restoreUnfinishedTasks();
   await ref.read(taskListProvider.notifier).restoreFromPersistence();
   await ref.read(backgroundTasksProvider.notifier).restoreFromPersistence();
   await ref.read(taskFlowListProvider.notifier).restoreFromPersistence();
-  await ref.read(taskFlowExecutionsProvider.notifier).restoreFromPersistence();
+  final flowExecutionsRestored =
+      await ref.read(taskFlowExecutionRestorationProvider.future);
+  ref.read(taskFlowExecutionRestoreStatusProvider.notifier).state =
+      flowExecutionsRestored
+          ? FlowExecutionRestoreStatus.ready
+          : FlowExecutionRestoreStatus.failed;
+  if (flowExecutionsRestored) {
+    await ref.read(taskFlowExecutionServiceProvider).restorePendingExecutions();
+  }
   final lastRead = await loadTaskListLastRead();
   ref.read(taskListLastReadProvider.notifier).state = lastRead;
   // 加载通知设置

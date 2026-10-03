@@ -70,21 +70,21 @@ enum IOType {
   /// The types users can actually pick for a flow's initial input.
   ///
   /// `url` is folded into [text] (URLs are plain text input — the blocks
-  /// treat them identically), and the internal `file`/`any` markers are
-  /// not user-selectable.
+  /// treat them identically). `file` selects a document with the file picker;
+  /// only the internal `any` marker is not user-selectable.
   static const List<IOType> userSelectable = [
     IOType.text,
     IOType.audio,
     IOType.image,
     IOType.video,
+    IOType.file,
   ];
 
-  /// Maps a stored type to the type shown in the UI: `url`/`file`/`any`
-  /// all display as [IOType.text] (their compatible user-facing type).
+  /// Maps stored `url`/`any` values to the user-facing [IOType.text]. A stored
+  /// file input stays [file] so reopening its flow shows the document picker.
   IOType get userFacing {
     switch (this) {
       case IOType.url:
-      case IOType.file:
       case IOType.any:
         return IOType.text;
       default:

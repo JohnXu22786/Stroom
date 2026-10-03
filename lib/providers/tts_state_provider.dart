@@ -29,12 +29,15 @@ final ttsProviderProvider = Provider<tts_provider_base.BaseTTSProvider?>((ref) {
 final synthesisConfigProvider =
     StateNotifierProvider<SynthesisConfigNotifier, SynthesisConfig>((ref) {
   final notifier = SynthesisConfigNotifier();
-  notifier.loadConfig();
+  notifier._loading = notifier.loadConfig();
   return notifier;
 });
 
 class SynthesisConfigNotifier extends StateNotifier<SynthesisConfig> {
   SynthesisConfigNotifier() : super(const SynthesisConfig());
+
+  Future<void> _loading = Future<void>.value();
+  Future<void> get ready => _loading;
 
   /// 已知的 voice ID 白名单（非语音名称）
   static const _knownVoiceIds = {

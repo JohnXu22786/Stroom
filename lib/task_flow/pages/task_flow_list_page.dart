@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../pages/unified_task_list/task_utils.dart';
 import '../models/task_flow_definition.dart';
+import '../models/task_flow_templates.dart';
 import '../providers/task_flow_provider.dart';
 import 'task_flow_builder_page.dart';
 
@@ -20,7 +21,12 @@ class TaskFlowListPage extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('任务流'), centerTitle: true),
+      appBar: AppBar(title: const Text('任务流'), centerTitle: true, actions: [
+        IconButton(
+            onPressed: () => _showTemplates(context),
+            tooltip: '示例模板',
+            icon: const Icon(Icons.auto_awesome_outlined)),
+      ]),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _createNewFlow(context, ref),
         child: const Icon(Icons.add),
@@ -50,6 +56,11 @@ class TaskFlowListPage extends ConsumerWidget {
               color: cs.onSurfaceVariant,
             ),
           ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+              onPressed: () => _showTemplates(context),
+              icon: const Icon(Icons.auto_awesome_outlined),
+              label: const Text('从示例模板开始')),
         ],
       ),
     );
@@ -153,7 +164,10 @@ class TaskFlowListPage extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
+                  IconButton(
+                      icon: const Icon(Icons.more_vert),
+                      tooltip: '流程操作',
+                      onPressed: () => _showContextMenu(context, ref, flow)),
                 ],
               ),
               const SizedBox(height: 10),
@@ -313,5 +327,41 @@ class TaskFlowListPage extends ConsumerWidget {
       context,
       MaterialPageRoute(builder: (_) => const TaskFlowBuilderPage()),
     );
+  }
+
+  void _showTemplates(BuildContext context) {
+    showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (sheetContext) => SafeArea(
+                child: SingleChildScrollView(
+              child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('选择示例模板',
+                          style: Theme.of(context).textTheme.titleLarge),
+                      const SizedBox(height: 8),
+                      const Text('模板会打开为待配置的草稿，选择模型和助手后再保存。'),
+                      for (final template in taskFlowTemplates)
+                        ListTile(
+                            title: Text(template.name),
+                            subtitle: Text(
+                                '${template.description}\n${template.requirements}'),
+                            isThreeLine: true,
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () {
+                              Navigator.of(sheetContext).pop();
+                              Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                      builder: (_) => TaskFlowBuilderPage(
+                                          initialDraft:
+                                              template.createDraft())));
+                            }),
+                    ],
+                  )),
+            )));
   }
 }

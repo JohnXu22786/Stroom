@@ -100,7 +100,9 @@ void main() {
       expect(removedIds, [capturedTaskId],
           reason: 'a stalled task must be cancelled via removeTask');
       expect(execNotifier.state[0].subTasks[0].status, TaskStatus.failed);
-      expect(execNotifier.state[0].status, FlowExecutionStatus.failed);
+      expect(execNotifier.state[0].subTasks[0].outcome, FlowStepOutcome.failed);
+      expect(execNotifier.state[0].status, FlowExecutionStatus.running,
+          reason: 'the service owns finalization after the executor throws');
     });
 
     test('progress changes keep the task alive until it completes', () async {
