@@ -22,18 +22,20 @@ import '../models/tool_call.dart';
 class WebSearchService {
   WebSearchService._();
 
-  static final Dio _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 30),
-    headers: {
-      'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-              '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept':
-          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    },
-  ));
+  static final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 30),
+      headers: {
+        'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+            '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept':
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      },
+    ),
+  );
 
   /// 搜索源枚举值
   static const List<String> supportedSources = ['google', 'bing', 'baidu'];
@@ -42,7 +44,8 @@ class WebSearchService {
   static final List<ToolDefinition> toolDefinitions = [
     ToolDefinition(
       name: 'web_search',
-      description: '通过网络搜索获取实时信息。支持 Google、Bing、百度三个搜索引擎，'
+      description:
+          '通过网络搜索获取实时信息。支持 Google、Bing、百度三个搜索引擎，'
           '通过 source 参数选择首选引擎（默认 google）；'
           '首选引擎不可用或未返回可解析结果时会自动尝试其他引擎。'
           '无需 API Key，免费使用。'
@@ -50,13 +53,11 @@ class WebSearchService {
       parameters: {
         'type': 'object',
         'properties': {
-          'query': {
-            'type': 'string',
-            'description': '搜索关键词',
-          },
+          'query': {'type': 'string', 'description': '搜索关键词'},
           'source': {
             'type': 'string',
-            'description': '首选搜索引擎：google（谷歌）、bing（必应）、baidu（百度）；'
+            'description':
+                '首选搜索引擎：google（谷歌）、bing（必应）、baidu（百度）；'
                 '不可用时会自动切换',
             'enum': ['google', 'bing', 'baidu'],
           },
@@ -119,7 +120,8 @@ class WebSearchService {
     final effectiveSource = _resolveSource(source);
     final maxResults = count.clamp(1, 10);
     debugPrint(
-        'WebSearch: preferredSource=$effectiveSource, count=$maxResults');
+      'WebSearch: preferredSource=$effectiveSource, count=$maxResults',
+    );
 
     final failures = <String>[];
     final noResultSources = <String>[];
@@ -168,9 +170,11 @@ class WebSearchService {
         return formattedResults;
       } on DioException catch (e) {
         final statusCode = e.response?.statusCode;
-        failures.add(statusCode == null
-            ? '$sourceToTry: ${e.type.name}'
-            : '$sourceToTry: HTTP $statusCode');
+        failures.add(
+          statusCode == null
+              ? '$sourceToTry: ${e.type.name}'
+              : '$sourceToTry: HTTP $statusCode',
+        );
         debugPrint('WebSearch: $sourceToTry request failed (${e.type.name})');
       } catch (e) {
         failures.add('$sourceToTry: ${e.runtimeType}');
@@ -191,31 +195,18 @@ class WebSearchService {
   }
 
   static String _sourceName(String source) => switch (source) {
-        'google' => 'Google',
-        'bing' => 'Bing',
-        'baidu' => '百度',
-        _ => source,
-      };
+    'google' => 'Google',
+    'bing' => 'Bing',
+    'baidu' => '百度',
+    _ => source,
+  };
 
   static bool _hasExplicitNoResults(String html, String source) {
     final text = _stripHtmlTags(html).toLowerCase();
     final messages = switch (source) {
-      'google' => [
-          'did not match any documents',
-          '找不到和您查询的',
-          '没有找到和您查询的',
-        ],
-      'bing' => [
-          'there are no results for',
-          'no results found',
-          '没有找到相关结果',
-        ],
-      'baidu' => [
-          '抱歉，未找到与',
-          '很抱歉，未找到与',
-          '抱歉，没有找到与',
-          '没有找到与',
-        ],
+      'google' => ['did not match any documents', '找不到和您查询的', '没有找到和您查询的'],
+      'bing' => ['there are no results for', 'no results found', '没有找到相关结果'],
+      'baidu' => ['抱歉，未找到与', '很抱歉，未找到与', '抱歉，没有找到与', '没有找到与'],
       _ => const <String>[],
     };
     return messages.any(text.contains);
@@ -223,7 +214,10 @@ class WebSearchService {
 
   /// 解析结果
   static List<SearchResult> _parseResults(
-      String html, String source, int maxResults) {
+    String html,
+    String source,
+    int maxResults,
+  ) {
     switch (source) {
       case 'bing':
         return parseBingResults(html, maxResults: maxResults);
@@ -264,11 +258,7 @@ class WebSearchService {
       if (title.isNotEmpty && url.isNotEmpty) {
         final snippet = _extractSnippetNearResult(html, match);
 
-        results.add(SearchResult(
-          title: title,
-          url: url,
-          snippet: snippet,
-        ));
+        results.add(SearchResult(title: title, url: url, snippet: snippet));
       }
     }
 
@@ -302,11 +292,7 @@ class WebSearchService {
 
       if (title.isNotEmpty && url.isNotEmpty) {
         final snippet = _extractSnippetAfter(match.group(0)!, html);
-        results.add(SearchResult(
-          title: title,
-          url: url,
-          snippet: snippet,
-        ));
+        results.add(SearchResult(title: title, url: url, snippet: snippet));
       }
     }
 
@@ -346,11 +332,7 @@ class WebSearchService {
             : match.group(0)!;
         final snippet = _extractAbstract(block);
 
-        results.add(SearchResult(
-          title: title,
-          url: url,
-          snippet: snippet,
-        ));
+        results.add(SearchResult(title: title, url: url, snippet: snippet));
       }
     }
 
@@ -484,8 +466,9 @@ class WebSearchService {
     if (afterTextIdx < html.length) {
       final afterText = html.substring(afterTextIdx);
       // 在接下来 500 个字符内找非空文本
-      final nearText =
-          afterText.length > 500 ? afterText.substring(0, 500) : afterText;
+      final nearText = afterText.length > 500
+          ? afterText.substring(0, 500)
+          : afterText;
       final spanRegex = RegExp(
         r'<span[^>]*>(.*?)</span>',
         dotAll: true,
@@ -508,8 +491,11 @@ class WebSearchService {
 
     final afterText = fullHtml.substring(afterIdx + matchBlock.length);
     // 在之后找 <p> 标签
-    final pRegex =
-        RegExp(r'<p[^>]*>(.*?)</p>', dotAll: true, caseSensitive: false);
+    final pRegex = RegExp(
+      r'<p[^>]*>(.*?)</p>',
+      dotAll: true,
+      caseSensitive: false,
+    );
     final pMatch = pRegex.firstMatch(afterText);
     if (pMatch != null) {
       return _stripHtmlTags(pMatch.group(1) ?? '');
