@@ -90,44 +90,43 @@ extension ChatAdapterMcpExt on ChatAdapter {
       return;
     }
 
-    // MCP 条目没变时只有组别列表发生了变化：仅释放已关闭组别的客户端，
-    // 或改由同名的另一份配置提供服务时替换对应客户端；仍有效的客户端继续复用。
-    final activeConfigSourcesByName = <String, Object>{};
-    for (final entry in mcpConfigs) {
-      activeConfigSourcesByName.putIfAbsent(
-        entry.config.name,
-        () => entry.sourceConfig,
-      );
-    }
-    if (keepExistingClients) {
-      for (final name in _mcpClientManager.clients.keys.toList()) {
-        if (!identical(
-          _lastMcpConfigSourcesByName[name],
-          activeConfigSourcesByName[name],
-        )) {
-          _mcpClientManager.removeClient(name);
-        }
-      }
-    } else {
+    if (!keepExistingClients) {
       // MCP 条目变化时配置可能包含新 URL/命令，旧客户端作废。
       _mcpClientManager.disposeAll();
+      _lastMcpConfigSourcesByName = {};
     }
 
     // 为每个 MCP 服务器创建客户端但**不连接**：连接延迟到工具被调用时。
-    // 无效配置（缺 URL/命令，McpClient 构造会抛 ArgumentError）跳过其
-    // 客户端但仍保留占位符，避免单条损坏配置让整个工具列表消失。
+    // 按配置顺序选择每个名称下第一个能创建客户端的启用配置，保证
+    // source map 和实际客户端总是同一份配置。同名配置中首个无效时，
+    // 继续尝试后续配置；失败的配置仍保留占位符。
+    final selectedConfigSourcesByName = <String, Object>{};
     for (final entry in mcpConfigs) {
-      if (_mcpClientManager.getClient(entry.config.name) != null) continue;
+      final name = entry.config.name;
+      if (selectedConfigSourcesByName.containsKey(name)) continue;
+      final existingClient = _mcpClientManager.getClient(name);
+      if (existingClient != null &&
+          identical(_lastMcpConfigSourcesByName[name], entry.sourceConfig)) {
+        selectedConfigSourcesByName[name] = entry.sourceConfig;
+        continue;
+      }
       try {
         _mcpClientManager.addClient(
-          entry.config.name,
+          name,
           McpClient(config: entry.config),
         );
       } catch (e) {
-        debugPrint('MCP[${entry.config.name}]: 无效配置，跳过客户端: $e');
+        debugPrint('MCP[$name]: 无效配置，跳过客户端: $e');
+        continue;
+      }
+      selectedConfigSourcesByName[name] = entry.sourceConfig;
+    }
+    for (final name in _mcpClientManager.clients.keys.toList()) {
+      if (!selectedConfigSourcesByName.containsKey(name)) {
+        _mcpClientManager.removeClient(name);
       }
     }
-    _lastMcpConfigSourcesByName = activeConfigSourcesByName;
+    _lastMcpConfigSourcesByName = selectedConfigSourcesByName;
 
     // 同步发布占位工具定义（不做任何网络等待）：每个配置的 MCP 服务器
     // 都先以一个占位工具出现在工具列表中。占位工具不是真实工具——模型
