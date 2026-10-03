@@ -91,6 +91,15 @@ class _FakeCookiePlatform implements CookiePlatform {
   }
 }
 
+void _expectDeleteUrlMatchesPath(
+    _FakeCookiePlatform fake, String domain, String path) {
+  final urls = fake.deleteCookiesCalls
+      .where((call) => call['path'] == path)
+      .map((call) => call['url'])
+      .toSet();
+  expect(urls, {'https://$domain$path', 'http://$domain$path'});
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -407,6 +416,7 @@ void main() {
 
   group('clearCookiesForDomain', () {
     test('removes all persisted cookies for the domain', () async {
+      BrowserCookieService.cookiePlatform = _FakeCookiePlatform();
       await BrowserCookieService.persistCookiesRawForTest([
         {
           'domain': 'example.com',
@@ -874,6 +884,113 @@ void main() {
             'http://example.com|null',
             'http://example.com|.example.com',
           ]));
+    });
+
+    test('clearCookiesForDomain expires every path recorded in the file',
+        () async {
+      final fake = _FakeCookiePlatform()..throwOnGetAll = true;
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'example.com', 'name': 'root', 'value': '1', 'path': '/'},
+        {'domain': 'example.com', 'name': 'api', 'value': '2', 'path': '/api'},
+        {
+          'domain': 'example.com',
+          'name': 'account',
+          'value': '3',
+          'path': '/account'
+        },
+        {'domain': 'other.com', 'name': 'keep', 'value': '4', 'path': '/admin'},
+      ]);
+
+      final ok =
+          await BrowserCookieService.clearCookiesForDomain('example.com');
+
+      final paths = fake.deleteCookiesCalls.map((call) => call['path']).toSet();
+      expect(ok, isFalse,
+          reason:
+              'URL-filtered lookup cannot confirm every native cookie path');
+      expect(paths, {'/', '/api', '/account'});
+      expect(fake.deleteCookiesCalls.length, 12);
+      _expectDeleteUrlMatchesPath(fake, 'example.com', '/api');
+      _expectDeleteUrlMatchesPath(fake, 'example.com', '/account');
+      expect(await BrowserCookieService.getCookiesFromFile(), {
+        'other.com': [
+          {
+            'domain': 'other.com',
+            'name': 'keep',
+            'value': '4',
+            'path': '/admin'
+          }
+        ]
+      });
+    });
+
+    test('clearCookiesForDomain includes paths from a platform snapshot',
+        () async {
+      final fake = _FakeCookiePlatform()
+        ..allCookies = [
+          Cookie(name: 'api', value: '1', domain: 'example.com', path: '/api'),
+          Cookie(name: 'other', value: '2', domain: 'other.com', path: '/keep'),
+        ];
+      BrowserCookieService.cookiePlatform = fake;
+
+      final ok =
+          await BrowserCookieService.clearCookiesForDomain('example.com');
+
+      final paths = fake.deleteCookiesCalls.map((call) => call['path']).toSet();
+      expect(ok, isTrue);
+      expect(paths, {'/', '/api'});
+      expect(fake.deleteCookiesCalls.length, 8);
+      _expectDeleteUrlMatchesPath(fake, 'example.com', '/api');
+    });
+
+    test(
+        'clearCookiesForDomain finds live paths when the snapshot and file are empty',
+        () async {
+      final fake = _FakeCookiePlatform()
+        ..throwOnGetAll = true
+        ..perUrlCookies['https://example.com/api/detail'] = [
+          Cookie(name: 'api', value: '1', path: '/api'),
+        ];
+      BrowserCookieService.cookiePlatform = fake;
+      BrowserCookieService.noteVisitedUrl(
+          'https://example.com/api/detail?from=browser');
+      await BrowserCookieService.persistCookiesRawForTest([]);
+      expect(await BrowserCookieService.getCookiesFromFile(), isEmpty);
+
+      final ok =
+          await BrowserCookieService.clearCookiesForDomain('example.com');
+
+      final paths = fake.deleteCookiesCalls.map((call) => call['path']).toSet();
+      expect(ok, isFalse);
+      expect(fake.getCookiesCalls, 1);
+      expect(paths, {'/', '/api'});
+      expect(fake.deleteCookiesCalls.length, 8);
+      _expectDeleteUrlMatchesPath(fake, 'example.com', '/api');
+      expect(await BrowserCookieService.getCookiesFromFile(), isEmpty);
+    });
+
+    test('clearCookiesForDomain keeps path coverage across a long session',
+        () async {
+      final fake = _FakeCookiePlatform()
+        ..throwOnGetAll = true
+        ..perUrlCookies['https://example.com/old/deep'] = [
+          Cookie(name: 'old', value: '1', path: '/old'),
+        ];
+      BrowserCookieService.cookiePlatform = fake;
+      BrowserCookieService.noteVisitedUrl('https://example.com/old/deep');
+      for (var i = 0; i < 257; i++) {
+        BrowserCookieService.noteVisitedUrl('https://example.com/new/$i');
+      }
+
+      final ok =
+          await BrowserCookieService.clearCookiesForDomain('example.com');
+
+      final paths = fake.deleteCookiesCalls.map((call) => call['path']).toSet();
+      expect(ok, isFalse);
+      expect(paths, {'/', '/old'});
+      expect(fake.getCookiesCalls, 258);
+      _expectDeleteUrlMatchesPath(fake, 'example.com', '/old');
     });
   });
 }
