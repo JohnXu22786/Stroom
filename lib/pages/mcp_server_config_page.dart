@@ -336,6 +336,15 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
     if (_isExistingConfig &&
         widget.configIndex >= 0 &&
         widget.configIndex < configs.length) {
+      final existing = configs[widget.configIndex];
+      final existingTypeConfig = existing.models.isNotEmpty
+          ? existing.models[0].typeConfig
+          : existing.typeConfig;
+      final connectivityTest = existingTypeConfig['connectivityTest'];
+      if (connectivityTest is Map) {
+        newConfig.models[0].typeConfig['connectivityTest'] =
+            Map<String, dynamic>.from(connectivityTest);
+      }
       configs[widget.configIndex] = newConfig;
     } else {
       configs.insert(0, newConfig);

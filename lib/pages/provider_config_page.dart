@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
+import '../services/connectivity_test_service.dart';
 import '../services/http_tool_service.dart';
 import '../services/todo_tool_service.dart';
 import '../services/web_search_service.dart';
+import 'connectivity_test_dialog.dart';
 import 'provider_config_detail_page.dart';
 import 'mcp_server_config_page.dart';
 import 'provider_config_tool_dialogs.dart';
@@ -150,6 +152,100 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       builder: (_) => BuiltinToolDetailsDialog(definition: definition),
     );
   }
+
+  Future<void> _testProviderConnectivity(int configIndex) async {
+    final entry = _entry;
+    if (entry == null ||
+        configIndex < 0 ||
+        configIndex >= entry.configs.length) {
+      return;
+    }
+
+    final config = entry.configs[configIndex];
+    final typeConfig = config.models.isNotEmpty
+        ? config.models[0].typeConfig
+        : config.typeConfig;
+    final isHttpTool = typeConfig['isHttpTool'] == true;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => ConnectivityTestDialog(
+        title: config.providerName,
+        initialContent: ConnectivityTestService.configuredTestContent(
+          config,
+          isHttpTool: isHttpTool,
+        ),
+        note: _connectivityTestNote,
+        onSave: (content) => _saveProviderConnectivityTest(
+          configIndex,
+          content,
+        ),
+        onRun: (content) => ConnectivityTestService.runProviderTest(
+          config: config,
+          testContent: content,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveProviderConnectivityTest(
+    int configIndex,
+    Map<String, dynamic> content,
+  ) async {
+    final entry = _entry;
+    if (entry == null ||
+        configIndex < 0 ||
+        configIndex >= entry.configs.length) {
+      return;
+    }
+
+    final configs = entry.configs.map((config) => config.copy()).toList();
+    final config = configs[configIndex];
+    if (config.models.isNotEmpty) {
+      final model = config.models[0];
+      model.typeConfig = Map<String, dynamic>.from(model.typeConfig)
+        ..['connectivityTest'] = content;
+    } else {
+      config.typeConfig = Map<String, dynamic>.from(config.typeConfig)
+        ..['connectivityTest'] = content;
+    }
+    await ref.read(providerEntriesProvider.notifier).update(
+          entry.id,
+          ProviderEntry(
+            id: entry.id,
+            type: entry.type,
+            name: entry.name,
+            configs: configs,
+            enabled: entry.enabled,
+          ),
+        );
+  }
+
+  Future<void> _testBuiltinTool(ToolDefinition definition) async {
+    final initialContent = await ConnectivityTestService.loadBuiltinTestContent(
+      definition.name,
+    );
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => ConnectivityTestDialog(
+        title: definition.name,
+        initialContent: initialContent,
+        note: _connectivityTestNote,
+        onSave: (content) => ConnectivityTestService.saveBuiltinTestContent(
+          definition.name,
+          content,
+        ),
+        onRun: (content) => ConnectivityTestService.runBuiltinTest(
+          toolName: definition.name,
+          testContent: content,
+        ),
+      ),
+    );
+  }
+
+  static const _connectivityTestNote =
+      '测试会向对应服务发出真实请求。MCP 仅调用只读 tools/list，HTTP/网页搜索会执行一次查询；'
+      'Todo 默认读取清单，非空 todos 参数会被拒绝以保护当前数据。';
 
   Future<void> _reorderConfigs(int oldIndex, int newIndex) async {
     final entry = _entry;
@@ -457,6 +553,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                         ? null
                         : () => _openSettingsPanel(i),
                     onDelete: isVendor ? null : () => _deleteConfig(i),
+                    onTest: entry.type == 'mcp'
+                        ? () => _testProviderConnectivity(i)
+                        : null,
                     onTap: () => _editConfig(i),
                   );
                 },
@@ -495,6 +594,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                       settingsTooltip: '查看接口',
                       onSettings: () => _showBuiltinToolDetails(definition),
                       onDelete: null,
+                      onTest: () => _testBuiltinTool(definition),
                       onTap: () => _showBuiltinToolDetails(definition),
                     );
                   },
@@ -702,6 +802,7 @@ class _McpConfigCard extends StatelessWidget {
   final IconData settingsIcon;
   final String settingsTooltip;
   final VoidCallback? onDelete;
+  final VoidCallback? onTest;
   final VoidCallback onTap;
 
   const _McpConfigCard({
@@ -720,6 +821,7 @@ class _McpConfigCard extends StatelessWidget {
     this.settingsIcon = Icons.tune,
     this.settingsTooltip = '设置',
     required this.onDelete,
+    this.onTest,
     required this.onTap,
   });
 
@@ -891,6 +993,14 @@ class _McpConfigCard extends StatelessWidget {
                       ),
                       onPressed: onSettings,
                       tooltip: settingsTooltip,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  if (onTest != null)
+                    IconButton(
+                      icon: const Icon(Icons.network_check, size: 20),
+                      onPressed: onTest,
+                      tooltip: '连通性测试',
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
