@@ -1498,7 +1498,10 @@ class BackupService {
       if (browserCookiesData != null) {
         try {
           final decoded = jsonDecode(utf8.decode(browserCookiesData));
-          if (decoded is! List) throw const FormatException('结构不是数组');
+          if (decoded is! List ||
+              decoded.any((cookie) => cookie is! Map<String, dynamic>)) {
+            throw const FormatException('结构不是Cookies对象数组');
+          }
         } catch (e) {
           throw BackupValidationException(
               '无效的备份文件：browser_cookies.json 损坏 ($e)');
