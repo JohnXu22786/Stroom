@@ -425,7 +425,8 @@ Future<String> executeChatBlock({
     flowAttachments = userMessage.attachments;
     if (!isLive()) await stopInactiveExecution();
     // Persist attachments before streaming so failure cleanup can find them.
-    if (!await conversationsNotifier.updateFlowMessagesChecked(convId, [userMessage])) {
+    if (!await conversationsNotifier
+        .updateFlowMessagesChecked(convId, [userMessage])) {
       throw StateError('用户消息未能保存，对话未发送');
     }
     // Cancellation before a stream exists cannot be handled by manager.cancel.
@@ -546,7 +547,8 @@ Future<String> executeChatBlock({
     // updateMessages keyed on convId), but a silent save failure there
     // must not leave a stub conversation behind. updateMessages is a full
     // replace, so re-persisting the same history is idempotent.
-    if (!await conversationsNotifier.updateFlowMessagesChecked(convId, result.history)) {
+    if (!await conversationsNotifier.updateFlowMessagesChecked(
+        convId, result.history)) {
       throw StateError('助手回复未能保存，对话未完成');
     }
     if (!isLive()) await stopInactiveExecution();

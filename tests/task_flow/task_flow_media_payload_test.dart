@@ -96,11 +96,13 @@ void main() {
     trackedExecutions.add(notifier);
     return notifier;
   }
+
   BackgroundTaskNotifier trackedBackground() {
     final notifier = BackgroundTaskNotifier();
     trackedBackgrounds.add(notifier);
     return notifier;
   }
+
   setUp(() async {
     trackedExecutions.clear();
     trackedBackgrounds.clear();
@@ -273,18 +275,26 @@ void main() {
 
   test('a compressible PNG over 10 MB still reaches the assistant', () async {
     final encoded = image.encodePng(image.Image(width: 1, height: 1));
-    final bytes = Uint8List(maxAttachmentBytes + 1)..setRange(0, encoded.length, encoded);
-    final source = await File('${directory.path}/compressible.png').writeAsBytes(bytes);
-    final assistant = Assistant(id: 'assistant', name: 'Assistant', prompt: 'Help');
-    final flow = TaskFlowDefinition(name: 'Image', inputType: IOType.image, blocks: [
-      TaskFlowBlock(typeKey: BlockType.chat, params: {'assistantId': assistant.id})
+    final bytes = Uint8List(maxAttachmentBytes + 1)
+      ..setRange(0, encoded.length, encoded);
+    final source =
+        await File('${directory.path}/compressible.png').writeAsBytes(bytes);
+    final assistant =
+        Assistant(id: 'assistant', name: 'Assistant', prompt: 'Help');
+    final flow =
+        TaskFlowDefinition(name: 'Image', inputType: IOType.image, blocks: [
+      TaskFlowBlock(
+          typeKey: BlockType.chat, params: {'assistantId': assistant.id})
     ]);
     await validateTaskFlow(flow, [FlowRunInput(text: source.path)],
         providers: const ProviderEntriesState(), assistants: [assistant]);
     final message = await prepareFlowChatMessage(
-        FlowPayload.file(fileReference: source.path, type: IOType.image), 'compressible');
-    final request = await const OpenAIProtocol().buildRequest(history: [message]);
-    expect((request.messages.single['content'] as List).single['type'], 'image_url');
+        FlowPayload.file(fileReference: source.path, type: IOType.image),
+        'compressible');
+    final request =
+        await const OpenAIProtocol().buildRequest(history: [message]);
+    expect((request.messages.single['content'] as List).single['type'],
+        'image_url');
   });
 
   test('oversized image is rejected before chat attachment allocation',
