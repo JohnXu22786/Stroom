@@ -1040,4 +1040,168 @@ void main() {
     expect(
         restarted.execution('waiting')?.status, FlowExecutionStatus.cancelled);
   });
+  test(
+      'restored batch waits for its paused first input before dispatching the next',
+      () async {
+    final notifier = container.read(taskFlowExecutionsProvider.notifier);
+    final flow = container.read(taskFlowListProvider).single;
+    final snapshot = FlowLaunchSnapshot.capture(
+      flow,
+      const ProviderEntriesState(),
+      [Assistant(id: 'assistant', name: 'A', prompt: 'P')],
+    );
+    List<FlowSubTask> steps(TaskStatus firstStatus) => [
+          FlowSubTask(
+            blockTypeKey: 'chat',
+            blockLabel: 'Chat',
+            subTaskId: 'pending_chat_0',
+            subTaskType: 'background',
+            status: firstStatus,
+          ),
+          FlowSubTask(
+            blockTypeKey: 'chat',
+            blockLabel: 'Chat',
+            subTaskId: 'pending_chat_1',
+            subTaskType: 'background',
+            status: TaskStatus.waiting,
+          ),
+        ];
+    await notifier.addExecutions([
+      TaskFlowExecution(
+        id: 'paused-first',
+        flowId: flow.id,
+        flowName: flow.name,
+        status: FlowExecutionStatus.paused,
+        batchId: 'restored-batch',
+        batchIndex: 0,
+        snapshot: snapshot,
+        inputText: 'one',
+        subTasks: steps(TaskStatus.paused),
+      ),
+      TaskFlowExecution(
+        id: 'waiting-second',
+        flowId: flow.id,
+        flowName: flow.name,
+        status: FlowExecutionStatus.waiting,
+        batchId: 'restored-batch',
+        batchIndex: 1,
+        snapshot: snapshot,
+        inputText: 'two',
+        subTasks: steps(TaskStatus.waiting),
+      ),
+    ]);
+    notifier.state = [];
+    expect(await notifier.restoreFromPersistence(), isTrue);
+
+    final service = container.read(taskFlowExecutionServiceProvider);
+    await service.restorePendingExecutions();
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(dispatches, isEmpty);
+    expect(notifier.execution('waiting-second')!.status,
+        FlowExecutionStatus.waiting);
+
+    await service.resumeExecution('paused-first');
+    await waitForDispatchCount(1);
+    expect(dispatches, ['original:one']);
+    expect(notifier.execution('waiting-second')!.status,
+        FlowExecutionStatus.waiting);
+
+    first.complete(const FlowPayload.text('prefix'));
+    await _waitForStatus(
+        container, 'waiting-second', FlowExecutionStatus.completed);
+    expect(dispatches, [
+      'original:one',
+      'null:prefix',
+      'original:two',
+      'null:done',
+    ]);
+    expect(notifier.execution('paused-first')!.status,
+        FlowExecutionStatus.completed);
+    expect(notifier.execution('waiting-second')!.status,
+        FlowExecutionStatus.completed);
+  });
+
+  test('cancelling a restored paused input keeps its predecessor in order',
+      () async {
+    final notifier = container.read(taskFlowExecutionsProvider.notifier);
+    final flow = container.read(taskFlowListProvider).single;
+    final snapshot = FlowLaunchSnapshot.capture(
+      flow,
+      const ProviderEntriesState(),
+      [Assistant(id: 'assistant', name: 'A', prompt: 'P')],
+    );
+    List<FlowSubTask> steps(TaskStatus status) => flow.blocks
+        .asMap()
+        .entries
+        .map((entry) => FlowSubTask(
+              blockTypeKey: 'chat',
+              blockLabel: 'Chat',
+              subTaskId: 'pending_chat_${entry.key}',
+              subTaskType: 'background',
+              status: entry.key == 0 ? status : TaskStatus.waiting,
+            ))
+        .toList();
+    await notifier.addExecutions([
+      TaskFlowExecution(
+        id: 'waiting-first',
+        flowId: flow.id,
+        flowName: flow.name,
+        status: FlowExecutionStatus.waiting,
+        batchId: 'cancelled-batch',
+        batchIndex: 0,
+        snapshot: snapshot,
+        inputText: 'one',
+        subTasks: steps(TaskStatus.waiting),
+      ),
+      TaskFlowExecution(
+        id: 'paused-middle',
+        flowId: flow.id,
+        flowName: flow.name,
+        status: FlowExecutionStatus.paused,
+        batchId: 'cancelled-batch',
+        batchIndex: 1,
+        snapshot: snapshot,
+        inputText: 'two',
+        subTasks: steps(TaskStatus.paused),
+      ),
+      TaskFlowExecution(
+        id: 'waiting-third',
+        flowId: flow.id,
+        flowName: flow.name,
+        status: FlowExecutionStatus.waiting,
+        batchId: 'cancelled-batch',
+        batchIndex: 2,
+        snapshot: snapshot,
+        inputText: 'three',
+        subTasks: steps(TaskStatus.waiting),
+      ),
+    ]);
+    notifier.state = [];
+    expect(await notifier.restoreFromPersistence(), isTrue);
+    final service = container.read(taskFlowExecutionServiceProvider);
+    await service.restorePendingExecutions();
+    await waitForDispatchCount(1);
+    expect(dispatches, ['original:one']);
+
+    await service.cancelExecution('paused-middle');
+    expect(dispatches, ['original:one']);
+    expect(notifier.execution('waiting-third')!.status,
+        FlowExecutionStatus.waiting);
+
+    first.complete(const FlowPayload.text('prefix'));
+    await _waitForStatus(
+        container, 'waiting-third', FlowExecutionStatus.completed);
+    expect(dispatches, [
+      'original:one',
+      'null:prefix',
+      'original:three',
+      'null:done',
+    ]);
+    expect(notifier.execution('waiting-first')!.status,
+        FlowExecutionStatus.completed);
+    expect(notifier.execution('paused-middle')!.status,
+        FlowExecutionStatus.cancelled);
+    expect(notifier.execution('waiting-third')!.status,
+        FlowExecutionStatus.completed);
+  });
 }

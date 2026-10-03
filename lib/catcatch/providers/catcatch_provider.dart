@@ -562,21 +562,47 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   /// 检查是否有运行中的任务
   bool _hasRunningTasks() => state.any((t) => t.status == TaskStatus.running);
 
+  @visibleForTesting
+  Future<bool> startBackgroundServiceForTask() => startBackgroundService();
+
+  @visibleForTesting
+  Future<String?> retryFromStepForTask({
+    required CatCatchTask task,
+    required StepType fromStep,
+    required void Function(CatCatchTask updated) onUpdate,
+    required CancelToken cancelToken,
+  }) =>
+      TaskExecutor.retryFromStep(
+        task: task,
+        fromStep: fromStep,
+        onUpdate: onUpdate,
+        cancelToken: cancelToken,
+      );
+
   /// 执行任务
   Future<void> _executeTask(CatCatchTask task) async {
-    if (!_hasRunningTasks()) {
-      await startBackgroundService();
-    }
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
 
     try {
+      if (!_hasRunningTasks()) {
+        await startBackgroundServiceForTask();
+      }
+      if (!mounted ||
+          cancelToken.isCancelled ||
+          !identical(_cancelTokens[task.id], cancelToken) ||
+          !state.any((current) => current.id == task.id)) {
+        return;
+      }
+
       final result = await TaskExecutor.executeTask(
         task: task,
         onUpdate: (updated) {
           if (!mounted ||
               cancelToken.isCancelled ||
-              !identical(_cancelTokens[task.id], cancelToken)) return;
+              !identical(_cancelTokens[task.id], cancelToken)) {
+            return;
+          }
           final index = state.indexWhere((t) => t.id == updated.id);
           if (index >= 0) {
             final currentStatus = state[index].status;
@@ -612,7 +638,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     } catch (e) {
       if (!mounted ||
           cancelToken.isCancelled ||
-          !identical(_cancelTokens[task.id], cancelToken)) return;
+          !identical(_cancelTokens[task.id], cancelToken)) {
+        return;
+      }
       debugPrint('[CatCatchNotifier] Task execution error: $e');
       // 更新为失败状态
       final index = state.indexWhere((t) => t.id == task.id);
@@ -638,20 +666,29 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 从指定步骤执行
   Future<void> _executeTaskFrom(CatCatchTask task, StepType fromStep) async {
-    if (!_hasRunningTasks()) {
-      await startBackgroundService();
-    }
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
 
     try {
-      final result = await TaskExecutor.retryFromStep(
+      if (!_hasRunningTasks()) {
+        await startBackgroundServiceForTask();
+      }
+      if (!mounted ||
+          cancelToken.isCancelled ||
+          !identical(_cancelTokens[task.id], cancelToken) ||
+          !state.any((current) => current.id == task.id)) {
+        return;
+      }
+
+      final result = await retryFromStepForTask(
         task: task,
         fromStep: fromStep,
         onUpdate: (updated) {
           if (!mounted ||
               cancelToken.isCancelled ||
-              !identical(_cancelTokens[task.id], cancelToken)) return;
+              !identical(_cancelTokens[task.id], cancelToken)) {
+            return;
+          }
           final index = state.indexWhere((t) => t.id == updated.id);
           if (index >= 0) {
             final currentStatus = state[index].status;
@@ -684,7 +721,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     } catch (e) {
       if (!mounted ||
           cancelToken.isCancelled ||
-          !identical(_cancelTokens[task.id], cancelToken)) return;
+          !identical(_cancelTokens[task.id], cancelToken)) {
+        return;
+      }
       debugPrint('[CatCatchNotifier] Task retry error: $e');
       final index = state.indexWhere((t) => t.id == task.id);
       if (index >= 0) {
