@@ -281,7 +281,7 @@ class TaskFlowExecutionService {
   /// records. A process exit can never discard an input waiting in a batch.
   Future<List<String>> launchFlowMany(
       String flowId, List<FlowRunInput> inputs) async {
-    final flow = await _prepareFlow(flowId, inputs);
+    final flow = await _prepareFlow(flowId);
     final snapshot = FlowLaunchSnapshot.capture(
         flow, _ref.read(providerEntriesProvider), _ref.read(assistantProvider),
         selectedChatModel: _ref
@@ -297,8 +297,7 @@ class TaskFlowExecutionService {
     return _submit(snapshot, inputs);
   }
 
-  Future<TaskFlowDefinition> _prepareFlow(
-      String flowId, List<FlowRunInput> inputs) async {
+  Future<TaskFlowDefinition> _prepareFlow(String flowId) async {
     await _ref.read(providerEntriesProvider.notifier).ready;
     await _ref.read(assistantProvider.notifier).ready;
     final flow = _ref
@@ -311,11 +310,6 @@ class TaskFlowExecutionService {
     if (flow.blocks.any((b) => b.typeKey == BlockType.tts)) {
       await _ref.read(synthesisConfigProvider.notifier).ready;
     }
-    await validateTaskFlow(flow, inputs,
-        providers: _ref.read(providerEntriesProvider),
-        assistants: _ref.read(assistantProvider),
-        fallbackChatEndpointType:
-            _ref.read(chatStreamManagerProvider).adapter.endpointType);
     return flow;
   }
 
@@ -618,7 +612,8 @@ class TaskFlowExecutionService {
           providers: snapshot.resolveProviders(
               _ref.read(providerEntriesProvider),
               blocks: remaining),
-          assistants: snapshot.resolveAssistants(_ref.read(assistantProvider)),
+          assistants: snapshot.resolveAssistants(_ref.read(assistantProvider),
+              blocks: remaining),
           fallbackChatEndpointType:
               _ref.read(chatStreamManagerProvider).adapter.endpointType);
       current = _currentControl(id, revision);
@@ -1105,16 +1100,16 @@ class TaskFlowExecutionService {
             ),
             def.outputType);
       case BlockType.chat:
-        // Resolve the block's assistantId (empty = use the currently
-        // selected assistant). Only user-defined assistants are allowed
+        // Resolve the block's assistantId (empty = use the captured model).
+        // Only user-defined assistants are allowed
         // on blocks — a legacy built-in prompt id resolves to null and
         // fails loudly below.
         final assistantId = block.params['assistantId']?.toString() ?? '';
+        final snapshot = _execution(execId)?.snapshot;
         final chatAssistant = resolveChatAssistant(
           assistantId,
-          _execution(execId)
-                  ?.snapshot
-                  ?.resolveAssistants(_ref.read(assistantProvider)) ??
+          snapshot?.resolveAssistants(_ref.read(assistantProvider),
+                  blocks: [block]) ??
               _ref.read(assistantProvider),
         );
         // A configured assistant that no longer exists must fail loudly
@@ -1133,6 +1128,9 @@ class TaskFlowExecutionService {
             blockTitle: def.label,
           );
         }
+        final modelReference = chatAssistant == null
+            ? snapshot?.chatModelReference(block.id)
+            : null;
         return FlowPayload.fromValue(
             await executeChatBlock(
               block: block,
@@ -1147,7 +1145,9 @@ class TaskFlowExecutionService {
               conversationsNotifier: _ref.read(conversationsProvider.notifier),
               assistant: chatAssistant,
               providerEntries: providerEntries,
+              modelReference: modelReference,
               endpointType: flowChatEndpointType(chatAssistant, providerEntries,
+                  modelReference: modelReference,
                   fallback: _ref
                       .read(chatStreamManagerProvider)
                       .adapter
