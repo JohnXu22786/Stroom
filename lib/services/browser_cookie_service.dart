@@ -27,6 +27,7 @@ class BrowserCookieService {
   BrowserCookieService._();
 
   static const String _retentionKey = 'browser_cookie_retention';
+  static Future<void> _retentionOperationQueue = Future<void>.value();
 
   /// The platform cookie facade used for all platform cookie operations.
   ///
@@ -133,6 +134,10 @@ class BrowserCookieService {
 
   /// Enables or disables cookie retention mode.
   static Future<void> setRetentionMode(bool enabled) async {
+    await _serializeRetentionOperation(() => _writeRetentionMode(enabled));
+  }
+
+  static Future<void> _writeRetentionMode(bool enabled) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_retentionKey, enabled);
@@ -143,10 +148,36 @@ class BrowserCookieService {
 
   /// Toggles the current retention mode and returns the new value.
   static Future<bool> toggleRetentionMode() async {
-    final current = await getRetentionMode();
-    final newValue = !current;
-    await setRetentionMode(newValue);
-    return newValue;
+    return _serializeRetentionOperation(() async {
+      final current = await getRetentionMode();
+      final newValue = !current;
+      await _writeRetentionMode(newValue);
+      return newValue;
+    });
+  }
+
+  /// Applies the final retention preference when the browser closes.
+  ///
+  /// Queuing this with preference writes ensures the final selected mode is
+  /// applied before cookies are persisted or cleared.
+  static Future<void> handleBrowserClose() {
+    return _serializeRetentionOperation(() async {
+      if (await getRetentionMode()) {
+        await persistCookiesToFile();
+      } else {
+        await clearAllCookies();
+      }
+    });
+  }
+
+  static Future<T> _serializeRetentionOperation<T>(
+      Future<T> Function() operation) {
+    final result = _retentionOperationQueue.then((_) => operation());
+    _retentionOperationQueue = result.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {},
+    );
+    return result;
   }
 
   // ===========================================================================

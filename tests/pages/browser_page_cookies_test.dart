@@ -128,6 +128,37 @@ void main() {
       expect(await BrowserCookieService.getCookiesFromFile(), isNotEmpty);
     });
 
+    test('close cleanup uses a retention toggle that is still in flight',
+        () async {
+      await BrowserCookieService.setRetentionMode(false);
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'example.com', 'name': 'session', 'value': 'abc'},
+      ]);
+
+      final pendingToggle = BrowserCookieService.toggleRetentionMode();
+      final closeCleanup = BrowserCookieService.handleBrowserClose();
+
+      await Future.wait([pendingToggle, closeCleanup]);
+
+      expect(await BrowserCookieService.getRetentionMode(), isTrue);
+      expect(await BrowserCookieService.getCookiesFromFile(), isNotEmpty);
+    });
+
+    test('close cleanup waits for a direct retention update', () async {
+      await BrowserCookieService.setRetentionMode(false);
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'example.com', 'name': 'session', 'value': 'abc'},
+      ]);
+
+      final pendingUpdate = BrowserCookieService.setRetentionMode(true);
+      final closeCleanup = BrowserCookieService.handleBrowserClose();
+
+      await Future.wait([pendingUpdate, closeCleanup]);
+
+      expect(await BrowserCookieService.getRetentionMode(), isTrue);
+      expect(await BrowserCookieService.getCookiesFromFile(), isNotEmpty);
+    });
+
     test('toggle driven by the AppBar button persists across reads', () async {
       final newValue = await BrowserCookieService.toggleRetentionMode();
       expect(newValue, isTrue);

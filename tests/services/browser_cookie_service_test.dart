@@ -173,6 +173,16 @@ void main() {
       expect(newValue, isFalse);
       expect(await BrowserCookieService.getRetentionMode(), isFalse);
     });
+
+    test('concurrent toggles each flip the preceding value', () async {
+      final results = await Future.wait([
+        BrowserCookieService.toggleRetentionMode(),
+        BrowserCookieService.toggleRetentionMode(),
+      ]);
+
+      expect(results, [isTrue, isFalse]);
+      expect(await BrowserCookieService.getRetentionMode(), isFalse);
+    });
   });
 
   // ====================================================================
