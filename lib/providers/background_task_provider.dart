@@ -541,6 +541,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// 交错导致旧快照覆盖新快照（步骤更新非常频繁，竞态窗口真实存在）。
   Future<void>? _pendingWrite;
 
+  /// Wait for queued task writes before releasing their storage directory.
+  Future<void> get pendingPersistence => _pendingWrite ?? Future<void>.value();
+
   Future<void> _persistTasks() {
     // 在进入异步写入前捕获当前状态的完整快照。
     final snapshot = state.map((t) => t.toMap()).toList();

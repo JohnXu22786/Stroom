@@ -3,12 +3,17 @@ import 'package:uuid/uuid.dart';
 import '../../providers/task_provider_shared.dart';
 import 'flow_launch_snapshot.dart';
 import 'flow_payload.dart';
+import 'io_type.dart';
 
 class FlowRunInput {
   final String text;
   final int durationSec;
   final String? mimeType;
-  const FlowRunInput({required this.text, this.durationSec = 0, this.mimeType});
+  final String? fileName;
+  /// Picker copy retained while an execution can retry this input.
+  final String? ownedStoragePath;
+  const FlowRunInput({required this.text, this.durationSec = 0, this.mimeType,
+    this.fileName, this.ownedStoragePath});
 }
 
 enum FlowExecutionStatus {
@@ -118,6 +123,9 @@ class TaskFlowExecution {
   final String inputText;
   final int inputDurationSec;
   final String? inputMimeType;
+  final IOType? inputType;
+  final String? inputFileName;
+  final String? inputStoragePath;
   final bool queued;
   final String? batchId;
   final int batchIndex;
@@ -147,6 +155,9 @@ class TaskFlowExecution {
       this.inputText = '',
       this.inputDurationSec = 0,
       this.inputMimeType,
+      this.inputType,
+      this.inputFileName,
+      this.inputStoragePath,
       this.queued = false,
       this.batchId,
       this.batchIndex = 0,
@@ -164,6 +175,9 @@ class TaskFlowExecution {
           String? inputText,
           int? inputDurationSec,
           String? inputMimeType,
+          IOType? inputType,
+          String? inputFileName,
+          String? inputStoragePath,
           bool? queued}) =>
       TaskFlowExecution(
           id: id,
@@ -178,6 +192,9 @@ class TaskFlowExecution {
           inputText: inputText ?? this.inputText,
           inputDurationSec: inputDurationSec ?? this.inputDurationSec,
           inputMimeType: inputMimeType ?? this.inputMimeType,
+          inputType: inputType ?? this.inputType,
+          inputFileName: inputFileName ?? this.inputFileName,
+          inputStoragePath: inputStoragePath ?? this.inputStoragePath,
           queued: queued ?? this.queued,
           batchId: batchId,
           batchIndex: batchIndex,
@@ -204,6 +221,9 @@ class TaskFlowExecution {
         'inputText': inputText,
         if (inputDurationSec > 0) 'inputDurationSec': inputDurationSec,
         if (inputMimeType != null) 'inputMimeType': inputMimeType,
+        if (inputType != null) 'inputType': inputType!.name,
+        if (inputFileName != null) 'inputFileName': inputFileName,
+        if (inputStoragePath != null) 'inputStoragePath': inputStoragePath,
         if (batchId != null) 'batchId': batchId,
         'batchIndex': batchIndex,
         if (snapshot != null) 'snapshot': snapshot!.toMap()
@@ -227,6 +247,9 @@ class TaskFlowExecution {
           inputText: map['inputText'] as String? ?? '',
           inputDurationSec: map['inputDurationSec'] as int? ?? 0,
           inputMimeType: map['inputMimeType'] as String?,
+      inputType: IOType.values.where((t) => t.name == map['inputType']).firstOrNull,
+      inputFileName: map['inputFileName'] as String?,
+      inputStoragePath: map['inputStoragePath'] as String?,
           batchId: map['batchId'] as String?,
           batchIndex: map['batchIndex'] as int? ?? 0,
           snapshot: map['snapshot'] is Map

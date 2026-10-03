@@ -13,7 +13,8 @@ import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_execution.dart';
 import 'block_executors/chat_executor.dart'
-    show flowChatEndpointType, flowChatInputError;
+    show flowChatEndpointType, flowChatInputError,
+        flowChatImageSizeError, flowChatIsTextFileName, flowChatTextFileError;
 
 /// User-actionable failure, shared by launch, batch launch and history retry.
 class TaskFlowValidationException implements Exception {
@@ -139,9 +140,15 @@ Future<void> validateTaskFlow(
   for (var i = 0; i < inputs.length; i++) {
     final text = inputs[i].text;
     String? error;
+    var checkLargeImage = false;
+    var checkTextEncoding = false;
+    final inputName = inputs[i].fileName ?? text;
     void checkFile(List<int> header, int length) {
-      final mimeType = flowFileMimeType(text,
-          headerBytes: header, mimeType: inputs[i].mimeType);
+      final mimeType = flowFileMimeType(
+        text,
+        headerBytes: header,
+        mimeType: inputs[i].mimeType,
+      );
       final actualType = flowMimeType(mimeType);
       if (initialChatEndpointType != null &&
           actualType == IOType.image &&
@@ -161,20 +168,39 @@ Future<void> validateTaskFlow(
         // A generic file may contain audio/video. The attachment pipeline
         // checks the detected MIME and file signature, not only the declared
         // flow input type (which can be IOType.file) or filename.
-        error = flowChatInputError(actualType, initialChatEndpointType,
-            mimeType: mimeType, headerBytes: header);
+        error = flowChatInputError(
+          actualType,
+          initialChatEndpointType,
+          mimeType: mimeType,
+          headerBytes: header,
+        );
+        checkLargeImage = error == null &&
+            actualType == IOType.image &&
+            length > maxAttachmentBytes;
+        checkTextEncoding = error == null &&
+            actualType == IOType.file &&
+            initialChatEndpointType != 'anthropic' &&
+            flowChatIsTextFileName(inputName);
       }
     }
 
     if (text.trim().isEmpty) {
       error = '输入为空，请重新输入或选择文件';
-    } else if ([IOType.audio, IOType.image, IOType.video, IOType.file]
-        .contains(inputType)) {
+    } else if ([
+      IOType.audio,
+      IOType.image,
+      IOType.video,
+      IOType.file,
+    ].contains(inputType)) {
       try {
         if (kIsWeb) {
           final bytes = await WebFileStore.read(text);
           if (bytes?.isNotEmpty != true) throw const FileSystemException();
           checkFile(bytes!, bytes.length);
+          if (checkLargeImage) error = await flowChatImageSizeError(bytes);
+          if (checkTextEncoding) {
+            error = flowChatTextFileError(inputName, bytes);
+          }
         } else {
           final file = await File(text).open();
           try {
@@ -183,6 +209,15 @@ Future<void> validateTaskFlow(
             checkFile(header, await file.length());
           } finally {
             await file.close();
+          }
+          if (checkLargeImage) {
+            error =
+                await flowChatImageSizeError(await File(text).readAsBytes());
+          } else if (checkTextEncoding) {
+            error = flowChatTextFileError(
+              inputName,
+              await File(text).readAsBytes(),
+            );
           }
         }
       } catch (_) {
@@ -197,12 +232,14 @@ Future<void> validateTaskFlow(
       }
     }
     if (error != null) {
-      throw TaskFlowValidationException('第 ${i + 1} 个输入：$error',
-          flowId: flow.id,
-          blockId: flow.blocks.first.id,
-          blockIndex: 0,
-          inputIndex: i,
-          isInputError: true);
+      throw TaskFlowValidationException(
+        '第 ${i + 1} 个输入：$error',
+        flowId: flow.id,
+        blockId: flow.blocks.first.id,
+        blockIndex: 0,
+        inputIndex: i,
+        isInputError: true,
+      );
     }
   }
 }

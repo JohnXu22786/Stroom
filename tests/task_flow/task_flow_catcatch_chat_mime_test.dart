@@ -57,8 +57,15 @@ void main() {
       mime: 'audio/x-mpeg-program-stream'
     ),
   ]) {
+    final unsupportedAudio = const {
+      'audio/x-flv',
+      'audio/quicktime',
+      'audio/x-msvideo',
+      'audio/x-matroska',
+      'audio/x-mpeg-program-stream',
+    }.contains(sample.mime);
     test(
-        '${sample.name} retains verified track MIME through chat attachment storage',
+        '${sample.name} retains verified track MIME ${unsupportedAudio ? 'and rejects unsupported chat audio' : 'through chat attachment storage'}',
         () async {
       final file =
           await File(p.join('tests', 'fixtures', 'catcatch', sample.name))
@@ -67,6 +74,20 @@ void main() {
       expect(output.type, sample.type);
       expect(output.mimeType, sample.mime);
       final restored = FlowPayload.fromMap(output.toMap());
+      expect(restored.type, sample.type);
+      expect(restored.mimeType, sample.mime);
+      if (unsupportedAudio) {
+        await expectLater(
+            prepareFlowChatMessage(restored, 'conversation',
+                endpointType: 'gemini'),
+            throwsA(isA<FormatException>().having(
+                (error) => error.message,
+                'unsupported audio encoding',
+                contains('不支持 ${sample.mime} 音频附件'))));
+        expect(await Directory(p.join(directory.path, 'attachments')).exists(),
+            isFalse);
+        return;
+      }
       final message = await prepareFlowChatMessage(restored, 'conversation',
           endpointType: 'gemini');
       final attachment = message.attachments.single;

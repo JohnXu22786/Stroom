@@ -281,6 +281,13 @@ class TaskFlowExecutionService {
   /// records. A process exit can never discard an input waiting in a batch.
   Future<List<String>> launchFlowMany(
       String flowId, List<FlowRunInput> inputs) async {
+    return _notifier.withInputStoragePathsLock(
+        inputs.map((input) => input.ownedStoragePath),
+        () => _launchFlowMany(flowId, inputs));
+  }
+
+  Future<List<String>> _launchFlowMany(
+      String flowId, List<FlowRunInput> inputs) async {
     final flow = await _prepareFlow(flowId);
     final snapshot = FlowLaunchSnapshot.capture(
         flow, _ref.read(providerEntriesProvider), _ref.read(assistantProvider),
@@ -345,7 +352,11 @@ class TaskFlowExecutionService {
             subTasks: _steps(flow),
             inputText: entry.value.text,
             inputDurationSec: entry.value.durationSec,
-            inputMimeType: entry.value.mimeType))
+            inputMimeType: entry.value.mimeType,
+            inputType: flow.inputType,
+            inputFileName: entry.value.fileName,
+            inputStoragePath: FlowPayload.isFileType(flow.inputType)
+                ? entry.value.ownedStoragePath : null))
         .toList();
     if (!await _notifier.addExecutions(records)) {
       for (final record in records) {
@@ -410,6 +421,13 @@ class TaskFlowExecutionService {
   /// latest-config option because their original configuration is unknown.
   Future<List<String>> retryExecution(String id,
       {bool useLatestConfiguration = false}) async {
+    final path = _execution(id)?.inputStoragePath;
+    return _notifier.withInputStoragePathLock(path,
+        () => _retryExecution(id, useLatestConfiguration: useLatestConfiguration));
+  }
+
+  Future<List<String>> _retryExecution(String id,
+      {required bool useLatestConfiguration}) async {
     final e = _execution(id);
     if (e == null) {
       throw StateError('执行记录已删除');
@@ -421,10 +439,18 @@ class TaskFlowExecutionService {
       FlowRunInput(
           text: e.inputText,
           durationSec: e.inputDurationSec,
-          mimeType: e.inputMimeType)
+          mimeType: e.inputMimeType,
+          fileName: e.inputFileName,
+          ownedStoragePath: e.inputStoragePath)
     ];
     if (useLatestConfiguration) {
-      return launchFlowMany(e.flowId, inputs);
+      final latest = _ref.read(taskFlowListProvider).where((f) => f.id == e.flowId).firstOrNull;
+      final originalType = e.inputType ?? e.snapshot?.flow.inputType;
+      if (latest != null && originalType != null && latest.inputType != originalType) {
+        throw TaskFlowValidationException('初始输入类型已修改，请重新选择运行输入',
+            flowId: e.flowId, isInputError: true);
+      }
+      return _launchFlowMany(e.flowId, inputs);
     }
     final snapshot = e.snapshot;
     if (snapshot == null) {
@@ -594,7 +620,7 @@ class TaskFlowExecutionService {
     final flow = snapshot.flow;
     final data = prefix == 0
         ? FlowPayload.fromValue(current.inputText, flow.inputType,
-            mimeType: current.inputMimeType)
+            mimeType: current.inputMimeType, fileName: current.inputFileName)
         : current.subTasks[prefix - 1].result!;
     await _readable(data, current.flowId);
     current = _currentControl(id, revision);
@@ -607,7 +633,7 @@ class TaskFlowExecutionService {
             FlowRunInput(
                 text: data.value,
                 durationSec: current.inputDurationSec,
-                mimeType: data.mimeType)
+                mimeType: data.mimeType, fileName: data.fileName)
           ],
           providers: snapshot.resolveProviders(
               _ref.read(providerEntriesProvider),
@@ -804,7 +830,7 @@ class TaskFlowExecutionService {
       return;
     }
     var current = FlowPayload.fromValue(original.inputText, flow.inputType,
-        mimeType: original.inputMimeType);
+        mimeType: original.inputMimeType, fileName: original.inputFileName);
     final scheduler = _ref.read(taskFlowSchedulerProvider);
     String? activeStepId;
     try {
