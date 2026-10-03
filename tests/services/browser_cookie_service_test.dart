@@ -1,7 +1,22 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/browser_cookie_service.dart';
+import 'package:stroom/services/storage_service.dart';
+
+class _CookieTestPathProviderPlatform extends PathProviderPlatform {
+  _CookieTestPathProviderPlatform(this.root);
+
+  final String root;
+
+  @override
+  Future<String> getApplicationDocumentsPath() async => root;
+}
 
 /// Fake platform facade recording every platform call so the platform
 /// branches (merge, per-domain fallback, restore validation, delete
@@ -341,6 +356,46 @@ void main() {
   // ====================================================================
 
   group('deleteCookie', () {
+    test('serializes overlapping deletions of distinct cookies', () async {
+      final appDir = await Directory.systemTemp.createTemp('cookie-delete-');
+      final previousPathProvider = PathProviderPlatform.instance;
+      PathProviderPlatform.instance =
+          _CookieTestPathProviderPlatform(appDir.path);
+      AppStorage.resetCache();
+      BrowserCookieService.disableTestMode();
+      BrowserCookieService.cookiePlatform = _FakeCookiePlatform();
+
+      try {
+        final file = File(p.join(appDir.path, 'browser_cookies.json'));
+        await file.writeAsString(jsonEncode([
+          {
+            'domain': 'example.com',
+            'name': 'session',
+            'value': 'abc',
+            'path': '/',
+          },
+          {
+            'domain': 'example.com',
+            'name': 'theme',
+            'value': 'dark',
+            'path': '/',
+          },
+        ]));
+
+        await Future.wait([
+          BrowserCookieService.deleteCookie('example.com', 'session'),
+          BrowserCookieService.deleteCookie('example.com', 'theme'),
+        ]);
+
+        expect(await BrowserCookieService.getCookiesFromFile(), isEmpty);
+      } finally {
+        BrowserCookieService.enableTestMode();
+        PathProviderPlatform.instance = previousPathProvider;
+        AppStorage.resetCache();
+        await appDir.delete(recursive: true);
+      }
+    });
+
     test('removes the cookie with the matching path', () async {
       await BrowserCookieService.persistCookiesRawForTest([
         {
