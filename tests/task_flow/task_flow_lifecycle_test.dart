@@ -156,6 +156,7 @@ void main() {
       // Block completes
       notifier.updateSubTaskStatus(execId, stId, TaskStatus.completed);
       notifier.completeExecution(execId);
+      notifier.completeExecution(execId);
 
       exec = notifier.state[0];
       expect(exec.subTasks[0].status, TaskStatus.completed);
@@ -181,6 +182,7 @@ void main() {
 
       // File read fails → sub-task fails
       notifier.updateSubTaskStatus(execId, stId, TaskStatus.failed);
+      notifier.completeExecution(execId);
       notifier.failExecution(execId, error: '输入文件不存在');
 
       final exec = notifier.state[0];
@@ -219,6 +221,7 @@ void main() {
       notifier.updateSubTaskId(execId, id1, 'cc_task_1');
       notifier.updateSubTaskStatus(execId, id1, TaskStatus.running);
       notifier.updateSubTaskStatus(execId, id1, TaskStatus.completed);
+      notifier.completeExecution(execId);
 
       // Block 1 starts (but not yet complete)
       notifier.updateSubTaskId(execId, id2, 'bg_task_1');
@@ -226,11 +229,13 @@ void main() {
 
       var exec = notifier.state[0];
       expect(exec.subTasks[0].status, TaskStatus.completed);
+      notifier.completeExecution(execId);
       expect(exec.subTasks[1].status, TaskStatus.running);
       expect(exec.status, FlowExecutionStatus.running); // flow still running
 
       // Block 1 completes
       notifier.updateSubTaskStatus(execId, id2, TaskStatus.completed);
+      notifier.completeExecution(execId);
       notifier.completeExecution(execId);
 
       exec = notifier.state[0];
@@ -401,6 +406,7 @@ void main() {
       // recomputation so the failed priority logic is exercised.
       notifier.updateSubTaskStatus(
           execId, notifier.state[0].subTasks[0].id, TaskStatus.failed);
+      notifier.completeExecution(execId);
       notifier.updateSubTaskStatus(
           execId, notifier.state[0].subTasks[1].id, TaskStatus.running);
 
@@ -436,6 +442,7 @@ void main() {
       // recomputation so the failed priority logic is exercised.
       notifier.updateSubTaskStatus(
           execId, notifier.state[0].subTasks[0].id, TaskStatus.failed);
+      notifier.completeExecution(execId);
       notifier.updateSubTaskStatus(
           execId, notifier.state[0].subTasks[1].id, TaskStatus.waiting);
 

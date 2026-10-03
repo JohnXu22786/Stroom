@@ -28,6 +28,7 @@ void main() {
 
       // Simulate: CatCatch task completed, polling loop updates sub-task
       notifier.updateSubTaskStatus(execId, stId, TaskStatus.completed);
+      notifier.completeExecution(execId);
       // Auto-complete should fire, but test that completeExecution also works
       expect(notifier.state[0].status, FlowExecutionStatus.completed);
     });
@@ -64,6 +65,7 @@ void main() {
 
       // Simulate: CatCatch task failed
       notifier.updateSubTaskStatus(execId, stId, TaskStatus.failed);
+      notifier.completeExecution(execId);
       // Auto-complete should have set failed already
       expect(notifier.state[0].status, FlowExecutionStatus.failed);
     });
@@ -90,10 +92,12 @@ void main() {
       final st2 = notifier.state[0].subTasks[1].id;
 
       notifier.updateSubTaskStatus(execId, st1, TaskStatus.completed);
+      notifier.completeExecution(execId);
       // Still running (not all done)
       expect(notifier.state[0].status, FlowExecutionStatus.running);
 
       notifier.updateSubTaskStatus(execId, st2, TaskStatus.completed);
+      notifier.completeExecution(execId);
       // All done
       expect(notifier.state[0].status, FlowExecutionStatus.completed);
     });
@@ -120,7 +124,9 @@ void main() {
       final st2 = notifier.state[0].subTasks[1].id;
 
       notifier.updateSubTaskStatus(execId, st1, TaskStatus.completed);
+      notifier.completeExecution(execId);
       notifier.updateSubTaskStatus(execId, st2, TaskStatus.failed);
+      notifier.completeExecution(execId);
 
       expect(notifier.state[0].status, FlowExecutionStatus.failed);
     });
@@ -172,6 +178,7 @@ void main() {
 
       // CatCatch completed, polling loop updated sub-task
       notifier.updateSubTaskStatus(execId, stId, TaskStatus.completed);
+      notifier.completeExecution(execId);
       expect(notifier.state[0].subTasks[0].status, TaskStatus.completed);
 
       // Now completeExecution is called from _startFlow
@@ -196,6 +203,7 @@ void main() {
 
       // CatCatch failed
       notifier.updateSubTaskStatus(execId, stId, TaskStatus.failed);
+      notifier.completeExecution(execId);
       expect(notifier.state[0].subTasks[0].status, TaskStatus.failed);
 
       // Called from _startFlow (though _startFlow only calls on success,
@@ -232,6 +240,7 @@ void main() {
       // CatCatch task eventually completes
       final stId = notifier.state[0].subTasks[0].id;
       notifier.updateSubTaskStatus(execId, stId, TaskStatus.completed);
+      notifier.completeExecution(execId);
       expect(notifier.state[0].subTasks[0].status, TaskStatus.completed);
 
       // _startFlow for-loop ends, allSucceeded=true
@@ -266,7 +275,7 @@ void main() {
       expect(notifier.state[0].status, FlowExecutionStatus.running);
     });
 
-    test('scenario: CatCatch task completes later → auto-complete', () {
+    test('scenario: CatCatch task completes later → service finalizes', () {
       // Widget disposed during CatCatch execution. completeExecution was
       // NOT called (because _startFlow exited early). CatCatch completes
       // later in background and a sub-task status update arrives —
@@ -288,14 +297,13 @@ void main() {
       // Later, CatCatch completes in background.
       final stId = notifier.state[0].subTasks[0].id;
       notifier.updateSubTaskStatus(execId, stId, TaskStatus.completed);
+      notifier.completeExecution(execId);
 
       // Auto-complete should fire → flow completed
       expect(notifier.state[0].status, FlowExecutionStatus.completed);
     });
 
-    test(
-        'scenario: a sub-task status update after failExecution recovers '
-        'the flow from failed to completed', () {
+    test('scenario: a late child completion cannot revive a failed flow', () {
       // Guards the updateSubTaskStatus recompute path: a late sub-task
       // update arriving after failExecution (e.g. a retried task that
       // completes) must re-open the execution instead of leaving it failed.
@@ -319,10 +327,13 @@ void main() {
       // A later sub-task update marks the sub-task completed.
       final stId = notifier.state[0].subTasks[0].id;
       notifier.updateSubTaskStatus(execId, stId, TaskStatus.completed);
+      notifier.completeExecution(execId);
 
       // Flow should recover to completed
-      expect(notifier.state[0].subTasks[0].status, TaskStatus.completed);
-      expect(notifier.state[0].status, FlowExecutionStatus.completed);
+      expect(
+          notifier.state[0].subTasks[0].outcome, FlowStepOutcome.interrupted);
+      expect(notifier.state[0].subTasks[0].status, TaskStatus.paused);
+      expect(notifier.state[0].status, FlowExecutionStatus.failed);
     });
   });
 }

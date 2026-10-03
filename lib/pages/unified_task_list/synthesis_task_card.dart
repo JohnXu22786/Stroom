@@ -14,9 +14,13 @@ import '../../widgets/running_elapsed_label.dart';
 class SynthesisTaskCard extends ConsumerStatefulWidget {
   final SynthesisTask task;
   final bool isUnread;
+  final bool isFlowManaged;
 
   const SynthesisTaskCard(
-      {super.key, required this.task, this.isUnread = false});
+      {super.key,
+      required this.task,
+      this.isUnread = false,
+      this.isFlowManaged = false});
 
   @override
   ConsumerState<SynthesisTaskCard> createState() => _SynthesisTaskCardState();
@@ -183,6 +187,16 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
   // ===========================================================================
 
   Widget _buildHeaderActions() {
+    if (widget.isFlowManaged) {
+      return widget.task.status == TaskStatus.completed &&
+              widget.task.downloadedFilePath != null
+          ? IconButton(
+              tooltip: '打开文件',
+              icon: const Icon(Icons.folder_open),
+              onPressed: () =>
+                  openFile(widget.task.downloadedFilePath!, context))
+          : const SizedBox.shrink();
+    }
     switch (widget.task.status) {
       case TaskStatus.running:
         return PopupMenuButton<String>(

@@ -37,7 +37,12 @@ Future<String> executeTtsBlock({
   final model = selected.model;
 
   final title = input.length > 20 ? input.substring(0, 20) : input;
-  final voice = asStringParam(block.params, 'voice', '');
+  final defaults = Map<String, dynamic>.from(
+      block.params['_launchSynthesisConfig'] as Map? ?? {});
+  final configuredVoice = asStringParam(block.params, 'voice', '');
+  final voice = configuredVoice.isEmpty
+      ? defaults['voice']?.toString() ?? ''
+      : configuredVoice;
   // Clamp into the model's speed range — an old flow may hold an
   // out-of-range value (the old number field had no bounds).
   final speedRaw =
@@ -61,6 +66,10 @@ Future<String> executeTtsBlock({
       customParams: {
         if (voice.isNotEmpty) 'voice': voice,
         'speed': speed,
+        if (defaults['volume'] != null) 'volume': defaults['volume'].toString(),
+        if (defaults['format'] != null) 'format': defaults['format'].toString(),
+        if (defaults['format'] != null)
+          'response_format': defaults['format'].toString(),
         if (saveFolder.isNotEmpty) 'saveFolder': saveFolder,
       },
       taskId: taskId,
@@ -68,6 +77,11 @@ Future<String> executeTtsBlock({
 
     while (true) {
       await Future.delayed(const Duration(milliseconds: 500));
+      final execution = execNotifier.execution(execId);
+      if (execution == null || execution.isTerminal) {
+        throw BlockExecutionException('任务流已结束',
+            blockType: def.typeKey.name, blockTitle: def.label);
+      }
       final task =
           taskListNotifier.state.where((t) => t.id == taskId).firstOrNull;
 
@@ -109,18 +123,15 @@ Future<String> executeTtsBlock({
         );
       }
       if (task.status == TaskStatus.paused) {
-        // A paused synthesis task will not progress — fail fast instead
-        // of polling forever.
         execNotifier.updateSubTaskStatus(
-          execId,
-          flowSubTask.id,
-          TaskStatus.paused,
-        );
-        throw BlockExecutionException(
-          '任务已暂停',
-          blockType: def.typeKey.name,
-          blockTitle: def.label,
-        );
+            execId, flowSubTask.id, TaskStatus.paused);
+        continue;
+      }
+      if (task.status == TaskStatus.running &&
+          execNotifier.execution(execId)?.status ==
+              FlowExecutionStatus.running) {
+        execNotifier.updateSubTaskStatus(
+            execId, flowSubTask.id, TaskStatus.running);
       }
       // No wall-clock timeout here: a slow-but-healthy synthesis (long
       // utterance, throttled server) must not be killed. A truly hung

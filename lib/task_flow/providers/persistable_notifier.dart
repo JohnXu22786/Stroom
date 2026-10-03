@@ -45,7 +45,7 @@ mixin PersistableNotifier<T> on StateNotifier<T> {
     }
     return _pendingPersistence = _pendingPersistence.then((_) async {
       try {
-        if (encodingError != null) throw encodingError!;
+        if (encodingError != null) throw encodingError;
         final file = await _dataFile();
         await AtomicFile.writeString(file, contents!);
         _persistenceError = null;
@@ -58,16 +58,22 @@ mixin PersistableNotifier<T> on StateNotifier<T> {
     });
   }
 
-  Future<void> restore() async {
+  /// Whether persisted state was absent or read and decoded successfully.
+  /// A failed read leaves the existing state intact so callers can keep
+  /// controls locked when the missing records affect ownership decisions.
+  Future<bool> restore() async {
     try {
       final file = await _dataFile();
-      if (!await file.exists()) return;
+      final type = await FileSystemEntity.type(file.path);
+      if (type == FileSystemEntityType.notFound) return true;
+      if (type != FileSystemEntityType.file) return false;
       final contents = await file.readAsString();
-      if (contents.isEmpty) return;
+      if (contents.isEmpty) return false;
       try {
         final List<dynamic> jsonList = jsonDecode(contents);
         state = fromJsonList(jsonList);
         await persist();
+        return true;
       } catch (e) {
         final truncated = contents.length > 100
             ? '${contents.substring(0, 100)}...'
@@ -76,9 +82,11 @@ mixin PersistableNotifier<T> on StateNotifier<T> {
           'WARNING: Corrupt persistence file $persistenceFileName — '
           'keeping previous state. Content was: $truncated',
         );
+        return false;
       }
     } catch (e) {
       debugPrint('Failed to restore $persistenceFileName: $e');
+      return false;
     }
   }
 }

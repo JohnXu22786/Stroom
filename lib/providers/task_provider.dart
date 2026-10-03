@@ -104,6 +104,12 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       if (speedParam != null) {
         params['speed'] = double.tryParse(speedParam) ?? synthConfig.speed;
       }
+      final volumeParam = task.customParams?['volume'];
+      if (volumeParam != null)
+        params['volume'] = double.tryParse(volumeParam) ?? synthConfig.volume;
+      final requestedFormat = task.customParams?['response_format'] ??
+          task.customParams?['format'] ??
+          synthConfig.format;
       // Parse JSON-type custom param values from string to actual JSON
       // objects/arrays so they are sent as raw JSON, not quoted strings.
       parseJsonCustomParams(params, task.modelConfig);
@@ -119,11 +125,11 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       if (cancelToken.isCancelled) return;
 
       // 格式校验
-      var actualFormat = synthConfig.format;
+      var actualFormat = requestedFormat;
       if (audioData.isNotEmpty) {
         final fixed = ensureValidAudioFormat(
           audioData,
-          requestedFormat: synthConfig.format,
+          requestedFormat: requestedFormat,
           sampleRate: 24000,
         );
         audioData = fixed.$1;
@@ -154,13 +160,20 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         folder: task.folder.isNotEmpty ? task.folder : saveFolder,
       );
 
+      if (cancelToken.isCancelled ||
+          !mounted ||
+          !identical(_cancelTokens[task.id], cancelToken)) return;
+
       // 更新任务为完成
       _updateTask(task.id, TaskStatus.completed, downloadedFilePath: filePath);
 
       // 刷新文件列表
       ref.read(audioRecordsProvider.notifier).loadRecords();
     } on DioException catch (e) {
-      if (e.type == DioExceptionType.cancel) {
+      if (e.type == DioExceptionType.cancel ||
+          cancelToken.isCancelled ||
+          !mounted ||
+          !identical(_cancelTokens[task.id], cancelToken)) {
         return;
       }
       String responseBodyStr = '';
@@ -207,7 +220,9 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         originalResponse: responseBodyStr.isNotEmpty ? responseBodyStr : null,
       );
     } catch (e) {
-      if (cancelToken.isCancelled) return;
+      if (cancelToken.isCancelled ||
+          !mounted ||
+          !identical(_cancelTokens[task.id], cancelToken)) return;
       String? origReq;
       String? origResp;
       if (e is tts_provider_base.SynthesisException) {
@@ -223,7 +238,8 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         originalResponse: origResp,
       );
     } finally {
-      _cancelTokens.remove(task.id);
+      if (identical(_cancelTokens[task.id], cancelToken))
+        _cancelTokens.remove(task.id);
     }
   }
 
@@ -248,13 +264,16 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
   }
 
   /// 继续已暂停的任务（重新开始）
-  void resumeTask(String taskId) {
+  void resumeTask(String taskId,
+      {ProviderConfigItem? providerConfig, ModelConfig? modelConfig}) {
     final index = state.indexWhere((t) => t.id == taskId);
     if (index == -1) return;
     if (state[index].status != TaskStatus.paused) return;
 
     final task = state[index];
     final updated = task.copyWith(
+      providerConfig: providerConfig,
+      modelConfig: modelConfig,
       status: TaskStatus.running,
       error: null,
       completedAt: null,
@@ -465,6 +484,15 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     ];
     debugPrint(
         '[TaskListNotifier] Restored ${tasks.length} tasks from persistence');
+  }
+
+  @override
+  void dispose() {
+    for (final token in _cancelTokens.values) {
+      if (!token.isCancelled) token.cancel();
+    }
+    _cancelTokens.clear();
+    super.dispose();
   }
 
   /// Parse JSON-type custom param values from string to actual JSON

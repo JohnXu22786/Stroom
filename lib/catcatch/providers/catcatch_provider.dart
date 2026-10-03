@@ -568,6 +568,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       final result = await TaskExecutor.executeTask(
         task: task,
         onUpdate: (updated) {
+          if (!mounted ||
+              cancelToken.isCancelled ||
+              !identical(_cancelTokens[task.id], cancelToken)) return;
           final index = state.indexWhere((t) => t.id == updated.id);
           if (index >= 0) {
             final currentStatus = state[index].status;
@@ -601,6 +604,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
             '[CatCatchNotifier] Task waiting for user selection: ${task.id}');
       }
     } catch (e) {
+      if (!mounted ||
+          cancelToken.isCancelled ||
+          !identical(_cancelTokens[task.id], cancelToken)) return;
       debugPrint('[CatCatchNotifier] Task execution error: $e');
       // 更新为失败状态
       final index = state.indexWhere((t) => t.id == task.id);
@@ -637,6 +643,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         task: task,
         fromStep: fromStep,
         onUpdate: (updated) {
+          if (!mounted ||
+              cancelToken.isCancelled ||
+              !identical(_cancelTokens[task.id], cancelToken)) return;
           final index = state.indexWhere((t) => t.id == updated.id);
           if (index >= 0) {
             final currentStatus = state[index].status;
@@ -667,6 +676,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
             '[CatCatchNotifier] Task retry completed: ${task.id} → $result');
       }
     } catch (e) {
+      if (!mounted ||
+          cancelToken.isCancelled ||
+          !identical(_cancelTokens[task.id], cancelToken)) return;
       debugPrint('[CatCatchNotifier] Task retry error: $e');
       final index = state.indexWhere((t) => t.id == task.id);
       if (index >= 0) {

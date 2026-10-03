@@ -76,6 +76,15 @@ class ChatAdapter {
   /// 当前缓存的模型配置（供上下文管理估算用）。
   ModelConfig? get modelConfig => _cachedModelConfig;
 
+  /// Stable identity of the endpoint used for an unbound assistant's next
+  /// request. Flow launches capture it before their execution is queued.
+  Map<String, String>? get selectedProviderModelReference {
+    final config = _cachedProviderConfig;
+    final model = _cachedModelConfig;
+    if (config == null || model == null) return null;
+    return {'configId': config.id, 'modelId': model.id};
+  }
+
   /// 当前缓存的对话助手 system prompt（供上下文管理注入用）。
   String? get assistantPrompt => _cachedAssistantPrompt;
 

@@ -11,8 +11,9 @@
 //  1. Tapping the message list while composing keeps the composer focused
 //     (the grouping survives — without it the app-wide override would blur
 //     the composer and close the keyboard on list touch).
-//  2. Tapping the top bar (outside the group) blurs the composer — the
-//     app-wide blur still applies outside the chat message area.
+//  2. Tapping a non-editing top-bar control (outside the group) blurs the
+//     composer — the app-wide blur still applies outside the chat message area.
+//  3. Tapping the conversation title opens the rename dialog and saves edits.
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart'
@@ -25,6 +26,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:stroom/models/chat_message.dart';
+import 'package:stroom/pages/chat/composer/chat_composer_widget.dart';
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -112,7 +114,11 @@ Future<void> pumpChat(WidgetTester tester) async {
 
 /// Whether the composer's TextField currently has focus.
 bool composerFocused(WidgetTester tester) {
-  return tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus;
+  final composerField = find.descendant(
+    of: find.byType(ChatComposerWidget),
+    matching: find.byType(TextField),
+  );
+  return tester.widget<TextField>(composerField).focusNode!.hasFocus;
 }
 
 void main() {
@@ -152,13 +158,39 @@ void main() {
         await tester.pump();
         expect(composerFocused(tester), isTrue);
 
-        // Tap the conversation title in the top bar — outside the
-        // composer's tap-region group, so the app-wide blur fires.
-        await tester.tap(find.text('Test Conversation'));
+        // Tap a top-bar control that does not open another text field. It is
+        // outside the composer's tap-region group, so the app-wide blur fires.
+        await tester.tap(find.byTooltip('临时对话'));
         await tester.pump();
         expect(composerFocused(tester), isFalse,
             reason: 'tapping the top bar must blur the composer like any '
                 'other outside-tap in the app');
+      });
+    });
+
+    testWidgets(
+        'tapping the conversation title opens the rename dialog and '
+        'saves edits', (tester) async {
+      await withPlatform(tester, TargetPlatform.android, () async {
+        await pumpChat(tester);
+
+        await tester.tap(find.text('Test Conversation'));
+        await tester.pump();
+        expect(find.text('重命名对话'), findsOneWidget);
+
+        final renameField = find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        );
+        expect(
+          tester.widget<TextField>(renameField).controller!.text,
+          'Test Conversation',
+        );
+        await tester.enterText(renameField, 'Renamed Conversation');
+        await tester.tap(find.widgetWithText(TextButton, '确定'));
+        await tester.pump();
+
+        expect(find.text('Renamed Conversation'), findsOneWidget);
       });
     });
 

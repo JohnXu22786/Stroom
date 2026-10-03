@@ -14,11 +14,13 @@ import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
 import 'package:stroom/task_flow/services/block_executors/catcatch_executor.dart';
 import 'package:stroom/task_flow/services/task_flow_validator.dart';
 import 'package:stroom/utils/provider_models.dart';
+import 'task_flow_catcatch_policy_pr708.dart';
 
 class _Notifier extends Mock implements CatCatchNotifier {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  registerCatCatchPr708PolicyTests();
   setUpAll(
     () => registerFallbackValue(
       const MediaResource(
