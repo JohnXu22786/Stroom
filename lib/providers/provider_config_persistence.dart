@@ -371,14 +371,6 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
     ];
   }
 
-  /// 创建本地 Web Search 的供应商分类。搜索工具本身仍以 `web_search`
-  /// 注册；此 entry 只提供独立、稳定的设置页身份。
-  ProviderEntry _createBuiltinWebSearchEntry() => ProviderEntry(
-        id: kBuiltinWebSearchEntryId,
-        type: 'mcp',
-        name: kBuiltinWebSearchEntryName,
-      );
-
   /// 构建单个内置 MCP 配置项
   ProviderConfigItem _buildMcpConfig({
     required String name,
@@ -426,9 +418,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
     SharedPreferences prefs,
     List<ProviderEntry> entries,
   ) async {
-    final mcpEntryIdx = entries.indexWhere(
-      (e) => e.type == 'mcp' && e.id != kBuiltinWebSearchEntryId,
-    );
+    final mcpEntryIdx = entries.indexWhere((e) => e.type == 'mcp');
     if (mcpEntryIdx < 0) return;
 
     final mcpEntry = entries[mcpEntryIdx];

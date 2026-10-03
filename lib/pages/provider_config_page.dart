@@ -15,6 +15,9 @@ class ProviderConfigPage extends ConsumerStatefulWidget {
 
 class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
   ProviderEntry? get _entry {
+    if (widget.entryId == kBuiltinWebSearchEntryId) {
+      return createBuiltinWebSearchEntry();
+    }
     final state = ref.read(providerEntriesProvider);
     try {
       return state.entries.firstWhere((e) => e.id == widget.entryId);

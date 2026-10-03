@@ -192,9 +192,8 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
     // 注意从**配置**推导（而非 adapter 的占位列表）：总开关关闭时 adapter
     // 已清空占位工具，只有配置里还能拿到这些名字。
     final validMcpToolNames = <String>{};
-    final mcpEntry = entriesState.entries
-        .where((e) => e.type == 'mcp' && e.id != kBuiltinWebSearchEntryId)
-        .firstOrNull;
+    final mcpEntry =
+        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
     for (final c in mcpEntry?.configs ?? const <ProviderConfigItem>[]) {
       final typeConfig = c.models.isNotEmpty ? c.models[0].typeConfig : null;
       if (typeConfig?['isHttpTool'] == true) continue;
