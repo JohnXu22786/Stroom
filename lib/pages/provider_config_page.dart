@@ -86,9 +86,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
     if (entry.type == 'mcp') {
       final config = entry.configs[configIndex];
-      final typeConfig = config.models.isNotEmpty
-          ? config.models[0].typeConfig
-          : null;
+      final typeConfig =
+          config.models.isNotEmpty ? config.models[0].typeConfig : null;
       if (typeConfig?['isHttpTool'] == true) {
         await _editHttpToolConfig(configIndex);
         return;
@@ -356,8 +355,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   // Determine if this is a built-in (vendor) MCP config
                   final mcpTypeConfig =
                       entry.type == 'mcp' && config.models.isNotEmpty
-                      ? config.models[0].typeConfig
-                      : null;
+                          ? config.models[0].typeConfig
+                          : null;
                   final isVendor = mcpTypeConfig?['isVendor'] as bool? ?? false;
 
                   // For MCP entries, show transport details
@@ -371,8 +370,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                       mcpTypeConfig?['transport'] as String? ?? 'sse';
                   final integrationType = entry.type == 'mcp'
                       ? isHttpTool
-                            ? 'HTTP 搜索'
-                            : 'MCP · ${transport == 'stdio' ? 'stdio' : 'SSE'}'
+                          ? 'HTTP 搜索'
+                          : 'MCP · ${transport == 'stdio' ? 'stdio' : 'SSE'}'
                       : '';
 
                   if (entry.type == 'mcp') {
@@ -398,9 +397,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   } else {
                     leadIcon = Icons.dns;
                     iconColor = Colors.teal;
-                    subtitle = config.host.isNotEmpty
-                        ? config.host
-                        : '(未设置 Host)';
+                    subtitle =
+                        config.host.isNotEmpty ? config.host : '(未设置 Host)';
                   }
 
                   // Show API key hint if available
@@ -530,9 +528,8 @@ class _McpConfigCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // 统一卡片配色（对齐 LLM 供应商页）：中性背景 + 柔和描边。
-    final Color backgroundColor = isDark
-        ? cs.surfaceContainerHigh
-        : cs.surfaceContainerLow;
+    final Color backgroundColor =
+        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
     final Color borderColor = cs.outlineVariant.withValues(alpha: 0.5);
 
     return Container(
@@ -717,9 +714,8 @@ class _McpMasterSwitchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color backgroundColor = isDark
-        ? cs.surfaceContainerHigh
-        : cs.surfaceContainerLow;
+    final Color backgroundColor =
+        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
 
     return Container(
       decoration: BoxDecoration(

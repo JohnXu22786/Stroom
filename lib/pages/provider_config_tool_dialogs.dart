@@ -82,8 +82,7 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
       final headerApiKey = trimmed.startsWith('Bearer ')
           ? trimmed.substring('Bearer '.length).trim()
           : trimmed;
-      final isKeyHeader =
-          trimmed.isEmpty ||
+      final isKeyHeader = trimmed.isEmpty ||
           trimmed == 'Bearer' ||
           (oldApiKey.isNotEmpty && headerApiKey == oldApiKey);
       if (!isKeyHeader) continue;
@@ -135,7 +134,9 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
                 SelectableText(
                   const JsonEncoder.withIndent('  ')
                       .convert(definition.parameters),
-                  style: Theme.of(context).textTheme.bodySmall
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
                       ?.copyWith(fontFamily: 'monospace'),
                 ),
               ],
@@ -209,7 +210,9 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
               SelectableText(
                 const JsonEncoder.withIndent('  ')
                     .convert(definition.parameters),
-                style: Theme.of(context).textTheme.bodySmall
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
                     ?.copyWith(fontFamily: 'monospace'),
               ),
               const SizedBox(height: 12),
