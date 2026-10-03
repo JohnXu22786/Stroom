@@ -1093,6 +1093,10 @@ class BackupService {
       skipMissingCategories: skipMissingCategories,
     );
     final restoreSelection = metadata.restoreSelection;
+    final previousCookies = await _captureCookiesForRestoreRollback(
+      restoreSelection,
+      metadata.browserCookiesData,
+    );
     onProgress?.call(0.15);
     await _yieldToEventLoop();
 
@@ -1148,6 +1152,7 @@ class BackupService {
     await _restoreBrowserCookiesAfterDataRestore(
       restoreSelection,
       metadata.browserCookiesData,
+      previousCookies: previousCookies,
     );
     onProgress?.call(1.0);
     return metadata.skippedLabels;
@@ -1213,6 +1218,10 @@ class BackupService {
         trustEmptyLegacyTaskPayloads: trustEmptyLegacyTaskPayloads,
       );
       final restoreSelection = metadata.restoreSelection;
+      final previousCookies = await _captureCookiesForRestoreRollback(
+        restoreSelection,
+        metadata.browserCookiesData,
+      );
       onProgress?.call(0.15);
       await _yieldToEventLoop();
 
@@ -1260,6 +1269,7 @@ class BackupService {
       await _restoreBrowserCookiesAfterDataRestore(
         restoreSelection,
         metadata.browserCookiesData,
+        previousCookies: previousCookies,
       );
       onProgress?.call(1.0);
       return metadata.skippedLabels;
@@ -1901,6 +1911,31 @@ class BackupService {
     return false;
   }
 
+  static Future<List<Map<String, dynamic>>?> _captureCookiesForRestoreRollback(
+    BackupSelection selection,
+    Uint8List? cookieData,
+  ) async {
+    if (!selection.browserCookies ||
+        cookieData == null ||
+        kIsWeb ||
+        WebFileStore.isTestMode ||
+        !(Platform.isAndroid ||
+            Platform.isIOS ||
+            Platform.isMacOS ||
+            Platform.isWindows)) {
+      return null;
+    }
+
+    final snapshot =
+        await BrowserCookieService.snapshotCookiesForRestoreRollback();
+    if (snapshot == null) {
+      throw Exception(
+        '当前平台无法完整读取现有内置浏览器Cookies，已中止恢复以保护现有数据。',
+      );
+    }
+    return snapshot;
+  }
+
   static Future<void> _clearLiveCookiesForRestore(
     BackupSelection selection,
   ) async {
@@ -1936,12 +1971,13 @@ class BackupService {
   static Future<void> _restoreBrowserCookiesAfterDataRestore(
     BackupSelection selection,
     Uint8List? cookieData,
+    {
+    required List<Map<String, dynamic>>? previousCookies,
+  },
   ) async {
     if (!selection.browserCookies || cookieData == null) return;
 
     final previousFileData = await readBackupFile('', 'browser_cookies.json');
-    final previousCookies =
-        await BrowserCookieService.snapshotCookiesForRestoreRollback();
     final previousRestorePending =
         await BrowserCookieService.hasBackupRestorePending();
     try {
@@ -1969,14 +2005,18 @@ class BackupService {
     required bool previousRestorePending,
   }) async {
     try {
-      await BrowserCookieService.clearPlatformCookies();
+      if (previousCookies != null) {
+        await BrowserCookieService.clearPlatformCookies();
+      }
       if (previousFileData == null) {
         await _deleteFile('', 'browser_cookies.json');
       } else {
         await writeBackupFile('', 'browser_cookies.json', previousFileData);
       }
       if (previousCookies == null) {
-        await BrowserCookieService.restoreCookiesFromFile(force: true);
+        if (previousFileData != null) {
+          await BrowserCookieService.restoreCookiesFromFile(force: true);
+        }
       } else {
         await BrowserCookieService.restoreCookiesFromSnapshot(
           previousCookies,

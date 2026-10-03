@@ -176,7 +176,11 @@ class BrowserCookieService {
       final retentionEnabled = await getRetentionMode();
       final backupRestorePending = await hasBackupRestorePending();
       if (retentionEnabled || backupRestorePending) {
-        return restoreCookiesFromFileChecked(force: backupRestorePending);
+        // Page-load restoration is best-effort: a stale or malformed cookie
+        // must not prevent the requested page from loading. Explicit backup
+        // imports use the checked result directly and can still roll back.
+        await restoreCookiesFromFile(force: backupRestorePending);
+        return true;
       }
       if (kIsWeb) {
         await clearPersistedCookies();
@@ -368,26 +372,15 @@ class BrowserCookieService {
     }
   }
 
-  /// Captures the best available current cookie view for rolling back a
-  /// failed restore. Unlike backup export, rollback may keep a partial
-  /// platform snapshot even when retention is disabled because it is used
-  /// only to put the destination's existing state back after an error.
+  /// Captures a complete platform cookie snapshot for rolling back a failed
+  /// restore. Returns null when the platform can only enumerate visited
+  /// domains, since that partial view cannot safely replace the full store.
   static Future<List<Map<String, dynamic>>?>
       snapshotCookiesForRestoreRollback() async {
     try {
       final result = await _collectPlatformCookies();
-      if (result.cookies == null) {
-        final persistedCookies = await _readCookiesFile();
-        return persistedCookies.isEmpty ? null : persistedCookies;
-      }
-
-      final currentCookies = result.cookies!.map(_cookieToMap).toList();
-      if (result.complete) return currentCookies;
-
-      final persistedCookies = await _readCookiesFile();
-      persistedCookies.removeWhere((cookie) =>
-          _rootPathCookieAppliesToAnyHost(cookie, result.queriedHosts));
-      return _mergeCookies(persistedCookies, currentCookies);
+      if (result.cookies == null || !result.complete) return null;
+      return result.cookies!.map(_cookieToMap).toList();
     } catch (e) {
       debugPrint(
           'BrowserCookieService.snapshotCookiesForRestoreRollback error: $e');
