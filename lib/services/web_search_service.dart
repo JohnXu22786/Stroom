@@ -43,7 +43,9 @@ class WebSearchService {
     ToolDefinition(
       name: 'web_search',
       description: '通过网络搜索获取实时信息。支持 Google、Bing、百度三个搜索引擎，'
-          '通过 source 参数选择（默认 google）。无需 API Key，免费使用。'
+          '通过 source 参数选择首选引擎（默认 google）；'
+          '首选引擎不可用或未返回可解析结果时会自动尝试其他引擎。'
+          '无需 API Key，免费使用。'
           '每个结果包含标题、链接和内容摘要。',
       parameters: {
         'type': 'object',
@@ -54,7 +56,8 @@ class WebSearchService {
           },
           'source': {
             'type': 'string',
-            'description': '搜索引擎：google（谷歌）、bing（必应）、baidu（百度）',
+            'description': '首选搜索引擎：google（谷歌）、bing（必应）、baidu（百度）；'
+                '不可用时会自动切换',
             'enum': ['google', 'bing', 'baidu'],
           },
           'count': {
@@ -115,32 +118,107 @@ class WebSearchService {
 
     final effectiveSource = _resolveSource(source);
     final maxResults = count.clamp(1, 10);
-    final url = buildSearchUrl(query, source);
-
     debugPrint(
-        'WebSearch: source=$effectiveSource, query=$query, count=$maxResults');
+        'WebSearch: preferredSource=$effectiveSource, count=$maxResults');
 
-    try {
-      final response = await _dio.get(
-        url,
-        options: Options(
-          responseType: ResponseType.plain,
-          followRedirects: true,
-          maxRedirects: 5,
-        ),
-      );
+    final failures = <String>[];
+    final noResultSources = <String>[];
+    final sourcesToTry = [
+      effectiveSource,
+      ...supportedSources.where((source) => source != effectiveSource),
+    ];
 
-      if (response.statusCode == 200) {
-        final html = response.data.toString();
-        final results = _parseResults(html, effectiveSource, maxResults);
-        return formatResults(results, effectiveSource);
+    for (final sourceToTry in sourcesToTry) {
+      try {
+        final response = await _dio.get<String>(
+          buildSearchUrl(query, sourceToTry),
+          options: Options(
+            responseType: ResponseType.plain,
+            followRedirects: true,
+            maxRedirects: 5,
+            connectTimeout: const Duration(seconds: 5),
+            receiveTimeout: const Duration(seconds: 10),
+          ),
+        );
+
+        if (response.statusCode != 200) {
+          failures.add('$sourceToTry: HTTP ${response.statusCode}');
+          continue;
+        }
+
+        final html = response.data ?? '';
+        final results = _parseResults(html, sourceToTry, maxResults);
+        if (results.isEmpty) {
+          if (_hasExplicitNoResults(html, sourceToTry)) {
+            noResultSources.add(sourceToTry);
+            continue;
+          }
+          failures.add('$sourceToTry: 未返回可解析的搜索结果');
+          continue;
+        }
+
+        final formattedResults = formatResults(results, sourceToTry);
+        if (sourceToTry != effectiveSource) {
+          final preferredReason = noResultSources.contains(effectiveSource)
+              ? '未找到相关结果'
+              : '暂不可用';
+          return '首选引擎 ${_sourceName(effectiveSource)} $preferredReason，已切换到 ${_sourceName(sourceToTry)}。\n\n'
+              '$formattedResults';
+        }
+        return formattedResults;
+      } on DioException catch (e) {
+        final statusCode = e.response?.statusCode;
+        failures.add(statusCode == null
+            ? '$sourceToTry: ${e.type.name}'
+            : '$sourceToTry: HTTP $statusCode');
+        debugPrint('WebSearch: $sourceToTry request failed (${e.type.name})');
+      } catch (e) {
+        failures.add('$sourceToTry: ${e.runtimeType}');
+        debugPrint('WebSearch: $sourceToTry failed (${e.runtimeType})');
       }
-
-      return '错误: 搜索请求失败 (HTTP ${response.statusCode})';
-    } catch (e) {
-      debugPrint('WebSearch error: $e');
-      return '错误: 搜索请求失败: $e';
     }
+
+    if (noResultSources.isNotEmpty) {
+      final noResults = noResultSources.map(_sourceName).join('、');
+      if (failures.isEmpty && noResultSources.length == sourcesToTry.length) {
+        return '未找到相关搜索结果（$noResults 均明确返回无结果）。';
+      }
+      return '搜索不完整：$noResults 明确返回无结果；'
+          '其他引擎不可用或返回了无法解析的页面：${failures.join('；')}';
+    }
+
+    return '错误: 所有搜索引擎均不可用。${failures.join('；')}';
+  }
+
+  static String _sourceName(String source) => switch (source) {
+        'google' => 'Google',
+        'bing' => 'Bing',
+        'baidu' => '百度',
+        _ => source,
+      };
+
+  static bool _hasExplicitNoResults(String html, String source) {
+    final text = _stripHtmlTags(html).toLowerCase();
+    final messages = switch (source) {
+      'google' => [
+          'did not match any documents',
+          '找不到和您查询的',
+          '没有找到和您查询的',
+        ],
+      'bing' => [
+          'there are no results for',
+          'no results found',
+          '没有找到相关结果',
+        ],
+      'baidu' => [
+          '抱歉，未找到与',
+          '很抱歉，未找到与',
+          '抱歉，没有找到与',
+          '没有找到与',
+        ],
+      _ => const <String>[],
+    };
+    return messages.any(text.contains);
   }
 
   /// 解析结果
@@ -286,13 +364,7 @@ class WebSearchService {
       return '未找到相关搜索结果。';
     }
 
-    final sourceNames = {
-      'google': 'Google',
-      'bing': 'Bing',
-      'baidu': '百度',
-    };
-
-    final sourceName = sourceNames[source] ?? source;
+    final sourceName = _sourceName(source);
     final buffer = StringBuffer('来自 $sourceName 的搜索结果：\n\n');
 
     for (var i = 0; i < results.length; i++) {
