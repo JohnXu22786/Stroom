@@ -112,6 +112,7 @@ class ChatAdapter {
   /// MCP 条目或组别列表变化时触发重建。
   ProviderEntry? _lastMcpEntry;
   List<McpProviderGroup>? _lastMcpGroups;
+  Map<String, Object> _lastMcpConfigSourcesByName = {};
   Set<String> _disabledMcpToolNames = {};
 
   /// 当前选中的配置索引（指向 llmEntry.configs）
