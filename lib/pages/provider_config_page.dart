@@ -54,12 +54,10 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     if (entry == null) return;
 
     if (entry.type == 'mcp') {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) =>
-              McpServerConfigPage(entryId: widget.entryId, configIndex: -1),
-        ),
+      await showMcpServerConfigDialog(
+        context: context,
+        entryId: widget.entryId,
+        configIndex: -1,
       );
     } else {
       await Navigator.push(
@@ -93,14 +91,10 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         return;
       }
 
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => McpServerConfigPage(
-            entryId: widget.entryId,
-            configIndex: configIndex,
-          ),
-        ),
+      await showMcpServerConfigDialog(
+        context: context,
+        entryId: widget.entryId,
+        configIndex: configIndex,
       );
     } else {
       await Navigator.push(
@@ -428,9 +422,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                             ),
                           )
                         : const SizedBox(width: 32),
-                    onSettings: () => entry.type == 'mcp'
-                        ? _editConfig(i)
-                        : _openSettingsPanel(i),
+                    onSettings: entry.type == 'mcp'
+                        ? null
+                        : () => _openSettingsPanel(i),
                     onDelete: isVendor ? null : () => _deleteConfig(i),
                     onTap: () => _editConfig(i),
                   );
@@ -499,7 +493,7 @@ class _McpConfigCard extends StatelessWidget {
   final String? apiKeyHint;
   final String? mcpDescription;
   final Widget dragHandle;
-  final VoidCallback onSettings;
+  final VoidCallback? onSettings;
   final IconData settingsIcon;
   final String settingsTooltip;
   final VoidCallback? onDelete;
@@ -664,17 +658,18 @@ class _McpConfigCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: Icon(
-                    settingsIcon,
-                    size: 20,
-                    color: cs.onSurfaceVariant,
+                if (onSettings != null)
+                  IconButton(
+                    icon: Icon(
+                      settingsIcon,
+                      size: 20,
+                      color: cs.onSurfaceVariant,
+                    ),
+                    onPressed: onSettings,
+                    tooltip: settingsTooltip,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
-                  onPressed: onSettings,
-                  tooltip: settingsTooltip,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
                 if (onDelete != null) ...[
                   const SizedBox(width: 4),
                   IconButton(
