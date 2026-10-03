@@ -134,6 +134,7 @@ extension ChatAdapterMcpExt on ChatAdapter {
     // 可用工具名告知模型。按生成的工具名去重，避免不同服务器名规范化后
     // 重复；同一工具名优先使用成功注册的客户端配置。
     final placeholderEntriesByToolName = <String, _McpConfigEntry>{};
+    final placeholderClientNamesByToolName = <String, String>{};
     final selectedPlaceholderToolNames = <String>{};
     for (final entry in mcpConfigs) {
       final selectedSource = selectedConfigSourcesByName[entry.config.name];
@@ -145,11 +146,18 @@ extension ChatAdapterMcpExt on ChatAdapter {
       if (selectedSource != null) {
         if (selectedPlaceholderToolNames.add(toolName)) {
           placeholderEntriesByToolName[toolName] = entry;
+          placeholderClientNamesByToolName[toolName] = entry.config.name;
         }
       } else {
-        placeholderEntriesByToolName.putIfAbsent(toolName, () => entry);
+        if (!placeholderEntriesByToolName.containsKey(toolName)) {
+          placeholderEntriesByToolName[toolName] = entry;
+          placeholderClientNamesByToolName[toolName] = entry.config.name;
+        }
       }
     }
+    _mcpClientManager.setPlaceholderClientNames(
+      placeholderClientNamesByToolName,
+    );
     _mcpToolDefinitions = [
       for (final placeholder in placeholderEntriesByToolName.entries)
         ToolDefinition(
