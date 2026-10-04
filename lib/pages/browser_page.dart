@@ -61,7 +61,7 @@ Future<bool> navigateBrowserPageAfterCookiePreparation({
 }
 
 /// Navigates from the browser address bar and restores its prior page address
-/// when cookie preparation prevents the requested navigation.
+/// when preparation or page loading prevents the requested navigation.
 @visibleForTesting
 Future<bool> navigateBrowserPageFromAddress({
   required String requestedUrl,
@@ -70,19 +70,24 @@ Future<bool> navigateBrowserPageFromAddress({
   required ValueChanged<String> updateAddress,
   required Future<bool> Function() prepareCookies,
   required Future<void> Function(String url) loadUrl,
-  required VoidCallback onPreparationFailure,
+  required VoidCallback onNavigationFailure,
 }) async {
   final uri = normalizeBrowserUrl(requestedUrl);
   if (uri.isEmpty) return false;
 
   updateAddress(uri);
-  final navigated = await navigateBrowserPageAfterCookiePreparation(
-    prepareCookies: prepareCookies,
-    loadUrl: () => loadUrl(uri),
-  );
+  var navigated = false;
+  try {
+    navigated = await navigateBrowserPageAfterCookiePreparation(
+      prepareCookies: prepareCookies,
+      loadUrl: () => loadUrl(uri),
+    );
+  } catch (e) {
+    debugPrint('[BrowserPage] address navigation failed: $e');
+  }
   if (!navigated) {
     updateAddress(currentUrl.isNotEmpty ? currentUrl : previousAddress);
-    onPreparationFailure();
+    onNavigationFailure();
   }
   return navigated;
 }
@@ -506,11 +511,11 @@ class _BrowserPageState extends State<BrowserPage> {
         if (!mounted || controller != _webViewController) return;
         await controller.loadUrl(urlRequest: URLRequest(url: WebUri(address)));
       },
-      onPreparationFailure: () {
+      onNavigationFailure: () {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Cookie 准备失败，未加载页面'),
+            content: Text('页面导航失败，地址已恢复'),
             backgroundColor: Colors.red,
           ),
         );
