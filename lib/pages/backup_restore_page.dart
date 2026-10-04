@@ -41,16 +41,16 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   bool _browserCookies = true;
 
   BackupSelection get _selection => BackupSelection(
-        chatRecordsAndAttachments: _chatRecordsAndAttachments,
-        settings: _settings,
-        pictures: _pictures,
-        audio: _audio,
-        videos: _videos,
-        texts: _texts,
-        tasks: _tasks,
-        ankiData: _ankiData,
-        browserCookies: _browserCookies,
-      );
+    chatRecordsAndAttachments: _chatRecordsAndAttachments,
+    settings: _settings,
+    pictures: _pictures,
+    audio: _audio,
+    videos: _videos,
+    texts: _texts,
+    tasks: _tasks,
+    ankiData: _ankiData,
+    browserCookies: _browserCookies,
+  );
 
   bool get _hasSelection {
     return _chatRecordsAndAttachments ||
@@ -206,11 +206,15 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Row(
                   children: [
-                    Icon(Icons.warning_amber_rounded,
-                        color: Colors.orange, size: 18),
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.orange,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
-                        child: Text(w, style: const TextStyle(fontSize: 13))),
+                      child: Text(w, style: const TextStyle(fontSize: 13)),
+                    ),
                   ],
                 ),
               ),
@@ -238,8 +242,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded,
-                      color: Colors.orange, size: 16),
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.orange,
+                    size: 16,
+                  ),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -285,7 +292,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           final message = skippedCategories.isEmpty
               ? '数据已从备份中恢复。请重启应用以使用恢复的数据。'
               : '${_skippedCategoriesMessage(skippedCategories)}'
-                  '其余所选数据已恢复，请重启应用以生效。';
+                    '其余所选数据已恢复，请重启应用以生效。';
           await _showRestartPrompt(message: message);
         }
       }
@@ -332,9 +339,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => _ClearSelectedDataConfirmationDialog(
-        labels: clearLabels,
-      ),
+      builder: (_) => _ClearSelectedDataConfirmationDialog(labels: clearLabels),
     );
 
     if (confirmed != true) return;
@@ -378,10 +383,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       if (mounted) {
         // 弹窗展示期间停止按钮 spinner（避免模态框背后持续动画）
         setState(() => _isClearing = false);
-        await _showRestartPrompt(
-          title: '数据清除完成',
-          message: '所选数据已清除。请重启应用以生效。',
-        );
+        await _showRestartPrompt(title: '数据清除完成', message: '所选数据已清除。请重启应用以生效。');
       }
     } catch (e) {
       // 先关闭进度弹窗，让失败提示可见
@@ -423,8 +425,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Anki闪卡片组已导出到: $path'),
-              backgroundColor: Colors.green),
+            content: Text('Anki闪卡片组已导出到: $path'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
@@ -450,7 +453,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('请选择 .apkg 格式的文件'), backgroundColor: Colors.orange),
+            content: Text('请选择 .apkg 格式的文件'),
+            backgroundColor: Colors.orange,
+          ),
         );
       }
       return;
@@ -539,10 +544,12 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   }
 
   String _skippedCategoriesMessage(List<String> categories) {
-    var message = '备份中未能确认以下勾选的数据类型包含可恢复内容，已跳过；'
+    var message =
+        '备份中未能确认以下勾选的数据类型包含可恢复内容，已跳过；'
         '当前数据保持不变：${categories.join('、')}。';
     if (categories.contains('任务')) {
-      message += '\n\n如果这是旧版备份，空任务文件无法区分“任务列表为空”和“该平台未导出任务”；'
+      message +=
+          '\n\n如果这是旧版备份，空任务文件无法区分“任务列表为空”和“该平台未导出任务”；'
           '为避免覆盖当前任务，任务类别已跳过并保留原数据。';
     }
     return message;
@@ -598,11 +605,13 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('导入/导出 .apkg 格式的 Anki 牌组',
-                      style: TextStyle(
-                          fontSize: 13,
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant)),
+                  Text(
+                    '导入/导出 .apkg 格式的 Anki 牌组',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -613,8 +622,10 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2))
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
                               : const Icon(Icons.file_upload_outlined),
                           label: Text(_isAnkiExporting ? '导出中...' : '导出 .apkg'),
                         ),
@@ -627,8 +638,10 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2))
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
                               : const Icon(Icons.file_download_outlined),
                           label: Text(_isAnkiImporting ? '导入中...' : '导入 .apkg'),
                         ),
@@ -691,8 +704,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.delete_outline,
-                          color: Colors.red.shade700, size: 20),
+                      Icon(
+                        Icons.delete_outline,
+                        color: Colors.red.shade700,
+                        size: 20,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         '清除所选数据',
@@ -960,8 +976,7 @@ class _ClearSelectedDataConfirmationDialogState
             ),
             child: const Row(
               children: [
-                Icon(Icons.warning_amber_rounded,
-                    color: Colors.red, size: 16),
+                Icon(Icons.warning_amber_rounded, color: Colors.red, size: 16),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -985,9 +1000,7 @@ class _ClearSelectedDataConfirmationDialogState
               : null,
           style: FilledButton.styleFrom(backgroundColor: Colors.red),
           child: Text(
-            _secondsRemaining == 0
-                ? '确定清除'
-                : '确定清除（$_secondsRemaining）',
+            _secondsRemaining == 0 ? '确定清除' : '确定清除（$_secondsRemaining）',
           ),
         ),
       ],
