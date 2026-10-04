@@ -86,6 +86,7 @@ void main() {
     WidgetTester tester,
     Brightness brightness, {
     ProviderEntriesState? state,
+    String entryId = 'test_mcp',
   }) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -110,7 +111,7 @@ void main() {
           ),
           themeMode:
               brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
-          home: const ProviderConfigPage(entryId: 'test_mcp'),
+          home: ProviderConfigPage(entryId: entryId),
         ),
       ),
     );
@@ -276,6 +277,29 @@ void main() {
     expect(
       find.descendant(of: builtinSearchCard, matching: find.text('内置工具')),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('built-in Web Search settings entry remains read-only',
+      (tester) async {
+    await pumpPage(
+      tester,
+      Brightness.light,
+      entryId: kBuiltinWebSearchEntryId,
+    );
+
+    expect(find.text(kBuiltinWebSearchEntryName), findsOneWidget);
+    expect(find.text('内置工具'), findsOneWidget);
+    expect(
+      find.text('内置网络搜索支持 Google、Bing 和百度，模型调用名为 web_search。'),
+      findsOneWidget,
+    );
+    expect(find.text('添加'), findsNothing);
+    expect(find.byType(Switch), findsNothing);
+    expect(find.text('服务与工具'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('builtin_tool_web_search')),
+      findsNothing,
     );
   });
 
