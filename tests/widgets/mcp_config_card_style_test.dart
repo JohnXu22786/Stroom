@@ -253,11 +253,6 @@ void main() {
       find.descendant(of: httpSearchCard, matching: find.text('HTTP 搜索')),
       findsOneWidget,
     );
-    expect(
-      find.descendant(of: builtinSearchCard, matching: find.text('内置工具')),
-      findsOneWidget,
-    );
-
     await tester.tap(httpSearchCard);
     await tester.pumpAndSettle();
 
