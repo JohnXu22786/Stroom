@@ -326,6 +326,40 @@ test('replays nested one-shot header pairs for fetch and media capture', async (
   }]);
 });
 
+test(
+  'replays the converted values of record headers without recoercing them',
+  async () => {
+    const response = {url: 'https://cdn.example/record-header.m3u8'};
+    let originalRequestHeader;
+    let headerValueStringifications = 0;
+    const statefulHeaderValue = {
+      toString() {
+        headerValueStringifications++;
+        return `from-record-${headerValueStringifications}`;
+      },
+    };
+    const {messages, window} = installHook([], (...args) => {
+      originalRequestHeader = new Headers(args[1].headers).get('x-request');
+      return Promise.resolve(response);
+    });
+
+    const result = await window.fetch('https://api.example/redirect', {
+      headers: {'X-Request': statefulHeaderValue},
+    });
+
+    assert.equal(result, response);
+    assert.equal(headerValueStringifications, 1);
+    assert.equal(originalRequestHeader, 'from-record-1');
+    assert.deepEqual(messages, [{
+      url: 'https://cdn.example/record-header.m3u8',
+      method: 'GET',
+      initiator: 'https://page.example/watch',
+      mimeType: '',
+      requestHeaders: {'x-request': 'from-record-1'},
+    }]);
+  },
+);
+
 test('replays nested one-shot pairs with non-iterable iterator wrappers', async () => {
   const response = {url: 'https://cdn.example/non-iterable-pair.m3u8'};
   let originalRequestHeader;
