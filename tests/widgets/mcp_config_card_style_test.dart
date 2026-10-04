@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/models/mcp.dart';
 import 'package:stroom/pages/provider_config_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 
@@ -81,13 +82,17 @@ void main() {
     );
   }
 
-  Future<void> pumpPage(WidgetTester tester, Brightness brightness) async {
+  Future<void> pumpPage(
+    WidgetTester tester,
+    Brightness brightness, {
+    ProviderEntriesState? state,
+  }) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           providerEntriesProvider.overrideWith((ref) {
             final notifier = ProviderEntriesNotifier();
-            notifier.state = mixedState();
+            notifier.state = state ?? mixedState();
             return notifier;
           }),
         ],
@@ -278,6 +283,47 @@ void main() {
     expect(
       find.descendant(of: builtinSearchCard, matching: find.text('内置工具')),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('clearing HTTP search API key removes stale credential headers',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = mixedState();
+    final braveConfig = state.entries.single.configs[1];
+    braveConfig.models[0].typeConfig = {
+      'transport': 'http',
+      'isHttpTool': true,
+      'isVendor': true,
+      'apiKey': 'new-explicit-key',
+      'headers': {'X-Subscription-Token': 'stale-header-key'},
+    };
+    await pumpPage(tester, Brightness.light, state: state);
+
+    await tester.tap(find.byKey(const ValueKey('config_test_mcp_1')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ProviderConfigPage)),
+    );
+    final updatedTypeConfig = container
+        .read(providerEntriesProvider)
+        .entries
+        .single
+        .configs[1]
+        .models[0]
+        .typeConfig;
+    expect(updatedTypeConfig, isNot(contains('apiKey')));
+    expect(
+      updatedTypeConfig['headers'],
+      {'X-Subscription-Token': ''},
+    );
+    expect(
+      McpServerConfig.extractApiKeyFromTypeConfig(updatedTypeConfig),
+      isEmpty,
     );
   });
 }

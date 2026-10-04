@@ -73,6 +73,11 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
     String oldApiKey,
     String apiKey,
   ) {
+    final credentialHeaderNames = switch (widget.config.providerName) {
+      'Brave Search' => const {'x-subscription-token'},
+      'Bocha' || 'Querit' || 'Searxng' => const {'authorization'},
+      _ => const <String>{},
+    };
     final rawHeaders = typeConfig['headers'];
     if (rawHeaders is! Map) return;
 
@@ -82,7 +87,9 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
       final headerApiKey = trimmed.startsWith('Bearer ')
           ? trimmed.substring('Bearer '.length).trim()
           : trimmed;
-      final isKeyHeader = trimmed.isEmpty ||
+      final isKeyHeader =
+          credentialHeaderNames.contains(key.toString().toLowerCase()) ||
+          trimmed.isEmpty ||
           trimmed == 'Bearer' ||
           (oldApiKey.isNotEmpty && headerApiKey == oldApiKey);
       if (!isKeyHeader) continue;
