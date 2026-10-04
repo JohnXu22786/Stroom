@@ -78,7 +78,11 @@ Map<String, String> mcpPlaceholderToolNamesByConfigId(
     for (final configId in configIds) {
       final serverName = serverNamesByConfigId[configId]!;
       aliasesByServerName.putIfAbsent(serverName, () {
-        if (aliasesByServerName.isEmpty) return entry.key;
+        if (aliasesByServerName.isEmpty && entry.key.length <= 64) {
+          return entry.key;
+        }
+        // Long base names need the same stable config-ID suffix as later
+        // collisions so every published tool name stays within 64 chars.
         return _uniqueMcpPlaceholderToolName(
           entry.key,
           configId,
@@ -113,7 +117,7 @@ String _uniqueMcpPlaceholderToolName(
         ? ''
         : baseStem.length <= maxStemLength
             ? baseStem
-            : baseStem.substring(0, maxStemLength);
+            : _truncateMcpToolNameStem(baseStem, maxStemLength);
     final name = '${stem}_${suffix}_mcp';
     if (usedNames.add(name)) return name;
     if (suffixLength < stableId.length) {
@@ -126,6 +130,18 @@ String _uniqueMcpPlaceholderToolName(
       if (usedNames.add(duplicateName)) return duplicateName;
     }
   }
+}
+
+String _truncateMcpToolNameStem(String value, int maxCodeUnits) {
+  final result = StringBuffer();
+  var codeUnits = 0;
+  for (final rune in value.runes) {
+    final runeCodeUnits = rune > 0xFFFF ? 2 : 1;
+    if (codeUnits + runeCodeUnits > maxCodeUnits) break;
+    result.writeCharCode(rune);
+    codeUnits += runeCodeUnits;
+  }
+  return result.toString();
 }
 
 String? mcpProviderConfigToolName(
@@ -149,10 +165,10 @@ String? mcpProviderConfigToolName(
     providerName: config.providerName,
     typeConfig: typeConfig,
   );
-  return serverConfig == null
-      ? null
-      : placeholderNamesByConfigId?[config.id] ??
-          McpServerConfig.placeholderToolName(serverConfig.name);
+  if (serverConfig == null) return null;
+  final stableNames = placeholderNamesByConfigId ??
+      mcpPlaceholderToolNamesByConfigId([config]);
+  return stableNames[config.id];
 }
 
 Set<String> disabledMcpToolNames(ProviderEntriesState state) {
