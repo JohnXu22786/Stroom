@@ -1534,6 +1534,9 @@ void main() {
 
     expect(saved, isNotNull);
     expect(updated?.status, TaskStatus.completed);
+    expect(updated?.metadata[CatCatchTask.nativeRegisteredPathKey], saved);
+    final restored = CatCatchTask.fromMap(updated!.toMap());
+    expect(restored.metadata[CatCatchTask.nativeRegisteredPathKey], saved);
     expect(updated?.selectedMedia, media);
     expect(await FileManifest.loadRecords(), hasLength(1));
     expect(await VideoManifest.loadRecords(), isEmpty);

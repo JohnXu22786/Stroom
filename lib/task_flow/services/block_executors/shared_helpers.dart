@@ -6,6 +6,16 @@ import '../../../providers/task_provider_shared.dart';
 import '../../../utils/text_manifest.dart';
 import '../../providers/task_flow_execution_provider.dart';
 
+/// A cancelled or otherwise finished execution can remain in the task list.
+/// Child work must stop before saving output even when its record still exists.
+bool isFlowExecutionActive(
+  TaskFlowExecutionNotifier execNotifier,
+  String execId,
+) {
+  final execution = execNotifier.execution(execId);
+  return execution != null && !execution.isTerminal;
+}
+
 void failSubTask(
   BackgroundTaskNotifier bgNotifier,
   String taskId,
@@ -58,8 +68,8 @@ Future<String?> saveTextForFlow(
   String? title,
 
   /// Optional guard checked right before the gallery record is committed.
-  /// Flow executors pass a check that the execution still exists, so a
-  /// flow deleted mid-save does not leave an orphaned text record.
+  /// Flow executors pass a check that the execution is still active, so a
+  /// flow cancelled or deleted mid-save does not leave a gallery record.
   bool Function()? shouldCommit,
 }) async {
   if (text.isEmpty) return null;
@@ -83,16 +93,21 @@ Future<String?> saveTextForFlow(
     recordName = '$baseName _${DateTime.now().millisecondsSinceEpoch}';
   }
 
-  await TextManifest.addRecord(
-    TextRecord(
-      name: recordName,
-      hash: hash,
-      format: 'txt',
-      createdAt: DateTime.now(),
-      size: bytes.length,
-      folder: saveFolder,
-      textLength: text.length,
-    ),
+  if (shouldCommit != null && !shouldCommit()) return null;
+
+  final record = TextRecord(
+    name: recordName,
+    hash: hash,
+    format: 'txt',
+    createdAt: DateTime.now(),
+    size: bytes.length,
+    folder: saveFolder,
+    textLength: text.length,
   );
+  await TextManifest.addRecord(record);
+  if (shouldCommit != null && !shouldCommit()) {
+    await TextManifest.deleteRecord(record.id);
+    return null;
+  }
   return filePath;
 }
