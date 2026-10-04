@@ -245,7 +245,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     final firstAssistant =
         conv.messages.where((m) => m.role == 'assistant').firstOrNull;
 
-    String combined = firstUser.content;
+    String combined = firstUser.content.trim().isNotEmpty
+        ? firstUser.content
+        : firstUser.attachments.firstOrNull?.fileName ?? '';
     if (firstAssistant != null) {
       combined += ' - ${firstAssistant.content}';
     }
@@ -271,6 +273,21 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// 延长临时对话的生命周期）。
   Future<void> updateMessages(String conversationId, List<ChatMessage> messages,
       {bool resetTemporaryCountdown = false}) async {
+    _replaceMessages(conversationId, messages,
+        resetTemporaryCountdown: resetTemporaryCountdown);
+    await _persistNow();
+  }
+
+  /// Confirm flow messages reached disk before sending or completing a step.
+  Future<bool> updateFlowMessagesChecked(
+      String conversationId, List<ChatMessage> messages) async {
+    if (!mounted || !state.any((c) => c.id == conversationId)) return false;
+    _replaceMessages(conversationId, messages);
+    return _persistNowChecked();
+  }
+
+  void _replaceMessages(String conversationId, List<ChatMessage> messages,
+      {bool resetTemporaryCountdown = false}) {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.messages = messages;
@@ -288,7 +305,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         final firstAssistant =
             messages.where((m) => m.role == 'assistant').firstOrNull;
 
-        String combined = firstUser.content;
+        String combined = firstUser.content.trim().isNotEmpty
+            ? firstUser.content
+            : firstUser.attachments.firstOrNull?.fileName ?? '';
         if (firstAssistant != null) {
           combined += ' - ${firstAssistant.content}';
         }
@@ -299,7 +318,6 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       }
       return c;
     }).toList();
-    await _persistNow();
   }
 
   /// Saves the draft (text + unsent attachment snapshots) for a specific

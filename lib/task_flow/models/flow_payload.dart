@@ -15,6 +15,7 @@ class FlowPayload {
   final IOType type;
   final String text;
   final String? fileReference;
+  final String? fileName;
 
   /// Media metadata from an upstream block. For shared containers such as MP4,
   /// this preserves the track kind that filename/header MIME cannot establish.
@@ -22,20 +23,29 @@ class FlowPayload {
 
   const FlowPayload.text(this.text, {this.type = IOType.text})
       : fileReference = null,
+        fileName = null,
         mimeType = null;
 
   const FlowPayload.file({
     required this.fileReference,
     required this.type,
     this.text = '',
+    this.fileName,
     this.mimeType,
   });
 
-  factory FlowPayload.fromValue(String value, IOType type,
-          {String? mimeType}) =>
+  factory FlowPayload.fromValue(
+    String value,
+    IOType type, {
+    String? mimeType,
+    String? fileName,
+  }) =>
       isFileType(type)
           ? FlowPayload.file(
-              fileReference: value, type: type, mimeType: mimeType)
+              fileReference: value,
+              type: type,
+              mimeType: mimeType,
+              fileName: fileName)
           : FlowPayload.text(value, type: type);
 
   bool get isFile => fileReference != null;
@@ -45,13 +55,14 @@ class FlowPayload {
         IOType.audio,
         IOType.image,
         IOType.video,
-        IOType.file
+        IOType.file,
       ].contains(type);
 
   Map<String, dynamic> toMap() => {
         'type': type.name,
         'text': text,
         if (fileReference != null) 'fileReference': fileReference,
+        if (fileName != null) 'fileName': fileName,
         if (mimeType != null) 'mimeType': mimeType,
       };
 
@@ -65,7 +76,9 @@ class FlowPayload {
             fileReference: reference,
             type: type,
             text: text,
-            mimeType: map['mimeType'] as String?);
+            fileName: map['fileName'] as String?,
+            mimeType: map['mimeType'] as String?,
+          );
   }
 }
 
