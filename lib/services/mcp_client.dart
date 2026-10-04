@@ -1058,7 +1058,7 @@ class McpClientManager {
         if (knownConfigIds.length > 1) _aliasedToolNames.add(toolName);
       }
       final placeholderOwner = _allPlaceholderClientNames[toolName];
-      if (placeholderOwner != null && placeholderOwner != clientName) {
+      if (placeholderOwner != null) {
         _aliasedToolNames.add(toolName);
       }
     }
@@ -1122,8 +1122,7 @@ class McpClientManager {
       final placeholderOwner = _allPlaceholderClientNames[actualToolName];
       if (clientNames.length > 1 ||
           (knownConfigIds?.length ?? 0) > 1 ||
-          (placeholderOwner != null &&
-              !clientNames.contains(placeholderOwner))) {
+          placeholderOwner != null) {
         _aliasedToolNames.add(actualToolName);
       }
 
