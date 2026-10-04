@@ -89,8 +89,6 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
           : trimmed;
       final isKeyHeader =
           credentialHeaderNames.contains(key.toString().toLowerCase()) ||
-          trimmed.isEmpty ||
-          trimmed == 'Bearer' ||
           (oldApiKey.isNotEmpty && headerApiKey == oldApiKey);
       if (!isKeyHeader) continue;
 

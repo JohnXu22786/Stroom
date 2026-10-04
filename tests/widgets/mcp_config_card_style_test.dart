@@ -326,4 +326,45 @@ void main() {
       isEmpty,
     );
   });
+
+  testWidgets('updating HTTP search API key preserves unrelated empty headers',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = mixedState();
+    final braveConfig = state.entries.single.configs[1];
+    braveConfig.models[0].typeConfig = {
+      'transport': 'http',
+      'isHttpTool': true,
+      'isVendor': true,
+      'apiKey': 'old-explicit-key',
+      'headers': {
+        'X-Subscription-Token': 'stale-header-key',
+        'X-Custom-Optional': '',
+      },
+    };
+    await pumpPage(tester, Brightness.light, state: state);
+
+    await tester.tap(find.byKey(const ValueKey('config_test_mcp_1')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'replacement-key');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    final updatedTypeConfig = ProviderScope.containerOf(
+      tester.element(find.byType(ProviderConfigPage)),
+    )
+        .read(providerEntriesProvider)
+        .entries
+        .single
+        .configs[1]
+        .models[0]
+        .typeConfig;
+    expect(
+      updatedTypeConfig['headers'],
+      {
+        'X-Subscription-Token': 'replacement-key',
+        'X-Custom-Optional': '',
+      },
+    );
+  });
 }
