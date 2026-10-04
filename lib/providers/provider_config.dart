@@ -129,9 +129,8 @@ String _uniqueMcpPlaceholderToolName(
     for (var index = 2;; index++) {
       final indexText = index.toString();
       final suffixBudget = 58 - indexText.length;
-      final duplicateSuffixLength = stableId.length <= suffixBudget
-          ? stableId.length
-          : suffixBudget;
+      final duplicateSuffixLength =
+          stableId.length <= suffixBudget ? stableId.length : suffixBudget;
       final duplicateSuffix =
           stableId.substring(stableId.length - duplicateSuffixLength);
       final duplicateStemLength =
@@ -182,8 +181,8 @@ String? mcpProviderConfigToolName(
     typeConfig: typeConfig,
   );
   if (serverConfig == null) return null;
-  final stableNames = placeholderNamesByConfigId ??
-      mcpPlaceholderToolNamesByConfigId([config]);
+  final stableNames =
+      placeholderNamesByConfigId ?? mcpPlaceholderToolNamesByConfigId([config]);
   return stableNames[config.id];
 }
 

@@ -1052,8 +1052,8 @@ class McpClientManager {
           .putIfAbsent(toolName, () => <String>{})
           .add(clientName);
       if (configId != null) {
-        final knownConfigIds = _knownToolConfigIdsByName
-            .putIfAbsent(toolName, () => <String>{})
+        final knownConfigIds = _knownToolConfigIdsByName.putIfAbsent(
+            toolName, () => <String>{})
           ..add(configId);
         if (knownConfigIds.length > 1) _aliasedToolNames.add(toolName);
       }
@@ -1075,7 +1075,8 @@ class McpClientManager {
 
   /// Returns the published name for this server's [actualToolName].
   String getPublishedToolName(String clientName, String actualToolName) =>
-      _publishedToolNamesByClient[clientName]?[actualToolName] ?? actualToolName;
+      _publishedToolNamesByClient[clientName]?[actualToolName] ??
+      actualToolName;
 
   /// Returns every active server that has exposed [toolName].
   List<String> getToolClientNames(String toolName) =>
@@ -1113,9 +1114,8 @@ class McpClientManager {
 
     for (final entry in _toolClientNamesByTool.entries) {
       final actualToolName = entry.key;
-      final clientNames = _clients.keys
-          .where(entry.value.contains)
-          .toList(growable: false);
+      final clientNames =
+          _clients.keys.where(entry.value.contains).toList(growable: false);
       if (clientNames.isEmpty) continue;
 
       final knownConfigIds = _knownToolConfigIdsByName[actualToolName];
@@ -1132,9 +1132,8 @@ class McpClientManager {
             : actualToolName;
         _toolClientNames[publishedToolName] = clientName;
         _toolActualNamesByPublishedName[publishedToolName] = actualToolName;
-        _publishedToolNamesByClient
-            .putIfAbsent(clientName, () => <String, String>{})[
-                actualToolName] =
+        _publishedToolNamesByClient.putIfAbsent(
+                clientName, () => <String, String>{})[actualToolName] =
             publishedToolName;
         reservedNames.add(publishedToolName);
       }
@@ -1147,7 +1146,7 @@ class McpClientManager {
     Set<String> reservedNames,
   ) {
     final configId = _clientConfigIdsByName[clientName] ?? clientName;
-    for (var salt = 0; ; salt++) {
+    for (var salt = 0;; salt++) {
       final source = salt == 0
           ? '$configId\u0000$actualToolName'
           : '$configId\u0000$actualToolName\u0000$salt';
