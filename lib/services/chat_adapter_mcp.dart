@@ -8,12 +8,14 @@ part of 'chat_adapter.dart';
 /// whose servers are unreachable.
 class _McpConfigEntry {
   final McpServerConfig config;
+  final String configId;
   final String description;
   final String placeholderToolName;
   final Object sourceConfig;
 
   const _McpConfigEntry({
     required this.config,
+    required this.configId,
     required this.description,
     required this.placeholderToolName,
     required this.sourceConfig,
@@ -61,9 +63,11 @@ extension ChatAdapterMcpExt on ChatAdapter {
     final mcpConfigs = <_McpConfigEntry>[];
     final placeholderNamesByConfigId =
         mcpPlaceholderToolNamesByConfigId(mcpEntry.configs);
+    final reservedPlaceholderClientNames = <String, String>{};
+    final validConfigIds = <String>{};
+    final configIdsByServerName = <String, List<String>>{};
 
     for (final config in mcpEntry.configs) {
-      if (!isMcpProviderConfigEnabled(config, entriesState.mcpGroups)) continue;
       final typeConfig =
           config.models.isNotEmpty ? config.models[0].typeConfig : null;
 
@@ -75,23 +79,44 @@ extension ChatAdapterMcpExt on ChatAdapter {
         providerName: config.providerName,
         typeConfig: typeConfig,
       );
-      if (serverConfig != null) {
-        final description = typeConfig?['description'] as String? ?? '';
-        mcpConfigs.add(_McpConfigEntry(
-          config: serverConfig,
-          description: description,
-          placeholderToolName: placeholderNamesByConfigId[config.id] ??
-              McpServerConfig.placeholderToolName(serverConfig.name),
-          sourceConfig: config,
-        ));
-      }
+      if (serverConfig == null) continue;
+
+      final placeholderToolName = placeholderNamesByConfigId[config.id] ??
+          McpServerConfig.placeholderToolName(serverConfig.name);
+      reservedPlaceholderClientNames[placeholderToolName] = serverConfig.name;
+      validConfigIds.add(config.id);
+      configIdsByServerName
+          .putIfAbsent(serverConfig.name, () => <String>[])
+          .add(config.id);
+      if (!isMcpProviderConfigEnabled(config, entriesState.mcpGroups)) continue;
+
+      final description = typeConfig?['description'] as String? ?? '';
+      mcpConfigs.add(_McpConfigEntry(
+        config: serverConfig,
+        configId: config.id,
+        description: description,
+        placeholderToolName: placeholderToolName,
+        sourceConfig: config,
+      ));
     }
+    // The manager's client key is the server name. When duplicate configs
+    // share that key, keep alias identity tied to the same deterministic
+    // config ID even when a group toggle selects a different config instance.
+    final stableConfigIdsByServerName = <String, String>{
+      for (final entry in configIdsByServerName.entries)
+        entry.key: (List<String>.of(entry.value)..sort()).first,
+    };
 
     if (mcpConfigs.isEmpty) {
       // 只剩 HTTP 工具等非 MCP 配置，或所有 MCP 配置都属于关闭组别。
       // 清空占位工具并释放旧客户端。
       _mcpToolDefinitions = [];
-      _mcpClientManager.disposeAll();
+      _mcpClientManager.disposeAll(preserveToolAliases: keepExistingClients);
+      _mcpClientManager.setPlaceholderClientNames(
+        const {},
+        reservedPlaceholderClientNames: reservedPlaceholderClientNames,
+        validConfigIds: validConfigIds,
+      );
       _lastMcpConfigSourcesByName = {};
       return;
     }
@@ -137,6 +162,17 @@ extension ChatAdapterMcpExt on ChatAdapter {
     _mcpClientManager.reorderClients(selectedConfigSourcesByName.keys);
     _lastMcpConfigSourcesByName = selectedConfigSourcesByName;
 
+    final selectedConfigIdsByName = <String, String>{};
+    for (final entry in mcpConfigs) {
+      if (identical(
+        selectedConfigSourcesByName[entry.config.name],
+        entry.sourceConfig,
+      )) {
+        selectedConfigIdsByName[entry.config.name] =
+            stableConfigIdsByServerName[entry.config.name] ?? entry.configId;
+      }
+    }
+
     // 同步发布占位工具定义（不做任何网络等待）：每个配置的 MCP 服务器
     // 都先以一个占位工具出现在工具列表中。占位工具不是真实工具——模型
     // 调用占位符时 _executeTool 会按需连接该服务器、列出真实工具并把
@@ -162,6 +198,9 @@ extension ChatAdapterMcpExt on ChatAdapter {
     }
     _mcpClientManager.setPlaceholderClientNames(
       placeholderClientNamesByToolName,
+      configIdsByClientName: selectedConfigIdsByName,
+      reservedPlaceholderClientNames: reservedPlaceholderClientNames,
+      validConfigIds: validConfigIds,
     );
     _mcpToolDefinitions = [
       for (final placeholder in placeholderEntriesByToolName.entries)
