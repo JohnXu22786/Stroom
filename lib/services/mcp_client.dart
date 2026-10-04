@@ -996,27 +996,21 @@ class McpClientManager {
   String? getPlaceholderClientName(String toolName) =>
       _placeholderClientNames[toolName];
 
-  /// Keeps dispatch order aligned with the active provider config order.
+  /// Keeps dispatch order aligned with the active provider config order while
+  /// preserving explicit routes for tools discovered on retained clients.
   void reorderClients(Iterable<String> clientNames) {
     final orderedClients = <String, McpClient>{};
     for (final name in clientNames) {
       final client = _clients[name];
       if (client != null) orderedClients[name] = client;
     }
+    final activeClientNames = orderedClients.keys.toSet();
+    _toolClientNames.removeWhere(
+      (_, clientName) => !activeClientNames.contains(clientName),
+    );
     _clients
       ..clear()
       ..addAll(orderedClients);
-    rebuildToolClientNames();
-  }
-
-  /// Restores first-config dispatch for cached tools after clients are reordered.
-  void rebuildToolClientNames() {
-    _toolClientNames.clear();
-    for (final entry in _clients.entries) {
-      for (final tool in entry.value.cachedTools) {
-        _toolClientNames.putIfAbsent(tool.name, () => entry.key);
-      }
-    }
   }
 
   /// Routes discovered tools to the server whose placeholder was just called.
