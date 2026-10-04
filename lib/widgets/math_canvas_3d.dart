@@ -20,6 +20,97 @@ typedef On3DViewportChange = void Function();
 typedef On3DObjectCreated = void Function(Object3D object);
 typedef On3DToolInstruction = void Function(String instruction);
 
+const double _planeGridRange = 5.0;
+const double _pointMarkerRadius = 4.0;
+
+({Vector3D normal, double d, double normalSquared, Point3D origin})?
+_normalizedPlaneEquation(Object3D plane) {
+  final a = plane.planeA;
+  final b = plane.planeB;
+  final c = plane.planeC;
+  final d = plane.planeD;
+  if (!a.isFinite || !b.isFinite || !c.isFinite || !d.isFinite) return null;
+  final scale = dart_math
+      .max(a.abs(), dart_math.max(b.abs(), c.abs()))
+      .toDouble();
+  if (scale == 0 || !scale.isFinite) return null;
+  final normal = Vector3D(a / scale, b / scale, c / scale);
+  final normalizedD = d / scale;
+  final normalSquared = normal.dot(normal);
+  if (!normalizedD.isFinite || !normalSquared.isFinite || normalSquared == 0) {
+    return null;
+  }
+  return (
+    normal: normal,
+    d: normalizedD,
+    normalSquared: normalSquared,
+    origin: Point3D(
+      normal.x * normalizedD / normalSquared,
+      normal.y * normalizedD / normalSquared,
+      normal.z * normalizedD / normalSquared,
+    ),
+  );
+}
+
+bool _withinRenderedPlaneGrid(Object3D plane, Point3D point) {
+  const tolerance = 1e-9;
+  final equation = _normalizedPlaneEquation(plane);
+  if (equation == null) return false;
+  final normal = equation.normal;
+  if (normal.z.abs() >= normal.x.abs() && normal.z.abs() >= normal.y.abs()) {
+    return point.x.abs() <= _planeGridRange + tolerance &&
+        point.y.abs() <= _planeGridRange + tolerance;
+  }
+  if (normal.y.abs() >= normal.x.abs()) {
+    return point.x.abs() <= _planeGridRange + tolerance &&
+        point.z.abs() <= _planeGridRange + tolerance;
+  }
+  return point.y.abs() <= _planeGridRange + tolerance &&
+      point.z.abs() <= _planeGridRange + tolerance;
+}
+
+bool _pointInTriangle3D(Point3D point, Point3D a, Point3D b, Point3D c) {
+  final ab = b - a;
+  final ac = c - a;
+  final ap = point - a;
+  final abLength = ab.magnitude;
+  final acLength = ac.magnitude;
+  if (!abLength.isFinite ||
+      !acLength.isFinite ||
+      abLength == 0 ||
+      acLength == 0) {
+    return false;
+  }
+  final unitAb = ab * (1 / abLength);
+  final unitAc = ac * (1 / acLength);
+  final sine = unitAb.cross(unitAc).magnitude;
+  if (!sine.isFinite || sine < 1e-9) return false;
+  final dot01 = unitAb.dot(unitAc);
+  final dot20 = ap.dot(unitAb);
+  final dot21 = ap.dot(unitAc);
+  final denominator = sine * sine;
+  final u = (dot20 - dot01 * dot21) / (denominator * abLength);
+  final v = (dot21 - dot01 * dot20) / (denominator * acLength);
+  return u >= -1e-8 && v >= -1e-8 && u + v <= 1 + 1e-8;
+}
+
+Vector3D? _normalizedTriangleNormal(Point3D a, Point3D b, Point3D c) {
+  final ab = b - a;
+  final ac = c - a;
+  final abLength = ab.magnitude;
+  final acLength = ac.magnitude;
+  if (!abLength.isFinite ||
+      !acLength.isFinite ||
+      abLength == 0 ||
+      acLength == 0) {
+    return null;
+  }
+  final cross = (ab * (1 / abLength)).cross(ac * (1 / acLength));
+  final sine = cross.magnitude;
+  if (!sine.isFinite || sine < 1e-9) return null;
+  return cross * (1 / sine);
+}
+
 enum PointDragMode { plane, height }
 
 enum _NavigationGesture { none, orbit, pan }
@@ -75,6 +166,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   static const double _defaultTheta = dart_math.pi * 0.75;
   static const double _defaultPhi = dart_math.pi / 6;
   static const double _orthographicDistanceScale = 0.6;
+  static const double _hitScreenDistanceTieTolerance = 8;
+  static const double _hitDepthTieTolerance = 1e-6;
 
   // Camera state
   double _cameraDistance = _defaultDistance;
@@ -87,10 +180,17 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   bool _showAxes = true;
   bool _showPlane = true;
   bool _showGrid = false;
+  bool _showLabels = true;
 
   // Scene objects
   final List<Object3D> _objects = [];
   int _objectsVersion = 0;
+  final Map<int, int> _pointAttachments = {};
+  int? _styleSourceIndex;
+  int? _intersectionSourceIndex;
+  int? _pointIntersectionSourceIndex;
+  int? _conicSourceIndex;
+  int? _attachmentPointIndex;
 
   /// Get the list of objects (unmodifiable).
   List<Object3D> get objects => List.unmodifiable(_objects);
@@ -127,7 +227,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   // Gesture state
   Offset? _lastFocalPoint;
   double?
-      _initialScaleDistance; // camera distance at gesture start (for stable zoom)
+  _initialScaleDistance; // camera distance at gesture start (for stable zoom)
   final FocusNode _focusNode = FocusNode(debugLabel: 'MathCanvas3D');
   int? _mousePointer;
   Offset? _lastMousePosition;
@@ -145,11 +245,11 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
   /// Get the current camera state.
   Camera3D get camera => Camera3D(
-        target: _cameraTarget,
-        distance: _cameraDistance,
-        theta: _cameraTheta,
-        phi: _cameraPhi,
-      );
+    target: _cameraTarget,
+    distance: _cameraDistance,
+    theta: _cameraTheta,
+    phi: _cameraPhi,
+  );
 
   /// Get the current projection type.
   ProjectionType get projectionType => _projectionType;
@@ -162,6 +262,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
   /// Whether the xOy coordinate plane is visible.
   bool get showPlane => _showPlane;
+
+  bool get showLabels => _showLabels;
 
   /// Number of objects in the scene.
   int get objectCount => _objects.length;
@@ -195,6 +297,45 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     });
   }
 
+  /// Run a toolbox command that does not need a canvas click.
+  void performToolCommand(ConstructionTool tool) {
+    switch (tool) {
+      case ConstructionTool.showHideLabels:
+        setState(() => _showLabels = !_showLabels);
+      case ConstructionTool.viewDirection:
+        _chooseViewDirection();
+      default:
+        break;
+    }
+  }
+
+  Future<void> _chooseViewDirection() async {
+    final action = await showDialog<_ViewAction>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('视图方向'),
+        children: [
+          _viewDirectionOption(dialogContext, _ViewAction.standardView, '标准视图'),
+          _viewDirectionOption(dialogContext, _ViewAction.topView, '俯视 xOy'),
+          _viewDirectionOption(dialogContext, _ViewAction.frontView, '正视 xOz'),
+          _viewDirectionOption(dialogContext, _ViewAction.sideView, '侧视 yOz'),
+        ],
+      ),
+    );
+    if (action != null && mounted) _handleViewAction(action);
+  }
+
+  Widget _viewDirectionOption(
+    BuildContext dialogContext,
+    _ViewAction action,
+    String label,
+  ) {
+    return SimpleDialogOption(
+      onPressed: () => Navigator.of(dialogContext).pop(action),
+      child: Text(label),
+    );
+  }
+
   /// Reset the camera to the default view.
   void resetView() {
     setState(() {
@@ -216,6 +357,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   void fitToView() {
     final points = <Point3D>[];
     for (final object in _objects) {
+      if (!object.visible) continue;
       switch (object.type) {
         case Object3DType.point:
           points.add(object.point);
@@ -271,16 +413,30 @@ class MathCanvas3DState extends State<MathCanvas3D> {
         (minY + maxY) / 2,
         (minZ + maxZ) / 2,
       );
-      _cameraDistance = dart_math.max(4.0, maxExtent * 1.35);
+      _cameraDistance = dart_math.max(4.0, maxExtent * 1.35).toDouble();
     });
     widget.onViewportChange?.call();
   }
 
   /// Set the objects to render.
   void setObjects(List<Object3D> objects) {
+    final preservesExistingObjects =
+        objects.length >= _objects.length &&
+        List.generate(
+          _objects.length,
+          (index) => index,
+        ).every((index) => identical(objects[index], _objects[index]));
     setState(() {
       _selectedPointIndex = null;
       _pointEditPointer = null;
+      if (!preservesExistingObjects) {
+        _pointAttachments.clear();
+        _attachmentPointIndex = null;
+        _styleSourceIndex = null;
+        _intersectionSourceIndex = null;
+        _pointIntersectionSourceIndex = null;
+        _conicSourceIndex = null;
+      }
       _objects
         ..clear()
         ..addAll(objects);
@@ -293,6 +449,12 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     setState(() {
       _selectedPointIndex = null;
       _pointEditPointer = null;
+      _pointAttachments.clear();
+      _attachmentPointIndex = null;
+      _styleSourceIndex = null;
+      _intersectionSourceIndex = null;
+      _pointIntersectionSourceIndex = null;
+      _conicSourceIndex = null;
       _objects.clear();
       _objectsVersion++;
     });
@@ -338,12 +500,19 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       _cancelPointDrag();
       _selectedPointIndex = null;
       _currentTool = tool;
-      if (tool == ConstructionTool.move) {
+      _styleSourceIndex = null;
+      _intersectionSourceIndex = null;
+      _pointIntersectionSourceIndex = null;
+      _conicSourceIndex = null;
+      _attachmentPointIndex = null;
+      if (ToolInfo.all[tool]!.behavior != ToolBehavior.construction) {
         _construction = null;
         _constructionPreview = null;
       } else {
-        _construction =
-            ConstructionState(tool: tool, polygonSides: widget.polygonSides);
+        _construction = ConstructionState(
+          tool: tool,
+          polygonSides: widget.polygonSides,
+        );
         _constructionPreview = null;
       }
       _constPointPlaced = false;
@@ -353,7 +522,9 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       _constructionPreview = null;
     });
     if (notifyInstruction) {
-      widget.onToolInstruction?.call(_construction?.currentInstruction ?? '');
+      widget.onToolInstruction?.call(
+        _construction?.currentInstruction ?? ToolInfo.all[tool]!.tooltip,
+      );
     }
   }
 
@@ -364,7 +535,9 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     _currentTool = widget.currentTool;
     if (_currentTool != ConstructionTool.move) {
       _construction = ConstructionState(
-          tool: _currentTool, polygonSides: widget.polygonSides);
+        tool: _currentTool,
+        polygonSides: widget.polygonSides,
+      );
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -383,8 +556,9 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       setTool(widget.currentTool, notifyInstruction: false);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          widget.onToolInstruction
-              ?.call(_construction?.currentInstruction ?? '');
+          widget.onToolInstruction?.call(
+            _construction?.currentInstruction ?? '',
+          );
         }
       });
     }
@@ -409,31 +583,2474 @@ class MathCanvas3DState extends State<MathCanvas3D> {
         keys.contains(LogicalKeyboardKey.controlRight);
   }
 
+  double _pointSelectionDistance(
+    Object3D object,
+    Offset position,
+    Offset anchor,
+  ) {
+    final label = object.label;
+    if (!object.isTextAnnotation || label == null) {
+      return (anchor - position).distance;
+    }
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: const TextStyle(fontSize: 11)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final bounds = Rect.fromLTWH(
+      anchor.dx,
+      anchor.dy,
+      painter.width,
+      painter.height,
+    );
+    final closestPoint = Offset(
+      position.dx.clamp(bounds.left, bounds.right).toDouble(),
+      position.dy.clamp(bounds.top, bounds.bottom).toDouble(),
+    );
+    return (closestPoint - position).distance;
+  }
+
   int? _hitPoint(Offset position) {
     int? nearest;
     var distance = 20.0;
+    var nearestDepth = double.infinity;
     final projection = _currentProjection();
     for (var i = _objects.length - 1; i >= 0; i--) {
       final object = _objects[i];
-      if (object.type != Object3DType.point || object.opacity <= 0) continue;
+      if (!object.visible ||
+          object.type != Object3DType.point ||
+          object.opacity <= 0 ||
+          ((object.color >> 24) & 0xFF) == 0)
+        continue;
       final screen = worldToScreen(object.point, camera, projection);
-      if (!screen.x.isFinite || !screen.y.isFinite) continue;
+      if (!screen.x.isFinite || !screen.y.isFinite || !screen.z.isFinite) {
+        continue;
+      }
       if (_projectionType == ProjectionType.perspective &&
-          (object.point - camera.position)
-                  .dot((_cameraTarget - camera.position).normalized()) <=
-              0) continue;
-      final gap = (Offset(screen.x, screen.y) - position).distance;
-      if (gap < distance) {
+          (screen.z < projection.near || screen.z > projection.far)) {
+        continue;
+      }
+      if (_projectionType == ProjectionType.perspective &&
+          (object.point - camera.position).dot(
+                (_cameraTarget - camera.position).normalized(),
+              ) <=
+              0)
+        continue;
+      final gap = _pointSelectionDistance(
+        object,
+        position,
+        Offset(screen.x, screen.y),
+      );
+      if (gap >= 20 ||
+          _isPointOccludedByOpaqueSurface(
+            object.point,
+            screenPosition: object.isTextAnnotation ? position : null,
+          )) {
+        continue;
+      }
+      final overlapsNearest =
+          (gap - distance).abs() <= _hitScreenDistanceTieTolerance;
+      if (nearest == null ||
+          gap < distance - _hitScreenDistanceTieTolerance ||
+          (overlapsNearest &&
+              (screen.z < nearestDepth ||
+                  (screen.z == nearestDepth && gap < distance)))) {
         nearest = i;
         distance = gap;
+        nearestDepth = screen.z;
       }
     }
     return nearest;
   }
 
+  bool _isPointOccludedByOpaqueSurface(
+    Point3D point, {
+    Offset? screenPosition,
+  }) {
+    final projection = _currentProjection();
+    final projectedPoint = worldToScreen(point, camera, projection);
+    if (!projectedPoint.x.isFinite ||
+        !projectedPoint.y.isFinite ||
+        !projectedPoint.z.isFinite) {
+      return false;
+    }
+    final ray = _screenRay(
+      screenPosition?.dx ?? projectedPoint.x,
+      screenPosition?.dy ?? projectedPoint.y,
+    );
+
+    for (final object in _objects) {
+      if (!object.visible ||
+          (object.type != Object3DType.surface &&
+              object.type != Object3DType.polyhedron) ||
+          (((object.color >> 24) & 0xFF) / 255.0) * object.opacity < 0.999) {
+        continue;
+      }
+      for (var i = 0; i + 2 < object.indices.length; i += 3) {
+        final ia = object.indices[i];
+        final ib = object.indices[i + 1];
+        final ic = object.indices[i + 2];
+        if (ia < 0 ||
+            ia >= object.vertices.length ||
+            ib < 0 ||
+            ib >= object.vertices.length ||
+            ic < 0 ||
+            ic >= object.vertices.length) {
+          continue;
+        }
+        final a = object.vertices[ia];
+        final b = object.vertices[ib];
+        final c = object.vertices[ic];
+        final normal = _normalizedTriangleNormal(a, b, c);
+        if (normal == null) continue;
+        final hit = intersectRayPlane(ray, point: a, normal: normal);
+        if (hit == null) {
+          continue;
+        }
+        final hitDepth = worldToScreen(hit, camera, projection).z;
+        if (!hitDepth.isFinite || hitDepth >= projectedPoint.z - 1e-8) {
+          continue;
+        }
+        if (_pointInTriangle3D(hit, a, b, c)) return true;
+      }
+    }
+    return false;
+  }
+
+  int? _hitObjectIndex(Offset position, {bool includeHidden = false}) {
+    final projection = _currentProjection();
+    final ray = _screenRay(position.dx, position.dy);
+    var nearestIndex = -1;
+    var nearestDistance = 24.0;
+    var nearestDepth = double.infinity;
+
+    Offset screen(Point3D point) {
+      final projected = worldToScreen(point, camera, projection);
+      return Offset(projected.x, projected.y);
+    }
+
+    double depthAt(Point3D point) => worldToScreen(point, camera, projection).z;
+
+    double segmentDistance(Offset point, Offset a, Offset b) {
+      final direction = b - a;
+      final lengthSquared = direction.distanceSquared;
+      if (lengthSquared < 1e-9) return (point - a).distance;
+      final t =
+          (((point - a).dx * direction.dx + (point - a).dy * direction.dy) /
+                  lengthSquared)
+              .clamp(0.0, 1.0)
+              .toDouble();
+      return (point - (a + direction * t)).distance;
+    }
+
+    double depthOnSegmentAtScreen(
+      Offset point,
+      Point3D start,
+      Point3D end,
+      double startDepth,
+      double endDepth,
+    ) {
+      final screenStart = screen(start);
+      final screenEnd = screen(end);
+      final screenDirection = screenEnd - screenStart;
+      final screenLengthSquared = screenDirection.distanceSquared;
+      var fraction = screenLengthSquared < 1e-9
+          ? 0.0
+          : (((point - screenStart).dx * screenDirection.dx +
+                        (point - screenStart).dy * screenDirection.dy) /
+                    screenLengthSquared)
+                .clamp(0.0, 1.0)
+                .toDouble();
+      if (projection.type == ProjectionType.perspective &&
+          startDepth > 0 &&
+          endDepth > 0) {
+        fraction =
+            fraction *
+            startDepth /
+            ((1 - fraction) * endDepth + fraction * startDepth);
+      }
+      return startDepth + (endDepth - startDepth) * fraction;
+    }
+
+    bool isVisibleDepth(double depth) =>
+        depth.isFinite &&
+        (projection.type == ProjectionType.parallel ||
+            (depth >= projection.near && depth <= projection.far));
+
+    bool insideTriangle(Offset point, Offset a, Offset b, Offset c) {
+      final d1 =
+          (point.dx - b.dx) * (a.dy - b.dy) + (a.dx - b.dx) * (point.dy - b.dy);
+      final d2 =
+          (point.dx - c.dx) * (b.dy - c.dy) + (b.dx - c.dx) * (point.dy - c.dy);
+      final d3 =
+          (point.dx - a.dx) * (c.dy - a.dy) + (c.dx - a.dx) * (point.dy - a.dy);
+      final hasNegative = d1 < 0 || d2 < 0 || d3 < 0;
+      final hasPositive = d1 > 0 || d2 > 0 || d3 > 0;
+      return !(hasNegative && hasPositive);
+    }
+
+    for (var i = _objects.length - 1; i >= 0; i--) {
+      final object = _objects[i];
+      if ((!object.visible && !includeHidden) ||
+          object.opacity <= 0 ||
+          ((object.color >> 24) & 0xFF) == 0)
+        continue;
+      var distance = double.infinity;
+      var hitDepth = switch (object.type) {
+        Object3DType.point => depthAt(object.point),
+        Object3DType.line => depthAt(object.pointA.midpoint(object.pointB)),
+        Object3DType.vector => depthAt(object.point + object.vector * 0.5),
+        Object3DType.curve => double.infinity,
+        Object3DType.surface || Object3DType.polyhedron => double.infinity,
+        Object3DType.sphere => depthAt(object.sphereCenter),
+        Object3DType.plane => double.infinity,
+      };
+      switch (object.type) {
+        case Object3DType.point:
+          distance =
+              _isPointOccludedByOpaqueSurface(
+                object.point,
+                screenPosition: object.isTextAnnotation ? position : null,
+              )
+              ? double.infinity
+              : _pointSelectionDistance(object, position, screen(object.point));
+        case Object3DType.line:
+          final clipped = clipLineToView(object, camera, projection);
+          if (clipped.length == 2) {
+            final startDepth = depthAt(clipped[0]);
+            final endDepth = depthAt(clipped[1]);
+            distance = segmentDistance(
+              position,
+              screen(clipped[0]),
+              screen(clipped[1]),
+            );
+            hitDepth = depthOnSegmentAtScreen(
+              position,
+              clipped[0],
+              clipped[1],
+              startDepth,
+              endDepth,
+            );
+          }
+        case Object3DType.vector:
+          final clipped = clipLineToView(
+            Object3D.line(
+              object.point,
+              object.point + object.vector,
+              lineKind: Line3DKind.segment,
+            ),
+            camera,
+            projection,
+          );
+          if (clipped.length == 2) {
+            final startDepth = depthAt(clipped[0]);
+            final endDepth = depthAt(clipped[1]);
+            distance = segmentDistance(
+              position,
+              screen(clipped[0]),
+              screen(clipped[1]),
+            );
+            hitDepth = depthOnSegmentAtScreen(
+              position,
+              clipped[0],
+              clipped[1],
+              startDepth,
+              endDepth,
+            );
+          }
+        case Object3DType.curve:
+          for (var j = 1; j < object.vertices.length; j++) {
+            if (object.curveStarts.contains(j)) continue;
+            final clipped = clipLineToView(
+              Object3D.line(
+                object.vertices[j - 1],
+                object.vertices[j],
+                lineKind: Line3DKind.segment,
+              ),
+              camera,
+              projection,
+            );
+            if (clipped.length != 2) continue;
+            final start = clipped[0];
+            final end = clipped[1];
+            final startProjection = worldToScreen(start, camera, projection);
+            final endProjection = worldToScreen(end, camera, projection);
+            if (!startProjection.x.isFinite ||
+                !startProjection.y.isFinite ||
+                !startProjection.z.isFinite ||
+                !endProjection.x.isFinite ||
+                !endProjection.y.isFinite ||
+                !endProjection.z.isFinite) {
+              continue;
+            }
+            final screenStart = Offset(startProjection.x, startProjection.y);
+            final screenDirection = Offset(
+              endProjection.x - startProjection.x,
+              endProjection.y - startProjection.y,
+            );
+            final screenLengthSquared = screenDirection.distanceSquared;
+            final screenOffset = position - screenStart;
+            var fraction = screenLengthSquared < 1e-9
+                ? 0.0
+                : ((screenOffset.dx * screenDirection.dx +
+                              screenOffset.dy * screenDirection.dy) /
+                          screenLengthSquared)
+                      .clamp(0.0, 1.0)
+                      .toDouble();
+            if (projection.type == ProjectionType.perspective &&
+                startProjection.z > 0 &&
+                endProjection.z > 0) {
+              fraction =
+                  fraction *
+                  startProjection.z /
+                  ((1 - fraction) * endProjection.z +
+                      fraction * startProjection.z);
+            }
+            final candidate = start + (end - start) * fraction;
+            final candidateDistance = (screen(candidate) - position).distance;
+            final candidateDepth = depthAt(candidate);
+            if (candidateDistance < distance ||
+                ((candidateDistance - distance).abs() <=
+                        _hitScreenDistanceTieTolerance &&
+                    candidateDepth < hitDepth)) {
+              distance = candidateDistance;
+              hitDepth = candidateDepth;
+            }
+          }
+        case Object3DType.surface:
+        case Object3DType.polyhedron:
+          final projected = object.vertices.map(screen).toList();
+          final projectedDepths = object.vertices.map(depthAt).toList();
+          for (var j = 0; j + 2 < object.indices.length; j += 3) {
+            final ia = object.indices[j];
+            final ib = object.indices[j + 1];
+            final ic = object.indices[j + 2];
+            if (ia >= 0 &&
+                ib >= 0 &&
+                ic >= 0 &&
+                ia < projected.length &&
+                ib < projected.length &&
+                ic < projected.length) {
+              final a = object.vertices[ia];
+              final b = object.vertices[ib];
+              final c = object.vertices[ic];
+              final normal = _normalizedTriangleNormal(a, b, c);
+              if (normal == null) continue;
+              if (insideTriangle(
+                position,
+                projected[ia],
+                projected[ib],
+                projected[ic],
+              )) {
+                final hit = intersectRayPlane(
+                  ray,
+                  point: a,
+                  normal: normal,
+                  allowBehind: projection.type == ProjectionType.parallel,
+                );
+                if (hit != null && _pointInTriangle3D(hit, a, b, c)) {
+                  final candidateDepth = depthAt(hit);
+                  if (isVisibleDepth(candidateDepth)) {
+                    distance = 0;
+                    hitDepth = dart_math
+                        .min(hitDepth, candidateDepth)
+                        .toDouble();
+                  }
+                }
+                continue;
+              }
+              for (final edge in [(ia, ib), (ib, ic), (ic, ia)]) {
+                final edgeDistance = segmentDistance(
+                  position,
+                  projected[edge.$1],
+                  projected[edge.$2],
+                );
+                final edgeDepth = depthOnSegmentAtScreen(
+                  position,
+                  object.vertices[edge.$1],
+                  object.vertices[edge.$2],
+                  projectedDepths[edge.$1],
+                  projectedDepths[edge.$2],
+                );
+                if (edgeDistance < distance && isVisibleDepth(edgeDepth)) {
+                  distance = edgeDistance;
+                  hitDepth = edgeDepth;
+                }
+              }
+            }
+          }
+        case Object3DType.sphere:
+          final sphereHit = _sphereIntersectionAtScreen(
+            object,
+            position,
+            projection,
+          );
+          if (sphereHit != null) {
+            distance = 0;
+            hitDepth = depthAt(sphereHit);
+          } else {
+            final center = screen(object.sphereCenter);
+            final radius = object.sphereRadius.abs();
+            final view = camera.viewMatrix();
+            final right = Vector3D(view[0], view[4], view[8]);
+            final up = Vector3D(view[1], view[5], view[9]);
+            final horizontalRadius = dart_math.max(
+              (screen(object.sphereCenter + right * radius) - center).distance,
+              (screen(object.sphereCenter + right * -radius) - center).distance,
+            );
+            final verticalRadius = dart_math.max(
+              (screen(object.sphereCenter + up * radius) - center).distance,
+              (screen(object.sphereCenter + up * -radius) - center).distance,
+            );
+            final projectedRadius = dart_math.max(
+              horizontalRadius,
+              verticalRadius,
+            );
+            final centerDistance = (center - position).distance;
+            hitDepth = depthAt(_pointOnSphereAtScreen(object, position));
+            distance = centerDistance <= projectedRadius + 12
+                ? dart_math
+                      .max(0.0, centerDistance - projectedRadius)
+                      .toDouble()
+                : double.infinity;
+          }
+        case Object3DType.plane:
+          final equation = _normalizedPlaneEquation(object);
+          if (equation != null) {
+            final hit = intersectRayPlane(
+              ray,
+              point: equation.origin,
+              normal: equation.normal,
+              allowBehind: projection.type == ProjectionType.parallel,
+            );
+            if (hit != null && _withinRenderedPlaneGrid(object, hit)) {
+              distance = 0;
+              hitDepth = depthAt(hit);
+            }
+          }
+      }
+      final overlapsNearest =
+          (distance - nearestDistance).abs() <= _hitScreenDistanceTieTolerance;
+      final pointWinsMarkerOverlap =
+          nearestIndex >= 0 &&
+          object.type == Object3DType.point &&
+          _objects[nearestIndex].type != Object3DType.point &&
+          distance <= _pointMarkerRadius &&
+          (hitDepth - nearestDepth).abs() <= _hitDepthTieTolerance;
+      final nearestPointWinsMarkerOverlap =
+          nearestIndex >= 0 &&
+          _objects[nearestIndex].type == Object3DType.point &&
+          object.type != Object3DType.point &&
+          nearestDistance <= _pointMarkerRadius &&
+          (hitDepth - nearestDepth).abs() <= _hitDepthTieTolerance;
+      if (distance < 24 &&
+          isVisibleDepth(hitDepth) &&
+          !nearestPointWinsMarkerOverlap &&
+          (nearestIndex < 0 ||
+              distance < nearestDistance - _hitScreenDistanceTieTolerance ||
+              (overlapsNearest &&
+                  (hitDepth < nearestDepth ||
+                      (hitDepth == nearestDepth &&
+                          distance < nearestDistance))) ||
+              pointWinsMarkerOverlap)) {
+        nearestDistance = distance;
+        nearestDepth = hitDepth;
+        nearestIndex = i;
+      }
+    }
+    return nearestIndex < 0 ? null : nearestIndex;
+  }
+
+  Point3D? _sphereIntersectionAtScreen(
+    Object3D sphere,
+    Offset position,
+    Projection3D projection,
+  ) {
+    final ray = _screenRay(position.dx, position.dy);
+    final center = sphere.sphereCenter;
+    final radius = sphere.sphereRadius.abs();
+    if (!radius.isFinite) return null;
+    final centerToRay = center - ray.origin;
+    final alongRay = centerToRay.dot(ray.direction);
+    final closest = ray.origin + ray.direction * alongRay;
+    final radial = closest - center;
+    final distanceToRay = radial.magnitude;
+    if (!distanceToRay.isFinite || distanceToRay > radius) return null;
+    final offset = dart_math.sqrt(
+      dart_math.max(0.0, radius * radius - distanceToRay * distanceToRay),
+    );
+    Point3D? nearest;
+    var nearestDepth = double.infinity;
+    for (final rayDistance in [alongRay - offset, alongRay + offset]) {
+      if (!rayDistance.isFinite ||
+          (projection.type == ProjectionType.perspective && rayDistance < 0)) {
+        continue;
+      }
+      final candidate = ray.pointAt(rayDistance);
+      final depth = worldToScreen(candidate, camera, projection).z;
+      if (!depth.isFinite ||
+          (projection.type == ProjectionType.perspective &&
+              (depth < projection.near || depth > projection.far))) {
+        continue;
+      }
+      if (depth < nearestDepth) {
+        nearest = candidate;
+        nearestDepth = depth;
+      }
+    }
+    return nearest;
+  }
+
+  Point3D _pointOnSphereAtScreen(Object3D sphere, Offset position) {
+    final hit = _sphereIntersectionAtScreen(
+      sphere,
+      position,
+      _currentProjection(),
+    );
+    if (hit != null) return hit;
+    final ray = _screenRay(position.dx, position.dy);
+    final center = sphere.sphereCenter;
+    final radius = sphere.sphereRadius.abs();
+    final centerToRay = center - ray.origin;
+    final alongRay = centerToRay.dot(ray.direction);
+    final closest = ray.origin + ray.direction * alongRay;
+    final radial = closest - center;
+    final distanceToRay = radial.magnitude;
+    if (distanceToRay > 0) return center + radial * (radius / distanceToRay);
+    return center + ray.direction * -radius;
+  }
+
+  Point3D? _pointOnMeshAtScreen(Object3D mesh, Offset position) {
+    final ray = _screenRay(position.dx, position.dy);
+    final projection = _currentProjection();
+    Point3D? nearest;
+    var nearestDistance = double.infinity;
+    for (var i = 0; i + 2 < mesh.indices.length; i += 3) {
+      final ia = mesh.indices[i];
+      final ib = mesh.indices[i + 1];
+      final ic = mesh.indices[i + 2];
+      if (ia < 0 ||
+          ia >= mesh.vertices.length ||
+          ib < 0 ||
+          ib >= mesh.vertices.length ||
+          ic < 0 ||
+          ic >= mesh.vertices.length) {
+        continue;
+      }
+      final a = mesh.vertices[ia];
+      final b = mesh.vertices[ib];
+      final c = mesh.vertices[ic];
+      final normal = _normalizedTriangleNormal(a, b, c);
+      if (normal == null) continue;
+      final hit = intersectRayPlane(
+        ray,
+        point: a,
+        normal: normal,
+        allowBehind: _projectionType == ProjectionType.parallel,
+      );
+      if (hit == null || !_pointInTriangle3D(hit, a, b, c)) continue;
+      final hitDepth = worldToScreen(hit, camera, projection).z;
+      if (!hitDepth.isFinite ||
+          (projection.type == ProjectionType.perspective &&
+              (hitDepth < projection.near || hitDepth > projection.far))) {
+        continue;
+      }
+      final distance = (hit - ray.origin).dot(ray.direction);
+      if ((_projectionType == ProjectionType.parallel || distance >= 0) &&
+          distance < nearestDistance) {
+        nearest = hit;
+        nearestDistance = distance;
+      }
+    }
+    return nearest;
+  }
+
+  Point3D _constrainPointToObject(Point3D point, Object3D object) {
+    if (object.type == Object3DType.point) return object.point;
+    if (object.type == Object3DType.sphere) {
+      final direction = (point - object.sphereCenter).normalized();
+      return object.sphereCenter +
+          (direction.magnitude == 0 ? Vector3D.unitX : direction) *
+              object.sphereRadius.abs();
+    }
+    if (object.type == Object3DType.plane) {
+      final equation = _normalizedPlaneEquation(object);
+      if (equation != null) {
+        return point -
+            equation.normal *
+                ((point - equation.origin).dot(equation.normal) /
+                    equation.normalSquared);
+      }
+    }
+    if (object.type == Object3DType.line ||
+        object.type == Object3DType.vector) {
+      final a = object.type == Object3DType.vector
+          ? object.point
+          : object.pointA;
+      final b = object.type == Object3DType.vector
+          ? object.point + object.vector
+          : object.pointB;
+      final direction = b - a;
+      final lengthSquared = direction.dot(direction);
+      if (direction.x == 0 && direction.y == 0 && direction.z == 0) return a;
+      var t = (point - a).dot(direction) / lengthSquared;
+      if (object.type == Object3DType.vector ||
+          object.lineKind == Line3DKind.segment) {
+        t = t.clamp(0.0, 1.0).toDouble();
+      } else if (object.lineKind == Line3DKind.ray) {
+        t = dart_math.max(0.0, t).toDouble();
+      }
+      return a + direction * t;
+    }
+    if ((object.type == Object3DType.surface ||
+            object.type == Object3DType.polyhedron) &&
+        object.indices.length >= 3) {
+      var nearest = point;
+      var nearestDistance = double.infinity;
+      for (var i = 0; i + 2 < object.indices.length; i += 3) {
+        final ia = object.indices[i];
+        final ib = object.indices[i + 1];
+        final ic = object.indices[i + 2];
+        if (ia < 0 ||
+            ib < 0 ||
+            ic < 0 ||
+            ia >= object.vertices.length ||
+            ib >= object.vertices.length ||
+            ic >= object.vertices.length)
+          continue;
+        final candidate = _closestPointOnTriangle(
+          point,
+          object.vertices[ia],
+          object.vertices[ib],
+          object.vertices[ic],
+        );
+        final distance = point.distanceTo(candidate);
+        if (distance < nearestDistance) {
+          nearest = candidate;
+          nearestDistance = distance;
+        }
+      }
+      if (nearestDistance.isFinite) return nearest;
+    }
+    if (object.vertices.length >= 2) {
+      var nearest = object.vertices.first;
+      var nearestDistance = point.distanceTo(nearest);
+      for (var i = 1; i < object.vertices.length; i++) {
+        if (object.type == Object3DType.curve &&
+            object.curveStarts.contains(i)) {
+          continue;
+        }
+        final candidate = _closestPointOnSegment(
+          point,
+          object.vertices[i - 1],
+          object.vertices[i],
+        );
+        final distance = point.distanceTo(candidate);
+        if (distance < nearestDistance) {
+          nearest = candidate;
+          nearestDistance = distance;
+        }
+      }
+      if (object.type == Object3DType.curve && object.conic != null) {
+        return _projectPointOntoConic(object.conic!, nearest) ?? nearest;
+      }
+      return nearest;
+    }
+    return point;
+  }
+
+  Point3D _pointOnObjectAtScreen(
+    Object3D object,
+    Offset position,
+    Point3D fallbackPoint,
+  ) {
+    switch (object.type) {
+      case Object3DType.point:
+        return object.point;
+      case Object3DType.sphere:
+        return _pointOnSphereAtScreen(object, position);
+      case Object3DType.surface:
+      case Object3DType.polyhedron:
+        return _pointOnMeshAtScreen(object, position) ??
+            _constrainPointToObject(fallbackPoint, object);
+      case Object3DType.plane:
+        final equation = _normalizedPlaneEquation(object);
+        if (equation != null) {
+          final hit = intersectRayPlane(
+            _screenRay(position.dx, position.dy),
+            point: equation.origin,
+            normal: equation.normal,
+            allowBehind: _projectionType == ProjectionType.parallel,
+          );
+          if (hit != null) return hit;
+        }
+        return _constrainPointToObject(fallbackPoint, object);
+      case Object3DType.line:
+      case Object3DType.vector:
+        return _pointOnLineAtScreen(object, position);
+      case Object3DType.curve:
+        return _pointOnCurveAtScreen(object, position) ??
+            _constrainPointToObject(fallbackPoint, object);
+    }
+  }
+
+  Point3D _pointOnLineAtScreen(Object3D object, Offset position) {
+    final start = object.type == Object3DType.vector
+        ? object.point
+        : object.pointA;
+    final direction = object.type == Object3DType.vector
+        ? object.vector
+        : object.pointB - object.pointA;
+    final lengthSquared = direction.dot(direction);
+    if (direction.x == 0 && direction.y == 0 && direction.z == 0) return start;
+
+    final ray = _screenRay(position.dx, position.dy);
+    final rayLengthSquared = ray.direction.dot(ray.direction);
+    final directionDot = ray.direction.dot(direction);
+    final offset = ray.origin - start;
+    final rayOffset = ray.direction.dot(offset);
+    final lineOffset = direction.dot(offset);
+    final denominator =
+        rayLengthSquared * lengthSquared - directionDot * directionDot;
+    var parameter =
+        denominator.abs() <= rayLengthSquared * lengthSquared * 1e-12
+        ? lineOffset / lengthSquared
+        : (rayLengthSquared * lineOffset - directionDot * rayOffset) /
+              denominator;
+
+    double clampToLine(double value) {
+      if (object.type == Object3DType.vector ||
+          object.lineKind == Line3DKind.segment) {
+        return value.clamp(0.0, 1.0).toDouble();
+      }
+      if (object.lineKind == Line3DKind.ray) {
+        return dart_math.max(0.0, value).toDouble();
+      }
+      return value;
+    }
+
+    parameter = clampToLine(parameter);
+    final rayParameter =
+        (directionDot * parameter - rayOffset) / rayLengthSquared;
+    if (rayParameter < 0) {
+      parameter = clampToLine(lineOffset / lengthSquared);
+    }
+    return start + direction * parameter;
+  }
+
+  Point3D? _pointOnCurveAtScreen(Object3D object, Offset position) {
+    final projection = _currentProjection();
+    Point3D? nearest;
+    var nearestDistance = double.infinity;
+    var nearestDepth = double.infinity;
+    for (var i = 1; i < object.vertices.length; i++) {
+      if (object.curveStarts.contains(i)) continue;
+      final clipped = clipLineToView(
+        Object3D.line(
+          object.vertices[i - 1],
+          object.vertices[i],
+          lineKind: Line3DKind.segment,
+        ),
+        camera,
+        projection,
+      );
+      if (clipped.length != 2) continue;
+      final start = clipped[0];
+      final end = clipped[1];
+      final startScreen = worldToScreen(start, camera, projection);
+      final endScreen = worldToScreen(end, camera, projection);
+      if (!startScreen.x.isFinite ||
+          !startScreen.y.isFinite ||
+          !startScreen.z.isFinite ||
+          !endScreen.x.isFinite ||
+          !endScreen.y.isFinite ||
+          !endScreen.z.isFinite) {
+        continue;
+      }
+      final screenDirection = Offset(
+        endScreen.x - startScreen.x,
+        endScreen.y - startScreen.y,
+      );
+      final screenLengthSquared = screenDirection.distanceSquared;
+      final screenOffset = position - Offset(startScreen.x, startScreen.y);
+      final fraction = screenLengthSquared < 1e-12
+          ? 0.0
+          : ((screenOffset.dx * screenDirection.dx +
+                        screenOffset.dy * screenDirection.dy) /
+                    screenLengthSquared)
+                .clamp(0.0, 1.0)
+                .toDouble();
+      var worldFraction = fraction;
+      if (projection.type == ProjectionType.perspective &&
+          startScreen.z > 0 &&
+          endScreen.z > 0) {
+        worldFraction =
+            fraction *
+            startScreen.z /
+            ((1 - fraction) * endScreen.z + fraction * startScreen.z);
+      }
+      final candidate = start + (end - start) * worldFraction;
+      final pointOnCurve = object.conic == null
+          ? candidate
+          : _projectPointOntoConic(object.conic!, candidate) ?? candidate;
+      final candidateScreen = worldToScreen(pointOnCurve, camera, projection);
+      if (!candidateScreen.x.isFinite ||
+          !candidateScreen.y.isFinite ||
+          !candidateScreen.z.isFinite ||
+          (projection.type == ProjectionType.perspective &&
+              (candidateScreen.z < projection.near ||
+                  candidateScreen.z > projection.far))) {
+        continue;
+      }
+      final distance =
+          (Offset(candidateScreen.x, candidateScreen.y) - position).distance;
+      if (!distance.isFinite) continue;
+      if (distance < nearestDistance - _hitScreenDistanceTieTolerance ||
+          ((distance - nearestDistance).abs() <=
+                  _hitScreenDistanceTieTolerance &&
+              candidateScreen.z < nearestDepth)) {
+        nearest = pointOnCurve;
+        nearestDistance = distance;
+        nearestDepth = candidateScreen.z;
+      }
+    }
+    return nearest;
+  }
+
+  Point3D _closestPointOnSegment(Point3D point, Point3D a, Point3D b) {
+    final direction = b - a;
+    final lengthSquared = direction.dot(direction);
+    if (lengthSquared < 1e-12) return a;
+    final t = ((point - a).dot(direction) / lengthSquared)
+        .clamp(0.0, 1.0)
+        .toDouble();
+    return a + direction * t;
+  }
+
+  Point3D _closestPointOnTriangle(
+    Point3D point,
+    Point3D a,
+    Point3D b,
+    Point3D c,
+  ) {
+    final ab = b - a;
+    final ac = c - a;
+    if (_normalizedTriangleNormal(a, b, c) == null) {
+      final candidates = [
+        a,
+        b,
+        c,
+        _closestPointOnSegment(point, a, b),
+        _closestPointOnSegment(point, b, c),
+        _closestPointOnSegment(point, c, a),
+      ];
+      return candidates.reduce(
+        (nearest, candidate) =>
+            point.distanceTo(candidate) < point.distanceTo(nearest)
+            ? candidate
+            : nearest,
+      );
+    }
+    final ap = point - a;
+    final d1 = ab.dot(ap);
+    final d2 = ac.dot(ap);
+    if (d1 <= 0 && d2 <= 0) return a;
+
+    final bp = point - b;
+    final d3 = ab.dot(bp);
+    final d4 = ac.dot(bp);
+    if (d3 >= 0 && d4 <= d3) return b;
+
+    final vc = d1 * d4 - d3 * d2;
+    if (vc <= 0 && d1 >= 0 && d3 <= 0) {
+      return a + ab * (d1 / (d1 - d3));
+    }
+
+    final cp = point - c;
+    final d5 = ab.dot(cp);
+    final d6 = ac.dot(cp);
+    if (d6 >= 0 && d5 <= d6) return c;
+
+    final vb = d5 * d2 - d1 * d6;
+    if (vb <= 0 && d2 >= 0 && d6 <= 0) {
+      return a + ac * (d2 / (d2 - d6));
+    }
+
+    final va = d3 * d6 - d5 * d4;
+    if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) {
+      final t = (d4 - d3) / (d4 - d3 + d5 - d6);
+      return b + (c - b) * t;
+    }
+
+    final inverseSum = 1 / (va + vb + vc);
+    final v = vb * inverseSum;
+    final w = vc * inverseSum;
+    return a + ab * v + ac * w;
+  }
+
+  void _performObjectAction(Offset position) {
+    final tool = _currentTool;
+    final index = _hitObjectIndex(
+      position,
+      includeHidden:
+          tool == ConstructionTool.showHideObject ||
+          tool == ConstructionTool.deleteObject,
+    );
+    if (index == null) return;
+    switch (tool) {
+      case ConstructionTool.deleteObject:
+        _removeObjectAt(index);
+      case ConstructionTool.showHideObject:
+        setState(() {
+          _objects[index] = _objects[index].copyWith(
+            visible: !_objects[index].visible,
+          );
+          _objectsVersion++;
+        });
+      case ConstructionTool.volume:
+        final volume = _objectVolume(_objects[index]);
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text(
+              volume == null
+                  ? '该对象不是封闭立体，无法测量体积'
+                  : '${_objects[index].label ?? '对象'} · 体积 ${volume.toStringAsFixed(3)}',
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      case ConstructionTool.intersectionPoint:
+        if (_pointIntersectionSourceIndex == null) {
+          _pointIntersectionSourceIndex = index;
+          widget.onToolInstruction?.call('再点击第二个相交对象');
+        } else {
+          final first = _objects[_pointIntersectionSourceIndex!];
+          final points = _createIntersectionPoints(first, _objects[index]);
+          _pointIntersectionSourceIndex = null;
+          if (points.isEmpty) {
+            ScaffoldMessenger.maybeOf(
+              context,
+            )?.showSnackBar(const SnackBar(content: Text('这两个对象没有可显示的离散交点')));
+          } else {
+            for (final point in points) {
+              _appendCreatedObject(Object3D.point(point, color: 0xFFD81B60));
+            }
+          }
+          widget.onToolInstruction?.call(ToolInfo.all[tool]!.tooltip);
+        }
+      case ConstructionTool.tangentLine:
+      case ConstructionTool.polarDiameter:
+        _performConicLineAction(
+          index,
+          tangent: tool == ConstructionTool.tangentLine,
+        );
+      case ConstructionTool.intersectionCurve:
+        if (_intersectionSourceIndex == null) {
+          _intersectionSourceIndex = index;
+          widget.onToolInstruction?.call('再点击与之相交的平面或球面');
+        } else {
+          final first = _objects[_intersectionSourceIndex!];
+          final intersection = _createIntersectionCurve(first, _objects[index]);
+          _intersectionSourceIndex = null;
+          if (intersection != null) _appendCreatedObject(intersection);
+          widget.onToolInstruction?.call(ToolInfo.all[tool]!.tooltip);
+        }
+      case ConstructionTool.copyStyle:
+        if (_styleSourceIndex == null) {
+          _styleSourceIndex = index;
+          widget.onToolInstruction?.call('再点击目标对象');
+        } else {
+          final source = _objects[_styleSourceIndex!];
+          setState(() {
+            _objects[index] = _objects[index].copyWith(
+              color: source.color,
+              opacity: source.opacity,
+            );
+            _styleSourceIndex = null;
+            _objectsVersion++;
+          });
+          widget.onToolInstruction?.call(ToolInfo.all[tool]!.tooltip);
+        }
+      case ConstructionTool.attachDetachPoint:
+        if (_attachmentPointIndex != null) {
+          if (_attachmentPointIndex == index) {
+            _attachmentPointIndex = null;
+            widget.onToolInstruction?.call('已取消附着');
+          } else if (_wouldCreateAttachmentCycle(
+            _attachmentPointIndex!,
+            index,
+          )) {
+            _attachmentPointIndex = null;
+            widget.onToolInstruction?.call('附着关系不能形成循环');
+          } else {
+            setState(() {
+              final pointIndex = _attachmentPointIndex!;
+              final point = _objects[pointIndex];
+              _objects[pointIndex] = point.copyWith(
+                point: _constrainPointToObject(point.point, _objects[index]),
+              );
+              _pointAttachments[pointIndex] = index;
+              _propagateAttachedPointMoves(pointIndex);
+              _attachmentPointIndex = null;
+              _objectsVersion++;
+            });
+            widget.onToolInstruction?.call('点已附着到对象');
+          }
+        } else if (_objects[index].type == Object3DType.point) {
+          if (_pointAttachments.containsKey(index)) {
+            setState(() {
+              _pointAttachments.remove(index);
+              _objectsVersion++;
+            });
+            widget.onToolInstruction?.call('点已脱离对象');
+          } else if (_attachmentPointIndex == null) {
+            _attachmentPointIndex = index;
+            widget.onToolInstruction?.call('再点击要附着到的对象');
+          }
+        }
+      case ConstructionTool.unfoldNet:
+        final unfolded = _unfoldPolyhedron(_objects[index]);
+        if (unfolded != null) _appendCreatedObject(unfolded);
+      default:
+        break;
+    }
+  }
+
+  void _appendCreatedObject(Object3D object) {
+    final toolName = ToolInfo.all[_currentTool]!.name;
+    var number = 1;
+    while (_objects.any((existing) => existing.label == '$toolName$number')) {
+      number++;
+    }
+    final labelled = object.label == null
+        ? object.copyWith(label: '$toolName$number')
+        : object;
+    if (widget.onObjectCreated != null) {
+      widget.onObjectCreated!(labelled);
+    } else {
+      setState(() {
+        _objects.add(labelled);
+        _objectsVersion++;
+      });
+    }
+  }
+
+  void _performConicLineAction(int index, {required bool tangent}) {
+    final sourceIndex = _conicSourceIndex;
+    final isPolarDiameter = _currentTool == ConstructionTool.polarDiameter;
+    if (sourceIndex == null) {
+      final source = _objects[index];
+      final canSelectPoint = source.type == Object3DType.point;
+      final canSelectLine = isPolarDiameter && source.type == Object3DType.line;
+      if (!canSelectPoint && !canSelectLine) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text(isPolarDiameter ? '请先选择一个点或直线' : '请先选择一个点')),
+        );
+      } else {
+        _conicSourceIndex = index;
+        widget.onToolInstruction?.call(
+          tangent
+              ? '再点击圆或圆锥曲线'
+              : canSelectLine
+              ? '再点击圆锥曲线生成共轭径线'
+              : '再点击圆锥曲线生成极线',
+        );
+      }
+      return;
+    }
+
+    final source = _objects[sourceIndex];
+    final conicObject = _objects[index];
+    final conic = conicObject.conic;
+    _conicSourceIndex = null;
+    Object3D? line;
+    if (conic != null) {
+      if (source.type == Object3DType.point &&
+          _pointInConicPlane(conic, source.point) &&
+          (!tangent ||
+              (_pointOnConic(conic, source.point) &&
+                  _pointOnConicPath(conicObject, source.point)))) {
+        line = _createPolarLine(
+          conic,
+          source.point,
+          label: tangent ? 'Tangent' : 'Polar',
+        );
+      } else if (isPolarDiameter && source.type == Object3DType.line) {
+        line = _createConjugateDiameter(conic, source);
+      }
+    }
+
+    if (line == null) {
+      final message = tangent
+          ? '请选取圆或圆锥曲线上的点'
+          : source.type == Object3DType.line
+          ? '请选择位于圆锥曲线平面内的直线和具有中心的圆锥曲线'
+          : '请选择曲线平面内能确定有限极线的点';
+      ScaffoldMessenger.maybeOf(context)
+          ?.showSnackBar(SnackBar(content: Text(message)));
+    } else {
+      _appendCreatedObject(line);
+    }
+    widget.onToolInstruction?.call(ToolInfo.all[_currentTool]!.tooltip);
+  }
+
+  bool _pointInConicPlane(Conic3D conic, Point3D point) {
+    final normal = conic.axisU.cross(conic.axisV).normalized();
+    return (point - conic.origin).dot(normal).abs() < 1e-6;
+  }
+
+  Point3D? _projectPointOntoConic(Conic3D conic, Point3D point) {
+    var x = (point - conic.origin).dot(conic.axisU);
+    var y = (point - conic.origin).dot(conic.axisV);
+    for (var i = 0; i < 12; i++) {
+      final value =
+          conic.quadraticX * x * x +
+          conic.quadraticXY * x * y +
+          conic.quadraticY * y * y +
+          conic.linearX * x +
+          conic.linearY * y +
+          conic.constant;
+      final gradientX =
+          2 * conic.quadraticX * x + conic.quadraticXY * y + conic.linearX;
+      final gradientY =
+          conic.quadraticXY * x + 2 * conic.quadraticY * y + conic.linearY;
+      final gradientSquared = gradientX * gradientX + gradientY * gradientY;
+      final gradientScaleX =
+          (2 * conic.quadraticX * x).abs() +
+          (conic.quadraticXY * y).abs() +
+          conic.linearX.abs();
+      final gradientScaleY =
+          (conic.quadraticXY * x).abs() +
+          (2 * conic.quadraticY * y).abs() +
+          conic.linearY.abs();
+      final gradientScale = dart_math.sqrt(
+        gradientScaleX * gradientScaleX + gradientScaleY * gradientScaleY,
+      );
+      if (!value.isFinite ||
+          !gradientSquared.isFinite ||
+          !gradientScale.isFinite ||
+          dart_math.sqrt(gradientSquared) <= gradientScale * 1e-12) {
+        return null;
+      }
+
+      final terms = [
+        conic.quadraticX * x * x,
+        conic.quadraticXY * x * y,
+        conic.quadraticY * y * y,
+        conic.linearX * x,
+        conic.linearY * y,
+        conic.constant,
+      ];
+      final scale = terms.fold<double>(0, (sum, term) => sum + term.abs());
+      if (value.abs() <= scale * 1e-12) break;
+
+      final correction = value / gradientSquared;
+      x -= correction * gradientX;
+      y -= correction * gradientY;
+      if (!x.isFinite || !y.isFinite) return null;
+    }
+
+    final projected = conic.origin + conic.axisU * x + conic.axisV * y;
+    return _pointOnConic(conic, projected) ? projected : null;
+  }
+
+  bool _pointOnConic(Conic3D conic, Point3D point) {
+    final offset = point - conic.origin;
+    final x = offset.dot(conic.axisU);
+    final y = offset.dot(conic.axisV);
+    final terms = [
+      conic.quadraticX * x * x,
+      conic.quadraticXY * x * y,
+      conic.quadraticY * y * y,
+      conic.linearX * x,
+      conic.linearY * y,
+      conic.constant,
+    ];
+    final value = terms.fold<double>(0, (sum, term) => sum + term);
+    final scale = terms.fold<double>(0, (sum, term) => sum + term.abs());
+    return value.abs() <= scale * 1e-6;
+  }
+
+  bool _pointOnConicPath(Object3D curve, Point3D point) {
+    for (var i = 1; i < curve.vertices.length; i++) {
+      if (curve.curveStarts.contains(i)) continue;
+      final start = curve.vertices[i - 1];
+      final end = curve.vertices[i];
+      final direction = end - start;
+      final segmentLength = start.distanceTo(end);
+      if (!segmentLength.isFinite || segmentLength == 0) continue;
+      final along = (point - start)
+          .dot(direction / segmentLength)
+          .clamp(0.0, segmentLength)
+          .toDouble();
+      final closest = start + direction / segmentLength * along;
+      final coordinateScale =
+          <double>[
+            point.x.abs(),
+            point.y.abs(),
+            point.z.abs(),
+            start.x.abs(),
+            start.y.abs(),
+            start.z.abs(),
+            end.x.abs(),
+            end.y.abs(),
+            end.z.abs(),
+            1.0,
+          ].fold<double>(
+            1,
+            (scale, coordinate) => dart_math.max(scale, coordinate).toDouble(),
+          );
+      if (point.distanceTo(closest) <=
+          segmentLength * 0.02 + coordinateScale * 1e-15) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Object3D? _createPolarLine(
+    Conic3D conic,
+    Point3D point, {
+    required String label,
+  }) {
+    final offset = point - conic.origin;
+    final x = offset.dot(conic.axisU);
+    final y = offset.dot(conic.axisV);
+    final lineX =
+        2 * conic.quadraticX * x + conic.quadraticXY * y + conic.linearX;
+    final lineY =
+        conic.quadraticXY * x + 2 * conic.quadraticY * y + conic.linearY;
+    final lineConstant =
+        conic.linearX * x + conic.linearY * y + 2 * conic.constant;
+
+    if (lineX == 0 && lineY == 0) {
+      return null;
+    }
+
+    late final double localX;
+    late final double localY;
+    late final Vector3D direction;
+    if (lineX.abs() >= lineY.abs()) {
+      localX = -lineConstant / lineX;
+      localY = 0;
+      direction = conic.axisV - conic.axisU * (lineY / lineX);
+    } else {
+      localX = 0;
+      localY = -lineConstant / lineY;
+      direction = conic.axisU - conic.axisV * (lineX / lineY);
+    }
+    final start = conic.origin + conic.axisU * localX + conic.axisV * localY;
+    return Object3D.line(
+      start,
+      start + direction,
+      lineKind: Line3DKind.line,
+      color: 0xFF4CAF50,
+      label: label,
+    );
+  }
+
+  Object3D? _createConjugateDiameter(Conic3D conic, Object3D sourceLine) {
+    if (!_pointInConicPlane(conic, sourceLine.pointA) ||
+        !_pointInConicPlane(conic, sourceLine.pointB)) {
+      return null;
+    }
+
+    final sourceDirection = sourceLine.pointB - sourceLine.pointA;
+    final directionX = sourceDirection.dot(conic.axisU);
+    final directionY = sourceDirection.dot(conic.axisV);
+    final directionScale = dart_math
+        .max(directionX.abs(), directionY.abs())
+        .toDouble();
+    if (!directionScale.isFinite || directionScale == 0) return null;
+    final dx = directionX / directionScale;
+    final dy = directionY / directionScale;
+
+    final quadraticScale = dart_math
+        .max(
+          conic.quadraticX.abs(),
+          dart_math.max(conic.quadraticXY.abs(), conic.quadraticY.abs()),
+        )
+        .toDouble();
+    if (!quadraticScale.isFinite || quadraticScale == 0) return null;
+    final quadraticX = conic.quadraticX / quadraticScale;
+    final quadraticXY = conic.quadraticXY / quadraticScale;
+    final quadraticY = conic.quadraticY / quadraticScale;
+    final linearX = conic.linearX / quadraticScale;
+    final linearY = conic.linearY / quadraticScale;
+    if (!linearX.isFinite || !linearY.isFinite) return null;
+
+    final determinant = 4 * quadraticX * quadraticY - quadraticXY * quadraticXY;
+    final determinantScale =
+        (4 * quadraticX * quadraticY).abs() + quadraticXY * quadraticXY;
+    if (!determinant.isFinite ||
+        determinantScale == 0 ||
+        determinant.abs() <= determinantScale * 1e-12) {
+      return null;
+    }
+
+    final centerX =
+        (-2 * quadraticY * linearX + quadraticXY * linearY) / determinant;
+    final centerY =
+        (-2 * quadraticX * linearY + quadraticXY * linearX) / determinant;
+    if (!centerX.isFinite || !centerY.isFinite) return null;
+
+    final formX = quadraticX * dx + quadraticXY * dy / 2;
+    final formY = quadraticXY * dx / 2 + quadraticY * dy;
+    final formScale = dart_math.max(formX.abs(), formY.abs()).toDouble();
+    if (!formScale.isFinite || formScale == 0) return null;
+
+    final center = conic.origin + conic.axisU * centerX + conic.axisV * centerY;
+    final direction =
+        conic.axisU * (-formY / formScale) + conic.axisV * (formX / formScale);
+    if (!center.x.isFinite ||
+        !center.y.isFinite ||
+        !center.z.isFinite ||
+        !direction.x.isFinite ||
+        !direction.y.isFinite ||
+        !direction.z.isFinite ||
+        direction.magnitude == 0) {
+      return null;
+    }
+
+    return Object3D.line(
+      center,
+      center + direction,
+      lineKind: Line3DKind.line,
+      color: 0xFF4CAF50,
+      label: 'Conjugate diameter',
+    );
+  }
+
+  Object3D? _createIntersectionCurve(Object3D first, Object3D second) {
+    final firstPlane = first.type == Object3DType.plane ? first : null;
+    final secondPlane = second.type == Object3DType.plane ? second : null;
+    final firstSphere = first.type == Object3DType.sphere ? first : null;
+    final secondSphere = second.type == Object3DType.sphere ? second : null;
+
+    if (firstPlane != null && secondPlane != null) {
+      final equation1 = _normalizedPlaneEquation(firstPlane);
+      final equation2 = _normalizedPlaneEquation(secondPlane);
+      if (equation1 == null || equation2 == null) return null;
+      final length1 = dart_math.sqrt(equation1.normalSquared);
+      final length2 = dart_math.sqrt(equation2.normalSquared);
+      final n1 = equation1.normal * (1 / length1);
+      final n2 = equation2.normal * (1 / length2);
+      final d1 = equation1.d / length1;
+      final d2 = equation2.d / length2;
+      final direction = n1.cross(n2);
+      final denominator = direction.dot(direction);
+      if (!denominator.isFinite || denominator == 0) return null;
+      final pointVector =
+          (n2.cross(direction) * d1 + direction.cross(n1) * d2) *
+          (1 / denominator);
+      final point = Point3D(pointVector.x, pointVector.y, pointVector.z);
+      final lineDirection = direction.normalized();
+      if (!point.x.isFinite ||
+          !point.y.isFinite ||
+          !point.z.isFinite ||
+          !lineDirection.x.isFinite ||
+          !lineDirection.y.isFinite ||
+          !lineDirection.z.isFinite ||
+          lineDirection.magnitude == 0) {
+        return null;
+      }
+      return Object3D.line(
+        point,
+        point + lineDirection,
+        lineKind: Line3DKind.line,
+        color: 0xFF1565C0,
+      );
+    }
+
+    if (firstSphere != null && secondPlane != null) {
+      return _spherePlaneIntersection(firstSphere, secondPlane);
+    }
+    if (firstPlane != null && secondSphere != null) {
+      return _spherePlaneIntersection(secondSphere, firstPlane);
+    }
+    if (firstSphere != null && secondSphere != null) {
+      return _sphereSphereIntersection(firstSphere, secondSphere);
+    }
+    return null;
+  }
+
+  List<Point3D> _createIntersectionPoints(Object3D first, Object3D second) {
+    if (identical(first, second)) return const [];
+
+    ({Point3D origin, Vector3D direction, double minT, double maxT})? lineInfo(
+      Object3D object,
+    ) {
+      if (object.type != Object3DType.line &&
+          object.type != Object3DType.vector)
+        return null;
+      final origin = object.type == Object3DType.vector
+          ? object.point
+          : object.pointA;
+      final direction = object.type == Object3DType.vector
+          ? object.vector
+          : object.pointB - object.pointA;
+      if (direction.x == 0 && direction.y == 0 && direction.z == 0) {
+        return null;
+      }
+      if (object.type == Object3DType.vector ||
+          object.lineKind == Line3DKind.segment) {
+        return (origin: origin, direction: direction, minT: 0, maxT: 1);
+      }
+      return (
+        origin: origin,
+        direction: direction,
+        minT: object.lineKind == Line3DKind.ray ? 0 : double.negativeInfinity,
+        maxT: double.infinity,
+      );
+    }
+
+    bool inRange(
+      ({Point3D origin, Vector3D direction, double minT, double maxT}) line,
+      double t,
+    ) => t >= line.minT - 1e-9 && t <= line.maxT + 1e-9;
+
+    double intersectionTolerance(
+      Point3D first,
+      Point3D second,
+      double geometryScale,
+    ) {
+      final coordinateScale =
+          [
+            first.x.abs(),
+            first.y.abs(),
+            first.z.abs(),
+            second.x.abs(),
+            second.y.abs(),
+            second.z.abs(),
+          ].fold<double>(
+            0,
+            (scale, coordinate) => dart_math.max(scale, coordinate).toDouble(),
+          );
+      return dart_math
+          .max(geometryScale * 1e-12, coordinateScale * 1.7763568394002505e-15)
+          .toDouble();
+    }
+
+    Point3D? linePlaneIntersection(
+      ({Point3D origin, Vector3D direction, double minT, double maxT}) line,
+      Object3D plane,
+    ) {
+      final equation = _normalizedPlaneEquation(plane);
+      if (equation == null) return null;
+      final normal = equation.normal;
+      final denominator = normal.dot(line.direction);
+      final normalMagnitude = normal.magnitude;
+      final directionMagnitude = line.direction.magnitude;
+      if (!denominator.isFinite ||
+          !normalMagnitude.isFinite ||
+          !directionMagnitude.isFinite ||
+          normalMagnitude == 0 ||
+          directionMagnitude == 0 ||
+          (denominator / normalMagnitude / directionMagnitude).abs() <= 1e-12) {
+        return null;
+      }
+      final t = (equation.d - normal.dot(line.origin.toVector())) / denominator;
+      if (!inRange(line, t)) return null;
+      return line.origin + line.direction * t;
+    }
+
+    List<Point3D> lineSphereIntersections(
+      ({Point3D origin, Vector3D direction, double minT, double maxT}) line,
+      Object3D sphere,
+    ) {
+      final offset = line.origin - sphere.sphereCenter;
+      final a = line.direction.dot(line.direction);
+      final b = 2 * line.direction.dot(offset);
+      final c = offset.dot(offset) - sphere.sphereRadius * sphere.sphereRadius;
+      final discriminant = b * b - 4 * a * c;
+      final discriminantTolerance = (b * b + (4 * a * c).abs()) * 1e-12;
+      if (discriminant < -discriminantTolerance) return const [];
+      final root = dart_math.sqrt(
+        dart_math.max(
+          0,
+          discriminant.abs() <= discriminantTolerance ? 0 : discriminant,
+        ),
+      );
+      final firstT = (-b - root) / (2 * a);
+      final candidates = <double>[firstT];
+      if (root > 0) candidates.add((-b + root) / (2 * a));
+      return [
+        for (final t in candidates)
+          if (inRange(line, t)) line.origin + line.direction * t,
+      ];
+    }
+
+    List<Point3D> lineConicIntersections(
+      ({Point3D origin, Vector3D direction, double minT, double maxT}) line,
+      Conic3D conic,
+    ) {
+      final normal = conic.axisU.cross(conic.axisV).normalized();
+      final offset = line.origin - conic.origin;
+      final planeOffset = offset.dot(normal);
+      final planeSlope = line.direction.dot(normal);
+      final directionMagnitude = line.direction.magnitude;
+      if (!directionMagnitude.isFinite || directionMagnitude == 0) {
+        return const [];
+      }
+      if (planeSlope.abs() > directionMagnitude * 1e-12) {
+        final t = -planeOffset / planeSlope;
+        if (!inRange(line, t)) return const [];
+        final intersection = line.origin + line.direction * t;
+        return _pointOnConic(conic, intersection) ? [intersection] : const [];
+      }
+      if (planeOffset.abs() > 1e-9) return const [];
+
+      final x = offset.dot(conic.axisU);
+      final y = offset.dot(conic.axisV);
+      final dx = line.direction.dot(conic.axisU);
+      final dy = line.direction.dot(conic.axisV);
+      final quadraticTerms = [
+        conic.quadraticX * dx * dx,
+        conic.quadraticXY * dx * dy,
+        conic.quadraticY * dy * dy,
+      ];
+      final quadratic = quadraticTerms.fold<double>(
+        0,
+        (sum, term) => sum + term,
+      );
+      final quadraticScale = quadraticTerms.fold<double>(
+        0,
+        (sum, term) => sum + term.abs(),
+      );
+      final linearTerms = [
+        2 * conic.quadraticX * x * dx,
+        conic.quadraticXY * x * dy,
+        conic.quadraticXY * y * dx,
+        2 * conic.quadraticY * y * dy,
+        conic.linearX * dx,
+        conic.linearY * dy,
+      ];
+      final linear = linearTerms.fold<double>(0, (sum, term) => sum + term);
+      final linearScale = linearTerms.fold<double>(
+        0,
+        (sum, term) => sum + term.abs(),
+      );
+      final constant =
+          conic.quadraticX * x * x +
+          conic.quadraticXY * x * y +
+          conic.quadraticY * y * y +
+          conic.linearX * x +
+          conic.linearY * y +
+          conic.constant;
+
+      final parameters = <double>[];
+      if (quadratic.abs() <= quadraticScale * 1e-12) {
+        if (linearScale == 0 || linear.abs() <= linearScale * 1e-12) {
+          return const [];
+        }
+        parameters.add(-constant / linear);
+      } else {
+        final discriminant = linear * linear - 4 * quadratic * constant;
+        final discriminantTolerance =
+            (linear * linear + (4 * quadratic * constant).abs()) * 1e-12;
+        if (discriminant < -discriminantTolerance) return const [];
+        final adjustedDiscriminant = discriminant.abs() <= discriminantTolerance
+            ? 0.0
+            : discriminant;
+        final root = dart_math.sqrt(dart_math.max(0, adjustedDiscriminant));
+        if (root == 0) {
+          parameters.add(-linear / (2 * quadratic));
+        } else {
+          parameters
+            ..add((-linear - root) / (2 * quadratic))
+            ..add((-linear + root) / (2 * quadratic));
+        }
+      }
+
+      final intersections = <Point3D>[];
+      for (final t in parameters) {
+        if (!t.isFinite || !inRange(line, t)) continue;
+        intersections.add(line.origin + line.direction * t);
+      }
+      return intersections;
+    }
+
+    ({Point3D center, double radius, Vector3D normal})? circleInfo(
+      Conic3D conic,
+    ) {
+      final quadraticScale = dart_math.max(
+        conic.quadraticX.abs(),
+        conic.quadraticY.abs(),
+      );
+      if (quadraticScale == 0 ||
+          (conic.quadraticX - conic.quadraticY).abs() >
+              quadraticScale * 1e-10 ||
+          conic.quadraticXY.abs() > quadraticScale * 1e-10) {
+        return null;
+      }
+      final axisU = conic.axisU;
+      final axisV = conic.axisV;
+      if ((axisU.magnitude - 1).abs() > 1e-8 ||
+          (axisV.magnitude - 1).abs() > 1e-8 ||
+          axisU.dot(axisV).abs() > 1e-8) {
+        return null;
+      }
+      final quadratic = (conic.quadraticX + conic.quadraticY) / 2;
+      final centerX = -conic.linearX / (2 * quadratic);
+      final centerY = -conic.linearY / (2 * quadratic);
+      final radiusSquared =
+          centerX * centerX + centerY * centerY - conic.constant / quadratic;
+      final normal = axisU.cross(axisV).normalized();
+      if (!radiusSquared.isFinite ||
+          radiusSquared <= 0 ||
+          normal.magnitude < 1e-9) {
+        return null;
+      }
+      return (
+        center: conic.origin + axisU * centerX + axisV * centerY,
+        radius: dart_math.sqrt(radiusSquared),
+        normal: normal,
+      );
+    }
+
+    bool isClosedCircle(Object3D object, double radius) {
+      if (object.type != Object3DType.curve ||
+          object.conic == null ||
+          object.curveStarts.isNotEmpty ||
+          object.vertices.length < 4) {
+        return false;
+      }
+      final closureTolerance = dart_math.max(1e-12, radius * 1e-7);
+      return object.vertices.first.distanceTo(object.vertices.last) <=
+          closureTolerance;
+    }
+
+    List<Point3D> circleIntersections(
+      ({Point3D center, double radius, Vector3D normal}) firstCircle,
+      ({Point3D center, double radius, Vector3D normal}) secondCircle,
+    ) {
+      final centerOffset = secondCircle.center - firstCircle.center;
+      var coordinateScale = 0.0;
+      for (final coordinate in [
+        firstCircle.center.x.abs(),
+        firstCircle.center.y.abs(),
+        firstCircle.center.z.abs(),
+        secondCircle.center.x.abs(),
+        secondCircle.center.y.abs(),
+        secondCircle.center.z.abs(),
+      ]) {
+        coordinateScale = dart_math.max(coordinateScale, coordinate).toDouble();
+      }
+      final scale = dart_math
+          .max(
+            firstCircle.radius,
+            dart_math.max(secondCircle.radius, centerOffset.magnitude),
+          )
+          .toDouble();
+      final tolerance = dart_math
+          .max(1e-15, dart_math.max(scale * 1e-9, coordinateScale * 1e-14))
+          .toDouble();
+      final normalCross = firstCircle.normal.cross(secondCircle.normal);
+      final normalCrossMagnitude = normalCross.magnitude;
+
+      bool liesOnBoth(Point3D point) =>
+          ((point - firstCircle.center).magnitude - firstCircle.radius).abs() <=
+              tolerance * 2 &&
+          ((point - secondCircle.center).magnitude - secondCircle.radius)
+                  .abs() <=
+              tolerance * 2 &&
+          (point - firstCircle.center).dot(firstCircle.normal).abs() <=
+              tolerance * 2 &&
+          (point - secondCircle.center).dot(secondCircle.normal).abs() <=
+              tolerance * 2;
+
+      if (normalCrossMagnitude <= 1e-9) {
+        if (centerOffset.dot(firstCircle.normal).abs() > tolerance) {
+          return const [];
+        }
+        final inPlaneOffset =
+            centerOffset -
+            firstCircle.normal * centerOffset.dot(firstCircle.normal);
+        final distance = inPlaneOffset.magnitude;
+        if (distance <= tolerance ||
+            distance > firstCircle.radius + secondCircle.radius + tolerance ||
+            distance <
+                (firstCircle.radius - secondCircle.radius).abs() - tolerance) {
+          return const [];
+        }
+        final axis = inPlaneOffset * (1 / distance);
+        final along =
+            (firstCircle.radius * firstCircle.radius -
+                secondCircle.radius * secondCircle.radius +
+                distance * distance) /
+            (2 * distance);
+        var heightSquared =
+            firstCircle.radius * firstCircle.radius - along * along;
+        final squaredTolerance =
+            tolerance * dart_math.max(firstCircle.radius, tolerance) * 2;
+        if (heightSquared < -squaredTolerance) return const [];
+        heightSquared = dart_math.max(0, heightSquared).toDouble();
+        final base = firstCircle.center + axis * along;
+        final height = dart_math.sqrt(heightSquared);
+        if (height <= tolerance) {
+          return liesOnBoth(base) ? [base] : const [];
+        }
+        final perpendicular = firstCircle.normal.cross(axis).normalized();
+        return [
+          for (final point in [
+            base + perpendicular * height,
+            base - perpendicular * height,
+          ])
+            if (liesOnBoth(point)) point,
+        ];
+      }
+
+      final lineDirection = normalCross * (1 / normalCrossMagnitude);
+      final denominator = normalCross.dot(normalCross);
+      final firstPlaneOffset = firstCircle.normal.dot(
+        firstCircle.center.toVector(),
+      );
+      final secondPlaneOffset = secondCircle.normal.dot(
+        secondCircle.center.toVector(),
+      );
+      final lineOriginVector =
+          (secondCircle.normal.cross(normalCross) * firstPlaneOffset +
+              normalCross.cross(firstCircle.normal) * secondPlaneOffset) *
+          (1 / denominator);
+      final lineOrigin = Point3D(
+        lineOriginVector.x,
+        lineOriginVector.y,
+        lineOriginVector.z,
+      );
+      final closestToCenter =
+          lineOrigin +
+          lineDirection * (firstCircle.center - lineOrigin).dot(lineDirection);
+      final centerDistance = closestToCenter.distanceTo(firstCircle.center);
+      var heightSquared =
+          firstCircle.radius * firstCircle.radius -
+          centerDistance * centerDistance;
+      final squaredTolerance =
+          tolerance * dart_math.max(firstCircle.radius, tolerance) * 2;
+      if (heightSquared < -squaredTolerance) return const [];
+      heightSquared = dart_math.max(0, heightSquared).toDouble();
+      final height = dart_math.sqrt(heightSquared);
+      final candidates = height <= tolerance
+          ? [closestToCenter]
+          : [
+              closestToCenter + lineDirection * height,
+              closestToCenter - lineDirection * height,
+            ];
+      return [
+        for (final point in candidates)
+          if (liesOnBoth(point)) point,
+      ];
+    }
+
+    List<Point3D> lineMeshIntersections(
+      ({Point3D origin, Vector3D direction, double minT, double maxT}) line,
+      Object3D mesh,
+    ) {
+      final intersections = <({Point3D point, double scale})>[];
+      final directionLength = line.direction.magnitude;
+      if (!directionLength.isFinite || directionLength == 0) {
+        return const [];
+      }
+      for (var i = 0; i + 2 < mesh.indices.length; i += 3) {
+        final ia = mesh.indices[i];
+        final ib = mesh.indices[i + 1];
+        final ic = mesh.indices[i + 2];
+        if (ia < 0 ||
+            ia >= mesh.vertices.length ||
+            ib < 0 ||
+            ib >= mesh.vertices.length ||
+            ic < 0 ||
+            ic >= mesh.vertices.length) {
+          continue;
+        }
+        final a = mesh.vertices[ia];
+        final b = mesh.vertices[ib];
+        final c = mesh.vertices[ic];
+        final triangleScale = dart_math
+            .max(
+              (b - a).magnitude,
+              dart_math.max((c - b).magnitude, (a - c).magnitude),
+            )
+            .toDouble();
+        final normal = _normalizedTriangleNormal(a, b, c);
+        if (normal == null) continue;
+        final denominator = normal.dot(line.direction);
+        if (denominator.abs() <= directionLength * 1e-10) {
+          continue;
+        }
+        final t = normal.dot(a - line.origin) / denominator;
+        if (!inRange(line, t)) continue;
+        final intersection = line.origin + line.direction * t;
+        if (_pointInTriangle3D(intersection, a, b, c) &&
+            intersections.every(
+              (existing) =>
+                  existing.point.distanceTo(intersection) >
+                  intersectionTolerance(
+                    existing.point,
+                    intersection,
+                    dart_math.max(existing.scale, triangleScale).toDouble(),
+                  ),
+            )) {
+          intersections.add((point: intersection, scale: triangleScale));
+        }
+      }
+      return [for (final intersection in intersections) intersection.point];
+    }
+
+    List<Object3D> curveSegments(Object3D curve) {
+      final segments = <Object3D>[];
+      for (var i = 1; i < curve.vertices.length; i++) {
+        if (curve.curveStarts.contains(i)) continue;
+        segments.add(
+          Object3D.line(
+            curve.vertices[i - 1],
+            curve.vertices[i],
+            lineKind: Line3DKind.segment,
+            color: curve.color,
+          ),
+        );
+      }
+      return segments;
+    }
+
+    bool liesOnSampledCurve(Object3D curve, Point3D point) {
+      for (var i = 1; i < curve.vertices.length; i++) {
+        if (curve.curveStarts.contains(i)) continue;
+        final start = curve.vertices[i - 1];
+        final direction = curve.vertices[i] - start;
+        final lengthSquared = direction.dot(direction);
+        if (lengthSquared < 1e-18) {
+          if (point.distanceTo(start) <= 1e-9) return true;
+          continue;
+        }
+        final fraction = (point - start).dot(direction) / lengthSquared;
+        if (fraction < -1e-9 || fraction > 1 + 1e-9) continue;
+        final closest = start + direction * fraction.clamp(0.0, 1.0).toDouble();
+        final tolerance = dart_math.max(
+          1e-9,
+          dart_math.sqrt(lengthSquared) * 0.02,
+        );
+        if (point.distanceTo(closest) <= tolerance) return true;
+      }
+      return false;
+    }
+
+    double intersectionFeatureScale(Object3D object) {
+      final line = lineInfo(object);
+      if (line == null ||
+          (object.type != Object3DType.vector &&
+              object.lineKind != Line3DKind.segment)) {
+        return 0;
+      }
+      return line.direction.magnitude;
+    }
+
+    final conicFirstLine = lineInfo(first);
+    final conicSecondLine = lineInfo(second);
+    if (first.type == Object3DType.curve &&
+        first.conic != null &&
+        conicSecondLine != null) {
+      return lineConicIntersections(
+        conicSecondLine,
+        first.conic!,
+      ).where((point) => liesOnSampledCurve(first, point)).toList();
+    }
+    if (second.type == Object3DType.curve &&
+        second.conic != null &&
+        conicFirstLine != null) {
+      return lineConicIntersections(
+        conicFirstLine,
+        second.conic!,
+      ).where((point) => liesOnSampledCurve(second, point)).toList();
+    }
+    if (first.type == Object3DType.curve &&
+        second.type == Object3DType.curve &&
+        first.conic != null &&
+        second.conic != null) {
+      final firstCircle = circleInfo(first.conic!);
+      final secondCircle = circleInfo(second.conic!);
+      if (firstCircle != null &&
+          secondCircle != null &&
+          isClosedCircle(first, firstCircle.radius) &&
+          isClosedCircle(second, secondCircle.radius)) {
+        return circleIntersections(firstCircle, secondCircle);
+      }
+    }
+
+    if (first.type == Object3DType.curve || second.type == Object3DType.curve) {
+      final firstSegments = first.type == Object3DType.curve
+          ? curveSegments(first)
+          : [first];
+      final secondSegments = second.type == Object3DType.curve
+          ? curveSegments(second)
+          : [second];
+      final intersections = <({Point3D point, double scale})>[];
+      for (final firstSegment in firstSegments) {
+        for (final secondSegment in secondSegments) {
+          final scale = dart_math
+              .max(
+                intersectionFeatureScale(firstSegment),
+                intersectionFeatureScale(secondSegment),
+              )
+              .toDouble();
+          for (final intersection in _createIntersectionPoints(
+            firstSegment,
+            secondSegment,
+          )) {
+            if (intersections.every(
+              (existing) =>
+                  existing.point.distanceTo(intersection) >
+                  intersectionTolerance(
+                    existing.point,
+                    intersection,
+                    dart_math.max(existing.scale, scale).toDouble(),
+                  ),
+            )) {
+              intersections.add((point: intersection, scale: scale));
+            }
+          }
+        }
+      }
+      return [for (final intersection in intersections) intersection.point];
+    }
+
+    final firstLine = lineInfo(first);
+    final secondLine = lineInfo(second);
+    if (firstLine != null && secondLine != null) {
+      final w = firstLine.origin - secondLine.origin;
+      final a = firstLine.direction.dot(firstLine.direction);
+      final b = firstLine.direction.dot(secondLine.direction);
+      final c = secondLine.direction.dot(secondLine.direction);
+      final d = firstLine.direction.dot(w);
+      final e = secondLine.direction.dot(w);
+      final denominator = a * c - b * b;
+      final denominatorScale = a * c;
+      if (denominatorScale == 0 ||
+          denominator.abs() <= denominatorScale * 1e-12) {
+        return const [];
+      }
+      final firstT = (b * e - c * d) / denominator;
+      final secondT = (a * e - b * d) / denominator;
+      if (!inRange(firstLine, firstT) || !inRange(secondLine, secondT)) {
+        return const [];
+      }
+      final firstPoint = firstLine.origin + firstLine.direction * firstT;
+      final secondPoint = secondLine.origin + secondLine.direction * secondT;
+      var coordinateScale = 0.0;
+      for (final coordinate in [
+        firstPoint.x.abs(),
+        firstPoint.y.abs(),
+        firstPoint.z.abs(),
+        secondPoint.x.abs(),
+        secondPoint.y.abs(),
+        secondPoint.z.abs(),
+      ]) {
+        coordinateScale = dart_math.max(coordinateScale, coordinate).toDouble();
+      }
+      final scale = dart_math
+          .max(
+            w.magnitude,
+            dart_math.max(
+              dart_math.sqrt(a),
+              dart_math.max(dart_math.sqrt(c), coordinateScale),
+            ),
+          )
+          .toDouble();
+      final tolerance = dart_math.max(1e-12, scale * 1e-12).toDouble();
+      return firstPoint.distanceTo(secondPoint) <= tolerance
+          ? [firstPoint.midpoint(secondPoint)]
+          : const [];
+    }
+
+    if (firstLine == null && secondLine == null) {
+      final intersection = _createIntersectionCurve(first, second);
+      if (intersection != null && intersection.type == Object3DType.point) {
+        return [intersection.point];
+      }
+    }
+
+    final line = firstLine ?? secondLine;
+    final other = firstLine == null ? first : second;
+    if (line == null) return const [];
+    if (other.type == Object3DType.plane) {
+      final point = linePlaneIntersection(line, other);
+      return point == null ? const [] : [point];
+    }
+    if (other.type == Object3DType.sphere) {
+      return lineSphereIntersections(line, other);
+    }
+    if (other.type == Object3DType.surface ||
+        other.type == Object3DType.polyhedron) {
+      return lineMeshIntersections(line, other);
+    }
+    return const [];
+  }
+
+  Object3D? _spherePlaneIntersection(Object3D sphere, Object3D plane) {
+    final equation = _normalizedPlaneEquation(plane);
+    if (equation == null) return null;
+    final normal = equation.normal;
+    final normalSquared = equation.normalSquared;
+    final center = sphere.sphereCenter;
+    final signedDistance =
+        (normal.dot(center.toVector()) - equation.d) /
+        dart_math.sqrt(normalSquared);
+    final radius = sphere.sphereRadius.abs();
+    final coordinateScale = dart_math.max(
+      equation.d.abs(),
+      dart_math.max(
+        center.x.abs(),
+        dart_math.max(center.y.abs(), center.z.abs()),
+      ),
+    );
+    final geometryScale = dart_math.max(radius, signedDistance.abs());
+    final tolerance = dart_math.max(
+      geometryScale * 1e-12,
+      coordinateScale * 1.7763568394002505e-15,
+    );
+    if (signedDistance.abs() > radius + tolerance) return null;
+    final circleCenter =
+        center +
+        normal * ((equation.d - normal.dot(center.toVector())) / normalSquared);
+    var radiusSquared = radius * radius - signedDistance * signedDistance;
+    final radiusSquaredTolerance =
+        tolerance * (radius + signedDistance.abs()) + tolerance * tolerance;
+    if (radiusSquared < -radiusSquaredTolerance) return null;
+    if (radiusSquared < 0) radiusSquared = 0;
+    final circleRadius = dart_math.sqrt(radiusSquared);
+    return _circleOnPlane(circleCenter, normal, circleRadius);
+  }
+
+  Object3D? _sphereSphereIntersection(Object3D first, Object3D second) {
+    final delta = second.sphereCenter - first.sphereCenter;
+    final distance = delta.magnitude;
+    final firstRadius = first.sphereRadius.abs();
+    final secondRadius = second.sphereRadius.abs();
+    final coordinateScale = [
+      first.sphereCenter.x.abs(),
+      first.sphereCenter.y.abs(),
+      first.sphereCenter.z.abs(),
+      second.sphereCenter.x.abs(),
+      second.sphereCenter.y.abs(),
+      second.sphereCenter.z.abs(),
+    ].fold<double>(0, (scale, value) => dart_math.max(scale, value).toDouble());
+    final geometryScale = dart_math.max(
+      distance,
+      dart_math.max(firstRadius, secondRadius),
+    );
+    final tolerance = dart_math.max(
+      geometryScale * 1e-12,
+      coordinateScale * 1.7763568394002505e-15,
+    );
+    final radiusDifference = (firstRadius - secondRadius).abs();
+    if (distance == 0 ||
+        distance > firstRadius + secondRadius + tolerance ||
+        distance < radiusDifference - tolerance) {
+      return null;
+    }
+    final axis = delta * (1 / distance);
+    final along =
+        (firstRadius * firstRadius -
+            secondRadius * secondRadius +
+            distance * distance) /
+        (2 * distance);
+    final center = first.sphereCenter + axis * along;
+    var radiusSquared = firstRadius * firstRadius - along * along;
+    final radiusSquaredTolerance =
+        tolerance * (firstRadius + along.abs()) + tolerance * tolerance;
+    if (radiusSquared < -radiusSquaredTolerance) return null;
+    if (radiusSquared < 0) radiusSquared = 0;
+    final radius = dart_math.sqrt(radiusSquared);
+    return _circleOnPlane(center, axis, radius);
+  }
+
+  Object3D _circleOnPlane(Point3D center, Vector3D normal, double radius) {
+    if (radius == 0) {
+      return Object3D.point(center, color: 0xFF1565C0);
+    }
+    var u = normal.cross(Vector3D.unitX).normalized();
+    if (u.magnitude < 1e-9) u = normal.cross(Vector3D.unitY).normalized();
+    final v = normal.normalized().cross(u).normalized();
+    final points = List.generate(65, (i) {
+      final angle = 2 * dart_math.pi * i / 64;
+      return center +
+          u * (radius * dart_math.cos(angle)) +
+          v * (radius * dart_math.sin(angle));
+    });
+    return Object3D.curve(
+      points: points,
+      color: 0xFF1565C0,
+      conic: Conic3D(
+        origin: center,
+        axisU: u,
+        axisV: v,
+        quadraticX: 1,
+        quadraticXY: 0,
+        quadraticY: 1,
+        linearX: 0,
+        linearY: 0,
+        constant: -radius * radius,
+      ),
+    );
+  }
+
+  void _removeObjectAt(int index) {
+    setState(() {
+      _objects.removeAt(index);
+      if (_selectedPointIndex == index) {
+        _selectedPointIndex = null;
+      } else if (_selectedPointIndex != null && _selectedPointIndex! > index) {
+        _selectedPointIndex = _selectedPointIndex! - 1;
+      }
+      final attachments = Map<int, int>.from(_pointAttachments);
+      _pointAttachments
+        ..clear()
+        ..addEntries(
+          attachments.entries
+              .where((entry) => entry.key != index && entry.value != index)
+              .map(
+                (entry) => MapEntry(
+                  entry.key > index ? entry.key - 1 : entry.key,
+                  entry.value > index ? entry.value - 1 : entry.value,
+                ),
+              ),
+        );
+      if (_attachmentPointIndex == index) _attachmentPointIndex = null;
+      if (_attachmentPointIndex != null && _attachmentPointIndex! > index) {
+        _attachmentPointIndex = _attachmentPointIndex! - 1;
+      }
+      if (_styleSourceIndex == index) {
+        _styleSourceIndex = null;
+      } else if (_styleSourceIndex != null && _styleSourceIndex! > index) {
+        _styleSourceIndex = _styleSourceIndex! - 1;
+      }
+      if (_intersectionSourceIndex == index) {
+        _intersectionSourceIndex = null;
+      } else if (_intersectionSourceIndex != null &&
+          _intersectionSourceIndex! > index) {
+        _intersectionSourceIndex = _intersectionSourceIndex! - 1;
+      }
+      if (_pointIntersectionSourceIndex == index) {
+        _pointIntersectionSourceIndex = null;
+      } else if (_pointIntersectionSourceIndex != null &&
+          _pointIntersectionSourceIndex! > index) {
+        _pointIntersectionSourceIndex = _pointIntersectionSourceIndex! - 1;
+      }
+      if (_conicSourceIndex == index) {
+        _conicSourceIndex = null;
+      } else if (_conicSourceIndex != null && _conicSourceIndex! > index) {
+        _conicSourceIndex = _conicSourceIndex! - 1;
+      }
+      _objectsVersion++;
+    });
+  }
+
+  bool _wouldCreateAttachmentCycle(int pointIndex, int targetIndex) {
+    var current = targetIndex;
+    final visited = <int>{};
+    while (current >= 0 && current < _objects.length) {
+      if (current == pointIndex) return true;
+      if (!visited.add(current)) return true;
+      final next = _pointAttachments[current];
+      if (next == null) return false;
+      current = next;
+    }
+    return false;
+  }
+
+  void _propagateAttachedPointMoves(int targetIndex) {
+    final pending = <int>[targetIndex];
+    final visited = <int>{targetIndex};
+    while (pending.isNotEmpty) {
+      final currentTargetIndex = pending.removeAt(0);
+      if (currentTargetIndex < 0 || currentTargetIndex >= _objects.length) {
+        continue;
+      }
+      for (final attachment in _pointAttachments.entries) {
+        final attachedIndex = attachment.key;
+        if (attachment.value != currentTargetIndex ||
+            attachedIndex < 0 ||
+            attachedIndex >= _objects.length ||
+            !visited.add(attachedIndex)) {
+          continue;
+        }
+        final attachedPoint = _objects[attachedIndex];
+        if (attachedPoint.type != Object3DType.point) continue;
+        final position = _constrainPointToObject(
+          attachedPoint.point,
+          _objects[currentTargetIndex],
+        );
+        if (position != attachedPoint.point) {
+          _objects[attachedIndex] = attachedPoint.copyWith(point: position);
+        }
+        pending.add(attachedIndex);
+      }
+    }
+  }
+
+  double? _objectVolume(Object3D object) {
+    if (object.type == Object3DType.sphere) {
+      final radius = object.sphereRadius.abs();
+      return 4 / 3 * dart_math.pi * radius * radius * radius;
+    }
+    if (object.type != Object3DType.polyhedron || !_isClosedMesh(object)) {
+      return null;
+    }
+
+    final faceCount = object.indices.length ~/ 3;
+    final adjacentFaces = List.generate(faceCount, (_) => <int>{});
+    final edgeFaces = <String, List<int>>{};
+    String edgeKey(int first, int second) =>
+        first < second ? '$first:$second' : '$second:$first';
+    for (var face = 0; face < faceCount; face++) {
+      final offset = face * 3;
+      final a = object.indices[offset];
+      final b = object.indices[offset + 1];
+      final c = object.indices[offset + 2];
+      for (final edge in [(a, b), (b, c), (c, a)]) {
+        edgeFaces.putIfAbsent(edgeKey(edge.$1, edge.$2), () => []).add(face);
+      }
+    }
+    for (final faces in edgeFaces.values) {
+      if (faces.length == 2) {
+        adjacentFaces[faces[0]].add(faces[1]);
+        adjacentFaces[faces[1]].add(faces[0]);
+      }
+    }
+
+    final visitedFaces = <int>{};
+    var totalVolume = 0.0;
+    for (var seed = 0; seed < faceCount; seed++) {
+      if (!visitedFaces.add(seed)) continue;
+
+      final firstIndex = object.indices[seed * 3];
+      final reference = object.vertices[firstIndex];
+      final pendingFaces = <int>[seed];
+      var componentVolume = 0.0;
+      while (pendingFaces.isNotEmpty) {
+        final face = pendingFaces.removeLast();
+        final offset = face * 3;
+        final a = object.vertices[object.indices[offset]] - reference;
+        final b = object.vertices[object.indices[offset + 1]] - reference;
+        final c = object.vertices[object.indices[offset + 2]] - reference;
+        componentVolume += a.dot(b.cross(c)) / 6;
+        for (final adjacent in adjacentFaces[face]) {
+          if (visitedFaces.add(adjacent)) pendingFaces.add(adjacent);
+        }
+      }
+      totalVolume += componentVolume.abs();
+    }
+    return totalVolume;
+  }
+
+  bool _isClosedMesh(Object3D object) {
+    if (object.indices.length < 12 || object.indices.length % 3 != 0) {
+      return false;
+    }
+    final edgeUseCount = <String, int>{};
+    final edgeDirectionBalance = <String, int>{};
+    void countEdge(int first, int second) {
+      final key = first < second ? '$first:$second' : '$second:$first';
+      edgeUseCount.update(key, (count) => count + 1, ifAbsent: () => 1);
+      final direction = first < second ? 1 : -1;
+      edgeDirectionBalance.update(
+        key,
+        (balance) => balance + direction,
+        ifAbsent: () => direction,
+      );
+    }
+
+    for (var i = 0; i + 2 < object.indices.length; i += 3) {
+      final a = object.indices[i];
+      final b = object.indices[i + 1];
+      final c = object.indices[i + 2];
+      if (a < 0 ||
+          b < 0 ||
+          c < 0 ||
+          a >= object.vertices.length ||
+          b >= object.vertices.length ||
+          c >= object.vertices.length) {
+        return false;
+      }
+      countEdge(a, b);
+      countEdge(b, c);
+      countEdge(c, a);
+    }
+    return edgeUseCount.entries.every(
+      (edge) => edge.value == 2 && edgeDirectionBalance[edge.key] == 0,
+    );
+  }
+
+  Object3D? _unfoldPolyhedron(Object3D object) {
+    if (object.type != Object3DType.polyhedron ||
+        object.indices.length < 3 ||
+        object.indices.length % 3 != 0) {
+      return null;
+    }
+    final triangles = <List<int>>[];
+    final edgeFaces = <String, List<int>>{};
+
+    String edgeKey(int first, int second) =>
+        first < second ? '$first:$second' : '$second:$first';
+
+    for (var i = 0; i + 2 < object.indices.length; i += 3) {
+      final triangle = [
+        object.indices[i],
+        object.indices[i + 1],
+        object.indices[i + 2],
+      ];
+      if (triangle.any(
+        (index) => index < 0 || index >= object.vertices.length,
+      )) {
+        return null;
+      }
+      final faceIndex = triangles.length;
+      triangles.add(triangle);
+      for (var edge = 0; edge < 3; edge++) {
+        final key = edgeKey(triangle[edge], triangle[(edge + 1) % 3]);
+        edgeFaces.putIfAbsent(key, () => []).add(faceIndex);
+      }
+    }
+
+    final unfoldedFaces = List<List<Offset>?>.filled(triangles.length, null);
+    var componentOffsetX = 0.0;
+    for (var start = 0; start < triangles.length; start++) {
+      if (unfoldedFaces[start] != null) continue;
+      final triangle = triangles[start];
+      final a = object.vertices[triangle[0]];
+      final b = object.vertices[triangle[1]];
+      final c = object.vertices[triangle[2]];
+      final edgeLength = a.distanceTo(b);
+      if (edgeLength < 1e-9) continue;
+      final distanceAC = a.distanceTo(c);
+      final distanceBC = b.distanceTo(c);
+      final along =
+          (distanceAC * distanceAC -
+              distanceBC * distanceBC +
+              edgeLength * edgeLength) /
+          (2 * edgeLength);
+      final height = dart_math.sqrt(
+        dart_math.max(0, distanceAC * distanceAC - along * along),
+      );
+      unfoldedFaces[start] = [
+        Offset(componentOffsetX, 0),
+        Offset(componentOffsetX + edgeLength, 0),
+        Offset(componentOffsetX + along, height),
+      ];
+      final queue = <int>[start];
+      var queueIndex = 0;
+      var componentMaxX = componentOffsetX + edgeLength + along.abs();
+
+      while (queueIndex < queue.length) {
+        final parentIndex = queue[queueIndex++];
+        final parentIds = triangles[parentIndex];
+        final parentPoints = unfoldedFaces[parentIndex]!;
+        for (var edge = 0; edge < 3; edge++) {
+          final sharedA = parentIds[edge];
+          final sharedB = parentIds[(edge + 1) % 3];
+          final key = edgeKey(sharedA, sharedB);
+          for (final childIndex in edgeFaces[key] ?? const <int>[]) {
+            if (childIndex == parentIndex || unfoldedFaces[childIndex] != null)
+              continue;
+            final childIds = triangles[childIndex];
+            final parentAIndex = parentIds.indexOf(sharedA);
+            final parentBIndex = parentIds.indexOf(sharedB);
+            final parentThirdIndex = 3 - parentAIndex - parentBIndex;
+            final childAIndex = childIds.indexOf(sharedA);
+            final childBIndex = childIds.indexOf(sharedB);
+            if (childAIndex < 0 || childBIndex < 0) continue;
+            final childThirdIndex = 3 - childAIndex - childBIndex;
+            final pointA = parentPoints[parentAIndex];
+            final pointB = parentPoints[parentBIndex];
+            final edgeVector = pointB - pointA;
+            final flatEdgeLength = edgeVector.distance;
+            if (flatEdgeLength < 1e-9) continue;
+            final direction = Offset(
+              edgeVector.dx / flatEdgeLength,
+              edgeVector.dy / flatEdgeLength,
+            );
+            final thirdPoint3D = object.vertices[childIds[childThirdIndex]];
+            final sharedPointA3D = object.vertices[sharedA];
+            final sharedPointB3D = object.vertices[sharedB];
+            final distanceA = thirdPoint3D.distanceTo(sharedPointA3D);
+            final distanceB = thirdPoint3D.distanceTo(sharedPointB3D);
+            final childAlong =
+                (distanceA * distanceA -
+                    distanceB * distanceB +
+                    flatEdgeLength * flatEdgeLength) /
+                (2 * flatEdgeLength);
+            final childHeight = dart_math.sqrt(
+              dart_math.max(0, distanceA * distanceA - childAlong * childAlong),
+            );
+            final parentThird = parentPoints[parentThirdIndex];
+            final parentSide =
+                edgeVector.dx * (parentThird.dy - pointA.dy) -
+                edgeVector.dy * (parentThird.dx - pointA.dx);
+            final outward =
+                Offset(-direction.dy, direction.dx) *
+                (parentSide >= 0 ? -1 : 1);
+            final childPoints = List<Offset>.filled(3, Offset.zero);
+            childPoints[childAIndex] = pointA;
+            childPoints[childBIndex] = pointB;
+            childPoints[childThirdIndex] =
+                pointA + direction * childAlong + outward * childHeight;
+            unfoldedFaces[childIndex] = childPoints;
+            for (final point in childPoints) {
+              componentMaxX = dart_math.max(componentMaxX, point.dx).toDouble();
+            }
+            queue.add(childIndex);
+          }
+        }
+      }
+      componentOffsetX = componentMaxX + 1;
+    }
+
+    final vertices = <Point3D>[];
+    final indices = <int>[];
+    var minX = double.infinity;
+    var maxX = -double.infinity;
+    var minY = double.infinity;
+    var maxY = -double.infinity;
+    for (final face in unfoldedFaces) {
+      if (face == null) continue;
+      for (final point in face) {
+        minX = dart_math.min(minX, point.dx).toDouble();
+        maxX = dart_math.max(maxX, point.dx).toDouble();
+        minY = dart_math.min(minY, point.dy).toDouble();
+        maxY = dart_math.max(maxY, point.dy).toDouble();
+      }
+    }
+    if (!minX.isFinite) return null;
+    final centerX = (minX + maxX) / 2;
+    final centerY = (minY + maxY) / 2;
+    final view = camera.viewMatrix();
+    final right = Vector3D(view[0], view[4], view[8]).normalized();
+    final up = Vector3D(view[1], view[5], view[9]).normalized();
+    final viewCenter = camera.target;
+    for (final face in unfoldedFaces) {
+      if (face == null) continue;
+      final firstIndex = vertices.length;
+      vertices.addAll(
+        face.map(
+          (point) =>
+              viewCenter +
+              right * (point.dx - centerX) +
+              up * (point.dy - centerY),
+        ),
+      );
+      indices.addAll([firstIndex, firstIndex + 1, firstIndex + 2]);
+    }
+    if (indices.isEmpty) return null;
+    return Object3D.polyhedron(
+      vertices: vertices,
+      indices: indices,
+      color: object.color,
+      label: '展开图',
+    );
+  }
+
   void _cancelPointDrag() {
     if (_pointBeforeDrag != null && _selectedPointIndex != null) {
       _objects[_selectedPointIndex!] = _pointBeforeDrag!;
+      _propagateAttachedPointMoves(_selectedPointIndex!);
       _objectsVersion++;
     }
     _pointBeforeDrag = null;
@@ -477,17 +3094,17 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       if (hit != null) return;
     }
     if (event.kind != PointerDeviceKind.mouse) return;
-    final mayNavigate = _currentTool == ConstructionTool.move ||
-        secondary ||
-        _panModifierPressed;
+    final navigationTool =
+        ToolInfo.all[_currentTool]!.behavior == ToolBehavior.navigation;
+    final mayNavigate = navigationTool || secondary || _panModifierPressed;
     if (!mayNavigate || (!primary && !secondary)) return;
     _mousePointer = event.pointer;
     _lastMousePosition = event.localPosition;
     _mouseGesture = secondary
         ? _NavigationGesture.orbit
-        : (_panModifierPressed
-            ? _NavigationGesture.pan
-            : _NavigationGesture.orbit);
+        : (_currentTool == ConstructionTool.panView || _panModifierPressed
+              ? _NavigationGesture.pan
+              : _NavigationGesture.orbit);
   }
 
   void _onPointerMove(PointerMoveEvent event) {
@@ -505,7 +3122,10 @@ class MathCanvas3DState extends State<MathCanvas3D> {
             ? dart_math.min(1.0, a.z / 2)
             : 1.0;
         final b = worldToScreen(
-            start + Vector3D.unitZ * heightStep, camera, projection);
+          start + Vector3D.unitZ * heightStep,
+          camera,
+          projection,
+        );
         final axis = Offset(b.x - a.x, b.y - a.y);
         // Looking straight down makes the z axis collapse to a screen point.
         // Keep an intuitive upward drag in that view as well.
@@ -521,13 +3141,21 @@ class MathCanvas3DState extends State<MathCanvas3D> {
         if (axis.distanceSquared > 16) dz *= heightStep;
         position = Point3D(start.x, start.y, start.z + dz);
       } else {
-        final startRay =
-            _screenRay(_pointerDownPosition!.dx, _pointerDownPosition!.dy);
+        final startRay = _screenRay(
+          _pointerDownPosition!.dx,
+          _pointerDownPosition!.dy,
+        );
         final ray = _screenRay(event.localPosition.dx, event.localPosition.dy);
-        final a = _intersectWorkingPlane(startRay,
-            point: start, normal: Vector3D.unitZ);
-        final b =
-            _intersectWorkingPlane(ray, point: start, normal: Vector3D.unitZ);
+        final a = _intersectWorkingPlane(
+          startRay,
+          point: start,
+          normal: Vector3D.unitZ,
+        );
+        final b = _intersectWorkingPlane(
+          ray,
+          point: start,
+          normal: Vector3D.unitZ,
+        );
         if (ray.direction.z.abs() > 0.02 && a != null && b != null) {
           final offset = b - a;
           position = Point3D(start.x + offset.x, start.y + offset.y, start.z);
@@ -535,15 +3163,23 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           // A horizontal plane is edge-on in front/side views.
           final view = camera.viewMatrix();
           final right = Vector3D(view[0], view[4], 0).normalized();
-          position = start +
+          position =
+              start +
               right * (delta.dx * _computeScaleForCanvas() * 2 / _canvasHeight);
         }
       }
       if (![position.x, position.y, position.z].every((v) => v.isFinite))
         return;
+      final attachedObject = _pointAttachments[_selectedPointIndex!];
+      if (attachedObject != null &&
+          attachedObject >= 0 &&
+          attachedObject < _objects.length) {
+        position = _constrainPointToObject(position, _objects[attachedObject]);
+      }
       setState(() {
-        _objects[_selectedPointIndex!] =
-            _pointBeforeDrag!.copyWith(point: position);
+        final selectedIndex = _selectedPointIndex!;
+        _objects[selectedIndex] = _pointBeforeDrag!.copyWith(point: position);
+        _propagateAttachedPointMoves(selectedIndex);
         _objectsVersion++;
       });
       return;
@@ -656,10 +3292,17 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     _initialScaleDistance = _cameraDistance;
     if (_suppressScale || _multiTouch) return;
 
+    final behavior = ToolInfo.all[_currentTool]!.behavior;
+    if (behavior == ToolBehavior.objectAction) {
+      _constStartPoint = details.localFocalPoint;
+      _lastFocalPoint = details.localFocalPoint;
+      return;
+    }
+
     // In construction mode, start tracking a point on the active working
     // plane. The first point uses a coordinate plane; later points use a
     // screen-facing plane through the previous construction point.
-    if (_currentTool != ConstructionTool.move && _construction != null) {
+    if (behavior == ToolBehavior.construction && _construction != null) {
       _constStartPoint = _pointerDownPosition ?? details.localFocalPoint;
       _constGroundPos = _screenToConstructionPlane(
         _constStartPoint!.dx,
@@ -680,9 +3323,15 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     final scale = details.scale;
     if (details.pointerCount < 2 && (_suppressScale || _multiTouch)) return;
 
+    final behavior = ToolInfo.all[_currentTool]!.behavior;
+    if (behavior == ToolBehavior.objectAction) {
+      _lastFocalPoint = focalPoint;
+      return;
+    }
+
     // ===== Construction mode: tap → point on a working plane, drag →
     // adjust height or move across the screen-facing construction plane.
-    if (_currentTool != ConstructionTool.move &&
+    if (behavior == ToolBehavior.construction &&
         _construction != null &&
         !_constPointPlaced &&
         !_multiTouch &&
@@ -698,16 +3347,23 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     // ===== Standard orbit/pan/zoom (Move tool or no construction active)
     if (details.pointerCount == 1) {
       // Single finger: orbit
-      final dx =
-          _lastFocalPoint == null ? 0.0 : (focalPoint.dx - _lastFocalPoint!.dx);
-      final dy =
-          _lastFocalPoint == null ? 0.0 : (focalPoint.dy - _lastFocalPoint!.dy);
+      final dx = _lastFocalPoint == null
+          ? 0.0
+          : (focalPoint.dx - _lastFocalPoint!.dx);
+      final dy = _lastFocalPoint == null
+          ? 0.0
+          : (focalPoint.dy - _lastFocalPoint!.dy);
 
-      _orbitBy(Offset(dx, dy));
+      if (_currentTool == ConstructionTool.panView) {
+        _panBy(Offset(dx, dy));
+      } else {
+        _orbitBy(Offset(dx, dy));
+      }
     } else if (details.pointerCount >= 2) {
       // GeoGebra combines two-finger translation and pinch in one gesture.
-      final delta =
-          _lastFocalPoint == null ? Offset.zero : focalPoint - _lastFocalPoint!;
+      final delta = _lastFocalPoint == null
+          ? Offset.zero
+          : focalPoint - _lastFocalPoint!;
       final startDistance = _initialScaleDistance ?? _cameraDistance;
       final newDistance = (startDistance / scale).clamp(0.25, 500.0).toDouble();
       final panned = Camera3D(
@@ -733,10 +3389,18 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       _constStartPoint = null;
       return;
     }
+    final behavior = ToolInfo.all[_currentTool]!.behavior;
+    if (behavior == ToolBehavior.objectAction && _constStartPoint != null) {
+      _performObjectAction(_lastFocalPoint ?? _constStartPoint!);
+      _constStartPoint = null;
+      _lastFocalPoint = null;
+      widget.onViewportChange?.call();
+      return;
+    }
     // ===== Construction mode: finalize the point with the latest spatial
     // position. A second sphere point therefore remains in 3D instead of
     // falling back to z=0.
-    if (_currentTool != ConstructionTool.move &&
+    if (behavior == ToolBehavior.construction &&
         _construction != null &&
         !_constPointPlaced &&
         _constGroundPos != null) {
@@ -755,7 +3419,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     }
 
     // Handle the case where user just tapped without dragging
-    if (_currentTool != ConstructionTool.move &&
+    if (behavior == ToolBehavior.construction &&
         _construction != null &&
         !_constPointPlaced &&
         _constGroundPos == null &&
@@ -801,8 +3465,9 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
   void _onPointerPanZoomUpdate(PointerPanZoomUpdateEvent event) {
     final initialDistance = _panZoomInitialDistance ?? _cameraDistance;
-    final newDistance =
-        (initialDistance / event.scale).clamp(0.25, 500.0).toDouble();
+    final newDistance = (initialDistance / event.scale)
+        .clamp(0.25, 500.0)
+        .toDouble();
     final panned = Camera3D(
       target: _cameraTarget,
       distance: newDistance,
@@ -861,13 +3526,12 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     Ray3D ray, {
     required Point3D point,
     required Vector3D normal,
-  }) =>
-      intersectRayPlane(
-        ray,
-        point: point,
-        normal: normal,
-        allowBehind: _projectionType == ProjectionType.parallel,
-      );
+  }) => intersectRayPlane(
+    ray,
+    point: point,
+    normal: normal,
+    allowBehind: _projectionType == ProjectionType.parallel,
+  );
 
   Projection3D _currentProjection() {
     return _projectionType == ProjectionType.parallel
@@ -894,6 +3558,15 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     if (_canvasWidth <= 0 || _canvasHeight <= 0) return null;
     final projection = _currentProjection();
     final candidates = <Point3D>[Point3D.origin];
+    if (const {
+      ConstructionTool.polygon,
+      ConstructionTool.area,
+      ConstructionTool.polyline,
+      ConstructionTool.locus,
+    }.contains(_currentTool)) {
+      final points = _construction?.points ?? const <Point3D>[];
+      if (points.isNotEmpty) candidates.add(points.first);
+    }
     final surfaceCandidates = <Point3D>[];
 
     void addSegmentCandidate(Point3D a, Point3D b) {
@@ -905,12 +3578,13 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       final t = lengthSquared < 1e-9
           ? 0.0
           : ((screenX - aScreen.x) * dx + (screenY - aScreen.y) * dy) /
-              lengthSquared;
+                lengthSquared;
       var clampedT = t.clamp(0.0, 1.0).toDouble();
       if (projection.type == ProjectionType.perspective &&
           aScreen.z > 0 &&
           bScreen.z > 0) {
-        clampedT = clampedT *
+        clampedT =
+            clampedT *
             aScreen.z /
             ((1 - clampedT) * bScreen.z + clampedT * aScreen.z);
       }
@@ -925,6 +3599,11 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
     final ray = _screenRay(screenX, screenY);
     for (final object in _objects) {
+      if (!object.visible ||
+          object.opacity <= 0 ||
+          ((object.color >> 24) & 0xFF) == 0) {
+        continue;
+      }
       switch (object.type) {
         case Object3DType.point:
           candidates.add(object.point);
@@ -935,10 +3614,29 @@ class MathCanvas3DState extends State<MathCanvas3D> {
             addSegmentCandidate(endpoints[0], endpoints[1]);
         case Object3DType.surface:
         case Object3DType.polyhedron:
+          candidates.addAll(object.vertices);
+          for (var i = 0; i + 2 < object.indices.length; i += 3) {
+            final a = object.indices[i];
+            final b = object.indices[i + 1];
+            final c = object.indices[i + 2];
+            if (a < 0 ||
+                a >= object.vertices.length ||
+                b < 0 ||
+                b >= object.vertices.length ||
+                c < 0 ||
+                c >= object.vertices.length) {
+              continue;
+            }
+            addSegmentCandidate(object.vertices[a], object.vertices[b]);
+            addSegmentCandidate(object.vertices[b], object.vertices[c]);
+            addSegmentCandidate(object.vertices[c], object.vertices[a]);
+          }
         case Object3DType.curve:
           candidates.addAll(object.vertices);
           for (var i = 1; i < object.vertices.length; i++) {
-            addSegmentCandidate(object.vertices[i - 1], object.vertices[i]);
+            if (!object.curveStarts.contains(i)) {
+              addSegmentCandidate(object.vertices[i - 1], object.vertices[i]);
+            }
           }
         case Object3DType.sphere:
           candidates.add(object.sphereCenter);
@@ -950,7 +3648,9 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           if (distanceToRay <= radius && alongRay >= 0) {
             final offset = dart_math.sqrt(
               dart_math.max(
-                  0.0, radius * radius - distanceToRay * distanceToRay),
+                0.0,
+                radius * radius - distanceToRay * distanceToRay,
+              ),
             );
             final hitDistance = dart_math.max(0.0, alongRay - offset);
             surfaceCandidates.add(ray.pointAt(hitDistance));
@@ -959,24 +3659,14 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           candidates.addAll([object.point, object.point + object.vector]);
           addSegmentCandidate(object.point, object.point + object.vector);
         case Object3DType.plane:
-          final normal = Vector3D(
-            object.planeA,
-            object.planeB,
-            object.planeC,
-          );
-          final normalSquared = normal.dot(normal);
-          if (normalSquared < 1e-12) break;
-          final planeOrigin = Point3D(
-            object.planeA * object.planeD / normalSquared,
-            object.planeB * object.planeD / normalSquared,
-            object.planeC * object.planeD / normalSquared,
-          );
+          final equation = _normalizedPlaneEquation(object);
+          if (equation == null) break;
           final hit = _intersectWorkingPlane(
             ray,
-            point: planeOrigin,
-            normal: normal,
+            point: equation.origin,
+            normal: equation.normal,
           );
-          if (hit != null && hit.distanceTo(planeOrigin) <= 7.5) {
+          if (hit != null && _withinRenderedPlaneGrid(object, hit)) {
             surfaceCandidates.add(hit);
           }
       }
@@ -1014,7 +3704,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
     final ray = _screenRay(screenX, screenY);
     final points = _construction?.points ?? const <Point3D>[];
-    final normal = normalOverride ??
+    final normal =
+        normalOverride ??
         (points.isEmpty ? Vector3D.unitZ : _constructionPlaneNormal);
     final planePoint = points.isEmpty ? Point3D.origin : points.last;
     final hit = _intersectWorkingPlane(ray, point: planePoint, normal: normal);
@@ -1060,8 +3751,9 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
     final pixelsPerWorldUnit =
         _canvasHeight / (_cameraDistance * _orthographicDistanceScale * 2);
-    _constHeight = -((focalPoint.dy - (_constStartPoint?.dy ?? focalPoint.dy)) /
-        pixelsPerWorldUnit);
+    _constHeight =
+        -((focalPoint.dy - (_constStartPoint?.dy ?? focalPoint.dy)) /
+            pixelsPerWorldUnit);
     final base = _constGroundPos ?? Point3D.origin;
     return Point3D(base.x, base.y, base.z + _constHeight);
   }
@@ -1104,6 +3796,30 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   /// Handle a placed 3D point during construction.
   /// Advances the construction state and creates the object when ready.
   void _handleConstructionPoint(Point3D worldPt) {
+    if (_currentTool == ConstructionTool.text) {
+      _showTextInput(worldPt);
+      _constPointPlaced = false;
+      return;
+    }
+    int? pointOnObjectTargetIndex;
+    if (_currentTool == ConstructionTool.pointOnObject) {
+      final selectionPosition = _constStartPoint;
+      final targetIndex = selectionPosition == null
+          ? null
+          : _hitObjectIndex(selectionPosition);
+      if (targetIndex == null) {
+        widget.onToolInstruction?.call('请点击现有对象上的位置');
+        return;
+      }
+      pointOnObjectTargetIndex = targetIndex;
+      final target = _objects[targetIndex];
+      final placementPosition = _lastFocalPoint ?? selectionPosition;
+      if (placementPosition != null) {
+        worldPt = _pointOnObjectAtScreen(target, placementPosition, worldPt);
+      } else {
+        worldPt = _constrainPointToObject(worldPt, target);
+      }
+    }
     if (_construction == null) return;
 
     final action = _construction!.addPoint(
@@ -1119,18 +3835,40 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           while (_objects.any((object) => object.label == '$name$number')) {
             number++;
           }
-          final obj = result.copyWith(label: '$name$number');
-          widget.onObjectCreated?.call(obj);
-          if (_currentTool == ConstructionTool.point) {
-            final index = _objects.indexOf(obj);
+          final keepMeasurement = const {
+            ConstructionTool.angle,
+            ConstructionTool.distance,
+            ConstructionTool.area,
+          }.contains(_currentTool);
+          final obj = result.copyWith(
+            label: keepMeasurement ? result.label : '$name$number',
+          );
+          if (widget.onObjectCreated != null) {
+            widget.onObjectCreated!(obj);
+          } else {
             setState(() {
-              _selectedPointIndex = index < 0 ? null : index;
-              _pointDragMode = PointDragMode.height;
+              _objects.add(obj);
+              _objectsVersion++;
             });
+          }
+          if (_currentTool == ConstructionTool.point ||
+              _currentTool == ConstructionTool.pointOnObject) {
+            final index = _objects.indexOf(obj);
+            if (index >= 0) {
+              setState(() {
+                _selectedPointIndex = index;
+                _pointDragMode = PointDragMode.height;
+                if (pointOnObjectTargetIndex != null) {
+                  _pointAttachments[index] = pointOnObjectTargetIndex!;
+                }
+              });
+            }
           }
         }
         _construction = ConstructionState(
-            tool: _currentTool, polygonSides: widget.polygonSides);
+          tool: _currentTool,
+          polygonSides: widget.polygonSides,
+        );
         break;
       case ConstructionAction.advanceStep:
         // Continue to next step
@@ -1140,7 +3878,9 @@ class MathCanvas3DState extends State<MathCanvas3D> {
         break;
       case ConstructionAction.reset:
         _construction = ConstructionState(
-            tool: _currentTool, polygonSides: widget.polygonSides);
+          tool: _currentTool,
+          polygonSides: widget.polygonSides,
+        );
         break;
     }
     widget.onToolInstruction?.call(_construction?.currentInstruction ?? '');
@@ -1152,6 +3892,37 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     // Update preview objects
     _objectsVersion++;
     _constructionPreview = _construction?.previewObject;
+  }
+
+  Future<void> _showTextInput(Point3D point) async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('添加文本'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: '输入要显示的内容'),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('添加'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || text == null || text.trim().isEmpty) return;
+    _appendCreatedObject(
+      Object3D.text(point, text: text.trim(), color: 0xFF1565C0),
+    );
   }
 
   // ==================================================================
@@ -1225,87 +3996,87 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   }
 
   List<PopupMenuEntry<_ViewAction>> _viewMenuItems() => [
-        _menuToggle(
-          value: _ViewAction.toggleAxes,
-          icon: Icons.straighten,
-          label: '坐标轴',
-          selected: _showAxes,
-        ),
-        _menuToggle(
-          value: _ViewAction.togglePlane,
-          icon: Icons.crop_square,
-          label: 'xOy 平面',
-          selected: _showPlane,
-        ),
-        _menuToggle(
-          value: _ViewAction.toggleGrid,
-          icon: Icons.grid_on,
-          label: '网格',
-          selected: _showGrid,
-        ),
-        const PopupMenuDivider(),
-        PopupMenuItem(
-          value: _ViewAction.parallelProjection,
-          child: Row(
-            children: [
-              const Icon(Icons.view_in_ar, size: 20),
-              const SizedBox(width: 12),
-              const Expanded(child: Text('平行投影')),
-              if (_projectionType == ProjectionType.parallel)
-                const Icon(Icons.check, size: 18),
-            ],
-          ),
-        ),
-        PopupMenuItem(
-          value: _ViewAction.perspectiveProjection,
-          child: Row(
-            children: [
-              const Icon(Icons.vrpano, size: 20),
-              const SizedBox(width: 12),
-              const Expanded(child: Text('透视投影')),
-              if (_projectionType == ProjectionType.perspective)
-                const Icon(Icons.check, size: 18),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(),
-        const PopupMenuItem(
-          value: _ViewAction.standardView,
-          child: ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.home_outlined, size: 20),
-            title: Text('标准视图'),
-          ),
-        ),
-        const PopupMenuItem(
-          value: _ViewAction.topView,
-          child: ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.vertical_align_bottom, size: 20),
-            title: Text('俯视 xOy'),
-          ),
-        ),
-        const PopupMenuItem(
-          value: _ViewAction.frontView,
-          child: ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.crop_landscape, size: 20),
-            title: Text('正视 xOz'),
-          ),
-        ),
-        const PopupMenuItem(
-          value: _ViewAction.sideView,
-          child: ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.crop_portrait, size: 20),
-            title: Text('侧视 yOz'),
-          ),
-        ),
-      ];
+    _menuToggle(
+      value: _ViewAction.toggleAxes,
+      icon: Icons.straighten,
+      label: '坐标轴',
+      selected: _showAxes,
+    ),
+    _menuToggle(
+      value: _ViewAction.togglePlane,
+      icon: Icons.crop_square,
+      label: 'xOy 平面',
+      selected: _showPlane,
+    ),
+    _menuToggle(
+      value: _ViewAction.toggleGrid,
+      icon: Icons.grid_on,
+      label: '网格',
+      selected: _showGrid,
+    ),
+    const PopupMenuDivider(),
+    PopupMenuItem(
+      value: _ViewAction.parallelProjection,
+      child: Row(
+        children: [
+          const Icon(Icons.view_in_ar, size: 20),
+          const SizedBox(width: 12),
+          const Expanded(child: Text('平行投影')),
+          if (_projectionType == ProjectionType.parallel)
+            const Icon(Icons.check, size: 18),
+        ],
+      ),
+    ),
+    PopupMenuItem(
+      value: _ViewAction.perspectiveProjection,
+      child: Row(
+        children: [
+          const Icon(Icons.vrpano, size: 20),
+          const SizedBox(width: 12),
+          const Expanded(child: Text('透视投影')),
+          if (_projectionType == ProjectionType.perspective)
+            const Icon(Icons.check, size: 18),
+        ],
+      ),
+    ),
+    const PopupMenuDivider(),
+    const PopupMenuItem(
+      value: _ViewAction.standardView,
+      child: ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(Icons.home_outlined, size: 20),
+        title: Text('标准视图'),
+      ),
+    ),
+    const PopupMenuItem(
+      value: _ViewAction.topView,
+      child: ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(Icons.vertical_align_bottom, size: 20),
+        title: Text('俯视 xOy'),
+      ),
+    ),
+    const PopupMenuItem(
+      value: _ViewAction.frontView,
+      child: ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(Icons.crop_landscape, size: 20),
+        title: Text('正视 xOz'),
+      ),
+    ),
+    const PopupMenuItem(
+      value: _ViewAction.sideView,
+      child: ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(Icons.crop_portrait, size: 20),
+        title: Text('侧视 yOz'),
+      ),
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -1352,6 +4123,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
                           showAxes: _showAxes,
                           showPlane: _showPlane,
                           showGrid: _showGrid,
+                          showLabels: _showLabels,
                           objects: _objects,
                           selectedPoint: selectedPoint,
                           pointDragMode: _pointDragMode,
@@ -1380,31 +4152,37 @@ class MathCanvas3DState extends State<MathCanvas3D> {
                             backgroundColor: cs.surfaceContainerHigh,
                             foregroundColor: cs.onSurface,
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                           icon: Icon(
-                              _pointDragMode == PointDragMode.height
-                                  ? Icons.height
-                                  : Icons.open_with,
-                              size: 20),
+                            _pointDragMode == PointDragMode.height
+                                ? Icons.height
+                                : Icons.open_with,
+                            size: 20,
+                          ),
                           onPressed: () => setState(() {
                             _pointDragMode =
                                 _pointDragMode == PointDragMode.plane
-                                    ? PointDragMode.height
-                                    : PointDragMode.plane;
+                                ? PointDragMode.height
+                                : PointDragMode.plane;
                           }),
                           label: Column(
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                  '${selectedPoint!.label ?? '点'} · ${_pointDragMode == PointDragMode.height ? '高度移动' : '平面移动'} · 点击切换',
-                                  style: const TextStyle(fontSize: 12)),
+                                '${selectedPoint!.label ?? '点'} · ${_pointDragMode == PointDragMode.height ? '高度移动' : '平面移动'} · 点击切换',
+                                style: const TextStyle(fontSize: 12),
+                              ),
                               Text(
-                                  'x ${selectedPoint!.point.x.toStringAsFixed(2)}  y ${selectedPoint!.point.y.toStringAsFixed(2)}  z ${selectedPoint!.point.z.toStringAsFixed(2)}',
-                                  style: const TextStyle(fontSize: 12)),
+                                'x ${selectedPoint!.point.x.toStringAsFixed(2)}  y ${selectedPoint!.point.y.toStringAsFixed(2)}  z ${selectedPoint!.point.z.toStringAsFixed(2)}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
                             ],
                           ),
                         ),
@@ -1478,6 +4256,7 @@ class MathCanvas3DPainter extends CustomPainter {
   final bool showAxes;
   final bool showPlane;
   final bool showGrid;
+  final bool showLabels;
   final List<Object3D> objects;
   final Object3D? constructionPreview;
   final Object3D? selectedPoint;
@@ -1499,6 +4278,7 @@ class MathCanvas3DPainter extends CustomPainter {
     this.showAxes = true,
     this.showPlane = true,
     this.showGrid = false,
+    this.showLabels = true,
     this.objects = const [],
     this.constructionPreview,
     this.selectedPoint,
@@ -1560,10 +4340,16 @@ class MathCanvas3DPainter extends CustomPainter {
         ..strokeWidth = 1.8
         ..style = PaintingStyle.stroke;
       canvas.drawCircle(center, 10, guide);
-      final ground =
-          worldToScreen(Point3D(point.x, point.y, 0), camera, projection);
-      canvas.drawLine(center, Offset(ground.x, ground.y),
-          guide..color = const Color(0x807C4DFF));
+      final ground = worldToScreen(
+        Point3D(point.x, point.y, 0),
+        camera,
+        projection,
+      );
+      canvas.drawLine(
+        center,
+        Offset(ground.x, ground.y),
+        guide..color = const Color(0x807C4DFF),
+      );
       guide.color = const Color(0xFF7C4DFF);
       final directions = pointDragMode == PointDragMode.height
           ? [const Offset(0, 28), const Offset(0, -28)]
@@ -1571,12 +4357,16 @@ class MathCanvas3DPainter extends CustomPainter {
               const Offset(28, 0),
               const Offset(-28, 0),
               const Offset(0, 28),
-              const Offset(0, -28)
+              const Offset(0, -28),
             ];
       for (final direction in directions) {
         canvas.drawLine(center + direction * 0.5, center + direction, guide);
         _drawArrowHead(
-            canvas, center, center + direction, Paint()..color = guide.color);
+          canvas,
+          center,
+          center + direction,
+          Paint()..color = guide.color,
+        );
       }
     }
   }
@@ -1645,9 +4435,11 @@ class MathCanvas3DPainter extends CustomPainter {
     final lines = <List<Offset>>[];
 
     // Lines along X (constant Y).
-    for (double y = gridCenter.y - gridRange;
-        y <= gridCenter.y + gridRange;
-        y += step) {
+    for (
+      double y = gridCenter.y - gridRange;
+      y <= gridCenter.y + gridRange;
+      y += step
+    ) {
       if ((y - gridCenter.y).abs() < 1e-10) continue;
       final p1 = worldToScreen(
         Point3D(gridCenter.x - gridRange, y, 0),
@@ -1663,9 +4455,11 @@ class MathCanvas3DPainter extends CustomPainter {
     }
 
     // Lines along Y (constant X).
-    for (double x = gridCenter.x - gridRange;
-        x <= gridCenter.x + gridRange;
-        x += step) {
+    for (
+      double x = gridCenter.x - gridRange;
+      x <= gridCenter.x + gridRange;
+      x += step
+    ) {
       if ((x - gridCenter.x).abs() < 1e-10) continue;
       final p1 = worldToScreen(
         Point3D(x, gridCenter.y - gridRange, 0),
@@ -1748,7 +4542,8 @@ class MathCanvas3DPainter extends CustomPainter {
         final screen = worldToScreen(point, camera, projection);
         final axisDirection = (tipPt - startPt);
         if (axisDirection.distance < 1) continue;
-        final normal = Offset(-axisDirection.dy, axisDirection.dx) /
+        final normal =
+            Offset(-axisDirection.dy, axisDirection.dx) /
             axisDirection.distance;
         final center = Offset(screen.x, screen.y);
         canvas.drawLine(center - normal * 3, center + normal * 3, axisPaint);
@@ -1823,6 +4618,7 @@ class MathCanvas3DPainter extends CustomPainter {
     final renderables = <_Renderable>[];
 
     for (final obj in objects) {
+      if (!obj.visible) continue;
       switch (obj.type) {
         case Object3DType.point:
           _collectPoint(renderables, obj, camera, projection);
@@ -1840,6 +4636,9 @@ class MathCanvas3DPainter extends CustomPainter {
           _collectVector(renderables, obj, camera, projection);
         case Object3DType.curve:
           _collectCurve(renderables, obj, camera, projection);
+      }
+      if (showLabels && obj.label != null && obj.type != Object3DType.point) {
+        _collectObjectLabel(renderables, obj, camera, projection);
       }
     }
 
@@ -1890,9 +4689,15 @@ class MathCanvas3DPainter extends CustomPainter {
           final paint = Paint()
             ..color = color
             ..style = PaintingStyle.fill;
-          canvas.drawCircle(Offset(screen.x, screen.y), 4, paint);
+          if (!obj.isTextAnnotation) {
+            canvas.drawCircle(
+              Offset(screen.x, screen.y),
+              _pointMarkerRadius,
+              paint,
+            );
+          }
 
-          if (obj.label != null) {
+          if ((showLabels || obj.isTextAnnotation) && obj.label != null) {
             final tp = TextPainter(
               text: TextSpan(
                 text: obj.label,
@@ -1901,10 +4706,168 @@ class MathCanvas3DPainter extends CustomPainter {
               textDirection: TextDirection.ltr,
             );
             tp.layout();
-            tp.paint(canvas, Offset(screen.x + 6, screen.y - 6));
+            final labelPosition = obj.isTextAnnotation
+                ? Offset(screen.x, screen.y)
+                : Offset(screen.x + 6, screen.y - 6);
+            tp.paint(canvas, labelPosition);
           }
         },
       ),
+    );
+  }
+
+  void _collectObjectLabel(
+    List<_Renderable> renderables,
+    Object3D object,
+    Camera3D camera,
+    Projection3D projection,
+  ) {
+    final anchor = switch (object.type) {
+      Object3DType.line => _lineLabelAnchor(object, camera, projection),
+      Object3DType.plane => _planeAnchor(object),
+      Object3DType.sphere => object.sphereCenter,
+      Object3DType.vector => object.point + object.vector * 0.5,
+      Object3DType.surface => _objectCentroid(object.vertices),
+      Object3DType.curve => _curveLabelAnchor(object, camera, projection),
+      Object3DType.polyhedron => _frontmostTriangleCentroid(
+        object,
+        camera,
+        projection,
+      ),
+      Object3DType.point => object.point,
+    };
+    if (anchor == null) return;
+    final screen = worldToScreen(anchor, camera, projection);
+    final alpha = ((object.color >> 24) & 0xFF) / 255.0;
+    final color = Color(object.color).withValues(alpha: alpha * object.opacity);
+    renderables.add(
+      _Renderable(
+        depth: object.type == Object3DType.polyhedron
+            ? screen.z - 1e-6
+            : screen.z,
+        draw: (canvas) {
+          final painter = TextPainter(
+            text: TextSpan(
+              text: object.label,
+              style: TextStyle(color: color, fontSize: 11),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          painter.paint(canvas, Offset(screen.x + 6, screen.y - 6));
+        },
+      ),
+    );
+  }
+
+  Point3D _frontmostTriangleCentroid(
+    Object3D object,
+    Camera3D camera,
+    Projection3D projection,
+  ) {
+    var anchor = _objectCentroid(object.vertices);
+    var nearestDepth = double.infinity;
+    for (var i = 0; i + 2 < object.indices.length; i += 3) {
+      final ia = object.indices[i];
+      final ib = object.indices[i + 1];
+      final ic = object.indices[i + 2];
+      if (ia < 0 ||
+          ia >= object.vertices.length ||
+          ib < 0 ||
+          ib >= object.vertices.length ||
+          ic < 0 ||
+          ic >= object.vertices.length) {
+        continue;
+      }
+      final a = object.vertices[ia];
+      final b = object.vertices[ib];
+      final c = object.vertices[ic];
+      final center = Point3D(
+        (a.x + b.x + c.x) / 3,
+        (a.y + b.y + c.y) / 3,
+        (a.z + b.z + c.z) / 3,
+      );
+      final depth = worldToScreen(center, camera, projection).z;
+      if (depth.isFinite && depth < nearestDepth) {
+        anchor = center;
+        nearestDepth = depth;
+      }
+    }
+    return anchor;
+  }
+
+  Point3D _planeAnchor(Object3D plane) {
+    final equation = _normalizedPlaneEquation(plane);
+    if (equation == null) return Point3D.origin;
+
+    final normal = equation.normal;
+    if (normal.z.abs() >= normal.x.abs() && normal.z.abs() >= normal.y.abs()) {
+      return Point3D(0, 0, equation.d / normal.z);
+    }
+    if (normal.y.abs() >= normal.x.abs()) {
+      return Point3D(0, equation.d / normal.y, 0);
+    }
+    return Point3D(equation.d / normal.x, 0, 0);
+  }
+
+  Point3D? _lineLabelAnchor(
+    Object3D line,
+    Camera3D camera,
+    Projection3D projection,
+  ) {
+    final endpoints = clipLineToView(line, camera, projection);
+    if (endpoints.length != 2) return null;
+    return endpoints[0].midpoint(endpoints[1]);
+  }
+
+  Point3D? _curveLabelAnchor(
+    Object3D curve,
+    Camera3D camera,
+    Projection3D projection,
+  ) {
+    Point3D? nearest;
+    var nearestCenterDistance = double.infinity;
+    final viewportCenter = Offset(canvasWidth / 2, canvasHeight / 2);
+    for (var i = 1; i < curve.vertices.length; i++) {
+      if (curve.curveStarts.contains(i)) continue;
+      final anchor = curve.vertices[i - 1].midpoint(curve.vertices[i]);
+      final screen = worldToScreen(anchor, camera, projection);
+      if (!screen.x.isFinite || !screen.y.isFinite || !screen.z.isFinite) {
+        continue;
+      }
+      if (projection.type == ProjectionType.perspective &&
+          (screen.z < projection.near || screen.z > projection.far)) {
+        continue;
+      }
+      if (screen.x < 0 ||
+          screen.x > canvasWidth ||
+          screen.y < 0 ||
+          screen.y > canvasHeight) {
+        continue;
+      }
+      final centerDistance =
+          (Offset(screen.x, screen.y) - viewportCenter).distanceSquared;
+      if (centerDistance < nearestCenterDistance) {
+        nearest = anchor;
+        nearestCenterDistance = centerDistance;
+      }
+    }
+    return nearest;
+  }
+
+  Point3D _objectCentroid(List<Point3D> vertices) {
+    if (vertices.isEmpty) return Point3D.origin;
+    var x = 0.0;
+    var y = 0.0;
+    var z = 0.0;
+    for (final point in vertices) {
+      x += point.x;
+      y += point.y;
+      z += point.z;
+    }
+    return Point3D(
+      x / vertices.length,
+      y / vertices.length,
+      z / vertices.length,
     );
   }
 
@@ -1943,23 +4906,25 @@ class MathCanvas3DPainter extends CustomPainter {
     Projection3D projection,
   ) {
     // Render a plane as a grid of lines on the plane surface
-    final a = obj.planeA;
-    final b = obj.planeB;
-    final c = obj.planeC;
-    final d = obj.planeD;
+    final equation = _normalizedPlaneEquation(obj);
+    if (equation == null) return;
+    final a = equation.normal.x;
+    final b = equation.normal.y;
+    final c = equation.normal.z;
+    final d = equation.d;
     final objAlpha = ((obj.color >> 24) & 0xFF) / 255.0;
     final color = Color(obj.color).withValues(alpha: objAlpha * obj.opacity);
 
     // Generate grid points on the plane within a range
     // Plane: ax + by + cz = d
     // Solve for the axis with largest coefficient for numeric stability
-    const range = 5.0;
+    const range = _planeGridRange;
     const step = 1.0;
     final lines = <List<Offset>>[];
     var totalZ = 0.0;
     var count = 0;
 
-    if (c.abs() > 1e-10) {
+    if (c.abs() >= a.abs() && c.abs() >= b.abs()) {
       // z = (d - ax - by) / c
       // Lines along X (constant Y)
       for (double y = -range; y <= range; y += step) {
@@ -1983,7 +4948,7 @@ class MathCanvas3DPainter extends CustomPainter {
         }
         if (pts.length >= 2) lines.add(pts);
       }
-    } else if (b.abs() > 1e-10) {
+    } else if (b.abs() >= a.abs()) {
       // y = (d - ax - cz) / b  — vertical plane, free variable z
       for (double z = -range; z <= range; z += step) {
         final pts = <Offset>[];
@@ -2005,7 +4970,7 @@ class MathCanvas3DPainter extends CustomPainter {
         }
         if (pts.length >= 2) lines.add(pts);
       }
-    } else if (a.abs() > 1e-10) {
+    } else {
       // x = (d - by - cz) / a  — vertical plane, free variable z
       for (double z = -range; z <= range; z += step) {
         final pts = <Offset>[];
@@ -2276,7 +5241,16 @@ class MathCanvas3DPainter extends CustomPainter {
             ..color = color
             ..strokeWidth = 2
             ..style = PaintingStyle.stroke;
-          canvas.drawPoints(PointMode.polygon, projected, paint);
+          final path = Path();
+          for (var i = 0; i < projected.length; i++) {
+            final point = projected[i];
+            if (i == 0 || obj.curveStarts.contains(i)) {
+              path.moveTo(point.dx, point.dy);
+            } else {
+              path.lineTo(point.dx, point.dy);
+            }
+          }
+          canvas.drawPath(path, paint);
         },
       ),
     );
@@ -2296,6 +5270,7 @@ class MathCanvas3DPainter extends CustomPainter {
         oldDelegate.showAxes != showAxes ||
         oldDelegate.showPlane != showPlane ||
         oldDelegate.showGrid != showGrid ||
+        oldDelegate.showLabels != showLabels ||
         oldDelegate.objectsVersion != objectsVersion ||
         oldDelegate.canvasWidth != canvasWidth ||
         oldDelegate.canvasHeight != canvasHeight ||

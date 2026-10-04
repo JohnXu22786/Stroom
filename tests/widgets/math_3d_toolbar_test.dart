@@ -36,9 +36,11 @@ void main() {
       ]);
     }))));
     await tester.pump();
-    await tester.tap(find.text('平面与圆'));
+    await tester.tap(find.text('直线与多边形'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('正多边形'));
+    final regularPolygonTool = find.text('正多边形');
+    await tester.ensureVisible(regularPolygonTool);
+    await tester.tap(regularPolygonTool);
     await tester.pumpAndSettle();
     final canvasRect = tester.getRect(find.byType(MathCanvas3D));
     final start = canvasRect.center;
@@ -55,7 +57,7 @@ void main() {
     await tester.tapAt(start + const Offset(65, 0));
     await tester.pump();
     expect(key.currentState!.objects.single.vertices, hasLength(5));
-    await tester.tap(find.byTooltip('结束构造，返回选择'));
+    await tester.tap(find.byTooltip('结束工具，返回移动'));
     await tester.pumpAndSettle();
     expect(key.currentState!.activeTool, ConstructionTool.move);
     expect(tester.takeException(), isNull);

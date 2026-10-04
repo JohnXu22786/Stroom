@@ -110,6 +110,33 @@ class Vector3D {
   String toString() => '[$x, $y, $z]';
 }
 
+/// Implicit conic equation in the local plane coordinates:
+/// `quadraticX*x² + quadraticXY*x*y + quadraticY*y² +`
+/// `linearX*x + linearY*y + constant = 0`.
+class Conic3D {
+  final Point3D origin;
+  final Vector3D axisU;
+  final Vector3D axisV;
+  final double quadraticX;
+  final double quadraticXY;
+  final double quadraticY;
+  final double linearX;
+  final double linearY;
+  final double constant;
+
+  const Conic3D({
+    required this.origin,
+    required this.axisU,
+    required this.axisV,
+    required this.quadraticX,
+    required this.quadraticXY,
+    required this.quadraticY,
+    required this.linearX,
+    required this.linearY,
+    required this.constant,
+  });
+}
+
 /// Types of 3D objects that can be rendered.
 enum Object3DType {
   point,
@@ -161,6 +188,10 @@ class Object3D {
   final List<Vector3D>? _normals;
   List<Vector3D> get normals => _normals ?? const [];
 
+  /// Vertex indexes that begin new disconnected paths in a curve.
+  final List<int> curveStarts;
+  final Conic3D? conic;
+
   // Sphere fields
   final Point3D? _sphereCenter;
   Point3D get sphereCenter => _sphereCenter ?? Point3D.origin;
@@ -176,6 +207,9 @@ class Object3D {
   final double opacity;
   final String? label;
   final bool transformOrigin;
+  final bool visible;
+  /// Render this point's text independently from geometric point labels.
+  final bool isTextAnnotation;
 
   const Object3D._({
     required this.type,
@@ -190,6 +224,8 @@ class Object3D {
     List<Point3D>? vertices,
     List<int>? indices,
     List<Vector3D>? normals,
+    this.curveStarts = const [],
+    this.conic,
     Point3D? sphereCenter,
     double? sphereRadius,
     Vector3D? vector,
@@ -197,6 +233,8 @@ class Object3D {
     this.opacity = 1.0,
     this.label,
     this.transformOrigin = false,
+    this.visible = true,
+    this.isTextAnnotation = false,
   })  : _point = point,
         _pointA = pointA,
         _pointB = pointB,
@@ -212,7 +250,14 @@ class Object3D {
         _vector = vector;
 
   /// Preserve geometry and appearance when naming or moving an object.
-  Object3D copyWith({Point3D? point, String? label}) => Object3D._(
+  Object3D copyWith({
+    Point3D? point,
+    String? label,
+    int? color,
+    double? opacity,
+    bool? visible,
+  }) =>
+      Object3D._(
         type: type,
         lineKind: lineKind,
         point: point ?? _point,
@@ -225,13 +270,17 @@ class Object3D {
         vertices: _vertices,
         indices: _indices,
         normals: _normals,
+        curveStarts: curveStarts,
+        conic: conic,
         sphereCenter: _sphereCenter,
         sphereRadius: _sphereRadius,
         vector: _vector,
-        color: color,
-        opacity: opacity,
+        color: color ?? this.color,
+        opacity: opacity ?? this.opacity,
         label: label ?? this.label,
         transformOrigin: transformOrigin,
+        visible: visible ?? this.visible,
+        isTextAnnotation: isTextAnnotation,
       );
 
   // ==================================================================
@@ -244,6 +293,13 @@ class Object3D {
     double opacity,
     String? label,
   }) = _Object3DPoint;
+
+  const factory Object3D.text(
+    Point3D point, {
+    required String text,
+    int color,
+    double opacity,
+  }) = _Object3DText;
 
   const factory Object3D.line(
     Point3D a,
@@ -299,6 +355,8 @@ class Object3D {
 
   const factory Object3D.curve({
     required List<Point3D> points,
+    List<int> curveStarts = const [],
+    Conic3D? conic,
     int color,
     double opacity,
     String? label,
@@ -318,6 +376,22 @@ class _Object3DPoint extends Object3D {
           color: color,
           opacity: opacity,
           label: label,
+        );
+}
+
+class _Object3DText extends Object3D {
+  const _Object3DText(
+    Point3D point, {
+    required String text,
+    int color = 0xFFAAAAAA,
+    double opacity = 1.0,
+  }) : super._(
+          type: Object3DType.point,
+          point: point,
+          color: color,
+          opacity: opacity,
+          label: text,
+          isTextAnnotation: true,
         );
 }
 
@@ -434,12 +508,16 @@ class _Object3DVector extends Object3D {
 class _Object3DCurve extends Object3D {
   const _Object3DCurve({
     required List<Point3D> points,
+    List<int> curveStarts = const [],
+    Conic3D? conic,
     int color = 0xFFAAAAAA,
     double opacity = 1.0,
     String? label,
   }) : super._(
           type: Object3DType.curve,
           vertices: points,
+          curveStarts: curveStarts,
+          conic: conic,
           color: color,
           opacity: opacity,
           label: label,
