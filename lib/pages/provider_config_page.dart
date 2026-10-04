@@ -41,6 +41,9 @@ class ProviderConfigPage extends ConsumerStatefulWidget {
 
 class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
   ProviderEntry? get _entry {
+    if (widget.entryId == kBuiltinWebSearchEntryId) {
+      return createBuiltinWebSearchEntry();
+    }
     final state = ref.read(providerEntriesProvider);
     try {
       return state.entries.firstWhere((e) => e.id == widget.entryId);
@@ -51,7 +54,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
   Future<void> _addConfig() async {
     final entry = _entry;
-    if (entry == null) return;
+    if (entry == null || entry.id == kBuiltinWebSearchEntryId) return;
 
     if (entry.type == 'mcp') {
       await showMcpServerConfigDialog(
@@ -77,6 +80,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
   Future<void> _editConfig(int configIndex) async {
     final entry = _entry;
     if (entry == null ||
+        entry.id == kBuiltinWebSearchEntryId ||
         configIndex < 0 ||
         configIndex >= entry.configs.length) {
       return;
@@ -250,7 +254,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
   /// 助手页面与对话页。
   Future<void> _toggleMcpEnabled(bool value) async {
     final entry = _entry;
-    if (entry == null || entry.type != 'mcp') return;
+    if (entry == null ||
+        entry.type != 'mcp' ||
+        entry.id == kBuiltinWebSearchEntryId) {
+      return;
+    }
 
     final updated = ProviderEntry(
       id: entry.id,
@@ -273,6 +281,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         body: const Center(child: Text('供应商未找到')),
       );
     }
+    final isBuiltinWebSearch = entry.id == kBuiltinWebSearchEntryId;
 
     return Scaffold(
       appBar: AppBar(title: Text(entry.name), centerTitle: true),
@@ -286,7 +295,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 Row(
                   children: [
                     Text(
-                      entry.type == 'mcp' ? '服务与工具' : '供应商配置',
+                      isBuiltinWebSearch
+                          ? '内置工具'
+                          : entry.type == 'mcp'
+                              ? '服务与工具'
+                              : '供应商配置',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -294,17 +307,18 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                       ),
                     ),
                     const Spacer(),
-                    TextButton.icon(
-                      icon: const Icon(Icons.add, size: 18),
-                      label: Text(entry.type == 'mcp' ? '添加 MCP' : '添加'),
-                      onPressed: _addConfig,
-                    ),
+                    if (!isBuiltinWebSearch)
+                      TextButton.icon(
+                        icon: const Icon(Icons.add, size: 18),
+                        label: Text(entry.type == 'mcp' ? '添加 MCP' : '添加'),
+                        onPressed: _addConfig,
+                      ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 // MCP 总开关：仅 MCP 条目显示。关闭后 MCP 服务器和内置
                 // 搜索工具不会提供给助手页面或对话页。
-                if (entry.type == 'mcp') ...[
+                if (entry.type == 'mcp' && !isBuiltinWebSearch) ...[
                   _McpMasterSwitchCard(
                     enabled: entry.enabled,
                     onChanged: _toggleMcpEnabled,
@@ -321,10 +335,13 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 padding: const EdgeInsets.symmetric(vertical: 32),
                 child: Center(
                   child: Text(
-                    entry.type == 'mcp'
-                        ? '暂无服务配置，请点击"添加 MCP"创建'
-                        : '暂无供应商配置，请点击"添加"创建',
+                    isBuiltinWebSearch
+                        ? '内置网络搜索支持 Google、Bing 和百度，模型调用名为 web_search。'
+                        : entry.type == 'mcp'
+                            ? '暂无服务配置，请点击"添加 MCP"创建'
+                            : '暂无供应商配置，请点击"添加"创建',
                     style: const TextStyle(color: Colors.grey),
+                    textAlign: TextAlign.center,
                   ),
                 ),
               ),
