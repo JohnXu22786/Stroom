@@ -37,6 +37,14 @@ void noteBrowserPageNavigationUrl(String url) {
   BrowserCookieService.noteVisitedUrl(url);
 }
 
+/// Records a main-frame redirect URL and returns it for active-navigation
+/// tracking.
+@visibleForTesting
+String? trackBrowserPageRedirectUrl(String? url) {
+  if (url != null) noteBrowserPageNavigationUrl(url);
+  return url;
+}
+
 /// Runs cookie preparation before a browser navigation.
 ///
 /// Exposed for tests so they can verify the ordering without creating a
@@ -697,7 +705,9 @@ class _BrowserPageState extends State<BrowserPage> {
                       },
                       shouldOverrideUrlLoading: (controller, action) async {
                         if (action.isForMainFrame) {
-                          _activeNavigationUrl = action.request.url?.toString();
+                          _activeNavigationUrl = trackBrowserPageRedirectUrl(
+                            action.request.url?.toString(),
+                          );
                         }
                         return NavigationActionPolicy.ALLOW;
                       },
