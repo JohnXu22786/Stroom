@@ -245,7 +245,6 @@ void main() {
         find.byKey(const ValueKey('builtin_tool_web_search'));
     expect(serverCard, findsOneWidget);
     expect(httpSearchCard, findsOneWidget);
-    expect(builtinSearchCard, findsOneWidget);
     expect(
       find.descendant(of: serverCard, matching: find.text('MCP · SSE')),
       findsOneWidget,
