@@ -48,7 +48,7 @@ String defaultMcpGroupIdForConfig(ProviderConfigItem config) {
 }
 
 /// Assigns stable placeholder names across all MCP configs, including disabled
-/// groups, so toggling a group never changes another server's tool name.
+/// groups, so toggling groups or reordering configs never changes tool names.
 Map<String, String> mcpPlaceholderToolNamesByConfigId(
   Iterable<ProviderConfigItem> configs,
 ) {
@@ -70,9 +70,12 @@ Map<String, String> mcpPlaceholderToolNamesByConfigId(
 
   final namesByConfigId = <String, String>{};
   final usedNames = configIdsByBaseName.keys.toSet();
-  for (final entry in configIdsByBaseName.entries) {
+  final groupsByBaseName = configIdsByBaseName.entries.toList()
+    ..sort((left, right) => left.key.compareTo(right.key));
+  for (final entry in groupsByBaseName) {
     final aliasesByServerName = <String, String>{};
-    for (final configId in entry.value) {
+    final configIds = List<String>.of(entry.value)..sort();
+    for (final configId in configIds) {
       final serverName = serverNamesByConfigId[configId]!;
       aliasesByServerName.putIfAbsent(serverName, () {
         if (aliasesByServerName.isEmpty) return entry.key;
@@ -83,7 +86,7 @@ Map<String, String> mcpPlaceholderToolNamesByConfigId(
         );
       });
     }
-    for (final configId in entry.value) {
+    for (final configId in configIds) {
       namesByConfigId[configId] =
           aliasesByServerName[serverNamesByConfigId[configId]!]!;
     }
