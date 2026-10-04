@@ -1629,7 +1629,13 @@ class BackupService {
           'size',
           'folder',
         };
-        const commonStringColumns = {'id', 'name', 'hash', 'format', 'folder'};
+        const commonStringColumns = {
+          'id',
+          'name',
+          'hash',
+          'format',
+          'folder',
+        };
         const commonIntegerColumns = {'size'};
         bool needsLegacyFolders(Object? value) =>
             value is! List || value.isEmpty;
