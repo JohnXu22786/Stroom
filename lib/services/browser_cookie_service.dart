@@ -699,9 +699,10 @@ class BrowserCookieService {
   /// snapshot. Backup restore uses this before replacing that snapshot.
   static Future<bool> clearPlatformCookies() async {
     try {
-      // The platform API reports whether any cookies were removed, so false
-      // is a normal result when the store is already empty.
-      await cookiePlatform.deleteAllCookies();
+      // If the platform reports a failed clear, do not allow a new page to
+      // load with stale cookies or continue a backup restore transaction.
+      final cleared = await cookiePlatform.deleteAllCookies();
+      if (!cleared) return false;
       await clearBackupRestorePending();
       return true;
     } catch (e) {

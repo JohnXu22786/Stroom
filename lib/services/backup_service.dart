@@ -1559,15 +1559,20 @@ class BackupService {
             }
 
             final columns = <String, Object?>{};
+            final sanitizedItem = <String, dynamic>{};
             for (final entry in item.entries) {
               final column = camelToSnake[entry.key] ?? entry.key;
               if (!allowedColumns.contains(column)) {
-                throw FormatException('$field 包含未知字段 ${entry.key}');
+                // Ignore fields from newer app versions. This app cannot
+                // persist unknown columns, but they should not make an
+                // otherwise usable cross-version backup unrestorable.
+                continue;
               }
               if (columns.containsKey(column)) {
                 throw FormatException('$field 中字段 ${entry.key} 重复');
               }
               columns[column] = entry.value;
+              sanitizedItem[entry.key] = entry.value;
             }
 
             for (final requiredColumn in const {
@@ -1588,8 +1593,10 @@ class BackupService {
                   throw FormatException('$field 字段 ${entry.key} 不是字符串');
                 }
               } else if (integerColumns.contains(entry.key)) {
-                if (value is! int) {
-                  throw FormatException('$field 字段 ${entry.key} 不是整数');
+                if (entry.key == 'duration' ? value is! num : value is! int) {
+                  throw FormatException(
+                    '$field 字段 ${entry.key} 不是有效数字',
+                  );
                 }
               } else if (entry.key == 'created_at' ||
                   entry.key == 'modified_at') {
@@ -1604,6 +1611,10 @@ class BackupService {
                 }
               }
             }
+
+            item
+              ..clear()
+              ..addAll(sanitizedItem);
           }
         }
 
@@ -2268,6 +2279,10 @@ class BackupService {
       try {
         final decoded = jsonDecode(utf8.decode(raw));
         if (decoded is List && decoded.isNotEmpty) return true;
+        if (decoded is Map) {
+          final jobs = decoded['jobs'];
+          if (jobs is List && jobs.isNotEmpty) return true;
+        }
       } catch (_) {
         // A malformed or unrelated task entry is not usable task data.
       }
@@ -2291,6 +2306,17 @@ class BackupService {
       try {
         final decoded = jsonDecode(utf8.decode(raw));
         if (decoded is! List) {
+          final legacyName = name.startsWith('files/')
+              ? name.substring('files/'.length)
+              : name;
+          if (legacyName == 'tasks/synthesis_tasks.json' &&
+              decoded is Map &&
+              decoded['jobs'] is List &&
+              (decoded['jobs'] as List).every((job) => job is Map)) {
+            // Older backups stored synthesis jobs in an object envelope.
+            // Preserve this supported legacy payload as-is.
+            continue;
+          }
           throw const FormatException('结构不是数组');
         }
         for (final item in decoded) {

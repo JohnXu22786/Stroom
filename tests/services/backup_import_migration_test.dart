@@ -116,12 +116,15 @@ void main() {
       expect(migratedPrefs.containsKey('chat_configs'), isFalse,
           reason: 'After import+migration, chat_configs should be removed');
 
-      // Per-part versions should all be current after import+migration
+      // This v1 archive only contains settings, not chat records. Its settings
+      // migrate, while the missing chat category keeps its local version.
       final stored = await DataMigrationService.getStoredPartVersions();
       for (final entry in DataMigrationService.currentPartVersions.entries) {
+        if (entry.key == DataMigrationService.partChat) continue;
         expect(stored[entry.key], equals(entry.value),
             reason: 'part ${entry.key}');
       }
+      expect(stored[DataMigrationService.partChat], equals(0));
       expect(migratedPrefs.containsKey('data_format_version'), isFalse,
           reason: '旧全局 key 迁移后退役');
 
@@ -245,12 +248,15 @@ void main() {
           reason: 'Null type should be auto-fixed after import');
       expect((entry1['type'] as String).isNotEmpty, isTrue);
 
-      // Per-part versions should all be current after import+migration
+      // This v1 archive contains settings but no chat records, so chat's
+      // local version remains unchanged.
       final stored = await DataMigrationService.getStoredPartVersions();
       for (final entry in DataMigrationService.currentPartVersions.entries) {
+        if (entry.key == DataMigrationService.partChat) continue;
         expect(stored[entry.key], equals(entry.value),
             reason: 'part ${entry.key}');
       }
+      expect(stored[DataMigrationService.partChat], equals(0));
     });
 
     test('modern-format backup skips migration after import', () async {
@@ -324,13 +330,17 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       await BackupService.restoreFromBytesForTest(backupBytes);
 
-      // Verify data still in modern format (migration didn't change anything)
+      // Verify data still in modern format (migration didn't change settings).
+      // This archive has no chat_data.json, so the missing chat category keeps
+      // its local version unchanged.
       final postPrefs = await SharedPreferences.getInstance();
       final stored = await DataMigrationService.getStoredPartVersions();
       for (final entry in DataMigrationService.currentPartVersions.entries) {
+        if (entry.key == DataMigrationService.partChat) continue;
         expect(stored[entry.key], equals(entry.value),
             reason: 'part ${entry.key}');
       }
+      expect(stored[DataMigrationService.partChat], equals(0));
       expect(postPrefs.containsKey('data_format_version'), isFalse,
           reason: '旧全局 key 迁移后退役');
       expect(postPrefs.getString('provider_entries'), isNotNull);

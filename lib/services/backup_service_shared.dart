@@ -43,7 +43,7 @@ Future<void> addFileToArchive(
   String archiveName,
   String subDir,
   String fileName, {
-  bool required = true,
+  bool required = false,
 }) async {
   debugPrint('[BackupServiceShared] addFileToArchive: $archiveName');
   try {
