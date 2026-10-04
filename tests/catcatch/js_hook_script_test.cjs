@@ -1077,6 +1077,46 @@ test('captures only HTTP(S) media fetches and preserves native fetch outcomes', 
   );
 });
 
+test('captures HTTP(S) media URLs passed to fetch as URL objects', async () => {
+  const crossRealmUrl = new URL('https://cdn.example/cross-realm.mp4');
+  const foreignUrlPrototype = vm.runInNewContext('Object.create(null)');
+  Object.defineProperty(
+    foreignUrlPrototype,
+    'href',
+    Object.getOwnPropertyDescriptor(URL.prototype, 'href'),
+  );
+  Object.defineProperty(foreignUrlPrototype, 'toString', {
+    value: URL.prototype.toString,
+  });
+  Object.setPrototypeOf(crossRealmUrl, foreignUrlPrototype);
+  assert.equal(crossRealmUrl instanceof URL, false);
+  const urls = [
+    new URL('http://cdn.example/video.mp4'),
+    new URL('https://cdn.example/video.m3u8'),
+    crossRealmUrl,
+  ];
+  const responses = [{ok: true}, {ok: true}, {ok: true}];
+  const fetchCalls = [];
+  let responseIndex = 0;
+  const {messages, window} = installHook([], (url) => {
+    fetchCalls.push(url);
+    return Promise.resolve(responses[responseIndex++]);
+  });
+
+  const results = await Promise.all(urls.map((url) => window.fetch(url)));
+
+  assert.equal(fetchCalls[0], urls[0]);
+  assert.equal(fetchCalls[1], urls[1]);
+  assert.equal(fetchCalls[2], urls[2]);
+  assert.equal(results[0], responses[0]);
+  assert.equal(results[1], responses[1]);
+  assert.equal(results[2], responses[2]);
+  assert.deepEqual(
+    messages.map(({url}) => url),
+    urls.map((url) => url.href),
+  );
+});
+
 test('reports fetch redirect media URLs with request metadata and usable responses', async () => {
   const response = {
     url: 'https://cdn.example/video.m3u8',
