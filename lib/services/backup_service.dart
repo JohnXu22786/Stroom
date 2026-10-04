@@ -1357,11 +1357,10 @@ class BackupService {
       // 无效备份直接中止恢复，避免"选中类别的文件已被删除但恢复失败"
       // 造成的数据丢失。
       //
-      // 注意：此处读取元数据时把条目损坏（_RestoreEntryCorruptException）
-      // 包装为 BackupValidationException —— 校验期失败意味着什么都没动；
-      // 删除之后的读取（二进制条目）不再包装，让调用方提示
-      // "恢复未完成，请重启"（流式恢复的固有差异：条目内容在删除后才
-      // 逐块解压，二进制条目的损坏只能在中途发现）。
+      // 注意：元数据读取和所选条目的尺寸/CRC 预检都在删除之前；条目
+      // 损坏会包装为 BackupValidationException，表示现有数据没有变动。
+      // 预检通过后，实际写入仍可能因文件系统错误中断；这些错误不包装，
+      // 让调用方提示恢复未完成并建议重启。
       // ================================================================
       final metadata = _validateAndParseMetadata(
         (name) {
@@ -4114,7 +4113,7 @@ class _ZipStreamReader {
   ///
   /// 条目损坏（本地头签名错误、数据截断、解压失败、不支持的压缩方式、
   /// 解压尺寸与声明不符）时抛 [_RestoreEntryCorruptException]：
-  /// - 校验期调用方（[_restoreFromZipFile] 元数据读取）包装为
+  /// - 校验期调用方（[_restoreFromZipFile] 元数据读取和条目预检）包装为
   ///   [BackupValidationException]（未删除任何数据）；
   /// - 删除之后的恢复循环直接传播（恢复可能已部分完成）。
   void extractEntry(
