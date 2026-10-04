@@ -694,6 +694,36 @@ test('reuses the initial RequestInit headers accessor value during replay', asyn
   assert.equal(messages[0].requestHeaders['x-request'], 'from-first-read');
 });
 
+test('uses the cached RequestInit header iterator lookup for record headers', async () => {
+  const response = {url: 'https://cdn.example/cached-record-headers.m3u8'};
+  let iteratorGetterReads = 0;
+  let iteratorCalls = 0;
+  const headers = {'X-Request': 'from-record'};
+  Object.defineProperty(headers, Symbol.iterator, {
+    get() {
+      iteratorGetterReads++;
+      if (iteratorGetterReads === 1) return undefined;
+      return function*() {
+        iteratorCalls++;
+        yield ['X-Request', 'from-iterator'];
+      };
+    },
+  });
+  let originalRequestHeader;
+  const {messages, window} = installHook([], (...args) => {
+    originalRequestHeader = new Headers(args[1].headers).get('x-request');
+    return Promise.resolve(response);
+  });
+
+  const result = await window.fetch('https://api.example/redirect', {headers});
+
+  assert.equal(result, response);
+  assert.equal(iteratorGetterReads, 1);
+  assert.equal(iteratorCalls, 0);
+  assert.equal(originalRequestHeader, 'from-record');
+  assert.equal(messages[0].requestHeaders['x-request'], 'from-record');
+});
+
 test('captures a RequestInit headers accessor value after an undefined first read', async () => {
   const response = {url: 'https://cdn.example/header-accessor-undefined.m3u8'};
   const requestOptions = {};

@@ -126,8 +126,8 @@ class JsHookScript {
     var headerSnapshotError;
     var replayInvalidHeaderStructure = false;
     var replayHeaderPairs = [];
+    var headerIteratorMethod;
     try {
-      var headerIteratorMethod;
       if (headers && !shouldReplayRequestInit) {
         headerIteratorMethod = headers[Symbol.iterator];
       }
@@ -289,6 +289,17 @@ class JsHookScript {
       if (headerSnapshotFailed && !replayInvalidHeaderStructure) {
         throw headerSnapshotError;
       }
+      var headersForParsing = headers;
+      if (shouldReplayRequestInit && headers &&
+          (typeof headers === 'object' || typeof headers === 'function') &&
+          typeof headerIteratorMethod !== 'function') {
+        headersForParsing = new Proxy(headers, {
+          get: function(target, property) {
+            if (property === Symbol.iterator) return headerIteratorMethod;
+            return Reflect.get(target, property, target);
+          },
+        });
+      }
       var replayOptions;
       var replayOptionsSource;
       var replayHeadersOverride;
@@ -313,7 +324,7 @@ class JsHookScript {
         fetchArgs = Array.prototype.slice.call(args);
         fetchArgs[1] = replayOptions;
       }
-      var parsedHeaders = new Headers(headers);
+      var parsedHeaders = new Headers(headersForParsing);
       if (replayOptions && (hasIterableHeaders || hasHeadersOption)) {
         replayHeadersOverride = parsedHeaders;
       }
