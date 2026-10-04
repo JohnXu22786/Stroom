@@ -178,8 +178,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     }
   }
 
-  /// 切换 MCP 总开关。关闭后 MCP 工具不再发布，助手页面与对话页
-  /// 都不再显示这些工具。
+  /// 切换 MCP 总开关。关闭后 MCP 服务器和内置搜索工具不再提供给
+  /// 助手页面与对话页。
   Future<void> _toggleMcpEnabled(bool value) async {
     final entry = _entry;
     if (entry == null || entry.type != 'mcp') return;
@@ -569,8 +569,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                // MCP 总开关：仅 MCP 条目显示。关闭后 MCP 服务器工具
-                // 不在助手页面显示，也无法在对话页使用。
+                // MCP 总开关：仅 MCP 条目显示。关闭后 MCP 服务器和内置
+                // 搜索工具不会提供给助手页面或对话页。
                 if (entry.type == 'mcp') ...[
                   _McpMasterSwitchCard(
                     enabled: entry.enabled,
@@ -1079,8 +1079,13 @@ class _McpMasterSwitchCard extends StatelessWidget {
               ),
             ),
             subtitle: Text(
-              enabled ? '已开启：MCP 服务器工具可用。' : '已关闭：MCP 服务器工具不在助手页面与对话页中显示。',
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              enabled
+                  ? '已开启：MCP 服务器和搜索工具可用。'
+                  : '已关闭：MCP 服务器和搜索工具不在助手页面与对话页中显示。',
+              style: TextStyle(
+                fontSize: 12,
+                color: cs.onSurfaceVariant,
+              ),
             ),
           ),
         ),

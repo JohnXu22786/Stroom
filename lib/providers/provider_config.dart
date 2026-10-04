@@ -21,9 +21,13 @@ class ProviderEntriesState {
   final List<ProviderEntry> entries;
   final List<McpProviderGroup> mcpGroups;
 
+  /// False only while the notifier is reading and migrating persisted entries.
+  final bool isLoaded;
+
   const ProviderEntriesState({
     this.entries = const [],
     this.mcpGroups = builtinMcpProviderGroups,
+    this.isLoaded = true,
   });
 }
 
@@ -223,7 +227,8 @@ final providerEntriesProvider =
 });
 
 class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
-  ProviderEntriesNotifier() : super(const ProviderEntriesState());
+  ProviderEntriesNotifier()
+      : super(const ProviderEntriesState(isLoaded: false));
 
   Future<void> _loading = Future<void>.value();
   Future<void> get ready => _loading;

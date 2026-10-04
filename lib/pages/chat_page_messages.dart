@@ -22,9 +22,8 @@ extension _ChatPageMessagesExt on _ChatPageState {
     }
     _configureAdapter();
     // Initialize built-in tools (HTTP tools) first — independent of MCP
-    // server connectivity. This ensures HTTP tools (brave_web_search,
-    // bocha_web_search, querit_search, searxng_search) are always
-    // available in the tool list even if MCP servers are unreachable.
+    // server connectivity. Their handlers are registered here, while search
+    // definitions follow the MCP master switch in the adapter.
     final entriesState = ref.read(providerEntriesProvider);
     _adapter.initializeBuiltinTools(entriesState);
 
@@ -47,7 +46,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
     // Then initialize MCP server placeholders (SSE / stdio) without any
     // network connection — MCP servers are lazy: they connect only when a
     // tool is actually called. Invalid MCP configs don't affect
-    // already-registered built-in tools.
+    // registered local handlers.
     // Re-read the entries state here: the snapshot taken at the top of
     // _initialize may predate ProviderEntriesNotifier.load() completing
     // (async SharedPreferences + migrations). Passing the stale (possibly

@@ -31,7 +31,7 @@ void main() {
         updateAddress: (value) => address = value,
         prepareCookies: cookiePreparation.ensurePrepared,
         loadUrl: (url) async => loadedUrls.add(url),
-        onPreparationFailure: () {},
+        onNavigationFailure: () {},
       );
 
       expect(loadedUrls, isEmpty);
@@ -63,12 +63,31 @@ void main() {
         updateAddress: (value) => address = value,
         prepareCookies: () async => false,
         loadUrl: (_) async => loadAttempts++,
-        onPreparationFailure: () => failureSignals++,
+        onNavigationFailure: () => failureSignals++,
       );
 
       expect(navigated, isFalse);
       expect(address, 'https://loaded.example/current');
       expect(loadAttempts, 0);
+      expect(failureSignals, 1);
+    });
+
+    test('restores the loaded URL and reports WebView load failure', () async {
+      var address = 'https://attempted.example/page';
+      var failureSignals = 0;
+
+      final navigated = await navigateBrowserPageFromAddress(
+        requestedUrl: 'https://attempted.example/page',
+        previousAddress: address,
+        currentUrl: 'https://loaded.example/current',
+        updateAddress: (value) => address = value,
+        prepareCookies: () async => true,
+        loadUrl: (_) async => throw StateError('load failed'),
+        onNavigationFailure: () => failureSignals++,
+      );
+
+      expect(navigated, isFalse);
+      expect(address, 'https://loaded.example/current');
       expect(failureSignals, 1);
     });
 
@@ -83,7 +102,7 @@ void main() {
         updateAddress: (value) => address = value,
         prepareCookies: () async => false,
         loadUrl: (_) async => loadAttempts++,
-        onPreparationFailure: () {},
+        onNavigationFailure: () {},
       );
 
       expect(navigated, isFalse);
@@ -103,7 +122,7 @@ void main() {
         updateAddress: (value) => address = value,
         prepareCookies: () async => true,
         loadUrl: (url) async => loadedUrls.add(url),
-        onPreparationFailure: () => failureSignals++,
+        onNavigationFailure: () => failureSignals++,
       );
 
       expect(navigated, isTrue);

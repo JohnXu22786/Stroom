@@ -61,7 +61,7 @@ Future<bool> navigateBrowserPageAfterCookiePreparation({
 }
 
 /// Navigates from the browser address bar and restores its prior page address
-/// when cookie preparation prevents the requested navigation.
+/// when preparation or page loading prevents the requested navigation.
 @visibleForTesting
 Future<bool> navigateBrowserPageFromAddress({
   required String requestedUrl,
@@ -70,19 +70,24 @@ Future<bool> navigateBrowserPageFromAddress({
   required ValueChanged<String> updateAddress,
   required Future<bool> Function() prepareCookies,
   required Future<void> Function(String url) loadUrl,
-  required VoidCallback onPreparationFailure,
+  required VoidCallback onNavigationFailure,
 }) async {
   final uri = normalizeBrowserUrl(requestedUrl);
   if (uri.isEmpty) return false;
 
   updateAddress(uri);
-  final navigated = await navigateBrowserPageAfterCookiePreparation(
-    prepareCookies: prepareCookies,
-    loadUrl: () => loadUrl(uri),
-  );
+  var navigated = false;
+  try {
+    navigated = await navigateBrowserPageAfterCookiePreparation(
+      prepareCookies: prepareCookies,
+      loadUrl: () => loadUrl(uri),
+    );
+  } catch (e) {
+    debugPrint('[BrowserPage] address navigation failed: $e');
+  }
   if (!navigated) {
     updateAddress(currentUrl.isNotEmpty ? currentUrl : previousAddress);
-    onPreparationFailure();
+    onNavigationFailure();
   }
   return navigated;
 }
@@ -145,6 +150,7 @@ InAppWebViewSettings _buildSettings({required bool isDesktopMode}) {
     // Enable scrollbars for scrollable content.
     verticalScrollBarEnabled: true,
     horizontalScrollBarEnabled: true,
+    useShouldOverrideUrlLoading: true,
     userAgent: isDesktopMode ? _desktopUserAgent : _mobileUserAgent,
   );
 }
@@ -297,6 +303,9 @@ class _BrowserPageState extends State<BrowserPage> {
   /// The URL of the most recently loaded page (or about to load), used for
   /// user-script match rules and cookie domain tracking.
   String _currentUrl = '';
+
+  /// The current main-frame request URL, including redirects, for load errors.
+  String? _activeNavigationUrl;
 
   /// Whether the cat-catch floating panel is currently visible.
   /// The panel persists its visibility state across page navigations
@@ -478,6 +487,14 @@ class _BrowserPageState extends State<BrowserPage> {
     });
   }
 
+  void _stopLoadingForMainFrameError(WebResourceRequest request) {
+    if (request.isForMainFrame != true ||
+        request.url.toString() != _activeNavigationUrl) {
+      return;
+    }
+    setState(() => _isLoading = false);
+  }
+
   Future<void> _goToUrl(String url) async {
     final controller = _webViewController;
     if (controller == null) return;
@@ -494,11 +511,11 @@ class _BrowserPageState extends State<BrowserPage> {
         if (!mounted || controller != _webViewController) return;
         await controller.loadUrl(urlRequest: URLRequest(url: WebUri(address)));
       },
-      onPreparationFailure: () {
+      onNavigationFailure: () {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Cookie 准备失败，未加载页面'),
+            content: Text('页面导航失败，地址已恢复'),
             backgroundColor: Colors.red,
           ),
         );
@@ -572,8 +589,7 @@ class _BrowserPageState extends State<BrowserPage> {
               // --- WebView + Loading ---
               Column(
                 children: [
-                  if (_isLoading && _progress < 1.0)
-                    LinearProgressIndicator(value: _progress),
+                  if (_isLoading) LinearProgressIndicator(value: _progress),
                   Expanded(
                     child: InAppWebView(
                       // The initial page is loaded explicitly in onWebViewCreated
@@ -628,6 +644,7 @@ class _BrowserPageState extends State<BrowserPage> {
                         // Record the requested host before a redirect replaces
                         // it with the final URL reported by onLoadStop.
                         noteBrowserPageNavigationUrl(urlString);
+                        _activeNavigationUrl = urlString;
                         setState(() {
                           _isLoading = true;
                           _progress = 0;
@@ -670,6 +687,19 @@ class _BrowserPageState extends State<BrowserPage> {
   });
 })();
 ''');
+                      },
+                      onReceivedError: (controller, request, error) {
+                        _stopLoadingForMainFrameError(request);
+                      },
+                      onReceivedHttpError: (controller, request, response) {
+                        // HTTP error responses can still load a body; progress
+                        // is completed by onLoadStop.
+                      },
+                      shouldOverrideUrlLoading: (controller, action) async {
+                        if (action.isForMainFrame) {
+                          _activeNavigationUrl = action.request.url?.toString();
+                        }
+                        return NavigationActionPolicy.ALLOW;
                       },
                       onProgressChanged: (controller, progress) {
                         setState(() => _progress = progress / 100.0);
