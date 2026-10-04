@@ -1528,8 +1528,14 @@ class BackupService {
 
     // 数据库清单（stroom_manifest.json，兼容旧路径 database/manifest_data.json）
     Map<String, dynamic>? dbData;
-    final dbJson = readFile('stroom_manifest.json') ??
-        readFile('database/manifest_data.json');
+    final needsMediaManifest = selection.pictures ||
+        selection.audio ||
+        selection.videos ||
+        selection.texts;
+    final dbJson = needsMediaManifest
+        ? readFile('stroom_manifest.json') ??
+            readFile('database/manifest_data.json')
+        : null;
     if (dbJson != null) {
       try {
         final decoded = jsonDecode(utf8.decode(dbJson));
@@ -1538,12 +1544,67 @@ class BackupService {
         }
         // 校验嵌套结构（与 _restoreDatabaseFromJson 的取值逻辑一致），
         // 防止恢复中途因字段形状错误抛错
-        void validateRecordList(Object? value, String field) {
+        void validateRecordList(
+          Object? value,
+          String field,
+          Set<String> allowedColumns,
+          Set<String> stringColumns,
+          Set<String> integerColumns,
+        ) {
           if (value == null) return;
           if (value is! List) throw FormatException('$field 不是数组');
           for (final item in value) {
             if (item is! Map<String, dynamic>) {
               throw FormatException('$field 包含非对象记录');
+            }
+
+            final columns = <String, Object?>{};
+            for (final entry in item.entries) {
+              final column = camelToSnake[entry.key] ?? entry.key;
+              if (!allowedColumns.contains(column)) {
+                throw FormatException('$field 包含未知字段 ${entry.key}');
+              }
+              if (columns.containsKey(column)) {
+                throw FormatException('$field 中字段 ${entry.key} 重复');
+              }
+              columns[column] = entry.value;
+            }
+
+            for (final requiredColumn in const {
+              'id',
+              'name',
+              'hash',
+              'created_at',
+            }) {
+              if (!columns.containsKey(requiredColumn)) {
+                throw FormatException('$field 缺少必需字段 $requiredColumn');
+              }
+            }
+
+            for (final entry in columns.entries) {
+              final value = entry.value;
+              if (stringColumns.contains(entry.key)) {
+                if (value is! String) {
+                  throw FormatException('$field 字段 ${entry.key} 不是字符串');
+                }
+              } else if (integerColumns.contains(entry.key)) {
+                if (value is! int) {
+                  throw FormatException('$field 字段 ${entry.key} 不是整数');
+                }
+              } else if (entry.key == 'created_at' ||
+                  entry.key == 'modified_at') {
+                if (value is String) {
+                  try {
+                    DateTime.parse(value);
+                  } on FormatException {
+                    throw FormatException('$field 字段 ${entry.key} 日期无效');
+                  }
+                } else if (value is! int) {
+                  throw FormatException(
+                    '$field 字段 ${entry.key} 不是有效日期',
+                  );
+                }
+              }
             }
           }
         }
@@ -1558,27 +1619,86 @@ class BackupService {
           }
         }
 
-        validateRecordList(decoded['image_records'], 'image_records');
-        validateRecordList(decoded['audio_records'], 'audio_records');
-        validateRecordList(decoded['video_records'], 'video_records');
-        validateRecordList(decoded['text_records'], 'text_records');
-        validateFolderList(decoded['folders'], 'folders');
-        validateFolderList(
-          decoded[ManifestTables.textFolders],
-          ManifestTables.textFolders,
-        );
-        validateFolderList(
-          decoded[ManifestTables.audioFolders],
-          ManifestTables.audioFolders,
-        );
-        validateFolderList(
-          decoded[ManifestTables.imageFolders],
-          ManifestTables.imageFolders,
-        );
-        validateFolderList(
-          decoded[ManifestTables.videoFolders],
-          ManifestTables.videoFolders,
-        );
+        const commonColumns = {
+          'id',
+          'name',
+          'hash',
+          'format',
+          'created_at',
+          'modified_at',
+          'size',
+          'folder',
+        };
+        const commonStringColumns = {'id', 'name', 'hash', 'format', 'folder'};
+        const commonIntegerColumns = {'size'};
+        bool needsLegacyFolders(Object? value) =>
+            value is! List || value.isEmpty;
+        bool usesLegacyFolders = false;
+        if (selection.pictures) {
+          final folders = decoded[ManifestTables.imageFolders];
+          validateRecordList(
+            decoded['image_records'],
+            'image_records',
+            commonColumns,
+            commonStringColumns,
+            commonIntegerColumns,
+          );
+          validateFolderList(
+            folders,
+            ManifestTables.imageFolders,
+          );
+          usesLegacyFolders = usesLegacyFolders || needsLegacyFolders(folders);
+        }
+        if (selection.audio) {
+          final folders = decoded[ManifestTables.audioFolders];
+          validateRecordList(
+            decoded['audio_records'],
+            'audio_records',
+            {...commonColumns, 'source_text', 'duration'},
+            {...commonStringColumns, 'source_text'},
+            {...commonIntegerColumns, 'duration'},
+          );
+          validateFolderList(
+            folders,
+            ManifestTables.audioFolders,
+          );
+          usesLegacyFolders = usesLegacyFolders || needsLegacyFolders(folders);
+        }
+        if (selection.videos) {
+          final folders = decoded[ManifestTables.videoFolders];
+          validateRecordList(
+            decoded['video_records'],
+            'video_records',
+            {...commonColumns, 'duration'},
+            commonStringColumns,
+            {...commonIntegerColumns, 'duration'},
+          );
+          validateFolderList(
+            folders,
+            ManifestTables.videoFolders,
+          );
+          usesLegacyFolders = usesLegacyFolders || needsLegacyFolders(folders);
+        }
+        if (selection.texts) {
+          final folders = decoded[ManifestTables.textFolders];
+          validateRecordList(
+            decoded['text_records'],
+            'text_records',
+            {...commonColumns, 'text_length'},
+            commonStringColumns,
+            {...commonIntegerColumns, 'text_length'},
+          );
+          validateFolderList(
+            folders,
+            ManifestTables.textFolders,
+          );
+          usesLegacyFolders = usesLegacyFolders || needsLegacyFolders(folders);
+        }
+        // Older v1 manifests used one shared folder list as a fallback for
+        // every selected media type that has no per-type folders.
+        if (usesLegacyFolders) {
+          validateFolderList(decoded['folders'], 'folders');
+        }
         dbData = decoded;
       } catch (e) {
         throw BackupValidationException('无效的备份文件：数据库记录损坏 ($e)');
