@@ -31,10 +31,12 @@ class JsHookScript {
   function sendMediaUrl(url, opts) {
     if (!url || typeof url !== 'string') return;
 
-    // Normalize before filtering so every Blob URL form is rejected.
+    // Normalize before filtering so only supported network URL schemes pass.
     try {
       var parsedUrl = new URL(url, PAGE_URL);
-      if (parsedUrl.protocol === 'blob:') return;
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return;
+      }
       url = parsedUrl.href;
     } catch(e) {
       return; // Invalid URL, skip
