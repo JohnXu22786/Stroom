@@ -626,11 +626,11 @@ test('preserves the RequestInit accessor receiver during header replay', async (
   assert.equal(result, response);
   assert.equal(originalMethod, 'PATCH');
   assert.equal(originalRequestHeader, 'from-init');
-  assert.deepEqual(methodGetterReceivers, [requestOptions, requestOptions]);
+  assert.deepEqual(methodGetterReceivers, [requestOptions]);
   assert.equal(messages[0].method, 'PATCH');
 });
 
-test('replays the RequestInit headers accessor value native fetch would read', async () => {
+test('reuses the initial RequestInit headers accessor value during replay', async () => {
   const response = {url: 'https://cdn.example/header-accessor.m3u8'};
   const firstHeaders = [['X-Request', 'from-first-read']];
   const secondHeaders = [['X-Request', 'from-second-read']];
@@ -654,10 +654,10 @@ test('replays the RequestInit headers accessor value native fetch would read', a
   const result = await window.fetch('https://api.example/redirect', requestOptions);
 
   assert.equal(result, response);
-  assert.equal(headerGetterReads, 2);
-  assert.deepEqual(headerGetterReceivers, [requestOptions, requestOptions]);
-  assert.equal(originalRequestHeader, 'from-second-read');
-  assert.equal(messages[0].requestHeaders['x-request'], 'from-second-read');
+  assert.equal(headerGetterReads, 1);
+  assert.deepEqual(headerGetterReceivers, [requestOptions]);
+  assert.equal(originalRequestHeader, 'from-first-read');
+  assert.equal(messages[0].requestHeaders['x-request'], 'from-first-read');
 });
 
 test('captures a RequestInit headers accessor value after an undefined first read', async () => {
@@ -704,16 +704,11 @@ test('captures a RequestInit headers accessor value after an undefined first rea
   );
 
   assert.equal(result, response);
-  assert.equal(originalRequestHeader, 'from-second-read');
-  assert.equal(messages[0].requestHeaders['x-request'], 'from-second-read');
-  assert.deepEqual(getterOrder, [
-    'method-1',
-    'headers-1',
-    'method-2',
-    'headers-2',
-  ]);
-  assert.deepEqual(methodGetterReceivers, [requestOptions, requestOptions]);
-  assert.deepEqual(headerGetterReceivers, [requestOptions, requestOptions]);
+  assert.equal(originalRequestHeader, null);
+  assert.equal(messages[0].requestHeaders['x-request'], undefined);
+  assert.deepEqual(getterOrder, ['method-1', 'headers-1']);
+  assert.deepEqual(methodGetterReceivers, [requestOptions]);
+  assert.deepEqual(headerGetterReceivers, [requestOptions]);
 });
 
 test('reads RequestInit.method before its replayed headers accessor', async () => {
@@ -761,16 +756,11 @@ test('reads RequestInit.method before its replayed headers accessor', async () =
 
   assert.equal(result, response);
   assert.equal(originalMethod, 'PATCH');
-  assert.equal(originalRequestHeader, 'after-method-read');
-  assert.equal(messages[0].requestHeaders['x-request'], 'after-method-read');
-  assert.deepEqual(getterOrder, [
-    'method-1',
-    'headers-1',
-    'method-2',
-    'headers-2',
-  ]);
-  assert.deepEqual(methodGetterReceivers, [requestOptions, requestOptions]);
-  assert.deepEqual(headerGetterReceivers, [requestOptions, requestOptions]);
+  assert.equal(originalRequestHeader, 'from-first-read');
+  assert.equal(messages[0].requestHeaders['x-request'], 'from-first-read');
+  assert.deepEqual(getterOrder, ['method-1', 'headers-1']);
+  assert.deepEqual(methodGetterReceivers, [requestOptions]);
+  assert.deepEqual(headerGetterReceivers, [requestOptions]);
 });
 
 test('replays invalid entries after snapshotting shared-cursor headers', async () => {
@@ -807,12 +797,13 @@ test('replays invalid entries after snapshotting shared-cursor headers', async (
   assert.equal(originalFetchArgs[1].headers[0], 7);
 });
 
-test('reads a second headers accessor value before probing the first value', async () => {
+test('rejects a failing initial headers accessor value without rereading it', async () => {
   const response = {url: 'https://cdn.example/header-accessor-throw.m3u8'};
   const firstHeaders = {};
+  const iteratorError = new Error('initial headers iterator getter was read');
   Object.defineProperty(firstHeaders, Symbol.iterator, {
     get() {
-      throw new Error('discarded headers iterator getter was read');
+      throw iteratorError;
     },
   });
   const secondHeaders = [['X-Request', 'from-second-read']];
@@ -825,17 +816,20 @@ test('reads a second headers accessor value before probing the first value', asy
     },
   });
   let originalRequestHeader;
+  let originalFetchCalls = 0;
   const {messages, window} = installHook([], (...args) => {
+    originalFetchCalls++;
     originalRequestHeader = new Headers(args[1].headers).get('x-request');
     return Promise.resolve(response);
   });
 
-  const result = await window.fetch('https://api.example/redirect', requestOptions);
+  const fetchPromise = window.fetch('https://api.example/redirect', requestOptions);
 
-  assert.equal(result, response);
-  assert.equal(headerGetterReads, 2);
-  assert.equal(originalRequestHeader, 'from-second-read');
-  assert.equal(messages[0].requestHeaders['x-request'], 'from-second-read');
+  await assert.rejects(fetchPromise, (error) => error === iteratorError);
+  assert.equal(headerGetterReads, 1);
+  assert.equal(originalFetchCalls, 0);
+  assert.equal(originalRequestHeader, undefined);
+  assert.deepEqual(messages, []);
 });
 
 test('continues fetch when RequestInit proxy introspection traps throw', async () => {
@@ -879,7 +873,7 @@ test('continues fetch when RequestInit proxy introspection traps throw', async (
   }
 });
 
-test('captures the method value used by native fetch after replay', async () => {
+test('uses the initial RequestInit.method value for fetch and capture', async () => {
   const response = {url: 'https://cdn.example/replayed-method.m3u8'};
   const requestOptions = {headers: [['X-Request', 'from-init']]};
   let methodReads = 0;
@@ -898,9 +892,9 @@ test('captures the method value used by native fetch after replay', async () => 
   const result = await window.fetch('https://api.example/redirect', requestOptions);
 
   assert.equal(result, response);
-  assert.equal(methodReads, 2);
-  assert.equal(originalMethod, 'PATCH');
-  assert.equal(messages[0].method, 'PATCH');
+  assert.equal(methodReads, 1);
+  assert.equal(originalMethod, 'POST');
+  assert.equal(messages[0].method, 'POST');
 });
 
 test('replays the converted values of malformed nested header pairs', async () => {
@@ -959,7 +953,7 @@ test('closes a nested header iterator when value conversion throws', async () =>
   assert.equal(originalFetchCalls, 0);
 });
 
-test('replays headers supplied by a descriptorless RequestInit proxy', async () => {
+test('reuses headers supplied by a descriptorless RequestInit proxy', async () => {
   const response = {url: 'https://cdn.example/proxy-dynamic-headers.m3u8'};
   const secondHeaders = [['X-Request', 'from-second-proxy-read']];
   let headerReads = 0;
@@ -985,12 +979,12 @@ test('replays headers supplied by a descriptorless RequestInit proxy', async () 
   const result = await window.fetch('https://api.example/redirect', requestOptions);
 
   assert.equal(result, response);
-  assert.equal(headerReads, 2);
-  assert.equal(originalRequestHeader, 'from-second-proxy-read');
-  assert.equal(messages[0].requestHeaders['x-request'], 'from-second-proxy-read');
+  assert.equal(headerReads, 1);
+  assert.equal(originalRequestHeader, null);
+  assert.equal(messages[0].requestHeaders['x-request'], undefined);
 });
 
-test('replays dynamic headers despite a RequestInit proxy data descriptor', async () => {
+test('reuses the initial headers from a RequestInit proxy data descriptor', async () => {
   const response = {url: 'https://cdn.example/proxy-data-headers.m3u8'};
   const secondHeaders = [['X-Request', 'from-second-proxy-read']];
   let headerReads = 0;
@@ -1016,9 +1010,9 @@ test('replays dynamic headers despite a RequestInit proxy data descriptor', asyn
   const result = await window.fetch('https://api.example/redirect', requestOptions);
 
   assert.equal(result, response);
-  assert.equal(headerReads, 2);
-  assert.equal(originalRequestHeader, 'from-second-proxy-read');
-  assert.equal(messages[0].requestHeaders['x-request'], 'from-second-proxy-read');
+  assert.equal(headerReads, 1);
+  assert.equal(originalRequestHeader, null);
+  assert.equal(messages[0].requestHeaders['x-request'], undefined);
 });
 
 test('keeps redirect capture when the page assigns onreadystatechange after send', () => {
