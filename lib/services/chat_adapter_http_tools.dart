@@ -68,7 +68,7 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
 
     // 占位符（'Bearer ' 前缀等）视为未设置，避免默认工具自动填入假 Key
     String? extractKey() {
-      final key = McpServerConfig.extractApiKeyFromTypeConfig(typeConfig);
+      final key = HttpToolService.extractHttpToolApiKey(name, typeConfig);
       return key.isNotEmpty ? key : null;
     }
 

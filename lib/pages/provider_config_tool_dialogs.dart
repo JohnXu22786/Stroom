@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import '../models/mcp.dart';
 import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
+import '../services/http_tool_service.dart';
 
 class HttpToolConfigDialog extends StatefulWidget {
   final ProviderConfigItem config;
@@ -32,7 +32,10 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
   void initState() {
     super.initState();
     _apiKeyController = TextEditingController(
-      text: McpServerConfig.extractApiKeyFromTypeConfig(_typeConfig),
+      text: HttpToolService.extractHttpToolApiKey(
+        widget.config.providerName,
+        _typeConfig,
+      ),
     );
     _urlController = TextEditingController(
       text: _typeConfig['url'] as String? ?? widget.config.host,
@@ -71,11 +74,10 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
     Map<String, dynamic> typeConfig,
     String apiKey,
   ) {
-    final credentialHeaderNames = switch (widget.config.providerName) {
-      'Brave Search' => const {'x-subscription-token'},
-      'Bocha' || 'Querit' || 'Searxng' => const {'authorization'},
-      _ => const <String>{},
-    };
+    final credentialHeaderNames =
+        HttpToolService.credentialHeaderNamesForProvider(
+      widget.config.providerName,
+    );
     final rawHeaders = typeConfig['headers'];
     if (rawHeaders is! Map) return;
 
@@ -97,7 +99,8 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
       final url = Uri.tryParse(_urlController.text.trim());
       if (url == null ||
           (url.scheme != 'http' && url.scheme != 'https') ||
-          !url.hasAuthority) {
+          !url.hasAuthority ||
+          url.host.isEmpty) {
         setState(() => _urlError = '请输入有效的 HTTP 或 HTTPS 地址');
         return;
       }

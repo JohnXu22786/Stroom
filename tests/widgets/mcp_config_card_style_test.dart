@@ -369,4 +369,34 @@ void main() {
       },
     );
   });
+
+  testWidgets('Searxng editor rejects URLs without a host', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = mixedState();
+    final searxngConfig = state.entries.single.configs[1];
+    searxngConfig.providerName = 'Searxng';
+    searxngConfig.host = 'http://localhost:8080';
+    searxngConfig.models[0].typeConfig = {
+      'transport': 'http',
+      'isHttpTool': true,
+      'isVendor': true,
+      'url': 'http://localhost:8080',
+      'headers': <String, String>{},
+    };
+    await pumpPage(tester, Brightness.light, state: state);
+
+    await tester.tap(find.byKey(const ValueKey('config_test_mcp_1')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'http:///search');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入有效的 HTTP 或 HTTPS 地址'), findsOneWidget);
+    expect(find.text('接入类型：HTTP 搜索'), findsOneWidget);
+    expect(
+      state.entries.single.configs[1].host,
+      'http://localhost:8080',
+      reason: 'invalid URLs are not saved to the provider config',
+    );
+  });
 }

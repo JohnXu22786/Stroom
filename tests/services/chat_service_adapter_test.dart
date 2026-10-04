@@ -11,6 +11,7 @@ import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_service.dart';
+import 'package:stroom/services/http_tool_service.dart';
 
 void main() {
   // ====================================================================
@@ -748,6 +749,60 @@ void main() {
       // registers HTTP tools and API keys. MCP tool discovery happens in
       // initializeMcpServers. After an empty-state call, mcpToolDefinitions
       // remains empty (correctly — no MCP servers were configured).
+    });
+
+    test('HTTP key collection ignores unrelated headers', () async {
+      const unrelatedHeaderKey = 'legacy-stale-key';
+      final typeConfig = <String, dynamic>{
+        'transport': 'http',
+        'isHttpTool': true,
+        'headers': {'X-Custom-Metadata': unrelatedHeaderKey},
+      };
+      expect(
+        HttpToolService.extractHttpToolApiKey('Brave Search', typeConfig),
+        isEmpty,
+      );
+      expect(
+        HttpToolService.extractHttpToolApiKey(
+          'Brave Search',
+          {
+            'headers': {
+              'X-Subscription-Token': 'legacy-provider-key',
+              'X-Custom-Metadata': unrelatedHeaderKey,
+            },
+          },
+        ),
+        'legacy-provider-key',
+      );
+
+      adapter.initializeBuiltinTools(
+        ProviderEntriesState(
+          entries: [
+            ProviderEntry(
+              id: 'test_mcp',
+              type: 'mcp',
+              name: 'MCP供应商',
+              configs: [
+                ProviderConfigItem(
+                  providerName: 'Brave Search',
+                  host: 'https://api.search.brave.com',
+                  models: [
+                    ModelConfig(
+                      name: 'Brave Search',
+                      modelId: 'http',
+                      typeConfig: typeConfig,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      final result = await HttpToolService.handleBraveSearch(
+        {'query': 'test'},
+      );
+      expect(result, contains('Brave Search API Key 未配置'));
     });
 
     test(
