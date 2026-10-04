@@ -2784,33 +2784,55 @@ class BackupService {
     Map<String, dynamic> data, {
     BackupSelection selection = BackupSelection.all,
   }) async {
-    final imageRecords = (data['image_records'] as List<dynamic>?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
-    final audioRecords = (data['audio_records'] as List<dynamic>?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
-    final videoRecords = (data['video_records'] as List<dynamic>?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
-    final textRecords = (data['text_records'] as List<dynamic>?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
+    final imageRecords = selection.pictures
+        ? (data['image_records'] as List<dynamic>?)
+                ?.cast<Map<String, dynamic>>() ??
+            <Map<String, dynamic>>[]
+        : <Map<String, dynamic>>[];
+    final audioRecords = selection.audio
+        ? (data['audio_records'] as List<dynamic>?)
+                ?.cast<Map<String, dynamic>>() ??
+            <Map<String, dynamic>>[]
+        : <Map<String, dynamic>>[];
+    final videoRecords = selection.videos
+        ? (data['video_records'] as List<dynamic>?)
+                ?.cast<Map<String, dynamic>>() ??
+            <Map<String, dynamic>>[]
+        : <Map<String, dynamic>>[];
+    final textRecords = selection.texts
+        ? (data['text_records'] as List<dynamic>?)
+                ?.cast<Map<String, dynamic>>() ??
+            <Map<String, dynamic>>[]
+        : <Map<String, dynamic>>[];
 
     // Per-type folders (v2+ backups)
-    final textFolders =
-        (data[ManifestTables.textFolders] as List<dynamic>?)?.cast<String>() ??
-            <String>[];
-    final audioFolders =
-        (data[ManifestTables.audioFolders] as List<dynamic>?)?.cast<String>() ??
-            <String>[];
-    final imageFolders =
-        (data[ManifestTables.imageFolders] as List<dynamic>?)?.cast<String>() ??
-            <String>[];
-    final videoFolders =
-        (data[ManifestTables.videoFolders] as List<dynamic>?)?.cast<String>() ??
-            <String>[];
-    final folders = (data['folders'] as List<dynamic>?)?.cast<String>() ?? [];
+    final textFolders = selection.texts
+        ? (data[ManifestTables.textFolders] as List<dynamic>?)
+                ?.cast<String>() ??
+            <String>[]
+        : <String>[];
+    final audioFolders = selection.audio
+        ? (data[ManifestTables.audioFolders] as List<dynamic>?)
+                ?.cast<String>() ??
+            <String>[]
+        : <String>[];
+    final imageFolders = selection.pictures
+        ? (data[ManifestTables.imageFolders] as List<dynamic>?)
+                ?.cast<String>() ??
+            <String>[]
+        : <String>[];
+    final videoFolders = selection.videos
+        ? (data[ManifestTables.videoFolders] as List<dynamic>?)
+                ?.cast<String>() ??
+            <String>[]
+        : <String>[];
+    final usesLegacyFolders = (selection.texts && textFolders.isEmpty) ||
+        (selection.audio && audioFolders.isEmpty) ||
+        (selection.pictures && imageFolders.isEmpty) ||
+        (selection.videos && videoFolders.isEmpty);
+    final folders = usesLegacyFolders
+        ? (data['folders'] as List<dynamic>?)?.cast<String>() ?? <String>[]
+        : <String>[];
 
     debugPrint(
       '[BackupService] _restoreDatabaseFromJson: '
