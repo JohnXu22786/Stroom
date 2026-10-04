@@ -360,6 +360,37 @@ test(
   },
 );
 
+test(
+  'rejects a record header conversion error without recoercing its value',
+  async () => {
+    let headerValueStringifications = 0;
+    let originalFetchCalls = 0;
+    const conversionError = new Error('initial header conversion failed');
+    const statefulHeaderValue = {
+      toString() {
+        headerValueStringifications++;
+        if (headerValueStringifications === 1) throw conversionError;
+        return 'converted-on-retry';
+      },
+    };
+    const {window} = installHook([], (...args) => {
+      originalFetchCalls++;
+      return Promise.resolve().then(() => {
+        new Headers(args[1].headers);
+        return {url: 'https://cdn.example/record-header-retry.m3u8'};
+      });
+    });
+
+    const fetchPromise = window.fetch('https://api.example/redirect', {
+      headers: {'X-Request': statefulHeaderValue},
+    });
+
+    await assert.rejects(fetchPromise, (error) => error === conversionError);
+    assert.equal(headerValueStringifications, 1);
+    assert.equal(originalFetchCalls, 0);
+  },
+);
+
 test('replays nested one-shot pairs with non-iterable iterator wrappers', async () => {
   const response = {url: 'https://cdn.example/non-iterable-pair.m3u8'};
   let originalRequestHeader;

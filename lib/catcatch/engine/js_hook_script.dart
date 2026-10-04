@@ -343,7 +343,10 @@ class JsHookScript {
         console.log('[CatCatch] fetch request capture error:', captureError);
       }
       if ((headerSnapshotFailed && !replayInvalidHeaderStructure) ||
-          (hasIterableHeaders && fetchArgs === args)) {
+          (hasIterableHeaders && fetchArgs === args) ||
+          (!hasIterableHeaders && headersForParsing &&
+              (typeof headersForParsing === 'object' ||
+               typeof headersForParsing === 'function'))) {
         return Promise.reject(e);
       }
       return ORIGINAL_FETCH.apply(this, fetchArgs);
