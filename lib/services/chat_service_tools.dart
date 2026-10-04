@@ -32,6 +32,21 @@ extension _ChatServiceToolsExt on ChatService {
     // Then check MCP clients (lazy: connect + list tools on demand)
     if (ChatService._mcpClientManager != null) {
       final manager = ChatService._mcpClientManager!;
+      // A discovered real tool may share another server's placeholder name.
+      // Honor its explicit route before interpreting the name as a placeholder.
+      final routedClientName = manager.getToolClientName(name);
+      if (routedClientName != null) {
+        final client = manager.getClient(routedClientName);
+        if (client != null &&
+            !client.isDisposed &&
+            client.cachedTools.any((tool) => tool.name == name)) {
+          if (!client.isConnected && !await client.connect()) {
+            return 'Error: MCP 服务器 "${client.config.name}" 重新连接失败。';
+          }
+          if (client.isConnected) return client.callTool(name, args);
+        }
+      }
+
       final placeholderClientName = manager.getPlaceholderClientName(name);
       if (placeholderClientName != null) {
         final client = manager.getClient(placeholderClientName);
@@ -58,19 +73,6 @@ extension _ChatServiceToolsExt on ChatService {
         final available = tools.map((t) => t.name).join(', ');
         return 'Error: MCP 服务器 "${client.config.name}" 没有名为 "$name" 的工具。'
             '该服务器可用的工具: $available。请改用这些工具名调用。';
-      }
-
-      final routedClientName = manager.getToolClientName(name);
-      if (routedClientName != null) {
-        final client = manager.getClient(routedClientName);
-        if (client != null &&
-            !client.isDisposed &&
-            client.cachedTools.any((tool) => tool.name == name)) {
-          if (!client.isConnected && !await client.connect()) {
-            return 'Error: MCP 服务器 "${client.config.name}" 重新连接失败。';
-          }
-          if (client.isConnected) return client.callTool(name, args);
-        }
       }
 
       for (final entry in manager.clients.entries) {
