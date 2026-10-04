@@ -71,8 +71,24 @@ extension _ChatServiceToolsExt on ChatService {
           return client.callTool(name, args);
         }
         final available = tools.map((t) => t.name).join(', ');
+        final duplicateToolGuidance = tools
+            .map((tool) {
+              final clientNames = manager.getToolClientNames(tool.name);
+              if (clientNames.length < 2) return null;
+              final selectedClientName = manager.getToolClientName(tool.name);
+              final otherClientNames = clientNames
+                  .where((clientName) => clientName != selectedClientName)
+                  .join('、');
+              return '工具 "${tool.name}" 也由 MCP 服务器 $otherClientNames 提供；'
+                  '当前路由到 $selectedClientName。若要调用其他服务器，请先调用该服务器的占位工具，'
+                  '再调用 "${tool.name}"。';
+            })
+            .whereType<String>()
+            .toSet()
+            .join(' ');
         return 'Error: MCP 服务器 "${client.config.name}" 没有名为 "$name" 的工具。'
-            '该服务器可用的工具: $available。请改用这些工具名调用。';
+            '该服务器可用的工具: $available。请改用这些工具名调用。'
+            '${duplicateToolGuidance.isEmpty ? '' : ' $duplicateToolGuidance'}';
       }
 
       for (final entry in manager.clients.entries) {
