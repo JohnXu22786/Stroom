@@ -29,12 +29,12 @@ Widget _buildTestApp() {
 }
 
 Finder _apiKeyFieldFinder() => find.byWidgetPredicate(
-  (w) => w is TextField && w.decoration?.hintText == '输入 API Key（可选）',
-);
+      (w) => w is TextField && w.decoration?.hintText == '输入 API Key（可选）',
+    );
 
 Finder _readOnlyApiKeyFinder() => find.byWidgetPredicate(
-  (w) => w is mcp_shared.ReadOnlyField && w.label == 'API 密钥',
-);
+      (w) => w is mcp_shared.ReadOnlyField && w.label == 'API 密钥',
+    );
 
 void main() {
   group('SettingsPage - MCP section', () {
@@ -42,7 +42,8 @@ void main() {
       registerBuiltinProviderTypes();
     });
 
-    testWidgets('built-in MCP details keep the "Bearer " placeholder unset and expose '
+    testWidgets(
+        'built-in MCP details keep the "Bearer " placeholder unset and expose '
         'an empty key field only after entering edit mode', (tester) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
@@ -124,8 +125,7 @@ void main() {
           matching: find.text('（未设置）'),
         ),
         findsOneWidget,
-        reason:
-            'the "Bearer " placeholder must remain unset, not become a '
+        reason: 'the "Bearer " placeholder must remain unset, not become a '
             'fake API key',
       );
 
@@ -137,8 +137,7 @@ void main() {
       expect(
         apiKeyField.controller!.text,
         isEmpty,
-        reason:
-            'the "Bearer " header placeholder must not be auto-filled '
+        reason: 'the "Bearer " header placeholder must not be auto-filled '
             'as the API key',
       );
 
@@ -215,8 +214,7 @@ void main() {
         expect(
           apiKeyField.controller!.text,
           'sk-123',
-          reason:
-              'edit mode must expose the actual key from the '
+          reason: 'edit mode must expose the actual key from the '
               'Authorization header',
         );
         expect(
