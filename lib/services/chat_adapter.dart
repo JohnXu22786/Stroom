@@ -21,6 +21,34 @@ import 'web_search_service.dart';
 part 'chat_adapter_mcp.dart';
 part 'chat_adapter_http_tools.dart';
 
+/// Built-in search integrations are configured alongside MCP providers and
+/// follow the MCP master switch, even though their handlers are registered
+/// locally rather than discovered from an MCP server.
+const kMcpSearchToolNames = <String>{
+  'brave_web_search',
+  'bocha_web_search',
+  'querit_search',
+  'searxng_search',
+  'web_search',
+};
+
+bool isMcpMasterSwitchEnabled(ProviderEntriesState entriesState) {
+  if (!entriesState.isLoaded) return false;
+  final mcpEntry =
+      entriesState.entries.where((entry) => entry.type == 'mcp').firstOrNull;
+  return mcpEntry?.enabled ?? true;
+}
+
+List<ToolDefinition> filterMcpSearchToolDefinitions(
+  List<ToolDefinition> tools, {
+  required bool mcpEnabled,
+}) {
+  if (mcpEnabled) return tools;
+  return tools
+      .where((tool) => !kMcpSearchToolNames.contains(tool.name))
+      .toList();
+}
+
 /// 表示一个可选的模型项
 class AvailableModel {
   /// 显示名："[model.name ?? model.modelId] | [providerName]"
@@ -104,6 +132,10 @@ class ChatAdapter {
 
   /// 缓存的 MCP 工具列表（占位工具定义）
   List<ToolDefinition> _mcpToolDefinitions = [];
+
+  /// Built-in search tools use local handlers but belong to the MCP provider
+  /// group, so their selectable definitions follow its master switch.
+  bool _mcpMasterSwitchEnabled = false;
 
   /// 上一份已处理的 MCP 供应商条目实例。
   ///
@@ -701,7 +733,10 @@ class ChatAdapter {
     // Built-in tools are registered statically via ChatService.registerTool()
     // MCP tools are discovered dynamically
     return [
-      ...ChatService.getRegisteredToolDefinitions(),
+      ...filterMcpSearchToolDefinitions(
+        ChatService.getRegisteredToolDefinitions(),
+        mcpEnabled: _mcpMasterSwitchEnabled,
+      ),
       ..._mcpToolDefinitions,
     ];
   }

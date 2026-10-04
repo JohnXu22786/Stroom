@@ -6,7 +6,13 @@ import '../../models/mcp.dart' show McpServerConfig;
 import '../../models/tool_call.dart';
 import '../../providers/chat_manager_provider.dart';
 import '../../providers/provider_config.dart';
-import '../../services/chat_adapter.dart' show AvailableModel, resolveModelRef;
+import '../../services/chat_adapter.dart'
+    show
+        AvailableModel,
+        filterMcpSearchToolDefinitions,
+        isMcpMasterSwitchEnabled,
+        kMcpSearchToolNames,
+        resolveModelRef;
 import '../../services/chat_service.dart';
 import '../../services/context_manager.dart' show kToolOutputMaxChars;
 import '../../services/http_tool_service.dart';
@@ -140,9 +146,12 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
   /// panel), falling back to the static service definitions when the
   /// registry is still empty (dialog opened before the chat page ever ran).
   ///
-  /// MCP 工具始终列出（MCP 总开关由 adapter 层控制：总开关关闭时
-  /// adapter 已清空 mcpToolDefinitions，这里自然不显示）。
-  List<ToolDefinition> _availableTools(WidgetRef ref) {
+  /// MCP 服务器占位符跟随 adapter 状态；内置搜索工具另按供应商页的
+  /// MCP 总开关过滤。
+  List<ToolDefinition> _availableTools(
+    WidgetRef ref, {
+    required bool mcpEnabled,
+  }) {
     final adapter = ref.read(chatStreamManagerProvider).adapter;
     final registered = ChatService.getRegisteredToolDefinitions();
     final builtins = registered.isNotEmpty
@@ -154,7 +163,10 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
           ];
     final seen = <String>{};
     final tools = <ToolDefinition>[];
-    for (final t in [...builtins, ...adapter.mcpToolDefinitions]) {
+    for (final t in filterMcpSearchToolDefinitions(
+      [...builtins, ...adapter.mcpToolDefinitions],
+      mcpEnabled: mcpEnabled,
+    )) {
       if (seen.add(t.name)) tools.add(t);
     }
     return tools;
@@ -184,13 +196,16 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
       for (final name in displayNames)
         models.firstWhere((m) => m.displayName == name),
     ];
-    final tools = _availableTools(ref);
+    final tools = _availableTools(
+      ref,
+      mcpEnabled: isMcpMasterSwitchEnabled(entriesState),
+    );
     final allToolNames = tools.map((t) => t.name).toSet();
     // 清理用的"有效工具名"：除当前显示的工具外，还包含被 MCP 总开关
-    // 隐藏的 MCP 工具。它们只是被隐藏、并未失效——单次开关/全部启用
-    // 不应把它们从默认配置中静默清除，恢复显示后默认配置保留。
+    // 隐藏的 MCP 工具和内置搜索工具。它们只是被隐藏、并未失效——单次
+    // 开关/全部启用不应把它们从默认配置中静默清除，恢复后默认配置保留。
     // 注意从**配置**推导（而非 adapter 的占位列表）：总开关关闭时 adapter
-    // 已清空占位工具，只有配置里还能拿到这些名字。
+    // 已清空占位工具，配置仍能提供服务器名字；内置搜索工具名由常量保留。
     final validMcpToolNames = <String>{};
     final mcpEntry =
         entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
@@ -207,7 +222,11 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
         );
       }
     }
-    final validToolNames = <String>{...allToolNames, ...validMcpToolNames};
+    final validToolNames = <String>{
+      ...allToolNames,
+      ...validMcpToolNames,
+      ...kMcpSearchToolNames,
+    };
 
     // 生效中的工具集合：null（从未配置）→ 全部工具自动启用，因此显示为
     // 全部开启；配置过（含空集合）则严格按集合显示。
