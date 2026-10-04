@@ -11,12 +11,13 @@ extension _ChatServiceToolsExt on ChatService {
   /// - 调用名已在某服务器的工具缓存中（模型从上一条错误信息得知的真实
   ///   工具名）：确保连接后直接调用。
   Future<String> _executeTool(String name, Map<String, dynamic> args) async {
-    if (ChatService._disabledToolNames.contains(name)) {
-      return 'Error: Tool "$name" is disabled.';
-    }
+    final isDisabled = ChatService._disabledToolNames.contains(name);
 
     // First check locally registered tools
-    final entry = ChatService._toolRegistries[name];
+    // A disabled provider may have a placeholder name that matches an active
+    // MCP server's real tool. Let enabled MCP routes resolve before reporting
+    // the disabled name, while still blocking the local handler itself.
+    final entry = isDisabled ? null : ChatService._toolRegistries[name];
     if (entry != null) {
       final handler =
           entry['handler'] as dynamic Function(Map<String, dynamic>);
@@ -94,6 +95,9 @@ extension _ChatServiceToolsExt on ChatService {
       }
     }
 
+    if (isDisabled) {
+      return 'Error: Tool "$name" is disabled.';
+    }
     return 'Error: Unknown tool "$name"';
   }
 }
