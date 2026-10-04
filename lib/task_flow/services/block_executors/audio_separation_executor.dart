@@ -18,14 +18,13 @@ import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
 import 'shared_helpers.dart';
 
-/// Runs [work] while polling whether the flow execution still exists,
-/// throwing '任务流已删除' as soon as it is deleted.
+/// Runs [work] while polling whether the flow execution is still active.
 ///
 /// The separation isolates cannot be aborted, but the flow's global run
-/// lock must free promptly when the flow is deleted mid-extraction —
+/// lock must free promptly when the flow ends mid-extraction —
 /// otherwise a new flow cannot start for the whole duration of the
 /// (possibly minutes-long) isolate work.
-Future<T> _awaitWithDeletionCheck<T>(
+Future<T> _awaitWhileFlowActive<T>(
   Future<T> work,
   TaskFlowExecutionNotifier execNotifier,
   String execId,
@@ -48,13 +47,20 @@ Future<T> _awaitWithDeletionCheck<T>(
   );
   while (!completed) {
     await Future.delayed(const Duration(milliseconds: 500));
-    if (!execNotifier.state.any((e) => e.id == execId)) {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
       throw BlockExecutionException(
-        '任务流已删除',
+        '任务流已结束或删除',
         blockType: def.typeKey.name,
         blockTitle: def.label,
       );
     }
+  }
+  if (!isFlowExecutionActive(execNotifier, execId)) {
+    throw BlockExecutionException(
+      '任务流已结束或删除',
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
   }
   if (error != null) throw error!;
   return result;
@@ -98,6 +104,9 @@ Future<String> executeAudioSeparationBlock({
   required TaskFlowExecutionNotifier execNotifier,
   required FlowSubTask flowSubTask,
   required BackgroundTaskNotifier bgNotifier,
+
+  /// Allows the extraction wait to be controlled in cancellation tests.
+  Future<Uint8List> Function(String, String)? extractAudio,
 }) async {
   final inputBasename = p.basename(input);
   final inputFormat = p.extension(input).replaceFirst('.', '').toLowerCase();
@@ -136,10 +145,10 @@ Future<String> executeAudioSeparationBlock({
     bgNotifier.updateStep(taskId, 0, running: true);
 
     // The separation isolate cannot be aborted, but the flow's run lock
-    // must free promptly when the flow is deleted mid-extraction — poll
-    // for deletion while the isolate runs.
-    audioBytes = await _awaitWithDeletionCheck(
-      _readAndExtractInIsolate(input, inputFormat),
+    // must free promptly when the flow ends mid-extraction — poll while
+    // the isolate runs.
+    audioBytes = await _awaitWhileFlowActive(
+      (extractAudio ?? _readAndExtractInIsolate)(input, inputFormat),
       execNotifier,
       execId,
       def,
@@ -185,7 +194,7 @@ Future<String> executeAudioSeparationBlock({
     bgNotifier.updateStep(taskId, 1, running: true);
 
     await _yieldFrame();
-    final meta = await _awaitWithDeletionCheck(
+    final meta = await _awaitWhileFlowActive(
       _computeAudioMetaInIsolate(audioBytes),
       execNotifier,
       execId,
@@ -194,11 +203,11 @@ Future<String> executeAudioSeparationBlock({
     final hash = meta.$1;
     final format = meta.$2;
 
-    // The flow may have been deleted while the separation isolate ran —
-    // don't write an orphaned audio file + gallery record.
-    if (!execNotifier.state.any((e) => e.id == execId)) {
+    // The flow may have ended while the separation isolate ran — don't
+    // write an orphaned audio file + gallery record.
+    if (!isFlowExecutionActive(execNotifier, execId)) {
       throw BlockExecutionException(
-        '任务流已删除',
+        '任务流已结束或删除',
         blockType: def.typeKey.name,
         blockTitle: def.label,
       );
@@ -233,17 +242,33 @@ Future<String> executeAudioSeparationBlock({
       size: audioBytes.length,
       folder: saveFolder,
     );
-    // Re-check right before the commit: the delete may land during the
+    // Re-check right before the commit: cancellation may land during the
     // file write / dedup lookups above.
-    if (!execNotifier.state.any((e) => e.id == execId)) {
+    if (!isFlowExecutionActive(execNotifier, execId)) {
       throw BlockExecutionException(
-        '任务流已删除',
+        '任务流已结束或删除',
         blockType: def.typeKey.name,
         blockTitle: def.label,
       );
     }
     await FileManifest.addRecord(record);
+
+    // Manifest insertion awaits storage, so cancellation can land after the
+    // pre-commit check. Remove only this flow's record in that case; the
+    // manifest preserves a shared file when another record uses its hash.
+    Future<void> ensureRecordStillActive() async {
+      if (isFlowExecutionActive(execNotifier, execId)) return;
+      await FileManifest.deleteRecord(record.id);
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
+
+    await ensureRecordStillActive();
     final filePath = await FileManifest.readFilePath('$hash.$format');
+    await ensureRecordStillActive();
 
     if (filePath == null) {
       failSubTask(
@@ -261,10 +286,12 @@ Future<String> executeAudioSeparationBlock({
       );
     }
 
+    await ensureRecordStillActive();
     await _yieldFrame();
     bgNotifier.updateStep(taskId, 1, completed: true);
 
     await _yieldFrame();
+    await ensureRecordStillActive();
     bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
     execNotifier.updateSubTaskStatus(
       execId,

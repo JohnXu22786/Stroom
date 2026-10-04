@@ -31,26 +31,11 @@ class JsHookScript {
   function sendMediaUrl(url, opts) {
     if (!url || typeof url !== 'string') return;
 
-    // Handle blob: URLs — report them but skip extension check
-    if (url.startsWith('blob:')) {
-      if (seenUrls[url]) return;
-      seenUrls[url] = true;
-      var method = (opts && opts.method) || 'GET';
-      var initiator = (opts && opts.initiator) || PAGE_URL;
-      var msg = JSON.stringify({
-        url: url,
-        method: method,
-        initiator: initiator,
-        mimeType: (opts && opts.mimeType) || '',
-        requestHeaders: (opts && opts.headers) || {}
-      });
-      sendToFlutter(msg);
-      return;
-    }
-
-    // Normalize: ensure absolute URL
+    // Normalize before filtering so every Blob URL form is rejected.
     try {
-      url = new URL(url, PAGE_URL).href;
+      var parsedUrl = new URL(url, PAGE_URL);
+      if (parsedUrl.protocol === 'blob:') return;
+      url = parsedUrl.href;
     } catch(e) {
       return; // Invalid URL, skip
     }
@@ -142,25 +127,25 @@ class JsHookScript {
       });
     }
 
-    // Also intercept on loadend to catch redirected URLs
+    // Listen independently so page handlers assigned before or after send
+    // remain intact.
     try {
-      var originalOnReadyStateChange = xhr.onreadystatechange;
-      xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4) {
+      if (!xhr._catCatchRedirectListener) {
+        xhr._catCatchRedirectListener = function() {
+          if (xhr.readyState !== 4) return;
+
           var responseUrl = xhr.responseURL;
-          if (responseUrl && responseUrl !== url) {
+          if (responseUrl && responseUrl !== xhr._catCatchUrl) {
             sendMediaUrl(responseUrl, {
               method: xhr._catCatchMethod || 'GET',
               initiator: PAGE_URL
             });
           }
-        }
-        if (originalOnReadyStateChange) {
-          originalOnReadyStateChange.apply(xhr, arguments);
-        }
-      };
+        };
+        xhr.addEventListener('readystatechange', xhr._catCatchRedirectListener);
+      }
     } catch(e) {
-      // Some environments restrict onreadystatechange access
+      // Some environments restrict event listener access
     }
 
     return ORIGINAL_XHR_SEND.apply(this, arguments);
@@ -190,22 +175,36 @@ class JsHookScript {
 
         // Check current src
         var src = el.currentSrc || el.src || '';
-        if (src) {
-          sendMediaUrl(src, {
+        var mediaUrls = [
+          src,
+          el.getAttribute('data-src'),
+          el.getAttribute('data-url')
+        ];
+        mediaUrls.forEach(function(mediaUrl) {
+          if (!mediaUrl) return;
+          sendMediaUrl(mediaUrl, {
             method: 'GET',
             mimeType: el.tagName === 'VIDEO' ? 'video/*' : 'audio/*',
             initiator: PAGE_URL
           });
-        }
+        });
 
         // Check <source> children
         el.querySelectorAll('source').forEach(function(source) {
-          if (source.src && !source._catCatchScanned) {
+          if (!source._catCatchScanned) {
             source._catCatchScanned = true;
-            sendMediaUrl(source.src, {
-              method: 'GET',
-              mimeType: source.type || (el.tagName === 'VIDEO' ? 'video/*' : 'audio/*'),
-              initiator: PAGE_URL
+            var sourceUrls = [
+              source.src,
+              source.getAttribute('data-src'),
+              source.getAttribute('data-url')
+            ];
+            sourceUrls.forEach(function(sourceUrl) {
+              if (!sourceUrl) return;
+              sendMediaUrl(sourceUrl, {
+                method: 'GET',
+                mimeType: source.type || (el.tagName === 'VIDEO' ? 'video/*' : 'audio/*'),
+                initiator: PAGE_URL
+              });
             });
           }
         });

@@ -186,7 +186,7 @@ class BrowserCookieService {
         await clearPersistedCookies();
         return true;
       }
-      return clearAllCookies();
+      return _clearAllCookies();
     });
   }
 
@@ -197,12 +197,12 @@ class BrowserCookieService {
   static Future<void> handleBrowserClose() {
     return _serializeRetentionOperation(() async {
       if (await getRetentionMode()) {
-        await persistCookiesToFile();
+        await _persistCookiesToFile();
         await clearBackupRestorePending();
       } else if (await consumeBackupRestorePending()) {
         // Keep imported cookies for this browser lifecycle only.
       } else {
-        await clearAllCookies();
+        await _clearAllCookies();
       }
     });
   }
@@ -323,7 +323,11 @@ class BrowserCookieService {
   /// sites stay deleted. The per-domain fallback replaces known root-path
   /// cookies for successfully queried hosts while preserving path-scoped
   /// cookies and cookies for failed or unvisited hosts.
-  static Future<void> persistCookiesToFile() async {
+  static Future<void> persistCookiesToFile() {
+    return _serializeRetentionOperation(_persistCookiesToFile);
+  }
+
+  static Future<void> _persistCookiesToFile() async {
     if (!await getRetentionMode()) return;
     try {
       final result = await _collectPlatformCookies();
@@ -664,7 +668,11 @@ class BrowserCookieService {
 
   /// Clears all cookies from both the platform CookieManager and the
   /// persisted local file.
-  static Future<bool> clearAllCookies() async {
+  static Future<bool> clearAllCookies() {
+    return _serializeRetentionOperation(_clearAllCookies);
+  }
+
+  static Future<bool> _clearAllCookies() async {
     try {
       await clearPersistedCookies();
       return await clearPlatformCookies();
@@ -698,7 +706,11 @@ class BrowserCookieService {
   /// only expires cookies at the given path.
   /// Returns false when the platform cannot provide a complete cookie
   /// snapshot, since URL-filtered queries cannot prove every path was cleared.
-  static Future<bool> clearCookiesForDomain(String domain) async {
+  static Future<bool> clearCookiesForDomain(String domain) {
+    return _serializeRetentionOperation(() => _clearCookiesForDomain(domain));
+  }
+
+  static Future<bool> _clearCookiesForDomain(String domain) async {
     try {
       final cleanDomain = domain.startsWith('.') ? domain.substring(1) : domain;
       if (cleanDomain.isEmpty) return false;
@@ -783,38 +795,42 @@ class BrowserCookieService {
     String domain,
     String name, {
     String? path,
-  }) async {
-    if (name.isEmpty) return false;
-    try {
-      // Also remove from persisted store
-      await _removeCookieFromFile(domain, name, path: path);
+  }) {
+    if (name.isEmpty) return Future.value(false);
+    return _serializeRetentionOperation(() async {
+      try {
+        // Remove the persisted entry and native cookie in the same serialized
+        // operation so a concurrent snapshot cannot restore the deletion.
+        await _removeCookieFromFile(domain, name, path: path);
 
-      final cleanDomain = domain.startsWith('.') ? domain.substring(1) : domain;
-      if (cleanDomain.isEmpty) return false;
+        final cleanDomain =
+            domain.startsWith('.') ? domain.substring(1) : domain;
+        if (cleanDomain.isEmpty) return false;
 
-      final httpsUrl = WebUri('https://$cleanDomain');
-      final httpUrl = WebUri('http://$cleanDomain');
+        final httpsUrl = WebUri('https://$cleanDomain');
+        final httpUrl = WebUri('http://$cleanDomain');
 
-      final results = await Future.wait([
-        cookiePlatform.deleteCookie(
-          url: httpsUrl,
-          name: name,
-          path: path ?? '/',
-          domain: domain.startsWith('.') ? domain : null,
-        ),
-        cookiePlatform.deleteCookie(
-          url: httpUrl,
-          name: name,
-          path: path ?? '/',
-          domain: domain.startsWith('.') ? domain : null,
-        ),
-      ]);
+        final results = await Future.wait([
+          cookiePlatform.deleteCookie(
+            url: httpsUrl,
+            name: name,
+            path: path ?? '/',
+            domain: domain.startsWith('.') ? domain : null,
+          ),
+          cookiePlatform.deleteCookie(
+            url: httpUrl,
+            name: name,
+            path: path ?? '/',
+            domain: domain.startsWith('.') ? domain : null,
+          ),
+        ]);
 
-      return results.every((r) => r);
-    } catch (e) {
-      debugPrint('BrowserCookieService.deleteCookie error: $e');
-      return false;
-    }
+        return results.every((r) => r);
+      } catch (e) {
+        debugPrint('BrowserCookieService.deleteCookie error: $e');
+        return false;
+      }
+    });
   }
 
   // ===========================================================================

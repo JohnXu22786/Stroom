@@ -31,6 +31,12 @@ String normalizeBrowserUrl(String url) {
   return trimmedUrl;
 }
 
+/// Records a top-level browser navigation URL for cookie persistence.
+@visibleForTesting
+void noteBrowserPageNavigationUrl(String url) {
+  BrowserCookieService.noteVisitedUrl(url);
+}
+
 /// Runs cookie preparation before a browser navigation.
 ///
 /// Exposed for tests so they can verify the ordering without creating a
@@ -52,6 +58,61 @@ Future<bool> navigateBrowserPageAfterCookiePreparation({
   }
   await loadUrl();
   return true;
+}
+
+/// Navigates from the browser address bar and restores its prior page address
+/// when cookie preparation prevents the requested navigation.
+@visibleForTesting
+Future<bool> navigateBrowserPageFromAddress({
+  required String requestedUrl,
+  required String previousAddress,
+  required String currentUrl,
+  required ValueChanged<String> updateAddress,
+  required Future<bool> Function() prepareCookies,
+  required Future<void> Function(String url) loadUrl,
+  required VoidCallback onPreparationFailure,
+}) async {
+  final uri = normalizeBrowserUrl(requestedUrl);
+  if (uri.isEmpty) return false;
+
+  updateAddress(uri);
+  final navigated = await navigateBrowserPageAfterCookiePreparation(
+    prepareCookies: prepareCookies,
+    loadUrl: () => loadUrl(uri),
+  );
+  if (!navigated) {
+    updateAddress(currentUrl.isNotEmpty ? currentUrl : previousAddress);
+    onPreparationFailure();
+  }
+  return navigated;
+}
+
+/// Shares cookie-store preparation between overlapping browser navigations.
+@visibleForTesting
+class BrowserCookieStorePreparation {
+  final Future<bool> Function() _prepareCookies;
+  bool _prepared = false;
+  Future<bool>? _inFlightPreparation;
+
+  BrowserCookieStorePreparation(this._prepareCookies);
+
+  Future<bool> ensurePrepared() {
+    if (_prepared) return Future<bool>.value(true);
+    final inFlightPreparation = _inFlightPreparation;
+    if (inFlightPreparation != null) return inFlightPreparation;
+
+    late final Future<bool> preparation;
+    preparation = Future<bool>.sync(_prepareCookies).then((prepared) {
+      if (prepared) _prepared = true;
+      return prepared;
+    }).whenComplete(() {
+      if (identical(_inFlightPreparation, preparation)) {
+        _inFlightPreparation = null;
+      }
+    });
+    _inFlightPreparation = preparation;
+    return preparation;
+  }
 }
 
 /// Builds the [InAppWebViewSettings] appropriate for the given mode.
@@ -247,8 +308,9 @@ class _BrowserPageState extends State<BrowserPage> {
   /// When enabled, cookies are not deleted on browser close.
   bool _cookieRetentionEnabled = false;
 
-  /// Whether cookie preparation succeeded for this page instance.
-  bool _cookieStorePrepared = false;
+  final _cookieStorePreparation = BrowserCookieStorePreparation(
+    BrowserCookieService.prepareForBrowserPageLoad,
+  );
 
   /// Current position offset of the floating panel, managed by the parent
   /// (BrowserPage) instead of internally by DraggableFloatingPanel.
@@ -287,12 +349,8 @@ class _BrowserPageState extends State<BrowserPage> {
     await BrowserCookieService.persistCookiesToFile();
   }
 
-  Future<bool> _ensureCookieStorePrepared() async {
-    if (_cookieStorePrepared) return true;
-    final prepared = await BrowserCookieService.prepareForBrowserPageLoad();
-    if (prepared) _cookieStorePrepared = true;
-    return prepared;
-  }
+  Future<bool> _ensureCookieStorePrepared() =>
+      _cookieStorePreparation.ensurePrepared();
 
   @override
   void dispose() {
@@ -421,16 +479,29 @@ class _BrowserPageState extends State<BrowserPage> {
   }
 
   Future<void> _goToUrl(String url) async {
-    final uri = normalizeBrowserUrl(url);
-    if (uri.isEmpty) return;
     final controller = _webViewController;
     if (controller == null) return;
-    _urlController.text = uri;
-    await navigateBrowserPageAfterCookiePreparation(
+    final previousAddress = _urlController.text;
+    await navigateBrowserPageFromAddress(
+      requestedUrl: url,
+      previousAddress: previousAddress,
+      currentUrl: _currentUrl,
+      updateAddress: (address) {
+        if (mounted) _urlController.text = address;
+      },
       prepareCookies: _ensureCookieStorePrepared,
-      loadUrl: () async {
+      loadUrl: (address) async {
         if (!mounted || controller != _webViewController) return;
-        await controller.loadUrl(urlRequest: URLRequest(url: WebUri(uri)));
+        await controller.loadUrl(urlRequest: URLRequest(url: WebUri(address)));
+      },
+      onPreparationFailure: () {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cookie 准备失败，未加载页面'),
+            backgroundColor: Colors.red,
+          ),
+        );
       },
     );
   }
@@ -554,6 +625,9 @@ class _BrowserPageState extends State<BrowserPage> {
                       },
                       onLoadStart: (controller, url) {
                         final urlString = url.toString();
+                        // Record the requested host before a redirect replaces
+                        // it with the final URL reported by onLoadStop.
+                        noteBrowserPageNavigationUrl(urlString);
                         setState(() {
                           _isLoading = true;
                           _progress = 0;
@@ -570,7 +644,7 @@ class _BrowserPageState extends State<BrowserPage> {
                         _currentUrl = url.toString();
                         // Track the host so cookies can be persisted/displayed
                         // even on platforms without CookieManager.getAllCookies.
-                        BrowserCookieService.noteVisitedUrl(url.toString());
+                        noteBrowserPageNavigationUrl(url.toString());
                         _injectScripts();
                         // Re-inject cat-catch hook if somehow missed or if an
                         // earlier injection was for a previous page

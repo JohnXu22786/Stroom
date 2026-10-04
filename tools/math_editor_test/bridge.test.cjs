@@ -242,7 +242,7 @@ test('vertical navigation edits fraction, script, radical and matrix target slot
 test('slot navigation revisits filled content and exits the correct parent', async () => {
   const {dom, field, bridge} = await editor();
   try {
-    bridge.setSource('\\frac{ab}{cd}',0);
+    bridge.setSource('\\frac{a b}{c d}',0);
     field.position = offsetOf(field,'b');
     assert.equal(bridge.command('next','').location,'分母');
     assert.equal(field.position,offsetOf(field,'d'));
@@ -346,24 +346,26 @@ test('expanded symbol families parse and remain editable in rendered math', asyn
   } finally { dom.window.close(); }
 });
 
-test('compact digit subscripts keep parameter boundaries in edited exports', async () => {
+test('compact identifier subscripts keep parameter boundaries in edited exports', async () => {
   const {dom, field, bridge} = await editor();
   try {
     for (const base of ['a','\\alpha']) {
-      const source = base + '_{1}x';
-      assert.equal(bridge.setSource(source,1).latex,source);
-      field.position = field.lastOffset;
-      bridge.command('insert','+1');
-      assert.equal(bridge.snapshot().latex,source+'+1');
-      bridge.setSource('',2);
-      bridge.command('insert',base);
-      bridge.command('insert','#@_{#?}');
-      bridge.command('insert','1');
-      bridge.command('navigate','out');
-      bridge.command('insert','x');
-      assert.equal(bridge.snapshot().latex,source);
-      field.selection = {ranges:[[0,field.lastOffset]],direction:'forward'};
-      assert.equal(bridge.selectedLatex(),source);
+      for (const index of ['1','b']) {
+        const source = base + '_{' + index + '}x';
+        assert.equal(bridge.setSource(source,1).latex,source);
+        field.position = field.lastOffset;
+        bridge.command('insert','+1');
+        assert.equal(bridge.snapshot().latex,source+'+1');
+        bridge.setSource('',2);
+        bridge.command('insert',base);
+        bridge.command('insert','#@_{#?}');
+        bridge.command('insert',index);
+        bridge.command('navigate','out');
+        bridge.command('insert','x');
+        assert.equal(bridge.snapshot().latex,source);
+        field.selection = {ranges:[[0,field.lastOffset]],direction:'forward'};
+        assert.equal(bridge.selectedLatex(),source);
+      }
     }
     for (const source of ['\\text{a_1}', '\\operatorname{a_1}']) {
       bridge.setSource(source,3);field.position=field.lastOffset;
@@ -371,6 +373,76 @@ test('compact digit subscripts keep parameter boundaries in edited exports', asy
       assert.equal(bridge.snapshot().latex,field.getValue('latex'));
     }
   } finally {dom.window.close();}
+});
+
+test('separate rendered letter atoms keep graph token boundaries in snapshots and copies', async () => {
+  const {dom, field, bridge} = await editor();
+  try {
+    for (const [atoms, exported, reimported=exported] of [
+      [['A','x'], 'A x'],
+      [['a','x'], 'a x'],
+      [['A','2'], 'A 2'],
+      [['a','2','3'], 'a 23'],
+      [['2','A'], '2 A'],
+      [['1','e','3'], '1 e 3'],
+      [['e','E'], 'e E', 'e e'],
+    ]) {
+      bridge.setSource('',0);
+      for (const atom of atoms) bridge.command('insert',atom);
+      assert.equal(bridge.snapshot().latex,exported,atoms.join(','));
+      field.selection = {ranges:[[0,field.lastOffset]],direction:'forward'};
+      assert.equal(bridge.selectedLatex(),exported,atoms.join(','));
+      // MathLive removes ordinary input spaces; reimporting an edited snapshot
+      // must restore the same atom boundaries on the next edit.
+      bridge.setSource('',1);
+      bridge.setSource(exported,2);
+      field.position=field.lastOffset;
+      bridge.command('insert','+1');
+      assert.equal(bridge.snapshot().latex,reimported+'+1',atoms.join(','));
+    }
+  } finally { dom.window.close(); }
+});
+
+test('legacy identifier namespaces survive rendered edits without splitting literals', async () => {
+  const {dom, field, bridge} = await editor();
+  try {
+    for (const name of ['foo','Ax','A2','a2ln2','constructor','foo_bar_baz','foo_pi_ln2','foo_','foo__bar','foo___','foo__bar_']) {
+      const source=name+'*x';
+      assert.equal(bridge.setSource(source,1).latex,source);
+      assert.equal(field.errors.length,0,source);
+      field.position=field.lastOffset;
+      bridge.command('insert','+1');
+      const exported='\\mathrm{'+name.replaceAll('_','\\_')+'}\\cdot x+1';
+      assert.equal(bridge.snapshot().latex,exported,source);
+      field.selection={ranges:[[0,field.lastOffset]],direction:'forward'};
+      assert.equal(bridge.selectedLatex(),exported,source);
+    }
+    for (const source of [
+      '\\text{Ax a2ln2 a\\_b}', '\\operatorname{a_1}',
+      '\\mathrm{alpha}_{12}x', 'a_{ln2}x', '\\alpha_{1e3}x',
+      'a\\_b', '\\sin(x)+\\alpha x+1.25',
+      '\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}',
+    ]) {
+      bridge.setSource(source,2);
+      assert.equal(field.errors.length,0,source);
+      field.position=field.lastOffset;
+      bridge.command('insert','+1');
+      assert.equal(bridge.snapshot().latex,field.getValue('latex'),source);
+    }
+    bridge.setSource('sin(xa_{12})',3);
+    field.position=field.lastOffset;
+    bridge.command('insert','+1');
+    assert.equal(bridge.snapshot().latex,'\\sin\\left(x a_{12}\\right)+1');
+    bridge.setSource('unknown(x)',4);
+    field.position=field.lastOffset;
+    bridge.command('insert','+1');
+    assert.equal(bridge.snapshot().latex,'\\mathrm{unknown}(x)+1');
+    const romanIndex='\\mathrm{foo}_{bar_baz}\\cdot x';
+    assert.equal(bridge.setSource(romanIndex,5).latex,romanIndex);
+    field.position=field.lastOffset;
+    bridge.command('insert','+1');
+    assert.equal(bridge.snapshot().latex,'\\mathrm{foo\\_bar\\_baz}\\cdot x+1');
+  } finally { dom.window.close(); }
 });
 
 test('identifier subscripts survive import and rendered editing', async () => {
@@ -429,10 +501,13 @@ test('legacy functions and constants retain their structures after editing', asy
       ['sqrt1_2', /\\frac\{1\}\{\\sqrt\{2\}\}/],
       ['SQRT1_2', /\\frac\{1\}\{\\sqrt\{2\}\}/],
       ['PI', /\\pi/],
+      ['pi', /\\pi/],
+      ['e', /^e/],
+      ['E', /^e/],
       ['2ln2', /2\\ln\\left\(2\\right\)/],
       ['2sqrt1_2', /2\\frac\{1\}\{\\sqrt\{2\}\}/],
-      ['a2ln2', /^a2ln2/],
-      ['constructor*x', /^constructor\\cdot x/],
+      ['a2ln2', /^\\mathrm\{a2ln2\}/],
+      ['constructor*x', /^\\mathrm\{constructor\}\\cdot x/],
     ]) {
       assert.equal(bridge.setSource(source,1).latex,source);
       assert.equal(field.errors.length,0,source);

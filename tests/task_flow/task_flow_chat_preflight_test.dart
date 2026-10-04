@@ -147,28 +147,130 @@ void main() {
             .having((e) => e.message, 'attachment size', contains('10 MB'))));
   });
 
-  test('image inputs keep the chat pipeline image compression allowance',
-      () async {
-    final image = File('${directory.path}/photo.png');
-    final handle = await image.open(mode: FileMode.write);
-    await handle.writeFrom([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-    await handle.truncate(maxAttachmentBytes + 1);
-    await handle.close();
-    await validateTaskFlow(
-        chatFlow(IOType.image), [FlowRunInput(text: image.path)],
-        providers: const ProviderEntriesState(),
-        assistants: [unboundAssistant]);
-  });
+  test(
+    'uncompressible images over 10 MB fail preflight',
+    () async {
+      final image = File('${directory.path}/photo.png');
+      final handle = await image.open(mode: FileMode.write);
+      await handle.writeFrom([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      await handle.truncate(maxAttachmentBytes + 1);
+      await handle.close();
+      await expectLater(
+        validateTaskFlow(
+          chatFlow(IOType.image),
+          [FlowRunInput(text: image.path)],
+          providers: const ProviderEntriesState(),
+          assistants: [unboundAssistant],
+        ),
+        throwsA(isA<TaskFlowValidationException>().having(
+            (e) => e.message, 'uncompressible image', contains('10 MB'))),
+      );
+    },
+  );
 
-  test('generic file input also allows a large detected image', () async {
+  test('generic file input also rejects a large uncompressible image',
+      () async {
     final image = File('${directory.path}/generic-image.png');
     final handle = await image.open(mode: FileMode.write);
     await handle.writeFrom([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     await handle.truncate(maxAttachmentBytes + 1);
     await handle.close();
-    await validateTaskFlow(
-        chatFlow(IOType.file), [FlowRunInput(text: image.path)],
+    await expectLater(
+      validateTaskFlow(
+        chatFlow(IOType.file),
+        [FlowRunInput(text: image.path)],
         providers: const ProviderEntriesState(),
-        assistants: [unboundAssistant]);
+        assistants: [unboundAssistant],
+      ),
+      throwsA(isA<TaskFlowValidationException>()
+          .having((e) => e.message, 'uncompressible image', contains('10 MB'))),
+    );
+  });
+
+  test('SVG fails initial chat preflight for both endpoint types', () async {
+    final image = await File('${directory.path}/vector.svg')
+        .writeAsString('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    for (final (providers, assistant) in [
+      (const ProviderEntriesState(), unboundAssistant),
+      (anthropic, boundAssistant),
+    ]) {
+      await expectLater(
+        validateTaskFlow(
+          chatFlow(IOType.image),
+          [FlowRunInput(text: image.path)],
+          providers: providers,
+          assistants: [assistant],
+        ),
+        throwsA(isA<TaskFlowValidationException>()
+            .having((e) => e.message, 'unsupported SVG', contains('SVG'))),
+      );
+    }
+  });
+
+  test('unsupported BMP and WMA fail before initial chat submission', () async {
+    final bmp = await File('${directory.path}/photo.bmp')
+        .writeAsBytes([0x42, 0x4d, 0, 0, 0, 0]);
+    final wma = await File('${directory.path}/recording.wma').writeAsBytes([
+      0x30,
+      0x26,
+      0xb2,
+      0x75,
+      0x8e,
+      0x66,
+      0xcf,
+      0x11,
+    ]);
+    for (final (source, providers, assistant) in [
+      (bmp, const ProviderEntriesState(), unboundAssistant),
+      (bmp, anthropic, boundAssistant),
+      (wma, const ProviderEntriesState(), unboundAssistant),
+    ]) {
+      await expectLater(
+        validateTaskFlow(
+          chatFlow(IOType.file),
+          [FlowRunInput(text: source.path)],
+          providers: providers,
+          assistants: [assistant],
+        ),
+        throwsA(isA<TaskFlowValidationException>().having(
+          (e) => e.message,
+          'unsupported media subtype',
+          contains('不支持'),
+        )),
+      );
+    }
+  });
+
+  test('picked text must be UTF-8 before initial chat submission', () async {
+    final file =
+        await File('${directory.path}/copy.bin').writeAsBytes([0xc3, 0x28]);
+    await expectLater(
+      validateTaskFlow(
+        chatFlow(IOType.file),
+        [FlowRunInput(text: file.path, fileName: 'report.txt')],
+        providers: const ProviderEntriesState(),
+        assistants: [unboundAssistant],
+      ),
+      throwsA(isA<TaskFlowValidationException>()
+          .having((e) => e.inputIndex, 'input index', 0)
+          .having((e) => e.message, 'text encoding', contains('UTF-8'))),
+    );
+    await file.writeAsString('Valid UTF-8 text');
+    await validateTaskFlow(
+      chatFlow(IOType.file),
+      [FlowRunInput(text: file.path, fileName: 'report.txt')],
+      providers: const ProviderEntriesState(),
+      assistants: [unboundAssistant],
+    );
+    // Anthropic sends a signed PDF as binary even when its picked name ends
+    // in .txt; its PDF bytes do not need to decode as text.
+    await file.writeAsBytes([...utf8.encode('%PDF-1.7\n'), 0xff]);
+    await validateTaskFlow(
+      chatFlow(IOType.file),
+      [FlowRunInput(text: file.path, fileName: 'report.txt')],
+      providers: const ProviderEntriesState(),
+      assistants: [unboundAssistant],
+      fallbackChatEndpointType: 'anthropic',
+    );
   });
 }

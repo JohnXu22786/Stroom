@@ -19,14 +19,21 @@ class FlowExecutionMigration {
     if (encoded.isEmpty) return;
     final executions = jsonDecode(encoded) as List;
     for (final execution in executions.whereType<Map>()) {
+      final rawSteps = execution['subTasks'];
+      // A malformed record is skipped by the execution loader. Do not let it
+      // prevent valid sibling records from receiving their migration.
+      if (rawSteps != null && rawSteps is! List) continue;
       execution.putIfAbsent('batchIndex', () => 0);
-      for (final step
-          in (execution['subTasks'] as List? ?? []).whereType<Map>()) {
+      for (final step in (rawSteps as List? ?? []).whereType<Map>()) {
         if (step.containsKey('outcome')) continue;
-        final pending =
-            (step['subTaskId'] as String? ?? '').startsWith('pending_');
-        if (pending && ['failed', 'completed'].contains(execution['status'])) {
-          step['outcome'] = 'skipped';
+        final subTaskId = step['subTaskId'];
+        if (subTaskId != null && subTaskId is! String) continue;
+        final pending = (subTaskId as String? ?? '').startsWith('pending_');
+        if (pending &&
+            ['running', 'failed', 'completed', 'interrupted', 'cancelled']
+                .contains(execution['status'])) {
+          step['outcome'] =
+              execution['status'] == 'cancelled' ? 'cancelled' : 'skipped';
           step['status'] = 'paused';
         } else {
           step['outcome'] = switch (step['status']) {

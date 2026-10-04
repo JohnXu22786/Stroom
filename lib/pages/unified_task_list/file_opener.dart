@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../../catcatch/models/media_kind.dart';
 import '../../utils/text_manifest.dart';
 import '../audio_player_page.dart';
 import '../text_preview_edit_page.dart';
@@ -99,9 +100,11 @@ final Set<String> _audioExtensions = {
   'mp3',
   'wav',
   'm4a',
+  'mka',
   'aac',
   'opus',
   'ogg',
+  'weba',
   'flac',
   'wma',
   'aiff',
@@ -113,6 +116,24 @@ final Set<String> _audioExtensions = {
   'mid',
   'midi',
 };
+
+enum FileOpenKind { text, video, audio, system }
+
+/// Some containers can contain either audio or video. Probe their saved bytes
+/// instead of treating their extensions as a media kind.
+Future<FileOpenKind> fileOpenKind(String filePath) async {
+  final ext = p.extension(filePath).replaceAll('.', '').toLowerCase();
+  if (_textExtensions.contains(ext)) return FileOpenKind.text;
+  if (const {'mov', 'flv', 'avi', 'mpeg', 'mpg'}.contains(ext)) {
+    final kind = await catCatchMediaKindFromPath(filePath);
+    if (kind == CatCatchMediaKind.audio) return FileOpenKind.audio;
+    if (kind == CatCatchMediaKind.video) return FileOpenKind.video;
+    return FileOpenKind.system;
+  }
+  if (_videoExtensions.contains(ext)) return FileOpenKind.video;
+  if (_audioExtensions.contains(ext)) return FileOpenKind.audio;
+  return FileOpenKind.system;
+}
 
 /// Open a file with the appropriate built-in viewer based on file extension.
 ///
@@ -128,16 +149,17 @@ Future<void> openFile(String filePath, BuildContext context) async {
       return;
     }
 
-    final ext = p.extension(filePath).replaceAll('.', '').toLowerCase();
-
-    if (_textExtensions.contains(ext)) {
-      await _openTextFile(filePath, context);
-    } else if (_videoExtensions.contains(ext)) {
-      _openVideoFile(filePath, context);
-    } else if (_audioExtensions.contains(ext)) {
-      _openAudioFile(filePath, context);
-    } else {
-      _openWithOsDefault(filePath);
+    final kind = await fileOpenKind(filePath);
+    if (!context.mounted) return;
+    switch (kind) {
+      case FileOpenKind.text:
+        await _openTextFile(filePath, context);
+      case FileOpenKind.video:
+        _openVideoFile(filePath, context);
+      case FileOpenKind.audio:
+        _openAudioFile(filePath, context);
+      case FileOpenKind.system:
+        _openWithOsDefault(filePath);
     }
   } catch (e) {
     debugPrint('Failed to open file: $e');
