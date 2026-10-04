@@ -14,6 +14,9 @@ class _FakeCookiePlatform implements CookiePlatform {
   List<Cookie> allCookies = [];
   Completer<void>? getAllCookiesStarted;
   Completer<void>? allowGetAllCookies;
+  int getAllCookiesCalls = 0;
+  final Map<int, Completer<void>> getAllCookiesStartedByCall = {};
+  final Map<int, Completer<void>> allowGetAllCookiesByCall = {};
   String? blockedDeleteCookieName;
   Completer<void>? deleteCookieStarted;
   Completer<void>? allowDeleteCookie;
@@ -27,6 +30,7 @@ class _FakeCookiePlatform implements CookiePlatform {
 
   @override
   Future<List<Cookie>> getAllCookies() async {
+    final callNumber = ++getAllCookiesCalls;
     if (throwOnGetAll) {
       throw UnimplementedError('getAllCookies is not implemented');
     }
@@ -34,9 +38,10 @@ class _FakeCookiePlatform implements CookiePlatform {
       throw StateError('platform exploded');
     }
     final snapshot = List<Cookie>.from(allCookies);
-    final started = getAllCookiesStarted;
+    final started =
+        getAllCookiesStartedByCall[callNumber] ?? getAllCookiesStarted;
     if (started != null && !started.isCompleted) started.complete();
-    await allowGetAllCookies?.future;
+    await (allowGetAllCookiesByCall[callNumber] ?? allowGetAllCookies)?.future;
     return snapshot;
   }
 
@@ -475,6 +480,35 @@ void main() {
       expect(cookies.containsKey('example.com'), isFalse);
       expect(cookies.containsKey('other.org'), isTrue);
     });
+
+    test('serializes with an in-flight cookie snapshot', () async {
+      final fake = _FakeCookiePlatform()
+        ..allCookies = [
+          Cookie(
+              name: 'session', value: 'abc', domain: 'example.com', path: '/'),
+          Cookie(name: 'keep', value: 'me', domain: 'other.org', path: '/'),
+        ]
+        ..getAllCookiesStartedByCall[1] = Completer<void>()
+        ..allowGetAllCookiesByCall[1] = Completer<void>();
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.setRetentionMode(true);
+
+      final persistence = BrowserCookieService.persistCookiesToFile();
+      await fake.getAllCookiesStartedByCall[1]!.future;
+      final clearing =
+          BrowserCookieService.clearCookiesForDomain('example.com');
+      await Future<void>.delayed(Duration.zero);
+      final deleteCallsBeforeSnapshotReleased =
+          List<Map<String, dynamic>>.from(fake.deleteCookiesCalls);
+      fake.allowGetAllCookiesByCall[1]!.complete();
+      await Future.wait([persistence, clearing]);
+
+      expect(deleteCallsBeforeSnapshotReleased, isEmpty,
+          reason: 'domain clearing must wait for the pending cookie snapshot');
+      final cookies = await BrowserCookieService.getCookiesFromFile();
+      expect(cookies.containsKey('example.com'), isFalse);
+      expect(cookies['other.org']!.single['name'], 'keep');
+    });
   });
 
   // ====================================================================
@@ -494,6 +528,52 @@ void main() {
       final ok = await BrowserCookieService.clearAllCookies();
       expect(ok, isTrue);
       expect(fake.deleteAllCookiesCalls, 1);
+      expect(await BrowserCookieService.getCookiesFromFile(), isEmpty);
+    });
+
+    test('serializes with an in-flight cookie snapshot', () async {
+      final fake = _FakeCookiePlatform()
+        ..allCookies = [
+          Cookie(
+              name: 'session', value: 'abc', domain: 'example.com', path: '/'),
+        ]
+        ..getAllCookiesStarted = Completer<void>()
+        ..allowGetAllCookies = Completer<void>();
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.setRetentionMode(true);
+
+      final persistence = BrowserCookieService.persistCookiesToFile();
+      await fake.getAllCookiesStarted!.future;
+      final clearing = BrowserCookieService.clearAllCookies();
+      fake.allowGetAllCookies!.complete();
+      await Future.wait([persistence, clearing]);
+
+      expect(await BrowserCookieService.getCookiesFromFile(), isEmpty);
+    });
+  });
+
+  group('queue-safe browser cleanup', () {
+    test('page preparation and browser close clear without re-entering queue',
+        () async {
+      final fake = _FakeCookiePlatform();
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'example.com', 'name': 'session', 'value': 'abc'},
+      ]);
+
+      expect(
+          await BrowserCookieService.prepareForBrowserPageLoad()
+              .timeout(const Duration(seconds: 5)),
+          isTrue);
+      expect(await BrowserCookieService.getCookiesFromFile(), isEmpty);
+
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'example.com', 'name': 'session', 'value': 'abc'},
+      ]);
+      await BrowserCookieService.handleBrowserClose()
+          .timeout(const Duration(seconds: 5));
+
+      expect(fake.deleteAllCookiesCalls, 2);
       expect(await BrowserCookieService.getCookiesFromFile(), isEmpty);
     });
   });
