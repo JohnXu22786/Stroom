@@ -417,7 +417,7 @@ class BackupService {
     // 3. 任务文件 + Anki + Cookies
     if (selection.tasks) {
       debugPrint('[BackupService] streaming: adding task files');
-      final appDir = await AppStorage.directory;
+      final appDir = useStreaming ? await AppStorage.directory : '';
       final taskFlowAttachmentPaths =
           selection.includeMediaFiles && !kIsWeb && !WebFileStore.isTestMode
               ? await _taskFlowAttachmentPathsForBackup(appDir)
@@ -518,7 +518,7 @@ class BackupService {
           diskFiles,
           memoryFiles,
           archivePrefix: 'anki/collection.media',
-          sourcePath: p.join(await AppStorage.directory, 'collection.media'),
+          sourcePath: await _appDataDirectoryPath('collection.media'),
           useStreaming: useStreaming,
         );
       }
@@ -529,7 +529,7 @@ class BackupService {
 
     // 4. 二进制文件 — 逐个处理，用到时才加载数据库记录
     debugPrint('[BackupService] streaming: adding binary files');
-    final appDir = await AppStorage.directory;
+    final appDir = useStreaming ? await AppStorage.directory : '';
     List<Map<String, dynamic>>? manifestImageRecords;
     List<Map<String, dynamic>>? manifestAudioRecords;
     List<Map<String, dynamic>>? manifestVideoRecords;
@@ -1024,6 +1024,14 @@ class BackupService {
     }
   }
 
+  /// Resolves an app-managed directory only for the native file-system path.
+  /// Tests and Web use WebFileStore, so asking path_provider for a native
+  /// documents directory there can stall inside Flutter's fake async zone.
+  static Future<String> _appDataDirectoryPath(String subdirectory) async {
+    if (kIsWeb || WebFileStore.isTestMode) return '';
+    return p.join(await AppStorage.directory, subdirectory);
+  }
+
   /// 添加内存中的数据到 ZIP（store 模式，数据小无需压缩）。
   static void _addInMemoryFile(ZipEncoder encoder, String name, String json) {
     final data = Uint8List.fromList(utf8.encode(json));
@@ -1458,7 +1466,7 @@ class BackupService {
         await _addDirectoryToArchive(
           archive,
           archivePrefix: 'anki/collection.media',
-          sourcePath: p.join(await AppStorage.directory, 'collection.media'),
+          sourcePath: await _appDataDirectoryPath('collection.media'),
         );
       }
     }
@@ -1502,7 +1510,7 @@ class BackupService {
       await _addDirectoryToArchive(
         archive,
         archivePrefix: 'pictures',
-        sourcePath: p.join(await AppStorage.directory, 'pictures'),
+        sourcePath: await _appDataDirectoryPath('pictures'),
       );
     }
     onProgress?.call(0.5);
@@ -1536,7 +1544,7 @@ class BackupService {
       await _addDirectoryToArchive(
         archive,
         archivePrefix: 'tts_audio',
-        sourcePath: p.join(await AppStorage.directory, 'tts_audio'),
+        sourcePath: await _appDataDirectoryPath('tts_audio'),
       );
     }
     onProgress?.call(0.65);
@@ -1563,7 +1571,7 @@ class BackupService {
       await _addDirectoryToArchive(
         archive,
         archivePrefix: 'videos',
-        sourcePath: p.join(await AppStorage.directory, 'videos'),
+        sourcePath: await _appDataDirectoryPath('videos'),
       );
     }
     onProgress?.call(0.75);
@@ -1589,7 +1597,7 @@ class BackupService {
       await _addDirectoryToArchive(
         archive,
         archivePrefix: 'texts',
-        sourcePath: p.join(await AppStorage.directory, 'texts'),
+        sourcePath: await _appDataDirectoryPath('texts'),
       );
     }
     onProgress?.call(0.8);
@@ -1616,7 +1624,7 @@ class BackupService {
       await _addDirectoryToArchive(
         archive,
         archivePrefix: 'attachments',
-        sourcePath: p.join(await AppStorage.directory, 'attachments'),
+        sourcePath: await _appDataDirectoryPath('attachments'),
       );
     }
     onProgress?.call(0.85);
