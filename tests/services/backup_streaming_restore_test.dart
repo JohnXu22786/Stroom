@@ -376,22 +376,34 @@ void main() {
 
     // ---- 条目 1：manifest.json（普通 store 条目）----
     final mName = utf8.encode('manifest.json');
-    writeLocalHeader(b, mName, manifestContent.length);
+    writeLocalHeader(
+      b,
+      mName,
+      manifestContent.length,
+      crc32: _zipCrc32(manifestContent),
+    );
     b.add(manifestContent);
 
     // ---- 条目 2：pictures/zip64.bin（zip64 尺寸/偏移）----
     final zName = utf8.encode('pictures/zip64.bin');
     final binOffset = b.length;
-    writeLocalHeader(b, zName, binContent.length, zip64Sizes: true);
+    writeLocalHeader(
+      b,
+      zName,
+      binContent.length,
+      zip64Sizes: true,
+      crc32: _zipCrc32(binContent),
+    );
     b.add(binContent);
 
     // ---- 中央目录（zip64 条目在前，普通条目在后）----
     final cdOffset = b.length;
     writeCfh(b, 'pictures/zip64.bin', binContent.length, binContent.length,
         binOffset,
-        zip64Fields: true);
+        zip64Fields: true, crc32: _zipCrc32(binContent));
     writeCfh(
-        b, 'manifest.json', manifestContent.length, manifestContent.length, 0);
+        b, 'manifest.json', manifestContent.length, manifestContent.length, 0,
+        crc32: _zipCrc32(manifestContent));
 
     final cdSize = b.length - cdOffset;
     final zip64EocdOffset = b.length;
@@ -427,16 +439,12 @@ void main() {
   });
 
   // ==================================================================
-  // 恢复中途的条目损坏：必须在删除之后以"非校验异常"失败（提示重启）
+  // 恢复前的条目校验：损坏的条目不得导致已选类别被提前删除。
   // ==================================================================
 
-  test('corrupt binary entry fails mid-restore, not as validation error',
-      () async {
-    // 手工合成 zip：manifest + stroom_manifest 合法（校验期通过），
-    // 但 videos/corrupt.mp4 的 deflate 数据是"合法流但尺寸不符"：
-    // 声明 uncompressedSize=1000000，实际解压只有 5 字节 —— 尺寸守卫
-    // 必须在中途抛出非 BackupValidationException 的异常（恢复已部分
-    // 完成，UI 需提示重启），而不是被当作"无效备份，什么都没动"。
+  test('corrupt binary entry is rejected before restore mutation', () async {
+    // manifest 和 stroom_manifest 合法；视频条目是合法但尺寸不符的
+    // deflate 流。预检必须在删除现有数据前将其作为无效备份拒绝。
     final manifestContent = utf8.encode(
         '{"version":2,"createdAt":"2026-01-01T00:00:00","appVersion":"test"}');
     final dbContent = utf8.encode(jsonEncode({
@@ -447,28 +455,47 @@ void main() {
       'folders': <String>[],
     }));
     // 一个合法但内容极短的 raw deflate 流（解压后 5 字节）
+    final shortContent = utf8.encode('SHORT');
     final shortDeflate =
-        Uint8List.fromList(ZLibCodec(raw: true).encode(utf8.encode('SHORT')));
+        Uint8List.fromList(ZLibCodec(raw: true).encode(shortContent));
 
     final b = BytesBuilder(copy: false);
     final mName = utf8.encode('manifest.json');
-    writeLocalHeader(b, mName, manifestContent.length);
+    writeLocalHeader(
+      b,
+      mName,
+      manifestContent.length,
+      crc32: _zipCrc32(manifestContent),
+    );
     b.add(manifestContent);
     final dbName = utf8.encode('stroom_manifest.json');
-    writeLocalHeader(b, dbName, dbContent.length);
+    writeLocalHeader(
+      b,
+      dbName,
+      dbContent.length,
+      crc32: _zipCrc32(dbContent),
+    );
     b.add(dbContent);
     final vName = utf8.encode('videos/corrupt.mp4');
     final videoOffset = b.length;
-    writeLocalHeader(b, vName, shortDeflate.length, method: 8);
+    writeLocalHeader(
+      b,
+      vName,
+      shortDeflate.length,
+      crc32: _zipCrc32(shortContent),
+      method: 8,
+    );
     b.add(shortDeflate);
 
     final cdOffset = b.length;
     writeCfh(
-        b, 'manifest.json', manifestContent.length, manifestContent.length, 0);
+        b, 'manifest.json', manifestContent.length, manifestContent.length, 0,
+        crc32: _zipCrc32(manifestContent));
     writeCfh(b, 'stroom_manifest.json', dbContent.length, dbContent.length,
-        mName.length + 30 + manifestContent.length);
+        mName.length + 30 + manifestContent.length,
+        crc32: _zipCrc32(dbContent));
     writeCfh(b, 'videos/corrupt.mp4', shortDeflate.length, 1000000, videoOffset,
-        method: 8);
+        method: 8, crc32: _zipCrc32(shortContent));
     final cdSize = b.length - cdOffset;
     writeEocd(b, entryCount: 3, cdSize: cdSize, cdOffset: cdOffset);
 
@@ -477,7 +504,7 @@ void main() {
 
     await expectLater(
       BackupService.restoreBackup(zipPath),
-      throwsA(isNot(isA<BackupValidationException>())),
+      throwsA(isA<BackupValidationException>()),
     );
   });
 
@@ -505,24 +532,42 @@ void main() {
 
     final b = BytesBuilder(copy: false);
     final mName = utf8.encode('manifest.json');
-    writeLocalHeader(b, mName, manifestContent.length);
+    writeLocalHeader(
+      b,
+      mName,
+      manifestContent.length,
+      crc32: _zipCrc32(manifestContent),
+    );
     b.add(manifestContent);
     final dbName = utf8.encode('stroom_manifest.json');
-    writeLocalHeader(b, dbName, dbContent.length);
+    writeLocalHeader(
+      b,
+      dbName,
+      dbContent.length,
+      crc32: _zipCrc32(dbContent),
+    );
     b.add(dbContent);
     final vName = utf8.encode('videos/truncated.mp4');
     final videoOffset = b.length;
-    writeLocalHeader(b, vName, truncated.length, method: 8);
+    writeLocalHeader(
+      b,
+      vName,
+      truncated.length,
+      crc32: _zipCrc32(fullData),
+      method: 8,
+    );
     b.add(truncated);
 
     final cdOffset = b.length;
     writeCfh(
-        b, 'manifest.json', manifestContent.length, manifestContent.length, 0);
+        b, 'manifest.json', manifestContent.length, manifestContent.length, 0,
+        crc32: _zipCrc32(manifestContent));
     writeCfh(b, 'stroom_manifest.json', dbContent.length, dbContent.length,
-        mName.length + 30 + manifestContent.length);
+        mName.length + 30 + manifestContent.length,
+        crc32: _zipCrc32(dbContent));
     writeCfh(b, 'videos/truncated.mp4', truncated.length, fullData.length,
         videoOffset,
-        method: 8);
+        method: 8, crc32: _zipCrc32(fullData));
     final cdSize = b.length - cdOffset;
     writeEocd(b, entryCount: 3, cdSize: cdSize, cdOffset: cdOffset);
 
@@ -531,7 +576,7 @@ void main() {
 
     await expectLater(
       BackupService.restoreBackup(zipPath),
-      throwsA(isNot(isA<BackupValidationException>())),
+      throwsA(isA<BackupValidationException>()),
     );
     // 绝不允许出现半个文件
     expect(await readBackupFile('videos', 'truncated.mp4'), isNull);
@@ -612,12 +657,18 @@ void main() {
 
     final b = BytesBuilder(copy: false);
     final mName = utf8.encode('manifest.json');
-    writeLocalHeader(b, mName, manifestContent.length);
+    writeLocalHeader(
+      b,
+      mName,
+      manifestContent.length,
+      crc32: _zipCrc32(manifestContent),
+    );
     b.add(manifestContent);
 
     final cdOffset = b.length;
     writeCfh(
-        b, 'manifest.json', manifestContent.length, manifestContent.length, 0);
+        b, 'manifest.json', manifestContent.length, manifestContent.length, 0,
+        crc32: _zipCrc32(manifestContent));
     for (var i = 0; i < 65534; i++) {
       final name = 'f${i.toString().padLeft(5, '0')}';
       final nameB = utf8.encode(name);
@@ -716,14 +767,14 @@ void main() {
 
 /// 写 ZIP 本地文件头（store 或 deflate，可选 zip64 满值尺寸）。
 void writeLocalHeader(BytesBuilder b, Uint8List name, int dataLen,
-    {bool zip64Sizes = false, int method = 0}) {
+    {required int crc32, bool zip64Sizes = false, int method = 0}) {
   b.add(_le32(0x04034b50));
   b.add(_le16(20)); // version needed
   b.add(_le16(0)); // flags
   b.add(_le16(method));
   b.add(_le16(0));
   b.add(_le16(0));
-  b.add(_le32(0)); // crc
+  b.add(_le32(crc32));
   if (zip64Sizes) {
     b.add(_le32(0xFFFFFFFF));
     b.add(_le32(0xFFFFFFFF));
@@ -738,7 +789,7 @@ void writeLocalHeader(BytesBuilder b, Uint8List name, int dataLen,
 
 /// 写 ZIP 中央目录条目（store 或 deflate，可选 zip64 extra）。
 void writeCfh(BytesBuilder b, String name, int comp, int uncomp, int offset,
-    {bool zip64Fields = false, int method = 0}) {
+    {required int crc32, bool zip64Fields = false, int method = 0}) {
   final nameB = utf8.encode(name);
   b.add(_le32(0x02014b50));
   b.add(_le16(0x0314)); // version made by
@@ -747,7 +798,7 @@ void writeCfh(BytesBuilder b, String name, int comp, int uncomp, int offset,
   b.add(_le16(method));
   b.add(_le16(0));
   b.add(_le16(0));
-  b.add(_le32(0)); // crc
+  b.add(_le32(crc32));
   if (zip64Fields) {
     b.add(_le32(0xFFFFFFFF));
     b.add(_le32(0xFFFFFFFF));
@@ -786,6 +837,18 @@ void writeEocd(BytesBuilder b,
 }
 
 Uint8List _le16(int v) => Uint8List.fromList([v & 0xff, (v >> 8) & 0xff]);
+
+int _zipCrc32(List<int> bytes) {
+  var checksum = 0xffffffff;
+  for (final byte in bytes) {
+    checksum ^= byte;
+    for (var bit = 0; bit < 8; bit++) {
+      checksum =
+          (checksum & 1) != 0 ? (checksum >> 1) ^ 0xedb88320 : checksum >> 1;
+    }
+  }
+  return (checksum ^ 0xffffffff) & 0xffffffff;
+}
 
 Uint8List _le32(int v) => Uint8List.fromList([
       v & 0xff,
