@@ -142,25 +142,25 @@ class JsHookScript {
       });
     }
 
-    // Also intercept on loadend to catch redirected URLs
+    // Listen independently so page handlers assigned before or after send
+    // remain intact.
     try {
-      var originalOnReadyStateChange = xhr.onreadystatechange;
-      xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4) {
+      if (!xhr._catCatchRedirectListener) {
+        xhr._catCatchRedirectListener = function() {
+          if (xhr.readyState !== 4) return;
+
           var responseUrl = xhr.responseURL;
-          if (responseUrl && responseUrl !== url) {
+          if (responseUrl && responseUrl !== xhr._catCatchUrl) {
             sendMediaUrl(responseUrl, {
               method: xhr._catCatchMethod || 'GET',
               initiator: PAGE_URL
             });
           }
-        }
-        if (originalOnReadyStateChange) {
-          originalOnReadyStateChange.apply(xhr, arguments);
-        }
-      };
+        };
+        xhr.addEventListener('readystatechange', xhr._catCatchRedirectListener);
+      }
     } catch(e) {
-      // Some environments restrict onreadystatechange access
+      // Some environments restrict event listener access
     }
 
     return ORIGINAL_XHR_SEND.apply(this, arguments);
@@ -169,6 +169,19 @@ class JsHookScript {
   // =========================================================================
   // MutationObserver: Scan for <video>/<audio> elements
   // =========================================================================
+  function markSourceForRescan(source) {
+    source._catCatchScanned = false;
+
+    var parent = source.parentElement;
+    while (parent && parent.nodeName !== 'VIDEO' &&
+        parent.nodeName !== 'AUDIO') {
+      parent = parent.parentElement;
+    }
+    if (parent) {
+      parent._catCatchScanned = false;
+    }
+  }
+
   function scanMediaElements() {
     try {
       document.querySelectorAll('video, audio').forEach(function(el) {
@@ -177,22 +190,36 @@ class JsHookScript {
 
         // Check current src
         var src = el.currentSrc || el.src || '';
-        if (src) {
-          sendMediaUrl(src, {
+        var mediaUrls = [
+          src,
+          el.getAttribute('data-src'),
+          el.getAttribute('data-url')
+        ];
+        mediaUrls.forEach(function(mediaUrl) {
+          if (!mediaUrl) return;
+          sendMediaUrl(mediaUrl, {
             method: 'GET',
             mimeType: el.tagName === 'VIDEO' ? 'video/*' : 'audio/*',
             initiator: PAGE_URL
           });
-        }
+        });
 
         // Check <source> children
         el.querySelectorAll('source').forEach(function(source) {
-          if (source.src && !source._catCatchScanned) {
+          if (!source._catCatchScanned) {
             source._catCatchScanned = true;
-            sendMediaUrl(source.src, {
-              method: 'GET',
-              mimeType: source.type || (el.tagName === 'VIDEO' ? 'video/*' : 'audio/*'),
-              initiator: PAGE_URL
+            var sourceUrls = [
+              source.src,
+              source.getAttribute('data-src'),
+              source.getAttribute('data-url')
+            ];
+            sourceUrls.forEach(function(sourceUrl) {
+              if (!sourceUrl) return;
+              sendMediaUrl(sourceUrl, {
+                method: 'GET',
+                mimeType: source.type || (el.tagName === 'VIDEO' ? 'video/*' : 'audio/*'),
+                initiator: PAGE_URL
+              });
             });
           }
         });
@@ -220,7 +247,12 @@ class JsHookScript {
           if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO' ||
               node.querySelectorAll) {
             needsScan = true;
-            break;
+          }
+          if (node.nodeName === 'SOURCE') {
+            markSourceForRescan(node);
+          }
+          if (node.querySelectorAll) {
+            node.querySelectorAll('source').forEach(markSourceForRescan);
           }
         }
       } else if (mutation.type === 'attributes' &&
@@ -230,7 +262,11 @@ class JsHookScript {
         var target = mutation.target;
         if (target && (target.nodeName === 'VIDEO' || target.nodeName === 'AUDIO' ||
             target.nodeName === 'SOURCE')) {
-          target._catCatchScanned = false;
+          if (target.nodeName === 'SOURCE') {
+            markSourceForRescan(target);
+          } else {
+            target._catCatchScanned = false;
+          }
           needsScan = true;
         }
       }
