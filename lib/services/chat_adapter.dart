@@ -736,9 +736,11 @@ class ChatAdapter {
     // MCP tools are discovered dynamically
     return [
       ...filterMcpSearchToolDefinitions(
-        ChatService.getRegisteredToolDefinitions().where(
-          (tool) => !_disabledMcpToolNames.contains(tool.name),
-        ).toList(),
+        ChatService.getRegisteredToolDefinitions()
+            .where(
+              (tool) => !_disabledMcpToolNames.contains(tool.name),
+            )
+            .toList(),
         mcpEnabled: _mcpMasterSwitchEnabled,
       ),
       ..._mcpToolDefinitions,
