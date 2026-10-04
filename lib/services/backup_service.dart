@@ -1260,6 +1260,7 @@ class BackupService {
     await _prepareSelectedFilesForRestore(
       restoreSelection,
       taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+      taskFilesToReplace: metadata.taskFilesToReplace,
     );
 
     // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
@@ -1388,6 +1389,7 @@ class BackupService {
       await _prepareSelectedFilesForRestore(
         restoreSelection,
         taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+        taskFilesToReplace: metadata.taskFilesToReplace,
       );
 
       // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
@@ -1655,6 +1657,13 @@ class BackupService {
     final restoreSelection = skipMissingCategories
         ? _intersectSelections(selection, availableSelection)
         : selection;
+    final taskFilesToReplace = restoreSelection.tasks
+        ? _taskPayloadFiles
+              .where(archiveEntries.contains)
+              .map(_canonicalTaskPayloadName)
+              .whereType<String>()
+              .toSet()
+        : <String>{};
 
     if (restoreSelection.tasks) {
       _validateTaskPayloads(readFile, archiveEntries);
@@ -1722,6 +1731,7 @@ class BackupService {
       chatPrefs: chatPrefs,
       settingsPrefs: settingsPrefs,
       restoreSelection: restoreSelection,
+      taskFilesToReplace: taskFilesToReplace,
       skippedLabels: skippedLabels,
       dataPartVersions: dataPartVersions,
       browserCookiesData: browserCookiesData,
@@ -2275,11 +2285,13 @@ class BackupService {
   static Future<void> _prepareSelectedFilesForRestore(
     BackupSelection selection, {
     required Set<String> taskFlowAttachmentKeys,
+    required Set<String> taskFilesToReplace,
   }) async {
     if (await _deleteSelectedFiles(
       selection,
       taskFlowAttachmentKeys: taskFlowAttachmentKeys,
       preserveBrowserCookieSnapshot: selection.browserCookies,
+      taskFilesToReplace: taskFilesToReplace,
     )) {
       throw Exception('部分数据文件删除失败，请重启应用后重试');
     }
@@ -3205,6 +3217,7 @@ class BackupService {
     BackupSelection selection, {
     required Set<String> taskFlowAttachmentKeys,
     bool preserveBrowserCookieSnapshot = false,
+    Set<String>? taskFilesToReplace,
   }) async {
     var deleteFailed = false;
 
@@ -3295,11 +3308,33 @@ class BackupService {
 
     // 任务文件
     if (selection.tasks) {
-      if (!await _deleteFile('synthesis', 'tasks.json')) deleteFailed = true;
-      if (!await _deleteFile('catcatch', 'tasks.json')) deleteFailed = true;
-      if (!await _deleteFile('background', 'tasks.json')) deleteFailed = true;
-      if (!await _deleteFile('task_flows', 'flows.json')) deleteFailed = true;
-      if (!await _deleteFile('task_flows', 'executions.json')) {
+      final taskFiles =
+          taskFilesToReplace ??
+          const {
+            'synthesis/tasks.json',
+            'catcatch/tasks.json',
+            'background/tasks.json',
+            'task_flows/flows.json',
+            'task_flows/executions.json',
+          };
+      if (taskFiles.contains('synthesis/tasks.json') &&
+          !await _deleteFile('synthesis', 'tasks.json')) {
+        deleteFailed = true;
+      }
+      if (taskFiles.contains('catcatch/tasks.json') &&
+          !await _deleteFile('catcatch', 'tasks.json')) {
+        deleteFailed = true;
+      }
+      if (taskFiles.contains('background/tasks.json') &&
+          !await _deleteFile('background', 'tasks.json')) {
+        deleteFailed = true;
+      }
+      if (taskFiles.contains('task_flows/flows.json') &&
+          !await _deleteFile('task_flows', 'flows.json')) {
+        deleteFailed = true;
+      }
+      if (taskFiles.contains('task_flows/executions.json') &&
+          !await _deleteFile('task_flows', 'executions.json')) {
         deleteFailed = true;
       }
     }
@@ -3682,6 +3717,7 @@ class _RestoreMetadata {
   final Map<String, dynamic>? chatPrefs;
   final Map<String, dynamic>? settingsPrefs;
   final BackupSelection restoreSelection;
+  final Set<String> taskFilesToReplace;
   final List<String> skippedLabels;
   final Map<String, int>? dataPartVersions;
   final Uint8List? browserCookiesData;
@@ -3690,6 +3726,7 @@ class _RestoreMetadata {
     required this.isV1,
     required this.restoreChatPreferences,
     required this.restoreSelection,
+    required this.taskFilesToReplace,
     required this.skippedLabels,
     required this.dataPartVersions,
     this.browserCookiesData,
