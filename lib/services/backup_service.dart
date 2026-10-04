@@ -917,8 +917,7 @@ class BackupService {
     required String appDir,
     required bool useStreaming,
   }) async {
-    for (final entry
-        in (await _collectAudioRecordingDrafts(appDir)).entries) {
+    for (final entry in (await _collectAudioRecordingDrafts(appDir)).entries) {
       await _addPlanFile(
         diskFiles,
         memoryFiles,
@@ -934,8 +933,7 @@ class BackupService {
     required String appDir,
   }) async {
     final archived = archive.files.map((file) => file.name).toSet();
-    for (final entry
-        in (await _collectAudioRecordingDrafts(appDir)).entries) {
+    for (final entry in (await _collectAudioRecordingDrafts(appDir)).entries) {
       final archiveName = '$_audioDraftsDirectory/${entry.key}';
       if (archived.contains(archiveName)) continue;
       final data = await File(entry.value).readAsBytes();
