@@ -33,6 +33,7 @@ extension ChatAdapterMcpExt on ChatAdapter {
   Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
     final mcpEntry =
         entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
+    _mcpMasterSwitchEnabled = isMcpMasterSwitchEnabled(entriesState);
     // MCP 配置未变（同一实例）：占位符与客户端都无需重建。页面重复进入、
     // 或其它供应商（TTS/OCR 等）配置变更时，MCP 条目实例不变，跳过。
     if (identical(_lastMcpEntry, mcpEntry)) return;

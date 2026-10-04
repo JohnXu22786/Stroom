@@ -37,6 +37,7 @@ void main() {
     required TaskFlowBlock block,
     ProviderEntriesState? entries,
     List<Assistant> assistants = const [],
+    ValueChanged<TaskFlowBlock?>? onSaved,
   }) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -54,7 +55,11 @@ void main() {
             body: Builder(
               builder: (context) => Center(
                 child: ElevatedButton(
-                  onPressed: () => showBlockEditorDialog(context, block: block),
+                  onPressed: () async {
+                    final saved =
+                        await showBlockEditorDialog(context, block: block);
+                    onSaved?.call(saved);
+                  },
                   child: const Text('打开设置'),
                 ),
               ),
@@ -66,6 +71,43 @@ void main() {
     await tester.tap(find.text('打开设置'));
     await tester.pumpAndSettle();
   }
+
+  testWidgets('CatCatch header follows edited audio output both ways',
+      (tester) async {
+    TaskFlowBlock? saved;
+    await pumpPanel(
+      tester,
+      block: TaskFlowBlock(
+        typeKey: BlockType.catcatch,
+        params: {'audioOutput': true},
+      ),
+      onSaved: (block) => saved = block,
+    );
+
+    final outputSwitch = find.byType(SwitchListTile).at(1);
+    expect(outputSwitch, findsOneWidget);
+    expect(find.text('输入: 文本  →  输出: 音频'), findsOneWidget);
+
+    await tester.tap(outputSwitch);
+    await tester.pumpAndSettle();
+    expect(find.text('输入: 文本  →  输出: 视频'), findsOneWidget);
+
+    await tester.tap(outputSwitch);
+    await tester.pumpAndSettle();
+    expect(find.text('输入: 文本  →  输出: 音频'), findsOneWidget);
+
+    await tester.tap(outputSwitch);
+    await tester.pumpAndSettle();
+    expect(find.text('输入: 文本  →  输出: 视频'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('确认'), 150,
+        scrollable: find.byType(Scrollable).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认'));
+    await tester.pumpAndSettle();
+    expect(saved?.params['audioOutput'], false);
+    expect(saved?.getDefinition()?.outputType,
+        BlockTypeDefinition.catcatch.outputType);
+  });
 
   ProviderEntriesState _ttsEntries() {
     return ProviderEntriesState(

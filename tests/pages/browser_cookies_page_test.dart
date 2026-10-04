@@ -1,8 +1,76 @@
+import 'dart:async';
+
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/browser_cookies_page.dart';
 import 'package:stroom/services/browser_cookie_service.dart';
+
+class _CookieListRacePlatform implements CookiePlatform {
+  final initialReadStarted = Completer<void>();
+  final releaseInitialRead = Completer<void>();
+  final postClearReadCompleted = Completer<void>();
+  int _getAllCookiesCalls = 0;
+
+  @override
+  Future<List<Cookie>> getAllCookies() async {
+    if (_getAllCookiesCalls++ == 0) {
+      initialReadStarted.complete();
+      await releaseInitialRead.future;
+      return [
+        Cookie(
+          name: 'session',
+          value: 'stale',
+          domain: 'example.com',
+          path: '/',
+        ),
+      ];
+    }
+
+    if (!postClearReadCompleted.isCompleted) {
+      postClearReadCompleted.complete();
+    }
+    return [];
+  }
+
+  @override
+  Future<List<Cookie>> getCookies({required WebUri url}) async => [];
+
+  @override
+  Future<bool> setCookie({
+    required WebUri url,
+    required String name,
+    required String value,
+    String path = '/',
+    String? domain,
+    int? expiresDate,
+    bool? isSecure,
+    bool? isHttpOnly,
+    HTTPCookieSameSitePolicy? sameSite,
+  }) async =>
+      true;
+
+  @override
+  Future<bool> deleteCookie({
+    required WebUri url,
+    required String name,
+    String path = '/',
+    String? domain,
+  }) async =>
+      true;
+
+  @override
+  Future<bool> deleteCookies({
+    required WebUri url,
+    String path = '/',
+    String? domain,
+  }) async =>
+      true;
+
+  @override
+  Future<bool> deleteAllCookies() async => true;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -107,6 +175,36 @@ void main() {
   // ====================================================================
 
   group('Clear All cookies', () {
+    testWidgets(
+        'a read started before Clear All cannot restore its stale cookies',
+        (tester) async {
+      final platform = _CookieListRacePlatform();
+      BrowserCookieService.cookiePlatform = platform;
+
+      await tester.pumpWidget(
+        const MaterialApp(home: BrowserCookiesPage()),
+      );
+      await tester.pump();
+      await platform.initialReadStarted.future;
+
+      await tester.tap(find.text('清除所有Cookies'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.text('清除'));
+      await tester.pump();
+      await tester.pump();
+      await platform.postClearReadCompleted.future;
+      await tester.pump();
+
+      expect(find.text('暂无持久化数据'), findsOneWidget);
+
+      platform.releaseInitialRead.complete();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('example.com'), findsNothing);
+    });
+
     testWidgets('cancelling confirmation dialog does not clear cookies',
         (tester) async {
       await tester.pumpWidget(

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../models/media_kind.dart';
 import '../models/media_resource.dart';
 import 'media_probe.dart';
 import 'executor_utils.dart';
@@ -9,15 +10,24 @@ List<MediaResource> detectSplitTracks(List<MediaResource> media) {
   final result = List<MediaResource>.from(media);
   final audioList = <int>[];
   final videoList = <int>[];
+  final untypedList = <int>[];
 
   for (int i = 0; i < result.length; i++) {
-    if (result[i].isAudio) audioList.add(i);
-    if (result[i].isVideo) videoList.add(i);
+    final resource = result[i];
+    final kind = _splitTrackKindHint(resource);
+    if (kind == CatCatchMediaKind.audio) {
+      audioList.add(i);
+    } else if (kind == CatCatchMediaKind.video) {
+      videoList.add(i);
+    } else if (catCatchIsSharedContainerExtension(resource.ext)) {
+      // A WebView may report an audio-only MP4 with neither MIME nor video
+      // dimensions. A matching known video makes both tracks unsafe to choose
+      // automatically, but a lone untyped container remains eligible.
+      untypedList.add(i);
+    }
   }
 
-  if (audioList.isEmpty || videoList.isEmpty) return result;
-
-  for (final ai in audioList) {
+  for (final ai in [...audioList, ...untypedList]) {
     for (final vi in videoList) {
       if (result[ai].groupId != null || result[vi].groupId != null) continue;
       final aDuration = result[ai].duration;
@@ -59,7 +69,55 @@ List<MediaResource> detectSplitTracks(List<MediaResource> media) {
     }
   }
 
+  // WebView can omit both MIME and dimensions for every track. With no kind
+  // metadata, matching durations are enough to require manual confirmation.
+  // A single untyped file remains eligible for automatic download.
+  for (var i = 0; i < untypedList.length; i++) {
+    for (var j = i + 1; j < untypedList.length; j++) {
+      final firstIndex = untypedList[i];
+      final secondIndex = untypedList[j];
+      final first = result[firstIndex];
+      final second = result[secondIndex];
+      final firstSeconds = first.duration == null
+          ? null
+          : parseDurationToSeconds(first.duration!);
+      final secondSeconds = second.duration == null
+          ? null
+          : parseDurationToSeconds(second.duration!);
+      if (firstSeconds == null ||
+          secondSeconds == null ||
+          (firstSeconds - secondSeconds).abs() > 2) {
+        continue;
+      }
+      final groupId = first.groupId ??
+          second.groupId ??
+          'split_${first.name}_${second.name}';
+      result[firstIndex] = first.copyWith(
+        groupId: groupId,
+        isLikelySplitTrack: true,
+      );
+      result[secondIndex] = second.copyWith(
+        groupId: groupId,
+        isLikelySplitTrack: true,
+      );
+    }
+  }
+
   return result;
+}
+
+/// A sniffer may discover an audio-only URL without MIME or dimensions.
+/// These extensions are useful for finding a matching video track, but do not
+/// prove the downloaded bytes are audio. Keep this guess out of automatic
+/// output selection, where a misnamed complete video must remain eligible.
+CatCatchMediaKind? _splitTrackKindHint(MediaResource resource) {
+  final metadataKind = catCatchResourceKindHint(resource);
+  if (metadataKind != null) return metadataKind;
+  if (const {'m4a', 'weba', 'opus', 'mka', 'wma'}
+      .contains(resource.ext.toLowerCase())) {
+    return CatCatchMediaKind.audio;
+  }
+  return null;
 }
 
 String buildDurationFilterDetail(
@@ -108,14 +166,11 @@ bool isSpecialFormat(String ext) {
     'f4v',
     'hlv',
     'ev1',
-    'mkv',
     'avi',
     'wmv',
     'mpeg',
     'mpg',
     'm4s',
-    'ogg',
-    'ogv',
     'm3u8',
     'm3u',
     'mpd',

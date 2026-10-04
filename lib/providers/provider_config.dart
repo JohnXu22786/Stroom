@@ -32,7 +32,10 @@ ProviderEntry createBuiltinWebSearchEntry() => ProviderEntry(
 class ProviderEntriesState {
   final List<ProviderEntry> entries;
 
-  const ProviderEntriesState({this.entries = const []});
+  /// False only while the notifier is reading and migrating persisted entries.
+  final bool isLoaded;
+
+  const ProviderEntriesState({this.entries = const [], this.isLoaded = true});
 }
 
 /// 供应商条目列表提供器（持久化）
@@ -44,7 +47,8 @@ final providerEntriesProvider =
 });
 
 class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
-  ProviderEntriesNotifier() : super(const ProviderEntriesState());
+  ProviderEntriesNotifier()
+      : super(const ProviderEntriesState(isLoaded: false));
 
   Future<void> _loading = Future<void>.value();
   Future<void> get ready => _loading;

@@ -142,6 +142,88 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
     super.dispose();
   }
 
+  Future<void> _clearTerminalTasks(TaskStatus status) async {
+    try {
+      final executions = ref.read(taskFlowExecutionsProvider);
+      var selectedExecutions = executions
+          .where((e) => e.isTerminal && e.taskStatus == status)
+          .toList();
+      final nestedIds = {
+        for (final execution in executions)
+          for (final subTask in execution.subTasks) subTask.subTaskId,
+      };
+      final catcatchIds = ref
+          .read(catcatchTasksProvider)
+          .where(
+              (t) => t.status.name == status.name && !nestedIds.contains(t.id))
+          .map((t) => t.id)
+          .toList();
+      final synthesisIds = ref
+          .read(taskListProvider)
+          .where((t) => t.status == status && !nestedIds.contains(t.id))
+          .map((t) => t.id)
+          .toList();
+      final backgroundIds = ref
+          .read(backgroundTasksProvider)
+          .where((t) => t.status == status && !nestedIds.contains(t.id))
+          .map((t) => t.id)
+          .toList();
+      final executionsNotifier = ref.read(taskFlowExecutionsProvider.notifier);
+      final selectedIds = selectedExecutions.map((e) => e.id).toSet();
+      final batchIds =
+          selectedExecutions.map((e) => e.batchId).whereType<String>().toSet();
+      if (batchIds.isNotEmpty) {
+        final service = ref.read(taskFlowExecutionServiceProvider);
+        while (mounted) {
+          final active = ref
+              .read(taskFlowExecutionsProvider)
+              .where((e) => batchIds.contains(e.batchId) && !e.isTerminal)
+              .firstOrNull;
+          if (active != null) {
+            await service.cancelBatch(active.batchId!);
+            if (!mounted) return;
+            if (ref
+                .read(taskFlowExecutionsProvider)
+                .any((e) => e.id == active.id && !e.isTerminal)) {
+              throw StateError('任务流取消后仍在运行');
+            }
+            continue;
+          }
+          // A failed earlier cancellation save can leave memory terminal.
+          // Flush it again before deleting any selected child or parent.
+          final snapshot = ref.read(taskFlowExecutionsProvider);
+          if (!await executionsNotifier.persist()) {
+            throw const TaskFlowPersistenceException('任务流取消状态无法保存，请重试清除');
+          }
+          if (!mounted) return;
+          if (identical(snapshot, ref.read(taskFlowExecutionsProvider))) break;
+        }
+      }
+      if (!mounted) return;
+      selectedExecutions = ref
+          .read(taskFlowExecutionsProvider)
+          .where((e) => selectedIds.contains(e.id))
+          .toList();
+      await removeFlowChildTasksPersisted(
+        ref,
+        selectedExecutions,
+        catcatchIds: catcatchIds,
+        synthesisIds: synthesisIds,
+        backgroundIds: backgroundIds,
+      );
+      if (!await executionsNotifier
+          .removeExecutionsPersisted(selectedExecutions.map((e) => e.id))) {
+        throw const TaskFlowPersistenceException('任务流记录删除状态无法保存，请重试清除');
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('清除未完成：$error')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final catcatchTasks = ref.watch(catcatchTasksProvider);
@@ -219,28 +301,7 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
               if (value == 'clear_completed') {
-                for (final t in catcatchTasks) {
-                  if (t.status.name == 'completed') {
-                    ref.read(catcatchTasksProvider.notifier).removeTask(t.id);
-                  }
-                }
-                for (final t in synthesisTasks) {
-                  if (t.status.name == 'completed') {
-                    ref.read(taskListProvider.notifier).removeTask(t.id);
-                  }
-                }
-                for (final t in backgroundTasks) {
-                  if (t.status == TaskStatus.completed) {
-                    ref.read(backgroundTasksProvider.notifier).removeTask(t.id);
-                  }
-                }
-                for (final e in taskFlowExecutions) {
-                  if (e.taskStatus == TaskStatus.completed) {
-                    ref
-                        .read(taskFlowExecutionsProvider.notifier)
-                        .removeExecution(e.id);
-                  }
-                }
+                _clearTerminalTasks(TaskStatus.completed);
               } else if (value == 'clear_failed') {
                 showDialog(
                   context: context,
@@ -253,40 +314,9 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                         child: const Text('取消'),
                       ),
                       TextButton(
-                        onPressed: () {
+                        onPressed: () async {
                           Navigator.pop(ctx);
-                          for (final t in catcatchTasks) {
-                            if (t.status.name == 'failed') {
-                              ref
-                                  .read(catcatchTasksProvider.notifier)
-                                  .removeTask(t.id);
-                            }
-                          }
-                          for (final t in synthesisTasks) {
-                            if (t.status.name == 'failed') {
-                              ref
-                                  .read(taskListProvider.notifier)
-                                  .removeTask(t.id);
-                            }
-                          }
-                          for (final t in backgroundTasks) {
-                            if (t.status == TaskStatus.failed) {
-                              ref
-                                  .read(backgroundTasksProvider.notifier)
-                                  .removeTask(t.id);
-                            }
-                          }
-                          for (final e in taskFlowExecutions) {
-                            if (e.taskStatus == TaskStatus.failed) {
-                              // Remove the sub-task tasks too, so a
-                              // completed block of a failed flow does not
-                              // resurface as an orphaned standalone card.
-                              removeFlowSubTaskTasks(ref, e);
-                              ref
-                                  .read(taskFlowExecutionsProvider.notifier)
-                                  .removeExecution(e.id);
-                            }
-                          }
+                          await _clearTerminalTasks(TaskStatus.failed);
                         },
                         child: const Text('确定',
                             style: TextStyle(color: Colors.red)),
@@ -309,16 +339,84 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                         onPressed: () async {
                           Navigator.pop(ctx);
                           try {
-                            final service =
-                                ref.read(taskFlowExecutionServiceProvider);
-                            final batches = <String>{};
-                            for (final execution in taskFlowExecutions
-                                .where((e) => !e.isTerminal)) {
-                              if (execution.batchId == null) {
-                                await service.cancelExecution(execution.id);
-                              } else if (batches.add(execution.batchId!)) {
-                                await service.cancelBatch(execution.batchId!);
+                            final service = ref.read(
+                              taskFlowExecutionServiceProvider,
+                            );
+                            // Re-read after each await: another run can start,
+                            // or a queued run can finish while cancellation
+                            // persistence is in progress.
+                            while (mounted) {
+                              final active = ref
+                                  .read(taskFlowExecutionsProvider)
+                                  .where((e) => !e.isTerminal)
+                                  .firstOrNull;
+                              if (active != null) {
+                                if (active.batchId == null) {
+                                  await service.cancelExecution(active.id);
+                                } else {
+                                  await service.cancelBatch(active.batchId!);
+                                }
+                                if (!mounted) return;
+                                final stillActive = ref
+                                    .read(taskFlowExecutionsProvider)
+                                    .where((e) => e.id == active.id)
+                                    .firstOrNull;
+                                if (stillActive != null &&
+                                    !stillActive.isTerminal) {
+                                  throw StateError('任务流取消后仍在运行');
+                                }
+                                continue;
                               }
+                              // Cancellation may have changed memory before
+                              // its save failed. A retry must durably write
+                              // even when every run is already terminal.
+                              final snapshot =
+                                  ref.read(taskFlowExecutionsProvider);
+                              if (snapshot.isNotEmpty) {
+                                if (!await ref
+                                    .read(taskFlowExecutionsProvider.notifier)
+                                    .persist()) {
+                                  throw const TaskFlowPersistenceException(
+                                      '任务流取消状态无法保存，请重试清除');
+                                }
+                              }
+                              if (!mounted) return;
+                              if (identical(snapshot,
+                                  ref.read(taskFlowExecutionsProvider))) {
+                                break;
+                              }
+                            }
+                            if (!mounted) return;
+                            // Snapshot after cancellation, then keep new
+                            // tasks started during the removal write intact.
+                            final executionsToClear =
+                                ref.read(taskFlowExecutionsProvider);
+                            final catcatchIds = ref
+                                .read(catcatchTasksProvider)
+                                .map((t) => t.id)
+                                .toList();
+                            final synthesisIds = ref
+                                .read(taskListProvider)
+                                .map((t) => t.id)
+                                .toList();
+                            final backgroundIds = ref
+                                .read(backgroundTasksProvider)
+                                .map((t) => t.id)
+                                .toList();
+                            final executionsNotifier =
+                                ref.read(taskFlowExecutionsProvider.notifier);
+                            await removeFlowChildTasksPersisted(
+                              ref,
+                              executionsToClear,
+                              catcatchIds: catcatchIds,
+                              synthesisIds: synthesisIds,
+                              backgroundIds: backgroundIds,
+                            );
+                            if (!await executionsNotifier
+                                .removeExecutionsPersisted(
+                                    executionsToClear.map((e) => e.id))) {
+                              throw const TaskFlowPersistenceException(
+                                  '任务流记录删除状态无法保存，请重试清除');
                             }
                           } catch (error) {
                             if (context.mounted) {
@@ -326,34 +424,6 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
                                 SnackBar(content: Text('清除未完成：$error')),
                               );
                             }
-                            return;
-                          }
-                          if (!mounted) return;
-
-                          for (final t in catcatchTasks) {
-                            ref
-                                .read(catcatchTasksProvider.notifier)
-                                .removeTask(t.id);
-                          }
-                          for (final t in synthesisTasks) {
-                            ref
-                                .read(taskListProvider.notifier)
-                                .removeTask(t.id);
-                          }
-                          for (final t in backgroundTasks) {
-                            ref
-                                .read(backgroundTasksProvider.notifier)
-                                .removeTask(t.id);
-                          }
-                          for (final e in taskFlowExecutions) {
-                            // Running executions are also removed — their
-                            // sub-task tasks get cancelled via removeTask
-                            // (engine/HTTP tokens), so no orphaned work
-                            // keeps running after the record is gone.
-                            removeFlowSubTaskTasks(ref, e);
-                            ref
-                                .read(taskFlowExecutionsProvider.notifier)
-                                .removeExecution(e.id);
                           }
                         },
                         child: const Text('确定',

@@ -202,6 +202,16 @@ Widget stepIcon(catcatch.StepStatus step) {
 bool shouldCancelActiveRequest(TaskFlowExecution execution) =>
     !execution.isTerminal;
 
+/// Clearing any member with unfinished batch work cancels the whole batch,
+/// including when the selected card already completed or failed.
+bool hasUnfinishedFlowBatchMember(
+  TaskFlowExecution execution,
+  Iterable<TaskFlowExecution> records,
+) =>
+    execution.batchId != null &&
+    records.any(
+        (member) => member.batchId == execution.batchId && !member.isTerminal);
+
 /// Remove the real tasks behind a flow execution's sub-tasks from their
 /// providers, so they don't resurface as orphaned standalone cards when
 /// the execution record is removed (card delete and AppBar 清除 actions).
@@ -240,6 +250,58 @@ void removeFlowSubTaskTasks(WidgetRef ref, TaskFlowExecution execution) {
           }
         : null,
   );
+}
+
+/// Save child task removals before a parent execution can be removed. A
+/// failed child write leaves the parent visible so the user can retry.
+Future<void> removeFlowChildTasksPersisted(
+  WidgetRef ref,
+  Iterable<TaskFlowExecution> executions, {
+  Iterable<String> catcatchIds = const [],
+  Iterable<String> synthesisIds = const [],
+  Iterable<String> backgroundIds = const [],
+}) async {
+  final catcatchNotifier = ref.read(catcatchTasksProvider.notifier);
+  final synthesisNotifier = ref.read(taskListProvider.notifier);
+  final backgroundNotifier = ref.read(backgroundTasksProvider.notifier);
+  final chat = ref.read(chatStreamManagerProvider);
+  final catcatchToRemove = catcatchIds.toSet();
+  final synthesisToRemove = synthesisIds.toSet();
+  final backgroundToRemove = backgroundIds.toSet();
+  final chatsToCancel = <String>[];
+
+  for (final execution in executions) {
+    for (final subTask in execution.subTasks) {
+      if (subTask.subTaskId.startsWith('pending_')) continue;
+      switch (subTask.subTaskType) {
+        case 'catcatch':
+          catcatchToRemove.add(subTask.subTaskId);
+        case 'synthesis':
+          synthesisToRemove.add(subTask.subTaskId);
+        default:
+          backgroundToRemove.add(subTask.subTaskId);
+          if (subTask.subTaskId.startsWith('chat_')) {
+            chatsToCancel.add('flow_${execution.id}_${subTask.id}');
+          }
+      }
+    }
+  }
+
+  if (catcatchToRemove.isNotEmpty &&
+      !await catcatchNotifier.removeTasksPersisted(catcatchToRemove)) {
+    throw const TaskFlowPersistenceException('猫抓子任务删除状态无法保存，请重试');
+  }
+  if (synthesisToRemove.isNotEmpty &&
+      !await synthesisNotifier.removeTasksPersisted(synthesisToRemove)) {
+    throw const TaskFlowPersistenceException('合成子任务删除状态无法保存，请重试');
+  }
+  if (backgroundToRemove.isNotEmpty &&
+      !await backgroundNotifier.removeTasksPersisted(backgroundToRemove)) {
+    throw const TaskFlowPersistenceException('后台子任务删除状态无法保存，请重试');
+  }
+  for (final id in chatsToCancel) {
+    chat.cancel(id);
+  }
 }
 
 /// Testable core of [removeFlowSubTaskTasks] — all provider access is
