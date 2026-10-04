@@ -159,9 +159,8 @@ class ConstructionState {
       final normal = (_points[1] - _points[0]).normalized();
       final radiusVector = point - _points[0];
       final axialOffset = radiusVector.dot(normal).abs();
-      final planeTolerance = dart_math
-          .max(1e-9, radiusVector.magnitude * 1e-9)
-          .toDouble();
+      final planeTolerance =
+          dart_math.max(1e-9, radiusVector.magnitude * 1e-9).toDouble();
       if (axialOffset > planeTolerance) {
         return _reject('圆周点必须位于与法向量垂直的平面内，请重新选择');
       }
@@ -187,9 +186,8 @@ class ConstructionState {
       return _reject('参考平面的三个点不能共线，请重新选择第三个点');
     }
     if (tool == ConstructionTool.perpendicularPlane && _points.length == 4) {
-      final referenceNormal = (_points[1] - _points[0])
-          .cross(_points[2] - _points[0])
-          .normalized();
+      final referenceNormal =
+          (_points[1] - _points[0]).cross(_points[2] - _points[0]).normalized();
       final direction = point - _points[3];
       if (direction.magnitude < 1e-9) {
         return _reject('方向点不能与平面经过点重合，请重新选择');
@@ -348,9 +346,8 @@ class ConstructionState {
             tool == ConstructionTool.extrudePrism ||
             tool == ConstructionTool.pyramid) &&
         _points.length == 3) {
-      final baseNormal = (_points[1] - _points[0])
-          .cross(_points[2] - _points[0])
-          .normalized();
+      final baseNormal =
+          (_points[1] - _points[0]).cross(_points[2] - _points[0]).normalized();
       final baseScale = dart_math
           .max(
             _points[0].distanceTo(_points[1]),
@@ -450,14 +447,14 @@ class ConstructionState {
           final b = _points[1];
           _result = switch (tool) {
             ConstructionTool.midpoint => Object3D.point(
-              a.midpoint(b),
-              color: 0xFF2196F3,
-            ),
+                a.midpoint(b),
+                color: 0xFF2196F3,
+              ),
             ConstructionTool.vector => Object3D.vectorObj(
-              origin: a,
-              vector: b - a,
-              color: 0xFF00897B,
-            ),
+                origin: a,
+                vector: b - a,
+                color: 0xFF00897B,
+              ),
             ConstructionTool.regularPolygon => _createRegularPolygon(a, b),
             _ => _createTetrahedron(a, b),
           };
@@ -503,15 +500,32 @@ class ConstructionState {
             _points.first.distanceTo(_points.last) < _closureTolerance()) {
           // Remove the duplicate closing point
           final vertices = List<Point3D>.from(_points)..removeLast();
-          if (vertices.length >= 3 && _hasArea(vertices)) {
-            _result = _createPolygon(vertices);
-            _updatePreview();
-            return ConstructionAction.complete;
+          if (vertices.length >= 3) {
+            final plane = _conicPlane(vertices);
+            if (plane == null &&
+                (_hasNonCollinearVertices(vertices) || _hasArea(vertices))) {
+              _validationMessage = '多边形要求所有顶点共面，请重新选择所有顶点';
+              _points.clear();
+              _stepIndex = 0;
+              _updatePreview();
+              return ConstructionAction.awaitInput;
+            }
+            if (plane != null && _hasSelfIntersectingEdges(vertices)) {
+              _validationMessage = '多边形边界不能自交，请重新选择所有顶点';
+              _points.clear();
+              _stepIndex = 0;
+              _updatePreview();
+              return ConstructionAction.awaitInput;
+            }
+            if (_hasArea(vertices)) {
+              _result = _createPolygon(vertices);
+              _updatePreview();
+              return ConstructionAction.complete;
+            }
           }
           _points.removeLast();
-          _stepIndex = _points.length < totalSteps
-              ? _points.length
-              : totalSteps - 1;
+          _stepIndex =
+              _points.length < totalSteps ? _points.length : totalSteps - 1;
           _updatePreview();
           return ConstructionAction.awaitInput;
         }
@@ -651,25 +665,36 @@ class ConstructionState {
         } else {
           _points[_points.length - 1] = _points.first;
         }
-        if (filled && _hasArea(_points)) {
-          if (_conicPlane(_points) == null) {
+        if (filled) {
+          final plane = _conicPlane(_points);
+          if (plane != null && _hasSelfIntersectingEdges(_points)) {
+            _validationMessage = '面积测量要求边界不自交，请重新选择所有顶点';
+            _points.clear();
+            _stepIndex = 0;
+            _updatePreview();
+            return ConstructionAction.awaitInput;
+          }
+          final hasArea = _hasArea(_points);
+          if (plane == null && (hasArea || _hasNonCollinearVertices(_points))) {
             _validationMessage = '面积测量要求所有顶点共面，请重新选择所有顶点';
             _points.clear();
             _stepIndex = 0;
             _updatePreview();
             return ConstructionAction.awaitInput;
           }
-          final area = _polygonArea(_points);
-          final center = _polygonInteriorPoint(_points);
-          _result = Object3D.point(
-            center,
-            color: 0xFF1565C0,
-            label: '面积 ${area.toStringAsFixed(3)}',
-          );
-        } else if (filled) {
-          _validationMessage = '顶点不能共线，请继续选择顶点';
-          _updatePreview();
-          return ConstructionAction.awaitInput;
+          if (hasArea) {
+            final area = _polygonArea(_points);
+            final center = _polygonInteriorPoint(_points);
+            _result = Object3D.point(
+              center,
+              color: 0xFF1565C0,
+              label: '面积 ${area.toStringAsFixed(3)}',
+            );
+          } else {
+            _validationMessage = '顶点不能共线，请继续选择顶点';
+            _updatePreview();
+            return ConstructionAction.awaitInput;
+          }
         } else {
           _result = Object3D.curve(
             points: List<Point3D>.from(_points),
@@ -826,9 +851,8 @@ class ConstructionState {
         final conic = _createConic(_points);
         if (conic == null) {
           _points.removeLast();
-          _stepIndex = _points.length < totalSteps
-              ? _points.length
-              : totalSteps - 1;
+          _stepIndex =
+              _points.length < totalSteps ? _points.length : totalSteps - 1;
           _validationMessage = '五个点必须共面且能确定圆锥曲线，请重新选择';
           _updatePreview();
           return ConstructionAction.awaitInput;
@@ -922,14 +946,14 @@ class ConstructionState {
           final radius = radiusScale == 0
               ? 0.0
               : radiusScale *
-                    dart_math.sqrt(
-                      (radiusVector.x / radiusScale) *
-                              (radiusVector.x / radiusScale) +
-                          (radiusVector.y / radiusScale) *
-                              (radiusVector.y / radiusScale) +
-                          (radiusVector.z / radiusScale) *
-                              (radiusVector.z / radiusScale),
-                    );
+                  dart_math.sqrt(
+                    (radiusVector.x / radiusScale) *
+                            (radiusVector.x / radiusScale) +
+                        (radiusVector.y / radiusScale) *
+                            (radiusVector.y / radiusScale) +
+                        (radiusVector.z / radiusScale) *
+                            (radiusVector.z / radiusScale),
+                  );
           return Object3D.point(_points[1] + direction * radius);
         });
       case ConstructionTool.axialSymmetry:
@@ -1026,8 +1050,7 @@ class ConstructionState {
         preview.addPoint(existing, workingPlaneNormal: _workingPlaneNormal);
       }
       preview.addPoint(point, workingPlaneNormal: _workingPlaneNormal);
-      _previewObject =
-          preview.result ??
+      _previewObject = preview.result ??
           Object3D.curve(points: [..._points, point], color: 0x60808080);
       return;
     }
@@ -1186,6 +1209,105 @@ class ConstructionState {
     return scaleSquared > 0 && area.magnitude > scaleSquared * 1e-10;
   }
 
+  static bool _hasNonCollinearVertices(List<Point3D> vertices) {
+    if (vertices.length < 3) return false;
+    final anchor = vertices.first;
+    for (var first = 1; first < vertices.length - 1; first++) {
+      for (var second = first + 1; second < vertices.length; second++) {
+        if (_isNonCollinear(anchor, vertices[first], vertices[second])) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  static bool _hasSelfIntersectingEdges(List<Point3D> vertices) {
+    final plane = _conicPlane(vertices);
+    if (plane == null) return false;
+    final coordinates = vertices.map((point) {
+      final relative = point - plane.origin;
+      return (relative.dot(plane.u), relative.dot(plane.v));
+    }).toList();
+    final scale = coordinates.fold<double>(0, (maximum, point) {
+      return dart_math
+          .max(
+            maximum,
+            dart_math.max(point.$1.abs(), point.$2.abs()),
+          )
+          .toDouble();
+    });
+    if (!scale.isFinite || scale == 0) return false;
+    final normalized = coordinates
+        .map((point) => (point.$1 / scale, point.$2 / scale))
+        .toList();
+
+    double cross(
+      (double, double) first,
+      (double, double) second,
+      (double, double) third,
+    ) =>
+        (second.$1 - first.$1) * (third.$2 - first.$2) -
+        (second.$2 - first.$2) * (third.$1 - first.$1);
+
+    bool onSegment(
+      (double, double) point,
+      (double, double) start,
+      (double, double) end,
+    ) {
+      const tolerance = 1e-12;
+      return cross(start, end, point).abs() <= tolerance &&
+          point.$1 >= dart_math.min(start.$1, end.$1) - tolerance &&
+          point.$1 <= dart_math.max(start.$1, end.$1) + tolerance &&
+          point.$2 >= dart_math.min(start.$2, end.$2) - tolerance &&
+          point.$2 <= dart_math.max(start.$2, end.$2) + tolerance;
+    }
+
+    bool segmentsIntersect(
+      (double, double) firstStart,
+      (double, double) firstEnd,
+      (double, double) secondStart,
+      (double, double) secondEnd,
+    ) {
+      const tolerance = 1e-12;
+      final firstSide = cross(firstStart, firstEnd, secondStart);
+      final secondSide = cross(firstStart, firstEnd, secondEnd);
+      final thirdSide = cross(secondStart, secondEnd, firstStart);
+      final fourthSide = cross(secondStart, secondEnd, firstEnd);
+      if (((firstSide > tolerance && secondSide < -tolerance) ||
+              (firstSide < -tolerance && secondSide > tolerance)) &&
+          ((thirdSide > tolerance && fourthSide < -tolerance) ||
+              (thirdSide < -tolerance && fourthSide > tolerance))) {
+        return true;
+      }
+      return (firstSide.abs() <= tolerance &&
+              onSegment(secondStart, firstStart, firstEnd)) ||
+          (secondSide.abs() <= tolerance &&
+              onSegment(secondEnd, firstStart, firstEnd)) ||
+          (thirdSide.abs() <= tolerance &&
+              onSegment(firstStart, secondStart, secondEnd)) ||
+          (fourthSide.abs() <= tolerance &&
+              onSegment(firstEnd, secondStart, secondEnd));
+    }
+
+    for (var first = 0; first < normalized.length; first++) {
+      final firstNext = (first + 1) % normalized.length;
+      for (var second = first + 1; second < normalized.length; second++) {
+        final secondNext = (second + 1) % normalized.length;
+        if (firstNext == second || secondNext == first) continue;
+        if (segmentsIntersect(
+          normalized[first],
+          normalized[firstNext],
+          normalized[second],
+          normalized[secondNext],
+        )) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   static Object3D _createFixedLengthSegment(
     Point3D start,
     Point3D directionPoint,
@@ -1269,9 +1391,8 @@ class ConstructionState {
   Vector3D _edgePerpendicular(Vector3D edge) {
     var perpendicular = _workingPlaneNormal.cross(edge).normalized();
     if (perpendicular.magnitude < 1e-9) {
-      final fallback = edge.normalized().x.abs() < 0.9
-          ? Vector3D.unitX
-          : Vector3D.unitY;
+      final fallback =
+          edge.normalized().x.abs() < 0.9 ? Vector3D.unitX : Vector3D.unitY;
       perpendicular = fallback.cross(edge).normalized();
     }
     return perpendicular;
@@ -1280,8 +1401,7 @@ class ConstructionState {
   Object3D _createRegularPolygon(Point3D a, Point3D b) {
     final edge = b - a;
     final inward = _edgePerpendicular(edge);
-    final center =
-        a.midpoint(b) +
+    final center = a.midpoint(b) +
         inward *
             (edge.magnitude / (2 * dart_math.tan(dart_math.pi / polygonSides)));
     final normal = edge.cross(inward).normalized();
@@ -1315,8 +1435,7 @@ class ConstructionState {
     final u = b - a;
     final v = c - a;
     final normal = u.cross(v);
-    final offset =
-        (v.cross(normal) * u.dot(u) + normal.cross(u) * v.dot(v)) *
+    final offset = (v.cross(normal) * u.dot(u) + normal.cross(u) * v.dot(v)) *
         (1 / (2 * normal.dot(normal)));
     return _createCircle(a + offset, a, planeNormal: normal.normalized());
   }
@@ -1336,8 +1455,8 @@ class ConstructionState {
   /// ear-clipping tolerances do not depend on the polygon's position or scale.
   static List<int> _triangulatePolygon(List<Point3D> vertices) {
     List<int> fan() => [
-      for (var i = 1; i < vertices.length - 1; i++) ...[0, i, i + 1],
-    ];
+          for (var i = 1; i < vertices.length - 1; i++) ...[0, i, i + 1],
+        ];
 
     if (vertices.length < 3) return fan();
 
@@ -1365,10 +1484,10 @@ class ConstructionState {
     }
     final dropAxis =
         normal.x.abs() >= normal.y.abs() && normal.x.abs() >= normal.z.abs()
-        ? 0
-        : normal.y.abs() >= normal.z.abs()
-        ? 1
-        : 2;
+            ? 0
+            : normal.y.abs() >= normal.z.abs()
+                ? 1
+                : 2;
     final projected = normalized.map((point) {
       return switch (dropAxis) {
         0 => (point.y, point.z),
@@ -1519,16 +1638,13 @@ class ConstructionState {
 
     for (int i = 0; i <= segments; i++) {
       final theta = 2 * dart_math.pi * i / segments;
-      final x =
-          center.x +
+      final x = center.x +
           radius *
               (dart_math.cos(theta) * dir.x + dart_math.sin(theta) * perp.x);
-      final y =
-          center.y +
+      final y = center.y +
           radius *
               (dart_math.cos(theta) * dir.y + dart_math.sin(theta) * perp.y);
-      final z =
-          center.z +
+      final z = center.z +
           radius *
               (dart_math.cos(theta) * dir.z + dart_math.sin(theta) * perp.z);
       points.add(Point3D(x, y, z));
@@ -1547,17 +1663,18 @@ class ConstructionState {
     Vector3D axisU,
     Vector3D axisV,
     double radius,
-  ) => Conic3D(
-    origin: center,
-    axisU: axisU,
-    axisV: axisV,
-    quadraticX: 1,
-    quadraticXY: 0,
-    quadraticY: 1,
-    linearX: 0,
-    linearY: 0,
-    constant: -radius * radius,
-  );
+  ) =>
+      Conic3D(
+        origin: center,
+        axisU: axisU,
+        axisV: axisV,
+        quadraticX: 1,
+        quadraticXY: 0,
+        quadraticY: 1,
+        linearX: 0,
+        linearY: 0,
+        constant: -radius * radius,
+      );
 
   /// Create a cube from two base edge points.
   static Object3D _createCube(
@@ -1668,9 +1785,18 @@ class ConstructionState {
     Point3D c,
     Point3D apex,
   ) {
+    final indices = [0, 2, 1, 0, 1, 3, 1, 2, 3, 2, 0, 3];
+    final signedHeight = (apex - a).dot((b - a).cross(c - a));
+    if (signedHeight < 0) {
+      for (var i = 0; i < indices.length; i += 3) {
+        final second = indices[i + 1];
+        indices[i + 1] = indices[i + 2];
+        indices[i + 2] = second;
+      }
+    }
     return Object3D.polyhedron(
       vertices: [a, b, c, apex],
-      indices: [0, 2, 1, 0, 1, 3, 1, 2, 3, 2, 0, 3],
+      indices: indices,
       color: 0x80FF9800,
       label: 'Pyramid',
     );
@@ -1819,8 +1945,7 @@ class ConstructionState {
     final normal = u.cross(v);
     final normalSquared = normal.dot(normal);
     if (!_isNonCollinear(a, b, c)) return a;
-    final offset =
-        (v.cross(normal) * u.dot(u) + normal.cross(u) * v.dot(v)) *
+    final offset = (v.cross(normal) * u.dot(u) + normal.cross(u) * v.dot(v)) *
         (1 / (2 * normalSquared));
     return a + offset;
   }
@@ -1846,9 +1971,8 @@ class ConstructionState {
 
     final middleAngle = angleFor(b);
     final endAngle = angleFor(c);
-    final sweep = middleAngle <= endAngle
-        ? endAngle
-        : endAngle - 2 * dart_math.pi;
+    final sweep =
+        middleAngle <= endAngle ? endAngle : endAngle - 2 * dart_math.pi;
     final radius = center.distanceTo(a);
     final points = List.generate(49, (i) {
       final theta = sweep * i / 48;
@@ -1929,7 +2053,7 @@ class ConstructionState {
   }
 
   static ({Point3D origin, Vector3D u, Vector3D v, Vector3D normal})?
-  _conicPlane(List<Point3D> points) {
+      _conicPlane(List<Point3D> points) {
     if (points.length < 3) return null;
     final anchor = points.first;
     var u = Vector3D.zero;
@@ -2027,10 +2151,10 @@ class ConstructionState {
     final quadraticDiscriminant = coefficientScale == 0
         ? 0.0
         : (normalizedCoefficients[1] / coefficientScale) *
-                  (normalizedCoefficients[1] / coefficientScale) -
-              4 *
-                  (normalizedCoefficients[0] / coefficientScale) *
-                  (normalizedCoefficients[2] / coefficientScale);
+                (normalizedCoefficients[1] / coefficientScale) -
+            4 *
+                (normalizedCoefficients[0] / coefficientScale) *
+                (normalizedCoefficients[2] / coefficientScale);
     // A positive discriminant means an indefinite quadratic form. Avoid a
     // fixed tolerance here so very elongated hyperbolas keep both branches.
     final isHyperbola = quadraticDiscriminant > 0;
@@ -2038,13 +2162,19 @@ class ConstructionState {
     final activeHyperbolaPaths = List<List<Point3D>?>.filled(2, null);
     double? previousScaledRadius;
     int? previousRootIndex;
-    final originOnConic = normalizedCoefficients[5].abs() <= 1e-10;
+    final coefficientMagnitude = normalizedCoefficients.fold<double>(
+      0,
+      (maximum, coefficient) =>
+          dart_math.max(maximum, coefficient.abs()).toDouble(),
+    );
+    const coefficientPrecision = 32 * 2.220446049250313e-16;
+    final originOnConic = normalizedCoefficients[5].abs() <=
+        coefficientMagnitude * coefficientPrecision;
 
     double radialDiscriminantAt(double theta) {
       final cosine = dart_math.cos(theta);
       final sine = dart_math.sin(theta);
-      final quadratic =
-          normalizedCoefficients[0] * cosine * cosine +
+      final quadratic = normalizedCoefficients[0] * cosine * cosine +
           normalizedCoefficients[1] * cosine * sine +
           normalizedCoefficients[2] * sine * sine;
       final linear =
@@ -2085,13 +2215,13 @@ class ConstructionState {
       final constant = normalizedCoefficients[5];
       final discriminantX =
           normalizedCoefficients[3] * normalizedCoefficients[3] -
-          4 * constant * normalizedCoefficients[0];
+              4 * constant * normalizedCoefficients[0];
       final discriminantXY =
           2 * normalizedCoefficients[3] * normalizedCoefficients[4] -
-          4 * constant * normalizedCoefficients[1];
+              4 * constant * normalizedCoefficients[1];
       final discriminantY =
           normalizedCoefficients[4] * normalizedCoefficients[4] -
-          4 * constant * normalizedCoefficients[2];
+              4 * constant * normalizedCoefficients[2];
       final mean = (discriminantX + discriminantY) / 2;
       final cosineCoefficient = (discriminantX - discriminantY) / 2;
       final sineCoefficient = discriminantXY / 2;
@@ -2181,16 +2311,27 @@ class ConstructionState {
         final discriminant = linear * linear - 4 * quadratic * constant;
         if (discriminant >= 0) {
           final root = dart_math.sqrt(discriminant);
-          final quadraticRoots =
-              [
-                    (index: 0, radius: (-linear + root) / (2 * quadratic)),
-                    (index: 1, radius: (-linear - root) / (2 * quadratic)),
-                  ]
-                  .where(
-                    (candidate) =>
-                        !originOnConic || candidate.radius.abs() > 1e-10,
-                  )
-                  .toList();
+          final stableNumerator =
+              -0.5 * (linear + (linear >= 0 ? root : -root));
+          final stableRoot = stableNumerator == 0
+              ? -linear / (2 * quadratic)
+              : stableNumerator / quadratic;
+          final complementaryRoot =
+              stableNumerator == 0 ? stableRoot : constant / stableNumerator;
+          final roots = linear >= 0
+              ? [
+                  (index: 0, radius: complementaryRoot),
+                  (index: 1, radius: stableRoot),
+                ]
+              : [
+                  (index: 0, radius: stableRoot),
+                  (index: 1, radius: complementaryRoot),
+                ];
+          final quadraticRoots = roots
+              .where(
+                (candidate) => !originOnConic || candidate.radius.abs() > 1e-10,
+              )
+              .toList();
           candidates.addAll(quadraticRoots);
         }
       }
@@ -2239,8 +2380,7 @@ class ConstructionState {
         previousRootIndex = null;
         continue;
       }
-      final startsNewBranch =
-          samples.isNotEmpty &&
+      final startsNewBranch = samples.isNotEmpty &&
           (previousScaledRadius == null ||
               previousRootIndex != selectedRootIndex);
       final radius = scaledRadius * coordinateScale;
@@ -2611,8 +2751,8 @@ class ConstructionState {
     final axis = unit.x.abs() <= unit.y.abs() && unit.x.abs() <= unit.z.abs()
         ? Vector3D.unitX
         : unit.y.abs() <= unit.z.abs()
-        ? Vector3D.unitY
-        : Vector3D.unitZ;
+            ? Vector3D.unitY
+            : Vector3D.unitZ;
     return unit.cross(axis).normalized();
   }
 

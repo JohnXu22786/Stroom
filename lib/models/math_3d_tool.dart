@@ -92,106 +92,106 @@ enum ToolGroup {
   final String label;
 
   List<ConstructionTool> get tools => switch (this) {
-    ToolGroup.basic => const [
-      ConstructionTool.move,
-      ConstructionTool.point,
-      ConstructionTool.pyramid,
-      ConstructionTool.cube,
-      ConstructionTool.sphere,
-      ConstructionTool.plane,
-      ConstructionTool.intersectionCurve,
-      ConstructionTool.unfoldNet,
-    ],
-    ToolGroup.edit => const [
-      ConstructionTool.showHideLabels,
-      ConstructionTool.showHideObject,
-      ConstructionTool.deleteObject,
-      ConstructionTool.viewDirection,
-    ],
-    ToolGroup.points => const [
-      ConstructionTool.point,
-      ConstructionTool.intersectionPoint,
-      ConstructionTool.midpoint,
-      ConstructionTool.pointOnObject,
-      ConstructionTool.attachDetachPoint,
-    ],
-    ToolGroup.lines => const [
-      ConstructionTool.segment,
-      ConstructionTool.fixedLengthSegment,
-      ConstructionTool.line,
-      ConstructionTool.ray,
-      ConstructionTool.vector,
-      ConstructionTool.polygon,
-      ConstructionTool.regularPolygon,
-      ConstructionTool.perpendicularLine,
-      ConstructionTool.parallelLine,
-      ConstructionTool.angleBisector,
-      ConstructionTool.tangentLine,
-    ],
-    ToolGroup.solids => const [
-      ConstructionTool.pyramid,
-      ConstructionTool.prism,
-      ConstructionTool.tetrahedron,
-      ConstructionTool.cube,
-      ConstructionTool.sphere,
-      ConstructionTool.sphereByRadius,
-      ConstructionTool.cone,
-      ConstructionTool.cylinder,
-      ConstructionTool.extrudeCone,
-      ConstructionTool.extrudePrism,
-      ConstructionTool.unfoldNet,
-      ConstructionTool.surfaceOfRevolution,
-    ],
-    ToolGroup.planes => const [
-      ConstructionTool.plane,
-      ConstructionTool.generalPlane,
-      ConstructionTool.parallelPlane,
-      ConstructionTool.perpendicularPlane,
-    ],
-    ToolGroup.circles => const [
-      ConstructionTool.circleAxisPoint,
-      ConstructionTool.circleCenterNormalRadius,
-      ConstructionTool.circleThreePoints,
-      ConstructionTool.circle,
-      ConstructionTool.arc,
-      ConstructionTool.circumcircleArc,
-      ConstructionTool.circularSector,
-      ConstructionTool.circumcircleSector,
-    ],
-    ToolGroup.curves => const [
-      ConstructionTool.ellipse,
-      ConstructionTool.conic,
-      ConstructionTool.parabola,
-      ConstructionTool.hyperbola,
-      ConstructionTool.locus,
-      ConstructionTool.intersectionCurve,
-    ],
-    ToolGroup.transforms => const [
-      ConstructionTool.reflectionInPlane,
-      ConstructionTool.centralSymmetry,
-      ConstructionTool.rotation,
-      ConstructionTool.translation,
-      ConstructionTool.dilation,
-      ConstructionTool.axialSymmetry,
-    ],
-    ToolGroup.measurement => const [
-      ConstructionTool.angle,
-      ConstructionTool.distance,
-      ConstructionTool.area,
-      ConstructionTool.volume,
-    ],
-    ToolGroup.other => const [
-      ConstructionTool.rotateView,
-      ConstructionTool.panView,
-      ConstructionTool.copyStyle,
-      ConstructionTool.text,
-    ],
-    ToolGroup.specialLines => const [
-      ConstructionTool.equalVector,
-      ConstructionTool.polyline,
-      ConstructionTool.polarDiameter,
-    ],
-  };
+        ToolGroup.basic => const [
+            ConstructionTool.move,
+            ConstructionTool.point,
+            ConstructionTool.pyramid,
+            ConstructionTool.cube,
+            ConstructionTool.sphere,
+            ConstructionTool.plane,
+            ConstructionTool.intersectionCurve,
+            ConstructionTool.unfoldNet,
+          ],
+        ToolGroup.edit => const [
+            ConstructionTool.showHideLabels,
+            ConstructionTool.showHideObject,
+            ConstructionTool.deleteObject,
+            ConstructionTool.viewDirection,
+          ],
+        ToolGroup.points => const [
+            ConstructionTool.point,
+            ConstructionTool.intersectionPoint,
+            ConstructionTool.midpoint,
+            ConstructionTool.pointOnObject,
+            ConstructionTool.attachDetachPoint,
+          ],
+        ToolGroup.lines => const [
+            ConstructionTool.segment,
+            ConstructionTool.fixedLengthSegment,
+            ConstructionTool.line,
+            ConstructionTool.ray,
+            ConstructionTool.vector,
+            ConstructionTool.polygon,
+            ConstructionTool.regularPolygon,
+            ConstructionTool.perpendicularLine,
+            ConstructionTool.parallelLine,
+            ConstructionTool.angleBisector,
+            ConstructionTool.tangentLine,
+          ],
+        ToolGroup.solids => const [
+            ConstructionTool.pyramid,
+            ConstructionTool.prism,
+            ConstructionTool.tetrahedron,
+            ConstructionTool.cube,
+            ConstructionTool.sphere,
+            ConstructionTool.sphereByRadius,
+            ConstructionTool.cone,
+            ConstructionTool.cylinder,
+            ConstructionTool.extrudeCone,
+            ConstructionTool.extrudePrism,
+            ConstructionTool.unfoldNet,
+            ConstructionTool.surfaceOfRevolution,
+          ],
+        ToolGroup.planes => const [
+            ConstructionTool.plane,
+            ConstructionTool.generalPlane,
+            ConstructionTool.parallelPlane,
+            ConstructionTool.perpendicularPlane,
+          ],
+        ToolGroup.circles => const [
+            ConstructionTool.circleAxisPoint,
+            ConstructionTool.circleCenterNormalRadius,
+            ConstructionTool.circleThreePoints,
+            ConstructionTool.circle,
+            ConstructionTool.arc,
+            ConstructionTool.circumcircleArc,
+            ConstructionTool.circularSector,
+            ConstructionTool.circumcircleSector,
+          ],
+        ToolGroup.curves => const [
+            ConstructionTool.ellipse,
+            ConstructionTool.conic,
+            ConstructionTool.parabola,
+            ConstructionTool.hyperbola,
+            ConstructionTool.locus,
+            ConstructionTool.intersectionCurve,
+          ],
+        ToolGroup.transforms => const [
+            ConstructionTool.reflectionInPlane,
+            ConstructionTool.centralSymmetry,
+            ConstructionTool.rotation,
+            ConstructionTool.translation,
+            ConstructionTool.dilation,
+            ConstructionTool.axialSymmetry,
+          ],
+        ToolGroup.measurement => const [
+            ConstructionTool.angle,
+            ConstructionTool.distance,
+            ConstructionTool.area,
+            ConstructionTool.volume,
+          ],
+        ToolGroup.other => const [
+            ConstructionTool.rotateView,
+            ConstructionTool.panView,
+            ConstructionTool.copyStyle,
+            ConstructionTool.text,
+          ],
+        ToolGroup.specialLines => const [
+            ConstructionTool.equalVector,
+            ConstructionTool.polyline,
+            ConstructionTool.polarDiameter,
+          ],
+      };
 }
 
 enum ToolBehavior { construction, objectAction, command, navigation }
@@ -800,7 +800,8 @@ class ConstructionWorkflow {
   const ConstructionWorkflow({required this.tool, required this.steps});
 
   static const _englishInstructions = <String, String>{
-    '点击位置创建点；拖动设置高度，点击已选点切换平面/高度移动': 'Click to create a point; drag to set its height, and click a selected point to switch between plane and height movement',
+    '点击位置创建点；拖动设置高度，点击已选点切换平面/高度移动':
+        'Click to create a point; drag to set its height, and click a selected point to switch between plane and height movement',
     '选择底面第一个顶点': 'Select the first base vertex',
     '选择底面第二个顶点': 'Select the second base vertex',
     '选择底面第三个顶点': 'Select the third base vertex',
@@ -885,7 +886,8 @@ class ConstructionWorkflow {
     '选择椭圆中心': 'Select the ellipse center',
     '选择长轴端点': 'Select the major-axis endpoint',
     '选择短轴端点': 'Select the minor-axis endpoint',
-    '选择短轴辅助点（垂直于长轴的分量决定短轴）': 'Select an auxiliary point; its component perpendicular to the major axis sets the minor axis',
+    '选择短轴辅助点（垂直于长轴的分量决定短轴）':
+        'Select an auxiliary point; its component perpendicular to the major axis sets the minor axis',
     '选择曲线上的第一个点': 'Select the first point on the curve',
     '继续选择点，直到五个': 'Continue selecting points until you have five',
     '选择焦点': 'Select the focus',
@@ -894,7 +896,8 @@ class ConstructionWorkflow {
     '选择双曲线中心': 'Select the hyperbola center',
     '选择实轴端点': 'Select the real-axis endpoint',
     '选择虚轴端点': 'Select the conjugate-axis endpoint',
-    '选择虚轴辅助点（垂直于实轴的分量决定虚轴）': 'Select an auxiliary point; its component perpendicular to the real axis sets the conjugate axis',
+    '选择虚轴辅助点（垂直于实轴的分量决定虚轴）':
+        'Select an auxiliary point; its component perpendicular to the real axis sets the conjugate axis',
     '选择轨迹起点': 'Select the starting point of the locus',
     '继续描点，点击首点结束': 'Continue adding points, then click the first to finish',
     '选择待变换点': 'Select the point to transform',
@@ -927,14 +930,13 @@ class ConstructionWorkflow {
             for (final instruction in info.steps)
               ConstructionStep(
                 instruction: instruction,
-                instructionEn:
-                    _englishInstructions[instruction] ??
+                instructionEn: _englishInstructions[instruction] ??
                     'Continue construction',
                 clickCount: instruction == '继续选择点，直到五个'
                     ? 4
                     : instruction.contains('继续')
-                    ? 0
-                    : 1,
+                        ? 0
+                        : 1,
               ),
           ],
         ),
