@@ -1906,7 +1906,9 @@ class BackupService {
           (entries.contains('anki/collection.anki2') ||
               entries.contains('collection.anki2')),
       browserCookies:
-          declared.browserCookies && entries.contains('browser_cookies.json'),
+          declared.browserCookies &&
+          !kIsWeb &&
+          entries.contains('browser_cookies.json'),
     );
   }
 
@@ -2094,7 +2096,8 @@ class BackupService {
       ankiData:
           normalizedEntries.contains('anki/collection.anki2') ||
           normalizedEntries.contains('collection.anki2'),
-      browserCookies: normalizedEntries.contains('browser_cookies.json'),
+      browserCookies:
+          !kIsWeb && normalizedEntries.contains('browser_cookies.json'),
     );
   }
 
