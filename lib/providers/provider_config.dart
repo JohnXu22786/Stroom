@@ -108,7 +108,8 @@ String _uniqueMcpPlaceholderToolName(
   final baseStem = baseName.endsWith('_mcp')
       ? baseName.substring(0, baseName.length - 4)
       : baseName;
-  var suffixLength = stableId.length < 8 ? stableId.length : 8;
+  final maxSuffixLength = stableId.length < 59 ? stableId.length : 59;
+  var suffixLength = maxSuffixLength < 8 ? maxSuffixLength : 8;
 
   while (true) {
     final suffix = stableId.substring(stableId.length - suffixLength);
@@ -120,13 +121,28 @@ String _uniqueMcpPlaceholderToolName(
             : _truncateMcpToolNameStem(baseStem, maxStemLength);
     final name = '${stem}_${suffix}_mcp';
     if (usedNames.add(name)) return name;
-    if (suffixLength < stableId.length) {
+    if (suffixLength < maxSuffixLength) {
       suffixLength += 4;
-      if (suffixLength > stableId.length) suffixLength = stableId.length;
+      if (suffixLength > maxSuffixLength) suffixLength = maxSuffixLength;
       continue;
     }
     for (var index = 2;; index++) {
-      final duplicateName = '${stem}_${stableId}_${index}_mcp';
+      final indexText = index.toString();
+      final suffixBudget = 58 - indexText.length;
+      final duplicateSuffixLength = stableId.length <= suffixBudget
+          ? stableId.length
+          : suffixBudget;
+      final duplicateSuffix =
+          stableId.substring(stableId.length - duplicateSuffixLength);
+      final duplicateStemLength =
+          64 - duplicateSuffix.length - indexText.length - 6;
+      final duplicateStem = duplicateStemLength <= 0
+          ? ''
+          : baseStem.length <= duplicateStemLength
+              ? baseStem
+              : _truncateMcpToolNameStem(baseStem, duplicateStemLength);
+      final duplicateName =
+          '${duplicateStem}_${duplicateSuffix}_${indexText}_mcp';
       if (usedNames.add(duplicateName)) return duplicateName;
     }
   }
