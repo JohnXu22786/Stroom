@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/assistant.dart';
+import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/flow_payload.dart';
@@ -69,6 +70,23 @@ Future<TaskFlowExecution> _waitForStatus(
     });
   } finally {
     subscription.close();
+  }
+}
+
+class _FailFirstRegistrationNotifier extends TaskFlowExecutionNotifier {
+  final firstWriteEntered = Completer<void>();
+  final releaseFirstWrite = Completer<void>();
+  int writes = 0;
+
+  @override
+  Future<bool> persist() async {
+    writes++;
+    if (writes == 1) {
+      firstWriteEntered.complete();
+      await releaseFirstWrite.future;
+      return false;
+    }
+    return super.persist();
   }
 }
 
@@ -205,8 +223,8 @@ void main() {
             .launchFlowMany('flow', [const FlowRunInput(text: 'one')]),
         throwsA(isA<TaskFlowPersistenceException>()));
     expect(dispatches, isEmpty);
-    expect(container.read(taskFlowExecutionsProvider).single.status,
-        FlowExecutionStatus.interrupted);
+    expect(container.read(taskFlowExecutionsProvider), isEmpty,
+        reason: 'a rejected launch must not enter later durable snapshots');
   });
   test(
       'snapshot retry preserves launch parameters after original is edited; latest retry is explicit',
@@ -673,5 +691,353 @@ void main() {
         'tts',
         flow.blocks.single.params['modelRef'])!;
     expect(selected.model.customParams.single.defaultValue, 'new-secret');
+  });
+  test('a failed batch cannot enter a later successful batch snapshot',
+      () async {
+    final notifier = _FailFirstRegistrationNotifier();
+    addTearDown(notifier.dispose);
+    final rejected = TaskFlowExecution(
+      id: 'rejected',
+      flowId: 'flow',
+      flowName: 'Flow',
+      status: FlowExecutionStatus.waiting,
+      inputText: 'first',
+    );
+    final accepted = TaskFlowExecution(
+      id: 'accepted',
+      flowId: 'flow',
+      flowName: 'Flow',
+      status: FlowExecutionStatus.waiting,
+      inputText: 'second',
+    );
+    final firstSave = notifier.addExecutions([rejected]);
+    await notifier.firstWriteEntered.future;
+    final secondSave = notifier.addExecutions([accepted]);
+    notifier.releaseFirstWrite.complete();
+    expect(await firstSave, isFalse);
+    expect(await secondSave, isTrue);
+    expect(notifier.executions.map((e) => e.id), ['accepted']);
+
+    final restarted = TaskFlowExecutionNotifier();
+    addTearDown(restarted.dispose);
+    await restarted.restoreFromPersistence();
+    expect(restarted.executions.map((e) => e.id), ['accepted']);
+  });
+
+  test('an unrelated write cannot persist a rejected registration', () async {
+    final notifier = _FailFirstRegistrationNotifier();
+    addTearDown(notifier.dispose);
+    final rejected = TaskFlowExecution(
+      id: 'rejected-by-storage',
+      flowId: 'flow',
+      flowName: 'Flow',
+      status: FlowExecutionStatus.waiting,
+    );
+    final registration = notifier.addExecutions([rejected]);
+    await notifier.firstWriteEntered.future;
+    final unrelatedWrite = notifier.persist();
+    notifier.releaseFirstWrite.complete();
+    expect(await registration, isFalse);
+    expect(await unrelatedWrite, isTrue);
+    expect(notifier.executions, isEmpty);
+
+    final restarted = TaskFlowExecutionNotifier();
+    addTearDown(restarted.dispose);
+    await restarted.restoreFromPersistence();
+    expect(restarted.executions, isEmpty);
+  });
+
+  test('resume needs only assistants used by unfinished Chat steps', () async {
+    final completedAssistant = Assistant(
+        id: 'completed-assistant', name: 'Past', prompt: 'Past prompt');
+    final activeAssistant = Assistant(
+        id: 'active-assistant', name: 'Current', prompt: 'Current prompt');
+    final assistants = container.read(assistantProvider.notifier);
+    await assistants.ready;
+    assistants.loadFromJson(jsonEncode([
+      completedAssistant.toMap(),
+      activeAssistant.toMap(),
+    ]));
+    final flow = TaskFlowDefinition(
+      id: 'assistant-suffix-flow',
+      name: 'Assistant suffix',
+      blocks: [
+        TaskFlowBlock(
+          typeKey: BlockType.chat,
+          params: {'assistantId': completedAssistant.id},
+        ),
+        TaskFlowBlock(
+          typeKey: BlockType.chat,
+          params: {'assistantId': activeAssistant.id},
+        ),
+      ],
+    );
+    final snapshot = FlowLaunchSnapshot.capture(
+      flow,
+      const ProviderEntriesState(),
+      [completedAssistant, activeAssistant],
+    );
+    final saved = TaskFlowExecution(
+      id: 'removed-prefix-assistant',
+      flowId: flow.id,
+      flowName: flow.name,
+      status: FlowExecutionStatus.failed,
+      inputText: 'original input',
+      snapshot: snapshot,
+      subTasks: [
+        FlowSubTask(
+          blockTypeKey: 'chat',
+          blockLabel: 'First',
+          subTaskId: 'completed_chat',
+          subTaskType: 'background',
+          status: TaskStatus.completed,
+          result: const FlowPayload.text('checkpoint'),
+        ),
+        FlowSubTask(
+          blockTypeKey: 'chat',
+          blockLabel: 'Second',
+          subTaskId: 'failed_chat',
+          subTaskType: 'background',
+          status: TaskStatus.failed,
+        ),
+      ],
+    );
+    final notifier = container.read(taskFlowExecutionsProvider.notifier);
+    expect(await notifier.addExecutions([saved]), isTrue);
+    assistants.loadFromJson(jsonEncode([activeAssistant.toMap()]));
+    runner =
+        (block, input, id, step) async => const FlowPayload.text('finished');
+
+    await container
+        .read(taskFlowExecutionServiceProvider)
+        .resumeExecution(saved.id);
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(dispatches, ['null:checkpoint']);
+    expect(notifier.execution(saved.id)?.status, FlowExecutionStatus.completed);
+    expect(notifier.execution(saved.id)?.subTasks.first.result?.value,
+        'checkpoint');
+    expect(
+      snapshot
+          .resolveAssistants(
+            [activeAssistant],
+            blocks: [flow.blocks.last],
+          )
+          .single
+          .prompt,
+      activeAssistant.prompt,
+    );
+    expect(
+      () => snapshot.resolveAssistants(
+        [completedAssistant],
+        blocks: [flow.blocks.last],
+      ),
+      throwsStateError,
+    );
+  });
+
+  test('migration skips malformed history while preserving valid records',
+      () async {
+    final file = File('${dir.path}/task_flows/executions.json');
+    await file.parent.create(recursive: true);
+    final malformed = {
+      'id': 'malformed',
+      'status': 'failed',
+      'subTasks': 'not a list',
+    };
+    await file.writeAsString(jsonEncode([
+      malformed,
+      {
+        'id': 'valid',
+        'status': 'failed',
+        'subTasks': [
+          {'subTaskId': 42, 'status': 'running'},
+          {'subTaskId': 'real', 'status': 'completed'},
+          {'subTaskId': 'pending_chat_1', 'status': 'failed'},
+        ],
+      },
+    ]));
+
+    await FlowExecutionMigration.migrate();
+    final migrated =
+        (jsonDecode(await file.readAsString()) as List).cast<Map>();
+    expect(migrated.first, malformed);
+    expect(migrated.last['batchIndex'], 0);
+    final steps = (migrated.last['subTasks'] as List).cast<Map>();
+    expect(steps.first.containsKey('outcome'), isFalse);
+    expect(steps[1]['outcome'], 'succeeded');
+    expect(steps.last['outcome'], 'skipped');
+    await FlowExecutionMigration.migrate();
+    expect((jsonDecode(await file.readAsString()) as List).last, migrated.last);
+  });
+
+  test('restart settles legacy and current pending steps in running records',
+      () async {
+    final file = File('${dir.path}/task_flows/executions.json');
+    await file.parent.create(recursive: true);
+    await file.writeAsString(jsonEncode([
+      {
+        'id': 'legacy-running',
+        'status': 'running',
+        'subTasks': [
+          {'subTaskId': 'real-completed', 'status': 'completed'},
+          {'subTaskId': 'real-active', 'status': 'running'},
+          {'subTaskId': 'pending_chat_2', 'status': 'running'},
+        ],
+      },
+      {
+        'id': 'current-running',
+        'status': 'running',
+        'subTasks': [
+          {
+            'subTaskId': 'real-active',
+            'status': 'running',
+            'outcome': 'running',
+          },
+          {
+            'subTaskId': 'pending_chat_1',
+            'status': 'waiting',
+            'outcome': 'pending',
+          },
+        ],
+      },
+    ]));
+    await FlowExecutionMigration.migrate();
+    final notifier = container.read(taskFlowExecutionsProvider.notifier);
+    await notifier.restoreFromPersistence();
+    final restored = {for (final e in notifier.executions) e.id: e};
+    expect(
+        restored.values
+            .every((e) => e.status == FlowExecutionStatus.interrupted),
+        isTrue);
+    expect(
+      restored['legacy-running']!.subTasks.map((step) => step.outcome),
+      [
+        FlowStepOutcome.succeeded,
+        FlowStepOutcome.interrupted,
+        FlowStepOutcome.skipped,
+      ],
+    );
+    expect(
+      restored['current-running']!.subTasks.map((step) => step.outcome),
+      [FlowStepOutcome.interrupted, FlowStepOutcome.skipped],
+    );
+    expect(
+      restored.values
+          .expand((e) => e.subTasks)
+          .where((step) => step.outcome == FlowStepOutcome.skipped)
+          .every((step) => step.status == TaskStatus.paused),
+      isTrue,
+    );
+    final saved = jsonDecode(await file.readAsString()) as List;
+    expect(saved.every((entry) => entry['status'] == 'interrupted'), isTrue);
+  });
+
+  test('deleting a completed batch record cancels pending siblings', () async {
+    final flow = container.read(taskFlowListProvider).single.copyWith(
+      blocks: [
+        TaskFlowBlock(
+          typeKey: BlockType.chat,
+          params: {'assistantId': 'assistant', 'marker': 'original'},
+        ),
+      ],
+    );
+    container.read(taskFlowListProvider.notifier).state = [flow];
+    final thirdEntered = Completer<void>();
+    final releaseThird = Completer<FlowPayload>();
+    runner = (block, input, id, step) {
+      if (input.value == 'three') {
+        thirdEntered.complete();
+        return releaseThird.future;
+      }
+      return Future.value(FlowPayload.fromValue('done', IOType.text));
+    };
+
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final ids = await service.launchFlowMany('flow', [
+      const FlowRunInput(text: 'one'),
+      const FlowRunInput(text: 'two'),
+      const FlowRunInput(text: 'three'),
+      const FlowRunInput(text: 'four'),
+    ]);
+    await thirdEntered.future.timeout(const Duration(seconds: 5));
+    final notifier = container.read(taskFlowExecutionsProvider.notifier);
+    expect(notifier.execution(ids[0])?.status, FlowExecutionStatus.completed);
+    expect(notifier.execution(ids[1])?.status, FlowExecutionStatus.completed);
+    expect(notifier.execution(ids[2])?.status, FlowExecutionStatus.running);
+    expect(notifier.execution(ids[3])?.status, FlowExecutionStatus.waiting);
+
+    notifier.removeExecution(ids[1]);
+    await notifier.persist();
+    expect(notifier.execution(ids[1]), isNull);
+    expect(notifier.execution(ids[0])?.status, FlowExecutionStatus.completed);
+    expect(notifier.execution(ids[2])?.status, FlowExecutionStatus.cancelled);
+    expect(notifier.execution(ids[3])?.status, FlowExecutionStatus.cancelled);
+    expect(
+      notifier.execution(ids[3])!.subTasks.single.outcome,
+      FlowStepOutcome.cancelled,
+    );
+
+    releaseThird.complete(FlowPayload.fromValue('late', IOType.text));
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(dispatches, ['original:one', 'original:two', 'original:three']);
+
+    final restarted = TaskFlowExecutionNotifier();
+    addTearDown(restarted.dispose);
+    await restarted.restoreFromPersistence();
+    expect(restarted.execution(ids[0])?.status, FlowExecutionStatus.completed);
+    expect(restarted.execution(ids[1]), isNull);
+    expect(restarted.execution(ids[2])?.status, FlowExecutionStatus.cancelled);
+    expect(restarted.execution(ids[3])?.status, FlowExecutionStatus.cancelled);
+  });
+
+  test('deleting a failed batch record retains completed sibling history',
+      () async {
+    final notifier = container.read(taskFlowExecutionsProvider.notifier);
+    expect(
+      await notifier.addExecutions([
+        TaskFlowExecution(
+          id: 'completed',
+          flowId: 'flow',
+          flowName: 'Flow',
+          batchId: 'failed-batch',
+          status: FlowExecutionStatus.completed,
+        ),
+        TaskFlowExecution(
+          id: 'failed',
+          flowId: 'flow',
+          flowName: 'Flow',
+          batchId: 'failed-batch',
+          batchIndex: 1,
+          status: FlowExecutionStatus.failed,
+        ),
+        TaskFlowExecution(
+          id: 'waiting',
+          flowId: 'flow',
+          flowName: 'Flow',
+          batchId: 'failed-batch',
+          batchIndex: 2,
+          status: FlowExecutionStatus.waiting,
+          queued: true,
+        ),
+      ]),
+      isTrue,
+    );
+
+    notifier.removeExecution('failed');
+    await notifier.persist();
+    expect(notifier.execution('failed'), isNull);
+    expect(
+        notifier.execution('completed')?.status, FlowExecutionStatus.completed);
+    expect(
+        notifier.execution('waiting')?.status, FlowExecutionStatus.cancelled);
+    expect(notifier.execution('waiting')?.queued, isFalse);
+
+    final restarted = TaskFlowExecutionNotifier();
+    addTearDown(restarted.dispose);
+    await restarted.restoreFromPersistence();
+    expect(restarted.execution('completed')?.status,
+        FlowExecutionStatus.completed);
+    expect(
+        restarted.execution('waiting')?.status, FlowExecutionStatus.cancelled);
   });
 }

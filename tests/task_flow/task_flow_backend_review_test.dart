@@ -583,11 +583,10 @@ void main() {
     expect(hydrated.single.prompt, 'frozen');
     expect(hydrated.single.settings.customParameters.map((p) => p.value),
         ['frozen', 'new-secret']);
-    final missing = snapshot
-            .resolveAssistants([assistant('other', 'wrong-secret', 'wrong')])
-        as List<Assistant>;
-    expect(missing.single.settings.customParameters.map((p) => p.value),
-        ['frozen']);
+    expect(
+        () => snapshot
+            .resolveAssistants([assistant('other', 'wrong-secret', 'wrong')]),
+        throwsStateError);
   });
 
   test('cold chat queue waits for live assistant credential hydration',
@@ -1389,7 +1388,7 @@ void main() {
     await service.resumeExecution(ids.single);
     expect(tasks.resumes, 1);
     expect(tasks.resumedConfig?.key, 'new-key');
-    expect(tasks.resumedConfig?.host, 'https://new.invalid');
+    expect(tasks.resumedConfig?.host, 'https://old.invalid');
     expect(tasks.resumedConfig?.typeConfig['Authorization'], 'new-auth');
     expect(tasks.resumedModel?.speedMax, 2);
     await service.cancelExecution(ids.single);
