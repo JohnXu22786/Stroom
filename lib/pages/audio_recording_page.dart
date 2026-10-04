@@ -2,13 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:audio_waveforms/audio_waveforms.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../providers/tts_state_provider.dart';
+import '../services/storage_service.dart';
 import '../utils/file_manifest.dart';
 
 /// 录音页面 - 使用 audio_waveforms 重构，带波形图与暂停/恢复功能
@@ -27,6 +28,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
   bool _isPermissionGranted = false;
   String? _recordedFilePath;
   String? _activeRecordingPath;
+  bool _isRecoveredDraft = false;
   int _recordDurationSeconds = 0;
   bool _isSaving = false;
   bool _isStarting = false;
@@ -55,10 +57,64 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
       }
     });
 
+    await _restorePendingRecordingDraft();
+
     // 检查权限
     await _checkPermission();
     if (mounted) {
       setState(() {});
+    }
+  }
+
+  static final _recordingDraftFileName =
+      RegExp(r'^recording_\d+\.m4a$', caseSensitive: false);
+
+  Future<void> _restorePendingRecordingDraft() async {
+    if (kIsWeb) return;
+    try {
+      final appDir = await AppStorage.directory;
+      final candidatesByName = <String, File>{};
+      for (final path in [
+        appDir,
+        p.join(appDir, 'audio_drafts'),
+      ]) {
+        final directory = Directory(path);
+        if (!await directory.exists()) continue;
+        await for (final entity in directory.list(followLinks: false)) {
+          if (entity is! File ||
+              !_recordingDraftFileName.hasMatch(p.basename(entity.path)) ||
+              await entity.length() == 0) {
+            continue;
+          }
+          final name = p.basename(entity.path);
+          final existing = candidatesByName[name];
+          if (existing == null ||
+              (await entity.lastModified())
+                  .isAfter(await existing.lastModified())) {
+            candidatesByName[name] = entity;
+          }
+        }
+      }
+      if (candidatesByName.isEmpty) return;
+
+      int timestamp(File file) {
+        final name = p.basenameWithoutExtension(file.path);
+        return int.tryParse(name.substring('recording_'.length)) ?? 0;
+      }
+
+      final candidates = candidatesByName.values.toList()
+        ..sort((a, b) => timestamp(b).compareTo(timestamp(a)));
+      final draft = candidates.first;
+      final draftSize = await draft.length();
+      final durationEstimate = (draftSize * 8 / 128000).round();
+      if (!mounted) return;
+      setState(() {
+        _recordedFilePath = draft.path;
+        _recordDurationSeconds = durationEstimate;
+        _isRecoveredDraft = true;
+      });
+    } catch (e) {
+      debugPrint('[AudioRecordingPage] 恢复录音草稿失败: $e');
     }
   }
 
@@ -152,6 +208,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
           _isPaused = false;
           _recordDurationSeconds = 0;
           _recordedFilePath = null;
+          _isRecoveredDraft = false;
           _isStarting = false;
         });
       }
@@ -199,6 +256,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
         if (path != null && path.isNotEmpty) {
           _recordedFilePath = path;
           _activeRecordingPath = null;
+          _isRecoveredDraft = false;
         } else {
           _showSnackBar('录音文件无效，请重新录制', isError: true);
         }
@@ -291,12 +349,22 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
     );
   }
 
-  void _resetForReRecord() {
+  Future<void> _resetForReRecord() async {
+    final recoveredDraftPath = _isRecoveredDraft ? _recordedFilePath : null;
     _controller.reset();
     setState(() {
       _recordedFilePath = null;
       _recordDurationSeconds = 0;
+      _isRecoveredDraft = false;
     });
+    if (recoveredDraftPath != null) {
+      try {
+        final draft = File(recoveredDraftPath);
+        if (await draft.exists()) await draft.delete();
+      } catch (e) {
+        debugPrint('[AudioRecordingPage] 删除录音草稿失败: $e');
+      }
+    }
   }
 
   String _formatDuration(int seconds) {
@@ -384,6 +452,13 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
             ),
           ),
           const SizedBox(height: 8),
+          if (_isRecoveredDraft) ...[
+            Text(
+              '检测到未保存的录音草稿，可保存到音频库。',
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 8),
+          ],
 
           // 录制/暂停状态标签
           if (_isRecording)

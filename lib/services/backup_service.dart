@@ -190,6 +190,9 @@ class BackupSelection {
 
 class BackupService {
   static int? _lastBackupFileTimestampSeconds;
+  static const _audioDraftsDirectory = 'audio_drafts';
+  static final _audioRecordingDraftFileName =
+      RegExp(r'^recording_\d+\.m4a$', caseSensitive: false);
   static const _catCatchRuntimeSubdirectories = [
     'downloads',
     '.progress',
@@ -638,6 +641,12 @@ class BackupService {
           sourcePath: p.join(appDir, 'tts_audio'),
           useStreaming: useStreaming,
         );
+        await _addAudioRecordingDraftsToPlan(
+          diskFiles,
+          memoryFiles,
+          appDir: appDir,
+          useStreaming: useStreaming,
+        );
       }
     }
     onProgress?.call(0.6);
@@ -865,6 +874,73 @@ class BackupService {
       diskFiles.add([archiveName, sourcePath]);
     } else {
       memoryFiles[archiveName] = await file.readAsBytes();
+    }
+  }
+
+  static bool _isAudioRecordingDraft(String relativePath) =>
+      _audioRecordingDraftFileName.hasMatch(relativePath);
+
+  /// Finds unregistered recordings left in the documents root and drafts
+  /// already restored into the dedicated audio_drafts directory.
+  static Future<Map<String, String>> _collectAudioRecordingDrafts(
+    String appDir,
+  ) async {
+    if (kIsWeb || WebFileStore.isTestMode) return {};
+    final pathsByName = <String, String>{};
+    final directories = [
+      Directory(appDir),
+      Directory(p.join(appDir, _audioDraftsDirectory)),
+    ];
+    for (final directory in directories) {
+      if (!await directory.exists()) continue;
+      await for (final entity in directory.list(followLinks: false)) {
+        if (entity is! File ||
+            !_isAudioRecordingDraft(p.basename(entity.path)) ||
+            await entity.length() == 0) {
+          continue;
+        }
+        final name = p.basename(entity.path);
+        final existingPath = pathsByName[name];
+        if (existingPath == null ||
+            (await entity.lastModified())
+                .isAfter(await File(existingPath).lastModified())) {
+          pathsByName[name] = entity.path;
+        }
+      }
+    }
+    return pathsByName;
+  }
+
+  static Future<void> _addAudioRecordingDraftsToPlan(
+    List<List<String>> diskFiles,
+    Map<String, Uint8List> memoryFiles, {
+    required String appDir,
+    required bool useStreaming,
+  }) async {
+    for (final entry
+        in (await _collectAudioRecordingDrafts(appDir)).entries) {
+      await _addPlanFile(
+        diskFiles,
+        memoryFiles,
+        '$_audioDraftsDirectory/${entry.key}',
+        entry.value,
+        useStreaming,
+      );
+    }
+  }
+
+  static Future<void> _addAudioRecordingDraftsToArchive(
+    Archive archive, {
+    required String appDir,
+  }) async {
+    final archived = archive.files.map((file) => file.name).toSet();
+    for (final entry
+        in (await _collectAudioRecordingDrafts(appDir)).entries) {
+      final archiveName = '$_audioDraftsDirectory/${entry.key}';
+      if (archived.contains(archiveName)) continue;
+      final data = await File(entry.value).readAsBytes();
+      archive.addFile(ArchiveFile(archiveName, data.length, data));
+      archived.add(archiveName);
     }
   }
 
@@ -1598,6 +1674,12 @@ class BackupService {
         archivePrefix: 'tts_audio',
         sourcePath: await _appDataDirectoryPath('tts_audio'),
       );
+      if (!kIsWeb && !WebFileStore.isTestMode) {
+        await _addAudioRecordingDraftsToArchive(
+          archive,
+          appDir: await AppStorage.directory,
+        );
+      }
     }
     onProgress?.call(0.65);
     await _yieldToEventLoop();
@@ -2547,6 +2629,12 @@ class BackupService {
             _isCatCatchMediaPath(relativePath) &&
             _isSafeRelativeArchivePath(relativePath);
       }
+      if (dir == _audioDraftsDirectory) {
+        return selection.audio &&
+            selection.includeMediaFiles &&
+            _isAudioRecordingDraft(relativePath) &&
+            _isSafeRelativeArchivePath(relativePath);
+      }
       return _shouldRestoreDir(dir, selection) &&
           _isSafeRelativeArchivePath(relativePath);
     }
@@ -3429,6 +3517,10 @@ class BackupService {
       debugPrint('[BackupService] 跳过不安全路径条目: $rawKey');
       return false;
     }
+    if (matchedDir == _audioDraftsDirectory &&
+        !_isAudioRecordingDraft(relativePath)) {
+      return false;
+    }
 
     if (matchedDir == 'anki') {
       // 实际数据库位于应用数据目录根目录 collection.anki2
@@ -3522,6 +3614,24 @@ class BackupService {
       return true;
     } catch (e) {
       debugPrint('[BackupService] 删除存储前缀 $subDir/ 失败: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _deleteRootAudioRecordingDrafts() async {
+    if (kIsWeb || WebFileStore.isTestMode) return true;
+    try {
+      final appDir = Directory(await AppStorage.directory);
+      if (!await appDir.exists()) return true;
+      await for (final entity in appDir.list(followLinks: false)) {
+        if (entity is File &&
+            _audioRecordingDraftFileName.hasMatch(p.basename(entity.path))) {
+          await entity.delete();
+        }
+      }
+      return true;
+    } catch (e) {
+      debugPrint('[BackupService] 删除未保存录音草稿失败: $e');
       return false;
     }
   }
@@ -4344,6 +4454,10 @@ class BackupService {
         }
       }
       if (!await _deleteStoredDirectory('tts_audio')) deleteFailed = true;
+      if (!await _deleteStoredDirectory(_audioDraftsDirectory)) {
+        deleteFailed = true;
+      }
+      if (!await _deleteRootAudioRecordingDrafts()) deleteFailed = true;
     }
     if (selection.videos && selection.includeMediaFiles) {
       final records = await ManifestDatabase.getAllVideoRecords();
@@ -4780,6 +4894,7 @@ const Set<String> _restoreSkipFiles = {
 const List<String> _restoreKnownDirs = [
   'pictures',
   'tts_audio',
+  'audio_drafts',
   'videos',
   'texts',
   'attachments',
@@ -4802,6 +4917,7 @@ bool _shouldRestoreDir(String dir, BackupSelection selection) {
     case 'pictures':
       return selection.pictures && selection.includeMediaFiles;
     case 'tts_audio':
+    case 'audio_drafts':
       return selection.audio && selection.includeMediaFiles;
     case 'videos':
       return selection.videos && selection.includeMediaFiles;
