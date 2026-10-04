@@ -100,7 +100,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('redirected main-frame HTTP error clears the loading indicator',
+  testWidgets('redirected main-frame HTTP error keeps progress until load stop',
       (tester) async {
     final previousPlatform = InAppWebViewPlatform.instance;
     final platform = _installBrowserPagePlatform();
@@ -133,6 +133,16 @@ void main() {
         headers: const {},
       ),
     );
+    await tester.pump();
+
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+    webView.params.onProgressChanged!(controller, 100);
+    await tester.pump();
+
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+    webView.params.onLoadStop!(controller, WebUri(redirectUrl));
     await tester.pump();
 
     expect(find.byType(LinearProgressIndicator), findsNothing);
