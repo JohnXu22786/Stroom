@@ -39,8 +39,7 @@ void main() {
       expect(await addressSubmit, isTrue);
       expect(preparationCallsWhileWaiting, 1);
       expect(preparationCalls, 1);
-      expect(
-          loadedUrls,
+      expect(loadedUrls,
           unorderedEquals(['initial', 'https://requested.example/page']));
       expect(address, 'https://requested.example/page');
     });
