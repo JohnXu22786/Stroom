@@ -1245,6 +1245,7 @@ class BackupService {
     final restoreSelection = metadata.restoreSelection;
     final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
       restoreSelection,
+      taskFilesToReplace: metadata.taskFilesToReplace,
     );
     final previousCookies = await _captureCookiesForRestoreRollback(
       restoreSelection,
@@ -1377,6 +1378,7 @@ class BackupService {
       final restoreSelection = metadata.restoreSelection;
       final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
         restoreSelection,
+        taskFilesToReplace: metadata.taskFilesToReplace,
       );
       final previousCookies = await _captureCookiesForRestoreRollback(
         restoreSelection,
@@ -2263,18 +2265,28 @@ class BackupService {
   }
 
   static Future<Set<String>> _taskFlowAttachmentsToPreserve(
-    BackupSelection selection,
-  ) async {
-    if (!selection.chatRecordsAndAttachments ||
-        !selection.includeMediaFiles ||
-        selection.tasks) {
+    BackupSelection selection, {
+    Set<String>? taskFilesToReplace,
+  }) async {
+    if (!selection.chatRecordsAndAttachments || !selection.includeMediaFiles) {
       return <String>{};
     }
 
-    final preservedTaskFiles = await _collectTaskFlowAttachmentKeys();
+    const taskFlowFiles = <String>{
+      'task_flows/flows.json',
+      'task_flows/executions.json',
+    };
+    final taskFlowFilesToPreserve = taskFilesToReplace == null
+        ? (selection.tasks ? <String>{} : taskFlowFiles)
+        : taskFlowFiles.difference(taskFilesToReplace);
+    if (taskFlowFilesToPreserve.isEmpty) return <String>{};
+
+    final preservedTaskFiles = await _collectTaskFlowAttachmentKeys(
+      taskFlowFilesToPreserve,
+    );
     if (preservedTaskFiles == null) {
       throw const DataManagementPreflightException(
-        '无法读取未勾选任务中的附件引用，已取消操作以避免误删数据。',
+        '无法读取未被替换任务中的附件引用，已取消操作以避免误删数据。',
       );
     }
     return preservedTaskFiles;
@@ -3087,10 +3099,12 @@ class BackupService {
     onProgress?.call(1.0);
   }
 
-  /// Returns attachment-store keys referenced by task-flow configuration or
-  /// execution data, so clearing chat attachments does not break unselected
-  /// task flows. A null result means the references could not be read safely.
-  static Future<Set<String>?> _collectTaskFlowAttachmentKeys() async {
+  /// Returns attachment-store keys referenced by task-flow files that will
+  /// remain in place, so clearing chat attachments does not break them. A null
+  /// result means the references could not be read safely.
+  static Future<Set<String>?> _collectTaskFlowAttachmentKeys(
+    Set<String> taskFlowFilesToPreserve,
+  ) async {
     final preservedKeys = <String>{};
     try {
       final isWebStore = kIsWeb || WebFileStore.isTestMode;
@@ -3149,12 +3163,12 @@ class BackupService {
         }
       }
 
-      for (final fileName in const ['flows.json', 'executions.json']) {
+      for (final taskFlowFile in taskFlowFilesToPreserve) {
+        final fileName = p.posix.basename(taskFlowFile);
         Uint8List? data;
         if (isWebStore) {
-          final key = 'task_flows/$fileName';
-          if (!await WebFileStore.exists(key)) continue;
-          data = await WebFileStore.read(key);
+          if (!await WebFileStore.exists(taskFlowFile)) continue;
+          data = await WebFileStore.read(taskFlowFile);
         } else {
           final file = File(p.join(appDir!, 'task_flows', fileName));
           if (!await file.exists()) continue;
@@ -3221,8 +3235,8 @@ class BackupService {
   }) async {
     var deleteFailed = false;
 
-    // 聊天附件与任务流输入共用 attachments/。若任务类别未选中，保留
-    // flows.json / executions.json 引用的文件，只清除其余聊天附件。
+    // 聊天附件与任务流输入共用 attachments/。保留未被本次替换的
+    // flows.json / executions.json 所引用的文件，只清除其余聊天附件。
     // （includeMediaFiles=false 的结构化快照恢复不动附件文件）
     if (selection.chatRecordsAndAttachments && selection.includeMediaFiles) {
       if (taskFlowAttachmentKeys.isEmpty) {
