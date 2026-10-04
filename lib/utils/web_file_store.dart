@@ -211,8 +211,8 @@ class WebFileStore {
     final txn = db.transaction('files', idbModeReadOnly);
     final keys = <String>[];
     await for (final cwv in txn.objectStore('files').openCursor(
-      autoAdvance: true,
-    )) {
+          autoAdvance: true,
+        )) {
       final key = cwv.key;
       if (key is String && key.startsWith(prefix)) keys.add(key);
     }

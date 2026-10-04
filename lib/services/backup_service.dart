@@ -418,11 +418,10 @@ class BackupService {
     if (selection.tasks) {
       debugPrint('[BackupService] streaming: adding task files');
       final appDir = await AppStorage.directory;
-      final taskFlowAttachmentPaths = selection.includeMediaFiles &&
-              !kIsWeb &&
-              !WebFileStore.isTestMode
-          ? await _taskFlowAttachmentPathsForBackup(appDir)
-          : <String>{};
+      final taskFlowAttachmentPaths =
+          selection.includeMediaFiles && !kIsWeb && !WebFileStore.isTestMode
+              ? await _taskFlowAttachmentPathsForBackup(appDir)
+              : <String>{};
       await _addTaskPlanFile(
         jsonFiles,
         memoryFiles,
@@ -914,8 +913,7 @@ class BackupService {
     )) {
       if (entity is! File) continue;
       final relativePath = p.relative(entity.path, from: directory.path);
-      final archiveRelativePath =
-          relativePath.split(p.separator).join('/');
+      final archiveRelativePath = relativePath.split(p.separator).join('/');
       if (!_isSafeRelativeArchivePath(archiveRelativePath)) continue;
       final archiveName = '$archivePrefix/$archiveRelativePath';
       if (archived.contains(archiveName)) continue;
@@ -4106,9 +4104,8 @@ class BackupService {
       if (raw == null) return <String>{};
       final decoded = jsonDecode(raw);
       if (decoded is! List) return null;
-      final appDir = kIsWeb || WebFileStore.isTestMode
-          ? null
-          : await AppStorage.directory;
+      final appDir =
+          kIsWeb || WebFileStore.isTestMode ? null : await AppStorage.directory;
       final keys = <String>{};
 
       String? canonicalKey(Object? value) {
@@ -4312,13 +4309,11 @@ class BackupService {
             'task_state/task_list_last_read.json',
             'task_state/app_launches.json',
           };
-      if (!selection.chatRecordsAndAttachments &&
-          selection.includeMediaFiles) {
-        final replacedTaskFlows = taskFiles
-            .intersection(const {
-              'task_flows/flows.json',
-              'task_flows/executions.json',
-            });
+      if (!selection.chatRecordsAndAttachments && selection.includeMediaFiles) {
+        final replacedTaskFlows = taskFiles.intersection(const {
+          'task_flows/flows.json',
+          'task_flows/executions.json',
+        });
         final oldTaskAttachments = await _collectTaskFlowAttachmentKeys(
           replacedTaskFlows,
         );
