@@ -1,5 +1,8 @@
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:uuid/uuid.dart';
+
+import '../../../catcatch/engine/executor_save.dart'
+    show CompletedMediaRegistration;
 
 import '../../../catcatch/models/media_resource.dart';
 import '../../../catcatch/models/media_kind.dart';
@@ -36,6 +39,7 @@ Future<String> executeCatCatchBlock({
   int durationSecOverride = 0,
   Duration stallTimeout = const Duration(minutes: 10),
   Duration pollInterval = const Duration(milliseconds: 500),
+  @visibleForTesting void Function()? onFallbackRegistration,
   IOType? nextInputType,
   void Function(String taskId)? onManualWait,
   void Function(IOType type)? onOutputType,
@@ -67,6 +71,20 @@ Future<String> executeCatCatchBlock({
   var lastProgressAt = DateTime.now();
   bool autoSelected = false;
   bool autoConfirmed = false;
+
+  bool isCurrent() {
+    if (!execNotifier.mounted || !isFlowExecutionActive(execNotifier, execId)) {
+      return false;
+    }
+    try {
+      // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+      return catcatchNotifier.state.any((current) =>
+          current.id == taskId &&
+          current.status == catcatch.TaskStatus.completed);
+    } catch (_) {
+      return false;
+    }
+  }
 
   while (true) {
     await Future.delayed(pollInterval);
@@ -176,14 +194,29 @@ Future<String> executeCatCatchBlock({
       }
       onOutputType?.call(actualType);
       onOutputPayload?.call(await catCatchOutputPayload(path));
-      // Registration remains best effort, matching the download engine.
-      try {
-        await registerFlowCatCatchOutput(path, task);
-      } catch (e) {
-        debugPrint('[TaskFlow] registerFlowCatCatchOutput failed: $e');
+      // Native saves have already registered this exact completed path.
+      // Legacy and mocked tasks still use the cancellation-aware fallback.
+      CompletedMediaRegistration? registration;
+      if (task.metadata[catcatch.CatCatchTask.nativeRegisteredPathKey] !=
+          path) {
+        try {
+          onFallbackRegistration?.call();
+          registration = await registerFlowCatCatchOutput(path, task,
+              isCurrent: isCurrent);
+        } catch (e) {
+          if (!isCurrent()) {
+            throw BlockExecutionException('任务已取消',
+                blockType: def.typeKey.name, blockTitle: def.label);
+          }
+          debugPrint('[TaskFlow] registerFlowCatCatchOutput failed: $e');
+        }
       }
-      execNotifier.updateSubTaskStatus(
-          execId, flowSubTask.id, TaskStatus.completed);
+      if (!isCurrent()) {
+        await registration?.rollback();
+        throw BlockExecutionException('任务已取消',
+            blockType: def.typeKey.name, blockTitle: def.label);
+      }
+      // The service commits the step only after saving its output checkpoint.
       return path;
     }
     if (task.status == catcatch.TaskStatus.failed) {

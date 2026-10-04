@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
-import '../../../models/tts_models.dart';
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider_shared.dart';
@@ -171,6 +170,9 @@ Future<String> executeAsrBlock({
   required BackgroundTaskNotifier bgNotifier,
   required ProviderEntriesState providerEntries,
   CancelToken? cancelToken,
+
+  /// Allows the response to be held and released in cancellation tests.
+  Future<String> Function(Uint8List, String)? requestAsr,
 }) async {
   // Resolve a human-readable base for the output record name: in-app
   // audio is stored under a hash filename — map it back to the record's
@@ -283,23 +285,25 @@ Future<String> executeAsrBlock({
 
   try {
     bgNotifier.updateStep(taskId, 0, running: true);
-    final result = await _callAsrApi(
-      audioBytes: audioBytes,
-      audioFormat: audioFormat,
-      host: config.host,
-      apiKey: config.key,
-      modelId: model.modelId,
-      typeConfig: model.typeConfig,
-      // Model-level custom params — the same list the ASR settings page
-      // edits and the standalone ASR page sends.
-      customParams: model.customParams,
-      cancelToken: cancelToken,
-    );
-    // The flow may have been deleted while the request was in flight —
-    // don't save an orphaned text record.
-    if (!execNotifier.state.any((e) => e.id == execId)) {
+    final result = await (requestAsr != null
+        ? requestAsr(audioBytes, audioFormat)
+        : _callAsrApi(
+            audioBytes: audioBytes,
+            audioFormat: audioFormat,
+            host: config.host,
+            apiKey: config.key,
+            modelId: model.modelId,
+            typeConfig: model.typeConfig,
+            // Model-level custom params — the same list the ASR settings page
+            // edits and the standalone ASR page sends.
+            customParams: model.customParams,
+            cancelToken: cancelToken,
+          ));
+    // The flow may have ended while the request was in flight — don't
+    // save an orphaned text record.
+    if (!isFlowExecutionActive(execNotifier, execId)) {
       throw BlockExecutionException(
-        '任务流已删除',
+        '任务流已结束或删除',
         blockType: def.typeKey.name,
         blockTitle: def.label,
       );
@@ -311,10 +315,16 @@ Future<String> executeAsrBlock({
       result,
       saveFolder: saveFolder,
       title: title,
-      // Guard against a flow deleted mid-save (narrow race after the
-      // existence check above).
-      shouldCommit: () => execNotifier.state.any((e) => e.id == execId),
+      // Guard against a flow cancelled or deleted mid-save.
+      shouldCommit: () => isFlowExecutionActive(execNotifier, execId),
     );
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     bgNotifier.completeTask(taskId, downloadedFilePath: textPath);
     execNotifier.updateSubTaskStatus(
       execId,

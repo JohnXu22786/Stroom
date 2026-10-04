@@ -150,7 +150,9 @@ void main() {
       );
 
       expect(result, p.absolute('tests/fixtures/catcatch/video_only.mp4'));
-      expect(execNotifier.state[0].subTasks[0].status, TaskStatus.completed);
+      expect(execNotifier.state[0].subTasks[0].status, TaskStatus.running,
+          reason:
+              'the service completes the step after saving its output checkpoint');
       verifyNever(() => notifier.removeTask(any()));
     });
 

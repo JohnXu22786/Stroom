@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dio/dio.dart' show CancelToken;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:stroom/catcatch/config/default_rules.dart';
@@ -8,11 +11,110 @@ import 'package:stroom/catcatch/models/catcatch_task.dart';
 import 'package:stroom/catcatch/models/media_resource.dart';
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
 
+class _GatedCatCatchNotifier extends CatCatchNotifier {
+  _GatedCatCatchNotifier(super.ref, this.startGate);
+
+  final Completer<bool> startGate;
+  int backgroundStarts = 0;
+  int executorStarts = 0;
+
+  void setTasksForTest(List<CatCatchTask> tasks) => state = tasks;
+
+  List<CatCatchTask> get tasksForTest => state;
+
+  @override
+  Future<bool> startBackgroundServiceForTask() {
+    backgroundStarts++;
+    return startGate.future;
+  }
+
+  @override
+  Future<String?> retryFromStepForTask({
+    required CatCatchTask task,
+    required StepType fromStep,
+    required void Function(CatCatchTask updated) onUpdate,
+    required CancelToken cancelToken,
+  }) async {
+    executorStarts++;
+    return null;
+  }
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
 
 void main() {
+  test('removing a task during background startup skips its executor',
+      () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final startGate = Completer<bool>();
+    late _GatedCatCatchNotifier notifier;
+    final container = ProviderContainer(overrides: [
+      catcatchTasksProvider.overrideWith((ref) {
+        notifier = _GatedCatCatchNotifier(ref, startGate);
+        return notifier;
+      }),
+    ]);
+    addTearDown(container.dispose);
+    container.read(catcatchTasksProvider);
+
+    notifier.setTasksForTest([
+      CatCatchTask(
+        id: 'removed-during-startup',
+        url: 'https://example.com/video.mp4',
+        expectedDurationSec: 120,
+        status: TaskStatus.paused,
+        createdAt: DateTime(2025, 1, 1),
+      ),
+    ]);
+
+    notifier.confirmAndContinue('removed-during-startup');
+    expect(notifier.backgroundStarts, 1);
+    expect(notifier.executorStarts, 0);
+
+    notifier.removeTask('removed-during-startup');
+    startGate.complete(true);
+    // removeTask also persists asynchronously; allow it to finish before
+    // disposing the provider container.
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    expect(notifier.tasksForTest, isEmpty);
+    expect(notifier.executorStarts, 0);
+  });
+
+  test('pausing a task during background startup skips its executor', () async {
+    final startGate = Completer<bool>();
+    late _GatedCatCatchNotifier notifier;
+    final container = ProviderContainer(overrides: [
+      catcatchTasksProvider.overrideWith((ref) {
+        notifier = _GatedCatCatchNotifier(ref, startGate);
+        return notifier;
+      }),
+    ]);
+    addTearDown(container.dispose);
+    container.read(catcatchTasksProvider);
+
+    notifier.setTasksForTest([
+      CatCatchTask(
+        id: 'paused-during-startup',
+        url: 'https://example.com/video.mp4',
+        expectedDurationSec: 120,
+        status: TaskStatus.paused,
+        createdAt: DateTime(2025, 1, 1),
+      ),
+    ]);
+
+    notifier.confirmAndContinue('paused-during-startup');
+    expect(notifier.backgroundStarts, 1);
+    notifier.pauseTask('paused-during-startup');
+    startGate.complete(true);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(notifier.tasksForTest.single.status, TaskStatus.paused);
+    expect(notifier.executorStarts, 0);
+  });
+
   group('CatCatchNotifier.cleanupTaskFiles', () {
     late Directory tempDir;
     late String appDir;

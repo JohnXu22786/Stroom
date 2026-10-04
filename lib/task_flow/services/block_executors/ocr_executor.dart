@@ -101,6 +101,9 @@ Future<String> executeOcrBlock({
   required BackgroundTaskNotifier bgNotifier,
   required ProviderEntriesState providerEntries,
   CancelToken? cancelToken,
+
+  /// Allows the response to be held and released in cancellation tests.
+  Future<String> Function(Uint8List, String)? requestOcr,
 }) async {
   final inputBasename = p.basename(input);
   final title = '文字识别_${p.basenameWithoutExtension(inputBasename)}';
@@ -193,19 +196,21 @@ Future<String> executeOcrBlock({
 
   try {
     bgNotifier.updateStep(taskId, 0, running: true);
-    final result = await _callOcrApi(
-      imageBytes: imageBytes,
-      imageFormat: imageFormat,
-      host: config.host,
-      apiKey: config.key,
-      modelId: model.modelId,
-      cancelToken: cancelToken,
-    );
-    // The flow may have been deleted while the request was in flight —
-    // don't save an orphaned text record.
-    if (!execNotifier.state.any((e) => e.id == execId)) {
+    final result = await (requestOcr != null
+        ? requestOcr(imageBytes, imageFormat)
+        : _callOcrApi(
+            imageBytes: imageBytes,
+            imageFormat: imageFormat,
+            host: config.host,
+            apiKey: config.key,
+            modelId: model.modelId,
+            cancelToken: cancelToken,
+          ));
+    // The flow may have ended while the request was in flight — don't
+    // save an orphaned text record.
+    if (!isFlowExecutionActive(execNotifier, execId)) {
       throw BlockExecutionException(
-        '任务流已删除',
+        '任务流已结束或删除',
         blockType: def.typeKey.name,
         blockTitle: def.label,
       );
@@ -217,10 +222,16 @@ Future<String> executeOcrBlock({
       result,
       saveFolder: saveFolder,
       title: title,
-      // Guard against a flow deleted mid-save (narrow race after the
-      // existence check above).
-      shouldCommit: () => execNotifier.state.any((e) => e.id == execId),
+      // Guard against a flow cancelled or deleted mid-save.
+      shouldCommit: () => isFlowExecutionActive(execNotifier, execId),
     );
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     bgNotifier.completeTask(taskId, downloadedFilePath: textPath);
     execNotifier.updateSubTaskStatus(
       execId,

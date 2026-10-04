@@ -1030,8 +1030,9 @@ void main() {
     expect(selected, videoA);
     expect(stateReads, greaterThanOrEqualTo(4));
     verify(() => notifier.selectMedia(taskId, videoA)).called(1);
-    expect(
-        executions.state.single.subTasks.single.status, TaskStatus.completed);
+    expect(executions.state.single.subTasks.single.status, TaskStatus.running,
+        reason:
+            'the service completes the step after saving its output checkpoint');
   });
 
   test(
@@ -1226,7 +1227,8 @@ void main() {
       pollInterval: const Duration(milliseconds: 1),
     );
     expect(path, videoPath);
-    expect(
-        executions.state.single.subTasks.single.status, TaskStatus.completed);
+    expect(executions.state.single.subTasks.single.status, TaskStatus.running,
+        reason:
+            'the service completes the step after saving its output checkpoint');
   });
 }
