@@ -145,6 +145,7 @@ InAppWebViewSettings _buildSettings({required bool isDesktopMode}) {
     // Enable scrollbars for scrollable content.
     verticalScrollBarEnabled: true,
     horizontalScrollBarEnabled: true,
+    useShouldOverrideUrlLoading: true,
     userAgent: isDesktopMode ? _desktopUserAgent : _mobileUserAgent,
   );
 }
@@ -297,6 +298,9 @@ class _BrowserPageState extends State<BrowserPage> {
   /// The URL of the most recently loaded page (or about to load), used for
   /// user-script match rules and cookie domain tracking.
   String _currentUrl = '';
+
+  /// The current main-frame request URL, including redirects, for load errors.
+  String? _activeNavigationUrl;
 
   /// Whether the cat-catch floating panel is currently visible.
   /// The panel persists its visibility state across page navigations
@@ -478,6 +482,14 @@ class _BrowserPageState extends State<BrowserPage> {
     });
   }
 
+  void _stopLoadingForMainFrameError(WebResourceRequest request) {
+    if (request.isForMainFrame != true ||
+        request.url.toString() != _activeNavigationUrl) {
+      return;
+    }
+    setState(() => _isLoading = false);
+  }
+
   Future<void> _goToUrl(String url) async {
     final controller = _webViewController;
     if (controller == null) return;
@@ -628,6 +640,7 @@ class _BrowserPageState extends State<BrowserPage> {
                         // Record the requested host before a redirect replaces
                         // it with the final URL reported by onLoadStop.
                         noteBrowserPageNavigationUrl(urlString);
+                        _activeNavigationUrl = urlString;
                         setState(() {
                           _isLoading = true;
                           _progress = 0;
@@ -670,6 +683,18 @@ class _BrowserPageState extends State<BrowserPage> {
   });
 })();
 ''');
+                      },
+                      onReceivedError: (controller, request, error) {
+                        _stopLoadingForMainFrameError(request);
+                      },
+                      onReceivedHttpError: (controller, request, response) {
+                        _stopLoadingForMainFrameError(request);
+                      },
+                      shouldOverrideUrlLoading: (controller, action) async {
+                        if (action.isForMainFrame) {
+                          _activeNavigationUrl = action.request.url?.toString();
+                        }
+                        return NavigationActionPolicy.ALLOW;
                       },
                       onProgressChanged: (controller, progress) {
                         setState(() => _progress = progress / 100.0);
