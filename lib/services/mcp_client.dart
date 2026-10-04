@@ -978,6 +978,7 @@ class McpClientManager {
   final Map<String, McpClient> _clients = {};
   final Map<String, String> _placeholderClientNames = {};
   final Map<String, String> _toolClientNames = {};
+  final Map<String, Set<String>> _toolClientNamesByTool = {};
 
   /// 所有客户端
   Map<String, McpClient> get clients => Map.unmodifiable(_clients);
@@ -1005,9 +1006,7 @@ class McpClientManager {
       if (client != null) orderedClients[name] = client;
     }
     final activeClientNames = orderedClients.keys.toSet();
-    _toolClientNames.removeWhere(
-      (_, clientName) => !activeClientNames.contains(clientName),
-    );
+    _removeToolRoutesForInactiveClients(activeClientNames);
     _clients
       ..clear()
       ..addAll(orderedClients);
@@ -1018,14 +1017,42 @@ class McpClientManager {
     if (!_clients.containsKey(clientName)) return;
     for (final toolName in toolNames) {
       _toolClientNames[toolName] = clientName;
+      _toolClientNamesByTool
+          .putIfAbsent(toolName, () => <String>{})
+          .add(clientName);
     }
   }
 
   /// Returns the selected server for a discovered tool name, if one exists.
   String? getToolClientName(String toolName) => _toolClientNames[toolName];
 
+  /// Returns every active server that has exposed [toolName].
+  List<String> getToolClientNames(String toolName) =>
+      List.unmodifiable(_toolClientNamesByTool[toolName] ?? const <String>{});
+
   void _removeToolRoutesForClient(String clientName) {
     _toolClientNames.removeWhere((_, name) => name == clientName);
+    for (final toolName in _toolClientNamesByTool.keys.toList()) {
+      final clientNames = _toolClientNamesByTool[toolName]!..remove(clientName);
+      if (clientNames.isEmpty) {
+        _toolClientNamesByTool.remove(toolName);
+      } else if (_toolClientNames[toolName] == null) {
+        _toolClientNames[toolName] = clientNames.first;
+      }
+    }
+  }
+
+  void _removeToolRoutesForInactiveClients(Set<String> activeClientNames) {
+    for (final toolName in _toolClientNamesByTool.keys.toList()) {
+      final clientNames = _toolClientNamesByTool[toolName]!
+        ..removeWhere((name) => !activeClientNames.contains(name));
+      if (clientNames.isEmpty) {
+        _toolClientNamesByTool.remove(toolName);
+        _toolClientNames.remove(toolName);
+      } else if (!activeClientNames.contains(_toolClientNames[toolName])) {
+        _toolClientNames[toolName] = clientNames.first;
+      }
+    }
   }
 
   /// 添加一个客户端
@@ -1054,5 +1081,6 @@ class McpClientManager {
     _clients.clear();
     _placeholderClientNames.clear();
     _toolClientNames.clear();
+    _toolClientNamesByTool.clear();
   }
 }
