@@ -314,7 +314,7 @@ class JsHookScript {
         fetchArgs[1] = replayOptions;
       }
       var parsedHeaders = new Headers(headers);
-      if (replayOptions && hasIterableHeaders) {
+      if (replayOptions && (hasIterableHeaders || hasHeadersOption)) {
         replayHeadersOverride = parsedHeaders;
       }
       parsedHeaders.forEach(function(value, name) {
