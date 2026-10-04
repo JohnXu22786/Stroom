@@ -687,6 +687,7 @@ class BrowserCookieService {
 
   static Future<bool> _clearAllCookies() async {
     try {
+      await clearBackupRestorePending();
       await clearPersistedCookies();
       return await clearPlatformCookies();
     } catch (e) {
