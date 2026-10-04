@@ -1776,9 +1776,12 @@ class BackupService {
     final restoreSelection = skipMissingCategories
         ? _intersectSelections(selection, availableSelection)
         : selection;
+    // Tasks is a single selectable category. When an archive makes that
+    // category available, clear every known task payload before restoring the
+    // files it contains so a partial legacy archive cannot merge stale local
+    // task types into the restored category.
     final taskFilesToReplace = restoreSelection.tasks
         ? _taskPayloadFiles
-            .where(archiveEntries.contains)
             .map(_canonicalTaskPayloadName)
             .whereType<String>()
             .toSet()
