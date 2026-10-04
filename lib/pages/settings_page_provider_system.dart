@@ -3,7 +3,12 @@ part of 'settings_page.dart';
 extension _SettingsPageSystemAssistantExt on _SettingsPageState {
   Widget _buildProviderSettings() {
     final entriesState = ref.watch(providerEntriesProvider);
-    final entries = entriesState.entries;
+    final entries = [
+      ...entriesState.entries.where(
+        (entry) => entry.id != kBuiltinWebSearchEntryId,
+      ),
+      createBuiltinWebSearchEntry(),
+    ];
 
     return Card(
       child: Padding(
