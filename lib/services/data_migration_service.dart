@@ -184,6 +184,18 @@ class DataMigrationService {
   /// 各部分当前支持的数据格式版本。
   static const Map<String, int> currentPartVersions = DataParts.currentVersions;
 
+  /// 格式版本元数据由备份清单单独承载，不作为用户设置跨设备覆盖。
+  static bool isFormatMetadataKey(String key) =>
+      key == _kLegacyDataFormatVersionKey ||
+      key == _kDataFormatVersionsKey ||
+      key == 'data_format_version_migrated';
+
+  /// Expands the legacy global format version carried by older backup files.
+  static Map<String, int>? partVersionsFromLegacyGlobal(Object? value) {
+    if (value is! int) return null;
+    return _expandFromLegacyGlobal(value);
+  }
+
   // ================================================================
   // 版本检查
   // ================================================================
@@ -413,16 +425,34 @@ class DataMigrationService {
 
   /// 执行所有落后部分的迁移，从各自存储版本迁移到当前版本。
   ///
-  /// pictures/audio/videos/texts 四个媒体部分共享同一个物理迁移
-  ///（共享 folders 表 → per-type 文件夹表），任一媒体部分落后时执行
-  /// 一次即可完成全部四部分的物理迁移，避免重复执行 4 次。
-  static Future<void> _performPartMigrations(Map<String, int> stored) async {
-    final mediaNeedsMigration = _mediaParts
-        .any((p) => (stored[p] ?? 0) < DataParts.currentVersions[p]!);
-    if (mediaNeedsMigration) {
-      await _migrateMediaV0ToV1();
+  /// pictures/audio/videos/texts 使用同一个 legacy `folders` 表，
+  /// 但只把该表迁移到仍落后的媒体类别。共享表会保留到所有媒体类别
+  /// 都达到当前版本，防止部分恢复时修改未选中的类别。
+  static Future<void> _performPartMigrations(
+    Map<String, int> stored, {
+    Set<String>? onlyParts,
+  }) async {
+    final selectedParts = onlyParts ?? DataParts.all.toSet();
+    final mediaPartsToMigrate = _mediaParts
+        .where(
+          (part) =>
+              selectedParts.contains(part) &&
+              (stored[part] ?? 0) < DataParts.currentVersions[part]!,
+        )
+        .toSet();
+    if (mediaPartsToMigrate.isNotEmpty) {
+      final allMediaCurrentAfterMigration = _mediaParts.every(
+        (part) =>
+            mediaPartsToMigrate.contains(part) ||
+            (stored[part] ?? 0) >= DataParts.currentVersions[part]!,
+      );
+      await _migrateMediaV0ToV1(
+        mediaParts: mediaPartsToMigrate,
+        removeLegacyTable: allMediaCurrentAfterMigration,
+      );
     }
     for (final part in DataParts.all) {
+      if (!selectedParts.contains(part)) continue;
       if (_mediaParts.contains(part)) continue; // 已统一迁移
       final from = stored[part] ?? 0;
       final to = DataParts.currentVersions[part]!;
@@ -482,20 +512,25 @@ class DataMigrationService {
   /// This is suitable for situations where data has been freshly restored
   /// from a backup and needs to be brought up to date, or when running
   /// migration in contexts where file system backup is not needed.
-  static Future<MigrationResult> migrateDataFormatIfNeeded() async {
+  static Future<MigrationResult> migrateDataFormatIfNeeded({
+    Set<String>? onlyParts,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
 
     final stored = await _resolvePartVersions(prefs);
+    final selectedParts = onlyParts ?? DataParts.all.toSet();
 
     final outdatedParts = DataParts.all
-        .where((p) => (stored[p] ?? 0) < DataParts.currentVersions[p]!)
+        .where((p) =>
+            selectedParts.contains(p) &&
+            (stored[p] ?? 0) < DataParts.currentVersions[p]!)
         .toList();
     if (outdatedParts.isEmpty) {
       return const MigrationResult(needsMigration: false);
     }
 
     try {
-      await _performPartMigrations(stored);
+      await _performPartMigrations(stored, onlyParts: selectedParts);
       await _recordMigratedParts(prefs, stored, outdatedParts);
       debugPrint(
         '[DataMigrationService] Per-part data format migration from '
@@ -510,6 +545,36 @@ class DataMigrationService {
       needsMigration: true,
       restartRequired: true,
     );
+  }
+
+  /// 将备份中的格式版本只应用到本次实际恢复的数据部分。
+  ///
+  /// 未恢复部分继续使用当前设备的版本标记。缺少版本信息的旧备份按
+  /// 初始格式 v0 处理，由后续迁移升级恢复的数据部分。
+  static Future<void> mergeRestoredPartVersions({
+    required Map<String, int>? backupVersions,
+    required Set<String> restoredParts,
+  }) async {
+    if (restoredParts.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final stored = await _resolvePartVersions(prefs);
+
+    for (final part in restoredParts) {
+      if (DataParts.all.contains(part)) {
+        final backupVersion = backupVersions?[part] ?? 0;
+        final currentVersion = DataParts.currentVersions[part]!;
+        // Backup restore writes media folders directly into the current
+        // per-type tables, including when the backup used the legacy shared
+        // `folders` list. Do not re-migrate selected media from the
+        // destination's legacy table after replacing those categories.
+        stored[part] =
+            _mediaParts.contains(part) && backupVersion < currentVersion
+                ? currentVersion
+                : backupVersion;
+      }
+    }
+    await _savePartVersions(stored);
   }
 
   /// 迁移成功后更新版本记录：只提升实际迁移过的部分。
@@ -577,19 +642,40 @@ class DataMigrationService {
   /// 内部已吞掉全部错误；SQLite 路径由 DB 初始化时的 onUpgrade 兜底，
   /// JSON/web 路径无等价兜底）。失败不会重试。此行为延续旧版
   /// v1→v2 的设计，刻意不改为上抛：folders 结构迁移失败不应阻塞启动。
-  static Future<void> _migrateMediaV0ToV1() async {
+  static Future<void> _migrateMediaV0ToV1({
+    required Set<String> mediaParts,
+    required bool removeLegacyTable,
+  }) async {
     try {
       debugPrint(
           '[DataMigrationService] media v0→v1: Migrating legacy shared folders '
           'to per-type folder tables');
 
-      await ManifestDatabase.migrateLegacyFoldersToPerType();
+      await ManifestDatabase.migrateLegacyFoldersToPerType(
+        onlyFolderTables: mediaParts.map(_folderTableForMediaPart).toSet(),
+        removeLegacyTable: removeLegacyTable,
+      );
 
       debugPrint(
           '[DataMigrationService] media v0→v1: Migration completed successfully');
     } catch (e) {
       // 迁移失败不阻塞启动，记录日志后继续
       debugPrint('[DataMigrationService] media v0→v1 migration failed: $e');
+    }
+  }
+
+  static String _folderTableForMediaPart(String part) {
+    switch (part) {
+      case DataParts.pictures:
+        return ManifestTables.imageFolders;
+      case DataParts.audio:
+        return ManifestTables.audioFolders;
+      case DataParts.videos:
+        return ManifestTables.videoFolders;
+      case DataParts.texts:
+        return ManifestTables.textFolders;
+      default:
+        throw ArgumentError.value(part, 'part', 'Not a media data part');
     }
   }
 

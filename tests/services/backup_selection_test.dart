@@ -1220,7 +1220,7 @@ void main() {
     });
 
     testWidgets(
-        'v2 restore: chat selected but backup has no chat_data.json → existing chat keys cleared',
+        'v2 restore: selected chat is unchanged when backup has no chat_data.json',
         (WidgetTester t) async {
       // Existing chat + settings data
       SharedPreferences.setMockInitialValues({
@@ -1273,15 +1273,20 @@ void main() {
         ankiData: false,
         browserCookies: false,
       );
-      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+      await BackupService.restoreFromBytesForTest(
+        backupBytes,
+        selection: sel,
+        skipMissingCategories: true,
+      );
 
       final restoredPrefs = await SharedPreferences.getInstance();
-      // Selected category with no backup data → cleared
-      expect(restoredPrefs.getString('conversations'), isNull,
+      // A selected category absent from the archive is skipped unchanged.
+      expect(
+          restoredPrefs.getString('conversations'), contains('existing_conv'),
           reason:
-              'Selected chat category must be cleared even when the backup has no chat_data.json');
-      expect(restoredPrefs.getString('active_conversation_id'), isNull,
-          reason: 'Selected chat category must be cleared');
+              'Selected chat category must remain unchanged when absent from the archive');
+      expect(
+          restoredPrefs.getString('active_conversation_id'), 'existing_conv');
       // Unselected settings → preserved
       expect(restoredPrefs.getString('assistants'), contains('existing_a'),
           reason: 'Unselected settings must be preserved');
@@ -2231,7 +2236,9 @@ void main() {
     testWidgets(
         'browserCookies: true restores file with correct content, false preserves pre-existing data',
         (WidgetTester t) async {
-      final cookiesContent = 'mock_cookies_data';
+      final cookiesContent = jsonEncode([
+        {'domain': 'example.com', 'name': 'session', 'value': 'abc'},
+      ]);
       final backupArchive = Archive();
       backupArchive.addFile(ArchiveFile(
           'manifest.json',
@@ -2464,10 +2471,25 @@ void main() {
             'text_records': <Map<String, dynamic>>[],
             'folders': <String>[],
           }))));
+      final synthesisTask = {
+        'id': 'task_from_backup',
+        'title': 'Task from backup',
+        'status': 'completed',
+        'createdAt': DateTime.now().toIso8601String(),
+        'text': 'backup task',
+        'providerConfig': <String, dynamic>{},
+        'modelConfig': <String, dynamic>{},
+      };
+      final catCatchTask = {
+        'id': 'catcatch_from_backup',
+        'url': 'https://example.com/media',
+        'expectedDurationSec': 1,
+        'createdAt': DateTime.now().toIso8601String(),
+      };
       backupArchive.addFile(ArchiveFile(
-          'synthesis/tasks.json', 0, utf8.encode('["task_from_backup"]')));
+          'synthesis/tasks.json', 0, utf8.encode(jsonEncode([synthesisTask]))));
       backupArchive.addFile(ArchiveFile(
-          'catcatch/tasks.json', 0, utf8.encode('["catcatch_from_backup"]')));
+          'catcatch/tasks.json', 0, utf8.encode(jsonEncode([catCatchTask]))));
       // Also include chat/settings in backup (should not be restored)
       backupArchive.addFile(ArchiveFile(
           'chat_data.json',
@@ -2827,14 +2849,12 @@ void main() {
   });
 
   // ==================================================================
-  // 恢复"勾选即清空"：选中的文件类类别在备份中缺失对应文件时，
-  // 现有文件也会被清除（与 DB/偏好设置类别语义一致）
+  // 手动导入：选中的类别不在部分备份包中时保持现有数据
   // ==================================================================
 
-  group('Restore clears selected file categories even when backup lacks them',
-      () {
+  group('Restore skips selected file categories missing from the backup', () {
     testWidgets(
-        'selected file categories are cleared when backup has no files for them',
+        'selected file categories stay unchanged when absent from the backup',
         (WidgetTester t) async {
       // Seed existing files for every file-based category
       await WebFileStore.write('/collection.anki2',
@@ -2904,39 +2924,42 @@ void main() {
         ankiData: true,
         browserCookies: true,
       );
-      await BackupService.restoreFromBytesForTest(backupBytes, selection: sel);
+      await BackupService.restoreFromBytesForTest(
+        backupBytes,
+        selection: sel,
+        skipMissingCategories: true,
+      );
 
-      // Selected categories: existing files cleared even though the backup
-      // has no corresponding files
-      expect(await WebFileStore.read('/collection.anki2'), isNull,
+      // The archive has no task, Anki, cookie, attachment, or picture payloads,
+      // so all selected categories are skipped without changing local data.
+      expect(await WebFileStore.read('/collection.anki2'), isNotNull,
+          reason: 'Missing Anki category must be left unchanged');
+      expect(await WebFileStore.read('/browser_cookies.json'), isNotNull,
+          reason: 'Missing cookies category must be left unchanged');
+      expect(await WebFileStore.read('synthesis/tasks.json'), isNotNull,
+          reason: 'Missing tasks category must be left unchanged');
+      expect(await WebFileStore.read('catcatch/tasks.json'), isNotNull,
+          reason: 'Missing tasks category must be left unchanged');
+      expect(await WebFileStore.read('attachments/ref.jpg'), isNotNull,
           reason:
-              'Selected anki category must be cleared when backup has no anki file');
-      expect(await WebFileStore.read('/browser_cookies.json'), isNull,
+              'Missing chat category must leave attachment files unchanged');
+      expect(await WebFileStore.read('attachments/orphan.bin'), isNotNull,
           reason:
-              'Selected cookies category must be cleared when backup has no cookies file');
-      expect(await WebFileStore.read('synthesis/tasks.json'), isNull,
-          reason:
-              'Selected tasks category must be cleared when backup has no tasks file');
-      expect(await WebFileStore.read('catcatch/tasks.json'), isNull,
-          reason: 'Selected tasks category must be cleared');
-      expect(await WebFileStore.read('attachments/ref.jpg'), isNull,
-          reason:
-              'Selected chat category must clear existing attachment files');
-      expect(await WebFileStore.read('attachments/orphan.bin'), isNull,
-          reason:
-              'Selected chat category must clear orphan attachment files too');
-      expect(await WebFileStore.read('pictures/img_sel_clear_hash.jpg'), isNull,
-          reason: 'Selected pictures category must clear existing media files');
+              'Missing chat category must leave orphan attachment files unchanged');
+      expect(
+          await WebFileStore.read('pictures/img_sel_clear_hash.jpg'), isNotNull,
+          reason: 'Missing pictures category must leave media files unchanged');
       expect(
           await WebFileStore.read(
               'pictures/${imageThumbFileName('img_sel_clear_hash')}'),
-          isNull,
-          reason: 'Selected pictures category must clear thumbnails too');
+          isNotNull,
+          reason: 'Missing pictures category must leave thumbnails unchanged');
 
-      // DB records also cleared (backup has empty records)
+      // The empty manifest does not prove that the pictures category was
+      // included, so its current database records remain untouched.
       final images = await ManifestDatabase.getAllImageRecords();
-      expect(images.length, equals(0),
-          reason: 'Selected pictures records must be cleared');
+      expect(images.length, equals(1),
+          reason: 'Missing pictures category must preserve current records');
     });
 
     testWidgets(

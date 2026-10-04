@@ -1,10 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
+import '../services/http_tool_service.dart';
+import '../services/todo_tool_service.dart';
+import '../services/web_search_service.dart';
 import 'provider_config_detail_page.dart';
 import 'mcp_server_config_page.dart';
+import 'provider_config_tool_dialogs.dart';
 import 'provider_settings_panel.dart';
+
+final _builtinToolDefinitions = [
+  ...TodoToolService.toolDefinitions,
+  ...WebSearchService.toolDefinitions,
+];
+
+ToolDefinition? _httpToolDefinition(String providerName) {
+  final toolName = switch (providerName) {
+    'Brave Search' => 'brave_web_search',
+    'Bocha' => 'bocha_web_search',
+    'Querit' => 'querit_search',
+    'Searxng' => 'searxng_search',
+    _ => null,
+  };
+  if (toolName == null) return null;
+  for (final definition in HttpToolService.toolDefinitions) {
+    if (definition.name == toolName) return definition;
+  }
+  return null;
+}
 
 class ProviderConfigPage extends ConsumerStatefulWidget {
   final String entryId;
@@ -16,6 +41,9 @@ class ProviderConfigPage extends ConsumerStatefulWidget {
 
 class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
   ProviderEntry? get _entry {
+    if (widget.entryId == kBuiltinWebSearchEntryId) {
+      return createBuiltinWebSearchEntry();
+    }
     final state = ref.read(providerEntriesProvider);
     try {
       return state.entries.firstWhere((e) => e.id == widget.entryId);
@@ -26,18 +54,14 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
   Future<void> _addConfig({String? groupId}) async {
     final entry = _entry;
-    if (entry == null) return;
+    if (entry == null || entry.id == kBuiltinWebSearchEntryId) return;
 
     if (entry.type == 'mcp') {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => McpServerConfigPage(
-            entryId: widget.entryId,
-            configIndex: -1,
-            groupId: groupId,
-          ),
-        ),
+      await showMcpServerConfigDialog(
+        context: context,
+        entryId: widget.entryId,
+        configIndex: -1,
+        groupId: groupId,
       );
     } else {
       await Navigator.push(
@@ -56,17 +80,26 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
   Future<void> _editConfig(int configIndex) async {
     final entry = _entry;
-    if (entry == null) return;
+    if (entry == null ||
+        entry.id == kBuiltinWebSearchEntryId ||
+        configIndex < 0 ||
+        configIndex >= entry.configs.length) {
+      return;
+    }
 
     if (entry.type == 'mcp') {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => McpServerConfigPage(
-            entryId: widget.entryId,
-            configIndex: configIndex,
-          ),
-        ),
+      final config = entry.configs[configIndex];
+      final typeConfig =
+          config.models.isNotEmpty ? config.models[0].typeConfig : null;
+      if (typeConfig?['isHttpTool'] == true) {
+        await _editHttpToolConfig(configIndex);
+        return;
+      }
+
+      await showMcpServerConfigDialog(
+        context: context,
+        entryId: widget.entryId,
+        configIndex: configIndex,
       );
     } else {
       await Navigator.push(
@@ -81,6 +114,46 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     }
     if (!mounted) return;
     setState(() {});
+  }
+
+  Future<void> _editHttpToolConfig(int configIndex) async {
+    final entry = _entry;
+    if (entry == null ||
+        configIndex < 0 ||
+        configIndex >= entry.configs.length) {
+      return;
+    }
+
+    final config = entry.configs[configIndex];
+    final definition = _httpToolDefinition(config.providerName);
+    final updatedConfig = await showDialog<ProviderConfigItem>(
+      context: context,
+      builder: (_) =>
+          HttpToolConfigDialog(config: config, definition: definition),
+    );
+    if (updatedConfig == null || !mounted) return;
+
+    final configs = entry.configs.map((c) => c.copy()).toList();
+    configs[configIndex] = updatedConfig;
+    final updatedEntry = ProviderEntry(
+      id: entry.id,
+      type: entry.type,
+      name: entry.name,
+      configs: configs,
+      enabled: entry.enabled,
+    );
+    await ref
+        .read(providerEntriesProvider.notifier)
+        .update(entry.id, updatedEntry);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _showBuiltinToolDetails(ToolDefinition definition) async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => BuiltinToolDetailsDialog(definition: definition),
+    );
   }
 
   Future<void> _reorderConfigs(int oldIndex, int newIndex) async {
@@ -182,7 +255,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
   /// 助手页面与对话页。
   Future<void> _toggleMcpEnabled(bool value) async {
     final entry = _entry;
-    if (entry == null || entry.type != 'mcp') return;
+    if (entry == null ||
+        entry.type != 'mcp' ||
+        entry.id == kBuiltinWebSearchEntryId) {
+      return;
+    }
 
     final updated = ProviderEntry(
       id: entry.id,
@@ -367,6 +444,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final isVendor = typeConfig?['isVendor'] as bool? ?? false;
     final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;
     final transport = typeConfig?['transport'] as String? ?? 'sse';
+    final integrationType = isHttpTool
+        ? 'HTTP 搜索'
+        : 'MCP · ${transport == 'stdio' ? 'stdio' : 'SSE'}';
     late final String subtitle;
     late final IconData leadIcon;
     late final Color iconColor;
@@ -390,6 +470,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       // stable key used by existing card finders.
       key: ValueKey('config_${widget.entryId}_$fullIndex'),
       isVendor: isVendor,
+      integrationType: integrationType,
       providerName: providerName,
       leadIcon: leadIcon,
       iconColor: iconColor,
@@ -400,7 +481,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         index: groupIndex,
         child: const Icon(Icons.drag_handle, color: Colors.grey),
       ),
-      onSettings: () => _openSettingsPanel(fullIndex),
+      onSettings: null,
       onDelete: isVendor ? null : () => _deleteConfig(fullIndex),
       onMove: isVendor ? null : () => _moveMcpConfig(config),
       onTap: () => _editConfig(fullIndex),
@@ -411,6 +492,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     ProviderEntry entry,
     List<McpProviderGroup> groups,
   ) {
+    final webSearchDefinition = _builtinToolDefinitions.firstWhere(
+      (definition) => definition.name == 'web_search',
+    );
     final configsByGroup = <String, List<ProviderConfigItem>>{
       for (final group in groups)
         group.id: entry.configs.where((config) {
@@ -476,8 +560,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
             if (group.id == builtinSearchMcpGroupId)
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                sliver: const SliverToBoxAdapter(
-                  child: _BuiltinWebSearchCard(),
+                sliver: SliverToBoxAdapter(
+                  child: _buildBuiltinToolCard(webSearchDefinition),
                 ),
               ),
             if (configsByGroup[group.id]?.isEmpty ?? true)
@@ -519,23 +603,65 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 ),
               ),
           ],
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                Text(
+                  '内置工具',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (final definition in _builtinToolDefinitions.where(
+                  (definition) => definition.name != 'web_search',
+                ))
+                  _buildBuiltinToolCard(definition),
+              ]),
+            ),
+          ),
           const SliverPadding(padding: EdgeInsets.all(16)),
         ],
       ),
     );
   }
 
+  Widget _buildBuiltinToolCard(ToolDefinition definition) {
+    return _McpConfigCard(
+      key: ValueKey('builtin_tool_${definition.name}'),
+      isVendor: false,
+      integrationType: '内置工具',
+      providerName: definition.name,
+      leadIcon: Icons.build_outlined,
+      iconColor: Colors.deepPurple,
+      subtitle: 'Stroom 工具接口',
+      apiKeyHint: null,
+      mcpDescription: definition.description,
+      dragHandle: const SizedBox(width: 32),
+      settingsIcon: Icons.info_outline,
+      settingsTooltip: '查看接口',
+      onSettings: () => _showBuiltinToolDetails(definition),
+      onDelete: null,
+      onTap: () => _showBuiltinToolDetails(definition),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final entriesState = ref.watch(providerEntriesProvider);
-    final entry =
-        entriesState.entries.where((e) => e.id == widget.entryId).firstOrNull;
+    final entry = widget.entryId == kBuiltinWebSearchEntryId
+        ? createBuiltinWebSearchEntry()
+        : entriesState.entries.where((e) => e.id == widget.entryId).firstOrNull;
     if (entry == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('配置')),
         body: const Center(child: Text('供应商未找到')),
       );
     }
+    final isBuiltinWebSearch = entry.id == kBuiltinWebSearchEntryId;
 
     if (entry.type == 'mcp') {
       return _buildMcpGroupsPage(entry, entriesState.mcpGroups);
@@ -553,7 +679,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 Row(
                   children: [
                     Text(
-                      '供应商配置',
+                      isBuiltinWebSearch
+                          ? '内置工具'
+                          : entry.type == 'mcp'
+                              ? '服务与工具'
+                              : '供应商配置',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -561,17 +691,18 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                       ),
                     ),
                     const Spacer(),
-                    TextButton.icon(
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('添加'),
-                      onPressed: _addConfig,
-                    ),
+                    if (!isBuiltinWebSearch)
+                      TextButton.icon(
+                        icon: const Icon(Icons.add, size: 18),
+                        label: Text(entry.type == 'mcp' ? '添加 MCP' : '添加'),
+                        onPressed: _addConfig,
+                      ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 // MCP 总开关：仅 MCP 条目显示。关闭后 MCP 服务器和内置
                 // 搜索工具不会提供给助手页面或对话页。
-                if (entry.type == 'mcp') ...[
+                if (entry.type == 'mcp' && !isBuiltinWebSearch) ...[
                   _McpMasterSwitchCard(
                     enabled: entry.enabled,
                     onChanged: _toggleMcpEnabled,
@@ -582,14 +713,19 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
             ),
           ),
           if (entry.configs.isEmpty)
-            const SliverFillRemaining(
+            SliverFillRemaining(
               hasScrollBody: false,
               child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 32),
+                padding: const EdgeInsets.symmetric(vertical: 32),
                 child: Center(
                   child: Text(
-                    '暂无供应商配置，请点击"添加"创建',
-                    style: TextStyle(color: Colors.grey),
+                    isBuiltinWebSearch
+                        ? '内置网络搜索支持 Google、Bing 和百度，模型调用名为 web_search。'
+                        : entry.type == 'mcp'
+                            ? '暂无服务配置，请点击"添加 MCP"创建'
+                            : '暂无供应商配置，请点击"添加"创建',
+                    style: const TextStyle(color: Colors.grey),
+                    textAlign: TextAlign.center,
                   ),
                 ),
               ),
@@ -625,11 +761,15 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   final isHttpTool = entry.type == 'mcp'
                       ? (mcpTypeConfig?['isHttpTool'] as bool? ?? false)
                       : false;
+                  final transport =
+                      mcpTypeConfig?['transport'] as String? ?? 'sse';
+                  final integrationType = entry.type == 'mcp'
+                      ? isHttpTool
+                          ? 'HTTP 搜索'
+                          : 'MCP · ${transport == 'stdio' ? 'stdio' : 'SSE'}'
+                      : '';
 
                   if (entry.type == 'mcp') {
-                    final transport =
-                        mcpTypeConfig?['transport'] as String? ?? 'sse';
-
                     if (isHttpTool) {
                       // HTTP 工具（纯 Dart 实现，非 MCP 协议）
                       final url = mcpTypeConfig?['url'] as String? ?? '';
@@ -667,6 +807,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   return _McpConfigCard(
                     key: ValueKey('config_${widget.entryId}_$i'),
                     isVendor: isVendor,
+                    integrationType: integrationType,
                     providerName: providerName,
                     leadIcon: leadIcon,
                     iconColor: iconColor,
@@ -682,7 +823,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                             ),
                           )
                         : const SizedBox(width: 32),
-                    onSettings: () => _openSettingsPanel(i),
+                    onSettings: entry.type == 'mcp'
+                        ? null
+                        : () => _openSettingsPanel(i),
                     onDelete: isVendor ? null : () => _deleteConfig(i),
                     onTap: () => _editConfig(i),
                   );
@@ -708,6 +851,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
 class _McpConfigCard extends StatelessWidget {
   final bool isVendor;
+  final String integrationType;
   final String providerName;
   final IconData leadIcon;
   final Color iconColor;
@@ -715,7 +859,9 @@ class _McpConfigCard extends StatelessWidget {
   final String? apiKeyHint;
   final String? mcpDescription;
   final Widget dragHandle;
-  final VoidCallback onSettings;
+  final VoidCallback? onSettings;
+  final IconData settingsIcon;
+  final String settingsTooltip;
   final VoidCallback? onDelete;
   final VoidCallback? onMove;
   final VoidCallback onTap;
@@ -723,6 +869,7 @@ class _McpConfigCard extends StatelessWidget {
   const _McpConfigCard({
     super.key,
     required this.isVendor,
+    required this.integrationType,
     required this.providerName,
     required this.leadIcon,
     required this.iconColor,
@@ -731,6 +878,8 @@ class _McpConfigCard extends StatelessWidget {
     required this.mcpDescription,
     required this.dragHandle,
     required this.onSettings,
+    this.settingsIcon = Icons.tune,
+    this.settingsTooltip = '设置',
     required this.onDelete,
     this.onMove,
     required this.onTap,
@@ -813,6 +962,29 @@ class _McpConfigCard extends StatelessWidget {
                               ),
                             ),
                           ],
+                          if (integrationType.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: cs.tertiaryContainer.withValues(
+                                  alpha: 0.55,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                integrationType,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: cs.onTertiaryContainer,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 4),
@@ -854,13 +1026,18 @@ class _McpConfigCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: Icon(Icons.tune, size: 20, color: cs.onSurfaceVariant),
-                  onPressed: onSettings,
-                  tooltip: '设置',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
+                if (onSettings != null)
+                  IconButton(
+                    icon: Icon(
+                      settingsIcon,
+                      size: 20,
+                      color: cs.onSurfaceVariant,
+                    ),
+                    onPressed: onSettings,
+                    tooltip: settingsTooltip,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
                 if (onMove != null) ...[
                   const SizedBox(width: 8),
                   IconButton(
@@ -998,45 +1175,11 @@ class _McpGroupHeaderCard extends StatelessWidget {
   }
 }
 
-class _BuiltinWebSearchCard extends StatelessWidget {
-  const _BuiltinWebSearchCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.5),
-          width: 0.5,
-        ),
-      ),
-      child: ListTile(
-        leading: Icon(Icons.travel_explore, color: cs.primary),
-        title: const Text('网页搜索'),
-        subtitle: const Text('Google、Bing、百度，使用 web_search 工具'),
-        trailing: Text(
-          '内置',
-          style: TextStyle(
-            color: cs.primary,
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ====================================================================
 // _McpMasterSwitchCard — MCP 总开关卡片（MCP 列表页顶部）。
 //
-// 与下方配置卡片同风格（中性背景 + 柔和描边）。关闭后 MCP 服务器工具
-// 不再发布：助手页面的"默认设置"tab 与对话页的工具列表都看不到 MCP
-// 服务器工具，也无法使用（内置 HTTP 工具不受此开关影响）。
+// 与下方配置卡片同风格（中性背景 + 柔和描边）。关闭后 MCP 服务器和
+// 内置搜索工具都不再提供给助手页面或对话页。
 // ====================================================================
 
 class _McpMasterSwitchCard extends StatelessWidget {

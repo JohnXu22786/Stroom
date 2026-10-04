@@ -200,15 +200,25 @@ class WebFileStore {
   /// 用于清除/恢复场景中按目录前缀清理文件（Web 端没有目录结构，
   /// 文件 key 即存储路径）。
   static Future<void> deleteByPrefix(String prefix) async {
+    await deleteByPrefixExcept(prefix, const <String>{});
+  }
+
+  /// Deletes files under [prefix], except keys still referenced by another
+  /// data category.
+  static Future<void> deleteByPrefixExcept(
+      String prefix, Set<String> preservedKeys) async {
+    bool shouldDelete(String key) =>
+        key.startsWith(prefix) && !preservedKeys.contains(key);
+
     if (_testMode) {
-      _inMemoryStore.removeWhere((k, _) => k.startsWith(prefix));
+      _inMemoryStore.removeWhere((key, _) => shouldDelete(key));
       return;
     }
     final db = await _database;
     final txn = db.transaction('files', idbModeReadWrite);
     final store = txn.objectStore('files');
     await for (final cwv in store.openCursor(autoAdvance: true)) {
-      if (cwv.key is String && (cwv.key as String).startsWith(prefix)) {
+      if (cwv.key is String && shouldDelete(cwv.key as String)) {
         await cwv.delete();
       }
     }

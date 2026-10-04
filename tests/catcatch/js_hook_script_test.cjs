@@ -287,6 +287,740 @@ test('does not offer opaque Blob URLs while keeping HTTP media candidates', () =
   );
 });
 
+test('replays nested one-shot header pairs for fetch and media capture', async () => {
+  const response = {url: 'https://cdn.example/nested-pair.m3u8'};
+  let originalRequestHeader;
+  let headerValueStringifications = 0;
+  const statefulHeaderValue = {
+    toString() {
+      headerValueStringifications++;
+      return `from-nested-generator-${headerValueStringifications}`;
+    },
+  };
+  const {messages, window} = installHook([], (...args) =>
+    Promise.resolve().then(() => {
+      const requestOptions = args[1] || {};
+      originalRequestHeader = new Headers(requestOptions.headers)
+        .get('x-request');
+      return response;
+    }),
+  );
+  function* makeHeaderPair() {
+    yield 'X-Request';
+    yield statefulHeaderValue;
+  }
+
+  const result = await window.fetch('https://api.example/redirect', {
+    headers: [makeHeaderPair()],
+  });
+
+  assert.equal(result, response);
+  assert.equal(originalRequestHeader, 'from-nested-generator-1');
+  assert.equal(headerValueStringifications, 1);
+  assert.deepEqual(messages, [{
+    url: 'https://cdn.example/nested-pair.m3u8',
+    method: 'GET',
+    initiator: 'https://page.example/watch',
+    mimeType: '',
+    requestHeaders: {'x-request': 'from-nested-generator-1'},
+  }]);
+});
+
+test('replays nested one-shot pairs with non-iterable iterator wrappers', async () => {
+  const response = {url: 'https://cdn.example/non-iterable-pair.m3u8'};
+  let originalRequestHeader;
+  const {messages, window} = installHook([], (...args) =>
+    Promise.resolve().then(() => {
+      originalRequestHeader = new Headers(args[1].headers).get('x-request');
+      return response;
+    }),
+  );
+  const values = ['X-Request', 'from-custom-iterator'];
+  let valueIndex = 0;
+  const oneShotPair = {
+    [Symbol.iterator]() {
+      return {
+        next() {
+          if (valueIndex >= values.length) return {done: true};
+          return {done: false, value: values[valueIndex++]};
+        },
+      };
+    },
+  };
+
+  const result = await window.fetch('https://api.example/redirect', {
+    headers: [oneShotPair],
+  });
+
+  assert.equal(result, response);
+  assert.equal(originalRequestHeader, 'from-custom-iterator');
+  assert.deepEqual(messages, [{
+    url: 'https://cdn.example/non-iterable-pair.m3u8',
+    method: 'GET',
+    initiator: 'https://page.example/watch',
+    mimeType: '',
+    requestHeaders: {'x-request': 'from-custom-iterator'},
+  }]);
+});
+
+test('reads each nested iterator method once during header replay', async () => {
+  const response = {url: 'https://cdn.example/getter-pair.m3u8'};
+  let iteratorMethodReads = 0;
+  let nextMethodReads = 0;
+  let pairIndex = 0;
+  const pairIterator = {};
+  Object.defineProperty(pairIterator, 'next', {
+    get() {
+      nextMethodReads++;
+      if (nextMethodReads > 1) {
+        throw new Error('nested next getter read more than once');
+      }
+      return function() {
+        if (pairIndex === 0) {
+          pairIndex++;
+          return {done: false, value: 'X-Request'};
+        }
+        if (pairIndex === 1) {
+          pairIndex++;
+          return {done: false, value: 'from-getter-pair'};
+        }
+        return {done: true};
+      };
+    },
+  });
+  const getterPair = {};
+  Object.defineProperty(getterPair, Symbol.iterator, {
+    get() {
+      iteratorMethodReads++;
+      if (iteratorMethodReads > 1) {
+        throw new Error('nested iterator getter read more than once');
+      }
+      return function() {
+        return pairIterator;
+      };
+    },
+  });
+  let originalRequestHeader;
+  const {window} = installHook([], (...args) => {
+    originalRequestHeader = new Headers(args[1].headers).get('x-request');
+    return Promise.resolve(response);
+  });
+
+  const result = await window.fetch('https://api.example/redirect', {
+    headers: [getterPair],
+  });
+
+  assert.equal(result, response);
+  assert.equal(iteratorMethodReads, 1);
+  assert.equal(nextMethodReads, 1);
+  assert.equal(originalRequestHeader, 'from-getter-pair');
+});
+
+test('rejects a non-callable first nested iterator method result', async () => {
+  let iteratorMethodReads = 0;
+  let originalFetchCalls = 0;
+  const alternatingPair = {};
+  Object.defineProperty(alternatingPair, Symbol.iterator, {
+    get() {
+      iteratorMethodReads++;
+      if (iteratorMethodReads === 1) return 1;
+      return function*() {
+        yield 'X-Request';
+        yield 'from-second-iterator-read';
+      };
+    },
+  });
+  const {window} = installHook([], () => {
+    originalFetchCalls++;
+    return Promise.resolve();
+  });
+
+  const fetchPromise = window.fetch('https://api.example/redirect', {
+    headers: [alternatingPair],
+  });
+
+  await assert.rejects(fetchPromise, (error) => error.name === 'TypeError');
+  assert.equal(iteratorMethodReads, 1);
+  assert.equal(originalFetchCalls, 0);
+});
+
+test('converts each header pair before advancing the outer iterator', async () => {
+  const response = {url: 'https://cdn.example/ordered-pairs.m3u8'};
+  let firstValueCoercions = 0;
+  let outerIndex = 0;
+  const orderedHeaders = {
+    [Symbol.iterator]() {
+      return {
+        next() {
+          if (outerIndex === 0) {
+            outerIndex++;
+            return {
+              done: false,
+              value: ['X-First', {
+                toString() {
+                  firstValueCoercions++;
+                  return 'first';
+                },
+              }],
+            };
+          }
+          if (outerIndex === 1) {
+            outerIndex++;
+            return {
+              done: false,
+              value: [
+                'X-Second',
+                firstValueCoercions === 0 ? 'before-coercion' : 'after-coercion',
+              ],
+            };
+          }
+          return {done: true};
+        },
+      };
+    },
+  };
+  let originalRequestHeaders;
+  const {messages, window} = installHook([], (...args) => {
+    originalRequestHeaders = new Headers(args[1].headers);
+    return Promise.resolve(response);
+  });
+
+  const result = await window.fetch('https://api.example/redirect', {
+    headers: orderedHeaders,
+  });
+
+  assert.equal(result, response);
+  assert.equal(firstValueCoercions, 1);
+  assert.equal(originalRequestHeaders.get('x-second'), 'after-coercion');
+  assert.equal(messages[0].requestHeaders['x-second'], 'after-coercion');
+});
+
+test('coerces each nested pair value before advancing its iterator', async () => {
+  const response = {url: 'https://cdn.example/ordered-pair-values.m3u8'};
+  let nameValueCoercions = 0;
+  let pairIndex = 0;
+  let nameWasCoerced = false;
+  const orderedPair = {
+    [Symbol.iterator]() {
+      return {
+        next() {
+          if (pairIndex === 0) {
+            pairIndex++;
+            return {
+              done: false,
+              value: {
+                toString() {
+                  nameValueCoercions++;
+                  nameWasCoerced = true;
+                  return 'X-Request';
+                },
+              },
+            };
+          }
+          if (pairIndex === 1) {
+            pairIndex++;
+            return {
+              done: false,
+              value: nameWasCoerced
+                ? 'after-coercion'
+                : 'before-coercion',
+            };
+          }
+          return {done: true};
+        },
+      };
+    },
+  };
+  let originalRequestHeaders;
+  const {messages, window} = installHook([], (...args) => {
+    originalRequestHeaders = new Headers(args[1].headers);
+    return Promise.resolve(response);
+  });
+
+  const result = await window.fetch('https://api.example/redirect', {
+    headers: [orderedPair],
+  });
+
+  assert.equal(result, response);
+  assert.equal(nameValueCoercions, 1);
+  assert.equal(originalRequestHeaders.get('x-request'), 'after-coercion');
+  assert.equal(messages[0].requestHeaders['x-request'], 'after-coercion');
+});
+
+test('rejects primitive results from nested header iterators', async () => {
+  const unexpectedSecondNext = new Error('iterator advanced after bad result');
+  let pairNextCalls = 0;
+  let originalFetchCalls = 0;
+  const malformedPair = {
+    [Symbol.iterator]() {
+      return {
+        next() {
+          pairNextCalls++;
+          if (pairNextCalls === 1) return 1;
+          throw unexpectedSecondNext;
+        },
+      };
+    },
+  };
+  const {window} = installHook([], () => {
+    originalFetchCalls++;
+    return Promise.resolve();
+  });
+
+  const fetchPromise = window.fetch('https://api.example/redirect', {
+    headers: [malformedPair],
+  });
+
+  await assert.rejects(fetchPromise, (error) => error.name === 'TypeError');
+  assert.equal(pairNextCalls, 1);
+  assert.equal(originalFetchCalls, 0);
+});
+
+test('preserves truthy primitive RequestInit during header replay', async () => {
+  const response = {url: 'https://cdn.example/primitive-init.m3u8'};
+  const request = new Request('https://api.example/redirect', {
+    headers: {'X-Request': 'from-request'},
+  });
+  let originalFetchCalls = 0;
+  let originalFetchArgs;
+  const {window} = installHook([], (...args) => {
+    originalFetchCalls++;
+    originalFetchArgs = args;
+    return Promise.resolve(response);
+  });
+
+  const result = await window.fetch(request, 'primitive-init');
+
+  assert.equal(result, response);
+  assert.equal(originalFetchCalls, 1);
+  assert.equal(originalFetchArgs[0], request);
+  assert.equal(typeof originalFetchArgs[1], 'object');
+  assert.equal(
+    new Headers(originalFetchArgs[1].headers).get('x-request'),
+    'from-request',
+  );
+});
+
+test('preserves the RequestInit accessor receiver during header replay', async () => {
+  const response = {url: 'https://cdn.example/accessor-init.m3u8'};
+  const requestOptions = {headers: [['X-Request', 'from-init']]};
+  const methodGetterReceivers = [];
+  Object.defineProperty(requestOptions, 'method', {
+    enumerable: true,
+    get() {
+      methodGetterReceivers.push(this);
+      return this === requestOptions ? 'PATCH' : 'GET';
+    },
+  });
+  Object.freeze(requestOptions);
+  let originalMethod;
+  let originalRequestHeader;
+  const {messages, window} = installHook([], (...args) => {
+    originalMethod = args[1].method;
+    originalRequestHeader = new Headers(args[1].headers).get('x-request');
+    return Promise.resolve(response);
+  });
+
+  const result = await window.fetch('https://api.example/redirect', requestOptions);
+
+  assert.equal(result, response);
+  assert.equal(originalMethod, 'PATCH');
+  assert.equal(originalRequestHeader, 'from-init');
+  assert.deepEqual(methodGetterReceivers, [requestOptions, requestOptions]);
+  assert.equal(messages[0].method, 'PATCH');
+});
+
+test('replays the RequestInit headers accessor value native fetch would read', async () => {
+  const response = {url: 'https://cdn.example/header-accessor.m3u8'};
+  const firstHeaders = [['X-Request', 'from-first-read']];
+  const secondHeaders = [['X-Request', 'from-second-read']];
+  const requestOptions = {};
+  const headerGetterReceivers = [];
+  let headerGetterReads = 0;
+  Object.defineProperty(requestOptions, 'headers', {
+    enumerable: true,
+    get() {
+      headerGetterReads++;
+      headerGetterReceivers.push(this);
+      return headerGetterReads === 1 ? firstHeaders : secondHeaders;
+    },
+  });
+  let originalRequestHeader;
+  const {messages, window} = installHook([], (...args) => {
+    originalRequestHeader = new Headers(args[1].headers).get('x-request');
+    return Promise.resolve(response);
+  });
+
+  const result = await window.fetch('https://api.example/redirect', requestOptions);
+
+  assert.equal(result, response);
+  assert.equal(headerGetterReads, 2);
+  assert.deepEqual(headerGetterReceivers, [requestOptions, requestOptions]);
+  assert.equal(originalRequestHeader, 'from-second-read');
+  assert.equal(messages[0].requestHeaders['x-request'], 'from-second-read');
+});
+
+test('captures a RequestInit headers accessor value after an undefined first read', async () => {
+  const response = {url: 'https://cdn.example/header-accessor-undefined.m3u8'};
+  const requestOptions = {};
+  const getterOrder = [];
+  const methodGetterReceivers = [];
+  const headerGetterReceivers = [];
+  let methodGetterReads = 0;
+  let headerGetterReads = 0;
+  function* oneShotHeaderPair() {
+    yield 'X-Request';
+    yield 'from-second-read';
+  }
+  const secondHeaders = [oneShotHeaderPair()];
+  Object.defineProperty(requestOptions, 'method', {
+    enumerable: true,
+    get() {
+      methodGetterReads++;
+      getterOrder.push(`method-${methodGetterReads}`);
+      methodGetterReceivers.push(this);
+      return 'PATCH';
+    },
+  });
+  Object.defineProperty(requestOptions, 'headers', {
+    enumerable: true,
+    get() {
+      headerGetterReads++;
+      getterOrder.push(`headers-${headerGetterReads}`);
+      headerGetterReceivers.push(this);
+      return headerGetterReads === 1 ? undefined : secondHeaders;
+    },
+  });
+  let originalRequestHeader;
+  const {messages, window} = installHook([], (...args) => {
+    args[1].method;
+    originalRequestHeader = new Headers(args[1].headers).get('x-request');
+    return Promise.resolve(response);
+  });
+
+  const result = await window.fetch(
+    'https://api.example/redirect',
+    requestOptions,
+  );
+
+  assert.equal(result, response);
+  assert.equal(originalRequestHeader, 'from-second-read');
+  assert.equal(messages[0].requestHeaders['x-request'], 'from-second-read');
+  assert.deepEqual(getterOrder, [
+    'method-1',
+    'headers-1',
+    'method-2',
+    'headers-2',
+  ]);
+  assert.deepEqual(methodGetterReceivers, [requestOptions, requestOptions]);
+  assert.deepEqual(headerGetterReceivers, [requestOptions, requestOptions]);
+});
+
+test('reads RequestInit.method before its replayed headers accessor', async () => {
+  const response = {url: 'https://cdn.example/header-read-order.m3u8'};
+  const firstHeaders = [['X-Request', 'from-first-read']];
+  const earlyHeaders = [['X-Request', 'before-method-read']];
+  const secondHeaders = [['X-Request', 'after-method-read']];
+  const requestOptions = {};
+  const getterOrder = [];
+  const methodGetterReceivers = [];
+  const headerGetterReceivers = [];
+  let methodGetterReads = 0;
+  let headerGetterReads = 0;
+  Object.defineProperty(requestOptions, 'method', {
+    enumerable: true,
+    get() {
+      methodGetterReads++;
+      getterOrder.push(`method-${methodGetterReads}`);
+      methodGetterReceivers.push(this);
+      return 'PATCH';
+    },
+  });
+  Object.defineProperty(requestOptions, 'headers', {
+    enumerable: true,
+    get() {
+      headerGetterReads++;
+      getterOrder.push(`headers-${headerGetterReads}`);
+      headerGetterReceivers.push(this);
+      if (headerGetterReads === 1) return firstHeaders;
+      return methodGetterReads >= 2 ? secondHeaders : earlyHeaders;
+    },
+  });
+  let originalMethod;
+  let originalRequestHeader;
+  const {messages, window} = installHook([], (...args) => {
+    originalMethod = args[1].method;
+    originalRequestHeader = new Headers(args[1].headers).get('x-request');
+    return Promise.resolve(response);
+  });
+
+  const result = await window.fetch(
+    'https://api.example/redirect',
+    requestOptions,
+  );
+
+  assert.equal(result, response);
+  assert.equal(originalMethod, 'PATCH');
+  assert.equal(originalRequestHeader, 'after-method-read');
+  assert.equal(messages[0].requestHeaders['x-request'], 'after-method-read');
+  assert.deepEqual(getterOrder, [
+    'method-1',
+    'headers-1',
+    'method-2',
+    'headers-2',
+  ]);
+  assert.deepEqual(methodGetterReceivers, [requestOptions, requestOptions]);
+  assert.deepEqual(headerGetterReceivers, [requestOptions, requestOptions]);
+});
+
+test('replays invalid entries after snapshotting shared-cursor headers', async () => {
+  let entryIndex = 0;
+  const sharedCursorHeaders = {
+    [Symbol.iterator]() {
+      return {
+        next() {
+          if (entryIndex === 0) {
+            entryIndex++;
+            return {done: false, value: 7};
+          }
+          return {done: true};
+        },
+      };
+    },
+  };
+  let originalFetchCalls = 0;
+  let originalFetchArgs;
+  const {window} = installHook([], (...args) => {
+    originalFetchCalls++;
+    originalFetchArgs = args;
+    return Promise.resolve().then(() => new Headers(args[1].headers));
+  });
+
+  const fetchPromise = window.fetch('https://api.example/redirect', {
+    headers: sharedCursorHeaders,
+  });
+
+  await assert.rejects(fetchPromise, TypeError);
+  assert.equal(originalFetchCalls, 1);
+  assert.equal(Array.isArray(originalFetchArgs[1].headers), true);
+  assert.equal(originalFetchArgs[1].headers.length, 1);
+  assert.equal(originalFetchArgs[1].headers[0], 7);
+});
+
+test('reads a second headers accessor value before probing the first value', async () => {
+  const response = {url: 'https://cdn.example/header-accessor-throw.m3u8'};
+  const firstHeaders = {};
+  Object.defineProperty(firstHeaders, Symbol.iterator, {
+    get() {
+      throw new Error('discarded headers iterator getter was read');
+    },
+  });
+  const secondHeaders = [['X-Request', 'from-second-read']];
+  const requestOptions = {};
+  let headerGetterReads = 0;
+  Object.defineProperty(requestOptions, 'headers', {
+    get() {
+      headerGetterReads++;
+      return headerGetterReads === 1 ? firstHeaders : secondHeaders;
+    },
+  });
+  let originalRequestHeader;
+  const {messages, window} = installHook([], (...args) => {
+    originalRequestHeader = new Headers(args[1].headers).get('x-request');
+    return Promise.resolve(response);
+  });
+
+  const result = await window.fetch('https://api.example/redirect', requestOptions);
+
+  assert.equal(result, response);
+  assert.equal(headerGetterReads, 2);
+  assert.equal(originalRequestHeader, 'from-second-read');
+  assert.equal(messages[0].requestHeaders['x-request'], 'from-second-read');
+});
+
+test('continues fetch when RequestInit proxy introspection traps throw', async () => {
+  const response = {url: 'https://cdn.example/proxy-init.m3u8'};
+  const trapCases = [
+    {
+      getOwnPropertyDescriptor() {
+        throw new Error('descriptor introspection should not block fetch');
+      },
+    },
+    {
+      getOwnPropertyDescriptor() {
+        return undefined;
+      },
+      getPrototypeOf() {
+        throw new Error('prototype introspection should not block fetch');
+      },
+    },
+  ];
+
+  for (const traps of trapCases) {
+    let originalRequestHeader;
+    const {messages, window} = installHook([], (...args) => {
+      originalRequestHeader = new Headers(args[1].headers).get('x-request');
+      return Promise.resolve(response);
+    });
+    const requestOptions = new Proxy({}, {
+      get(target, property, receiver) {
+        if (property === 'method') return 'PATCH';
+        if (property === 'headers') return [['X-Request', 'from-proxy']];
+        return Reflect.get(target, property, receiver);
+      },
+      ...traps,
+    });
+
+    const result = await window.fetch('https://api.example/redirect', requestOptions);
+
+    assert.equal(result, response);
+    assert.equal(originalRequestHeader, 'from-proxy');
+    assert.equal(messages[0].requestHeaders['x-request'], 'from-proxy');
+  }
+});
+
+test('captures the method value used by native fetch after replay', async () => {
+  const response = {url: 'https://cdn.example/replayed-method.m3u8'};
+  const requestOptions = {headers: [['X-Request', 'from-init']]};
+  let methodReads = 0;
+  Object.defineProperty(requestOptions, 'method', {
+    get() {
+      methodReads++;
+      return methodReads === 1 ? 'POST' : 'PATCH';
+    },
+  });
+  let originalMethod;
+  const {messages, window} = installHook([], (...args) => {
+    originalMethod = args[1].method;
+    return Promise.resolve(response);
+  });
+
+  const result = await window.fetch('https://api.example/redirect', requestOptions);
+
+  assert.equal(result, response);
+  assert.equal(methodReads, 2);
+  assert.equal(originalMethod, 'PATCH');
+  assert.equal(messages[0].method, 'PATCH');
+});
+
+test('replays the converted values of malformed nested header pairs', async () => {
+  let valueCoercions = 0;
+  const singleValuePair = [{
+    toString() {
+      valueCoercions++;
+      if (valueCoercions > 1) {
+        throw new Error('malformed pair value was converted again');
+      }
+      return 'X-Invalid';
+    },
+  }];
+  let originalFetchCalls = 0;
+  const {window} = installHook([], (...args) => {
+    originalFetchCalls++;
+    return Promise.resolve().then(() => new Headers(args[1].headers));
+  });
+
+  const fetchPromise = window.fetch('https://api.example/redirect', {
+    headers: [singleValuePair],
+  });
+
+  await assert.rejects(fetchPromise, TypeError);
+  assert.equal(originalFetchCalls, 1);
+  assert.equal(valueCoercions, 1);
+});
+
+test('closes a nested header iterator when value conversion throws', async () => {
+  const conversionError = new Error('header name conversion failed');
+  let pairIteratorClosed = false;
+  let originalFetchCalls = 0;
+  function* throwingHeaderPair() {
+    try {
+      yield {
+        toString() {
+          throw conversionError;
+        },
+      };
+      yield 'unreachable';
+    } finally {
+      pairIteratorClosed = true;
+    }
+  }
+  const {window} = installHook([], () => {
+    originalFetchCalls++;
+    return Promise.resolve();
+  });
+
+  const fetchPromise = window.fetch('https://api.example/redirect', {
+    headers: [throwingHeaderPair()],
+  });
+
+  await assert.rejects(fetchPromise, (error) => error === conversionError);
+  assert.equal(pairIteratorClosed, true);
+  assert.equal(originalFetchCalls, 0);
+});
+
+test('replays headers supplied by a descriptorless RequestInit proxy', async () => {
+  const response = {url: 'https://cdn.example/proxy-dynamic-headers.m3u8'};
+  const secondHeaders = [['X-Request', 'from-second-proxy-read']];
+  let headerReads = 0;
+  let originalRequestHeader;
+  const requestOptions = new Proxy({}, {
+    get(target, property, receiver) {
+      if (property === 'headers') {
+        headerReads++;
+        return headerReads === 1 ? {} : secondHeaders;
+      }
+      if (property === 'method') return 'PATCH';
+      return Reflect.get(target, property, receiver);
+    },
+    getOwnPropertyDescriptor() {
+      return undefined;
+    },
+  });
+  const {messages, window} = installHook([], (...args) => {
+    originalRequestHeader = new Headers(args[1].headers).get('x-request');
+    return Promise.resolve(response);
+  });
+
+  const result = await window.fetch('https://api.example/redirect', requestOptions);
+
+  assert.equal(result, response);
+  assert.equal(headerReads, 2);
+  assert.equal(originalRequestHeader, 'from-second-proxy-read');
+  assert.equal(messages[0].requestHeaders['x-request'], 'from-second-proxy-read');
+});
+
+test('replays dynamic headers despite a RequestInit proxy data descriptor', async () => {
+  const response = {url: 'https://cdn.example/proxy-data-headers.m3u8'};
+  const secondHeaders = [['X-Request', 'from-second-proxy-read']];
+  let headerReads = 0;
+  let originalRequestHeader;
+  const requestOptions = new Proxy({headers: {}}, {
+    get(target, property, receiver) {
+      if (property === 'headers') {
+        headerReads++;
+        return headerReads === 1 ? {} : secondHeaders;
+      }
+      if (property === 'method') return 'PATCH';
+      return Reflect.get(target, property, receiver);
+    },
+    getOwnPropertyDescriptor(target, property) {
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+  });
+  const {messages, window} = installHook([], (...args) => {
+    originalRequestHeader = new Headers(args[1].headers).get('x-request');
+    return Promise.resolve(response);
+  });
+
+  const result = await window.fetch('https://api.example/redirect', requestOptions);
+
+  assert.equal(result, response);
+  assert.equal(headerReads, 2);
+  assert.equal(originalRequestHeader, 'from-second-proxy-read');
+  assert.equal(messages[0].requestHeaders['x-request'], 'from-second-proxy-read');
+});
+
 test('keeps redirect capture when the page assigns onreadystatechange after send', () => {
   const {messages, XMLHttpRequest} = installHook([]);
   const xhr = new XMLHttpRequest();
@@ -305,6 +1039,41 @@ test('keeps redirect capture when the page assigns onreadystatechange after send
   assert.deepEqual(
     messages.map(({url}) => url),
     ['https://cdn.example/video.m3u8'],
+  );
+});
+
+test('captures only HTTP(S) media fetches and preserves native fetch outcomes', async () => {
+  const unsupportedFetchError = new TypeError(
+    'fetch rejected unsupported URL scheme',
+  );
+  const urls = [
+    'ftp://cdn.example/video.mp4',
+    'http://cdn.example/video.mp4',
+    'https://cdn.example/video.mp4',
+  ];
+  const responses = new Map(
+    urls.slice(1).map((url) => [url, {url}]),
+  );
+  const fetchCalls = [];
+  const {messages, window} = installHook([], (url) => {
+    fetchCalls.push(url);
+    if (url.startsWith('ftp:')) return Promise.reject(unsupportedFetchError);
+    return Promise.resolve(responses.get(url));
+  });
+
+  await assert.rejects(
+    window.fetch(urls[0]),
+    (error) => error === unsupportedFetchError,
+  );
+  const httpResponse = await window.fetch(urls[1]);
+  const httpsResponse = await window.fetch(urls[2]);
+
+  assert.deepEqual(fetchCalls, urls);
+  assert.equal(httpResponse, responses.get(urls[1]));
+  assert.equal(httpsResponse, responses.get(urls[2]));
+  assert.deepEqual(
+    messages.map(({url}) => url),
+    urls.slice(1),
   );
 });
 
@@ -453,10 +1222,42 @@ test('preserves fetch rejection and direct capture for invalid HeadersInit', asy
   const fetchError = new TypeError('fetch rejected invalid headers');
   let originalFetchCalls = 0;
   let replayedInvalidHeaders;
+  const headerIteratorError = new TypeError('header iterator failed');
+  const sharedHeaderIteratorError = new TypeError(
+    'shared header iterator failed',
+  );
+  const nestedPairIteratorError = new TypeError('nested header pair failed');
   const cyclicHeaders = [];
   cyclicHeaders.push(cyclicHeaders);
   function* invalidHeaderEntries() {
     yield ['X-Invalid'];
+  }
+  function* throwingHeaderEntries() {
+    yield ['X-Request', 'before-error'];
+    throw headerIteratorError;
+  }
+  let sharedHeaderIndex = 0;
+  let sharedHeaderIteratorThrew = false;
+  const sharedWrapperThrowingHeaders = {
+    [Symbol.iterator]() {
+      return {
+        next() {
+          if (sharedHeaderIndex === 0) {
+            sharedHeaderIndex++;
+            return {done: false, value: ['X-Request', 'before-error']};
+          }
+          if (!sharedHeaderIteratorThrew) {
+            sharedHeaderIteratorThrew = true;
+            throw sharedHeaderIteratorError;
+          }
+          return {done: true};
+        },
+      };
+    },
+  };
+  function* throwingNestedHeaderPair() {
+    yield 'X-Request';
+    throw nestedPairIteratorError;
   }
   const oneShotInvalidHeaders = invalidHeaderEntries();
   const requestWithHeaders = new Request(
@@ -516,6 +1317,46 @@ test('preserves fetch rejection and direct capture for invalid HeadersInit', asy
   await assert.rejects(invalidGeneratorPromise, (error) => error === fetchError);
   assert.equal(originalFetchCalls, 5);
   assert.deepEqual(replayedInvalidHeaders, [['X-Invalid']]);
+
+  let throwingIteratorPromise;
+  assert.doesNotThrow(() => {
+    throwingIteratorPromise = window.fetch(
+      'https://cdn.example/throwing-iterator.m3u8',
+      {headers: throwingHeaderEntries()},
+    );
+  });
+  await assert.rejects(
+    throwingIteratorPromise,
+    (error) => error === headerIteratorError,
+  );
+  assert.equal(originalFetchCalls, 5);
+
+  let throwingPairPromise;
+  assert.doesNotThrow(() => {
+    throwingPairPromise = window.fetch(
+      'https://cdn.example/throwing-pair.m3u8',
+      {headers: [throwingNestedHeaderPair()]},
+    );
+  });
+  await assert.rejects(
+    throwingPairPromise,
+    (error) => error === nestedPairIteratorError,
+  );
+  assert.equal(originalFetchCalls, 5);
+
+  let sharedWrapperPromise;
+  assert.doesNotThrow(() => {
+    sharedWrapperPromise = window.fetch(
+      'https://cdn.example/shared-wrapper-throw.m3u8',
+      {headers: sharedWrapperThrowingHeaders},
+    );
+  });
+  await assert.rejects(
+    sharedWrapperPromise,
+    (error) => error === sharedHeaderIteratorError,
+  );
+  assert.equal(originalFetchCalls, 5);
+
   assert.deepEqual(
     messages.map(({url}) => url),
     [
@@ -523,9 +1364,15 @@ test('preserves fetch rejection and direct capture for invalid HeadersInit', asy
       'https://cdn.example/cyclic.m3u8',
       'https://cdn.example/falsey-headers.m3u8',
       'https://cdn.example/invalid-generator.m3u8',
+      'https://cdn.example/throwing-iterator.m3u8',
+      'https://cdn.example/throwing-pair.m3u8',
+      'https://cdn.example/shared-wrapper-throw.m3u8',
     ],
   );
   assert.deepEqual(messages[1].requestHeaders, {});
   assert.deepEqual(messages[2].requestHeaders, {});
   assert.deepEqual(messages[3].requestHeaders, {});
+  assert.deepEqual(messages[4].requestHeaders, {});
+  assert.deepEqual(messages[5].requestHeaders, {});
+  assert.deepEqual(messages[6].requestHeaders, {});
 });
