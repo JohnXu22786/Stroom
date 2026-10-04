@@ -81,8 +81,7 @@ extension ChatAdapterMcpExt on ChatAdapter {
       );
       if (serverConfig == null) continue;
 
-      final placeholderToolName = placeholderNamesByConfigId[config.id] ??
-          McpServerConfig.placeholderToolName(serverConfig.name);
+      final placeholderToolName = placeholderNamesByConfigId[config.id]!;
       reservedPlaceholderClientNames[placeholderToolName] = serverConfig.name;
       validConfigIds.add(config.id);
       configIdsByServerName
