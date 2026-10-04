@@ -87,21 +87,88 @@ class JsHookScript {
     var args = arguments;
     var url = args[0];
     var opts = args[1] || {};
+    var methodOption = opts.method;
+    var method = methodOption !== undefined ? String(methodOption) : 'GET';
+    var headersOption = opts.headers;
+    var hasHeadersOption = headersOption !== undefined;
+    var headers = hasHeadersOption ? headersOption : {};
+    var fetchArgs = args;
 
     // Resolve URL if it's a Request object
     if (url && typeof url === 'object' && url.url) {
+      method = methodOption !== undefined ? method : (url.method || method);
+      headers = hasHeadersOption ? headersOption : (url.headers || headers);
       url = url.url;
     }
 
+    // Normalize HeadersInit forms and make them JSON-serializable.
+    var isOneShotHeaders = false;
+    try {
+      if (headers && typeof headers[Symbol.iterator] === 'function') {
+        var headerIterator = headers[Symbol.iterator]();
+        isOneShotHeaders = headerIterator === headers ||
+          headers[Symbol.iterator]() === headerIterator;
+      }
+    } catch(e) {
+      // Let Headers below handle invalid iterables.
+    }
+    var normalizedHeaders = Object.create(null);
+    try {
+      if (isOneShotHeaders) {
+        headers = Array.from(headers);
+        var replayOptions = Object.create(opts);
+        Object.defineProperty(replayOptions, 'headers', {
+          value: headers,
+          configurable: true,
+          enumerable: true,
+          writable: true
+        });
+        fetchArgs = Array.prototype.slice.call(args);
+        fetchArgs[1] = replayOptions;
+      }
+      var parsedHeaders = new Headers(headers);
+      parsedHeaders.forEach(function(value, name) {
+        normalizedHeaders[name] = value;
+      });
+    } catch(e) {
+      // Let fetch produce its normal rejected promise for invalid headers.
+      try {
+        sendMediaUrl(url, {
+          method: method,
+          headers: {},
+          initiator: PAGE_URL
+        });
+      } catch(captureError) {
+        console.log('[CatCatch] fetch request capture error:', captureError);
+      }
+      if (isOneShotHeaders && fetchArgs === args) return Promise.reject(e);
+      return ORIGINAL_FETCH.apply(this, fetchArgs);
+    }
+    headers = normalizedHeaders;
+
     // Check on request
     sendMediaUrl(url, {
-      method: opts.method || 'GET',
-      headers: opts.headers || {},
+      method: method,
+      headers: headers,
       initiator: PAGE_URL
     });
 
-    // Return original promise
-    return ORIGINAL_FETCH.apply(this, args);
+    // Capture a media URL reached after a redirect without consuming the
+    // response or changing its rejection behavior.
+    return ORIGINAL_FETCH.apply(this, fetchArgs).then(function(response) {
+      try {
+        if (response && response.url) {
+          sendMediaUrl(response.url, {
+            method: method,
+            headers: headers,
+            initiator: PAGE_URL
+          });
+        }
+      } catch(e) {
+        console.log('[CatCatch] fetch response capture error:', e);
+      }
+      return response;
+    });
   };
 
   // =========================================================================
