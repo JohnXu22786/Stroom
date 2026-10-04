@@ -379,7 +379,7 @@ class BrowserCookieService {
   /// restore. Returns null when the platform can only enumerate visited
   /// domains, since that partial view cannot safely replace the full store.
   static Future<List<Map<String, dynamic>>?>
-  snapshotCookiesForRestoreRollback() async {
+      snapshotCookiesForRestoreRollback() async {
     try {
       final result = await _collectPlatformCookies();
       if (result.cookies == null || !result.complete) return null;
@@ -459,9 +459,8 @@ class BrowserCookieService {
           allCookiesRestored = false;
           continue;
         }
-        final cleanDomain = domain.startsWith('.')
-            ? domain.substring(1)
-            : domain;
+        final cleanDomain =
+            domain.startsWith('.') ? domain.substring(1) : domain;
         final restored = await cookiePlatform.setCookie(
           url: WebUri('https://$cleanDomain'),
           name: name,
@@ -539,7 +538,7 @@ class BrowserCookieService {
   /// Reads from the local JSON file (or test in-memory store).
   /// Returns empty map if the file doesn't exist or is empty.
   static Future<Map<String, List<Map<String, dynamic>>>>
-  getCookiesFromFile() async {
+      getCookiesFromFile() async {
     try {
       final list = await _readCookiesFile();
       return _groupAndSort(list);
@@ -559,7 +558,7 @@ class BrowserCookieService {
   /// domain/name/path; file entries for domains not visited this session
   /// are still shown).
   static Future<Map<String, List<Map<String, dynamic>>>>
-  getCookiesGrouped() async {
+      getCookiesGrouped() async {
     final platformCookies = <Map<String, dynamic>>[];
     var platformComplete = false;
     try {
@@ -745,9 +744,8 @@ class BrowserCookieService {
       for (final path in paths) {
         // The native implementation enumerates cookies applicable to the URL
         // before expiring them, so the URL itself must match the cookie path.
-        final urlPath = path == '/'
-            ? ''
-            : (path.startsWith('/') ? path : '/$path');
+        final urlPath =
+            path == '/' ? '' : (path.startsWith('/') ? path : '/$path');
         final httpsUrl = WebUri('https://$cleanDomain$urlPath');
         final httpUrl = WebUri('http://$cleanDomain$urlPath');
         deleteCalls.addAll([
@@ -838,9 +836,8 @@ class BrowserCookieService {
   /// with the persisted file. Successful per-domain queries are listed so
   /// root-path entries can be replaced only for those hosts.
   static Future<
-    ({List<Cookie>? cookies, bool complete, Set<String> queriedHosts})
-  >
-  _collectPlatformCookies() async {
+          ({List<Cookie>? cookies, bool complete, Set<String> queriedHosts})>
+      _collectPlatformCookies() async {
     try {
       final all = await cookiePlatform.getAllCookies();
       return (cookies: all, complete: true, queriedHosts: <String>{});
@@ -1171,17 +1168,18 @@ class _RealCookiePlatform implements CookiePlatform {
     bool? isSecure,
     bool? isHttpOnly,
     HTTPCookieSameSitePolicy? sameSite,
-  }) => _manager.setCookie(
-    url: url,
-    name: name,
-    value: value,
-    path: path,
-    domain: domain,
-    expiresDate: expiresDate,
-    isSecure: isSecure,
-    isHttpOnly: isHttpOnly,
-    sameSite: sameSite,
-  );
+  }) =>
+      _manager.setCookie(
+        url: url,
+        name: name,
+        value: value,
+        path: path,
+        domain: domain,
+        expiresDate: expiresDate,
+        isSecure: isSecure,
+        isHttpOnly: isHttpOnly,
+        sameSite: sameSite,
+      );
 
   @override
   Future<bool> deleteCookie({
@@ -1189,14 +1187,16 @@ class _RealCookiePlatform implements CookiePlatform {
     required String name,
     String path = '/',
     String? domain,
-  }) => _manager.deleteCookie(url: url, name: name, path: path, domain: domain);
+  }) =>
+      _manager.deleteCookie(url: url, name: name, path: path, domain: domain);
 
   @override
   Future<bool> deleteCookies({
     required WebUri url,
     String path = '/',
     String? domain,
-  }) => _manager.deleteCookies(url: url, path: path, domain: domain);
+  }) =>
+      _manager.deleteCookies(url: url, path: path, domain: domain);
 
   @override
   Future<bool> deleteAllCookies() => _manager.deleteAllCookies();
@@ -1209,8 +1209,8 @@ class _RealCookiePlatform implements CookiePlatform {
 class _AndroidLikeCookiePlatform implements CookiePlatform {
   @override
   Future<List<Cookie>> getAllCookies() => throw UnimplementedError(
-    'getAllCookies is not implemented on the current platform',
-  );
+        'getAllCookies is not implemented on the current platform',
+      );
 
   @override
   Future<List<Cookie>> getCookies({required WebUri url}) async => [];
@@ -1226,7 +1226,8 @@ class _AndroidLikeCookiePlatform implements CookiePlatform {
     bool? isSecure,
     bool? isHttpOnly,
     HTTPCookieSameSitePolicy? sameSite,
-  }) async => true;
+  }) async =>
+      true;
 
   @override
   Future<bool> deleteCookie({
@@ -1234,14 +1235,16 @@ class _AndroidLikeCookiePlatform implements CookiePlatform {
     required String name,
     String path = '/',
     String? domain,
-  }) async => true;
+  }) async =>
+      true;
 
   @override
   Future<bool> deleteCookies({
     required WebUri url,
     String path = '/',
     String? domain,
-  }) async => true;
+  }) async =>
+      true;
 
   @override
   Future<bool> deleteAllCookies() async => true;

@@ -41,16 +41,16 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   bool _browserCookies = true;
 
   BackupSelection get _selection => BackupSelection(
-    chatRecordsAndAttachments: _chatRecordsAndAttachments,
-    settings: _settings,
-    pictures: _pictures,
-    audio: _audio,
-    videos: _videos,
-    texts: _texts,
-    tasks: _tasks,
-    ankiData: _ankiData,
-    browserCookies: _browserCookies,
-  );
+        chatRecordsAndAttachments: _chatRecordsAndAttachments,
+        settings: _settings,
+        pictures: _pictures,
+        audio: _audio,
+        videos: _videos,
+        texts: _texts,
+        tasks: _tasks,
+        ankiData: _ankiData,
+        browserCookies: _browserCookies,
+      );
 
   bool get _hasSelection {
     return _chatRecordsAndAttachments ||
@@ -292,7 +292,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           final message = skippedCategories.isEmpty
               ? '数据已从备份中恢复。请重启应用以使用恢复的数据。'
               : '${_skippedCategoriesMessage(skippedCategories)}'
-                    '其余所选数据已恢复，请重启应用以生效。';
+                  '其余所选数据已恢复，请重启应用以生效。';
           await _showRestartPrompt(message: message);
         }
       }
@@ -544,12 +544,10 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   }
 
   String _skippedCategoriesMessage(List<String> categories) {
-    var message =
-        '备份中未能确认以下勾选的数据类型包含可恢复内容，已跳过；'
+    var message = '备份中未能确认以下勾选的数据类型包含可恢复内容，已跳过；'
         '当前数据保持不变：${categories.join('、')}。';
     if (categories.contains('任务')) {
-      message +=
-          '\n\n如果这是旧版备份，空任务文件无法区分“任务列表为空”和“该平台未导出任务”；'
+      message += '\n\n如果这是旧版备份，空任务文件无法区分“任务列表为空”和“该平台未导出任务”；'
           '为避免覆盖当前任务，任务类别已跳过并保留原数据。';
     }
     return message;

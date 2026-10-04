@@ -166,16 +166,16 @@ class BackupSelection {
   }
 
   Set<String> get selectedPartIds => {
-    if (chatRecordsAndAttachments) DataParts.chat,
-    if (settings) DataParts.settings,
-    if (pictures) DataParts.pictures,
-    if (audio) DataParts.audio,
-    if (videos) DataParts.videos,
-    if (texts) DataParts.texts,
-    if (tasks) DataParts.tasks,
-    if (ankiData) DataParts.anki,
-    if (browserCookies) DataParts.browserCookies,
-  };
+        if (chatRecordsAndAttachments) DataParts.chat,
+        if (settings) DataParts.settings,
+        if (pictures) DataParts.pictures,
+        if (audio) DataParts.audio,
+        if (videos) DataParts.videos,
+        if (texts) DataParts.texts,
+        if (tasks) DataParts.tasks,
+        if (ankiData) DataParts.anki,
+        if (browserCookies) DataParts.browserCookies,
+      };
 }
 
 // ====================================================================
@@ -879,8 +879,8 @@ class BackupService {
     final archive = Archive();
     final browserCookieSnapshot =
         selection.browserCookies && !kIsWeb && !WebFileStore.isTestMode
-        ? await BrowserCookieService.snapshotCookiesForBackup()
-        : null;
+            ? await BrowserCookieService.snapshotCookiesForBackup()
+            : null;
     final ankiDbPath = await _findAnkiDatabasePath(selection);
 
     // 1. manifest.json（始终包含）
@@ -1528,8 +1528,7 @@ class BackupService {
 
     // 数据库清单（stroom_manifest.json，兼容旧路径 database/manifest_data.json）
     Map<String, dynamic>? dbData;
-    final dbJson =
-        readFile('stroom_manifest.json') ??
+    final dbJson = readFile('stroom_manifest.json') ??
         readFile('database/manifest_data.json');
     if (dbJson != null) {
       try {
@@ -1628,8 +1627,7 @@ class BackupService {
             dbData: dbData,
             chatPrefs: isV1Format ? v1Prefs : chatPrefs,
             requireMediaFiles: selection.includeMediaFiles,
-            requireAttachmentFiles:
-                selection.chatRecordsAndAttachments &&
+            requireAttachmentFiles: selection.chatRecordsAndAttachments &&
                 selection.includeMediaFiles,
           )
         : _getAvailableSelection(
@@ -1639,33 +1637,31 @@ class BackupService {
             chatPrefs: chatPrefs,
             settingsPrefs: settingsPrefs,
             isV1: isV1Format,
-            hasTaskData:
-                skipMissingCategories &&
+            hasTaskData: skipMissingCategories &&
                 selection.tasks &&
                 (trustEmptyLegacyTaskPayloads
                     ? _hasTaskPayloadFile(archiveEntries)
                     : _hasNonEmptyTaskPayload(readFile)),
             requireMediaFiles: selection.includeMediaFiles,
-            requireAttachmentFiles:
-                selection.chatRecordsAndAttachments &&
+            requireAttachmentFiles: selection.chatRecordsAndAttachments &&
                 selection.includeMediaFiles,
           );
     final skippedLabels = skipMissingCategories
         ? selection.selectedLabels
-              .where(
-                (label) => !availableSelection.selectedLabels.contains(label),
-              )
-              .toList()
+            .where(
+              (label) => !availableSelection.selectedLabels.contains(label),
+            )
+            .toList()
         : <String>[];
     final restoreSelection = skipMissingCategories
         ? _intersectSelections(selection, availableSelection)
         : selection;
     final taskFilesToReplace = restoreSelection.tasks
         ? _taskPayloadFiles
-              .where(archiveEntries.contains)
-              .map(_canonicalTaskPayloadName)
-              .whereType<String>()
-              .toSet()
+            .where(archiveEntries.contains)
+            .map(_canonicalTaskPayloadName)
+            .whereType<String>()
+            .toSet()
         : <String>{};
 
     if (restoreSelection.tasks) {
@@ -1705,10 +1701,10 @@ class BackupService {
     }
     final dataPartVersions =
         _parseBackupPartVersions(manifest['dataPartVersions']) ??
-        _parseBackupPartVersions(versionPrefs?['data_format_versions']) ??
-        DataMigrationService.partVersionsFromLegacyGlobal(
-          versionPrefs?['data_format_version'],
-        );
+            _parseBackupPartVersions(versionPrefs?['data_format_versions']) ??
+            DataMigrationService.partVersionsFromLegacyGlobal(
+              versionPrefs?['data_format_version'],
+            );
 
     for (final part in restoreSelection.selectedPartIds) {
       final backupVersion = dataPartVersions?[part];
@@ -1724,8 +1720,7 @@ class BackupService {
 
     return _RestoreMetadata(
       isV1: isV1Format,
-      restoreChatPreferences:
-          declaredSelection?.chatRecordsAndAttachments ??
+      restoreChatPreferences: declaredSelection?.chatRecordsAndAttachments ??
           (isV1Format
               ? v1Prefs?.keys.any(_isChatPrefKey) ?? false
               : chatPrefs != null),
@@ -1797,20 +1792,20 @@ class BackupService {
   static BackupSelection _intersectSelections(
     BackupSelection requested,
     BackupSelection available,
-  ) => BackupSelection(
-    chatRecordsAndAttachments:
-        requested.chatRecordsAndAttachments &&
-        available.chatRecordsAndAttachments,
-    settings: requested.settings && available.settings,
-    pictures: requested.pictures && available.pictures,
-    audio: requested.audio && available.audio,
-    videos: requested.videos && available.videos,
-    texts: requested.texts && available.texts,
-    tasks: requested.tasks && available.tasks,
-    ankiData: requested.ankiData && available.ankiData,
-    browserCookies: requested.browserCookies && available.browserCookies,
-    includeMediaFiles: requested.includeMediaFiles,
-  );
+  ) =>
+      BackupSelection(
+        chatRecordsAndAttachments: requested.chatRecordsAndAttachments &&
+            available.chatRecordsAndAttachments,
+        settings: requested.settings && available.settings,
+        pictures: requested.pictures && available.pictures,
+        audio: requested.audio && available.audio,
+        videos: requested.videos && available.videos,
+        texts: requested.texts && available.texts,
+        tasks: requested.tasks && available.tasks,
+        ankiData: requested.ankiData && available.ankiData,
+        browserCookies: requested.browserCookies && available.browserCookies,
+        includeMediaFiles: requested.includeMediaFiles,
+      );
 
   static bool _isSafeRelativeArchivePath(String path) {
     final pathSegments = path.split(RegExp(r'[/\\]'));
@@ -1862,8 +1857,7 @@ class BackupService {
 
     final hasManifest = dbData != null;
     return BackupSelection(
-      chatRecordsAndAttachments:
-          declared.chatRecordsAndAttachments &&
+      chatRecordsAndAttachments: declared.chatRecordsAndAttachments &&
           entries.contains('chat_data.json') &&
           _hasAllReferencedAttachmentFiles(
             chatPrefs: chatPrefs,
@@ -1871,8 +1865,7 @@ class BackupService {
             requireFiles: requireAttachmentFiles,
           ),
       settings: declared.settings && entries.contains('settings.json'),
-      pictures:
-          declared.pictures &&
+      pictures: declared.pictures &&
           hasManifest &&
           (!requireMediaFiles ||
               _hasAllMediaFiles(
@@ -1882,8 +1875,7 @@ class BackupService {
                 directory: 'pictures',
                 defaultExtension: 'jpg',
               )),
-      audio:
-          declared.audio &&
+      audio: declared.audio &&
           hasManifest &&
           (!requireMediaFiles ||
               _hasAllMediaFiles(
@@ -1893,8 +1885,7 @@ class BackupService {
                 directory: 'tts_audio',
                 defaultExtension: 'wav',
               )),
-      videos:
-          declared.videos &&
+      videos: declared.videos &&
           hasManifest &&
           (!requireMediaFiles ||
               _hasAllMediaFiles(
@@ -1904,8 +1895,7 @@ class BackupService {
                 directory: 'videos',
                 defaultExtension: 'mp4',
               )),
-      texts:
-          declared.texts &&
+      texts: declared.texts &&
           hasManifest &&
           (!requireMediaFiles ||
               _hasAllMediaFiles(
@@ -1915,8 +1905,7 @@ class BackupService {
                 directory: 'texts',
                 defaultExtension: 'txt',
               )),
-      tasks:
-          !kIsWeb &&
+      tasks: !kIsWeb &&
           declared.tasks &&
           const [
             'synthesis/tasks.json',
@@ -1925,13 +1914,11 @@ class BackupService {
             'task_flows/flows.json',
             'task_flows/executions.json',
           ].every(entries.contains),
-      ankiData:
-          !kIsWeb &&
+      ankiData: !kIsWeb &&
           declared.ankiData &&
           (entries.contains('anki/collection.anki2') ||
               entries.contains('collection.anki2')),
-      browserCookies:
-          declared.browserCookies &&
+      browserCookies: declared.browserCookies &&
           !kIsWeb &&
           entries.contains('browser_cookies.json'),
     );
@@ -2089,8 +2076,7 @@ class BackupService {
       return hasNonEmptyList(dbData, foldersKey);
     }
 
-    final hasChatData =
-        normalizedEntries.contains('chat_data.json') ||
+    final hasChatData = normalizedEntries.contains('chat_data.json') ||
         (isV1 && hasV1Preference(_isChatPrefKey));
     final chatAttachmentsPresent = _hasAllReferencedAttachmentFiles(
       chatPrefs: isV1 ? v1Prefs : chatPrefs,
@@ -2100,8 +2086,7 @@ class BackupService {
 
     return BackupSelection(
       chatRecordsAndAttachments: hasChatData && chatAttachmentsPresent,
-      settings:
-          hasSettingsPreference(settingsPrefs) ||
+      settings: hasSettingsPreference(settingsPrefs) ||
           (isV1 &&
               hasV1Preference(
                 (key) =>
@@ -2134,8 +2119,7 @@ class BackupService {
         'txt',
       ),
       tasks: !kIsWeb && hasTaskData,
-      ankiData:
-          !kIsWeb &&
+      ankiData: !kIsWeb &&
           (normalizedEntries.contains('anki/collection.anki2') ||
               normalizedEntries.contains('collection.anki2')),
       browserCookies:
@@ -2230,21 +2214,20 @@ class BackupService {
   }
 
   static String? _canonicalTaskPayloadName(String name) {
-    var normalized = name.startsWith('files/')
-        ? name.substring('files/'.length)
-        : name;
+    var normalized =
+        name.startsWith('files/') ? name.substring('files/'.length) : name;
     if (normalized == 'tasks/synthesis_tasks.json') {
       normalized = 'synthesis/tasks.json';
     } else if (normalized == 'tasks/catcatch_tasks.json') {
       normalized = 'catcatch/tasks.json';
     }
     return const {
-          'synthesis/tasks.json',
-          'catcatch/tasks.json',
-          'background/tasks.json',
-          'task_flows/flows.json',
-          'task_flows/executions.json',
-        }.contains(normalized)
+      'synthesis/tasks.json',
+      'catcatch/tasks.json',
+      'background/tasks.json',
+      'task_flows/flows.json',
+      'task_flows/executions.json',
+    }.contains(normalized)
         ? normalized
         : null;
   }
@@ -2677,36 +2660,32 @@ class BackupService {
     Map<String, dynamic> data, {
     BackupSelection selection = BackupSelection.all,
   }) async {
-    final imageRecords =
-        (data['image_records'] as List<dynamic>?)
+    final imageRecords = (data['image_records'] as List<dynamic>?)
             ?.cast<Map<String, dynamic>>() ??
         [];
-    final audioRecords =
-        (data['audio_records'] as List<dynamic>?)
+    final audioRecords = (data['audio_records'] as List<dynamic>?)
             ?.cast<Map<String, dynamic>>() ??
         [];
-    final videoRecords =
-        (data['video_records'] as List<dynamic>?)
+    final videoRecords = (data['video_records'] as List<dynamic>?)
             ?.cast<Map<String, dynamic>>() ??
         [];
-    final textRecords =
-        (data['text_records'] as List<dynamic>?)
+    final textRecords = (data['text_records'] as List<dynamic>?)
             ?.cast<Map<String, dynamic>>() ??
         [];
 
     // Per-type folders (v2+ backups)
     final textFolders =
         (data[ManifestTables.textFolders] as List<dynamic>?)?.cast<String>() ??
-        <String>[];
+            <String>[];
     final audioFolders =
         (data[ManifestTables.audioFolders] as List<dynamic>?)?.cast<String>() ??
-        <String>[];
+            <String>[];
     final imageFolders =
         (data[ManifestTables.imageFolders] as List<dynamic>?)?.cast<String>() ??
-        <String>[];
+            <String>[];
     final videoFolders =
         (data[ManifestTables.videoFolders] as List<dynamic>?)?.cast<String>() ??
-        <String>[];
+            <String>[];
     final folders = (data['folders'] as List<dynamic>?)?.cast<String>() ?? [];
 
     debugPrint(
@@ -2808,10 +2787,8 @@ class BackupService {
   }) async {
     final prefs = await SharedPreferences.getInstance();
 
-    final keysToRemove = prefs
-        .getKeys()
-        .where((k) => _isKeyInSelection(k, selection))
-        .toList();
+    final keysToRemove =
+        prefs.getKeys().where((k) => _isKeyInSelection(k, selection)).toList();
     for (final key in keysToRemove) {
       await prefs.remove(key);
     }
@@ -2926,9 +2903,8 @@ class BackupService {
           } catch (_) {}
         }
         final displayPath = await BackupLocationManager.getDisplayPath();
-        savedLocation = displayPath.isEmpty
-            ? defaultName
-            : '$displayPath/$defaultName';
+        savedLocation =
+            displayPath.isEmpty ? defaultName : '$displayPath/$defaultName';
       } else {
         // 桌面：先选保存位置（不传 bytes → 只返回路径，不写文件），
         // 再流式写入 —— 峰值内存不随备份体积增长。
@@ -3132,9 +3108,8 @@ class BackupService {
     try {
       final isWebStore = kIsWeb || WebFileStore.isTestMode;
       final appDir = isWebStore ? null : await AppStorage.directory;
-      final attachmentDir = appDir == null
-          ? null
-          : p.normalize(p.join(appDir, 'attachments'));
+      final attachmentDir =
+          appDir == null ? null : p.normalize(p.join(appDir, 'attachments'));
 
       void preserveReference(String reference) {
         final slashPath = reference.replaceAll('\\', '/');
@@ -3345,8 +3320,7 @@ class BackupService {
 
     // 任务文件
     if (selection.tasks) {
-      final taskFiles =
-          taskFilesToReplace ??
+      final taskFiles = taskFilesToReplace ??
           const {
             'synthesis/tasks.json',
             'catcatch/tasks.json',
@@ -3409,11 +3383,12 @@ class BackupService {
     void Function(double progress)? onProgress,
     bool Function()? isCancelled,
     BackupSelection selection = BackupSelection.all,
-  }) => _buildBackupBytes(
-    onProgress: onProgress,
-    isCancelled: isCancelled,
-    selection: selection,
-  );
+  }) =>
+      _buildBackupBytes(
+        onProgress: onProgress,
+        isCancelled: isCancelled,
+        selection: selection,
+      );
 
   /// 公开流式备份的同步构建核心供测试使用（大文件路径）。
   ///
@@ -3448,10 +3423,11 @@ class BackupService {
   static Future<void> restoreDatabaseFromJsonForTest(
     String json, {
     BackupSelection selection = BackupSelection.all,
-  }) => _restoreDatabaseFromJson(
-    jsonDecode(json) as Map<String, dynamic>,
-    selection: selection,
-  );
+  }) =>
+      _restoreDatabaseFromJson(
+        jsonDecode(json) as Map<String, dynamic>,
+        selection: selection,
+      );
 }
 
 // ====================================================================
@@ -3569,9 +3545,9 @@ class _FileInputStream extends InputStream {
   int _pos = 0;
 
   _FileInputStream(String path)
-    : _file = File(path).openSync(),
-      _fileLength = File(path).lengthSync(),
-      super(byteOrder: ByteOrder.littleEndian);
+      : _file = File(path).openSync(),
+        _fileLength = File(path).lengthSync(),
+        super(byteOrder: ByteOrder.littleEndian);
 
   @override
   int get position => _pos;
@@ -3641,8 +3617,8 @@ class _FileOutputStream extends OutputStream {
   int _length = 0;
 
   _FileOutputStream(String path)
-    : _file = File(path).openSync(mode: FileMode.write),
-      super(byteOrder: ByteOrder.littleEndian);
+      : _file = File(path).openSync(mode: FileMode.write),
+        super(byteOrder: ByteOrder.littleEndian);
 
   @override
   int get length => _length;
@@ -3819,7 +3795,7 @@ class _ZipStreamReader {
   final Map<String, _ZipEntryInfo> _byName;
 
   _ZipStreamReader._fromFile(this._file, this._entries)
-    : _byName = {for (final e in _entries) e.name: e};
+      : _byName = {for (final e in _entries) e.name: e};
 
   /// 解析 [path] 指向的 ZIP 文件。结构损坏时抛 [FormatException]
   /// （由调用方包装为 [BackupValidationException]）。
