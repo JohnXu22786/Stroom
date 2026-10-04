@@ -1812,6 +1812,14 @@ class BackupService {
     includeMediaFiles: requested.includeMediaFiles,
   );
 
+  static bool _isSafeRelativeArchivePath(String path) {
+    final pathSegments = path.split(RegExp(r'[/\\]'));
+    return !pathSegments.any((part) => part == '..') &&
+        !RegExp(r'^[a-zA-Z]:').hasMatch(path) &&
+        !path.startsWith('/') &&
+        pathSegments.first.isNotEmpty;
+  }
+
   static bool _hasAllMediaFiles({
     required Map<String, dynamic>? dbData,
     required Set<String> archiveEntries,
@@ -1826,7 +1834,9 @@ class BackupService {
       final rawExtension = record['format'];
       if (rawExtension != null && rawExtension is! String) return false;
       final extension = (rawExtension as String?) ?? defaultExtension;
-      if (!archiveEntries.contains('$directory/${record['hash']}.$extension')) {
+      final relativePath = '${record['hash']}.$extension';
+      if (!_isSafeRelativeArchivePath(relativePath) ||
+          !archiveEntries.contains('$directory/$relativePath')) {
         return false;
       }
     }
@@ -1965,6 +1975,10 @@ class BackupService {
             continue;
           }
           final normalizedPath = path.replaceAll(r'\', '/');
+          if (!_isSafeRelativeArchivePath(normalizedPath)) {
+            allPresent = false;
+            continue;
+          }
           final archivePaths = normalizedPath.startsWith('temp_edited/')
               ? {normalizedPath, 'attachments/${p.basename(normalizedPath)}'}
               : {normalizedPath};
@@ -2581,11 +2595,7 @@ class BackupService {
     // 任何平台上都不是合法的备份相对路径，一律跳过（不依赖
     // p.isAbsolute —— 它在 POSIX 上不识别盘符）。
     // 未知条目按"跳过"处理，与未知目录语义一致。
-    final pathSegments = relativePath.split(RegExp(r'[/\\]'));
-    if (pathSegments.any((part) => part == '..') ||
-        RegExp(r'^[a-zA-Z]:').hasMatch(relativePath) ||
-        relativePath.startsWith('/') ||
-        relativePath.startsWith(r'\')) {
+    if (!_isSafeRelativeArchivePath(relativePath)) {
       debugPrint('[BackupService] 跳过不安全路径条目: $rawKey');
       return false;
     }
