@@ -221,6 +221,40 @@ void main() {
     }
   });
 
+  testWidgets('Search group toggle leaves the MCP entry and other group enabled',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await pumpPage(tester, Brightness.light);
+
+    final searchGroupTitle = find.text('搜索').first;
+    final searchGroupCard = find
+        .ancestor(of: searchGroupTitle, matching: find.byType(Container))
+        .first;
+    final groupSwitch =
+        find.descendant(of: searchGroupCard, matching: find.byType(Switch));
+    expect(groupSwitch, findsOneWidget);
+
+    await tester.tap(groupSwitch);
+    await tester.pumpAndSettle();
+
+    final state = ProviderScope.containerOf(
+      tester.element(find.byType(ProviderConfigPage)),
+    ).read(providerEntriesProvider);
+    expect(
+      state.mcpGroups
+          .firstWhere((group) => group.id == builtinSearchMcpGroupId)
+          .enabled,
+      isFalse,
+    );
+    expect(
+      state.mcpGroups
+          .firstWhere((group) => group.id == builtinMcpServicesGroupId)
+          .enabled,
+      isTrue,
+    );
+    expect(state.entries.single.enabled, isTrue);
+  });
+
   testWidgets('MCP master switch renders and toggles the entry enabled flag',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
