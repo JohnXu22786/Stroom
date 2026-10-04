@@ -2239,12 +2239,17 @@ class BackupService {
     if (!selection.browserCookies ||
         cookieData == null ||
         kIsWeb ||
-        WebFileStore.isTestMode ||
-        !(Platform.isAndroid ||
-            Platform.isIOS ||
-            Platform.isMacOS ||
-            Platform.isWindows)) {
+        WebFileStore.isTestMode) {
       return null;
+    }
+
+    if (!(Platform.isAndroid ||
+        Platform.isIOS ||
+        Platform.isMacOS ||
+        Platform.isWindows)) {
+      throw const DataManagementPreflightException(
+        '当前平台无法完整读取现有内置浏览器Cookies，已中止恢复以保护现有数据。',
+      );
     }
 
     final snapshot = await BrowserCookieService.runExclusiveRetentionOperation(
@@ -3049,8 +3054,18 @@ class BackupService {
       selection,
     );
 
-    // Remove the live WebView session as well as the persisted cookie snapshot.
-    await _clearLiveCookiesForRestore(selection);
+    // Clear live and persisted Cookies together so browser-close persistence
+    // cannot recreate the snapshot after the selected data is deleted.
+    var cookieDeleteFailed = false;
+    if (selection.browserCookies) {
+      cookieDeleteFailed =
+          await BrowserCookieService.runExclusiveRetentionOperation(() async {
+        await _clearLiveCookiesForRestore(selection);
+        final deleted = await _deleteFile('', 'browser_cookies.json');
+        await BrowserCookieService.clearBackupRestorePending();
+        return !deleted;
+      });
+    }
 
     // 1. SharedPreferences — 只删除选中类别的键
     if (selection.chatRecordsAndAttachments || selection.settings) {
@@ -3069,10 +3084,12 @@ class BackupService {
     }
 
     // 2. 选中类别的文件（附件目录整清，孤儿文件一并删除）
-    final deleteFailed = await _deleteSelectedFiles(
+    final otherDeleteFailed = await _deleteSelectedFiles(
       selection,
       taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+      preserveBrowserCookieSnapshot: selection.browserCookies,
     );
+    final deleteFailed = cookieDeleteFailed || otherDeleteFailed;
 
     // 3. 媒体数据库记录 + 文件夹表（文件已由 _deleteSelectedFiles 删除）
     if (selection.pictures) {
