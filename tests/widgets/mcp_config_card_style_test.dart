@@ -227,7 +227,8 @@ void main() {
     }
   });
 
-  testWidgets('Search group toggle leaves the MCP entry and other group enabled',
+  testWidgets(
+      'Search group toggle leaves the MCP entry and other group enabled',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     await pumpPage(tester, Brightness.light);
