@@ -112,7 +112,7 @@ class BackupSelection {
   /// 文本文件（texts/）
   final bool texts;
 
-  /// 任务、流程配置、流程附件、CatCatch 已完成文件和任务列表状态。
+  /// 任务、流程配置、流程附件、CatCatch 文件和任务列表状态。
   final bool tasks;
 
   /// Anki 闪卡原始数据库（collection.anki2）
@@ -190,6 +190,11 @@ class BackupSelection {
 
 class BackupService {
   static int? _lastBackupFileTimestampSeconds;
+  static const _catCatchRuntimeSubdirectories = [
+    'downloads',
+    '.progress',
+    'converted',
+  ];
 
   BackupService._();
 
@@ -487,6 +492,14 @@ class BackupService {
           sourcePath: p.join(appDir, 'catcatch', 'completed'),
           useStreaming: useStreaming,
         );
+        if (!kIsWeb && !WebFileStore.isTestMode) {
+          await _addCatCatchRuntimeFilesToPlan(
+            diskFiles,
+            memoryFiles,
+            catcatchDir: p.join(appDir, 'catcatch'),
+            useStreaming: useStreaming,
+          );
+        }
       }
       await _addTaskStatePlanFile(
         diskFiles,
@@ -855,6 +868,25 @@ class BackupService {
     }
   }
 
+  /// Adds CatCatch in-progress download files and resume metadata, which are
+  /// stored separately from task records and completed outputs.
+  static Future<void> _addCatCatchRuntimeFilesToPlan(
+    List<List<String>> diskFiles,
+    Map<String, Uint8List> memoryFiles, {
+    required String catcatchDir,
+    required bool useStreaming,
+  }) async {
+    for (final subdirectory in _catCatchRuntimeSubdirectories) {
+      await _addDirectoryPlanFiles(
+        diskFiles,
+        memoryFiles,
+        archivePrefix: 'catcatch/$subdirectory',
+        sourcePath: p.join(catcatchDir, subdirectory),
+        useStreaming: useStreaming,
+      );
+    }
+  }
+
   /// Adds every app-managed file below a storage directory to the backup.
   /// Manifest-listed files are added first and remain required; this pass also
   /// preserves unreferenced files which have not yet been cleaned up.
@@ -966,6 +998,19 @@ class BackupService {
     if (!await file.exists()) return;
     final data = await file.readAsBytes();
     archive.addFile(ArchiveFile(archiveName, data.length, data));
+  }
+
+  static Future<void> _addCatCatchRuntimeFilesToArchive(
+    Archive archive, {
+    required String catcatchDir,
+  }) async {
+    for (final subdirectory in _catCatchRuntimeSubdirectories) {
+      await _addDirectoryToArchive(
+        archive,
+        archivePrefix: 'catcatch/$subdirectory',
+        sourcePath: p.join(catcatchDir, subdirectory),
+      );
+    }
   }
 
   /// Adds every file in a native directory or WebFileStore prefix. This keeps
@@ -1453,6 +1498,13 @@ class BackupService {
         addStringToArchive(archive, 'background/tasks.json', '[]');
         addStringToArchive(archive, 'task_flows/flows.json', '[]');
         addStringToArchive(archive, 'task_flows/executions.json', '[]');
+      }
+      if (selection.includeMediaFiles && !kIsWeb && !WebFileStore.isTestMode) {
+        final catcatchDir = p.join(await AppStorage.directory, 'catcatch');
+        await _addCatCatchRuntimeFilesToArchive(
+          archive,
+          catcatchDir: catcatchDir,
+        );
       }
     }
     onProgress?.call(0.35);
@@ -2407,6 +2459,11 @@ class BackupService {
         pathSegments.first.isNotEmpty;
   }
 
+  static bool _isCatCatchMediaPath(String relativePath) =>
+      relativePath.startsWith('completed/') ||
+      _catCatchRuntimeSubdirectories
+          .any((directory) => relativePath.startsWith('$directory/'));
+
   static void _validateArchiveEntryChecksums(
     Archive archive,
     Map<String, Uint8List> fileMap,
@@ -2484,6 +2541,12 @@ class BackupService {
     for (final dir in _restoreKnownDirs) {
       if (!key.startsWith('$dir/')) continue;
       final relativePath = key.substring(dir.length + 1);
+      if (dir == 'catcatch' && relativePath != 'tasks.json') {
+        return selection.tasks &&
+            selection.includeMediaFiles &&
+            _isCatCatchMediaPath(relativePath) &&
+            _isSafeRelativeArchivePath(relativePath);
+      }
       return _shouldRestoreDir(dir, selection) &&
           _isSafeRelativeArchivePath(relativePath);
     }
@@ -3380,7 +3443,8 @@ class BackupService {
       if (relativePath == 'tasks.json') {
         await writeEntry(matchedDir, 'tasks.json');
       } else if (matchedDir == 'catcatch' &&
-          relativePath.startsWith('completed/')) {
+          selection.includeMediaFiles &&
+          _isCatCatchMediaPath(relativePath)) {
         await writeEntry(matchedDir, relativePath);
       }
       return true;
@@ -3854,7 +3918,7 @@ class BackupService {
   /// - 设置：删除所有设置相关 Preferences 键
   /// - 图片/音频/视频/文本：删除对应数据库记录、文件夹表、逐文件删除
   ///   （Web/测试模式同样生效），并在原生模式删除整个目录
-  /// - 任务：删除任务记录、流程文件、任务流专属附件、CatCatch 成品和任务状态
+  /// - 任务：删除任务记录、流程文件、任务流专属附件、CatCatch 文件和任务状态
   /// - Anki数据：关闭数据库连接后删除 collection.anki2 与本地媒体目录
   /// - 浏览器Cookies：清除内置浏览器Cookies并删除 browser_cookies.json
   ///
@@ -4209,7 +4273,7 @@ class BackupService {
   /// - 聊天附件：清理附件目录中未被未选中任务流引用的文件
   /// - 图片/音频/视频/文本：按当前数据库记录逐文件删除（Web/测试模式），
   ///   原生模式再整目录删除（清理无记录的孤儿文件）
-  /// - 任务：删除任务记录、流程文件、任务流专属附件、CatCatch 成品和任务状态
+  /// - 任务：删除任务记录、流程文件、任务流专属附件、CatCatch 文件和任务状态
   /// - Anki：关闭数据库连接后删除 collection.anki2、历史 anki/ 残留和本地媒体目录
   /// - 浏览器Cookies：默认删除 browser_cookies.json；恢复时可暂时保留
   static Future<bool> _deleteSelectedFiles(
@@ -4366,6 +4430,13 @@ class BackupService {
       if (selection.includeMediaFiles &&
           !await _deleteDirectory('catcatch/completed')) {
         deleteFailed = true;
+      }
+      if (selection.includeMediaFiles) {
+        for (final subdirectory in _catCatchRuntimeSubdirectories) {
+          if (!await _deleteStoredDirectory('catcatch/$subdirectory')) {
+            deleteFailed = true;
+          }
+        }
       }
     }
 
