@@ -146,39 +146,51 @@ void main() {
 
     tearDown(BrowserCookieService.disableTestMode);
 
-    test('persists cookies from both the starting and redirect hosts',
+    test('persists cookies from intermediate main-frame redirect URLs',
         () async {
-      // These events mirror the top-level onLoadStart and onLoadStop callbacks.
+      // The start and final URLs mirror the top-level onLoadStart and
+      // onLoadStop callbacks. Redirect hops arrive through
+      // shouldOverrideUrlLoading before the final page load callbacks.
       noteBrowserPageNavigationUrl('https://start.example/start');
-      noteBrowserPageNavigationUrl('https://redirect.example/final');
+      trackBrowserPageRedirectUrl('https://intermediate.example/redirect-hop');
+      noteBrowserPageNavigationUrl('https://final.example/final');
 
       await BrowserCookieService.persistCookiesToFile();
 
       expect(BrowserCookieService.visitedDomainsForTest,
-          {'start.example', 'redirect.example'});
-      expect(
-          cookiePlatform.queriedHosts, {'start.example', 'redirect.example'});
+          {'start.example', 'intermediate.example', 'final.example'});
+      expect(cookiePlatform.queriedHosts,
+          {'start.example', 'intermediate.example', 'final.example'});
+      expect(cookiePlatform.queriedUrls,
+          contains('https://intermediate.example/redirect-hop'));
 
       final persistedCookies = await BrowserCookieService.getCookiesFromFile();
-      expect(persistedCookies.keys,
-          containsAll({'start.example', 'redirect.example'}));
+      expect(
+          persistedCookies.keys,
+          containsAll(
+              {'start.example', 'intermediate.example', 'final.example'}));
       expect(
           persistedCookies['start.example']!.single['value'], 'start.example');
-      expect(persistedCookies['redirect.example']!.single['value'],
-          'redirect.example');
+      expect(persistedCookies['intermediate.example']!.single['value'],
+          'intermediate.example');
+      expect(
+          persistedCookies['final.example']!.single['value'], 'final.example');
     });
   });
 }
 
 class _HostOnlyCookiePlatform extends Fake implements CookiePlatform {
   final queriedHosts = <String>{};
+  final queriedUrls = <String>{};
 
   @override
   Future<List<Cookie>> getAllCookies() async => throw UnimplementedError();
 
   @override
   Future<List<Cookie>> getCookies({required WebUri url}) async {
-    final host = Uri.parse(url.toString()).host;
+    final urlString = url.toString();
+    queriedUrls.add(urlString);
+    final host = Uri.parse(urlString).host;
     queriedHosts.add(host);
     return [Cookie(name: 'session', value: host)];
   }
