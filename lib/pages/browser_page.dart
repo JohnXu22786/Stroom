@@ -31,6 +31,12 @@ String normalizeBrowserUrl(String url) {
   return trimmedUrl;
 }
 
+/// Records a top-level browser navigation URL for cookie persistence.
+@visibleForTesting
+void noteBrowserPageNavigationUrl(String url) {
+  BrowserCookieService.noteVisitedUrl(url);
+}
+
 /// Runs cookie preparation before a browser navigation.
 ///
 /// Exposed for tests so they can verify the ordering without creating a
@@ -619,6 +625,9 @@ class _BrowserPageState extends State<BrowserPage> {
                       },
                       onLoadStart: (controller, url) {
                         final urlString = url.toString();
+                        // Record the requested host before a redirect replaces
+                        // it with the final URL reported by onLoadStop.
+                        noteBrowserPageNavigationUrl(urlString);
                         setState(() {
                           _isLoading = true;
                           _progress = 0;
@@ -635,7 +644,7 @@ class _BrowserPageState extends State<BrowserPage> {
                         _currentUrl = url.toString();
                         // Track the host so cookies can be persisted/displayed
                         // even on platforms without CookieManager.getAllCookies.
-                        BrowserCookieService.noteVisitedUrl(url.toString());
+                        noteBrowserPageNavigationUrl(url.toString());
                         _injectScripts();
                         // Re-inject cat-catch hook if somehow missed or if an
                         // earlier injection was for a previous page

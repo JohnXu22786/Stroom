@@ -1,7 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/browser_page.dart';
+import 'package:stroom/services/browser_cookie_service.dart';
 
 void main() {
   group('BrowserCookieStorePreparation', () {
@@ -108,4 +112,55 @@ void main() {
       expect(failureSignals, 0);
     });
   });
+
+  group('BrowserPage redirect cookie tracking', () {
+    late _HostOnlyCookiePlatform cookiePlatform;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({
+        'browser_cookie_retention': true,
+      });
+      BrowserCookieService.enableTestMode();
+      cookiePlatform = _HostOnlyCookiePlatform();
+      BrowserCookieService.cookiePlatform = cookiePlatform;
+    });
+
+    tearDown(BrowserCookieService.disableTestMode);
+
+    test('persists cookies from both the starting and redirect hosts',
+        () async {
+      // These events mirror the top-level onLoadStart and onLoadStop callbacks.
+      noteBrowserPageNavigationUrl('https://start.example/start');
+      noteBrowserPageNavigationUrl('https://redirect.example/final');
+
+      await BrowserCookieService.persistCookiesToFile();
+
+      expect(BrowserCookieService.visitedDomainsForTest,
+          {'start.example', 'redirect.example'});
+      expect(
+          cookiePlatform.queriedHosts, {'start.example', 'redirect.example'});
+
+      final persistedCookies = await BrowserCookieService.getCookiesFromFile();
+      expect(persistedCookies.keys,
+          containsAll({'start.example', 'redirect.example'}));
+      expect(
+          persistedCookies['start.example']!.single['value'], 'start.example');
+      expect(persistedCookies['redirect.example']!.single['value'],
+          'redirect.example');
+    });
+  });
+}
+
+class _HostOnlyCookiePlatform extends Fake implements CookiePlatform {
+  final queriedHosts = <String>{};
+
+  @override
+  Future<List<Cookie>> getAllCookies() async => throw UnimplementedError();
+
+  @override
+  Future<List<Cookie>> getCookies({required WebUri url}) async {
+    final host = Uri.parse(url.toString()).host;
+    queriedHosts.add(host);
+    return [Cookie(name: 'session', value: host)];
+  }
 }
