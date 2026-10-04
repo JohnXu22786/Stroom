@@ -29,6 +29,13 @@ class JsHookScript {
   // Core: Send URL to Flutter via CatCatchChannel
   // =========================================================================
   function sendMediaUrl(url, opts) {
+    if (url && typeof url === 'object') {
+      try {
+        url = URL.prototype.toString.call(url);
+      } catch(e) {
+        // Non-URL objects keep their existing handling.
+      }
+    }
     if (!url || typeof url !== 'string') return;
 
     // Normalize before filtering so only supported network URL schemes pass.
