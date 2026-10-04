@@ -32,18 +32,20 @@ extension _ChatServiceToolsExt on ChatService {
     // Then check MCP clients (lazy: connect + list tools on demand)
     if (ChatService._mcpClientManager != null) {
       final manager = ChatService._mcpClientManager!;
-      // A discovered real tool may share another server's placeholder name.
-      // Honor its explicit route before interpreting the name as a placeholder.
+      // A discovered tool may have a stable alias when its real name conflicts
+      // with a placeholder or another server's tool. Resolve the published
+      // name first, then call the original MCP name on its owning client.
       final routedClientName = manager.getToolClientName(name);
       if (routedClientName != null) {
         final client = manager.getClient(routedClientName);
+        final actualToolName = manager.getActualToolName(name);
         if (client != null &&
             !client.isDisposed &&
-            client.cachedTools.any((tool) => tool.name == name)) {
+            client.cachedTools.any((tool) => tool.name == actualToolName)) {
           if (!client.isConnected && !await client.connect()) {
             return 'Error: MCP 服务器 "${client.config.name}" 重新连接失败。';
           }
-          if (client.isConnected) return client.callTool(name, args);
+          if (client.isConnected) return client.callTool(actualToolName, args);
         }
       }
 
@@ -65,30 +67,54 @@ extension _ChatServiceToolsExt on ChatService {
           placeholderClientName,
           tools.map((tool) => tool.name),
         );
-        // 极少数服务器真实提供了与占位符同名的工具：直接执行，
-        // 避免模型陷入"调用占位符 → 报错列出同名工具 → 再调用"的死循环。
-        if (tools.any((t) => t.name == name)) {
+        // If this server's real tool has the same name as its placeholder and
+        // the name is otherwise unambiguous, execute it directly. A collision
+        // alias must still be honored so the placeholder name remains reserved.
+        if (tools.any((tool) =>
+            tool.name == name &&
+            manager.getPublishedToolName(placeholderClientName, tool.name) ==
+                name)) {
           return client.callTool(name, args);
         }
-        final available = tools.map((t) => t.name).join(', ');
-        final duplicateToolGuidance = tools
-            .map((tool) {
-              final clientNames = manager.getToolClientNames(tool.name);
-              if (clientNames.length < 2) return null;
-              final selectedClientName = manager.getToolClientName(tool.name);
-              final otherClientNames = clientNames
-                  .where((clientName) => clientName != selectedClientName)
-                  .join('、');
-              return '工具 "${tool.name}" 也由 MCP 服务器 $otherClientNames 提供；'
-                  '当前路由到 $selectedClientName。若要调用其他服务器，请先调用该服务器的占位工具，'
-                  '再调用 "${tool.name}"。';
-            })
-            .whereType<String>()
-            .toSet()
-            .join(' ');
-        return 'Error: MCP 服务器 "${client.config.name}" 没有名为 "$name" 的工具。'
+        final available = tools
+            .map((tool) => manager.getPublishedToolName(
+                  placeholderClientName,
+                  tool.name,
+                ))
+            .join(', ');
+        final toolGuidance = <String>{};
+        for (final tool in tools) {
+          final publishedName = manager.getPublishedToolName(
+            placeholderClientName,
+            tool.name,
+          );
+          if (publishedName != tool.name) {
+            toolGuidance.add(
+              '真实工具 "${tool.name}" 在此服务器上的调用名为 "$publishedName"。',
+            );
+          }
+          final clientNames = manager.getToolClientNames(tool.name);
+          if (clientNames.length < 2) continue;
+          final routes = clientNames
+              .map((clientName) =>
+                  '"${manager.getPublishedToolName(clientName, tool.name)}" '
+                  '(MCP 服务器 $clientName)')
+              .join('、');
+          toolGuidance.add(
+            '同名工具 "${tool.name}" 由多个 MCP 服务器提供；请使用对应调用名：$routes。',
+          );
+        }
+        final collisionGuidance = toolGuidance.join(' ');
+        final hasAliasedRequestedName = tools.any((tool) =>
+            tool.name == name &&
+            manager.getPublishedToolName(placeholderClientName, tool.name) !=
+                name);
+        final missingToolMessage = hasAliasedRequestedName
+            ? '真实工具 "$name" 存在名称冲突，请使用上面列出的调用名。'
+            : 'MCP 服务器 "${client.config.name}" 没有名为 "$name" 的工具。';
+        return 'Error: $missingToolMessage'
             '该服务器可用的工具: $available。请改用这些工具名调用。'
-            '${duplicateToolGuidance.isEmpty ? '' : ' $duplicateToolGuidance'}';
+            '${collisionGuidance.isEmpty ? '' : ' $collisionGuidance'}';
       }
 
       for (final entry in manager.clients.entries) {
@@ -97,7 +123,9 @@ extension _ChatServiceToolsExt on ChatService {
 
         // 真实工具名：工具已在缓存中（上一次占位符调用发现过，或会话中
         // 曾发现过）→ 确保连接后调用。会话中掉线时 connect() 会重连。
-        final hasTool = client.cachedTools.any((t) => t.name == name);
+        final hasTool = client.cachedTools.any((tool) =>
+            tool.name == manager.getActualToolName(name) &&
+            manager.getPublishedToolName(entry.key, tool.name) == name);
         if (hasTool) {
           if (!client.isConnected) {
             final connected = await client.connect();
@@ -107,9 +135,20 @@ extension _ChatServiceToolsExt on ChatService {
             }
           }
           if (client.isConnected) {
-            return client.callTool(name, args);
+            return client.callTool(manager.getActualToolName(name), args);
           }
         }
+      }
+
+      final knownOwners = manager.getToolClientNames(name);
+      if (knownOwners.isNotEmpty) {
+        final routes = knownOwners
+            .map((clientName) =>
+                '"${manager.getPublishedToolName(clientName, name)}" '
+                '(MCP 服务器 $clientName)')
+            .join('、');
+        return 'Error: MCP 工具 "$name" 当前使用了冲突别名。'
+            '请使用对应调用名：$routes。';
       }
     }
 

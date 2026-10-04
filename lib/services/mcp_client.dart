@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Process, ProcessStartMode;
 
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
@@ -977,8 +978,14 @@ class McpClient {
 class McpClientManager {
   final Map<String, McpClient> _clients = {};
   final Map<String, String> _placeholderClientNames = {};
+  final Map<String, String> _clientConfigIdsByName = {};
+  final Map<String, String> _allPlaceholderClientNames = {};
   final Map<String, String> _toolClientNames = {};
+  final Map<String, String> _toolActualNamesByPublishedName = {};
   final Map<String, Set<String>> _toolClientNamesByTool = {};
+  final Map<String, Set<String>> _knownToolConfigIdsByName = {};
+  final Map<String, Map<String, String>> _publishedToolNamesByClient = {};
+  final Set<String> _aliasedToolNames = {};
 
   /// 所有客户端
   Map<String, McpClient> get clients => Map.unmodifiable(_clients);
@@ -987,10 +994,33 @@ class McpClientManager {
   McpClient? getClient(String id) => _clients[id];
 
   /// Sets the server that owns each published placeholder tool name.
-  void setPlaceholderClientNames(Map<String, String> clientNames) {
+  void setPlaceholderClientNames(
+    Map<String, String> clientNames, {
+    Map<String, String> configIdsByClientName = const {},
+    Map<String, String> reservedPlaceholderClientNames = const {},
+    Iterable<String> validConfigIds = const [],
+  }) {
     _placeholderClientNames
       ..clear()
       ..addAll(clientNames);
+    _clientConfigIdsByName
+      ..clear()
+      ..addAll(configIdsByClientName);
+    _allPlaceholderClientNames
+      ..clear()
+      ..addAll(reservedPlaceholderClientNames)
+      ..addAll(clientNames);
+    final currentConfigIds = validConfigIds.toSet();
+    for (final toolName in _knownToolConfigIdsByName.keys.toList()) {
+      final configIds = _knownToolConfigIdsByName[toolName]!
+        ..removeWhere((configId) => !currentConfigIds.contains(configId));
+      if (configIds.isEmpty) {
+        _knownToolConfigIdsByName.remove(toolName);
+      } else if (configIds.length > 1) {
+        _aliasedToolNames.add(toolName);
+      }
+    }
+    _refreshToolRoutes();
   }
 
   /// Returns the configured server name for a placeholder tool, if any.
@@ -1010,36 +1040,56 @@ class McpClientManager {
     _clients
       ..clear()
       ..addAll(orderedClients);
+    _refreshToolRoutes();
   }
 
   /// Routes discovered tools to the server whose placeholder was just called.
   void routeToolsToClient(String clientName, Iterable<String> toolNames) {
     if (!_clients.containsKey(clientName)) return;
+    final configId = _clientConfigIdsByName[clientName];
     for (final toolName in toolNames) {
-      _toolClientNames[toolName] = clientName;
       _toolClientNamesByTool
           .putIfAbsent(toolName, () => <String>{})
           .add(clientName);
+      if (configId != null) {
+        final knownConfigIds = _knownToolConfigIdsByName
+            .putIfAbsent(toolName, () => <String>{})
+          ..add(configId);
+        if (knownConfigIds.length > 1) _aliasedToolNames.add(toolName);
+      }
+      final placeholderOwner = _allPlaceholderClientNames[toolName];
+      if (placeholderOwner != null && placeholderOwner != clientName) {
+        _aliasedToolNames.add(toolName);
+      }
     }
+    _refreshToolRoutes();
   }
 
-  /// Returns the selected server for a discovered tool name, if one exists.
-  String? getToolClientName(String toolName) => _toolClientNames[toolName];
+  /// Returns the server for a published tool name, if it has been discovered.
+  String? getToolClientName(String publishedToolName) =>
+      _toolClientNames[publishedToolName];
+
+  /// Returns the server's original tool name for a published alias.
+  String getActualToolName(String publishedToolName) =>
+      _toolActualNamesByPublishedName[publishedToolName] ?? publishedToolName;
+
+  /// Returns the published name for this server's [actualToolName].
+  String getPublishedToolName(String clientName, String actualToolName) =>
+      _publishedToolNamesByClient[clientName]?[actualToolName] ?? actualToolName;
 
   /// Returns every active server that has exposed [toolName].
   List<String> getToolClientNames(String toolName) =>
       List.unmodifiable(_toolClientNamesByTool[toolName] ?? const <String>{});
 
   void _removeToolRoutesForClient(String clientName) {
-    _toolClientNames.removeWhere((_, name) => name == clientName);
+    _clientConfigIdsByName.remove(clientName);
     for (final toolName in _toolClientNamesByTool.keys.toList()) {
       final clientNames = _toolClientNamesByTool[toolName]!..remove(clientName);
       if (clientNames.isEmpty) {
         _toolClientNamesByTool.remove(toolName);
-      } else if (_toolClientNames[toolName] == null) {
-        _toolClientNames[toolName] = clientNames.first;
       }
     }
+    _refreshToolRoutes();
   }
 
   void _removeToolRoutesForInactiveClients(Set<String> activeClientNames) {
@@ -1048,10 +1098,66 @@ class McpClientManager {
         ..removeWhere((name) => !activeClientNames.contains(name));
       if (clientNames.isEmpty) {
         _toolClientNamesByTool.remove(toolName);
-        _toolClientNames.remove(toolName);
-      } else if (!activeClientNames.contains(_toolClientNames[toolName])) {
-        _toolClientNames[toolName] = clientNames.first;
       }
+    }
+  }
+
+  void _refreshToolRoutes() {
+    _toolClientNames.clear();
+    _toolActualNamesByPublishedName.clear();
+    _publishedToolNamesByClient.clear();
+    final reservedNames = <String>{
+      ..._allPlaceholderClientNames.keys,
+      ..._toolClientNamesByTool.keys,
+    };
+
+    for (final entry in _toolClientNamesByTool.entries) {
+      final actualToolName = entry.key;
+      final clientNames = _clients.keys
+          .where(entry.value.contains)
+          .toList(growable: false);
+      if (clientNames.isEmpty) continue;
+
+      final knownConfigIds = _knownToolConfigIdsByName[actualToolName];
+      final placeholderOwner = _allPlaceholderClientNames[actualToolName];
+      if (clientNames.length > 1 ||
+          (knownConfigIds?.length ?? 0) > 1 ||
+          (placeholderOwner != null &&
+              !clientNames.contains(placeholderOwner))) {
+        _aliasedToolNames.add(actualToolName);
+      }
+
+      for (final clientName in clientNames) {
+        final publishedToolName = _aliasedToolNames.contains(actualToolName)
+            ? _stableToolAlias(clientName, actualToolName, reservedNames)
+            : actualToolName;
+        _toolClientNames[publishedToolName] = clientName;
+        _toolActualNamesByPublishedName[publishedToolName] = actualToolName;
+        _publishedToolNamesByClient
+            .putIfAbsent(clientName, () => <String, String>{})[
+                actualToolName] =
+            publishedToolName;
+        reservedNames.add(publishedToolName);
+      }
+    }
+  }
+
+  String _stableToolAlias(
+    String clientName,
+    String actualToolName,
+    Set<String> reservedNames,
+  ) {
+    final configId = _clientConfigIdsByName[clientName] ?? clientName;
+    for (var salt = 0; ; salt++) {
+      final source = salt == 0
+          ? '$configId\u0000$actualToolName'
+          : '$configId\u0000$actualToolName\u0000$salt';
+      final digest = sha256.convert(utf8.encode(source)).toString();
+      // Tool names are limited to 64 characters. Keep the full stable config
+      // and original-name digest in that budget to avoid order-dependent
+      // prefixes when two aliases are registered in a different order.
+      final alias = 'm_${digest.substring(0, 62)}';
+      if (!reservedNames.contains(alias)) return alias;
     }
   }
 
@@ -1074,13 +1180,21 @@ class McpClientManager {
   }
 
   /// 释放所有客户端
-  void disposeAll() {
+  void disposeAll({bool preserveToolAliases = false}) {
     for (final client in _clients.values) {
       client.dispose();
     }
     _clients.clear();
     _placeholderClientNames.clear();
+    _clientConfigIdsByName.clear();
+    _allPlaceholderClientNames.clear();
     _toolClientNames.clear();
+    _toolActualNamesByPublishedName.clear();
     _toolClientNamesByTool.clear();
+    _publishedToolNamesByClient.clear();
+    if (!preserveToolAliases) {
+      _knownToolConfigIdsByName.clear();
+      _aliasedToolNames.clear();
+    }
   }
 }
