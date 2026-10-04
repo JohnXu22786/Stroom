@@ -3594,11 +3594,13 @@ class BackupService {
     Uint8List bytes, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
+    bool skipMissingCategories = false,
   }) async {
     await _restoreFromBytes(
       bytes,
       onProgress: onProgress,
       selection: selection,
+      skipMissingCategories: skipMissingCategories,
     );
   }
 
@@ -3699,7 +3701,9 @@ void _createBackupStreamingSync(
       final sourcePath = entry[1];
       final file = File(sourcePath);
       if (!file.existsSync()) {
-        throw FileSystemException('备份文件不存在', sourcePath);
+        debugPrint('[BackupService] skipping missing backup file: $sourcePath');
+        checkCancelled();
+        continue;
       }
       final input = _FileInputStream(sourcePath);
       final af = ArchiveFile.stream(archiveName, input);
