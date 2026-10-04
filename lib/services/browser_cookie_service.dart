@@ -477,6 +477,51 @@ class BrowserCookieService {
     return allCookiesRestored;
   }
 
+  /// Validates the shape of a cookie snapshot before a backup import mutates
+  /// the current cookie store. Runtime cookie-store failures are still handled
+  /// by [restoreCookiesFromSnapshot] after this structural check.
+  static void validateCookieSnapshotForRestore(Object? snapshot) {
+    if (snapshot is! List) {
+      throw const FormatException('结构不是Cookies对象数组');
+    }
+    for (final item in snapshot) {
+      if (item is! Map<String, dynamic>) {
+        throw const FormatException('包含非对象Cookie记录');
+      }
+      final name = item['name'];
+      final domain = item['domain'];
+      final value = item['value'];
+      if (name is! String || name.isEmpty) {
+        throw const FormatException('Cookie名称无效');
+      }
+      if (domain is! String || domain.isEmpty) {
+        throw const FormatException('Cookie域名无效');
+      }
+      if (value is! String || value.contains(';')) {
+        throw const FormatException('Cookie值无效');
+      }
+      if (item['path'] != null && item['path'] is! String) {
+        throw const FormatException('Cookie路径类型无效');
+      }
+      if (item['expiresDate'] != null && item['expiresDate'] is! int) {
+        throw const FormatException('Cookie过期时间类型无效');
+      }
+      if (item['isSecure'] != null && item['isSecure'] is! bool) {
+        throw const FormatException('Cookie安全标记类型无效');
+      }
+      if (item['isHttpOnly'] != null && item['isHttpOnly'] is! bool) {
+        throw const FormatException('Cookie HttpOnly标记类型无效');
+      }
+      final sameSite = item['sameSite'];
+      if (sameSite != null && sameSite is! String && sameSite is! int) {
+        throw const FormatException('Cookie SameSite类型无效');
+      }
+      // Exercise the plugin's value conversion during preflight, before any
+      // existing cookies or other selected categories can be cleared.
+      HTTPCookieSameSitePolicy.fromNativeValue(sameSite);
+    }
+  }
+
   /// Returns persisted cookies grouped by domain.
   ///
   /// Reads from the local JSON file (or test in-memory store).

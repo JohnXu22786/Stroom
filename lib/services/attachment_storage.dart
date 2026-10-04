@@ -96,12 +96,13 @@ class AttachmentStorage {
     await AppLogService.info('AttachmentStorage', '读取文件: $storagePath');
     try {
       if (kIsWeb) {
-        final data = WebFileStore.read(_webKey(storagePath));
+        final data = await WebFileStore.read(_webKey(storagePath));
         if (data != null || !storagePath.startsWith('temp_edited/')) {
           return data;
         }
         // Cross-device backups normalize edited files into attachments/.
-        return WebFileStore.read('attachments/${p.basename(storagePath)}');
+        return await WebFileStore.read(
+            'attachments/${p.basename(storagePath)}');
       }
       final dir = await _storageDir;
       final name = p.basename(storagePath);

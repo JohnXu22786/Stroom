@@ -62,11 +62,11 @@ Future<void> addFileToArchive(
 Future<Uint8List?> readBackupFile(String subDir, String fileName) async {
   try {
     if (kIsWeb || WebFileStore.isTestMode) {
-      final data = WebFileStore.read('$subDir/$fileName');
+      final data = await WebFileStore.read('$subDir/$fileName');
       if (data != null || subDir != 'attachments') return data;
       // Edited attachments were historically stored under temp_edited/ on
       // Web, while native platforms store the same bytes in attachments/.
-      return WebFileStore.read('temp_edited/$fileName');
+      return await WebFileStore.read('temp_edited/$fileName');
     } else {
       final appDir = await AppStorage.directory;
       final file = File(p.join(appDir, subDir, fileName));

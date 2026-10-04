@@ -23,6 +23,11 @@ import '../utils/image_thumbnail_loader.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
+import '../catcatch/models/catcatch_task.dart' show CatCatchTask;
+import '../providers/background_task_provider.dart' show BackgroundTask;
+import '../providers/task_provider_shared.dart' show SynthesisTask;
+import '../task_flow/models/task_flow_definition.dart' show TaskFlowDefinition;
+import '../task_flow/models/task_flow_execution.dart' show TaskFlowExecution;
 
 /// Exception thrown when a backup operation is cancelled.
 class BackupCancelledException implements Exception {
@@ -1502,16 +1507,17 @@ class BackupService {
         ? _intersectSelections(selection, availableSelection)
         : selection;
 
+    if (restoreSelection.tasks) {
+      _validateTaskPayloads(readFile, archiveEntries);
+    }
+
     Uint8List? browserCookiesData;
     if (restoreSelection.browserCookies) {
       browserCookiesData = readFile('browser_cookies.json');
       if (browserCookiesData != null) {
         try {
-          final decoded = jsonDecode(utf8.decode(browserCookiesData));
-          if (decoded is! List ||
-              decoded.any((cookie) => cookie is! Map<String, dynamic>)) {
-            throw const FormatException('结构不是Cookies对象数组');
-          }
+          BrowserCookieService.validateCookieSnapshotForRestore(
+              jsonDecode(utf8.decode(browserCookiesData)));
         } catch (e) {
           throw BackupValidationException(
               '无效的备份文件：browser_cookies.json 损坏 ($e)');
@@ -1935,6 +1941,74 @@ class BackupService {
       }
     }
     return false;
+  }
+
+  /// Parses every selected task payload through the same model factories used
+  /// by the task providers. A malformed entry must be caught before restore
+  /// clears the existing task files.
+  static void _validateTaskPayloads(
+    Uint8List? Function(String name) readFile,
+    Set<String> archiveEntries,
+  ) {
+    for (final name in _taskPayloadFiles) {
+      if (!archiveEntries.contains(name)) continue;
+      final raw = readFile(name);
+      if (raw == null) continue;
+      final target = _canonicalTaskPayloadName(name);
+      if (target == null) continue;
+      try {
+        final decoded = jsonDecode(utf8.decode(raw));
+        if (decoded is! List) {
+          throw const FormatException('结构不是数组');
+        }
+        for (final item in decoded) {
+          if (item is! Map) {
+            throw const FormatException('包含非对象任务记录');
+          }
+          final map = Map<String, dynamic>.from(item);
+          switch (target) {
+            case 'synthesis/tasks.json':
+              SynthesisTask.fromMap(map);
+              break;
+            case 'catcatch/tasks.json':
+              CatCatchTask.fromMap(map);
+              break;
+            case 'background/tasks.json':
+              BackgroundTask.fromMap(map);
+              break;
+            case 'task_flows/flows.json':
+              TaskFlowDefinition.fromMap(map);
+              break;
+            case 'task_flows/executions.json':
+              TaskFlowExecution.fromMap(map);
+              break;
+          }
+        }
+      } catch (e) {
+        throw BackupValidationException(
+            '无效的备份文件：$name 损坏 ($e)');
+      }
+    }
+  }
+
+  static String? _canonicalTaskPayloadName(String name) {
+    var normalized = name.startsWith('files/')
+        ? name.substring('files/'.length)
+        : name;
+    if (normalized == 'tasks/synthesis_tasks.json') {
+      normalized = 'synthesis/tasks.json';
+    } else if (normalized == 'tasks/catcatch_tasks.json') {
+      normalized = 'catcatch/tasks.json';
+    }
+    return const {
+      'synthesis/tasks.json',
+      'catcatch/tasks.json',
+      'background/tasks.json',
+      'task_flows/flows.json',
+      'task_flows/executions.json',
+    }.contains(normalized)
+        ? normalized
+        : null;
   }
 
   static Future<List<Map<String, dynamic>>?> _captureCookiesForRestoreRollback(
