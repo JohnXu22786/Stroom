@@ -1637,6 +1637,7 @@ class BackupService {
             dbData: dbData,
             v1Prefs: v1Prefs,
             chatPrefs: chatPrefs,
+            settingsPrefs: settingsPrefs,
             isV1: isV1Format,
             hasTaskData:
                 skipMissingCategories &&
@@ -2011,6 +2012,7 @@ class BackupService {
     required Map<String, dynamic>? dbData,
     required Map<String, dynamic>? v1Prefs,
     required Map<String, dynamic>? chatPrefs,
+    required Map<String, dynamic>? settingsPrefs,
     required bool isV1,
     required bool hasTaskData,
     required bool requireMediaFiles,
@@ -2036,6 +2038,16 @@ class BackupService {
               !_isDeviceLocalPreferenceKey(key) &&
               !DataMigrationService.isFormatMetadataKey(key) &&
               predicate(key),
+        ) ??
+        false;
+
+    bool hasSettingsPreference(Map<String, dynamic>? prefs) =>
+        prefs?.keys.any(
+          (key) =>
+              key != _browserCookieRetentionKey &&
+              !key.startsWith('flutter.') &&
+              !_isDeviceLocalPreferenceKey(key) &&
+              !DataMigrationService.isFormatMetadataKey(key),
         ) ??
         false;
 
@@ -2075,11 +2087,12 @@ class BackupService {
     return BackupSelection(
       chatRecordsAndAttachments: hasChatData && chatAttachmentsPresent,
       settings:
-          normalizedEntries.contains('settings.json') ||
+          hasSettingsPreference(settingsPrefs) ||
           (isV1 &&
               hasV1Preference(
                 (key) =>
                     !_isChatPrefKey(key) &&
+                    key != _browserCookieRetentionKey &&
                     !DataMigrationService.isFormatMetadataKey(key),
               )),
       pictures: hasMediaData(
