@@ -2407,7 +2407,8 @@ class BackupService {
         !(Platform.isAndroid ||
             Platform.isIOS ||
             Platform.isMacOS ||
-            Platform.isWindows)) {
+            Platform.isWindows ||
+            Platform.isLinux)) {
       return;
     }
     if (!await BrowserCookieService.clearPlatformCookies()) {
