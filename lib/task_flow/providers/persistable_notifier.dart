@@ -33,13 +33,18 @@ mixin PersistableNotifier<T> on StateNotifier<T> {
 
   /// Queue this state snapshot and report whether it reached disk.
   /// Failed writes keep the in-memory state and do not block later retries.
-  Future<bool> persist() {
+  Future<bool> persist() => _encodeAndPersist(() => state);
+
+  /// Queue an owned snapshot without reading notifier state after an await.
+  Future<bool> persistSnapshot(T snapshot) => _encodeAndPersist(() => snapshot);
+
+  Future<bool> _encodeAndPersist(T Function() snapshot) {
     String? contents;
     Object? encodingError;
     try {
       // Capture before any await: a later mutation or disposal must not change
       // the snapshot belonging to this request.
-      contents = jsonEncode(toJsonList(state));
+      contents = jsonEncode(toJsonList(snapshot()));
     } catch (e) {
       encodingError = e;
     }

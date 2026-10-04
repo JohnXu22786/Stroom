@@ -4,8 +4,10 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../providers/task_provider_shared.dart';
+import '../../services/attachment_storage.dart';
 import '../models/task_flow_execution.dart';
 import '../models/flow_payload.dart';
+import '../models/io_type.dart';
 import 'persistable_notifier.dart';
 
 /// Provider for tracking task flow executions (for the unified task list).
@@ -25,6 +27,12 @@ final taskFlowExecutionRestoreStatusProvider =
 class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     with PersistableNotifier<List<TaskFlowExecution>> {
   TaskFlowExecutionNotifier() : super([]);
+
+  Future<void> _registrationQueue = Future<void>.value();
+  final Object _registrationWriteZone = Object();
+  Completer<void>? _registrationBarrier;
+  List<TaskFlowExecution>? _disposedSnapshot;
+  Future<bool>? _disposedPersistence;
 
   // ===========================================================================
   // PersistableNotifier contract
@@ -64,17 +72,153 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     return state.map((e) => e.toMap()).toList();
   }
 
+  final Map<String, TaskFlowExecution> _pendingInputRemovals = {};
+  final Map<String, int> _pendingInputRegistrations = {};
+  Future<void> _inputRemovalQueue = Future<void>.value();
+  final Map<String, Future<void>> _inputPathLocks = {};
+  final Set<String> _deletingInputPaths = {};
+
+  /// Keep validation and durable registration of a picker copy together with
+  /// the last-reference check and deletion of that same copy.
+  Future<T> withInputStoragePathLock<T>(
+    String? path,
+    Future<T> Function() action,
+  ) async {
+    if (path == null || path.isEmpty) return action();
+    final previous = _inputPathLocks[path];
+    final released = Completer<void>();
+    _inputPathLocks[path] = released.future;
+    if (previous != null) await previous;
+    try {
+      return await action();
+    } finally {
+      if (identical(_inputPathLocks[path], released.future)) {
+        _inputPathLocks.remove(path);
+      }
+      released.complete();
+    }
+  }
+
+  /// Batches reserve shared picker copies in sorted order to avoid deadlocks.
+  Future<T> withInputStoragePathsLock<T>(
+      Iterable<String?> paths, Future<T> Function() action) {
+    final ordered = paths
+        .whereType<String>()
+        .where((path) => path.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    Future<T> acquire(int index) => index == ordered.length
+        ? action()
+        : withInputStoragePathLock(ordered[index], () => acquire(index + 1));
+    return acquire(0);
+  }
+
+  bool referencesInputStoragePath(String path) =>
+      mounted &&
+      (state.any((entry) => entry.inputStoragePath == path) ||
+          (_pendingInputRegistrations[path] ?? 0) > 0 ||
+          _pendingInputRemovals.values
+              .any((entry) => entry.inputStoragePath == path));
+
+  /// Release copies only after their owning records were durably removed.
+  /// Bulk history cleanup uses the same locks and last-reference checks.
+  Future<void> cleanupInputStoragePaths(Iterable<String?> paths) async {
+    final uniquePaths =
+        paths.whereType<String>().where((path) => path.isNotEmpty).toSet();
+    for (final path in uniquePaths) {
+      if (!mounted || referencesInputStoragePath(path)) continue;
+      await withInputStoragePathLock(path, () async {
+        if (!mounted || referencesInputStoragePath(path)) return;
+        _deletingInputPaths.add(path);
+        try {
+          await AttachmentStorage.deleteFile(path);
+        } catch (error) {
+          debugPrint('Failed to clean up flow input $path: $error');
+        } finally {
+          _deletingInputPaths.remove(path);
+        }
+      });
+    }
+  }
+
   Timer? _persistTimer;
+  Completer<void>? _removalBarrier;
 
   List<TaskFlowExecution> get executions => state;
 
   TaskFlowExecution? execution(String id) =>
       state.where((e) => e.id == id).firstOrNull;
 
+  /// Serialize changes whose disk snapshots must exclude rejected or removed
+  /// executions. Durable removal uses this same queue as registration.
+  Future<T> serializeExecutionMutation<T>(Future<T> Function() action) {
+    final operation = _registrationQueue.then((_) => action());
+    _registrationQueue = operation.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {},
+    );
+    return operation;
+  }
+
   /// One atomic submission snapshot contains every input and placeholder.
   Future<bool> addExecutions(List<TaskFlowExecution> executions) {
-    state = [...executions.reversed, ...state];
-    return persist();
+    if (executions
+        .any((entry) => _deletingInputPaths.contains(entry.inputStoragePath))) {
+      throw StateError('输入文件正在删除，请重新选择文件');
+    }
+    final submitted = List<TaskFlowExecution>.of(executions);
+    // Queue publication can wait behind another durable registration. Reserve
+    // picker copies now so removal cleanup sees these future owners as well.
+    final reservedPaths = submitted
+        .map((entry) => entry.inputStoragePath)
+        .whereType<String>()
+        .where((path) => path.isNotEmpty)
+        .toSet();
+    for (final path in reservedPaths) {
+      _pendingInputRegistrations.update(path, (count) => count + 1,
+          ifAbsent: () => 1);
+    }
+    return serializeExecutionMutation(() async {
+      try {
+        if (!mounted) return false;
+        final barrier = Completer<void>();
+        _registrationBarrier = barrier;
+        var saved = false;
+        try {
+          state = [...submitted.reversed, ...state];
+          saved = await runZoned<Future<bool>>(
+            persist,
+            zoneValues: {_registrationWriteZone: true},
+          );
+          return saved;
+        } finally {
+          if (!saved) {
+            final ids = submitted.map((entry) => entry.id).toSet();
+            if (mounted) {
+              state = state.where((entry) => !ids.contains(entry.id)).toList();
+            } else {
+              // The disposal snapshot owns media references as well as
+              // progress. Rejected submissions cannot enter its final flush.
+              _disposedSnapshot = _disposedSnapshot
+                  ?.where((entry) => !ids.contains(entry.id))
+                  .toList();
+            }
+          }
+          _registrationBarrier = null;
+          barrier.complete();
+        }
+      } finally {
+        for (final path in reservedPaths) {
+          final count = _pendingInputRegistrations[path]!;
+          if (count == 1) {
+            _pendingInputRegistrations.remove(path);
+          } else {
+            _pendingInputRegistrations[path] = count - 1;
+          }
+        }
+      }
+    });
   }
 
   String addExecution(
@@ -82,13 +226,24 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
       required String flowName,
       List<FlowSubTask> subTasks = const [],
       String inputText = '',
-      int inputDurationSec = 0}) {
+      int inputDurationSec = 0,
+      String? inputMimeType,
+      IOType? inputType,
+      String? inputFileName,
+      String? inputStoragePath}) {
+    if (_deletingInputPaths.contains(inputStoragePath)) {
+      throw StateError('输入文件正在删除，请重新选择文件');
+    }
     final entry = TaskFlowExecution(
         flowId: flowId,
         flowName: flowName,
         subTasks: subTasks,
         inputText: inputText,
-        inputDurationSec: inputDurationSec);
+        inputDurationSec: inputDurationSec,
+        inputMimeType: inputMimeType,
+        inputType: inputType,
+        inputFileName: inputFileName,
+        inputStoragePath: inputStoragePath);
     state = [entry, ...state];
     unawaited(persist());
     return entry.id;
@@ -288,15 +443,14 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
 
   /// Removing waiting records itself prevents dispatch, even without a UI
   /// cleanup callback. The service observes removals to cancel active work.
-  void removeExecution(String id) {
+  Future<void> removeExecution(String id) {
     if (!mounted) {
-      return;
+      return Future<void>.value();
     }
     final removed = execution(id);
+    if (removed == null) return Future<void>.value();
     state = state.where((e) => e.id != id).map((e) {
-      if (removed == null ||
-          removed.isTerminal ||
-          removed.batchId == null ||
+      if (removed.batchId == null ||
           e.batchId != removed.batchId ||
           e.isTerminal) {
         return e;
@@ -314,7 +468,85 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
                       outcome: FlowStepOutcome.cancelled))
               .toList());
     }).toList();
-    _debouncedPersist();
+    _pendingInputRemovals[id] = removed;
+    // Delete the copy only after the record removal has reached disk.
+    final write = persist();
+    final operation = _inputRemovalQueue.then((_) async {
+      final saved = await write;
+      if (!saved) {
+        if (mounted) {
+          state = [
+            removed.copyWith(
+                status: FlowExecutionStatus.interrupted,
+                queued: false,
+                completedAt: DateTime.now(),
+                error: '删除记录未能保存，请重试',
+                subTasks: removed.subTasks
+                    .map((step) => step.outcome == FlowStepOutcome.succeeded ||
+                            step.outcome == FlowStepOutcome.failed
+                        ? step
+                        : step.copyWith(
+                            status: TaskStatus.paused,
+                            outcome: FlowStepOutcome.interrupted))
+                    .toList()),
+            ...state
+          ];
+          await persist();
+        }
+        _pendingInputRemovals.remove(id);
+        return;
+      }
+      _pendingInputRemovals.remove(id);
+      await cleanupInputStoragePaths([removed.inputStoragePath]);
+    });
+    _inputRemovalQueue = operation.catchError((Object error, StackTrace stack) {
+      debugPrint('Failed to clean up removed flow input: $error');
+    });
+    return operation;
+  }
+
+  /// Save removals before publishing them to listeners. Failed writes leave
+  /// the records visible and keep the last durable cancellation state intact.
+  Future<bool> removeExecutionsPersisted(Iterable<String> ids) async {
+    final removedIds = ids.toSet();
+    final inputPaths = <String?>[];
+    final saved = await serializeExecutionMutation(() async {
+      if (!mounted) return false;
+      final removed = state.where((e) => removedIds.contains(e.id)).toList();
+      if (removed.isEmpty) return true;
+      if (removed.any((e) => !e.isTerminal)) {
+        throw StateError('任务流取消后仍在运行');
+      }
+
+      final gate = Completer<void>();
+      _removalBarrier = gate;
+      _persistTimer?.cancel();
+      _persistTimer = null;
+      try {
+        final proposed =
+            state.where((e) => !removedIds.contains(e.id)).toList();
+        if (!await persistSnapshot(proposed)) return false;
+        if (mounted) {
+          // Preserve records added while the disk write was in progress.
+          state = state.where((e) => !removedIds.contains(e.id)).toList();
+        } else {
+          // A final flush waiting behind this removal owns the disposal
+          // snapshot. Successful removals must stay absent from that flush.
+          _disposedSnapshot = _disposedSnapshot
+              ?.where((e) => !removedIds.contains(e.id))
+              .toList();
+        }
+        inputPaths.addAll(removed.map((entry) => entry.inputStoragePath));
+        return true;
+      } finally {
+        _removalBarrier = null;
+        gate.complete();
+      }
+    });
+    // A retry can hold a picker-file lock while awaiting registration. Release
+    // the mutation queue before taking those same locks for input cleanup.
+    if (saved) await cleanupInputStoragePaths(inputPaths);
+    return saved;
   }
 
   void setExecutionQueued(String id, bool queued) => _update(
@@ -332,8 +564,24 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
 
   @override
   Future<bool> persist() {
+    final removalBarrier = _removalBarrier;
+    if (removalBarrier != null) {
+      return removalBarrier.future.then((_) => persist());
+    }
     _persistTimer?.cancel();
     _persistTimer = null;
+    final barrier = _registrationBarrier;
+    if (barrier != null && Zone.current[_registrationWriteZone] != true) {
+      return barrier.future.then((_) => persist());
+    }
+    if (!mounted) {
+      final snapshot = _disposedSnapshot;
+      if (snapshot == null) return Future.value(false);
+      // A registration override may reach this point in its own write zone.
+      // Deduplicate only the final flush after that registration settles.
+      if (barrier != null) return super.persistSnapshot(snapshot);
+      return _disposedPersistence ??= super.persistSnapshot(snapshot);
+    }
     return super.persist();
   }
 
@@ -348,12 +596,17 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
           completedAt: DateTime.now(),
           error: '应用退出时执行中断，可从已保存的步骤继续',
           subTasks: e.subTasks
-              .map((st) => [FlowStepOutcome.running, FlowStepOutcome.paused]
-                      .contains(st.outcome)
-                  ? st.copyWith(
-                      status: TaskStatus.paused,
-                      outcome: FlowStepOutcome.interrupted)
-                  : st)
+              .map((st) => switch (st.outcome) {
+                    FlowStepOutcome.running ||
+                    FlowStepOutcome.paused =>
+                      st.copyWith(
+                          status: TaskStatus.paused,
+                          outcome: FlowStepOutcome.interrupted),
+                    FlowStepOutcome.pending => st.copyWith(
+                        status: TaskStatus.paused,
+                        outcome: FlowStepOutcome.skipped),
+                    _ => st,
+                  })
               .toList());
     }).toList();
     await persist();
@@ -362,7 +615,12 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
 
   @override
   void dispose() {
-    if (_persistTimer != null) unawaited(persist());
+    _disposedSnapshot = List<TaskFlowExecution>.of(state);
+    if (_persistTimer != null ||
+        _registrationBarrier != null ||
+        _removalBarrier != null) {
+      unawaited(persist());
+    }
     super.dispose();
   }
 }

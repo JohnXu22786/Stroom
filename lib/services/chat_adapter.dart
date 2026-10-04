@@ -10,6 +10,7 @@ import '../models/mcp.dart';
 import '../models/tool_call.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
+import '../utils/provider_models.dart' show resolveProviderModel;
 import 'chat_protocol.dart';
 import 'chat_service.dart';
 import 'http_tool_service.dart';
@@ -194,7 +195,7 @@ class ChatAdapter {
   /// Creates (or returns an existing) [ChatService] for the given
   /// conversation. Each conversation gets an independent HTTP connection,
   /// enabling concurrent streaming across multiple conversations.
-  /// Returns null if the adapter hasn't been configured yet.
+  /// Returns null when no requested or cached model can be resolved.
   ///
   /// When [assistant] is provided (with [entriesState]), the service is
   /// built from the assistant's bound model (its `modelId`) and carries
@@ -205,11 +206,39 @@ class ChatAdapter {
   /// fresh session where the chat page was never opened. If the
   /// assistant's model cannot be resolved, it falls back to the global
   /// config (still applying the assistant's prompt/settings).
+  /// An explicit [modelReference] selects exact local config/model IDs from
+  /// [entriesState], independently of the global cache. An unresolved explicit
+  /// reference cannot fall back to another model.
   ChatService? getOrCreateService(
     String convId, {
     Assistant? assistant,
     ProviderEntriesState? entriesState,
+    Map<String, String>? modelReference,
   }) {
+    if (modelReference != null) {
+      final selected = entriesState == null
+          ? null
+          : resolveProviderModel(entriesState, 'llm', modelReference);
+      if (selected == null) return null;
+      final config = selected.config;
+      final model = selected.model;
+      final endpointType =
+          effectiveEndpointType(model.endpointType, config.endpointType);
+      return _activeServices.putIfAbsent(
+          convId,
+          () => _buildService(
+                createChatProviderFromConfig(
+                  providerName: config.providerName,
+                  baseUrl: config.host,
+                  apiKey: config.key,
+                  endpointType: endpointType,
+                ),
+                model,
+                config,
+                endpointType,
+                assistant: assistant,
+              ));
+    }
     if (assistant != null && entriesState != null) {
       // The assistant editor stores the default model as a DISPLAY name
       // (Assistant.defaultModelName) plus its absolute identity

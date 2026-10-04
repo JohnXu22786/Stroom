@@ -175,22 +175,36 @@ class JsHookScript {
 
         // Check current src
         var src = el.currentSrc || el.src || '';
-        if (src) {
-          sendMediaUrl(src, {
+        var mediaUrls = [
+          src,
+          el.getAttribute('data-src'),
+          el.getAttribute('data-url')
+        ];
+        mediaUrls.forEach(function(mediaUrl) {
+          if (!mediaUrl) return;
+          sendMediaUrl(mediaUrl, {
             method: 'GET',
             mimeType: el.tagName === 'VIDEO' ? 'video/*' : 'audio/*',
             initiator: PAGE_URL
           });
-        }
+        });
 
         // Check <source> children
         el.querySelectorAll('source').forEach(function(source) {
-          if (source.src && !source._catCatchScanned) {
+          if (!source._catCatchScanned) {
             source._catCatchScanned = true;
-            sendMediaUrl(source.src, {
-              method: 'GET',
-              mimeType: source.type || (el.tagName === 'VIDEO' ? 'video/*' : 'audio/*'),
-              initiator: PAGE_URL
+            var sourceUrls = [
+              source.src,
+              source.getAttribute('data-src'),
+              source.getAttribute('data-url')
+            ];
+            sourceUrls.forEach(function(sourceUrl) {
+              if (!sourceUrl) return;
+              sendMediaUrl(sourceUrl, {
+                method: 'GET',
+                mimeType: source.type || (el.tagName === 'VIDEO' ? 'video/*' : 'audio/*'),
+                initiator: PAGE_URL
+              });
             });
           }
         });

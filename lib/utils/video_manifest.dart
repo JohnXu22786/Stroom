@@ -151,7 +151,8 @@ class VideoManifest {
 
   static Future<List<VideoRecord>> loadRecords() => _ops.loadRecords();
   static Future<void> addRecord(VideoRecord record) => _ops.addRecord(record);
-  static Future<void> deleteRecord(String id) => _ops.deleteRecord(id);
+  static Future<void> deleteRecord(String id, {bool preserveFiles = false}) =>
+      _ops.deleteRecord(id, preserveFiles: preserveFiles);
   static Future<void> deleteRecords(List<String> ids) =>
       _ops.deleteRecords(ids);
   static Future<void> updateRecord(VideoRecord updated) =>

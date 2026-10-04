@@ -260,6 +260,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   @override
   void dispose() {
+    _disposedSnapshot = List.of(state);
     _iosSyncTimer?.cancel();
     _iosSyncTimer = null;
     super.dispose();
@@ -407,6 +408,38 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     _syncIosContinuedTask();
   }
 
+  /// Save removals before publishing them; absent IDs also retry disk cleanup.
+  Future<bool> removeTasksPersisted(Iterable<String> ids) async {
+    while (_removalBarrier != null) {
+      await _removalBarrier!.future;
+    }
+    if (!mounted) return false;
+    final removedIds = ids.toSet();
+    if (removedIds.isEmpty) return true;
+
+    final gate = Completer<void>();
+    _removalBarrier = gate;
+    try {
+      final proposed = state.where((t) => !removedIds.contains(t.id)).toList();
+      if (!await _writeSnapshot(proposed)) return false;
+      if (mounted) {
+        state = state.where((t) => !removedIds.contains(t.id)).toList();
+        _syncIosContinuedTask();
+      }
+      if (!mounted) {
+        // Deferred ordinary writes own this snapshot after disposal. Only a
+        // successful removal may remove these IDs from its final flush.
+        _disposedSnapshot = _disposedSnapshot
+            ?.where((task) => !removedIds.contains(task.id))
+            .toList();
+      }
+      return true;
+    } finally {
+      _removalBarrier = null;
+      gate.complete();
+    }
+  }
+
   /// Update the retry data for a task (used to set retry data after
   /// computing it asynchronously via isolate).
   void setRetryData(String taskId, Map<String, dynamic>? retryData) {
@@ -540,24 +573,44 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// 写入链：保证多次 _persistTasks 按调用顺序落盘，避免并发写入
   /// 交错导致旧快照覆盖新快照（步骤更新非常频繁，竞态窗口真实存在）。
   Future<void>? _pendingWrite;
+  Completer<void>? _removalBarrier;
+  List<BackgroundTask>? _disposedSnapshot;
+  Future<void>? _disposedPersistence;
+
+  /// Wait for queued task writes before releasing their storage directory.
+  Future<void> get pendingPersistence => _pendingWrite ?? Future<void>.value();
 
   Future<void> _persistTasks() {
+    final barrier = _removalBarrier;
+    if (barrier != null) return barrier.future.then((_) => _persistTasks());
+    if (!mounted) {
+      final snapshot = _disposedSnapshot;
+      if (snapshot == null) return Future<void>.value();
+      return _disposedPersistence ??= _writeSnapshot(snapshot).then((_) {});
+    }
+    return _writeSnapshot(state).then((_) {});
+  }
+
+  Future<bool> _writeSnapshot(List<BackgroundTask> snapshot) {
     // 在进入异步写入前捕获当前状态的完整快照。
-    final snapshot = state.map((t) => t.toMap()).toList();
+    final data = snapshot.map((t) => t.toMap()).toList();
     // 同样在调用时捕获持久化目录覆盖值：写入链可能延迟到调用之后
     // 才真正执行，若此时再解析目录，测试 teardown 已重置覆盖值，
     // 残留写入会落到共享的正式目录（跨测试污染）。
     final dirOverride = debugStorageDirectoryOverride;
     // 串行化写入：每次写入排在上一次写入完成之后。
-    _pendingWrite = (_pendingWrite ?? Future<void>.value()).then((_) async {
+    final write = (_pendingWrite ?? Future<void>.value()).then((_) async {
       try {
         final file = await _tasksFile(dirOverride);
-        await _writeTasksFile(file, jsonEncode(snapshot));
+        await _writeTasksFile(file, jsonEncode(data));
+        return true;
       } catch (e) {
         debugPrint('[BackgroundTaskNotifier] Failed to persist tasks: $e');
+        return false;
       }
     });
-    return _pendingWrite!;
+    _pendingWrite = write.then<void>((_) {});
+    return write;
   }
 
   /// 原子写入任务文件（委托 [AtomicFile]：写临时文件 + rename 替换）。
