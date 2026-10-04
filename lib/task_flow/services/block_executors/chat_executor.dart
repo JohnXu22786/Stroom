@@ -85,8 +85,7 @@ String flowChatEndpointType(
     );
   }
   if (assistant == null) return fallback;
-  final reference =
-      assistant.modelId ??
+  final reference = assistant.modelId ??
       assistant.defaultModelId ??
       assistant.defaultModelName;
   if (reference == null || reference.isEmpty) return fallback;
@@ -98,9 +97,8 @@ String flowChatEndpointType(
         : null,
     displayName: reference,
   );
-  final entry = providers.entries
-      .where((entry) => entry.type == 'llm')
-      .firstOrNull;
+  final entry =
+      providers.entries.where((entry) => entry.type == 'llm').firstOrNull;
   if (selected == null || entry == null) return fallback;
   final config = entry.configs[selected.configIndex];
   final model = config.models[selected.modelIndex];
@@ -191,8 +189,8 @@ Future<String?> flowChatImageSizeError(Uint8List bytes) async {
 /// substitutes an unreadable placeholder on decoding failure, which a flow
 /// must surface as an input error before starting the assistant exchange.
 bool flowChatIsTextFileName(String name) => textAttachmentExtensions.contains(
-  p.basename(name).split('.').last.toLowerCase(),
-);
+      p.basename(name).split('.').last.toLowerCase(),
+    );
 
 String? flowChatTextFileError(String name, List<int> bytes) {
   if (!flowChatIsTextFileName(name)) return null;
@@ -345,9 +343,8 @@ Future<String> executeChatBlock({
   final taskId = 'chat_${execId}_${flowSubTask.id}';
   final convId = 'flow_${execId}_${flowSubTask.id}';
   bool isLive() {
-    final execution = execNotifier.mounted
-        ? execNotifier.execution(execId)
-        : null;
+    final execution =
+        execNotifier.mounted ? execNotifier.execution(execId) : null;
     return execution != null && !execution.isTerminal;
   }
 
@@ -475,22 +472,22 @@ Future<String> executeChatBlock({
     // conversation — no prior context from other flows.
     final result = await chatManager
         .startStreaming(
-          text: userMessage.content,
-          convId: convId,
-          history: [userMessage],
-          tools: [], // No tool access in flow blocks
-          assistant: assistant,
-          entriesStateOverride: providerEntries,
-        )
+      text: userMessage.content,
+      convId: convId,
+      history: [userMessage],
+      tools: [], // No tool access in flow blocks
+      assistant: assistant,
+      entriesStateOverride: providerEntries,
+    )
         .timeout(
-          maxWait,
-          onTimeout: () {
-            // A stalled model stream must not hang the flow forever —
-            // cancel the stream and surface the failure like any other.
-            chatManager.cancel(convId);
-            return const StreamResult(history: [], cancelled: true);
-          },
-        );
+      maxWait,
+      onTimeout: () {
+        // A stalled model stream must not hang the flow forever —
+        // cancel the stream and surface the failure like any other.
+        chatManager.cancel(convId);
+        return const StreamResult(history: [], cancelled: true);
+      },
+    );
 
     if (!isLive()) await stopInactiveExecution();
 

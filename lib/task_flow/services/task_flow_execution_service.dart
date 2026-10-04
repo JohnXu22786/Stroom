@@ -117,13 +117,16 @@ Future<FlowPayload> catCatchOutputPayload(String path) async {
     '.mov' => type == IOType.audio ? 'audio/quicktime' : 'video/quicktime',
     '.webm' || '.weba' => type == IOType.audio ? 'audio/webm' : 'video/webm',
     '.mkv' ||
-    '.mka' => type == IOType.audio ? 'audio/x-matroska' : 'video/x-matroska',
+    '.mka' =>
+      type == IOType.audio ? 'audio/x-matroska' : 'video/x-matroska',
     '.ogg' ||
     '.ogv' ||
-    '.opus' => type == IOType.audio ? 'audio/ogg' : 'video/ogg',
+    '.opus' =>
+      type == IOType.audio ? 'audio/ogg' : 'video/ogg',
     '.avi' => type == IOType.audio ? 'audio/x-msvideo' : 'video/x-msvideo',
     '.flv' => type == IOType.audio ? 'audio/x-flv' : 'video/x-flv',
-    '.mpeg' || '.mpg' =>
+    '.mpeg' ||
+    '.mpg' =>
       type == IOType.audio ? 'audio/x-mpeg-program-stream' : 'video/mpeg',
     _ => null,
   };
@@ -196,8 +199,7 @@ class TaskFlowExecutionService {
     if (task == null || task.status != catcatch.TaskStatus.running) {
       return null;
     }
-    final awaitingSelection =
-        task.selectedMedia == null &&
+    final awaitingSelection = task.selectedMedia == null &&
         task.detectedMedia.length > 1 &&
         task.steps.any(
           (step) =>
@@ -224,8 +226,7 @@ class TaskFlowExecutionService {
 
   void _releaseManualCatCatchSlot(String executionId, String taskId) {
     if (_manualCatCatchActions.contains(taskId)) return;
-    final waiting =
-        _manualCatCatchExecution(taskId, true) ??
+    final waiting = _manualCatCatchExecution(taskId, true) ??
         _manualCatCatchExecution(taskId, false);
     if (waiting?.id != executionId) return;
     _manualCatCatchWaits[taskId] = executionId;
@@ -429,11 +430,10 @@ class TaskFlowExecutionService {
     if (_disposed) {
       return;
     }
-    final waiting =
-        _notifier.executions
-            .where((e) => e.status == FlowExecutionStatus.waiting)
-            .toList()
-          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final waiting = _notifier.executions
+        .where((e) => e.status == FlowExecutionStatus.waiting)
+        .toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final batches = <String, List<TaskFlowExecution>>{};
     for (final e in waiting) {
       if (e.snapshot == null) {
@@ -523,17 +523,15 @@ class TaskFlowExecutionService {
       inputs,
       providers: snapshot.resolveProviders(_ref.read(providerEntriesProvider)),
       assistants: snapshot.resolveAssistants(_ref.read(assistantProvider)),
-      fallbackChatEndpointType: _ref
-          .read(chatStreamManagerProvider)
-          .adapter
-          .endpointType,
+      fallbackChatEndpointType:
+          _ref.read(chatStreamManagerProvider).adapter.endpointType,
     );
     // The test-only block runner bypasses ChatAdapter; production chat blocks
     // need a captured endpoint. The adapter has no implicit first-model
     // fallback when an assistant has no binding or usable legacy name.
     if (_ref.read(taskFlowBlockRunnerProvider) == null) {
-      final selected = (snapshot.toMap()['chatModels'] as List? ?? [])
-          .cast<Map>();
+      final selected =
+          (snapshot.toMap()['chatModels'] as List? ?? []).cast<Map>();
       final blocks = snapshot.flow.blocks;
       for (var index = 0; index < blocks.length; index++) {
         final block = blocks[index];
@@ -611,8 +609,7 @@ class TaskFlowExecutionService {
       _resumePending[id] = revision;
       try {
         final activeType = _activeBlockTypes[id];
-        final awaitingManualChoice =
-            activeType == BlockType.catcatch &&
+        final awaitingManualChoice = activeType == BlockType.catcatch &&
             _manualCatCatchWaits.containsValue(id);
         if ((activeType == BlockType.catcatch || activeType == BlockType.tts) &&
             !awaitingManualChoice &&
@@ -724,10 +721,8 @@ class TaskFlowExecutionService {
           _ref.read(assistantProvider),
           blocks: remaining,
         ),
-        fallbackChatEndpointType: _ref
-            .read(chatStreamManagerProvider)
-            .adapter
-            .endpointType,
+        fallbackChatEndpointType:
+            _ref.read(chatStreamManagerProvider).adapter.endpointType,
       );
       current = _currentControl(id, revision);
       if (current == null) return;
@@ -827,9 +822,7 @@ class TaskFlowExecutionService {
           _ref.read(catcatchTasksProvider.notifier).resumeTask(step.subTaskId);
         case 'synthesis':
           final model = synthesis[step.id]!;
-          _ref
-              .read(taskListProvider.notifier)
-              .resumeTask(
+          _ref.read(taskListProvider.notifier).resumeTask(
                 step.subTaskId,
                 providerConfig: model.config,
                 modelConfig: model.model,
@@ -1110,8 +1103,7 @@ class TaskFlowExecutionService {
         ? _ref.read(chatStreamManagerProvider)
         : null;
     _stopActions[execId] = (e) {
-      final realId =
-          e.subTasks
+      final realId = e.subTasks
               .where((s) => s.id == flowSubTask.id)
               .firstOrNull
               ?.subTaskId ??
@@ -1315,10 +1307,8 @@ class TaskFlowExecutionService {
               chatAssistant,
               providerEntries,
               modelReference: modelReference,
-              fallback: _ref
-                  .read(chatStreamManagerProvider)
-                  .adapter
-                  .endpointType,
+              fallback:
+                  _ref.read(chatStreamManagerProvider).adapter.endpointType,
             ),
           ),
           def.outputType,

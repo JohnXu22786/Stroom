@@ -13,8 +13,8 @@ import 'persistable_notifier.dart';
 /// Provider for tracking task flow executions (for the unified task list).
 final taskFlowExecutionsProvider =
     StateNotifierProvider<TaskFlowExecutionNotifier, List<TaskFlowExecution>>(
-      (ref) => TaskFlowExecutionNotifier(),
-    );
+  (ref) => TaskFlowExecutionNotifier(),
+);
 
 /// Startup sets this to restoring before loading any task lists. Directly
 /// constructed pages default to ready; they have no startup restore window.
@@ -22,8 +22,8 @@ enum FlowExecutionRestoreStatus { ready, restoring, failed }
 
 final taskFlowExecutionRestoreStatusProvider =
     StateProvider<FlowExecutionRestoreStatus>(
-      (ref) => FlowExecutionRestoreStatus.ready,
-    );
+  (ref) => FlowExecutionRestoreStatus.ready,
+);
 
 class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     with PersistableNotifier<List<TaskFlowExecution>> {
@@ -105,13 +105,12 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     Iterable<String?> paths,
     Future<T> Function() action,
   ) {
-    final ordered =
-        paths
-            .whereType<String>()
-            .where((path) => path.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
+    final ordered = paths
+        .whereType<String>()
+        .where((path) => path.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
     Future<T> acquire(int index) => index == ordered.length
         ? action()
         : withInputStoragePathLock(ordered[index], () => acquire(index + 1));
@@ -129,10 +128,8 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   /// Release copies only after their owning records were durably removed.
   /// Bulk history cleanup uses the same locks and last-reference checks.
   Future<void> cleanupInputStoragePaths(Iterable<String?> paths) async {
-    final uniquePaths = paths
-        .whereType<String>()
-        .where((path) => path.isNotEmpty)
-        .toSet();
+    final uniquePaths =
+        paths.whereType<String>().where((path) => path.isNotEmpty).toSet();
     for (final path in uniquePaths) {
       if (!mounted || referencesInputStoragePath(path)) continue;
       await withInputStoragePathLock(path, () async {
@@ -279,28 +276,30 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   }
 
   void addSubTask(String executionId, FlowSubTask subTask) => _update(
-    executionId,
-    (e) => e.isTerminal ? e : e.copyWith(subTasks: [...e.subTasks, subTask]),
-  );
+        executionId,
+        (e) =>
+            e.isTerminal ? e : e.copyWith(subTasks: [...e.subTasks, subTask]),
+      );
 
   void updateSubTaskId(
     String executionId,
     String subTaskId,
     String newSubTaskId,
-  ) => _update(
-    executionId,
-    (e) => e.isTerminal
-        ? e
-        : e.copyWith(
-            subTasks: e.subTasks
-                .map(
-                  (st) => st.id == subTaskId
-                      ? st.copyWith(subTaskId: newSubTaskId)
-                      : st,
-                )
-                .toList(),
-          ),
-  );
+  ) =>
+      _update(
+        executionId,
+        (e) => e.isTerminal
+            ? e
+            : e.copyWith(
+                subTasks: e.subTasks
+                    .map(
+                      (st) => st.id == subTaskId
+                          ? st.copyWith(subTaskId: newSubTaskId)
+                          : st,
+                    )
+                    .toList(),
+              ),
+      );
 
   /// Child callbacks cannot reopen a terminal execution. The service owns the
   /// final lifecycle; a completed child is not a durable checkpoint yet.
@@ -335,30 +334,30 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     String id,
     FlowExecutionStatus status, {
     String? error,
-  }) => _update(
-    id,
-    (e) => e.copyWith(
-      status: status,
-      error: error,
-      clearError: error == null,
-      queued: false,
-      clearCompletedAt: ![
-        FlowExecutionStatus.completed,
-        FlowExecutionStatus.failed,
-        FlowExecutionStatus.cancelled,
-        FlowExecutionStatus.interrupted,
-      ].contains(status),
-      completedAt:
-          [
+  }) =>
+      _update(
+        id,
+        (e) => e.copyWith(
+          status: status,
+          error: error,
+          clearError: error == null,
+          queued: false,
+          clearCompletedAt: ![
+            FlowExecutionStatus.completed,
+            FlowExecutionStatus.failed,
+            FlowExecutionStatus.cancelled,
+            FlowExecutionStatus.interrupted,
+          ].contains(status),
+          completedAt: [
             FlowExecutionStatus.completed,
             FlowExecutionStatus.failed,
             FlowExecutionStatus.cancelled,
             FlowExecutionStatus.interrupted,
           ].contains(status)
-          ? DateTime.now()
-          : null,
-    ),
-  );
+              ? DateTime.now()
+              : null,
+        ),
+      );
 
   /// Save the output before the dispatcher is allowed to start the next step.
   Future<bool> saveStepResult(String id, String stepId, FlowPayload result) {
@@ -384,74 +383,73 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   }
 
   void prepareResume(String id) => _update(id, (e) {
-    var prefix = true;
-    final steps = e.subTasks.map((st) {
-      if (prefix &&
-          st.outcome == FlowStepOutcome.succeeded &&
-          st.result != null) {
-        return st;
-      }
-      prefix = false;
-      return st.copyWith(
-        subTaskId: 'pending_${st.blockTypeKey}_${st.id}',
-        status: TaskStatus.waiting,
-        outcome: FlowStepOutcome.pending,
-        clearResult: true,
-      );
-    }).toList();
-    return e.copyWith(
-      status: FlowExecutionStatus.waiting,
-      clearError: true,
-      clearCompletedAt: true,
-      subTasks: steps,
-    );
-  });
+        var prefix = true;
+        final steps = e.subTasks.map((st) {
+          if (prefix &&
+              st.outcome == FlowStepOutcome.succeeded &&
+              st.result != null) {
+            return st;
+          }
+          prefix = false;
+          return st.copyWith(
+            subTaskId: 'pending_${st.blockTypeKey}_${st.id}',
+            status: TaskStatus.waiting,
+            outcome: FlowStepOutcome.pending,
+            clearResult: true,
+          );
+        }).toList();
+        return e.copyWith(
+          status: FlowExecutionStatus.waiting,
+          clearError: true,
+          clearCompletedAt: true,
+          subTasks: steps,
+        );
+      });
 
   void completeExecution(String id) => _update(id, (e) {
-    if (e.isTerminal || e.status == FlowExecutionStatus.paused) {
-      return e;
-    }
-    if (e.subTasks.any((st) => st.outcome == FlowStepOutcome.failed)) {
-      return e.copyWith(
-        status: FlowExecutionStatus.failed,
-        completedAt: DateTime.now(),
-        subTasks: e.subTasks
-            .map(
-              (st) =>
-                  st.outcome == FlowStepOutcome.succeeded ||
-                      st.outcome == FlowStepOutcome.failed
-                  ? st
-                  : st.copyWith(
-                      status: TaskStatus.paused,
-                      outcome: st.outcome == FlowStepOutcome.pending
-                          ? FlowStepOutcome.skipped
-                          : FlowStepOutcome.interrupted,
-                    ),
-            )
-            .toList(),
-      );
-    }
-    if (e.subTasks.any((st) => st.outcome != FlowStepOutcome.succeeded)) {
-      return e;
-    }
-    return e.copyWith(
-      status: FlowExecutionStatus.completed,
-      completedAt: DateTime.now(),
-    );
-  });
+        if (e.isTerminal || e.status == FlowExecutionStatus.paused) {
+          return e;
+        }
+        if (e.subTasks.any((st) => st.outcome == FlowStepOutcome.failed)) {
+          return e.copyWith(
+            status: FlowExecutionStatus.failed,
+            completedAt: DateTime.now(),
+            subTasks: e.subTasks
+                .map(
+                  (st) => st.outcome == FlowStepOutcome.succeeded ||
+                          st.outcome == FlowStepOutcome.failed
+                      ? st
+                      : st.copyWith(
+                          status: TaskStatus.paused,
+                          outcome: st.outcome == FlowStepOutcome.pending
+                              ? FlowStepOutcome.skipped
+                              : FlowStepOutcome.interrupted,
+                        ),
+                )
+                .toList(),
+          );
+        }
+        if (e.subTasks.any((st) => st.outcome != FlowStepOutcome.succeeded)) {
+          return e;
+        }
+        return e.copyWith(
+          status: FlowExecutionStatus.completed,
+          completedAt: DateTime.now(),
+        );
+      });
 
   void failExecution(String id, {String? error}) => _finish(
-    id,
-    FlowExecutionStatus.failed,
-    FlowStepOutcome.interrupted,
-    error: error,
-  );
+        id,
+        FlowExecutionStatus.failed,
+        FlowStepOutcome.interrupted,
+        error: error,
+      );
   void interruptExecution(String id, {String? error}) => _finish(
-    id,
-    FlowExecutionStatus.interrupted,
-    FlowStepOutcome.interrupted,
-    error: error,
-  );
+        id,
+        FlowExecutionStatus.interrupted,
+        FlowStepOutcome.interrupted,
+        error: error,
+      );
   void cancelExecution(String id) =>
       _finish(id, FlowExecutionStatus.cancelled, FlowStepOutcome.cancelled);
 
@@ -460,33 +458,34 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     FlowExecutionStatus status,
     FlowStepOutcome activeOutcome, {
     String? error,
-  }) => _update(id, (e) {
-    if (e.isTerminal) {
-      return e.status == status && e.error == null && error != null
-          ? e.copyWith(error: error)
-          : e;
-    }
-    return e.copyWith(
-      status: status,
-      completedAt: DateTime.now(),
-      error: error,
-      queued: false,
-      subTasks: e.subTasks.map((st) {
-        if (st.outcome == FlowStepOutcome.succeeded ||
-            st.outcome == FlowStepOutcome.failed) {
-          return st;
+  }) =>
+      _update(id, (e) {
+        if (e.isTerminal) {
+          return e.status == status && e.error == null && error != null
+              ? e.copyWith(error: error)
+              : e;
         }
-        return st.copyWith(
-          status: TaskStatus.paused,
-          outcome: st.outcome == FlowStepOutcome.pending
-              ? (status == FlowExecutionStatus.cancelled
-                    ? FlowStepOutcome.cancelled
-                    : FlowStepOutcome.skipped)
-              : activeOutcome,
+        return e.copyWith(
+          status: status,
+          completedAt: DateTime.now(),
+          error: error,
+          queued: false,
+          subTasks: e.subTasks.map((st) {
+            if (st.outcome == FlowStepOutcome.succeeded ||
+                st.outcome == FlowStepOutcome.failed) {
+              return st;
+            }
+            return st.copyWith(
+              status: TaskStatus.paused,
+              outcome: st.outcome == FlowStepOutcome.pending
+                  ? (status == FlowExecutionStatus.cancelled
+                      ? FlowStepOutcome.cancelled
+                      : FlowStepOutcome.skipped)
+                  : activeOutcome,
+            );
+          }).toList(),
         );
-      }).toList(),
-    );
-  });
+      });
 
   /// Removing waiting records itself prevents dispatch, even without a UI
   /// cleanup callback. The service observes removals to cancel active work.
@@ -508,8 +507,7 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
         completedAt: DateTime.now(),
         subTasks: e.subTasks
             .map(
-              (st) =>
-                  st.outcome == FlowStepOutcome.succeeded ||
+              (st) => st.outcome == FlowStepOutcome.succeeded ||
                       st.outcome == FlowStepOutcome.failed
                   ? st
                   : st.copyWith(
@@ -535,8 +533,7 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
               error: '删除记录未能保存，请重试',
               subTasks: removed.subTasks
                   .map(
-                    (step) =>
-                        step.outcome == FlowStepOutcome.succeeded ||
+                    (step) => step.outcome == FlowStepOutcome.succeeded ||
                             step.outcome == FlowStepOutcome.failed
                         ? step
                         : step.copyWith(
@@ -563,14 +560,13 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   }
 
   void setExecutionQueued(String id, bool queued) => _update(
-    id,
-    (e) =>
-        e.isTerminal ||
-            e.status == FlowExecutionStatus.paused ||
-            e.queued == queued
-        ? e
-        : e.copyWith(queued: queued),
-  );
+        id,
+        (e) => e.isTerminal ||
+                e.status == FlowExecutionStatus.paused ||
+                e.queued == queued
+            ? e
+            : e.copyWith(queued: queued),
+      );
 
   void _debouncedPersist() {
     _persistTimer?.cancel();
@@ -610,14 +606,15 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
             .map(
               (st) => switch (st.outcome) {
                 FlowStepOutcome.running ||
-                FlowStepOutcome.paused => st.copyWith(
-                  status: TaskStatus.paused,
-                  outcome: FlowStepOutcome.interrupted,
-                ),
+                FlowStepOutcome.paused =>
+                  st.copyWith(
+                    status: TaskStatus.paused,
+                    outcome: FlowStepOutcome.interrupted,
+                  ),
                 FlowStepOutcome.pending => st.copyWith(
-                  status: TaskStatus.paused,
-                  outcome: FlowStepOutcome.skipped,
-                ),
+                    status: TaskStatus.paused,
+                    outcome: FlowStepOutcome.skipped,
+                  ),
                 _ => st,
               },
             )
