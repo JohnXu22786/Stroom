@@ -558,8 +558,7 @@ class BrowserCookieService {
   /// stripped for the URL; the raw [domain] is forwarded to the platform so
   /// the exact stored cookie is expired — genuine domain cookies keep their
   /// leading dot, host-only cookies are expired without a Domain attribute).
-  static Future<bool> deleteCookie(String domain, String name,
-      {String? path}) {
+  static Future<bool> deleteCookie(String domain, String name, {String? path}) {
     if (name.isEmpty) return Future.value(false);
     return _serializeRetentionOperation(() async {
       try {
