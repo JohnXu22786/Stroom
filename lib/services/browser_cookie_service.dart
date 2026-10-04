@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io' hide Cookie;
 
@@ -27,6 +29,11 @@ class BrowserCookieService {
   BrowserCookieService._();
 
   static const String _retentionKey = 'browser_cookie_retention';
+  // Keep pending callbacks rather than a completed Future tail, which can
+  // retain the caller's async zone across independent operations.
+  static final Queue<_QueuedRetentionOperation<dynamic>> _retentionOperations =
+      Queue();
+  static bool _isRunningRetentionOperation = false;
 
   /// The platform cookie facade used for all platform cookie operations.
   ///
@@ -133,6 +140,10 @@ class BrowserCookieService {
 
   /// Enables or disables cookie retention mode.
   static Future<void> setRetentionMode(bool enabled) async {
+    await _serializeRetentionOperation(() => _writeRetentionMode(enabled));
+  }
+
+  static Future<void> _writeRetentionMode(bool enabled) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_retentionKey, enabled);
@@ -143,10 +154,85 @@ class BrowserCookieService {
 
   /// Toggles the current retention mode and returns the new value.
   static Future<bool> toggleRetentionMode() async {
-    final current = await getRetentionMode();
-    final newValue = !current;
-    await setRetentionMode(newValue);
-    return newValue;
+    return _serializeRetentionOperation(() async {
+      final current = await getRetentionMode();
+      final newValue = !current;
+      await _writeRetentionMode(newValue);
+      return newValue;
+    });
+  }
+
+  /// Prepares the native cookie store before a newly created browser page
+  /// makes its first request. Retained cookies are restored when enabled;
+  /// otherwise both the native and persisted stores are cleared. Running this
+  /// on page creation also handles launches where the previous process did not
+  /// reach [handleBrowserClose]. On Web, where native cookie deletion is not
+  /// implemented, the persisted store is cleared and navigation remains usable.
+  static Future<bool> prepareForBrowserPageLoad() {
+    return _serializeRetentionOperation(() async {
+      if (await getRetentionMode()) {
+        await restoreCookiesFromFile();
+        return true;
+      } else {
+        if (kIsWeb) {
+          await clearPersistedCookies();
+          return true;
+        }
+        return _clearAllCookies();
+      }
+    });
+  }
+
+  /// Applies the final retention preference when the browser closes.
+  ///
+  /// Queuing this with preference writes ensures the final selected mode is
+  /// applied before cookies are persisted or cleared.
+  static Future<void> handleBrowserClose() {
+    return _serializeRetentionOperation(() async {
+      if (await getRetentionMode()) {
+        await _persistCookiesToFile();
+      } else {
+        await _clearAllCookies();
+      }
+    });
+  }
+
+  static Future<T> _serializeRetentionOperation<T>(
+      Future<T> Function() operation) {
+    final completer = Completer<T>();
+    _retentionOperations.add(_QueuedRetentionOperation(operation, completer));
+    if (!_isRunningRetentionOperation) {
+      _isRunningRetentionOperation = true;
+      _runNextRetentionOperation();
+    }
+    return completer.future;
+  }
+
+  static void _runNextRetentionOperation() {
+    if (_retentionOperations.isEmpty) {
+      _isRunningRetentionOperation = false;
+      return;
+    }
+
+    final queuedOperation = _retentionOperations.removeFirst();
+    Future<dynamic>.sync(queuedOperation.run).then<void>(
+      (value) {
+        if (_retentionOperations.isEmpty) {
+          _isRunningRetentionOperation = false;
+        } else {
+          _runNextRetentionOperation();
+        }
+        queuedOperation.completer.complete(value);
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (_retentionOperations.isEmpty) {
+          _isRunningRetentionOperation = false;
+        } else {
+          _runNextRetentionOperation();
+        }
+        queuedOperation.completer.completeError(error, stackTrace);
+      },
+    );
   }
 
   // ===========================================================================
@@ -185,7 +271,11 @@ class BrowserCookieService {
   /// sites stay deleted. The per-domain fallback replaces known root-path
   /// cookies for successfully queried hosts while preserving path-scoped
   /// cookies and cookies for failed or unvisited hosts.
-  static Future<void> persistCookiesToFile() async {
+  static Future<void> persistCookiesToFile() {
+    return _serializeRetentionOperation(_persistCookiesToFile);
+  }
+
+  static Future<void> _persistCookiesToFile() async {
     if (!await getRetentionMode()) return;
     try {
       final result = await _collectPlatformCookies();
@@ -315,28 +405,50 @@ class BrowserCookieService {
     return _groupAndSort(_mergeCookies(fileCookies, platformCookies));
   }
 
-  /// Enumerates cookies for every visited host (in parallel) and appends
-  /// them to [out]. Host-only cookies (whose platform `domain` is null) are
-  /// stamped with the visited host so they group, match and restore correctly.
-  /// Returns the hosts whose queries completed, including those with no cookies.
+  /// Enumerates cookies for every visited host and visited URL path (in
+  /// parallel) and appends them to [out]. HTTPS queries expose both secure
+  /// and non-secure cookies. Host-only cookies (whose platform `domain` is
+  /// null) are stamped with the visited host so they group, match and restore
+  /// correctly. Duplicate cookies returned for multiple paths are collapsed.
+  /// Returns hosts with at least one successful query, including hosts whose
+  /// successful queries returned no cookies.
   static Future<Set<String>> _collectPerDomainCookies(
       List<Map<String, dynamic>> out) async {
     final successfulHosts = <String>{};
     await Future.wait(_visitedDomains.map((host) async {
-      try {
-        final cookies =
-            await cookiePlatform.getCookies(url: WebUri('https://$host'));
-        final hostCookies = <Map<String, dynamic>>[];
-        for (final cookie in cookies) {
-          final map = _cookieToMap(cookie);
-          if (map['domain'] == null) map['domain'] = host;
-          hostCookies.add(map);
+      final queryUrls = <String>{'https://$host'};
+      for (final visitedUrl in _visitedUrls) {
+        final uri = Uri.tryParse(visitedUrl);
+        if (uri == null || uri.host != host) continue;
+
+        // The cookie API filters by URL path. Keep the visited path while
+        // using HTTPS so both secure and non-secure cookies are returned.
+        final httpsUri = uri.replace(scheme: 'https');
+        queryUrls.add(httpsUri.path == '/'
+            ? httpsUri.replace(path: '').toString()
+            : httpsUri.toString());
+      }
+
+      var querySucceeded = false;
+      final hostCookies = <Map<String, dynamic>>[];
+      await Future.wait(queryUrls.map((url) async {
+        try {
+          final cookies = await cookiePlatform.getCookies(url: WebUri(url));
+          querySucceeded = true;
+          for (final cookie in cookies) {
+            final map = _cookieToMap(cookie);
+            if (map['domain'] == null) map['domain'] = host;
+            hostCookies.add(map);
+          }
+        } catch (e) {
+          debugPrint(
+              'BrowserCookieService._collectPerDomainCookies: $url error: $e');
         }
-        out.addAll(hostCookies);
+      }));
+
+      if (querySucceeded) {
+        out.addAll(_mergeCookies(<Map<String, dynamic>>[], hostCookies));
         successfulHosts.add(host);
-      } catch (e) {
-        debugPrint(
-            'BrowserCookieService._collectPerDomainCookies: domain $host error: $e');
       }
     }));
     return successfulHosts;
@@ -357,7 +469,11 @@ class BrowserCookieService {
 
   /// Clears all cookies from both the platform CookieManager and the
   /// persisted local file.
-  static Future<bool> clearAllCookies() async {
+  static Future<bool> clearAllCookies() {
+    return _serializeRetentionOperation(_clearAllCookies);
+  }
+
+  static Future<bool> _clearAllCookies() async {
     try {
       await clearPersistedCookies();
       return await cookiePlatform.deleteAllCookies();
@@ -376,7 +492,11 @@ class BrowserCookieService {
   /// only expires cookies at the given path.
   /// Returns false when the platform cannot provide a complete cookie
   /// snapshot, since URL-filtered queries cannot prove every path was cleared.
-  static Future<bool> clearCookiesForDomain(String domain) async {
+  static Future<bool> clearCookiesForDomain(String domain) {
+    return _serializeRetentionOperation(() => _clearCookiesForDomain(domain));
+  }
+
+  static Future<bool> _clearCookiesForDomain(String domain) async {
     try {
       final cleanDomain = domain.startsWith('.') ? domain.substring(1) : domain;
       if (cleanDomain.isEmpty) return false;
@@ -446,37 +566,40 @@ class BrowserCookieService {
   /// stripped for the URL; the raw [domain] is forwarded to the platform so
   /// the exact stored cookie is expired — genuine domain cookies keep their
   /// leading dot, host-only cookies are expired without a Domain attribute).
-  static Future<bool> deleteCookie(String domain, String name,
-      {String? path}) async {
-    if (name.isEmpty) return false;
-    try {
-      // Also remove from persisted store
-      await _removeCookieFromFile(domain, name, path: path);
+  static Future<bool> deleteCookie(String domain, String name, {String? path}) {
+    if (name.isEmpty) return Future.value(false);
+    return _serializeRetentionOperation(() async {
+      try {
+        // Remove the persisted entry and native cookie in the same serialized
+        // operation so a concurrent snapshot cannot restore the deletion.
+        await _removeCookieFromFile(domain, name, path: path);
 
-      final cleanDomain = domain.startsWith('.') ? domain.substring(1) : domain;
-      if (cleanDomain.isEmpty) return false;
+        final cleanDomain =
+            domain.startsWith('.') ? domain.substring(1) : domain;
+        if (cleanDomain.isEmpty) return false;
 
-      final httpsUrl = WebUri('https://$cleanDomain');
-      final httpUrl = WebUri('http://$cleanDomain');
+        final httpsUrl = WebUri('https://$cleanDomain');
+        final httpUrl = WebUri('http://$cleanDomain');
 
-      final results = await Future.wait([
-        cookiePlatform.deleteCookie(
-            url: httpsUrl,
-            name: name,
-            path: path ?? '/',
-            domain: domain.startsWith('.') ? domain : null),
-        cookiePlatform.deleteCookie(
-            url: httpUrl,
-            name: name,
-            path: path ?? '/',
-            domain: domain.startsWith('.') ? domain : null),
-      ]);
+        final results = await Future.wait([
+          cookiePlatform.deleteCookie(
+              url: httpsUrl,
+              name: name,
+              path: path ?? '/',
+              domain: domain.startsWith('.') ? domain : null),
+          cookiePlatform.deleteCookie(
+              url: httpUrl,
+              name: name,
+              path: path ?? '/',
+              domain: domain.startsWith('.') ? domain : null),
+        ]);
 
-      return results.every((r) => r);
-    } catch (e) {
-      debugPrint('BrowserCookieService.deleteCookie error: $e');
-      return false;
-    }
+        return results.every((r) => r);
+      } catch (e) {
+        debugPrint('BrowserCookieService.deleteCookie error: $e');
+        return false;
+      }
+    });
   }
 
   // ===========================================================================
@@ -733,6 +856,13 @@ class BrowserCookieService {
         'persistCookiesRawForTest should only be called in test mode');
     _testCookies = List.from(cookies);
   }
+}
+
+class _QueuedRetentionOperation<T> {
+  const _QueuedRetentionOperation(this.run, this.completer);
+
+  final Future<T> Function() run;
+  final Completer<T> completer;
 }
 
 // ===========================================================================

@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:uuid/uuid.dart';
+import 'package:path/path.dart' as p;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../catcatch/models/media_kind.dart';
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../models/assistant.dart';
@@ -90,6 +92,41 @@ typedef FlowBlockRunner = Future<FlowPayload> Function(TaskFlowBlock block,
 @visibleForTesting
 final taskFlowBlockRunnerProvider = Provider<FlowBlockRunner?>((ref) => null);
 
+Future<FlowPayload> catCatchOutputPayload(String path) async {
+  // CatCatch has already checked the downloaded file. Probe its saved path
+  // again here so the payload cannot lose the verified kind when a container
+  // extension or MIME magic describes only the container, not its tracks.
+  final kind = await catCatchMediaKindFromPath(path);
+  final type = switch (kind) {
+    CatCatchMediaKind.audio => IOType.audio,
+    CatCatchMediaKind.video => IOType.video,
+    CatCatchMediaKind.other => IOType.file,
+  };
+  if (type == IOType.file) {
+    throw const FormatException('无法验证下载文件的音视频类型，请检查媒体文件');
+  }
+  final extension = p.extension(path).toLowerCase();
+  final mimeType = switch (extension) {
+    '.mp4' || '.m4a' => type == IOType.audio ? 'audio/mp4' : 'video/mp4',
+    '.mov' => type == IOType.audio ? 'audio/quicktime' : 'video/quicktime',
+    '.webm' || '.weba' => type == IOType.audio ? 'audio/webm' : 'video/webm',
+    '.mkv' ||
+    '.mka' =>
+      type == IOType.audio ? 'audio/x-matroska' : 'video/x-matroska',
+    '.ogg' ||
+    '.ogv' ||
+    '.opus' =>
+      type == IOType.audio ? 'audio/ogg' : 'video/ogg',
+    '.avi' => type == IOType.audio ? 'audio/x-msvideo' : 'video/x-msvideo',
+    '.flv' => type == IOType.audio ? 'audio/x-flv' : 'video/x-flv',
+    '.mpeg' ||
+    '.mpg' =>
+      type == IOType.audio ? 'audio/x-mpeg-program-stream' : 'video/mpeg',
+    _ => null,
+  };
+  return FlowPayload.fromValue(path, type, mimeType: mimeType);
+}
+
 class TaskFlowPersistenceException implements Exception {
   final String message;
   const TaskFlowPersistenceException(this.message);
@@ -105,6 +142,8 @@ class TaskFlowExecutionService {
   final Map<String, void Function(TaskFlowExecution)> _stopActions = {};
   final Map<String, CancelToken> _activeRequestCancelTokens = {};
   final Map<String, Future<void>> _workers = {};
+  final Map<String, Future<void>> _restoredBatchPredecessors = {};
+  final Map<String, Completer<void>> _restoredBatchBarriers = {};
   final Map<String, Completer<void>> _pauseGates = {};
   final Map<String, int> _resumePending = {};
   final Map<String, int> _controlRevisions = {};
@@ -244,7 +283,14 @@ class TaskFlowExecutionService {
   /// records. A process exit can never discard an input waiting in a batch.
   Future<List<String>> launchFlowMany(
       String flowId, List<FlowRunInput> inputs) async {
-    final flow = await _prepareFlow(flowId, inputs);
+    return _notifier.withInputStoragePathsLock(
+        inputs.map((input) => input.ownedStoragePath),
+        () => _launchFlowMany(flowId, inputs));
+  }
+
+  Future<List<String>> _launchFlowMany(
+      String flowId, List<FlowRunInput> inputs) async {
+    final flow = await _prepareFlow(flowId);
     final snapshot = FlowLaunchSnapshot.capture(
         flow, _ref.read(providerEntriesProvider), _ref.read(assistantProvider),
         selectedChatModel: _ref
@@ -260,8 +306,7 @@ class TaskFlowExecutionService {
     return _submit(snapshot, inputs);
   }
 
-  Future<TaskFlowDefinition> _prepareFlow(
-      String flowId, List<FlowRunInput> inputs) async {
+  Future<TaskFlowDefinition> _prepareFlow(String flowId) async {
     await _ref.read(providerEntriesProvider.notifier).ready;
     await _ref.read(assistantProvider.notifier).ready;
     final flow = _ref
@@ -274,11 +319,6 @@ class TaskFlowExecutionService {
     if (flow.blocks.any((b) => b.typeKey == BlockType.tts)) {
       await _ref.read(synthesisConfigProvider.notifier).ready;
     }
-    await validateTaskFlow(flow, inputs,
-        providers: _ref.read(providerEntriesProvider),
-        assistants: _ref.read(assistantProvider),
-        fallbackChatEndpointType:
-            _ref.read(chatStreamManagerProvider).adapter.endpointType);
     return flow;
   }
 
@@ -314,7 +354,12 @@ class TaskFlowExecutionService {
             subTasks: _steps(flow),
             inputText: entry.value.text,
             inputDurationSec: entry.value.durationSec,
-            inputMimeType: entry.value.mimeType))
+            inputMimeType: entry.value.mimeType,
+            inputType: flow.inputType,
+            inputFileName: entry.value.fileName,
+            inputStoragePath: FlowPayload.isFileType(flow.inputType)
+                ? entry.value.ownedStoragePath
+                : null))
         .toList();
     if (!await _notifier.addExecutions(records)) {
       for (final record in records) {
@@ -331,17 +376,37 @@ class TaskFlowExecutionService {
 
   /// Serialize inputs within a batch; scheduler still shares its weighted
   /// budget with independently submitted batches.
-  void _startBatch(List<String> ids) {
-    var previous = Future<void>.value();
+  void _startBatch(List<String> ids, {Future<void>? after}) {
+    var previous = after ?? Future<void>.value();
     for (final id in ids) {
-      if (_workers.containsKey(id)) {
+      final existing = _workers[id];
+      if (existing != null) {
+        previous = existing;
+        continue;
+      }
+      // A restored paused input keeps its batch position without reserving
+      // scheduler resources until it resumes or is cancelled.
+      if (_execution(id)?.status == FlowExecutionStatus.paused) {
+        _restoredBatchPredecessors.putIfAbsent(id, () => previous);
+        final barrier =
+            _restoredBatchBarriers.putIfAbsent(id, () => Completer<void>());
+        previous = previous.then((_) => barrier.future);
         continue;
       }
       final work = previous.then((_) => _runSaved(id));
       _workers[id] = work;
       previous = work;
-      unawaited(work.whenComplete(() => _workers.remove(id)));
+      unawaited(work.whenComplete(() {
+        _workers.remove(id);
+        _releaseRestoredBatchBarrier(id);
+      }));
     }
+  }
+
+  void _releaseRestoredBatchBarrier(String id) {
+    _restoredBatchPredecessors.remove(id);
+    final barrier = _restoredBatchBarriers.remove(id);
+    if (barrier != null && !barrier.isCompleted) barrier.complete();
   }
 
   Future<void> restorePendingExecutions() async {
@@ -355,13 +420,17 @@ class TaskFlowExecutionService {
       return;
     }
     final waiting = _notifier.executions
-        .where((e) => e.status == FlowExecutionStatus.waiting)
+        .where((e) =>
+            e.status == FlowExecutionStatus.waiting ||
+            e.status == FlowExecutionStatus.paused)
         .toList()
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final batches = <String, List<TaskFlowExecution>>{};
     for (final e in waiting) {
       if (e.snapshot == null) {
-        _notifier.interruptExecution(e.id, error: '旧记录没有运行快照，请选择使用最新配置重试');
+        if (e.status == FlowExecutionStatus.waiting) {
+          _notifier.interruptExecution(e.id, error: '旧记录没有运行快照，请选择使用最新配置重试');
+        }
         continue;
       }
       batches.putIfAbsent(e.batchId ?? e.id, () => []).add(e);
@@ -379,6 +448,15 @@ class TaskFlowExecutionService {
   /// latest-config option because their original configuration is unknown.
   Future<List<String>> retryExecution(String id,
       {bool useLatestConfiguration = false}) async {
+    final path = _execution(id)?.inputStoragePath;
+    return _notifier.withInputStoragePathLock(
+        path,
+        () => _retryExecution(id,
+            useLatestConfiguration: useLatestConfiguration));
+  }
+
+  Future<List<String>> _retryExecution(String id,
+      {required bool useLatestConfiguration}) async {
     final e = _execution(id);
     if (e == null) {
       throw StateError('执行记录已删除');
@@ -390,10 +468,23 @@ class TaskFlowExecutionService {
       FlowRunInput(
           text: e.inputText,
           durationSec: e.inputDurationSec,
-          mimeType: e.inputMimeType)
+          mimeType: e.inputMimeType,
+          fileName: e.inputFileName,
+          ownedStoragePath: e.inputStoragePath)
     ];
     if (useLatestConfiguration) {
-      return launchFlowMany(e.flowId, inputs);
+      final latest = _ref
+          .read(taskFlowListProvider)
+          .where((f) => f.id == e.flowId)
+          .firstOrNull;
+      final originalType = e.inputType ?? e.snapshot?.flow.inputType;
+      if (latest != null &&
+          originalType != null &&
+          latest.inputType != originalType) {
+        throw TaskFlowValidationException('初始输入类型已修改，请重新选择运行输入',
+            flowId: e.flowId, isInputError: true);
+      }
+      return _launchFlowMany(e.flowId, inputs);
     }
     final snapshot = e.snapshot;
     if (snapshot == null) {
@@ -563,7 +654,7 @@ class TaskFlowExecutionService {
     final flow = snapshot.flow;
     final data = prefix == 0
         ? FlowPayload.fromValue(current.inputText, flow.inputType,
-            mimeType: current.inputMimeType)
+            mimeType: current.inputMimeType, fileName: current.inputFileName)
         : current.subTasks[prefix - 1].result!;
     await _readable(data, current.flowId);
     current = _currentControl(id, revision);
@@ -576,12 +667,14 @@ class TaskFlowExecutionService {
             FlowRunInput(
                 text: data.value,
                 durationSec: current.inputDurationSec,
-                mimeType: data.mimeType)
+                mimeType: data.mimeType,
+                fileName: data.fileName)
           ],
           providers: snapshot.resolveProviders(
               _ref.read(providerEntriesProvider),
               blocks: remaining),
-          assistants: snapshot.resolveAssistants(_ref.read(assistantProvider)),
+          assistants: snapshot.resolveAssistants(_ref.read(assistantProvider),
+              blocks: remaining),
           fallbackChatEndpointType:
               _ref.read(chatStreamManagerProvider).adapter.endpointType);
       current = _currentControl(id, revision);
@@ -595,7 +688,7 @@ class TaskFlowExecutionService {
       _notifier.interruptExecution(id, error: '无法保存恢复状态');
       throw const TaskFlowPersistenceException('无法保存恢复状态');
     }
-    _startBatch([id]);
+    _startBatch([id], after: _restoredBatchPredecessors.remove(id));
   }
 
   Future<void> pauseExecution(String id) async {
@@ -720,6 +813,9 @@ class TaskFlowExecutionService {
     _manualCatCatchWaits.removeWhere((_, executionId) => executionId == e.id);
     _resumePending.remove(e.id);
     _pauseGates.remove(e.id)?.complete();
+    if (invalidateControl && !_workers.containsKey(e.id)) {
+      _releaseRestoredBatchBarrier(e.id);
+    }
     _stopActions.remove(e.id)?.call(e);
   }
 
@@ -772,7 +868,7 @@ class TaskFlowExecutionService {
       return;
     }
     var current = FlowPayload.fromValue(original.inputText, flow.inputType,
-        mimeType: original.inputMimeType);
+        mimeType: original.inputMimeType, fileName: original.inputFileName);
     final scheduler = _ref.read(taskFlowSchedulerProvider);
     String? activeStepId;
     try {
@@ -877,6 +973,11 @@ class TaskFlowExecutionService {
         : <TaskFlowExecution>[];
     _disposed = true;
     _resumePending.clear();
+    _restoredBatchPredecessors.clear();
+    for (final barrier in _restoredBatchBarriers.values) {
+      if (!barrier.isCompleted) barrier.complete();
+    }
+    _restoredBatchBarriers.clear();
     _manualCatCatchWaits.clear();
     for (final token in _activeRequestCancelTokens.values) {
       if (!token.isCancelled) token.cancel();
@@ -1068,16 +1169,16 @@ class TaskFlowExecutionService {
             ),
             def.outputType);
       case BlockType.chat:
-        // Resolve the block's assistantId (empty = use the currently
-        // selected assistant). Only user-defined assistants are allowed
+        // Resolve the block's assistantId (empty = use the captured model).
+        // Only user-defined assistants are allowed
         // on blocks — a legacy built-in prompt id resolves to null and
         // fails loudly below.
         final assistantId = block.params['assistantId']?.toString() ?? '';
+        final snapshot = _execution(execId)?.snapshot;
         final chatAssistant = resolveChatAssistant(
           assistantId,
-          _execution(execId)
-                  ?.snapshot
-                  ?.resolveAssistants(_ref.read(assistantProvider)) ??
+          snapshot?.resolveAssistants(_ref.read(assistantProvider),
+                  blocks: [block]) ??
               _ref.read(assistantProvider),
         );
         // A configured assistant that no longer exists must fail loudly
@@ -1096,6 +1197,9 @@ class TaskFlowExecutionService {
             blockTitle: def.label,
           );
         }
+        final modelReference = chatAssistant == null
+            ? snapshot?.chatModelReference(block.id)
+            : null;
         return FlowPayload.fromValue(
             await executeChatBlock(
               block: block,
@@ -1110,7 +1214,9 @@ class TaskFlowExecutionService {
               conversationsNotifier: _ref.read(conversationsProvider.notifier),
               assistant: chatAssistant,
               providerEntries: providerEntries,
+              modelReference: modelReference,
               endpointType: flowChatEndpointType(chatAssistant, providerEntries,
+                  modelReference: modelReference,
                   fallback: _ref
                       .read(chatStreamManagerProvider)
                       .adapter

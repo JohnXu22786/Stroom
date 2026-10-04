@@ -15,6 +15,7 @@ class FlowPayload {
   final IOType type;
   final String text;
   final String? fileReference;
+  final String? fileName;
 
   /// Media metadata from an upstream block. For shared containers such as MP4,
   /// this preserves the track kind that filename/header MIME cannot establish.
@@ -22,20 +23,29 @@ class FlowPayload {
 
   const FlowPayload.text(this.text, {this.type = IOType.text})
       : fileReference = null,
+        fileName = null,
         mimeType = null;
 
   const FlowPayload.file({
     required this.fileReference,
     required this.type,
     this.text = '',
+    this.fileName,
     this.mimeType,
   });
 
-  factory FlowPayload.fromValue(String value, IOType type,
-          {String? mimeType}) =>
+  factory FlowPayload.fromValue(
+    String value,
+    IOType type, {
+    String? mimeType,
+    String? fileName,
+  }) =>
       isFileType(type)
           ? FlowPayload.file(
-              fileReference: value, type: type, mimeType: mimeType)
+              fileReference: value,
+              type: type,
+              mimeType: mimeType,
+              fileName: fileName)
           : FlowPayload.text(value, type: type);
 
   bool get isFile => fileReference != null;
@@ -45,13 +55,14 @@ class FlowPayload {
         IOType.audio,
         IOType.image,
         IOType.video,
-        IOType.file
+        IOType.file,
       ].contains(type);
 
   Map<String, dynamic> toMap() => {
         'type': type.name,
         'text': text,
         if (fileReference != null) 'fileReference': fileReference,
+        if (fileName != null) 'fileName': fileName,
         if (mimeType != null) 'mimeType': mimeType,
       };
 
@@ -65,26 +76,55 @@ class FlowPayload {
             fileReference: reference,
             type: type,
             text: text,
-            mimeType: map['mimeType'] as String?);
+            fileName: map['fileName'] as String?,
+            mimeType: map['mimeType'] as String?,
+          );
   }
 }
 
-/// Use the chat composer's MIME lookup, preserving an MP4 container's audio
-/// track metadata (or its explicit M4A filename). An `ftypisom` header identifies
-/// the container, not whether it contains video. Strongly different headers,
-/// such as PNG or MP3, still take precedence over filename/upstream metadata.
+/// Preserve verified track metadata only within the detected container family.
+/// Shared container magic cannot distinguish audio from video; strongly
+/// different headers, such as PNG, WAV or MP3, still take precedence.
 String flowFileMimeType(String reference,
     {List<int>? headerBytes, String? mimeType}) {
   final detected = lookupMimeType(reference, headerBytes: headerBytes) ??
       'application/octet-stream';
-  bool isMp4(String? mime) => const {'audio/mp4', 'audio/x-m4a', 'video/mp4'}
-      .contains(mime?.split(';').first.trim().toLowerCase());
-  if (isMp4(detected)) {
-    if (isMp4(mimeType)) {
-      return flowMimeType(mimeType) == IOType.audio ? 'audio/mp4' : 'video/mp4';
-    }
+  String normalized(String mime) => mime.split(';').first.trim().toLowerCase();
+  String? containerFamily(String mime) => switch (normalized(mime)) {
+        'audio/mp4' ||
+        'audio/x-m4a' ||
+        'video/mp4' ||
+        'audio/quicktime' ||
+        'video/quicktime' =>
+          'iso',
+        'audio/webm' ||
+        'audio/weba' ||
+        'video/webm' ||
+        'audio/x-matroska' ||
+        'video/x-matroska' =>
+          'ebml',
+        'audio/x-msvideo' || 'video/x-msvideo' => 'avi',
+        'audio/x-flv' || 'video/x-flv' => 'flv',
+        'audio/ogg' || 'video/ogg' || 'application/ogg' => 'ogg',
+        'audio/x-mpeg-program-stream' || 'video/mpeg' => 'mpeg',
+        _ => null,
+      };
+  final family = containerFamily(detected);
+  if (family != null &&
+      mimeType != null &&
+      containerFamily(mimeType) == family &&
+      (flowMimeType(mimeType) == IOType.audio ||
+          flowMimeType(mimeType) == IOType.video)) {
+    final supplied = normalized(mimeType);
+    return supplied == 'audio/x-m4a' ? 'audio/mp4' : supplied;
+  }
+  if (family == 'iso') {
     final named = lookupMimeType(reference);
-    if (isMp4(named) && flowMimeType(named) == IOType.audio) return 'audio/mp4';
+    if (named != null &&
+        containerFamily(named) == 'iso' &&
+        flowMimeType(named) == IOType.audio) {
+      return 'audio/mp4';
+    }
   }
   return detected;
 }

@@ -22,6 +22,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
   Map<String, List<Map<String, dynamic>>> _cookiesByDomain = {};
   bool _isLoadingCookies = true;
   bool _isClearing = false;
+  int _cookieLoadGeneration = 0;
 
   @override
   void initState() {
@@ -30,12 +31,14 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
   }
 
   Future<void> _loadData() async {
+    final generation = ++_cookieLoadGeneration;
     if (mounted) {
       setState(() => _isLoadingCookies = true);
     }
     final retention = await BrowserCookieService.getRetentionMode();
+    if (generation != _cookieLoadGeneration) return;
     final cookies = await BrowserCookieService.getCookiesGrouped();
-    if (mounted) {
+    if (mounted && generation == _cookieLoadGeneration) {
       setState(() {
         _retentionEnabled = retention;
         _cookiesByDomain = cookies;
@@ -73,6 +76,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
 
     if (confirmed != true || !mounted) return;
 
+    _cookieLoadGeneration++;
     setState(() => _isClearing = true);
     try {
       final ok = await BrowserCookieService.clearAllCookies();
@@ -113,6 +117,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
 
     if (confirmed != true || !mounted) return;
 
+    _cookieLoadGeneration++;
     final ok = await BrowserCookieService.clearCookiesForDomain(domain);
     await _loadData();
     if (mounted) {
@@ -378,6 +383,7 @@ class _BrowserCookiesPageState extends State<BrowserCookiesPage> {
   Future<void> _deleteSingleCookie(
       String domain, Map<String, dynamic> cookie) async {
     final name = cookie['name'] as String? ?? '';
+    _cookieLoadGeneration++;
     final ok = await BrowserCookieService.deleteCookie(
       domain,
       name,

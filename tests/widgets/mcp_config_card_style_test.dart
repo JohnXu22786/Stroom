@@ -229,4 +229,55 @@ void main() {
     final mcpEntry = entries.entries.firstWhere((e) => e.type == 'mcp');
     expect(mcpEntry.enabled, isFalse);
   });
+
+  testWidgets(
+      'catalog separates integrations and opens the HTTP search editor',
+      (tester) async {
+    await pumpPage(tester, Brightness.light);
+
+    final serverCard = find.byKey(const ValueKey('config_test_mcp_0'));
+    final httpSearchCard = find.byKey(const ValueKey('config_test_mcp_1'));
+    final builtinSearchCard =
+        find.byKey(const ValueKey('builtin_tool_web_search'));
+    expect(serverCard, findsOneWidget);
+    expect(httpSearchCard, findsOneWidget);
+    expect(builtinSearchCard, findsOneWidget);
+    expect(
+      find.descendant(of: serverCard, matching: find.text('MCP · SSE')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: httpSearchCard, matching: find.text('HTTP 搜索')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: builtinSearchCard, matching: find.text('内置工具')),
+      findsOneWidget,
+    );
+
+    await tester.tap(httpSearchCard);
+    await tester.pumpAndSettle();
+
+    expect(find.text('接入类型：HTTP 搜索'), findsOneWidget);
+    expect(find.text('工具接口：brave_web_search'), findsOneWidget);
+    final fields = tester.widgetList<TextField>(find.byType(TextField));
+    expect(
+      fields.first.readOnly,
+      isTrue,
+      reason: 'the Brave endpoint remains fixed to its provider URL',
+    );
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      builtinSearchCard,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(builtinSearchCard, findsOneWidget);
+    expect(
+      find.descendant(of: builtinSearchCard, matching: find.text('内置工具')),
+      findsOneWidget,
+    );
+  });
 }

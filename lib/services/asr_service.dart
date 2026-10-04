@@ -283,7 +283,7 @@ class AsrService {
       throw Exception('音频数据为空');
     }
 
-    final fmt = audioFormat.toLowerCase();
+    final fmt = normalizeAsrUploadFormat(audioFormat);
     if (!_asrSupportedFormats.contains(fmt)) {
       throw Exception(
         '不支持的音频格式: $fmt。'

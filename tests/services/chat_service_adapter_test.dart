@@ -1033,6 +1033,67 @@ void main() {
       expect(names, contains('searxng_search'));
     });
 
+    test('MCP master switch filters all search tool definitions', () {
+      const searchToolNames = {
+        'brave_web_search',
+        'bocha_web_search',
+        'querit_search',
+        'searxng_search',
+        'web_search',
+      };
+
+      adapter.initializeBuiltinTools(
+        ProviderEntriesState(
+          entries: [
+            ProviderEntry(
+              id: 'test_mcp',
+              type: 'mcp',
+              name: 'MCP供应商',
+              enabled: false,
+            ),
+          ],
+        ),
+      );
+
+      var names = adapter
+          .getAllToolDefinitions()
+          .map((tool) => tool.name)
+          .toSet();
+      expect(
+        names.intersection(searchToolNames),
+        isEmpty,
+        reason: 'the switch must hide HTTP and Stroom-built-in search tools',
+      );
+      expect(
+        names,
+        contains('todowrite'),
+        reason: 'the switch must leave unrelated built-in tools available',
+      );
+
+      adapter.initializeBuiltinTools(
+        ProviderEntriesState(
+          entries: [
+            ProviderEntry(
+              id: 'test_mcp',
+              type: 'mcp',
+              name: 'MCP供应商',
+              enabled: true,
+            ),
+          ],
+        ),
+      );
+
+      names = adapter
+          .getAllToolDefinitions()
+          .map((tool) => tool.name)
+          .toSet();
+      expect(
+        names,
+        containsAll(searchToolNames),
+        reason: 're-enabling the switch must restore all search tools',
+      );
+    });
+
     test('vendor SSE placeholder tools are visible via mcpToolDefinitions',
         () async {
       // Single vendor SSE config (Exa)

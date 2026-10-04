@@ -10,6 +10,7 @@ import '../models/mcp.dart';
 import '../models/tool_call.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
+import '../utils/provider_models.dart' show resolveProviderModel;
 import 'chat_protocol.dart';
 import 'chat_service.dart';
 import 'http_tool_service.dart';
@@ -19,6 +20,34 @@ import 'web_search_service.dart';
 
 part 'chat_adapter_mcp.dart';
 part 'chat_adapter_http_tools.dart';
+
+/// Built-in search integrations are configured alongside MCP providers and
+/// follow the MCP master switch, even though their handlers are registered
+/// locally rather than discovered from an MCP server.
+const kMcpSearchToolNames = <String>{
+  'brave_web_search',
+  'bocha_web_search',
+  'querit_search',
+  'searxng_search',
+  'web_search',
+};
+
+bool isMcpMasterSwitchEnabled(ProviderEntriesState entriesState) {
+  if (!entriesState.isLoaded) return false;
+  final mcpEntry =
+      entriesState.entries.where((entry) => entry.type == 'mcp').firstOrNull;
+  return mcpEntry?.enabled ?? true;
+}
+
+List<ToolDefinition> filterMcpSearchToolDefinitions(
+  List<ToolDefinition> tools, {
+  required bool mcpEnabled,
+}) {
+  if (mcpEnabled) return tools;
+  return tools
+      .where((tool) => !kMcpSearchToolNames.contains(tool.name))
+      .toList();
+}
 
 /// 表示一个可选的模型项
 class AvailableModel {
@@ -103,6 +132,10 @@ class ChatAdapter {
 
   /// 缓存的 MCP 工具列表（占位工具定义）
   List<ToolDefinition> _mcpToolDefinitions = [];
+
+  /// Built-in search tools use local handlers but belong to the MCP provider
+  /// group, so their selectable definitions follow its master switch.
+  bool _mcpMasterSwitchEnabled = false;
 
   /// 上一份已处理的 MCP 供应商条目实例。
   ///
@@ -194,7 +227,7 @@ class ChatAdapter {
   /// Creates (or returns an existing) [ChatService] for the given
   /// conversation. Each conversation gets an independent HTTP connection,
   /// enabling concurrent streaming across multiple conversations.
-  /// Returns null if the adapter hasn't been configured yet.
+  /// Returns null when no requested or cached model can be resolved.
   ///
   /// When [assistant] is provided (with [entriesState]), the service is
   /// built from the assistant's bound model (its `modelId`) and carries
@@ -205,11 +238,39 @@ class ChatAdapter {
   /// fresh session where the chat page was never opened. If the
   /// assistant's model cannot be resolved, it falls back to the global
   /// config (still applying the assistant's prompt/settings).
+  /// An explicit [modelReference] selects exact local config/model IDs from
+  /// [entriesState], independently of the global cache. An unresolved explicit
+  /// reference cannot fall back to another model.
   ChatService? getOrCreateService(
     String convId, {
     Assistant? assistant,
     ProviderEntriesState? entriesState,
+    Map<String, String>? modelReference,
   }) {
+    if (modelReference != null) {
+      final selected = entriesState == null
+          ? null
+          : resolveProviderModel(entriesState, 'llm', modelReference);
+      if (selected == null) return null;
+      final config = selected.config;
+      final model = selected.model;
+      final endpointType =
+          effectiveEndpointType(model.endpointType, config.endpointType);
+      return _activeServices.putIfAbsent(
+          convId,
+          () => _buildService(
+                createChatProviderFromConfig(
+                  providerName: config.providerName,
+                  baseUrl: config.host,
+                  apiKey: config.key,
+                  endpointType: endpointType,
+                ),
+                model,
+                config,
+                endpointType,
+                assistant: assistant,
+              ));
+    }
     if (assistant != null && entriesState != null) {
       // The assistant editor stores the default model as a DISPLAY name
       // (Assistant.defaultModelName) plus its absolute identity
@@ -672,7 +733,10 @@ class ChatAdapter {
     // Built-in tools are registered statically via ChatService.registerTool()
     // MCP tools are discovered dynamically
     return [
-      ...ChatService.getRegisteredToolDefinitions(),
+      ...filterMcpSearchToolDefinitions(
+        ChatService.getRegisteredToolDefinitions(),
+        mcpEnabled: _mcpMasterSwitchEnabled,
+      ),
       ..._mcpToolDefinitions,
     ];
   }
