@@ -113,11 +113,26 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
   }
 
+  /// Scrolls to config [index], which may be lazily built in a later group.
+  Future<void> scrollToCard(
+    WidgetTester tester,
+    int index, {
+    required double delta,
+  }) async {
+    final card = find.byKey(ValueKey('config_test_mcp_$index'));
+    await tester.scrollUntilVisible(
+      card,
+      delta,
+      scrollable: find.byType(Scrollable).first,
+    );
+  }
+
   /// The card-level Container for config [index]. The page emits stable
   /// keys (`ValueKey('config_${entryId}_$i')`) on each _McpConfigCard; the
   /// card's outer Container (the one with the rounded BoxDecoration) is its
   /// first descendant Container.
-  BoxDecoration cardDecoration(WidgetTester tester, int index) {
+  Future<BoxDecoration> cardDecoration(WidgetTester tester, int index) async {
+    await scrollToCard(tester, index, delta: 200);
     final card = find.byKey(ValueKey('config_test_mcp_$index'));
     expect(card, findsOneWidget);
     final container = tester.widget<Container>(
@@ -127,9 +142,11 @@ void main() {
   }
 
   /// The icon-box Containers (borderRadius 10) of all cards.
-  List<Color?> iconBoxColors(WidgetTester tester) {
+  Future<List<Color?>> iconBoxColors(WidgetTester tester) async {
     final colors = <Color?>[];
-    for (var i = 0; i < 3; i++) {
+    // The preceding style checks leave the scroll view at the last card.
+    for (var i = 2; i >= 0; i--) {
+      await scrollToCard(tester, i, delta: -200);
       final card = find.byKey(ValueKey('config_test_mcp_$i'));
       final boxes = find
           .descendant(of: card, matching: find.byType(Container))
@@ -156,7 +173,7 @@ void main() {
     final expectedBg = cs.surfaceContainerLow;
     final expectedBorder = cs.outlineVariant.withValues(alpha: 0.5);
     for (var i = 0; i < 3; i++) {
-      final d = cardDecoration(tester, i);
+      final d = await cardDecoration(tester, i);
       expect(d.color, expectedBg,
           reason: 'vendor and user-added cards must use the same background '
               '(matching the LLM provider page) — no primaryContainer tint');
@@ -170,7 +187,7 @@ void main() {
     // Icon boxes: all use the same primaryContainer tint regardless of
     // vendor/transport.
     final expectedIconBox = cs.primaryContainer.withValues(alpha: 0.3);
-    for (final color in iconBoxColors(tester)) {
+    for (final color in await iconBoxColors(tester)) {
       expect(color, expectedIconBox,
           reason: 'icon boxes must use the same tint for every card');
     }
@@ -186,7 +203,7 @@ void main() {
     final expectedBg = cs.surfaceContainerHigh;
     final expectedBorder = cs.outlineVariant.withValues(alpha: 0.5);
     for (var i = 0; i < 3; i++) {
-      final d = cardDecoration(tester, i);
+      final d = await cardDecoration(tester, i);
       expect(d.color, expectedBg,
           reason: 'dark mode must use the same adaptive background for every '
               'card, no vendor tint');
@@ -198,7 +215,7 @@ void main() {
     }
 
     final expectedIconBox = cs.primaryContainer.withValues(alpha: 0.3);
-    for (final color in iconBoxColors(tester)) {
+    for (final color in await iconBoxColors(tester)) {
       expect(color, expectedIconBox,
           reason: 'icon boxes must use the same tint for every card');
     }
